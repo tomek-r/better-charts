@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Check tag against package and Cargo versions
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, tomllib
+          root = pathlib.Path("apps/desktop")
+          version = json.loads((root / "package.json").read_text())["version"]
+          cargo = tomllib.loads((root / "src-tauri/Cargo.toml").read_text())
+          if os.environ["RELEASE_TAG"] != f"v{version}" or cargo["package"]["version"] != version:
+              raise SystemExit("Tag, package.json and Cargo.toml versions must match")
+          print(f"Releasing v{version}")
+          PY
+
+  validate:
+    needs: version
+    uses: ./.github/workflows/validate.yml
+
+  packages:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin --bundles dmg -- --locked
+          - os: windows-latest
+            targets: x86_64-pc-windows-msvc
+            args: --target x86_64-pc-windows-msvc --bundles nsis,msi -- --locked
+          - os: ubuntu-22.04
+            targets: x86_64-unknown-linux-gnu
+            args: --target x86_64-unknown-linux-gnu --bundles appimage,deb -- --locked
+    runs-on: ${{ matrix.os }}
+    env:
+      MT5_BACKEND_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+      - name: Install Linux prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2
+      - run: pnpm install --frozen-lockfile
+      - name: Build installers
+        uses: tauri-apps/tauri-action@v1
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          args: ${{ matrix.args }}
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: installers-[platform]-[arch]-[bundle]
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: false
+
+  draft:
+    needs: packages
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: installers-*
+          path: release-assets
+          merge-multiple: true
+      - name: Generate checksums
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib
+          root = pathlib.Path("release-assets")
+          extensions = {".dmg", ".exe", ".msi", ".AppImage", ".deb"}
+          files = sorted(p for p in root.iterdir() if p.is_file() and p.suffix in extensions)
+          if len(files) != 5 or {p.suffix for p in files} != extensions:
+              raise SystemExit("Expected one DMG, EXE, MSI, AppImage and DEB")
+          checksums = []
+          for path in files:
+              with path.open("rb") as stream:
+                  digest = hashlib.file_digest(stream, "sha256").hexdigest()
+              checksums.append(f"{digest}  {path.name}\n")
+          (root / "SHA256SUMS.txt").write_text("".join(checksums))
+          PY
+          (cd release-assets && sha256sum --check SHA256SUMS.txt)
+      - name: Create or update draft prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          assets=(release-assets/*.dmg release-assets/*.exe release-assets/*.msi release-assets/*.AppImage release-assets/*.deb release-assets/SHA256SUMS.txt)
+          cat > release-notes.md <<EOF
+          Unsigned preview build of Better Charts from commit $RELEASE_COMMIT.
+
+          Downloads: Windows x64 (NSIS/MSI), macOS Intel + Apple Silicon (universal DMG), and Linux x64 (AppImage/DEB).
+
+          These builds have no verified publisher signature. macOS uses a certificate-free ad-hoc signature and is not notarized. Operating-system security prompts may appear.
+
+          MQL5 sources and third-party license notices are bundled. MetaTrader 5 is installed separately. Start with a demo account; real-money trading has not been validated.
+
+          Verify downloads against SHA256SUMS.txt. Review and smoke-test all packages before publishing this draft.
+          EOF
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > "$RUNNER_TEMP/release-draft"; then
+            test "$(cat "$RUNNER_TEMP/release-draft")" = true || { echo "Refusing to overwrite a published release"; exit 1; }
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --draft --prerelease --title "Better Charts $RELEASE_TAG" --notes-file release-notes.md
+          fi

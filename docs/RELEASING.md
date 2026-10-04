@@ -41,12 +41,30 @@ Before distributing installers, verify on each supported OS:
 Native Windows/Linux runtime, current chart changes and packaged runtime
 verification remain pending. Real-account testing has not been validated.
 
-## Version and signing
+## Versioned releases
 
 Update `apps/desktop/package.json` and the matching version in
 `apps/desktop/src-tauri/Cargo.toml`; Tauri and the UI read the package version.
 Update `Cargo.lock` through Cargo and run the version guard with workspace tests.
 
-Follow [Tauri's distribution guide](https://v2.tauri.app/distribute/) for signing
-and macOS notarization. Store signing credentials outside the repository.
-Tag the validated revision and publish only reviewed artifacts.
+After merging the version update and checking CI, push the matching tag:
+
+```bash
+git tag -a v0.0.1 -m "Release v0.0.1"
+git push origin v0.0.1
+```
+
+Use the updated version for subsequent releases. The `Release` workflow rejects
+tags that differ from the package and Cargo versions, runs the existing validation
+workflow, and builds Windows x64 NSIS/MSI, a universal macOS DMG for Intel and
+Apple Silicon, and Linux x64 AppImage/DEB packages. After all jobs pass, it creates
+a draft prerelease with the installers and `SHA256SUMS.txt`.
+
+No signing secrets are required. Windows/Linux packages are unsigned; macOS uses
+certificate-free ad-hoc signing for Apple Silicon compatibility and is not
+notarized. These builds have no verified publisher identity and may show OS
+security prompts. See [Tauri's macOS guidance](https://v2.tauri.app/distribute/sign/macos/#ad-hoc-signing).
+
+Review the draft, complete the package checks above, then publish it from GitHub
+Releases. A rerun can replace assets on an existing draft; published releases are
+never overwritten by the workflow. Do not move a released tag to another commit.

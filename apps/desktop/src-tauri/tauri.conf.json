@@ -32,6 +32,8 @@
     ],
     "targets": "all",
     "resources": {
+      "../../../mql5/bridge/Experts/BetterChartsBridge.mq5": "mql5/Experts/BetterChartsBridge.mq5",
+      "../../../mql5/bridge/Indicators/BetterChartsTickHistoryReader.mq5": "mql5/Indicators/BetterChartsTickHistoryReader.mq5",
       "licenses/lightweight-charts/LICENSE.txt": "third-party-notices/lightweight-charts/LICENSE.txt",
       "licenses/lightweight-charts/NOTICE.txt": "third-party-notices/lightweight-charts/NOTICE.txt",
       "../../../LICENSE": "LICENSE"
