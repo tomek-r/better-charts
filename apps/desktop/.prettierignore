@@ -1,0 +1,9 @@
+dist
+node_modules
+target
+test-results
+playwright-report
+src-tauri
+mql5
+*.md
+pnpm-lock.yaml

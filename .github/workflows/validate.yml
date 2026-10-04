@@ -1,0 +1,60 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    env:
+      MT5_BACKEND_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Linux prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - run: pnpm install --frozen-lockfile
+      - run: cargo fetch --locked
+      - run: cargo fmt --all -- --check
+      - run: cargo test --workspace --locked --offline
+      - run: cargo clippy --workspace --all-targets --locked --offline -- -D warnings
+      - run: pnpm check
+      - run: pnpm tauri build --no-bundle
+      - run: python -m py_compile scripts/mock_mt5_bridge.py scripts/capture_reconcile_snapshot.py scripts/check_tick_reader.py
+      - run: python scripts/check_tick_reader.py
+      - name: Mock bridge self-test
+        env:
+          MT5_MOCK_SELFTEST: "1"
+        run: python scripts/mock_mt5_bridge.py
+      - name: Capture tool self-test
+        env:
+          MT5_CAPTURE_SELFTEST: "1"
+        run: python scripts/capture_reconcile_snapshot.py
+      - name: Install browser
+        if: runner.os == 'Linux'
+        run: pnpm --filter better-charts exec playwright install --with-deps chromium
+      - name: Browser tests
+        if: runner.os == 'Linux'
+        run: pnpm test:e2e

@@ -1,0 +1,33 @@
+/* Trading workspace: the dashboard column hosting the chart and the panel. */
+.dashboard {
+  width: 100%;
+  margin: 0;
+  /* Left: 52px clears the fixed tool rail + 14px, leaving the same 14px
+     side gap the right side uses when the drawer is closed. */
+  padding: 8px 14px 0 66px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  flex: 1;
+  transition: padding-right 0.2s ease;
+}
+
+/* Open drawer shrinks the chart column (330px panel + 14px gap, matching the
+   rail-side gap); the chart host's ResizeObserver then calls
+   instance.resize() for the new width. The panel carries the state its own
+   styles already need, so opening it cannot re-render the app tree. */
+.dashboard:has(.trade-panel.open) {
+  padding-right: 344px;
+}
+
+@media (max-width: 900px) {
+  .dashboard:has(.trade-panel.open) {
+    padding-right: 14px;
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard {
+    padding: 14px 12px 14px 52px;
+  }
+}

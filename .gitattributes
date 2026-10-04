@@ -1,0 +1,2 @@
+# Keep source and scripts consistent across native Windows and Unix checkouts.
+* text=auto eol=lf

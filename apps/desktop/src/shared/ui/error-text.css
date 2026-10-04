@@ -1,0 +1,6 @@
+/* Inline error text: ticket review, order-check last error and search dialog. */
+.error-text {
+  color: var(--color-danger-text);
+  font-size: 12px;
+  margin: 10px 0 0;
+}

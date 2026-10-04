@@ -1,0 +1,171 @@
+/* Open-positions card in the trade-panel drawer. */
+
+/* §11a Reorder polish: the risk card now opens the aside, so its old top divider must not float below the panel edge, and the status hero needs air below the order panel. */
+.portfolio-card {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Account state bar (MT5 layout) shown while a position is live: balance,
+   equity, margin, free margin and margin level. Wraps inside the 314px card
+   instead of overflowing like MT5's full-width terminal strip. */
+.portfolio-account {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-bottom: 12px;
+}
+
+.portfolio-account span {
+  display: inline-flex;
+  gap: 4px;
+  align-items: baseline;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.portfolio-account small {
+  color: var(--color-muted);
+}
+
+.portfolio-account b {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.portfolio-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.portfolio-heading h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.portfolio-heading span,
+.portfolio-more {
+  color: var(--color-muted);
+  font-size: 10px;
+}
+
+.portfolio-list {
+  display: grid;
+  /* minmax(0, 1fr): a single implicit auto track would size to the nowrap
+     row content (~380px) and overflow the 314px card, pushing the Close
+     button past the panel edge. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+  margin-top: 11px;
+}
+
+.portfolio-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-surface);
+  font-size: 10px;
+}
+
+.portfolio-row > div {
+  /* The Close column stays fixed-width (.portfolio-actions is flex: 0 0 auto). */
+  min-width: 0;
+}
+
+.portfolio-row > div:last-child {
+  text-align: right;
+}
+
+/* Row body = the "open this symbol on the chart" action. Reset the button
+   chrome so the text keeps the row's layout, and let it fill the space the
+   Close column leaves. Close stays a sibling — never a button inside one. */
+.portfolio-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.portfolio-open > div {
+  /* Text columns shrink and ellipsize when the panel is narrow. */
+  min-width: 0;
+}
+
+.portfolio-open:hover strong,
+.portfolio-open:focus-visible strong {
+  color: var(--color-buy-soft);
+}
+
+/* The symbol never wraps; the value lines wrap (instead of ellipsizing) so
+   full-precision prices/volumes stay readable and never lose digits — the row
+   simply grows taller inside the fixed 330px drawer. */
+.portfolio-row strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-row span,
+.portfolio-row small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.portfolio-row strong {
+  color: var(--color-text-secondary);
+}
+
+.portfolio-row span {
+  color: var(--color-muted-strong);
+}
+
+.portfolio-row small {
+  margin-top: 3px;
+  color: var(--color-muted);
+}
+
+.portfolio-more {
+  margin: 8px 0 0;
+}
+
+/* UX clarity pass: portfolio close/cancel row actions (their status line reuses .command-status) */
+.portfolio-actions {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: 8px;
+}
+
+.portfolio-action {
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  padding: 5px 8px;
+  color: var(--color-text-label);
+  background: var(--color-raised);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.portfolio-action:hover:not(:disabled) {
+  color: var(--color-text-secondary);
+  border-color: var(--color-muted);
+}
+
+.portfolio-action:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}

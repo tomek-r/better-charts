@@ -1,0 +1,46 @@
+/* Trade panel: the slide-out drawer chrome. */
+/* Right-side drawer: fixed to the window edge below the 68px topbar. Closed,
+   it is translated off-screen AND visibility-hidden (delayed until the slide
+   finishes) so it cannot catch pointer events, focus, or Playwright hits. */
+.trade-panel {
+  position: fixed;
+  /* 68px topbar + 8px: the panel top edge sits on the chart card's top line,
+     same distance from the topbar as the card. */
+  top: 76px;
+  right: 0;
+  bottom: 0;
+  width: 330px;
+  overflow-y: auto;
+  z-index: 20;
+  /* 8px top inside the panel keeps the ticket at 84px (68 + 16) from the window
+     top, unchanged when the panel edge moved down. */
+  padding: 8px 8px 8px;
+  border-radius: var(--border-radius) 0 0 var(--border-radius);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0.2s;
+  min-width: 0;
+  background: var(--color-overlay);
+}
+
+.trade-panel.open {
+  transform: translateX(0);
+  visibility: visible;
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0s;
+}
+
+@media (max-width: 900px) {
+  .trade-panel {
+    width: min(330px, 88vw);
+  }
+}
+
+@media (max-width: 520px) {
+  .trade-panel {
+    padding: 20px;
+  }
+}

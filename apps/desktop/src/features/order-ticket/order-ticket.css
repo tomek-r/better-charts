@@ -1,0 +1,723 @@
+/* Order ticket, order panel, units sizing and the order surfaces. */
+.order-check-result {
+  margin-top: 13px;
+  padding: 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-surface);
+}
+
+.order-check-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.order-check-grid div {
+  min-width: 0;
+}
+
+.order-check-grid small {
+  display: block;
+  color: var(--color-muted);
+  font-size: 9px;
+}
+
+.order-check-grid b {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font:
+    11px ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-check-time {
+  display: block;
+  margin-top: 10px;
+  color: var(--color-muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.ticket-blocked-reason {
+  margin: 8px 0 0;
+  color: var(--color-warn-text);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Account environment badge (DEMO/CONTEST/REAL/UNKNOWN · login) — safety-relevant: which environment an order hits */
+.ticket-account-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: var(--color-info);
+  background: var(--color-raised);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: default;
+}
+
+/* DEMO stays an INFO blue on purpose: buy/long borrows the up teal now, so
+   taking the buy tokens would have put DEMO and CONTEST in the same teal on a
+   safety badge. */
+.ticket-account-badge.demo {
+  color: var(--color-info);
+  border-color: var(--color-border-strong);
+  background: var(--color-raised);
+}
+
+.ticket-account-badge.contest {
+  color: var(--color-accent-soft);
+  border-color: var(--color-accent-border);
+  background: var(--color-accent-fill);
+}
+
+.ticket-account-badge.real {
+  color: var(--color-warn-text);
+  border-color: var(--color-warn-border);
+  background: var(--color-warn-fill);
+}
+
+.ticket-account-badge.unknown {
+  color: var(--color-text-label);
+  border-color: var(--color-border-strong);
+  background: var(--color-raised);
+}
+
+/* ══ TradingView-style order ticket (wave 1) ══ */
+.order-ticket {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--border-radius);
+  background: var(--color-raised);
+}
+
+.ticket-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ticket-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ticket-title strong {
+  color: var(--color-text);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.ticket-title strong {
+  line-height: 1.2;
+}
+
+.ticket-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--color-muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.ticket-icon-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* Segmented Order | DOM tabs */
+/* Quote row = side selector */
+.ticket-quote {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.ticket-quote-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: var(--color-surface);
+  cursor: pointer;
+  text-align: left;
+}
+
+.ticket-quote-side small {
+  color: var(--color-muted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ticket-quote-side b {
+  color: var(--color-text-secondary);
+  font:
+    13px ui-monospace,
+    monospace;
+}
+
+.ticket-quote-side:hover:not(.active) {
+  border-color: var(--color-border-hover);
+}
+
+.ticket-quote-side.sell.active {
+  border-color: var(--color-sell-border);
+  background: var(--color-sell-fill);
+}
+
+.ticket-quote-side.sell.active small,
+.ticket-quote-side.sell.active b {
+  color: var(--color-danger-text);
+}
+
+/* Teal to match the buy-side elements on the chart (STAGED_COLORS.buy / ask
+   profile = var(--color-buy)). */
+.ticket-quote-side.buy.active {
+  border-color: var(--color-buy-border);
+  background: var(--color-buy-wash);
+}
+
+.ticket-quote-side.buy.active small,
+.ticket-quote-side.buy.active b {
+  color: var(--color-buy-soft);
+}
+
+.ticket-spread {
+  align-self: center;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: var(--color-muted-strong);
+  font:
+    10px ui-monospace,
+    monospace;
+  white-space: nowrap;
+}
+
+/* Order-type tabs with active underline */
+.ticket-type-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ticket-type-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 6px 9px;
+  color: var(--color-muted-strong);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.ticket-type-tab.active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+  font-weight: 700;
+}
+
+.ticket-type-tab:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* Generic label + field row */
+.ticket-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.ticket-row.disabled {
+  opacity: 0.55;
+}
+
+.ticket-row.static .ticket-field {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+}
+
+.ticket-row-label {
+  color: var(--color-muted-strong);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.ticket-field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: 4px 6px;
+  background: var(--color-surface);
+}
+
+.ticket-field:focus-within {
+  border-color: var(--color-accent);
+}
+
+.ticket-value {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  padding: 3px 2px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font:
+    12px ui-monospace,
+    monospace;
+}
+
+.ticket-value:disabled {
+  color: var(--color-text-label);
+}
+
+.ticket-value.invalid {
+  box-shadow: none;
+}
+
+.ticket-field:has(.invalid) {
+  border-color: var(--color-warn-border-soft);
+}
+
+.ticket-ref,
+.ticket-mode {
+  border: 0;
+  outline: none;
+  padding: 3px 2px;
+  color: var(--color-text-label);
+  background: transparent;
+  /* The native select arrow scales with font-size in Chromium — 12px gives a
+     visible arrow (the option text grows a step with it). */
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ticket-ref:disabled,
+.ticket-mode:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ticket-swap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: 2px 6px;
+  color: var(--color-text-label);
+  background: var(--color-raised);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.ticket-swap:hover:not(:disabled) {
+  color: var(--color-text-secondary);
+  border-color: var(--color-muted);
+}
+
+.ticket-swap:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.ticket-unit {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.ticket-hint {
+  margin: -4px 0 0;
+  color: var(--color-muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.ticket-hint.error {
+  color: var(--color-warn-text);
+}
+
+.ticket-risk-reward {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.ticket-tick-value {
+  color: var(--color-text-secondary);
+  font:
+    12px ui-monospace,
+    monospace;
+}
+
+.ticket-hint + .ticket-hint,
+.ticket-field + .ticket-hint {
+  margin-top: -2px;
+}
+
+/* Collapsible sections */
+.ticket-collapse {
+  border-top: 1px solid var(--color-border);
+  padding-top: 7px;
+}
+
+.ticket-collapse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  padding: 2px 0;
+  color: var(--color-text-label);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Chevron: keep it clearly visible against the ticket background. */
+.ticket-collapse-head span {
+  color: var(--color-text-label);
+  font-size: 18px;
+}
+
+.ticket-collapse-head:hover span {
+  color: var(--color-text);
+}
+
+.ticket-collapse-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Exits rows + switch */
+.ticket-exit {
+  display: grid;
+  gap: 5px;
+}
+
+.ticket-exit.off .ticket-exit-head {
+  opacity: 0.6;
+}
+
+/* TV semantics: an off exit keeps its row visible but greyed and non-editable. */
+.ticket-exit.off .ticket-field {
+  opacity: 0.45;
+}
+
+.ticket-exit.off .ticket-value,
+.ticket-exit.off .ticket-swap {
+  cursor: not-allowed;
+}
+
+.ticket-exit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ticket-switch {
+  appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 15px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-border-subtle);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.ticket-switch::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--color-muted);
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease;
+}
+
+.ticket-switch:checked {
+  border-color: var(--color-accent-border);
+  background: var(--color-accent-fill);
+}
+
+.ticket-switch:checked::after {
+  transform: translateX(13px);
+  background: var(--color-accent);
+}
+
+/* Review state */
+.ticket-review-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ticket-review-head strong {
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.ticket-review-head span {
+  color: var(--color-muted-strong);
+  font:
+    10px ui-monospace,
+    monospace;
+}
+
+.ticket-review-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.ticket-reason {
+  margin: 0;
+  color: var(--color-warn-text);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* The CTA echoes the selected side: sell red / buy teal, matching the side
+   badges and the chart overlays. */
+.ticket-cta {
+  width: 100%;
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--border-radius);
+  padding: 10px;
+  color: var(--color-root);
+  background: var(--color-accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+/* Muted hues, same palette as the active quote-side badges. Both CTAs — Start
+   creating order and Send order — wear the selected side. */
+.ticket-cta.side-sell {
+  border-color: var(--color-sell-border);
+  color: var(--color-danger-text);
+  background: var(--color-sell-fill);
+}
+
+.ticket-cta.side-sell:hover:not(:disabled) {
+  background: var(--color-sell-fill);
+}
+
+.ticket-cta.side-buy {
+  border-color: var(--color-buy-border);
+  color: var(--color-buy-soft);
+  background: var(--color-buy-wash);
+}
+
+.ticket-cta.side-buy:hover:not(:disabled) {
+  background: var(--color-buy-fill);
+}
+
+.ticket-cta:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.ticket-back {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  padding: 10px 12px;
+  color: var(--color-text-label);
+  background: var(--color-raised);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.ticket-back:hover {
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 520px) {
+  .ticket-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+/* Staged-order overlay chip (chart bracket draft is active) */
+/* (The in-panel staged chip was removed per owner — the chart (✕) chip unstages.) */
+/* ══ TV-style sizing menu (ONE Units input; mode owns the value) ══ */
+.units-row {
+  position: relative;
+}
+
+.units-row > .ticket-row-label {
+  width: 50px;
+}
+
+.ticket-menu-trigger {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--color-muted-strong);
+  font-family: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* SVG caret for the sizing-mode and exit-row triggers: flex parents center
+   it exactly; in the exit-head label it rides the text. */
+.ticket-caret {
+  flex: 0 0 auto;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+}
+
+.ticket-menu-trigger:hover {
+  color: var(--color-text-secondary);
+}
+
+.ticket-menu-trigger:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.ticket-mode-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: 3px 6px;
+  color: var(--color-text-label);
+  background: var(--color-raised);
+  cursor: pointer;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.ticket-mode-indicator:hover {
+  color: var(--color-text-secondary);
+  border-color: var(--color-muted);
+}
+
+.ticket-mode-indicator:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.ticket-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  background: var(--color-panel);
+  box-shadow: 0 10px 30px var(--color-scrim);
+}
+
+.ticket-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius);
+  padding: 7px 9px;
+  color: var(--color-text-label);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  text-align: left;
+  font-family: inherit;
+}
+
+.ticket-menu-item:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-raised);
+}
+
+.ticket-menu-item.selected {
+  color: var(--color-text);
+  background: var(--color-raised);
+  border-color: var(--color-muted);
+  box-shadow: inset 0 0 0 1px var(--color-accent-ring);
+}
+
+.ticket-menu-item:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
+.ticket-menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ticket-menu-info {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  color: var(--color-muted);
+  font-size: 9px;
+  font-style: italic;
+  font-weight: 700;
+  cursor: help;
+}
+
+.ticket-menu-info:hover {
+  color: var(--color-text-label);
+  border-color: var(--color-muted);
+}

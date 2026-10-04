@@ -1,0 +1,295 @@
+/* Chart section: framing, overlays, legend and price-scale controls. */
+.chart-section {
+  min-width: 0;
+  border-radius: var(--border-radius);
+  background: var(--color-overlay);
+}
+
+.chart-section {
+  align-self: start;
+  width: 100%;
+  height: calc(100vh - 68px - 8px);
+  padding: 8px 22px 0 22px;
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+
+.chart-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.chart-heading h1 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+}
+
+/* Section label above the symbol, matching the topbar's version tag. */
+.eyebrow {
+  color: var(--color-muted);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+
+/* Live bid/spread/ask cards, right-aligned in the heading row. */
+.quote-cards {
+  display: flex;
+  gap: 7px;
+  margin-left: auto;
+}
+
+.quote-cards div {
+  min-width: 72px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: 5px 7px;
+  background: var(--color-surface);
+}
+
+.quote-cards small {
+  display: block;
+  color: var(--color-muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.quote-cards b {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font:
+    12px ui-monospace,
+    monospace;
+}
+
+.chart-frame {
+  position: relative;
+  min-height: 320px;
+  flex: 1 1 320px;
+  overflow: hidden;
+  border-radius: var(--border-radius);
+  background: var(--color-surface);
+}
+
+.chart-host {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+}
+
+.chart-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 9px;
+  background: var(--color-overlay);
+  color: var(--color-muted-strong);
+  text-align: center;
+  pointer-events: none;
+}
+
+.chart-overlay strong {
+  color: var(--color-text-tertiary);
+  font-size: 15px;
+}
+
+.chart-overlay span:last-child {
+  max-width: 320px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.overlay-glyph {
+  color: var(--color-muted);
+  font-size: 30px;
+}
+
+.chart-error {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  padding: 9px 11px;
+  border-radius: var(--border-radius);
+  color: var(--color-danger-text);
+  background: var(--color-sell-fill-translucent);
+  font-size: 12px;
+}
+
+.timeframe-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.timeframe-tabs button {
+  min-width: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius);
+  padding: 7px 8px;
+  color: var(--color-muted-strong);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.timeframe-tabs button:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-border-subtle);
+}
+
+.timeframe-tabs button.active {
+  color: var(--color-root);
+  background: var(--color-accent);
+  font-weight: 700;
+}
+
+.timeframe-tabs button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+@media (max-width: 900px) {
+  .chart-section {
+    height: clamp(520px, 72vh, 760px);
+    min-height: 520px;
+  }
+}
+
+@media (max-width: 520px) {
+  .chart-section {
+    height: 520px;
+    padding: 14px;
+    min-height: 470px;
+  }
+
+  .chart-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+}
+
+.chart-legend {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 1;
+  color: var(--color-text-label);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.chart-connection-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-sell);
+  box-shadow: 0 0 0 3px var(--color-sell-wash);
+}
+
+/* Hover-revealed right price-scale toggles (A = auto scale, L = logarithmic).
+   Position is here, not in the controller: `bottom` is the time axis height, so
+   the row sits on the pane's bottom edge above it, and `right: 0` keeps it in
+   the axis column. Only its width is set from the chart, because the axis
+   width is runtime geometry. The fill is the price scale canvas's own, so the
+   labels behind the row are masked; the container never takes pointer events
+   (axis dragging must keep working), only the revealed buttons do. */
+.price-scale-controls {
+  position: absolute;
+  right: 0;
+  bottom: 28px;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  background: var(--color-panel);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.price-scale-controls-revealed,
+.price-scale-controls:focus-within {
+  opacity: 1;
+}
+
+.price-scale-controls button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.price-scale-controls-revealed button {
+  pointer-events: auto;
+}
+
+.price-scale-controls button:hover {
+  border-color: var(--color-muted);
+  color: var(--color-text);
+}
+
+.price-scale-controls button.price-scale-control-on {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-ring-soft);
+}
+
+.chart-connection-connected {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-ring-soft);
+}
+
+.chart-connection-connecting {
+  background: var(--color-warn);
+  box-shadow: 0 0 0 3px var(--color-warn-wash);
+  animation: connection-pulse 1.15s ease-in-out infinite;
+}
+
+.chart-connection-protocol_error {
+  background: var(--color-sell);
+  box-shadow: 0 0 0 3px var(--color-sell-wash);
+}
+
+@keyframes connection-pulse {
+  50% {
+    opacity: 0.35;
+    box-shadow: 0 0 0 5px var(--color-warn-wash-faint);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-connection-connecting {
+    animation: none;
+  }
+
+  .price-scale-controls {
+    transition: none;
+  }
+}

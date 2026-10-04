@@ -1,0 +1,8 @@
+set -e
+pnpm exec lint-staged
+pnpm --filter better-charts typecheck
+cargo test --workspace --offline
+pnpm test:e2e
+python3 scripts/check_tick_reader.py
+MT5_MOCK_SELFTEST=1 python3 scripts/mock_mt5_bridge.py
+MT5_CAPTURE_SELFTEST=1 python3 scripts/capture_reconcile_snapshot.py

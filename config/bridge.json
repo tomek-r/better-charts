@@ -1,0 +1,8 @@
+{
+  "frameBytes": {
+    "default": 8388608,
+    "min": 1024,
+    "max": 2147483643
+  },
+  "historyBars": 1000
+}

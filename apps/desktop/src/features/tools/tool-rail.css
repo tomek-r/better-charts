@@ -1,0 +1,188 @@
+/* Tool rail: the drawing tools, the pointer group and its menu. */
+
+/* Staged-order chip row host: keeps the unstage (✕) button laid out cleanly. */
+/* Fixed tool rail below the topbar; the chart clears it via the dashboard's
+   left padding. */
+.tool-rail {
+  position: fixed;
+  /* 68px topbar + 8px: the rail top edge sits on the chart card's top line,
+     same distance from the topbar as the card. */
+  top: 76px;
+  left: 0;
+  bottom: 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 52px;
+  padding: 8px 0 8px;
+  overflow: visible;
+  border-radius: 0 var(--border-radius) 0 0;
+  background: var(--color-panel);
+}
+
+.tool-rail-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius);
+  padding: 0;
+  color: var(--color-muted-strong);
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.tool-rail-btn:hover {
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+  background: var(--color-raised);
+}
+
+.tool-rail-btn:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
+.tool-rail-btn.active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-fill);
+}
+
+.drawing-tool-icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.tool-rail-sep {
+  width: 22px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--color-border);
+}
+
+/* Pointer group: a TV-style split button — the icon shows the group's armed
+   tool, the arrow tab on its right edge opens the same menu. The tab is
+   absolutely positioned so revealing it never shifts the rail. */
+.tool-rail-group {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.tool-rail-split {
+  position: relative;
+  display: flex;
+}
+
+.tool-rail-arrow {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 40px;
+  border: 1px solid var(--color-border);
+  border-left: 0;
+  border-radius: 0 var(--border-radius) var(--border-radius) 0;
+  padding: 0;
+  color: var(--color-muted-strong);
+  background: var(--color-panel);
+  cursor: pointer;
+}
+
+.tool-rail-arrow-glyph {
+  display: block;
+}
+
+.tool-rail-arrow:hover {
+  border-color: var(--color-border-hover);
+  color: var(--color-text-secondary);
+  background: var(--color-raised);
+}
+
+.tool-rail-arrow:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
+/* Revealed by the rail itself (pointer on the button) or by an open menu — not
+   by CSS :hover, which Escape could not clear while the pointer still rests on
+   the tab. See DrawingToolRail's `revealed` state. */
+.tool-rail-split.open .tool-rail-arrow {
+  display: flex;
+}
+
+/* Revealed tool menu. Left edge clears the arrow tab (rail width + tab + gap)
+   so the tab stays visible next to the list it opened. */
+.tool-flyout {
+  position: absolute;
+  top: -4px;
+  left: calc(100% + 20px + 7px);
+  z-index: 26;
+  min-width: 214px;
+  padding: 5px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  background: var(--color-panel);
+  box-shadow: 0 10px 30px var(--color-scrim);
+}
+
+.tool-flyout-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 10px 6px;
+  color: var(--color-text-label);
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+}
+
+.tool-flyout-row:hover {
+  color: var(--color-text);
+  background: var(--color-raised);
+}
+
+.tool-flyout-row:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
+.tool-flyout-row.selected {
+  color: var(--color-text);
+  background: var(--color-raised);
+  border-color: var(--color-accent-ring);
+}
+
+.tool-flyout-row .drawing-tool-icon {
+  flex: 0 0 auto;
+  color: var(--color-muted-strong);
+}
+
+.tool-flyout-row.selected .drawing-tool-icon {
+  color: var(--color-accent);
+}
+
+.tool-flyout-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

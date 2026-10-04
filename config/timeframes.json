@@ -1,0 +1,11 @@
+{
+  "default": "M1",
+  "timeframes": [
+    { "code": "M1", "seconds": 60 },
+    { "code": "M5", "seconds": 300 },
+    { "code": "M15", "seconds": 900 },
+    { "code": "H1", "seconds": 3600 },
+    { "code": "H4", "seconds": 14400 },
+    { "code": "D1", "seconds": 86400 }
+  ]
+}

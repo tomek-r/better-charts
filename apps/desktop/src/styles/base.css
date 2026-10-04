@@ -1,0 +1,22 @@
+/* Reset, document defaults and the application frame (page layout, footer). */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--color-root);
+}
+
+/* The React mount node is the app frame: the header and the workspace stack
+   here, and it is the containing block for the fixed chrome. Drawer state is
+   applied by the panel itself (see app-workspace/app-workspace.css), so nothing
+   has to wrap the application to carry it. */
+#root {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}

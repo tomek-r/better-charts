@@ -1,0 +1,56 @@
+# Rust
+/target/
+
+# JavaScript
+node_modules/
+dist/
+.vite/
+.pnpm-store/
+
+# Playwright artifacts
+apps/desktop/test-results/
+apps/desktop/playwright-report/
+
+# Tauri
+apps/desktop/src-tauri/gen/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.set
+bridge.local.ini
+capture_reconcile_snapshot.json
+capture_reconcile_snapshot.json.*
+
+# MT5 build output and logs
+*.ex5
+*.log
+
+# Python
+__pycache__/
+
+# Local broker samples (contain account data)
+captures/
+
+# MT5/Wine runtime junk
+settings.dat
+*.dxvk-cache
+
+# Misc
+.pi/
+.agents/
+.codex/
+skills-lock.json
+
+# Local execution journals and startup configuration
+*.bin
+*.ini
+*.pem
+*.key

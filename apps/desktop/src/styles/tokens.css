@@ -1,0 +1,105 @@
+/* Design tokens: the colour palette plus shared geometry.
+ *
+ * Every colour in the app resolves to a token below. Canvas code cannot read
+ * custom properties, so `src/shared/theme/palette.ts` mirrors these values for
+ * the chart engine — change both together.
+ *
+ * Palette rules (see docs/architecture/color-palette.md for the analysis):
+ * - A colour earns a token only if no other token is within dE00 6 / dE76 12
+ *   of it, except for deliberate aliases (buy == profile ask, sell == profile
+ *   bid, buy == up, accent-soft == contest badge).
+ * - Values asserted by e2e (`#f7525f`, `#26a69a`, `#ffd200`, `#f2f5fa`,
+ *   `#c4c9d0`, `#121923`) are canonical for their family and never drift.
+ */
+:root {
+  /* ── Neutrals: page, wells, surfaces, raised fills ───────────────────── */
+  --color-root: #0b0e14;
+  --color-well: #040608;
+  --color-surface: #0d121b;
+  --color-panel: #121923;
+  --color-raised: #1a2637;
+  --color-overlay: #121823e8;
+
+  /* ── Borders ─────────────────────────────────────────────────────────── */
+  --color-border-subtle: #1d2635;
+  --color-border: #2b384b;
+  --color-border-strong: #3b4b62;
+  --color-border-hover: var(--color-border-hover);
+  --color-border-dialog: #374348;
+
+  /* ── Text ────────────────────────────────────────────────────────────── */
+  --color-text: #e8edf5;
+  --color-text-bright: #f2f5fa;
+  --color-text-secondary: #dce4ef;
+  --color-text-tertiary: #c4c9d0;
+  --color-text-label: #a4b7d0;
+  --color-muted: #718099;
+  --color-muted-strong: #8b99ad;
+
+  /* ── Accent: confirmations, connected state, TP zone ───────── */
+  --color-accent: #6de0ac;
+  --color-accent-soft: #91e2bd;
+  --color-accent-fill: #17382e;
+  --color-accent-border: #466b61;
+  --color-accent-ring: #6de0ac55;
+  --color-accent-ring-soft: #6de0ac1f;
+
+  /* ── Buy / long: teal (== up) · info: blue ────────────────────────────────────────────────── */
+  --color-buy: #26a69a;
+  --color-buy-soft: #79d8cf;
+  --color-buy-border: #2a7d72;
+  --color-buy-fill: #143330;
+  --color-buy-wash: #0e2523;
+
+  /* ── Take profit: blue ──────────────────────────────────────── */
+  --color-tp: #3aaeff;
+
+  /* ── Info / brand: blue ──────────────────────────────────────── */
+  --color-info: #77a7ff;
+
+  /* ── Sell / danger: red ──────────────────────────────────────────────── */
+  --color-sell: #f7525f;
+  --color-sell-soft: #ff7185;
+  --color-sell-border: #944b57;
+  --color-sell-fill: #45242b;
+  --color-sell-fill-translucent: #45242bdd;
+  --color-sell-wash: #f7525f1c;
+  --color-sell-ring: #f7525f33;
+  --color-danger-text: #ffadb3;
+
+  /* ── Warn: amber ─────────────────────────────────────────────────────── */
+  --color-warn: #ff9800;
+  --color-warn-text: #ffd28a;
+  --color-warn-highlight: #e8c86c;
+  --color-warn-border: #94772b;
+  --color-warn-border-soft: #d9a441;
+  --color-warn-fill: #453a24;
+  --color-warn-wash: #ff98001c;
+  --color-warn-wash-faint: #ff980008;
+
+  /* ── Up / candle: teal ──────────────────────────────────────────── */
+  --color-up: #26a69a;
+  --color-up-wash: #26a69a55;
+
+  /* ── Analysis overlays (TradingView-parity values, asserted by e2e) ───── */
+  --color-profile-poc: #ffd200;
+
+  /* ── Scrims ──────────────────────────────────────────────────────────── */
+  --color-scrim: rgb(0 0 0 / 45%);
+  --color-scrim-strong: #0009;
+
+  /* ── Geometry ────────────────────────────────────────────────────────── */
+  --border-radius: 8px;
+}
+
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: var(--color-text);
+  background: var(--color-root);
+  font-synthesis: none;
+}

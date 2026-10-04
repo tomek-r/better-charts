@@ -1,0 +1,38 @@
+{
+  "name": "better-charts-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
+  "devDependencies": {
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter better-charts build",
+    "dev": "pnpm --filter better-charts dev",
+    "test:e2e": "pnpm --filter better-charts test:e2e",
+    "tauri": "pnpm --filter better-charts tauri",
+    "check": "pnpm --filter better-charts check",
+    "lint": "pnpm --filter better-charts lint",
+    "format": "pnpm --filter better-charts format",
+    "format:check": "pnpm --filter better-charts format:check",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "pnpm --filter better-charts exec prettier --write",
+      "pnpm --filter better-charts exec eslint --fix"
+    ],
+    "*.{css,json,yml,yaml}": [
+      "pnpm --filter better-charts exec prettier --write"
+    ],
+    "*.css": [
+      "pnpm --filter better-charts exec eslint --fix"
+    ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "license": "MIT"
+}

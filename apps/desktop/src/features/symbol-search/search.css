@@ -1,0 +1,165 @@
+/* Symbol search dialog and its loading skeleton. */
+
+.search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: start center;
+  padding-top: 104px;
+  background: var(--color-overlay);
+}
+
+.search-panel {
+  width: min(540px, calc(100% - 28px));
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  padding: 18px;
+  background: var(--color-panel);
+  box-shadow: 0 20px 80px #000b;
+}
+
+.search-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.search-title h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.search-title button {
+  border: 0;
+  color: var(--color-muted-strong);
+  background: transparent;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.search-panel > input {
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  outline: none;
+  padding: 11px 12px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+}
+
+.search-panel > input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-ring-soft);
+}
+
+.search-hint {
+  color: var(--color-muted-strong);
+  font-size: 12px;
+}
+
+/* TV-style list: scrollable but scrollbar-free (wheel/keyboard only). */
+.search-results {
+  max-height: 310px;
+  overflow: auto;
+  margin-top: 10px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.search-results::-webkit-scrollbar {
+  display: none;
+}
+
+.search-results button {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  width: 100%;
+  gap: 3px;
+  border: 0;
+  border-radius: var(--border-radius);
+  padding: 10px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.search-results button:hover,
+.search-results button:focus-visible {
+  background: var(--color-raised);
+  outline: none;
+}
+
+.search-results button span {
+  color: var(--color-muted-strong);
+  font-size: 12px;
+}
+
+.search-section-label {
+  padding: 9px 8px 5px;
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.search-result-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.search-result-row > button:first-child {
+  flex: 1;
+}
+
+.search-result-row .favorite-toggle {
+  width: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  color: var(--color-warn-highlight);
+  font-size: 17px;
+}
+
+.search-result-row .favorite-toggle:hover,
+.search-result-row .favorite-toggle:focus-visible {
+  background: var(--color-raised);
+}
+
+.search-results button small {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--color-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Search skeleton: fixed-height pseudo-list while results load — no layout jump. */
+.search-skeleton {
+  display: grid;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.search-skeleton span {
+  display: block;
+  height: 34px;
+  border-radius: var(--border-radius);
+  background: linear-gradient(90deg, var(--color-raised) 25%, var(--color-raised) 50%, var(--color-raised) 75%);
+  background-size: 200% 100%;
+  animation: search-skeleton 1.2s linear infinite;
+}
+
+@keyframes search-skeleton {
+  to {
+    background-position: -200% 0;
+  }
+}

@@ -1,0 +1,6 @@
+/* Execution status view: the risk card hosted by the trade panel. */
+.risk-card {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--color-border);
+}

@@ -1,0 +1,237 @@
+import { createContext, useContext, useMemo, type ComponentProps, type ReactNode } from 'react';
+import { useOrderTicket, type OrderTicketState } from './useOrderTicket';
+import { quoteDigits } from '../../shared/format';
+import type { AccountSnapshot } from '../../shared/bridge/types';
+import { OrderTicketEdit } from './OrderTicketEdit';
+import { OrderTicketReview } from './OrderTicketReview';
+import { useBridgeAccount, useBridgeConnection, useBridgeMarket } from '../bridge/BridgeSessionProvider';
+import { useChartResources } from '../chart/ChartWorkspaceProvider';
+import { deriveOrderRiskBasis, type OrderRiskBasis } from './riskBasis';
+
+const OrderTicketContext = createContext<OrderTicketState | null>(null);
+type HeaderState = { account: AccountSnapshot | undefined; symbol: string | undefined };
+type ReviewProps = ComponentProps<typeof OrderTicketReview>;
+type EditProps = ComponentProps<typeof OrderTicketEdit>;
+const HeaderContext = createContext<HeaderState | null>(null);
+const RiskBasisContext = createContext<OrderRiskBasis | null>(null);
+const StageContext = createContext<'edit' | 'review' | null>(null);
+const ReviewContext = createContext<ReviewProps | null>(null);
+const EditContext = createContext<EditProps | null>(null);
+
+export function OrderTicketProvider({ children }: { children: ReactNode }) {
+  const { chart, stagedOrderState, instrumentDigitsRef, stagedActiveRef } = useChartResources();
+  const { instrument, quote, snapshot } = useBridgeMarket();
+  const account = useBridgeAccount();
+  const { status } = useBridgeConnection();
+  const ticket = useOrderTicket({
+    chart,
+    stagedOrderState,
+    instrumentDigitsRef,
+    stagedActiveRef,
+    instrument,
+    account,
+    quote,
+    snapshot,
+    status,
+  });
+  const header = useMemo<HeaderState>(() => ({ account, symbol: snapshot.symbol }), [account, snapshot.symbol]);
+  const basis = useMemo(
+    () =>
+      deriveOrderRiskBasis({
+        unitsMode: ticket.unitsMode,
+        riskAmount: ticket.riskAmount,
+        equity: account?.equity,
+        currency: account?.currency,
+        stagedOnChart: ticket.stagedOnChart,
+      }),
+    [ticket.unitsMode, ticket.riskAmount, account?.equity, account?.currency, ticket.stagedOnChart],
+  );
+  const bid = quote ? Number(quote.bid) : NaN;
+  const ask = quote ? Number(quote.ask) : NaN;
+  const quotePrecision = quote ? quoteDigits(quote.bid, quote.ask, quote.last) : 2;
+  const spread = Number.isFinite(bid) && Number.isFinite(ask) ? (ask - bid).toFixed(quotePrecision) : '—';
+  const pointSize = instrument ? Number(instrument.pointSize) : NaN;
+  const spreadPoints =
+    Number.isFinite(bid) && Number.isFinite(ask) && Number.isFinite(pointSize) && pointSize > 0
+      ? Math.round((ask - bid) / pointSize)
+      : null;
+  // Estimate only: the bridge does not expose the broker's true tick value.
+  const tickValueRaw = instrument ? Number(instrument.tickSize) * Number(instrument.contractSize) : NaN;
+  const tickValueText =
+    Number.isFinite(tickValueRaw) && tickValueRaw > 0 ? String(Number(tickValueRaw.toPrecision(8))) : '—';
+  const limitPriceNum = Number(ticket.limitPrice.trim());
+  const limitPriceMisaligned =
+    ticket.limitPriceValid &&
+    ticket.orderKind === 'stop_limit' &&
+    ticket.tickKnown &&
+    Math.abs(limitPriceNum / ticket.tickSize - Math.round(limitPriceNum / ticket.tickSize)) > 1e-6;
+  let priceSwapTitle: string;
+  if (ticket.priceMode === 'offset') {
+    priceSwapTitle = 'Enter an absolute price';
+  } else if (ticket.orderKind === 'market') {
+    priceSwapTitle = 'Market orders follow the quote — no offset';
+  } else if (!quote) {
+    priceSwapTitle = 'Offset needs a live quote';
+  } else if (!ticket.tickKnown) {
+    priceSwapTitle = 'Tick size unknown — offset conversion unavailable';
+  } else {
+    priceSwapTitle = 'Enter a price offset from the reference';
+  }
+  const review: ReviewProps = {
+    canSubmitOrder: ticket.canSubmitOrder,
+    effectiveVolume: ticket.effectiveVolume,
+    orderCheck: ticket.orderCheck,
+    orderCheckError: ticket.orderCheckError,
+    orderCheckLoading: ticket.orderCheckLoading,
+    orderKindDisplay: ticket.orderKindDisplay,
+    ticketBlockedReason: ticket.ticketBlockedReason,
+    riskSide: ticket.riskSide,
+    setTicketStage: ticket.setTicketStage,
+    submitOrder: ticket.submitOrder,
+    submitStatus: ticket.submitStatus,
+    submittingSide: ticket.submittingSide,
+  };
+  const edit: EditProps = {
+    quote: {
+      value: quote,
+      precision: quotePrecision,
+      spread,
+      spreadBadge: spread,
+      spreadPoints,
+      side: ticket.riskSide,
+      stageFromQuote: ticket.stageFromQuote,
+    },
+    pricing: {
+      instrument,
+      orderKind: ticket.orderKind,
+      setOrderKind: ticket.setOrderKind,
+      entry: ticket.entry,
+      setEntry: ticket.setEntry,
+      priceMode: ticket.priceMode,
+      priceOffset: ticket.priceOffset,
+      setPriceOffset: ticket.setPriceOffset,
+      priceReference: ticket.priceReference,
+      setPriceReference: ticket.setPriceReference,
+      priceSwapDisabled: ticket.priceSwapDisabled,
+      priceSwapTitle,
+      togglePriceMode: ticket.togglePriceMode,
+      limitPrice: ticket.limitPrice,
+      setLimitPrice: ticket.setLimitPrice,
+      limitPriceValid: ticket.limitPriceValid,
+      limitPriceMisaligned,
+    },
+    sizing: {
+      account,
+      unitsMode: ticket.unitsMode,
+      orderVolume: ticket.orderVolume,
+      setOrderVolume: ticket.setOrderVolume,
+      setVolumeManual: ticket.setVolumeManual,
+      riskAmount: ticket.riskAmount,
+      setRiskAmount: ticket.setRiskAmountFromInput,
+      applyUnitsMode: ticket.applyUnitsMode,
+      unitsAutoMode: ticket.unitsAutoMode,
+      volumeIssue: ticket.volumeIssue,
+      equityValue: basis.equityValue,
+      riskModeHint: basis.riskModeHint,
+      tickValueText,
+    },
+    exits: {
+      open: ticket.exitsOpen,
+      setOpen: ticket.setExitsOpen,
+      stopGuard: ticket.stopGuard,
+      tickKnown: ticket.tickKnown,
+      tpOn: ticket.tpOn,
+      slOn: ticket.slOn,
+      tpUnit: ticket.tpUnit,
+      slUnit: ticket.slUnit,
+      tpTicksView: ticket.priceToTicks(ticket.takeProfit, 'tp'),
+      slTicksView: ticket.priceToTicks(ticket.stopLoss, 'sl'),
+      takeProfit: ticket.takeProfit,
+      setTakeProfit: ticket.setTakeProfit,
+      stopLoss: ticket.stopLoss,
+      setStopLoss: ticket.setStopLoss,
+      toggleExit: ticket.toggleExit,
+      applyExitTicks: ticket.applyExitTicks,
+      swapExitUnit: ticket.swapExitUnit,
+    },
+    extra: {
+      open: ticket.extraOpen,
+      setOpen: ticket.setExtraOpen,
+      timeInForce: ticket.timeInForce,
+      setTimeInForce: ticket.setTimeInForce,
+    },
+    action: {
+      stagedOnChart: ticket.stagedOnChart,
+      canCheckOrder: ticket.canCheckOrder,
+      orderCheckLoading: ticket.orderCheckLoading,
+      startOrderReview: ticket.startOrderReview,
+    },
+  };
+
+  return (
+    <OrderTicketContext.Provider value={ticket}>
+      <HeaderContext.Provider value={header}>
+        <RiskBasisContext.Provider value={basis}>
+          <StageContext.Provider value={ticket.ticketStage}>
+            <ReviewContext.Provider value={review}>
+              <EditContext.Provider value={edit}>{children}</EditContext.Provider>
+            </ReviewContext.Provider>
+          </StageContext.Provider>
+        </RiskBasisContext.Provider>
+      </HeaderContext.Provider>
+    </OrderTicketContext.Provider>
+  );
+}
+
+function useRequiredOrderTicket(): OrderTicketState {
+  const ticket = useContext(OrderTicketContext);
+  if (ticket === null) {
+    throw new Error('Order ticket hooks must be used inside OrderTicketProvider.');
+  }
+  return ticket;
+}
+
+/** Full ticket state for lifecycle integrations and effect-slot registration. */
+export function useOrderTicketRuntime(): OrderTicketState {
+  return useRequiredOrderTicket();
+}
+
+export function useOrderTicketHeader(): HeaderState {
+  const value = useContext(HeaderContext);
+  if (value === null) {
+    throw new Error('OrderTicketView must be used inside OrderTicketProvider.');
+  }
+  return value;
+}
+
+export function useOrderTicketStage(): 'edit' | 'review' {
+  const value = useContext(StageContext);
+  if (value === null) {
+    throw new Error('OrderTicketView must be used inside OrderTicketProvider.');
+  }
+  return value;
+}
+
+export function useOrderTicketReviewProps(): ReviewProps {
+  const value = useContext(ReviewContext);
+  if (value === null) {
+    throw new Error('OrderTicketView must be used inside OrderTicketProvider.');
+  }
+  return value;
+}
+
+export function useOrderTicketEditProps(): EditProps {
+  const value = useContext(EditContext);
+  if (value === null) {
+    throw new Error('OrderTicketView must be used inside OrderTicketProvider.');
+  }
+  return value;
+}
+
+export function useOrderRiskBasis(): OrderRiskBasis {
+  const value = useContext(RiskBasisContext);
+  if (value === null) {
+    throw new Error('useOrderRiskBasis must be used inside OrderTicketProvider.');
+  }
+  return value;
+}
