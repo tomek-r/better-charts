@@ -141,6 +141,7 @@ export class ChartController {
             mode: options.mode,
             axisWidth: scale.width(),
             paneHeight: this.chart.panes()[0]?.getHeight() ?? 0,
+            timeAxisHeight: this.chart.timeScale().height(),
             range: scale.getVisibleRange(),
           };
         },

@@ -127,7 +127,9 @@ impl ExecutionJournal {
         }
         let mut file = options.open(path)?;
         file.try_lock_exclusive().map_err(|error| {
-            if error.kind() == io::ErrorKind::WouldBlock {
+            if error.kind() == io::ErrorKind::WouldBlock
+                || error.raw_os_error() == fs2::lock_contended_error().raw_os_error()
+            {
                 JournalError::AlreadyOpen
             } else {
                 JournalError::Io(error)
@@ -146,12 +148,14 @@ impl ExecutionJournal {
 
         let mut registry = ExecutionRegistry::new();
         let mut entries = 0usize;
-        let mut reader = file.try_clone()?;
+        // Windows byte-range locks deny reads through a second handle,
+        // including a duplicate. Replay through the handle owning the lock.
+        let reader = &mut file;
         reader.rewind()?;
         let mut consumed = 0u64;
         loop {
             let mut header = [0u8; 4];
-            let read = read_header(&mut reader, &mut header)?;
+            let read = read_header(reader, &mut header)?;
             if read == 0 {
                 break;
             }

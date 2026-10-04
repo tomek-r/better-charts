@@ -231,29 +231,27 @@ test('timeframe loading hides the old timer and hourly/daily bars use hours', as
 });
 
 /** Advance the fake clock while keeping a live tick in step with it. */
-async function feed(page: Page, t0: number, ms: number) {
+async function feed(page: Page, t0: number, brokerOffset: number, ms: number) {
   const now = await clockNow(page);
-  await pushEvent(page, 'quote-update', quote(STUB_NOW + 15_500 + Math.round(now - t0)));
+  await pushEvent(page, 'quote-update', quote(STUB_NOW + brokerOffset + Math.round(now - t0)));
   await page.clock.runFor(ms);
 }
 
 test('the tag rolls into the next bar at a close with a live feed instead of going blank', async ({ page }) => {
   await start(page);
-  await activate(page);
+  // Begin within the last second rather than replaying almost five minutes
+  // of timer callbacks just to reach the rollover under test.
+  await activate(page, 'M5', 299_500);
   const t0 = await clockNow(page);
-  // Walk the feed forward until the tag is one second from the close. Each step
-  // lands inside that second eventually, because the tag rolls back to a full
-  // interval every time a bar closes.
-  for (let step = 0; step < 200 && (await countdownText(page)) !== '00:01'; step += 1) {
-    await feed(page, t0, 2000);
-  }
+  // activate renders for 50 + 16 ms after accepting the final quote.
+  const brokerOffset = 299_500 + 66;
   expect(await countdownText(page)).toBe('00:01');
   await clearAxisPaints(page);
   // Cross the close with ticks still arriving: MT5 confirms the new bar with
   // its first tick, which has not arrived yet, so the tag must roll over rather
   // than blink off for that gap.
   for (let step = 0; step < 12; step += 1) {
-    await feed(page, t0, 100);
+    await feed(page, t0, brokerOffset, 100);
   }
   expect(await countdownText(page)).toBe('05:00');
   expect(await framesWithoutTag(page)).toEqual([]);

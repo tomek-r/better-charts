@@ -183,7 +183,7 @@ test.describe('crosshair', () => {
     expect(price.y + price.height / 2).toBeCloseTo(state.y, 0);
     // Time label: centred on the pointer x, in the time axis' own canvas
     // (its y is measured from the top of that axis, not of the pane).
-    const timeAxisHeight = host.height - pane.paneHeight;
+    const timeAxisHeight = await page.evaluate(() => window.__chartTest!.priceScale().timeAxisHeight);
     const time = state.timeLabelBox!;
     expect(time.x + time.width / 2).toBeCloseTo(state.x, 0);
     expect(time.x).toBeGreaterThanOrEqual(0);

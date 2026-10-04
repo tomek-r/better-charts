@@ -27,6 +27,7 @@ export interface DevTestApi {
     mode: PriceScaleMode;
     axisWidth: number;
     paneHeight: number;
+    timeAxisHeight: number;
     range: { from: number; to: number } | null;
   };
 }

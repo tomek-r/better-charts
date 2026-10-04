@@ -78,15 +78,16 @@ fn journal_allows_only_one_live_writer_and_releases_lock_on_drop() {
     let temp = Temp::new();
     let writer = ExecutionJournal::open(&temp.0).unwrap();
     writer.register(intent("one"), 1).unwrap();
+    drop(writer);
     let bytes_before = fs::read(&temp.0).unwrap();
+    let writer = ExecutionJournal::open(&temp.0).unwrap();
 
     assert!(matches!(
         ExecutionJournal::open(&temp.0),
         Err(JournalError::AlreadyOpen)
     ));
-    assert_eq!(fs::read(&temp.0).unwrap(), bytes_before);
-
     drop(writer);
+    assert_eq!(fs::read(&temp.0).unwrap(), bytes_before);
     let shared_writer = ExecutionJournal::open(&temp.0).unwrap();
     let retained_clone = shared_writer.clone();
     drop(shared_writer);

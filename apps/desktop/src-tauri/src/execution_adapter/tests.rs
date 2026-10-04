@@ -530,6 +530,7 @@ fn session_close_strands_queued_commands_and_unknowns_the_in_flight_one() {
         .find(|entry| entry.command_id == "cmd-a")
         .unwrap();
     assert_eq!(in_flight.state, "unknown");
+    drop(journal);
     assert_eq!(
         queue_dropped_ids(&temp.0),
         vec![vec!["cmd-b".to_owned(), "cmd-c".to_owned()]],
