@@ -95,6 +95,15 @@ struct JournalInner {
     failed: bool,
 }
 
+impl Drop for JournalInner {
+    fn drop(&mut self) {
+        // On Unix, a child spawned concurrently can retain the shared file
+        // description until exec. Release ownership when the last journal
+        // clone drops, rather than waiting for every inherited fd to close.
+        let _ = FileExt::unlock(&self.file);
+    }
+}
+
 /// Synchronized journal + validated in-memory view. A failed open or append is
 /// surfaced to the caller; callers must keep execution disabled in that case.
 #[derive(Clone)]

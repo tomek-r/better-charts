@@ -101,6 +101,29 @@ fn journal_allows_only_one_live_writer_and_releases_lock_on_drop() {
 }
 
 #[test]
+#[cfg(unix)]
+fn journal_releases_lock_even_when_a_duplicate_descriptor_is_retained() {
+    let temp = Temp::new();
+    let writer = ExecutionJournal::open(&temp.0).unwrap();
+    writer.register(intent("one"), 1).unwrap();
+    // A concurrently spawned child can inherit this descriptor until exec.
+    let inherited_file = writer.inner.lock().unwrap().file.try_clone().unwrap();
+    assert!(matches!(
+        ExecutionJournal::open(&temp.0),
+        Err(JournalError::AlreadyOpen)
+    ));
+
+    drop(writer);
+    let next_writer = ExecutionJournal::open(&temp.0).unwrap();
+    assert_eq!(next_writer.command_count().unwrap(), 1);
+    drop(inherited_file);
+    assert!(matches!(
+        ExecutionJournal::open(&temp.0),
+        Err(JournalError::AlreadyOpen)
+    ));
+}
+
+#[test]
 fn journal_lock_excludes_a_writer_in_another_process() {
     const CHILD_PATH: &str = "BETTER_CHARTS_JOURNAL_LOCK_CHILD_PATH";
     if let Some(path) = env::var_os(CHILD_PATH) {

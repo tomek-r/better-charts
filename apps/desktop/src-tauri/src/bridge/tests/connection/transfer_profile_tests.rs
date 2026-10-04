@@ -421,6 +421,31 @@ async fn streamed_multi_day_profile_reaches_ui_without_truncation_or_session_res
     for page_index in 0..5 {
         let page = client.recv(Duration::from_secs(3)).await.unwrap();
         assert_eq!(page.message_type, MessageType::TickHistoryRequest);
+        // Keep the simulated EA live during a large transfer. On the second
+        // page, span the full heartbeat deadline to guard against relying on
+        // the entire test finishing within that deadline on a fast machine.
+        let heartbeat_count = if page_index == 1 { 4 } else { 1 };
+        for beat in 0..heartbeat_count {
+            if beat > 0 {
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            let sequence = page_index * 4 + beat + 1;
+            client
+                .send(BridgeClient::envelope(
+                    MessageType::Heartbeat,
+                    "multi-day-heartbeat",
+                    Some(&handshake.session),
+                    serde_json::json!({
+                        "sequence": sequence, "terminal_connected": true,
+                        "account_connected": true, "broker_server": "Broker-Demo"
+                    }),
+                ))
+                .await
+                .unwrap();
+            let ack = client.recv(Duration::from_secs(3)).await.unwrap();
+            assert_eq!(ack.message_type, MessageType::HeartbeatAck);
+            assert_eq!(ack.payload["sequence"], sequence);
+        }
         let wire: TickHistoryRequest = serde_json::from_value(page.payload).unwrap();
         assert_eq!(wire.max_ticks, 65_535);
         let end = (wire.from_ms + i64::from(wire.max_ticks)).min(300_000);
