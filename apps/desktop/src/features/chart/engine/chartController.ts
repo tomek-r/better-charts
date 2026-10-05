@@ -43,8 +43,8 @@ export class ChartController {
   private readonly connection: ConnectionIndicator;
   private readonly countdownPrimitive = new BarCountdownPrimitive({ backColor: STAGED_COLORS.sell });
   private readonly scaleControls: PriceScaleController;
-  // The Cross tool's crosshair; attached for the life of the chart and drawn
-  // only while the pointer position it is given is current.
+  // Every tool shares pointer labels; Cross additionally draws the lines.
+  // Attached for the chart's life, drawn only while a pointer is over the pane.
   private readonly crosshair = new CrosshairPrimitive();
   // The Bid/Ask lines are native price lines; their tags are price-axis labels
   // positioned by this primitive, because the library's own label alignment
@@ -354,14 +354,11 @@ export class ChartController {
     return this.tool === 'fixedRangeProfile';
   }
   /**
-   * The Cross tool follows the pointer (host CSS px). Outside the pane the
-   * crosshair hides rather than clamping, because a clamped crosshair would
+   * Every pointer shows axis labels (host CSS px). Outside the pane the
+   * readout hides rather than clamping, because a clamped readout would
    * print a time or price the pointer is not over.
    */
   moveCrosshair(x: number, y: number): void {
-    if (this.tool !== 'crosshair') {
-      return;
-    }
     const { width, height } = this.view.paneSize();
     if (isOutsidePane(x, y, width, height)) {
       this.crosshair.hide();
@@ -381,9 +378,7 @@ export class ChartController {
       this.profile.cancelGesture();
     }
     this.tool = tool;
-    if (tool !== 'crosshair') {
-      this.crosshair.hide();
-    }
+    this.crosshair.setLinesVisible(tool === 'crosshair');
     this.host.style.cursor = tool ? 'crosshair' : '';
   }
   getProfileRange(): ProfileRange | null {

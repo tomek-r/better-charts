@@ -66,8 +66,8 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
     };
     const onPointerMove = (event: PointerEvent) => {
       const { x, y } = localPoint(event);
-      // The Cross tool follows the pointer without consuming the event; every
-      // other gesture path below is unaffected (crosshair is not a profile tool).
+      // Pointer labels follow every tool without consuming events or taking
+      // ownership from the gesture paths below.
       chart.current?.moveCrosshair(x, y);
       if (chart.current?.profilePointerMove(x)) {
         event.stopPropagation();

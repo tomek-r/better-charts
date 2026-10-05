@@ -47,6 +47,13 @@ The optional React measurement harness runs with
 `pnpm --filter better-charts profiler`. For repeatable main-versus-working-tree
 measurements, see the [React profiler guide](../performance/react-profiler.md).
 
+Every chart pointer displays the price on the right and the bar date/time at
+the bottom of the pane just above the time axis, including Arrow and Fixed
+Range Volume Profile. Crosshair adds its
+lines to the same readout. The custom primitive resolves values from the live
+chart geometry during drawing; labels hide outside the pane and on pointer
+leave, and use UTC for the time label.
+
 ## Identity and observations
 
 Accept snapshots only for the current session, symbol and request. A newer
