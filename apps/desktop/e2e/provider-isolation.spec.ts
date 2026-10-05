@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { deriveOrderRiskBasis } from '../src/features/order-ticket/riskBasis';
+import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
 import { gotoWithStub } from './tauriStub';
 
 interface ProbeCounts {
@@ -41,6 +41,8 @@ test('quote updates rerender market and ticket consumers without waking unrelate
   expect(counts.market).toBeGreaterThan(0);
   expect(counts['bridge-runtime']).toBeGreaterThan(0);
   expect(counts['ticket-edit']).toBeGreaterThan(0);
+  expect(counts['ticket-quotes']).toBeGreaterThan(0);
+  expect(counts['ticket-extra-settings'] ?? 0).toBe(0);
   expect(counts.account ?? 0).toBe(0);
   expect(counts.portfolio ?? 0).toBe(0);
   expect(counts.settings ?? 0).toBe(0);
@@ -51,6 +53,14 @@ test('quote updates rerender market and ticket consumers without waking unrelate
   expect(counts['chart-title'] ?? 0).toBe(0);
   expect(counts['chart-timeframes'] ?? 0).toBe(0);
   expect(counts['chart-canvas'] ?? 0).toBe(0);
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Update quote' }).click();
+  const nextCounts = await probeCounts(page);
+  expect(nextCounts['ticket-quotes']).toBeGreaterThan(0);
+  expect(nextCounts['ticket-edit'] ?? 0).toBe(0);
+  expect(nextCounts['ticket-extra-settings'] ?? 0).toBe(0);
 });
 
 test('ticket edits and panel toggles update only their owning consumers', async ({ page }) => {
@@ -60,6 +70,8 @@ test('ticket edits and panel toggles update only their owning consumers', async 
   await expect(page.getByTestId('probe-ticket-edit')).toHaveText('1.2345');
   const ticketCounts = await probeCounts(page);
   expect(ticketCounts['ticket-edit']).toBeGreaterThan(0);
+  expect(ticketCounts['ticket-extra-settings'] ?? 0).toBe(0);
+  expect(ticketCounts['ticket-tick-value'] ?? 0).toBe(0);
   expect(ticketCounts.market ?? 0).toBe(0);
   expect(ticketCounts.account ?? 0).toBe(0);
   expect(ticketCounts.settings ?? 0).toBe(0);
@@ -151,4 +163,37 @@ test('typing in search keeps bridge, ticket, settings and header consumers idle'
   expect(counts.header ?? 0).toBe(0);
   expect(counts.settings ?? 0).toBe(0);
   expect(counts['chart-resources'] ?? 0).toBe(0);
+});
+
+test('extra settings changes stay local to settings and preserve selection when collapsed', async ({ page }) => {
+  await mountHarness(page);
+  const extra = page.getByRole('button', { name: 'Extra settings' });
+  await extra.click();
+  await page.getByRole('combobox', { name: 'Time in force' }).selectOption('ioc');
+  await expect(page.getByRole('combobox', { name: 'Time in force' })).toHaveValue('ioc');
+  const counts = await probeCounts(page);
+  expect(counts['ticket-extra-settings']).toBeGreaterThan(0);
+  expect(counts['ticket-quotes'] ?? 0).toBe(0);
+  expect(counts['ticket-edit'] ?? 0).toBe(0);
+  await extra.click();
+  await expect(page.getByRole('combobox', { name: 'Time in force' })).toHaveCount(0);
+  await extra.click();
+  await expect(page.getByRole('combobox', { name: 'Time in force' })).toHaveValue('ioc');
+});
+
+test('moving quotes keep unchanged sizing, exits and review action consumers idle', async ({ page }) => {
+  await mountHarness(page);
+  await page.getByRole('button', { name: 'Update quote' }).click();
+  await expect(page.getByTestId('probe-market')).toHaveText('1.0852');
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Move quote' }).click();
+  await expect(page.getByTestId('probe-market')).toHaveText('1.08530');
+  const counts = await probeCounts(page);
+  expect(counts['ticket-quotes']).toBeGreaterThan(0);
+  expect(counts['ticket-sizing'] ?? 0).toBe(0);
+  expect(counts['ticket-tick-value'] ?? 0).toBe(0);
+  expect(counts['ticket-exits'] ?? 0).toBe(0);
+  expect(counts['ticket-action'] ?? 0).toBe(0);
 });

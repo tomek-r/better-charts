@@ -1,5 +1,5 @@
-import type { OrderCheckResult as OrderCheckResultModel } from '../../shared/bridge/types';
-import { formatOrderMetric, formatQuoted } from './ticketFormatting';
+import type { OrderCheckResult as OrderCheckResultModel } from '../../../shared/bridge/types';
+import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
 
 /** MT5 OrderCheck result panel shown in the ticket's review stage. */
 export function OrderCheckResult({ orderCheck }: { orderCheck: OrderCheckResultModel }) {

@@ -8,8 +8,8 @@ import type {
   RiskPreview,
   RiskSide,
   TimeInForce,
-} from '../../shared/bridge/types';
-import { normalizedPrice } from '../../shared/format';
+} from '../../../shared/bridge/types';
+import { normalizedPrice } from '../../../shared/format';
 
 // §11 editable volume: positive decimal and — when instrument metadata is known — inside [volumeMin, volumeMax] and a whole multiple of volumeStep (the 1e-8 tolerance absorbs binary-float noise such as 0.3/0.1). Unknown instrument: plain positive decimal only; the backend/EA re-validates volume on the wire.
 export function orderVolumeIssue(value: string, instrument?: BrokerSymbol): string | undefined {

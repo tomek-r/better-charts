@@ -1,6 +1,6 @@
-import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, useRef, useState } from 'react';
-import type { AccountSnapshot } from '../../shared/bridge/types';
-import { CaretIcon } from '../../shared/ui/CaretIcon';
+import { type Dispatch, type RefObject, type SetStateAction, useEffect, useRef, useState } from 'react';
+import type { AccountSnapshot } from '../../../shared/bridge/types';
+import { CaretIcon } from '../../../shared/ui/CaretIcon';
 
 /** The order ticket's Units sizing row: manual volume/risk field, swap button,
  * in-field sizing indicator and the sizing-mode menu (units / money / equity). */
@@ -23,7 +23,7 @@ export function UnitsSizingRow({
   setRiskAmount: (value: string) => void;
   applyUnitsMode: (mode: 'money' | 'equity' | 'units') => void;
   account: AccountSnapshot | undefined;
-  unitsAutoMode: MutableRefObject<'money' | 'equity'>;
+  unitsAutoMode: RefObject<'money' | 'equity'>;
 }) {
   // TV-style sizing-mode menu for the ONE Units input: opens from the row label
   // or the in-field indicator, closes on select / outside press / Escape, and is

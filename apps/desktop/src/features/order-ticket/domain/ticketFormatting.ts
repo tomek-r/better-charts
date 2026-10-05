@@ -1,4 +1,4 @@
-import type { AccountSnapshot } from '../../shared/bridge/types';
+import type { AccountSnapshot } from '../../../shared/bridge/types';
 
 /** Account-environment badge data: prefers the backend's `accountTradeModeName`,
  * falls back to the raw enum int (0 demo / 1 contest / 2 real), else unknown —

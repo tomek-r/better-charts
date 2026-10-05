@@ -38,7 +38,7 @@ import {
 } from './normalizers';
 import { syncPositionOverlay } from '../chart/engine/overlayLines';
 import { quoteDigits } from '../../shared/format';
-import type { OrderTicketState } from '../order-ticket/useOrderTicket';
+import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
 import { HISTORY_BARS } from '../../shared/bridge/limits';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
 

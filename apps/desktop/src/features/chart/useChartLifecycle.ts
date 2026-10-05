@@ -4,7 +4,7 @@ import { ChartController } from './engine/chartController';
 import { Mt5DataAdapter } from './engine/mt5DataAdapter';
 import { quoteDigits } from '../../shared/format';
 import type { BridgeSessionState } from '../bridge/useBridgeSession';
-import type { OrderTicketState } from '../order-ticket/useOrderTicket';
+import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
 import type { ChartWorkspaceState } from './useChartWorkspace';
 
 /**

@@ -12,11 +12,9 @@ import {
   useChartWorkspaceMirrorRefEffect,
   useChartWorkspaceMirrorLayoutEffect,
 } from './features/chart/useChartOverlaySync';
-import {
-  useOrderTicketEntryEffects,
-  useOrderTicketOrderCheckEffects,
-  useOrderTicketRiskPreviewEffects,
-} from './features/order-ticket/useOrderTicket';
+import { useOrderTicketEntryEffects } from './features/order-ticket/effects/useOrderTicketEntryEffects';
+import { useOrderTicketOrderCheckEffects } from './features/order-ticket/effects/useOrderTicketOrderCheckEffects';
+import { useOrderTicketRiskPreviewEffects } from './features/order-ticket/effects/useOrderTicketRiskPreviewEffects';
 import { usePortfolioAccountResetEffect } from './features/portfolio/usePortfolio';
 import { useBridgeSessionRuntime } from './features/bridge/BridgeSessionProvider';
 import { useChartWorkspaceRuntime } from './features/chart/ChartWorkspaceProvider';
