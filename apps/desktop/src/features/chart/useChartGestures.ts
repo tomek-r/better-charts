@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { createStagedOrderGestures } from './engine/stagedOrderGestures';
 import { createTradingOverlayGestures } from './engine/tradingOverlayGestures';
-import type { OrderTicketState } from '../order-ticket/useOrderTicket';
+import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
 import type { ChartWorkspaceState } from './useChartWorkspace';
 import { useChartGestureDiagnostics } from './useChartGestureDiagnostics';
 

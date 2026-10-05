@@ -2,7 +2,7 @@
  * dual ticks⇄price field. The price string is the canonical value (what the
  * backend receives); the ticks view converts through the instrument tick size
  * and is disabled when the tick size is unknown. */
-import { CaretIcon } from '../../shared/ui/CaretIcon';
+import { CaretIcon } from '../../../shared/ui/CaretIcon';
 
 export function TicketExitRow({
   label,

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { deriveOrderTicket, orderEntryPrice, stopDistanceGuard } from '../src/features/order-ticket/ticketRules';
+import { deriveOrderTicket, orderEntryPrice, stopDistanceGuard } from '../src/features/order-ticket/domain/ticketRules';
 import type { BrokerSymbol, QuoteSnapshot } from '../src/shared/bridge/types';
 import { openTradePanel } from './panel';
 import { gotoWithStub, pushEvent, stubInvocations, wasInvoked } from './tauriStub';
@@ -281,4 +281,77 @@ test('no-SL draft edits advance the rendered freshness token without requesting 
   expect(await latestInvoke(page, 'request_risk_preview')).toBeUndefined();
   expect(collected.pageErrors).toEqual([]);
   expect(collected.consoleErrors).toEqual([]);
+});
+
+test('risk input uses the latest market quote for its default stop', async ({ page }) => {
+  const { ticket, collected } = await openTicket(page);
+  await ticket.locator('.ticket-quote-side.buy').click();
+  await ticket.locator('.ticket-menu-trigger').click();
+  await ticket.getByRole('menuitemradio', { name: 'Risk, USD' }).click();
+  await pushEvent(page, 'quote-update', {
+    ...quote,
+    symbol: 'EURUSD',
+    bid: '1.09000',
+    ask: '1.09020',
+    last: '1.09000',
+    timeMs: 1745700001000,
+  });
+  await expect(page.getByLabel('Order price')).toHaveValue('1.09020');
+  await page.getByLabel('Risk amount').fill('25');
+  await page.getByLabel('Swap Stop loss input to price').click();
+  await expect(page.getByLabel('Stop loss price')).toHaveValue('1.08978');
+  expect(collected.pageErrors).toEqual([]);
+  expect(collected.consoleErrors).toEqual([]);
+});
+
+test('market quote changes update stop validation and the review gate', async ({ page }) => {
+  const { ticket } = await openTicket(page);
+  await ticket.locator('.ticket-quote-side.buy').click();
+  await fillExitPrice(page, 'Stop loss', '1.08400');
+  const action = ticket.locator('.ticket-cta');
+  await expect(action).toBeEnabled();
+  await pushEvent(page, 'quote-update', {
+    ...quote,
+    symbol: 'EURUSD',
+    bid: '1.08410',
+    ask: '1.08500',
+    last: '1.08410',
+    timeMs: 1745700001000,
+  });
+  await expect(action).toBeDisabled();
+  await expect(page.getByLabel('Stop loss price')).toHaveClass(/invalid/);
+  await pushEvent(page, 'quote-update', {
+    ...quote,
+    symbol: 'EURUSD',
+    bid: '1.08460',
+    ask: '1.08500',
+    last: '1.08460',
+    timeMs: 1745700002000,
+  });
+  await expect(action).toBeEnabled();
+  await action.click();
+  await expect(page.locator('.order-check-result')).toBeVisible();
+  expect((await latestInvoke(page, 'request_order_check'))?.args).toMatchObject({
+    entry: '1.085',
+    stopLoss: '1.08400',
+    side: 'buy',
+  });
+});
+
+test('review action reads the latest draft fields after editing', async ({ page }) => {
+  const { ticket } = await openTicket(page);
+  await ticket.locator('.ticket-quote-side.buy').click();
+  await ticket.getByRole('button', { name: 'Limit', exact: true }).click();
+  await page.getByLabel('Order price').fill('1.08000');
+  await page.getByLabel('Units', { exact: true }).fill('0.25');
+  await ticket.getByRole('button', { name: 'Extra settings' }).click();
+  await ticket.getByRole('combobox', { name: 'Time in force' }).selectOption('day');
+  await ticket.locator('.ticket-cta').click();
+  await expect(page.locator('.order-check-result')).toBeVisible();
+  expect((await latestInvoke(page, 'request_order_check'))?.args).toMatchObject({
+    entry: '1.08000',
+    volume: '0.25',
+    timeInForce: 'day',
+    orderKind: 'limit',
+  });
 });

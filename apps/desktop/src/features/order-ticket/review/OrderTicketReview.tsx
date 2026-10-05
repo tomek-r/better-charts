@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction } from 'react';
-import type { OrderCheckResult, RiskSide } from '../../shared/bridge/types';
+import type { OrderCheckResult, RiskSide } from '../../../shared/bridge/types';
 import { OrderCheckResult as OrderCheckResultView } from './OrderCheckResult';
 
 export function OrderTicketReview({

@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect } from 'react';
 import type { StagedOrderLevels } from './engine/stagedOrderOverlay';
 import { quoteDigits, formatSignedMoney } from '../../shared/format';
-import { orderEntryPrice, riskRewardRatio } from '../order-ticket/ticketRules';
+import { orderEntryPrice, riskRewardRatio } from '../order-ticket/domain/ticketRules';
 import type { BridgeSessionState } from '../bridge/useBridgeSession';
-import type { OrderTicketState } from '../order-ticket/useOrderTicket';
+import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
 import type { useExecutionCommands } from '../execution/useExecutionCommands';
 import type { ChartWorkspaceState } from './useChartWorkspace';
 

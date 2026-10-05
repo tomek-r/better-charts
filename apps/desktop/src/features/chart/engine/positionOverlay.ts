@@ -1,6 +1,6 @@
 import type { OverlayRenderer } from './overlayTypes';
 import type { RiskSide } from '../../../shared/bridge/types';
-import { riskRewardRatio } from '../../order-ticket/ticketRules';
+import { riskRewardRatio } from '../../order-ticket/domain/ticketRules';
 import {
   STAGED_COLORS,
   tagPath,

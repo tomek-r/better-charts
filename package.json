@@ -15,7 +15,8 @@
     "lint": "pnpm --filter better-charts lint",
     "format": "pnpm --filter better-charts format",
     "format:check": "pnpm --filter better-charts format:check",
-    "prepare": "husky"
+    "prepare": "husky",
+    "profiler:compare": "node scripts/react-profiler/compare.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

@@ -24,9 +24,15 @@ import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
 import type { QuoteSnapshot } from '../src/shared/bridge/types';
 import {
   OrderTicketProvider,
-  useOrderTicketEditProps,
+  useOrderTicketPricing,
   useOrderTicketRuntime,
 } from '../src/features/order-ticket/OrderTicketProvider';
+import { OrderTicketTickValue } from '../src/features/order-ticket/editor/OrderTicketTickValue';
+import { OrderTicketSizing } from '../src/features/order-ticket/editor/OrderTicketSizing';
+import { OrderTicketExits } from '../src/features/order-ticket/editor/OrderTicketExits';
+import { OrderTicketReviewAction } from '../src/features/order-ticket/editor/OrderTicketReviewAction';
+import { OrderTicketQuotes } from '../src/features/order-ticket/editor/OrderTicketQuotes';
+import { OrderTicketExtraSettings } from '../src/features/order-ticket/editor/OrderTicketExtraSettings';
 import { SymbolSearchView } from '../src/features/symbol-search/SymbolSearchView';
 import { SymbolSearchProvider } from '../src/features/symbol-search/SymbolSearchProvider';
 import { AppSettingsProvider, useAppSettingsView } from '../src/features/settings/AppSettingsProvider';
@@ -110,8 +116,8 @@ function ChartResourcesProbe() {
 }
 
 function TicketEditProbe() {
-  const edit = useOrderTicketEditProps();
-  return <output data-testid="probe-ticket-edit">{edit.pricing.entry}</output>;
+  const pricing = useOrderTicketPricing();
+  return <output data-testid="probe-ticket-edit">{pricing.entry}</output>;
 }
 
 function PanelProbe() {
@@ -133,6 +139,13 @@ function BridgeControls() {
       flags: 0,
     };
     session.setQuote(quote);
+  };
+  const moveQuote = () => {
+    session.setQuote((quote) =>
+      quote
+        ? { ...quote, bid: (Number(quote.bid) + 0.0001).toFixed(5), ask: (Number(quote.ask) + 0.0001).toFixed(5) }
+        : quote,
+    );
   };
   const updateCandle = () => {
     session.setSnapshot((snapshot) => ({
@@ -163,6 +176,9 @@ function BridgeControls() {
     <div data-testid="provider-probe-ready">
       <button type="button" onClick={updateQuote}>
         Update quote
+      </button>
+      <button type="button" onClick={moveQuote}>
+        Move quote
       </button>
       <button type="button" onClick={updateCandle}>
         Update candle
@@ -249,6 +265,24 @@ function WorkspaceProbes() {
           <OrderTicketProvider>
             <Probe id="ticket-edit">
               <TicketEditProbe />
+            </Probe>
+            <Probe id="ticket-quotes">
+              <OrderTicketQuotes />
+            </Probe>
+            <Probe id="ticket-extra-settings">
+              <OrderTicketExtraSettings />
+            </Probe>
+            <Probe id="ticket-sizing">
+              <OrderTicketSizing />
+            </Probe>
+            <Probe id="ticket-tick-value">
+              <OrderTicketTickValue />
+            </Probe>
+            <Probe id="ticket-exits">
+              <OrderTicketExits />
+            </Probe>
+            <Probe id="ticket-action">
+              <OrderTicketReviewAction />
             </Probe>
             <TicketControls />
           </OrderTicketProvider>

@@ -1,7 +1,7 @@
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { ticketPrice } from '../../../shared/format';
 import type { ChartWorkspaceState } from '../useChartWorkspace';
-import type { OrderTicketState } from '../../order-ticket/useOrderTicket';
+import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
 
 type StagedGestureWorkspace = Pick<ChartWorkspaceState, 'stagedOrderState'>;
 type StagedGestureTicket = Pick<

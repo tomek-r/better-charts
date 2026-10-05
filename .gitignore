@@ -54,3 +54,6 @@ skills-lock.json
 *.ini
 *.pem
 *.key
+
+# Local React profiling captures
+.react-profiler/

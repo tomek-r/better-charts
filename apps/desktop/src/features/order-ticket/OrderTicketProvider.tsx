@@ -1,22 +1,35 @@
 import { createContext, useContext, useMemo, type ComponentProps, type ReactNode } from 'react';
-import { useOrderTicket, type OrderTicketState } from './useOrderTicket';
+import { useOrderTicket, type OrderTicketState } from './state/useOrderTicket';
 import { quoteDigits } from '../../shared/format';
 import type { AccountSnapshot } from '../../shared/bridge/types';
-import { OrderTicketEdit } from './OrderTicketEdit';
-import { OrderTicketReview } from './OrderTicketReview';
+import { OrderTicketReview } from './review/OrderTicketReview';
 import { useBridgeAccount, useBridgeConnection, useBridgeMarket } from '../bridge/BridgeSessionProvider';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
-import { deriveOrderRiskBasis, type OrderRiskBasis } from './riskBasis';
+import { deriveOrderRiskBasis, type OrderRiskBasis } from './domain/riskBasis';
+import type {
+  OrderTicketActionProps,
+  OrderTicketExitsProps,
+  OrderTicketExtraSettingsProps,
+  OrderTicketPricingProps,
+  OrderTicketQuoteProps,
+  OrderTicketSizingProps,
+  OrderTicketTickValueProps,
+} from './editor/orderTicketEditorTypes';
 
 const OrderTicketContext = createContext<OrderTicketState | null>(null);
 type HeaderState = { account: AccountSnapshot | undefined; symbol: string | undefined };
 type ReviewProps = ComponentProps<typeof OrderTicketReview>;
-type EditProps = ComponentProps<typeof OrderTicketEdit>;
 const HeaderContext = createContext<HeaderState | null>(null);
 const RiskBasisContext = createContext<OrderRiskBasis | null>(null);
 const StageContext = createContext<'edit' | 'review' | null>(null);
 const ReviewContext = createContext<ReviewProps | null>(null);
-const EditContext = createContext<EditProps | null>(null);
+const QuoteContext = createContext<OrderTicketQuoteProps | null>(null);
+const PricingContext = createContext<OrderTicketPricingProps | null>(null);
+const SizingContext = createContext<OrderTicketSizingProps | null>(null);
+const TickValueContext = createContext<OrderTicketTickValueProps | null>(null);
+const ExitsContext = createContext<OrderTicketExitsProps | null>(null);
+const ExtraSettingsContext = createContext<OrderTicketExtraSettingsProps | null>(null);
+const ActionContext = createContext<OrderTicketActionProps | null>(null);
 
 export function OrderTicketProvider({ children }: { children: ReactNode }) {
   const { chart, stagedOrderState, instrumentDigitsRef, stagedActiveRef } = useChartResources();
@@ -77,22 +90,38 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
   } else {
     priceSwapTitle = 'Enter a price offset from the reference';
   }
-  const review: ReviewProps = {
-    canSubmitOrder: ticket.canSubmitOrder,
-    effectiveVolume: ticket.effectiveVolume,
-    orderCheck: ticket.orderCheck,
-    orderCheckError: ticket.orderCheckError,
-    orderCheckLoading: ticket.orderCheckLoading,
-    orderKindDisplay: ticket.orderKindDisplay,
-    ticketBlockedReason: ticket.ticketBlockedReason,
-    riskSide: ticket.riskSide,
-    setTicketStage: ticket.setTicketStage,
-    submitOrder: ticket.submitOrder,
-    submitStatus: ticket.submitStatus,
-    submittingSide: ticket.submittingSide,
-  };
-  const edit: EditProps = {
-    quote: {
+  const review = useMemo<ReviewProps>(
+    () => ({
+      canSubmitOrder: ticket.canSubmitOrder,
+      effectiveVolume: ticket.effectiveVolume,
+      orderCheck: ticket.orderCheck,
+      orderCheckError: ticket.orderCheckError,
+      orderCheckLoading: ticket.orderCheckLoading,
+      orderKindDisplay: ticket.orderKindDisplay,
+      ticketBlockedReason: ticket.ticketBlockedReason,
+      riskSide: ticket.riskSide,
+      setTicketStage: ticket.setTicketStage,
+      submitOrder: ticket.submitOrder,
+      submitStatus: ticket.submitStatus,
+      submittingSide: ticket.submittingSide,
+    }),
+    [
+      ticket.canSubmitOrder,
+      ticket.effectiveVolume,
+      ticket.orderCheck,
+      ticket.orderCheckError,
+      ticket.orderCheckLoading,
+      ticket.orderKindDisplay,
+      ticket.ticketBlockedReason,
+      ticket.riskSide,
+      ticket.setTicketStage,
+      ticket.submitOrder,
+      ticket.submitStatus,
+      ticket.submittingSide,
+    ],
+  );
+  const quoteProps = useMemo<OrderTicketQuoteProps>(
+    () => ({
       value: quote,
       precision: quotePrecision,
       spread,
@@ -100,8 +129,12 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
       spreadPoints,
       side: ticket.riskSide,
       stageFromQuote: ticket.stageFromQuote,
-    },
-    pricing: {
+    }),
+    [quote, quotePrecision, spread, spreadPoints, ticket.riskSide, ticket.stageFromQuote],
+  );
+  const hasQuote = quote !== undefined;
+  const pricingProps = useMemo<OrderTicketPricingProps>(
+    () => ({
       instrument,
       orderKind: ticket.orderKind,
       setOrderKind: ticket.setOrderKind,
@@ -119,8 +152,33 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
       setLimitPrice: ticket.setLimitPrice,
       limitPriceValid: ticket.limitPriceValid,
       limitPriceMisaligned,
-    },
-    sizing: {
+      side: ticket.riskSide,
+      hasQuote,
+    }),
+    [
+      instrument,
+      ticket.orderKind,
+      ticket.setOrderKind,
+      ticket.entry,
+      ticket.setEntry,
+      ticket.priceMode,
+      ticket.priceOffset,
+      ticket.setPriceOffset,
+      ticket.priceReference,
+      ticket.setPriceReference,
+      ticket.priceSwapDisabled,
+      priceSwapTitle,
+      ticket.togglePriceMode,
+      ticket.limitPrice,
+      ticket.setLimitPrice,
+      ticket.limitPriceValid,
+      limitPriceMisaligned,
+      ticket.riskSide,
+      hasQuote,
+    ],
+  );
+  const sizingProps = useMemo<OrderTicketSizingProps>(
+    () => ({
       account,
       unitsMode: ticket.unitsMode,
       orderVolume: ticket.orderVolume,
@@ -133,19 +191,51 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
       volumeIssue: ticket.volumeIssue,
       equityValue: basis.equityValue,
       riskModeHint: basis.riskModeHint,
-      tickValueText,
-    },
-    exits: {
+      stagedOnChart: ticket.stagedOnChart,
+      slOn: ticket.slOn,
+      stopLoss: ticket.stopLoss,
+    }),
+    [
+      account,
+      ticket.unitsMode,
+      ticket.orderVolume,
+      ticket.setOrderVolume,
+      ticket.setVolumeManual,
+      ticket.riskAmount,
+      ticket.setRiskAmountFromInput,
+      ticket.applyUnitsMode,
+      ticket.unitsAutoMode,
+      ticket.volumeIssue,
+      basis.equityValue,
+      basis.riskModeHint,
+      ticket.stagedOnChart,
+      ticket.slOn,
+      ticket.stopLoss,
+    ],
+  );
+  const hasInstrument = instrument !== undefined;
+  const currency = account?.currency;
+  const tickValueProps = useMemo<OrderTicketTickValueProps>(
+    () => ({ hasInstrument, tickValueText, currency }),
+    [hasInstrument, tickValueText, currency],
+  );
+  const slTooClose = ticket.stagedOnChart && Boolean(ticket.stopGuard?.slTooClose);
+  const tpTooClose = ticket.stagedOnChart && Boolean(ticket.stopGuard?.tpTooClose);
+  const tpTicksView = ticket.priceToTicks(ticket.takeProfit, 'tp');
+  const slTicksView = ticket.priceToTicks(ticket.stopLoss, 'sl');
+  const exitsProps = useMemo<OrderTicketExitsProps>(
+    () => ({
       open: ticket.exitsOpen,
       setOpen: ticket.setExitsOpen,
-      stopGuard: ticket.stopGuard,
+      slTooClose,
+      tpTooClose,
       tickKnown: ticket.tickKnown,
       tpOn: ticket.tpOn,
       slOn: ticket.slOn,
       tpUnit: ticket.tpUnit,
       slUnit: ticket.slUnit,
-      tpTicksView: ticket.priceToTicks(ticket.takeProfit, 'tp'),
-      slTicksView: ticket.priceToTicks(ticket.stopLoss, 'sl'),
+      tpTicksView,
+      slTicksView,
       takeProfit: ticket.takeProfit,
       setTakeProfit: ticket.setTakeProfit,
       stopLoss: ticket.stopLoss,
@@ -153,20 +243,56 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
       toggleExit: ticket.toggleExit,
       applyExitTicks: ticket.applyExitTicks,
       swapExitUnit: ticket.swapExitUnit,
-    },
-    extra: {
-      open: ticket.extraOpen,
-      setOpen: ticket.setExtraOpen,
+      side: ticket.riskSide,
+      orderKind: ticket.orderKind,
+      entry: ticket.entry,
+      limitPrice: ticket.limitPrice,
+      stagedOnChart: ticket.stagedOnChart,
+    }),
+    [
+      ticket.exitsOpen,
+      ticket.setExitsOpen,
+      slTooClose,
+      tpTooClose,
+      ticket.tickKnown,
+      ticket.tpOn,
+      ticket.slOn,
+      ticket.tpUnit,
+      ticket.slUnit,
+      tpTicksView,
+      slTicksView,
+      ticket.takeProfit,
+      ticket.stopLoss,
+      ticket.setTakeProfit,
+      ticket.setStopLoss,
+      ticket.toggleExit,
+      ticket.applyExitTicks,
+      ticket.swapExitUnit,
+      ticket.riskSide,
+      ticket.orderKind,
+      ticket.entry,
+      ticket.limitPrice,
+      ticket.stagedOnChart,
+    ],
+  );
+  const extraSettingsProps = useMemo<OrderTicketExtraSettingsProps>(
+    () => ({
+      open: ticket.extraSettingsOpen,
+      setOpen: ticket.setExtraSettingsOpen,
       timeInForce: ticket.timeInForce,
       setTimeInForce: ticket.setTimeInForce,
-    },
-    action: {
-      stagedOnChart: ticket.stagedOnChart,
+    }),
+    [ticket.extraSettingsOpen, ticket.setExtraSettingsOpen, ticket.timeInForce, ticket.setTimeInForce],
+  );
+  const actionProps = useMemo<OrderTicketActionProps>(
+    () => ({
       canCheckOrder: ticket.canCheckOrder,
       orderCheckLoading: ticket.orderCheckLoading,
       startOrderReview: ticket.startOrderReview,
-    },
-  };
+      side: ticket.riskSide,
+    }),
+    [ticket.canCheckOrder, ticket.orderCheckLoading, ticket.startOrderReview, ticket.riskSide],
+  );
 
   return (
     <OrderTicketContext.Provider value={ticket}>
@@ -174,7 +300,19 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
         <RiskBasisContext.Provider value={basis}>
           <StageContext.Provider value={ticket.ticketStage}>
             <ReviewContext.Provider value={review}>
-              <EditContext.Provider value={edit}>{children}</EditContext.Provider>
+              <QuoteContext.Provider value={quoteProps}>
+                <PricingContext.Provider value={pricingProps}>
+                  <SizingContext.Provider value={sizingProps}>
+                    <TickValueContext.Provider value={tickValueProps}>
+                      <ExitsContext.Provider value={exitsProps}>
+                        <ExtraSettingsContext.Provider value={extraSettingsProps}>
+                          <ActionContext.Provider value={actionProps}>{children}</ActionContext.Provider>
+                        </ExtraSettingsContext.Provider>
+                      </ExitsContext.Provider>
+                    </TickValueContext.Provider>
+                  </SizingContext.Provider>
+                </PricingContext.Provider>
+              </QuoteContext.Provider>
             </ReviewContext.Provider>
           </StageContext.Provider>
         </RiskBasisContext.Provider>
@@ -199,7 +337,7 @@ export function useOrderTicketRuntime(): OrderTicketState {
 export function useOrderTicketHeader(): HeaderState {
   const value = useContext(HeaderContext);
   if (value === null) {
-    throw new Error('OrderTicketView must be used inside OrderTicketProvider.');
+    throw new Error('Order ticket hooks must be used inside OrderTicketProvider.');
   }
   return value;
 }
@@ -207,7 +345,7 @@ export function useOrderTicketHeader(): HeaderState {
 export function useOrderTicketStage(): 'edit' | 'review' {
   const value = useContext(StageContext);
   if (value === null) {
-    throw new Error('OrderTicketView must be used inside OrderTicketProvider.');
+    throw new Error('Order ticket hooks must be used inside OrderTicketProvider.');
   }
   return value;
 }
@@ -215,17 +353,44 @@ export function useOrderTicketStage(): 'edit' | 'review' {
 export function useOrderTicketReviewProps(): ReviewProps {
   const value = useContext(ReviewContext);
   if (value === null) {
-    throw new Error('OrderTicketView must be used inside OrderTicketProvider.');
+    throw new Error('Order ticket hooks must be used inside OrderTicketProvider.');
   }
   return value;
 }
 
-export function useOrderTicketEditProps(): EditProps {
-  const value = useContext(EditContext);
+export function useOrderTicketQuotes(): OrderTicketQuoteProps {
+  const value = useContext(QuoteContext);
   if (value === null) {
-    throw new Error('OrderTicketView must be used inside OrderTicketProvider.');
+    throw new Error('Order ticket hooks must be used inside OrderTicketProvider.');
   }
   return value;
+}
+
+function useEditorContext<T>(value: T | null, hookName: string): T {
+  if (value === null) {
+    throw new Error(`${hookName} must be used inside OrderTicketProvider.`);
+  }
+  return value;
+}
+
+export function useOrderTicketPricing(): OrderTicketPricingProps {
+  return useEditorContext(useContext(PricingContext), 'useOrderTicketPricing');
+}
+
+export function useOrderTicketSizing(): OrderTicketSizingProps {
+  return useEditorContext(useContext(SizingContext), 'useOrderTicketSizing');
+}
+
+export function useOrderTicketExits(): OrderTicketExitsProps {
+  return useEditorContext(useContext(ExitsContext), 'useOrderTicketExits');
+}
+
+export function useOrderTicketExtraSettings(): OrderTicketExtraSettingsProps {
+  return useEditorContext(useContext(ExtraSettingsContext), 'useOrderTicketExtraSettings');
+}
+
+export function useOrderTicketAction(): OrderTicketActionProps {
+  return useEditorContext(useContext(ActionContext), 'useOrderTicketAction');
 }
 
 export function useOrderRiskBasis(): OrderRiskBasis {
@@ -234,4 +399,8 @@ export function useOrderRiskBasis(): OrderRiskBasis {
     throw new Error('useOrderRiskBasis must be used inside OrderTicketProvider.');
   }
   return value;
+}
+
+export function useOrderTicketTickValue(): OrderTicketTickValueProps {
+  return useEditorContext(useContext(TickValueContext), 'useOrderTicketTickValue');
 }
