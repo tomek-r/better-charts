@@ -29,6 +29,23 @@
   letter-spacing: -0.035em;
 }
 
+.chart-title {
+  min-width: 0;
+}
+
+.chart-symbol {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.chart-symbol-description {
+  color: var(--color-muted-strong);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 /* Section label above the symbol, matching the topbar's version tag. */
 .eyebrow {
   color: var(--color-muted);
@@ -70,6 +87,8 @@
 
 .chart-frame {
   position: relative;
+  /* Contain canvas, message and legend layers within the chart frame. */
+  isolation: isolate;
   min-height: 320px;
   flex: 1 1 320px;
   overflow: hidden;
@@ -90,6 +109,7 @@
 
 .chart-overlay {
   position: absolute;
+  z-index: 3;
   inset: 0;
   display: flex;
   align-items: center;
@@ -120,6 +140,7 @@
 
 .chart-error {
   position: absolute;
+  z-index: 3;
   left: 14px;
   right: 14px;
   bottom: 14px;
@@ -187,7 +208,7 @@
   position: absolute;
   top: 10px;
   left: 12px;
-  z-index: 1;
+  z-index: 4;
   color: var(--color-text-label);
   font-size: 11px;
   font-variant-numeric: tabular-nums;

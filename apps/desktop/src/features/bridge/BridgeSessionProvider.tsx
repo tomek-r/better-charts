@@ -23,6 +23,16 @@ export interface BridgeMarket {
   chartError: string | undefined;
 }
 
+/** Chart UI state whose consumers do not need quote or candle updates. */
+export interface BridgeChartState {
+  symbol: string | undefined;
+  timeframe: string | undefined;
+  description: string | undefined;
+  symbolLoading: boolean;
+  hasCandles: boolean;
+  chartError: string | undefined;
+}
+
 export interface BridgeActions {
   requestHistory: (wire: string) => Promise<void>;
   chooseSymbol: (item: BrokerSymbol) => Promise<void>;
@@ -34,6 +44,7 @@ const RuntimeContext = createContext<BridgeSessionState | null>(null);
 const ConnectionContext = createContext<BridgeConnection | null>(null);
 const TauriAvailableContext = createContext<boolean | null>(null);
 const MarketContext = createContext<BridgeMarket | null>(null);
+const ChartStateContext = createContext<BridgeChartState | null>(null);
 const AccountContext = createContext<AccountSnapshot | undefined | null>(null);
 const PortfolioContext = createContext<PortfolioSnapshot | undefined | null>(null);
 const ActionsContext = createContext<BridgeActions | null>(null);
@@ -65,6 +76,22 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
     [session.snapshot, session.quote, session.instrument, session.symbolLoading, session.chartError],
   );
 
+  const symbol = session.snapshot.symbol;
+  const timeframe = session.snapshot.timeframe;
+  const description = session.instrument?.symbol === symbol ? session.instrument?.description : undefined;
+  const hasCandles = session.snapshot.candles.length > 0;
+  const chartState = useMemo<BridgeChartState>(
+    () => ({
+      symbol,
+      timeframe,
+      description,
+      hasCandles,
+      symbolLoading: session.symbolLoading,
+      chartError: session.chartError,
+    }),
+    [symbol, timeframe, description, hasCandles, session.symbolLoading, session.chartError],
+  );
+
   const actions = useMemo<BridgeActions>(
     () => ({
       requestHistory: session.requestHistory,
@@ -79,13 +106,15 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
       <ConnectionContext.Provider value={connection}>
         <TauriAvailableContext.Provider value={session.tauriAvailable}>
           <MarketContext.Provider value={market}>
-            <AccountContext.Provider value={session.account}>
-              <PortfolioContext.Provider value={session.portfolio}>
-                <LastSymbolSelectionContext.Provider value={session.lastSymbolSelection}>
-                  <ActionsContext.Provider value={actions}>{children}</ActionsContext.Provider>
-                </LastSymbolSelectionContext.Provider>
-              </PortfolioContext.Provider>
-            </AccountContext.Provider>
+            <ChartStateContext.Provider value={chartState}>
+              <AccountContext.Provider value={session.account}>
+                <PortfolioContext.Provider value={session.portfolio}>
+                  <LastSymbolSelectionContext.Provider value={session.lastSymbolSelection}>
+                    <ActionsContext.Provider value={actions}>{children}</ActionsContext.Provider>
+                  </LastSymbolSelectionContext.Provider>
+                </PortfolioContext.Provider>
+              </AccountContext.Provider>
+            </ChartStateContext.Provider>
           </MarketContext.Provider>
         </TauriAvailableContext.Provider>
       </ConnectionContext.Provider>
@@ -121,6 +150,10 @@ export function useTauriAvailable(): boolean {
 
 export function useBridgeMarket(): BridgeMarket {
   return useRequiredContext(MarketContext, 'useBridgeMarket');
+}
+
+export function useBridgeChartState(): BridgeChartState {
+  return useRequiredContext(ChartStateContext, 'useBridgeChartState');
 }
 
 export function useBridgeAccount(): AccountSnapshot | undefined {

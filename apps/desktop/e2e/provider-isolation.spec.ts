@@ -46,6 +46,11 @@ test('quote updates rerender market and ticket consumers without waking unrelate
   expect(counts.settings ?? 0).toBe(0);
   expect(counts.header ?? 0).toBe(0);
   expect(counts['chart-resources'] ?? 0).toBe(0);
+  await expect(page.getByTestId('probe-chart-header').locator('.quote-cards b').first()).toHaveText('1.0852');
+  expect(counts['chart-quotes']).toBeGreaterThan(0);
+  expect(counts['chart-title'] ?? 0).toBe(0);
+  expect(counts['chart-timeframes'] ?? 0).toBe(0);
+  expect(counts['chart-canvas'] ?? 0).toBe(0);
 });
 
 test('ticket edits and panel toggles update only their owning consumers', async ({ page }) => {
@@ -72,6 +77,23 @@ test('ticket edits and panel toggles update only their owning consumers', async 
   expect(panelCounts.settings ?? 0).toBe(0);
   expect(panelCounts.market ?? 0).toBe(0);
   expect(panelCounts['chart-resources'] ?? 0).toBe(0);
+});
+
+test('candle updates with unchanged chart identity keep title and timeframe consumers idle', async ({ page }) => {
+  await mountHarness(page);
+  await page.getByRole('button', { name: 'Load candle' }).click();
+  await expect(page.getByTestId('probe-candle-close')).toHaveText('1.0850');
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Update candle' }).click();
+  await expect(page.getByTestId('probe-candle-close')).toHaveText('1.0852');
+
+  const counts = await probeCounts(page);
+  expect(counts.market).toBeGreaterThan(0);
+  expect(counts['chart-title'] ?? 0).toBe(0);
+  expect(counts['chart-timeframes'] ?? 0).toBe(0);
+  expect(counts['chart-canvas'] ?? 0).toBe(0);
 });
 
 test('settings updates do not rerender the header action consumer', async ({ page }) => {
