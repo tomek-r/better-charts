@@ -16,6 +16,10 @@ import {
   useTauriAvailable,
 } from '../src/features/bridge/BridgeSessionProvider';
 import { ChartWorkspaceProvider, useChartResources } from '../src/features/chart/ChartWorkspaceProvider';
+import { ChartTitle } from '../src/features/chart/ChartTitle';
+import { ChartQuotes } from '../src/features/chart/ChartQuotes';
+import { ChartCanvas } from '../src/features/chart/ChartCanvas';
+import { ChartTimeframes } from '../src/features/chart/ChartTimeframes';
 import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
 import type { QuoteSnapshot } from '../src/shared/bridge/types';
 import {
@@ -49,7 +53,31 @@ function Probe({ children, id }: { children: ReactNode; id: string }) {
 
 function MarketProbe() {
   const { quote, snapshot } = useBridgeMarket();
-  return <output data-testid="probe-market">{quote?.bid ?? snapshot.symbol}</output>;
+  return (
+    <>
+      <output data-testid="probe-market">{quote?.bid ?? snapshot.symbol}</output>
+      <output data-testid="probe-candle-close">{snapshot.candles[0]?.close}</output>
+    </>
+  );
+}
+
+function ChartHeaderProbes() {
+  return (
+    <div data-testid="probe-chart-header">
+      <Probe id="chart-title">
+        <ChartTitle />
+      </Probe>
+      <Probe id="chart-quotes">
+        <ChartQuotes />
+      </Probe>
+      <Probe id="chart-timeframes">
+        <ChartTimeframes />
+      </Probe>
+      <Probe id="chart-canvas">
+        <ChartCanvas />
+      </Probe>
+    </div>
+  );
 }
 
 function BridgeRuntimeProbe() {
@@ -106,10 +134,41 @@ function BridgeControls() {
     };
     session.setQuote(quote);
   };
+  const updateCandle = () => {
+    session.setSnapshot((snapshot) => ({
+      ...snapshot,
+      candles: snapshot.candles.map((candle, index) => (index === 0 ? { ...candle, close: '1.0852' } : candle)),
+    }));
+  };
+  const loadCandle = () => {
+    session.setSnapshot({
+      symbol: 'EURUSD',
+      timeframe: 'M5',
+      complete: true,
+      candles: [
+        {
+          timeMs: 1745700000000,
+          open: '1.0846',
+          high: '1.0860',
+          low: '1.0840',
+          close: '1.0850',
+          tickVolume: 10,
+          spread: 2,
+          realVolume: 0,
+        },
+      ],
+    });
+  };
   return (
     <div data-testid="provider-probe-ready">
       <button type="button" onClick={updateQuote}>
         Update quote
+      </button>
+      <button type="button" onClick={updateCandle}>
+        Update candle
+      </button>
+      <button type="button" onClick={loadCandle}>
+        Load candle
       </button>
     </div>
   );
@@ -176,6 +235,7 @@ function WorkspaceProbes() {
         <Probe id="market">
           <MarketProbe />
         </Probe>
+        <ChartHeaderProbes />
         <Probe id="account">
           <AccountProbe />
         </Probe>

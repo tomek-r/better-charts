@@ -93,6 +93,18 @@ test('shows the no-bridge fallback state without crashing', async ({ page }) => 
   await expect(page.locator('.app-footer')).toHaveCount(0);
   // Chart area falls back to its waiting overlay instead of crashing.
   await expect(page.locator('.chart-overlay strong')).toHaveText('Waiting for market data');
+  // Hit testing with text enabled detects canvases painted over the message.
+  const overlayTextOnTop = await page.locator('.chart-overlay strong').evaluate((heading) => {
+    const previous = heading.style.pointerEvents;
+    heading.style.pointerEvents = 'auto';
+    try {
+      const bounds = heading.getBoundingClientRect();
+      return document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2) === heading;
+    } finally {
+      heading.style.pointerEvents = previous;
+    }
+  });
+  expect(overlayTextOnTop).toBe(true);
   expect(pageErrors).toEqual([]);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
@@ -239,6 +251,17 @@ test('chart chrome nests the connection dot inside the OHLC legend, after its te
   await expect(dot).toHaveClass(/chart-connection-dot/);
   await expect(dot).toHaveAttribute('role', 'status');
   await expect(dot).toHaveAttribute('aria-label', /^MT5 /);
+  const dotOnTop = await dot.evaluate((element) => {
+    const previous = element.style.pointerEvents;
+    element.style.pointerEvents = 'auto';
+    try {
+      const bounds = element.getBoundingClientRect();
+      return document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2) === element;
+    } finally {
+      element.style.pointerEvents = previous;
+    }
+  });
+  expect(dotOnTop).toBe(true);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
 

@@ -6,10 +6,12 @@ import {
   useChartWorkspaceChartEffects,
   useChartWorkspaceResetEffects,
   useChartWorkspaceHotkeyEffect,
-  useChartWorkspacePointerEffects,
+} from './features/chart/useChartLifecycle';
+import { useChartWorkspacePointerEffects } from './features/chart/useChartGestures';
+import {
   useChartWorkspaceMirrorRefEffect,
   useChartWorkspaceMirrorLayoutEffect,
-} from './features/chart/useChartWorkspace';
+} from './features/chart/useChartOverlaySync';
 import {
   useOrderTicketEntryEffects,
   useOrderTicketOrderCheckEffects,
