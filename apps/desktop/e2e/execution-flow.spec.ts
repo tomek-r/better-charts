@@ -69,6 +69,7 @@ interface StagedGeom {
   tpHandle: { x: number; y: number; w: number; h: number } | null;
   slMoney: string | null;
   tpMoney: string | null;
+  riskRewardLabel: string | null;
   chartRect: { x: number; y: number; width: number; height: number } | null;
   visibleRange: { from: number; to: number } | null;
   priceRange: { min: number; max: number } | null;
@@ -1486,5 +1487,36 @@ test('Risk, USD sizing must not break the chart scale after a symbol switch (own
   expect(after).not.toBeNull();
   expect(after!.min).toBeGreaterThan(30_000);
   expect(after!.max).toBeGreaterThan(30_000);
+  expectClean(collected);
+});
+
+test('staged RR matches broker SL/TP amounts rather than equal price distances', async ({ page }) => {
+  const collected = await gotoWithStub(page, { responses: { request_risk_preview: null } });
+  await openTradePanel(page);
+  await fillRiskDraft(page);
+  await page.getByLabel('Take profit enabled').check();
+  await page.getByLabel('Take profit price').fill('1.0900');
+  await expect
+    .poll(
+      async () =>
+        (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)?.args.takeProfit,
+    )
+    .toBe('1.0900');
+  const request = (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
+  await pushEvent(page, 'risk-preview', {
+    ...request.args,
+    riskBudget: '25.00',
+    volume: '2.60',
+    estimatedRisk: '57.56',
+    estimatedReward: '56.19',
+    estimatedMargin: '105.00',
+    rr: '0.98',
+    currency: 'USD',
+    quotedAtMs: STUB_NOW,
+  });
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-$57.56');
+  await expect.poll(async () => (await stagedGeom(page))?.tpMoney).toBe('+$56.19');
+  await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).toBe('0.98');
+  await expect(page.locator('.ticket-risk-reward')).toHaveText('RR 0.98');
   expectClean(collected);
 });

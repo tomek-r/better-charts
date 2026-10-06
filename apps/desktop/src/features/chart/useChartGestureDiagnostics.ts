@@ -59,6 +59,7 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
           tpHandle: box(hit.tpHandle),
           slMoney: state.order?.slMoney ?? null,
           tpMoney: state.order?.tpMoney ?? null,
+          riskRewardLabel: state.order?.riskRewardLabel ?? null,
           chartRect: hit.chartRect
             ? {
                 x: rect.left + hit.chartRect.x,

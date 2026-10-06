@@ -57,6 +57,7 @@ export function TicketExitRow({
             disabled={!on}
             onChange={(event) => onTicks(event.target.value)}
             placeholder="Ticks"
+            type="number"
             aria-label={`${label} ticks`}
           />
         ) : (
