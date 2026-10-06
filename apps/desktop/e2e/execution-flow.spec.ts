@@ -1671,7 +1671,17 @@ for (const level of ['sl', 'tp'] as const) {
       currency: 'USD',
       quotedAtMs: STUB_NOW,
     });
-    await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).toBe('0.98');
+    // RR is independent of volume: it can match while the passive broker-volume
+    // sync still leaves amounts based on the previous size. Capture the drag
+    // baseline only once the complete broker sizing is mirrored on the chart.
+    await expect
+      .poll(async () => stagedGeom(page))
+      .toMatchObject({
+        volume: '2.60',
+        slMoney: '-$25',
+        tpMoney: '+$24.5',
+        riskRewardLabel: '0.98',
+      });
     const before = (await stagedGeom(page))!;
     const handle = level === 'sl' ? before.slHandle! : before.tpHandle!;
     const start = { x: handle.x + handle.w / 2, y: handle.y + handle.h / 2 };
