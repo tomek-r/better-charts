@@ -6,7 +6,9 @@ import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
 export function OrderCheckResult({ orderCheck }: { orderCheck: OrderCheckResultModel }) {
   return (
     <div className="order-check-result" aria-label="MT5 OrderCheck result">
-      {orderCheck.lastError !== 0 && <ErrorNotification message={`Last error code ${orderCheck.lastError}`} />}
+      {orderCheck.checkPassed && orderCheck.lastError !== 0 && (
+        <ErrorNotification message={`Last error code ${orderCheck.lastError}`} />
+      )}
       <div className="order-check-grid">
         <div>
           <small>Used price</small>

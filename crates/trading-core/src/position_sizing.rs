@@ -7,21 +7,21 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum RiskSizingError {
-    #[error("risk amount must be non-negative")]
+    #[error("Risk amount must be non-negative")]
     NegativeRisk,
-    #[error("insufficient free margin for broker minimum volume")]
+    #[error("Insufficient free margin for broker minimum volume")]
     InsufficientMargin,
-    #[error("equity allocation must be greater than 0 and at most 100 percent")]
+    #[error("Equity allocation must be greater than 0 and at most 100 percent")]
     InvalidEquityAllocation,
-    #[error("positive account equity is required for margin allocation")]
+    #[error("Positive account equity is required for margin allocation")]
     InvalidEquity,
-    #[error("invalid quote parameters")]
+    #[error("Invalid quote parameters")]
     InvalidQuote,
-    #[error("normalized volume is below broker minimum")]
+    #[error("Risk is too low for the minimum order size at this SL distance.")]
     BelowMinimum,
-    #[error("risk sizing arithmetic overflow")]
+    #[error("Risk sizing arithmetic overflow")]
     ArithmeticOverflow,
-    #[error("risk sizing arithmetic loses decimal precision")]
+    #[error("Risk sizing arithmetic loses decimal precision")]
     ArithmeticPrecisionLoss,
 }
 

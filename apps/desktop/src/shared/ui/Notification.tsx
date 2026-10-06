@@ -28,6 +28,12 @@ function Frame({ children, role }: { children: ReactNode; role: 'status' | 'aler
   return (
     <DismissContext.Provider value={{ closing, dismiss }}>
       <div className={`notification notification-${role}${closing ? ' is-closing' : ''}`} role={role}>
+        {role === 'alert' ? (
+          <svg className="notification-error-icon" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="10" cy="10" r="8" />
+            <path d="M10 5.5v5M10 14v.5" />
+          </svg>
+        ) : null}
         {children}
       </div>
     </DismissContext.Provider>
@@ -40,6 +46,11 @@ function Status({ children }: { children: ReactNode }) {
 
 function Alert({ children }: { children: ReactNode }) {
   return <Frame role="alert">{children}</Frame>;
+}
+
+function Message({ children }: { children: string }) {
+  const text = children.trimStart();
+  return <span>{text.charAt(0).toUpperCase() + text.slice(1)}</span>;
 }
 
 function Dismiss({ onDismiss, label }: { onDismiss: () => void; label: string }) {
@@ -62,4 +73,4 @@ function Dismiss({ onDismiss, label }: { onDismiss: () => void; label: string })
   );
 }
 
-export const Notification = { Region, Status, Alert, Dismiss };
+export const Notification = { Region, Status, Alert, Message, Dismiss };

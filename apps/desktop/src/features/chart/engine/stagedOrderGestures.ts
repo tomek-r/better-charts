@@ -16,7 +16,6 @@ type StagedGestureTicket = Pick<
   | 'setTakeProfit'
   | 'setStagedDragging'
   | 'setDragSlMoney'
-  | 'riskStopIntentRef'
 >;
 
 /** Owns staged-widget gestures; writes draft fields without dispatching orders. */
@@ -36,7 +35,6 @@ export function createStagedOrderGestures(
     setTakeProfit,
     setStagedDragging,
     setDragSlMoney,
-    riskStopIntentRef,
   } = ticket;
   let drag: 'entry' | 'sl' | 'tp' | null = null;
   let stagedEntryDrag: {
@@ -119,7 +117,6 @@ export function createStagedOrderGestures(
       toggleExit('tp', false);
       return false;
     }
-    riskStopIntentRef.current = undefined;
     drag = target as 'entry' | 'sl' | 'tp';
     const stagedOrder = stagedOrderState.current.order;
     setDragSlMoney(stagedOrder?.slMoney);

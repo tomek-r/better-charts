@@ -1,5 +1,6 @@
 import { type Dispatch, type RefObject, type SetStateAction, useEffect, useRef, useState } from 'react';
 import type { AccountSnapshot } from '../../../shared/bridge/types';
+import { MAX_RISK_PERCENT } from '../domain/riskBasis';
 import { CaretIcon } from '../../../shared/ui/CaretIcon';
 
 /** The order ticket's Units sizing row: manual volume/risk field, swap button,
@@ -112,6 +113,9 @@ export function UnitsSizingRow({
           className="ticket-value"
           type="number"
           inputMode="decimal"
+          min={unitsMode === 'equity' ? 0 : undefined}
+          max={unitsMode === 'equity' ? MAX_RISK_PERCENT : undefined}
+          step="any"
           value={unitsMode === 'units' ? orderVolume : riskAmount}
           onChange={(event) => {
             const value = event.target.value;

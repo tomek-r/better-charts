@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { clampRiskPercentInput } from '../domain/riskBasis';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { orderEntryPrice } from '../domain/ticketRules';
 import type { OrderTicketBaseState } from './useOrderTicketState';
@@ -6,9 +7,6 @@ import type { OrderTicketBaseState } from './useOrderTicketState';
 type SizingInput = Pick<
   OrderTicketBaseState,
   | 'riskSide'
-  | 'orderVolume'
-  | 'stopLoss'
-  | 'riskStopIntentRef'
   | 'setRiskAmount'
   | 'stagedOnChart'
   | 'unitsMode'
@@ -28,9 +26,6 @@ type SizingInput = Pick<
 export function useOrderTicketSizing(ticket: SizingInput) {
   const {
     riskSide,
-    orderVolume,
-    stopLoss,
-    riskStopIntentRef,
     setRiskAmount,
     stagedOnChart,
     unitsMode,
@@ -49,41 +44,18 @@ export function useOrderTicketSizing(ticket: SizingInput) {
   } = ticket;
   const unitsAutoModeRef = unitsAutoMode;
   const setRiskAmountFromInput = useCallback(
-    (value: string) => {
+    (input: string) => {
+      const value = unitsMode === 'equity' ? clampRiskPercentInput(input) : input;
       setRiskAmount(value);
       if (stagedOnChart && unitsMode !== 'units' && Number(value) > 0) {
-        const seed = enableRiskStopLoss(riskSide, Number(orderEntryPrice(orderKind, entry, limitPrice)));
-        riskStopIntentRef.current = seed
-          ? {
-              volume: riskStopIntentRef.current?.volume ?? orderVolume,
-              stopLoss: stopLoss.trim() ? stopLoss : seed,
-              seedStopLoss: seed,
-              riskAmount: value,
-              fitted: false,
-            }
-          : undefined;
-      } else {
-        riskStopIntentRef.current = undefined;
+        enableRiskStopLoss(riskSide, Number(orderEntryPrice(orderKind, entry, limitPrice)));
       }
     },
-    [
-      stagedOnChart,
-      unitsMode,
-      enableRiskStopLoss,
-      riskSide,
-      orderKind,
-      entry,
-      limitPrice,
-      setRiskAmount,
-      orderVolume,
-      stopLoss,
-      riskStopIntentRef,
-    ],
+    [stagedOnChart, unitsMode, enableRiskStopLoss, riskSide, orderKind, entry, limitPrice, setRiskAmount],
   );
   const applyUnitsMode = useCallback(
     (mode: 'money' | 'equity' | 'units') => {
       if (mode !== unitsMode) {
-        riskStopIntentRef.current = undefined;
         setOrderVolume('1');
         setVolumeManual(false);
         setRiskAmount('');
@@ -99,7 +71,6 @@ export function useOrderTicketSizing(ticket: SizingInput) {
     },
     [
       unitsMode,
-      riskStopIntentRef,
       setOrderVolume,
       setVolumeManual,
       setRiskAmount,

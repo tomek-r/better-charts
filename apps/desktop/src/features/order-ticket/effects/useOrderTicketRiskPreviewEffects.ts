@@ -13,10 +13,6 @@ const RISK_PREVIEW_DEBOUNCE_MS = 100;
 export function useOrderTicketRiskPreviewEffects(
   ticket: Pick<
     OrderTicketState,
-    | 'riskStopIntentRef'
-    | 'riskPreview'
-    | 'stagedDragging'
-    | 'setStopLoss'
     | 'snapshot'
     | 'status'
     | 'account'
@@ -47,10 +43,6 @@ export function useOrderTicketRiskPreviewEffects(
   { riskMode, effectiveRiskAmount }: { riskMode: 'usd' | 'equity'; effectiveRiskAmount: string },
 ): void {
   const {
-    riskStopIntentRef,
-    riskPreview,
-    stagedDragging,
-    setStopLoss,
     snapshot,
     status,
     account,
@@ -92,10 +84,6 @@ export function useOrderTicketRiskPreviewEffects(
     // must not create another draft or cancel its outstanding sizing response.
     if (ticketStage === 'review') {
       return;
-    }
-    const intent = riskStopIntentRef.current;
-    if (intent && (intent.stopLoss !== stopLoss || intent.riskAmount !== riskAmount || unitsMode === 'units')) {
-      riskStopIntentRef.current = undefined;
     }
     window.clearTimeout(pendingTimer.current);
     const version = ++riskVersionRef.current;
@@ -142,7 +130,7 @@ export function useOrderTicketRiskPreviewEffects(
       equityAllocationPercent,
       draftVersion: version,
     };
-    if (unitsMode !== 'units' && !volumeManual && !riskStopIntentRef.current && riskPreviewDisplayRef.current) {
+    if (unitsMode !== 'units' && !volumeManual && riskPreviewDisplayRef.current) {
       // Native Decimal sizing projects the cached broker quote immediately.
       // Keep it separate from riskPreview: only MT5 can satisfy freshness.
       void invoke<RiskPreview | null>('project_risk_preview', data)
@@ -200,77 +188,9 @@ export function useOrderTicketRiskPreviewEffects(
     stopGuard?.tpTooClose,
     equity,
     riskVersionRef,
-    riskStopIntentRef,
     setDraftVersion,
     setRiskPreview,
     setRiskError,
     setRiskLoading,
-  ]);
-  useEffect(() => {
-    const intent = riskStopIntentRef.current;
-    if (
-      !intent ||
-      !riskPreview ||
-      stagedDragging ||
-      ticketStage !== 'edit' ||
-      riskPreview.draftVersion !== riskVersionRef.current ||
-      intent.stopLoss !== stopLoss ||
-      intent.riskAmount !== riskAmount ||
-      unitsMode === 'units'
-    ) {
-      return;
-    }
-    if (intent.fitted) {
-      riskStopIntentRef.current = undefined;
-      return;
-    }
-    const version = riskPreview.draftVersion;
-    // Obtain a broker quote first, then solve the inverse problem in Decimal.
-    // Changing the stop triggers another quote; this result cannot satisfy send freshness.
-    void invoke<RiskPreview | null>('project_risk_preview', {
-      symbol: riskPreview.symbol,
-      side: riskPreview.side,
-      entry: riskPreview.entry,
-      stopLoss: intent.seedStopLoss,
-      takeProfit: riskPreview.takeProfit,
-      riskAmount: effectiveRiskAmount,
-      equityAllocationPercent,
-      draftVersion: version,
-      targetVolume: intent.volume,
-    })
-      .then((fitted) => {
-        if (
-          riskStopIntentRef.current !== intent ||
-          riskVersionRef.current !== version ||
-          currentStage.current !== 'edit'
-        ) {
-          return;
-        }
-        riskStopIntentRef.current = fitted ? { ...intent, stopLoss: fitted.stopLoss, fitted: true } : undefined;
-        if (fitted) {
-          setOrderVolume(fitted.volume);
-          setStopLoss(fitted.stopLoss);
-        }
-      })
-      .catch(() => {
-        if (riskStopIntentRef.current === intent && riskVersionRef.current === version) {
-          riskStopIntentRef.current = undefined;
-          setRiskError('Unable to fit stop loss to the risk budget.');
-        }
-      });
-  }, [
-    riskPreview,
-    stagedDragging,
-    ticketStage,
-    riskVersionRef,
-    riskStopIntentRef,
-    stopLoss,
-    riskAmount,
-    unitsMode,
-    effectiveRiskAmount,
-    equityAllocationPercent,
-    setOrderVolume,
-    setStopLoss,
-    setRiskError,
   ]);
 }

@@ -11,7 +11,7 @@ export function AppNotificationsView() {
       <ErrorNotifications />
       {settings.configurationNotice ? (
         <Notification.Alert key={`error-${settings.notificationRevision}-${settings.configurationNotice}`}>
-          <span>{settings.configurationNotice}</span>
+          <Notification.Message>{settings.configurationNotice}</Notification.Message>
           <Notification.Dismiss
             label="Dismiss configuration notification"
             onDismiss={settings.dismissConfigurationNotice}

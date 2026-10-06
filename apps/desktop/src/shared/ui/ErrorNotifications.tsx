@@ -71,7 +71,7 @@ export function ErrorNotifications() {
   const { notices, dismiss } = useErrorNotifications();
   return notices.map((notice) => (
     <Notification.Alert key={notice.id}>
-      <span>{notice.message}</span>
+      <Notification.Message>{notice.message}</Notification.Message>
       <Notification.Dismiss label="Dismiss error notification" onDismiss={() => dismiss(notice.id)} />
     </Notification.Alert>
   ));

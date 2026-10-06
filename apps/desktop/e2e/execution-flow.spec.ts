@@ -329,6 +329,8 @@ test('failed OrderCheck surfaces the broker comment verbatim', async ({ page }) 
   await expect(reason).toBeVisible();
   await expect(reason).toContainText('Not enough money');
   await expect(reason).toContainText('code 10019');
+  await expect(page.locator('.notification-region [role=alert]')).toHaveCount(1);
+  await expect(page.locator('.notification-region [role=alert]')).not.toContainText('Last error code');
   // The broker's margin numbers still render as the quantitative context.
   await expect(page.locator('.order-check-grid')).toContainText('Free margin');
   // A failed check never enables Send.
@@ -345,6 +347,7 @@ test('failed OrderCheck without a broker comment falls back to the retcode copy'
   await expect(page.locator('.notification-region [role=alert]').filter({ hasText: 'Adjust the ticket' })).toHaveText(
     'Retcode 10019. Adjust the ticket and start the review again.',
   );
+  await expect(page.locator('.notification-region [role=alert]')).toHaveCount(1);
   expectClean(collected);
 });
 
@@ -2026,7 +2029,58 @@ for (const mode of ['equity', 'money'] as const) {
 }
 
 for (const mode of ['equity', 'money'] as const) {
-  test(`${mode} risk entry fits SL distance before requesting fresh broker confirmation`, async ({ page }) => {
+  for (const side of ['buy', 'sell'] as const) {
+    test(`${mode} ${side} risk increases volume while keeping the seeded SL visible`, async ({ page }) => {
+      const collected = await gotoWithStub(page, {
+        responses: { request_risk_preview: null, project_risk_preview: 'reactive' },
+      });
+      await openTradePanel(page);
+      await page.locator(`.ticket-quote-side.${side}`).click();
+      await page.locator('.ticket-menu-trigger').click();
+      await page.getByRole('menuitemradio', { name: mode === 'equity' ? 'Risk, % equity' : 'Risk, USD' }).click();
+      const input = page.getByLabel(mode === 'equity' ? 'Risk percent' : 'Risk amount');
+      await input.fill(mode === 'equity' ? '1' : '100');
+      const latest = async () =>
+        (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
+      await expect.poll(async () => (await latest())?.args).toBeDefined();
+      const initial = await latest();
+      const stop = String(initial.args.stopLoss);
+      const reply = (args: Record<string, unknown>, volume: string, risk: string) => ({
+        ...args,
+        riskBudget: args.riskAmount,
+        volume,
+        estimatedRisk: risk,
+        estimatedMargin: '100',
+        estimatedReward: null,
+        rr: null,
+        currency: 'USD',
+        quotedAtMs: STUB_NOW,
+      });
+      await pushEvent(page, 'risk-preview', reply(initial.args, '2', '100'));
+      await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('2');
+      await expect(page.getByLabel('Stop loss price')).toHaveValue(stop);
+      await input.fill(mode === 'equity' ? '100' : '1000');
+      await expect.poll(async () => (await latest())?.args.riskAmount).not.toBe(initial.args.riskAmount);
+      const increased = await latest();
+      expect(increased.args.stopLoss).toBe(stop);
+      await pushEvent(page, 'risk-preview', reply(increased.args, '17.3', '213.48'));
+      await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('17.3');
+      await expect(page.getByLabel('Stop loss price')).toHaveValue(stop);
+      await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-$213.48');
+      const geometry = (await stagedGeom(page))!;
+      expect(Number(stop)).toBeGreaterThan(geometry.priceRange!.min);
+      expect(Number(stop)).toBeLessThan(geometry.priceRange!.max);
+      expect(geometry.slHandle).not.toBeNull();
+      expect(
+        (await stubInvocations(page)).some((item) => item.cmd === 'project_risk_preview' && item.args.targetVolume),
+      ).toBe(false);
+      // Capped broker sizing reports achievable risk; it must not move SL to spend the remainder.
+      expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
+      expectClean(collected);
+    });
+  }
+
+  test(`${mode} risk sizing preserves SL distance through a quote before the broker reply`, async ({ page }) => {
     const collected = await gotoWithStub(page, {
       responses: { request_risk_preview: null, project_risk_preview: 'reactive' },
     });
@@ -2034,67 +2088,93 @@ for (const mode of ['equity', 'money'] as const) {
     await page.locator('.ticket-quote-side.buy').click();
     await page.locator('.ticket-menu-trigger').click();
     await page.getByRole('menuitemradio', { name: mode === 'equity' ? 'Risk, % equity' : 'Risk, USD' }).click();
-    await page.getByLabel(mode === 'equity' ? 'Risk percent' : 'Risk amount').fill(mode === 'equity' ? '1' : '100');
+    await page.getByLabel(mode === 'equity' ? 'Risk percent' : 'Risk amount').fill(mode === 'equity' ? '100' : '1000');
     const latest = async () =>
       (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
     await expect.poll(async () => (await latest())?.args).toBeDefined();
     const initial = await latest();
+    await pushEvent(page, 'quote-update', {
+      symbol: 'EURUSD',
+      bid: '1.0856',
+      ask: '1.0860',
+      last: '1.0858',
+      volume: 0,
+      volumeReal: '0',
+      flags: 3,
+      timeMs: STUB_NOW + 1000,
+    });
+    await expect.poll(async () => (await latest())?.args.entry).toBe('1.0860');
+    const moved = await latest();
+    expect(Number(moved.args.stopLoss)).toBeCloseTo(Number(initial.args.stopLoss) + 0.001, 4);
     await pushEvent(page, 'risk-preview', {
-      ...initial.args,
-      riskBudget: '100',
-      volume: '8',
-      estimatedRisk: '100',
-      estimatedMargin: '100',
+      ...moved.args,
+      riskBudget: moved.args.riskAmount,
+      volume: '17.3',
+      estimatedRisk: '213.48',
+      estimatedMargin: '5600',
       estimatedReward: null,
       rr: null,
       currency: 'USD',
-      quotedAtMs: STUB_NOW,
+      quotedAtMs: STUB_NOW + 1000,
     });
-    await expect.poll(async () => (await latest())?.args.stopLoss).toBe('1.0800');
-    const fitted = await latest();
-    expect(Number(fitted.args.draftVersion)).toBeGreaterThan(Number(initial.args.draftVersion));
-    await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('1');
-    // Native fit remains tentative: only the new MT5 reply can supply freshness.
-    await page.getByRole('button', { name: 'Start creating order' }).click();
-    await expect(page.getByRole('button', { name: 'Send order', exact: true })).toBeDisabled();
+    await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('17.3');
+    await expect(page.getByLabel('Stop loss price')).toHaveValue(String(moved.args.stopLoss));
     expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
     expectClean(collected);
   });
 }
 
-test('manual SL edit wins over a delayed risk-entry fit', async ({ page }) => {
+test('manual SL edit wins over a delayed risk volume projection', async ({ page }) => {
   const collected = await gotoWithStub(page, {
     responses: { request_risk_preview: null, project_risk_preview: 'reactive' },
   });
   await openTradePanel(page);
-  await page.locator('.ticket-quote-side.buy').click();
-  await page.locator('.ticket-menu-trigger').click();
-  await page.getByRole('menuitemradio', { name: 'Risk, USD' }).click();
-  await page.getByLabel('Risk amount').fill('100');
+  await fillRiskDraft(page);
+  const latest = async () =>
+    (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
+  const initial = await latest();
+  await pushEvent(page, 'risk-preview', {
+    ...initial.args,
+    riskBudget: '25',
+    volume: '1',
+    estimatedRisk: '25',
+    estimatedMargin: '100',
+    estimatedReward: null,
+    rr: null,
+    currency: 'USD',
+    quotedAtMs: STUB_NOW,
+  });
+  await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('1');
   await page.evaluate(() => {
     const w = window as unknown as {
       __TAURI_INTERNALS__: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
-      __releaseStopFit?: () => void;
+      __releaseRiskProjection?: () => void;
     };
     const original = w.__TAURI_INTERNALS__.invoke;
     w.__TAURI_INTERNALS__.invoke = async (cmd, args) => {
       const value = await original(cmd, args);
-      if (cmd !== 'project_risk_preview' || !args?.targetVolume) {
+      if (cmd !== 'project_risk_preview' || args?.riskAmount !== '100') {
         return value;
       }
       return new Promise((resolve) => {
-        w.__releaseStopFit = () => resolve(value);
+        w.__releaseRiskProjection = () => resolve(value);
       });
     };
   });
-  const latest = async () =>
-    (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
-  await expect.poll(async () => (await latest())?.args).toBeDefined();
-  const initial = await latest();
+  await page.getByLabel('Risk amount').fill('100');
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => typeof (window as unknown as { __releaseRiskProjection?: () => void }).__releaseRiskProjection,
+      ),
+    )
+    .toBe('function');
+  await page.getByLabel('Stop loss price').fill('1.0820');
+  await expect.poll(async () => (await latest())?.args.stopLoss).toBe('1.0820');
   await pushEvent(page, 'risk-preview', {
-    ...initial.args,
+    ...(await latest()).args,
     riskBudget: '100',
-    volume: '8',
+    volume: '3',
     estimatedRisk: '100',
     estimatedMargin: '100',
     estimatedReward: null,
@@ -2102,19 +2182,67 @@ test('manual SL edit wins over a delayed risk-entry fit', async ({ page }) => {
     currency: 'USD',
     quotedAtMs: STUB_NOW,
   });
-  await expect
-    .poll(async () =>
-      page.evaluate(() => typeof (window as unknown as { __releaseStopFit?: () => void }).__releaseStopFit),
-    )
-    .toBe('function');
-  await page.getByLabel('Stop loss price').fill('1.0820');
-  await expect.poll(async () => (await latest())?.args.stopLoss).toBe('1.0820');
+  await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('3');
   await page.evaluate(async () => {
-    const w = window as unknown as { __releaseStopFit?: () => void };
-    w.__releaseStopFit!();
+    (window as unknown as { __releaseRiskProjection?: () => void }).__releaseRiskProjection!();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   });
   await expect(page.getByLabel('Stop loss price')).toHaveValue('1.0820');
+  await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('3');
   expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
   expectClean(collected);
 });
+
+test('Risk % input clamps to 0–100, keeps decimals, and leaves money risk unrestricted', async ({ page }) => {
+  const collected = await gotoWithStub(page, { responses: { request_risk_preview: null } });
+  await openTradePanel(page);
+  await page.locator('.ticket-quote-side.buy').click();
+  await page.locator('.ticket-menu-trigger').click();
+  await page.getByRole('menuitemradio', { name: 'Risk, % equity' }).click();
+  const percent = page.getByLabel('Risk percent');
+  await percent.fill('101');
+  await expect(percent).toHaveValue('100');
+  await expect(percent).toHaveAttribute('min', '0');
+  await expect(percent).toHaveAttribute('max', '100');
+  await percent.fill('-1');
+  await expect(percent).toHaveValue('0');
+  await percent.fill('25.5');
+  await expect(percent).toHaveValue('25.5');
+  await percent.fill('');
+  await expect(percent).toHaveValue('');
+  await page.locator('.ticket-menu-trigger').click();
+  await page.getByRole('menuitemradio', { name: 'Risk, USD' }).click();
+  await page.getByLabel('Risk amount').fill('1000');
+  await expect(page.getByLabel('Risk amount')).toHaveValue('1000');
+  expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
+  expectClean(collected);
+});
+
+for (const mode of ['money', 'equity'] as const) {
+  for (const side of ['buy', 'sell'] as const) {
+    test(`${side} selecting ${mode} risk waits for a value before notifying about missing SL`, async ({ page }) => {
+      const collected = await gotoWithStub(page, { responses: { request_risk_preview: null } });
+      await openTradePanel(page);
+      await page.locator(`.ticket-quote-side.${side}`).click();
+      await page.locator('.ticket-menu-trigger').click();
+      await page.getByRole('menuitemradio', { name: mode === 'money' ? 'Risk, USD' : 'Risk, % equity' }).click();
+      const input = page.getByLabel(mode === 'money' ? 'Risk amount' : 'Risk percent');
+      await expect(input).toHaveValue('');
+      await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
+      await expect(page.getByRole('button', { name: 'Start creating order' })).toBeDisabled();
+      await expect(page.locator('.notification-region [role=alert]')).toHaveCount(0);
+      expect(await wasInvoked(page, 'request_risk_preview')).toBeUndefined();
+      await input.fill(mode === 'money' ? '100' : '1');
+      await expect(page.getByLabel('Stop loss enabled')).toBeChecked();
+      await expect(page.locator('.notification-region [role=alert]')).toHaveCount(0);
+      await page.getByLabel('Stop loss enabled').uncheck();
+      const notice = page.locator('.notification-region [role=alert]').filter({ hasText: 'needs a stop distance' });
+      await expect(notice).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Start creating order' })).toBeDisabled();
+      await input.fill('');
+      await expect(notice).toBeHidden();
+      expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
+      expectClean(collected);
+    });
+  }
+}

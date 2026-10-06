@@ -77,9 +77,6 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
   const [submittingSide, setSubmittingSide] = useState<RiskSide>();
   const [submitStatus, setSubmitStatus] = useState<{ kind: 'locked' | 'error'; text: string }>();
   const [orderVolume, setOrderVolume] = useState('1');
-  const riskStopIntentRef = useRef<
-    { volume: string; stopLoss: string; seedStopLoss: string; riskAmount: string; fitted: boolean } | undefined
-  >(undefined);
   const [volumeManual, setVolumeManual] = useState(false);
   useErrorNotification(riskError);
   useErrorNotification(orderCheckError);
@@ -187,7 +184,6 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
     setSubmitStatus,
     orderVolume,
     setOrderVolume,
-    riskStopIntentRef,
     volumeManual,
     setVolumeManual,
     ...derived,

@@ -238,3 +238,26 @@ test('equity allocation scales percent risk but leaves explicit money risk uncha
     ).toBe('');
   }
 });
+
+test('equity risk rejects percentages outside the positive 0–100 range', () => {
+  for (const riskAmount of ['0', '-1', '100.01', '200', 'Infinity', '']) {
+    expect(
+      deriveOrderRiskBasis({
+        unitsMode: 'equity',
+        riskAmount,
+        equity: '5600',
+        currency: 'USD',
+        stagedOnChart: true,
+      }).effectiveRiskAmount,
+    ).toBe('');
+  }
+  expect(
+    deriveOrderRiskBasis({
+      unitsMode: 'equity',
+      riskAmount: '100',
+      equity: '5600',
+      currency: 'USD',
+      stagedOnChart: true,
+    }).effectiveRiskAmount,
+  ).toBe('5600.00');
+});

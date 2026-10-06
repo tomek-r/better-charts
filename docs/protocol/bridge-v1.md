@@ -463,13 +463,17 @@ fields as `request_risk_preview` (allocation is required) and returns a nullable
 risk fitting: retain that preferred volume on the broker lot grid, capped by
 margin and the risk possible at the supplied seed SL; move SL outward from
 that seed to the nearest price tick whose estimated loss does not exceed the
-budget. The seed is the ticket's closest permitted stop, including the market
-spread and minimum-distance guard. On entering money/% risk, the ticket uses
-its current volume (initially 1 lot) as the preference, obtains a broker quote,
-fits SL natively from the closest permitted stop, then requests a fresh broker
-quote for the new stop.
-Editing or dragging a level cancels a pending fit. A fitted projection never
-satisfies preview freshness or OrderCheck; wire quotes remain unchanged.
+budget. The caller must supply a valid seed, including the market spread and
+minimum-distance guard. This optional inverse-fitting command remains available,
+but the ticket does not use it when entering money/% risk: it seeds SL inside the
+visible chart range and sizes volume at that stop. Known symbols use the closest
+permitted stop; without metadata, the seed uses a quarter of the visible price
+span. If no valid seed fits, the UI requests zooming out or a manual SL instead
+of changing the price scale. Existing user stops are preserved. Margin and lot
+caps reduce achievable risk; they never move SL outward to consume the budget.
+Automatic market-quote following translates entry and exits together to preserve
+distance. Projections never satisfy preview freshness or OrderCheck; wire quotes
+remain unchanged.
 Without `targetVolume`, it projects the last accepted broker quote from the current
 session, symbol and side using checked Decimal SL/TP distance ratios, then runs
 the same sizing function with the latest equity/free-margin allocation and lot

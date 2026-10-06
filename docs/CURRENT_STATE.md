@@ -12,7 +12,8 @@ and the [bridge contract](protocol/bridge-v1.md) for implementation details.
 - Automatic sizing respects SL risk, broker lot limits and margin budget:
   `min(equity × Equity use % / 100, free margin)`. Equity use defaults to 100%
   and accepts greater than 0 through 100%; Risk % uses allocated equity,
-  money risk stays fixed, and manual Units keeps explicit volume.
+  money risk stays fixed, and manual Units keeps explicit volume. Risk % input
+  stays in 0–100; zero/empty drafts cannot produce a risk preview.
   MT5 quotes incorporate price, contract and leverage; `OrderCheck` checks affordability.
 - Authenticated local TCP, account/session binding, reconciliation, append-only
   journals, one command in flight, saved settings and opt-in MT5 startup.
@@ -24,7 +25,9 @@ Pine Script execution.
 
 - Chart-first workspace; Panel opens the ticket/portfolio drawer (overlay at
   ≤900 px). No separate execution-status panel or Commands list. Errors use
-  dismissible bottom-right notifications; negative free margin preserves charts.
+  dismissible bottom-right notifications with bright text, red borders and an error
+  icon; messages start with a capital letter. Failed OrderCheck shows one broker
+  rejection notice, without a separate last-error-code notice. Negative free margin preserves charts.
 - Arrow/Crosshair share a toolbar group; Escape closes the menu without disarming.
   Volume Profile is separate; boundaries drag, Delete/Backspace clears it,
   timeframe changes preserve selection and symbol changes clear it.
@@ -39,9 +42,15 @@ Pine Script execution.
 - Ticket/chart SL/TP amounts and RR share a display model using actual volume
   and unrounded estimates. Drags project the last broker quote immediately;
   broker replies replace estimates. Pending orders retain RR with both exits.
-- Entering money/% risk fits SL distance from the current size (initially 1 lot),
-  reducing size for margin/lot/minimum-distance limits and rounding within budget;
-  the adjusted stop needs a fresh broker preview. Manual level edits cancel the fit.
+- Entering money/% risk seeds a visible SL beyond the broker minimum, then sizes
+  volume to the budget using MT5 quotes. Higher risk increases volume; margin/lot
+  caps reduce achievable risk without moving SL outward. Existing SL edits stay put.
+  Selecting a risk mode with an empty budget shows no risk validation notification;
+  entering a value enables validation. Review still requires a valid stop and sizing.
+  Below-minimum sizing reports that risk is too low for the minimum order size
+  at the current SL distance.
+  Without metadata, the seed uses a quarter of the visible price span. If no valid
+  stop fits, a notification asks for zooming out or a manual SL; the scale stays fixed.
 - Money/% SL drags resize volume from the cached broker quote using native Decimal
   sizing; local projections cannot replace the fresh broker preview required to send.
   Market entry/exits and the grabbed SL USD label hold during a drag; release

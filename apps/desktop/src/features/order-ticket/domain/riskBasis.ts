@@ -1,5 +1,18 @@
 import { equityAllocationIssue } from './ticketRules';
 
+export const MAX_RISK_PERCENT = 100;
+
+export function clampRiskPercentInput(value: string): string {
+  if (!value.trim()) {
+    return value;
+  }
+  const percent = Number(value);
+  if (!Number.isFinite(percent)) {
+    return '';
+  }
+  return percent < 0 || percent > MAX_RISK_PERCENT ? String(Math.min(MAX_RISK_PERCENT, Math.max(0, percent))) : value;
+}
+
 export type OrderRiskBasis = {
   riskMode: 'usd' | 'equity';
   effectiveRiskAmount: string;
@@ -32,7 +45,8 @@ export function deriveOrderRiskBasis({
     equityAllocationIssue(equityAllocationPercent) === undefined &&
     riskAmount.trim() !== '' &&
     Number.isFinite(parsedRisk) &&
-    parsedRisk > 0
+    parsedRisk > 0 &&
+    parsedRisk <= MAX_RISK_PERCENT
       ? ((parsedRisk / 100) * equityValue * (Number(equityAllocationPercent) / 100)).toFixed(2)
       : '';
   const effectiveRiskAmount = riskMode === 'usd' ? riskAmount : percentRiskAmount;

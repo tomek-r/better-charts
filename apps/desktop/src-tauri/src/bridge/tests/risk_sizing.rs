@@ -41,7 +41,7 @@ fn risk_sizing_uses_latest_bound_account_free_margin() {
     state.account.lock().unwrap().as_mut().unwrap().free_margin = "-1".into();
     assert_eq!(
         size_risk_quote(&state, Decimal::from(100), Decimal::from(100), &quote()).unwrap_err(),
-        "insufficient free margin for broker minimum volume"
+        "Insufficient free margin for broker minimum volume"
     );
 }
 

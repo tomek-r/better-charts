@@ -58,7 +58,7 @@ test('settings notifications stack in the bottom right and clear drawing tools a
     for (const height of [480, 800]) {
       await page.setViewportSize({ width, height });
       await expectBannerTextUncovered(page.getByRole('alert'));
-      await expect(page.getByRole('alert')).toHaveCSS('color', 'rgb(196, 201, 208)');
+      await expect(page.getByRole('alert')).toHaveCSS('color', 'rgb(242, 245, 250)');
       await expectBannerTextUncovered(page.getByRole('status').filter({ hasText: 'Restart Better Charts' }));
       await expect(page.getByRole('status').filter({ hasText: 'Restart Better Charts' })).toHaveCSS(
         'color',

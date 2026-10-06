@@ -23,6 +23,7 @@ export function OrderTicketSizing() {
     equityValue,
     riskModeHint,
   } = useOrderTicketSizing();
+  const riskEntered = riskAmount.trim() !== '';
   const allocationIssue = unitsMode === 'units' ? undefined : equityAllocationIssue(equityAllocationPercent);
   const allocationHint = {
     units: 'Equity allocation applies to automatic sizing.',
@@ -69,14 +70,15 @@ export function OrderTicketSizing() {
         {allocationHint}
       </p>
       {allocationIssue && <ErrorNotification message={allocationIssue} />}
-      {volumeIssue && <ErrorNotification message={volumeIssue} />}
-      {stagedOnChart && unitsMode !== 'units' && !slOn && (
+      {volumeIssue && (unitsMode === 'units' || riskEntered) && <ErrorNotification message={volumeIssue} />}
+      {stagedOnChart && unitsMode !== 'units' && riskEntered && !slOn && (
         <ErrorNotification message="Money/% sizing needs a stop distance — enable Stop loss or switch to Units mode." />
       )}
       {stagedOnChart && unitsMode !== 'units' && slOn && !stopLoss.trim() && (
         <p className="ticket-hint">Risk sizing needs the stop distance — set the Stop loss price.</p>
       )}
-      {riskModeHint &&
+      {riskEntered &&
+        riskModeHint &&
         (equityValue !== undefined ? (
           <p className="ticket-hint">{riskModeHint}</p>
         ) : (
