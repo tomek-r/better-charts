@@ -1,3 +1,4 @@
+import { containsLabel } from './engine/labelLayout';
 import { useEffect } from 'react';
 import { createStagedOrderGestures } from './engine/stagedOrderGestures';
 import { createTradingOverlayGestures } from './engine/tradingOverlayGestures';
@@ -24,6 +25,15 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
       const rect = frameRect();
       return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     };
+    let labelDragOffset = 0;
+    const labelAt = (x: number, y: number) =>
+      [
+        ...(workspace.positionOverlayState.current.hit.labels ?? []),
+        ...(workspace.stagedOrderState.current.hit.labels ?? []),
+      ].find((row) => containsLabel(row, x, y));
+    const setLabelDragOffset = (row: ReturnType<typeof labelAt>, y: number) => {
+      labelDragOffset = row && Math.abs(row.y + row.h / 2 - row.lineY) > 1 ? y - row.lineY : 0;
+    };
     const onPointerDown = (event: PointerEvent) => {
       const { x, y } = localPoint(event);
       host.focus({ preventScroll: true });
@@ -34,7 +44,12 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
         host.setPointerCapture(event.pointerId);
         return;
       }
-      const target = staged.resolveGrab(x, y);
+      const row = labelAt(x, y);
+      setLabelDragOffset(row, y);
+      let target = row ? null : staged.resolveGrab(x, y);
+      if (row?.source === 'staged') {
+        target = staged.resolveLabelGrab(row.level, x, y);
+      }
       if (target) {
         if (staged.applyGrab(target, event)) {
           try {
@@ -45,7 +60,10 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
         }
         return;
       }
-      const overlay = trading.resolveGrab(x, y);
+      let overlay = row ? null : trading.resolveGrab(x, y);
+      if (row?.source === 'trading') {
+        overlay = trading.resolveLabelGrab(row, x, y);
+      }
       if (!overlay) {
         if (chart.current?.profilePointerDown(x, y)) {
           profileGesture = true;
@@ -57,7 +75,7 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
       }
       event.stopPropagation();
       event.preventDefault(); // suppresses the compat mousedown → chart pan/draw never starts
-      trading.startPointer(overlay, x, y, event.shiftKey);
+      trading.startPointer(overlay, x, overlay.kind === 'line' ? y - labelDragOffset : y, event.shiftKey);
       try {
         host.setPointerCapture(event.pointerId);
       } catch {
@@ -90,9 +108,9 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
       }
       event.stopPropagation();
       if (staged.active) {
-        staged.applyDrag(y, event.shiftKey);
+        staged.applyDrag(y - labelDragOffset, event.shiftKey);
       } else {
-        trading.applyLineDrag(y, event.shiftKey);
+        trading.applyLineDrag(y - labelDragOffset, event.shiftKey);
       }
     };
     // Leaving the chart drops the crosshair: it is a pointer indicator, so it
@@ -126,18 +144,26 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
         return;
       }
       const { x, y } = localPoint(event.touches[0]);
-      const target = staged.resolveGrab(x, y);
+      const row = labelAt(x, y);
+      setLabelDragOffset(row, y);
+      let target = row ? null : staged.resolveGrab(x, y);
+      if (row?.source === 'staged') {
+        target = staged.resolveLabelGrab(row.level, x, y);
+      }
       if (target) {
         staged.applyGrab(target, event);
         return;
       }
-      const overlay = trading.resolveGrab(x, y);
+      let overlay = row ? null : trading.resolveGrab(x, y);
+      if (row?.source === 'trading') {
+        overlay = trading.resolveLabelGrab(row, x, y);
+      }
       if (!overlay) {
         return;
       }
       event.stopPropagation();
       event.preventDefault();
-      trading.startTouch(overlay, x, y);
+      trading.startTouch(overlay, x, overlay.kind === 'line' ? y - labelDragOffset : y);
     };
     const onTouchMove = (event: TouchEvent) => {
       if (profileGesture) {
@@ -158,7 +184,7 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
       if (staged.active) {
         event.stopPropagation();
         event.preventDefault();
-        staged.applyDrag(y);
+        staged.applyDrag(y - labelDragOffset);
         return;
       }
       if (!trading.lineActive) {
@@ -166,7 +192,7 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
       }
       event.stopPropagation();
       event.preventDefault();
-      trading.applyLineDrag(y);
+      trading.applyLineDrag(y - labelDragOffset);
     };
     const onTouchCancel = () => {
       staged.reset();

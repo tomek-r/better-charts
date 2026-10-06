@@ -1,3 +1,9 @@
+import {
+  paintTradingLabel,
+  type TradingLabelHit,
+  type TradingLabelTarget,
+  type TradingLabelLayoutState,
+} from './labelLayout';
 import type { OverlayRenderer } from './overlayTypes';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { riskRewardRatio } from '../../order-ticket/domain/ticketRules';
@@ -127,6 +133,7 @@ export interface PositionOverlayState {
   drag: PositionDrag | null;
   /** Fresh geometry every paint; read by the host pointer handlers. */
   hit: {
+    labels?: TradingLabelHit[];
     chartRect?: { x: number; y: number; width: number; height: number };
     /** Viewport px → price inverse transform from the last paint (UNCLAMPED,
      *  like the library's yToPrice — a drag may extrapolate past the range). */
@@ -158,7 +165,11 @@ export const LINE_DRAG_THRESHOLD = 3;
 
 const titleCase = (label: string) => label.toLowerCase().replace(/(^|\s)\S/g, (char) => char.toUpperCase());
 
-export function createPositionOverlay(state: PositionOverlayState, pass: OverlayPass): OverlayRenderer {
+export function createPositionOverlay(
+  state: PositionOverlayState,
+  pass: OverlayPass,
+  labels?: TradingLabelLayoutState,
+): OverlayRenderer {
   // Size the P&L column from actual amounts only. Wider values expand it;
   // shorter values never move the units and RR back to the left.
   // (The `lines` pass never writes it; the two renderers are independent.)
@@ -167,13 +178,26 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
     // `ui` layer: row widgets render over the chart. Two-pass z-order (`lines`
     // before `labels`, features/chart/engine/overlays.ts) keeps risk zones beneath row labels;
     // native price lines and their axis labels render below this primitive.
-    descriptor: { id: `mt5-position-overlay-${pass}`, name: `Positions & Orders (${pass})`, layer: 'ui' },
+    descriptor: { id: `position-overlay-${pass}`, name: `Positions & Orders (${pass})`, layer: 'ui' },
     render(ctx, { viewport }) {
       const { x, y, width, height } = viewport.chartRect;
       const drawLines = pass === 'lines';
       const drawLabels = pass === 'labels';
       const { min, max } = viewport.priceRange;
-      const hit: PositionOverlayState['hit'] = {};
+      const hit: PositionOverlayState['hit'] = { labels: [] };
+      const row = (
+        id: string,
+        level: TradingLabelTarget['level'],
+        lineY: number,
+        draw: (labelY: number) => StagedHitRect,
+      ) => paintTradingLabel(ctx, viewport, hit.labels!, { source: 'trading', id, level }, lineY, draw, labels);
+
+      const exitRowRect = (labelY: number, box: StagedHitRect): StagedHitRect => ({
+        x: x + CANCEL_CHIP_X - 10,
+        y: labelY - 10,
+        w: box.x + box.w - (x + CANCEL_CHIP_X - 10),
+        h: 20,
+      });
 
       if (width <= 0 || height <= 0 || !(max > min)) {
         state.hit = hit;
@@ -267,46 +291,61 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
         }
         if (inBand(entryY)) {
           if (drawLabels) {
-            // The ✕ echoes the P&L state — red losing, green profiting — not the
-            // side: a red sell ✕ beside a green P&L read as a contradiction.
-            // Before the first P&L arrives it falls back to the side colour.
-            let pnlColor = sideColor;
-            if (pos.pnl !== undefined) {
-              pnlColor = pos.pnl.startsWith('-') ? STAGED_COLORS.sell : palette.up;
-            }
-            hit.posCloses!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, entryY, pnlColor) });
-            // Owner: a LIVE position row keeps ONLY the ✕ and the P&L box — the
-            // Buy/Sell marker and the draft grip tag are HIDDEN (they speak of the
-            // draft that made the position). The box is the SL/TP handle (same
-            // drawHandle, same palette red/teal as the other elements) and the
-            // number rides the SL/TP money format ("-$6.63").
-            if (pos.pnl !== undefined) {
-              // Tip: UP for long, DOWN for short. The trade size reads as
-              // "10 units" after the P&L ("P&L -$19.8 · 10 units").
-              // RR is recomputed from the PREVIEWED exits, so dragging SL/TP
-              // updates it live exactly like the staged tag.
-              const rrLabel =
-                sl !== undefined && tp !== undefined ? riskRewardRatio(pos.side, pos.entry, sl, tp) : undefined;
-              ctx.font = '400 12px system-ui, sans-serif';
-              const columnWidth = Math.max(pnlColumnWidths.get(pos.id) ?? 0, ctx.measureText(pos.pnl).width);
-              pnlColumnWidths.set(pos.id, columnWidth);
-              drawHandle(ctx, x + HANDLE_X, entryY, 'P&L ', pnlColor, pos.side !== 'buy', {
-                text: ` · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`,
-                amount: { text: pos.pnl, width: columnWidth },
-              });
-            }
+            row(pos.id, 'entry', entryY, (labelY) => {
+              // The ✕ echoes the P&L state — red losing, green profiting — not the
+              // side: a red sell ✕ beside a green P&L read as a contradiction.
+              // Before the first P&L arrives it falls back to the side colour.
+              let pnlColor = sideColor;
+              if (pos.pnl !== undefined) {
+                pnlColor = pos.pnl.startsWith('-') ? STAGED_COLORS.sell : palette.up;
+              }
+              hit.posCloses!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, pnlColor) });
+              // Owner: a LIVE position row keeps ONLY the ✕ and the P&L box — the
+              // Buy/Sell marker and the draft grip tag are HIDDEN (they speak of the
+              // draft that made the position). The box is the SL/TP handle (same
+              // drawHandle, same palette red/teal as the other elements) and the
+              // number rides the SL/TP money format ("-$6.63").
+              let right = x + CANCEL_CHIP_X + 10;
+              if (pos.pnl !== undefined) {
+                // Tip: UP for long, DOWN for short. The trade size reads as
+                // "10 units" after the P&L ("P&L -$19.8 · 10 units").
+                // RR is recomputed from the PREVIEWED exits, so dragging SL/TP
+                // updates it live exactly like the staged tag.
+                const rrLabel =
+                  sl !== undefined && tp !== undefined ? riskRewardRatio(pos.side, pos.entry, sl, tp) : undefined;
+                ctx.font = '400 12px system-ui, sans-serif';
+                const columnWidth = Math.max(pnlColumnWidths.get(pos.id) ?? 0, ctx.measureText(pos.pnl).width);
+                pnlColumnWidths.set(pos.id, columnWidth);
+                const box = drawHandle(ctx, x + HANDLE_X, labelY, 'P&L ', pnlColor, pos.side !== 'buy', {
+                  text: ` · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`,
+                  amount: { text: pos.pnl, width: columnWidth },
+                });
+                right = box.x + box.w;
+              }
+
+              return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: right - (x + CANCEL_CHIP_X - 10), h: 20 };
+            });
           }
         }
         if (sl !== undefined) {
           const slY = toY(sl);
           if (inBand(slY)) {
             if (drawLabels) {
-              if (pos.stopLoss !== undefined) {
-                hit.slClears!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, slY, STAGED_COLORS.sl) });
-              }
-              const slMoney =
-                drag && drag.kind === 'sl' && drag.id === pos.id && drag.money !== undefined ? drag.money : pos.slMoney;
-              exitHandle(slY, 'sl', slMoney, entryY);
+              row(pos.id, 'sl', slY, (labelY) => {
+                if (pos.stopLoss !== undefined) {
+                  hit.slClears!.push({
+                    id: pos.id,
+                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.sl),
+                  });
+                }
+                const slMoney =
+                  drag && drag.kind === 'sl' && drag.id === pos.id && drag.money !== undefined
+                    ? drag.money
+                    : pos.slMoney;
+                const box = exitHandle(labelY, 'sl', slMoney, entryY);
+
+                return exitRowRect(labelY, box);
+              });
             }
             if (pos.stopLoss !== undefined) {
               hit.slLines!.push({ id: pos.id, y: slY });
@@ -315,19 +354,32 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
         } else {
           const slY = floatingExitY(entryY, 'sl', pos.side);
           if (drawLabels && inBand(slY)) {
-            hit.slHandles!.push({ id: pos.id, ...exitHandle(slY, 'sl', undefined, entryY) });
+            row(pos.id, 'sl', slY, (labelY) => {
+              const box = exitHandle(labelY, 'sl', undefined, entryY);
+              hit.slHandles!.push({ id: pos.id, ...box });
+              return box;
+            });
           }
         }
         if (tp !== undefined) {
           const tpY = toY(tp);
           if (inBand(tpY)) {
             if (drawLabels) {
-              if (pos.takeProfit !== undefined) {
-                hit.tpClears!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, tpY, STAGED_COLORS.tp) });
-              }
-              const tpMoney =
-                drag && drag.kind === 'tp' && drag.id === pos.id && drag.money !== undefined ? drag.money : pos.tpMoney;
-              exitHandle(tpY, 'tp', tpMoney, entryY);
+              row(pos.id, 'tp', tpY, (labelY) => {
+                if (pos.takeProfit !== undefined) {
+                  hit.tpClears!.push({
+                    id: pos.id,
+                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.tp),
+                  });
+                }
+                const tpMoney =
+                  drag && drag.kind === 'tp' && drag.id === pos.id && drag.money !== undefined
+                    ? drag.money
+                    : pos.tpMoney;
+                const box = exitHandle(labelY, 'tp', tpMoney, entryY);
+
+                return exitRowRect(labelY, box);
+              });
             }
             if (pos.takeProfit !== undefined) {
               hit.tpLines!.push({ id: pos.id, y: tpY });
@@ -336,7 +388,11 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
         } else {
           const tpY = floatingExitY(entryY, 'tp', pos.side);
           if (drawLabels && inBand(tpY)) {
-            hit.tpHandles!.push({ id: pos.id, ...exitHandle(tpY, 'tp', undefined, entryY) });
+            row(pos.id, 'tp', tpY, (labelY) => {
+              const box = exitHandle(labelY, 'tp', undefined, entryY);
+              hit.tpHandles!.push({ id: pos.id, ...box });
+              return box;
+            });
           }
         }
       }
@@ -361,25 +417,29 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
         const lineY = toY(price);
         if (inBand(lineY)) {
           if (drawLabels) {
-            hit.orderCancels!.push({ id: order.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, lineY, sideColor) });
-            // Side marker: the SAME handle box as the order preview (tip up for
-            // buy, down for sell) — the old filled pill stood out from the rest.
-            const sideBox = drawHandle(
-              ctx,
-              x + HANDLE_X,
-              lineY,
-              order.side === 'buy' ? 'Buy' : 'Sell',
-              sideColor,
-              order.side !== 'buy',
-            );
-            const rrLabel =
-              sl !== undefined && tp !== undefined ? riskRewardRatio(order.side, price, sl, tp) : undefined;
-            qtyTag(
-              sideBox.x + sideBox.w + 6,
-              lineY,
-              `⋮⋮  |  ${order.quantity}  |  ${titleCase(order.label)}${rrLabel ? `  |  RR ${rrLabel}` : ''}`,
-              sideColor,
-            );
+            row(orderKey, 'entry', lineY, (labelY) => {
+              hit.orderCancels!.push({ id: order.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, sideColor) });
+              // Side marker: the SAME handle box as the order preview (tip up for
+              // buy, down for sell) — the old filled pill stood out from the rest.
+              const sideBox = drawHandle(
+                ctx,
+                x + HANDLE_X,
+                labelY,
+                order.side === 'buy' ? 'Buy' : 'Sell',
+                sideColor,
+                order.side !== 'buy',
+              );
+              const rrLabel =
+                sl !== undefined && tp !== undefined ? riskRewardRatio(order.side, price, sl, tp) : undefined;
+              const right = qtyTag(
+                sideBox.x + sideBox.w + 6,
+                labelY,
+                `⋮⋮  |  ${order.quantity}  |  ${titleCase(order.label)}${rrLabel ? `  |  RR ${rrLabel}` : ''}`,
+                sideColor,
+              );
+
+              return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: right - (x + CANCEL_CHIP_X - 10), h: 20 };
+            });
           }
           hit.orderLines!.push({ id: order.id, y: lineY });
         }
@@ -390,20 +450,31 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
         if (sl === undefined) {
           const slY = floatingExitY(lineY, 'sl', order.side);
           if (drawLabels && inBand(slY)) {
-            hit.slHandles!.push({ id: orderKey, ...exitHandle(slY, 'sl', undefined, lineY) });
+            row(orderKey, 'sl', slY, (labelY) => {
+              const box = exitHandle(labelY, 'sl', undefined, lineY);
+              hit.slHandles!.push({ id: orderKey, ...box });
+              return box;
+            });
           }
         } else {
           const slY = toY(sl);
           if (inBand(slY)) {
             if (drawLabels) {
-              if (order.stopLoss !== undefined) {
-                hit.slClears!.push({ id: orderKey, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, slY, STAGED_COLORS.sl) });
-              }
-              const slMoney =
-                drag && drag.kind === 'sl' && drag.id === orderKey && drag.money !== undefined
-                  ? drag.money
-                  : order.slMoney;
-              exitHandle(slY, 'sl', slMoney, lineY);
+              row(orderKey, 'sl', slY, (labelY) => {
+                if (order.stopLoss !== undefined) {
+                  hit.slClears!.push({
+                    id: orderKey,
+                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.sl),
+                  });
+                }
+                const slMoney =
+                  drag && drag.kind === 'sl' && drag.id === orderKey && drag.money !== undefined
+                    ? drag.money
+                    : order.slMoney;
+                const box = exitHandle(labelY, 'sl', slMoney, lineY);
+
+                return exitRowRect(labelY, box);
+              });
             }
             if (order.stopLoss !== undefined) {
               hit.slLines!.push({ id: orderKey, y: slY });
@@ -413,20 +484,31 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
         if (tp === undefined) {
           const tpY = floatingExitY(lineY, 'tp', order.side);
           if (drawLabels && inBand(tpY)) {
-            hit.tpHandles!.push({ id: orderKey, ...exitHandle(tpY, 'tp', undefined, lineY) });
+            row(orderKey, 'tp', tpY, (labelY) => {
+              const box = exitHandle(labelY, 'tp', undefined, lineY);
+              hit.tpHandles!.push({ id: orderKey, ...box });
+              return box;
+            });
           }
         } else {
           const tpY = toY(tp);
           if (inBand(tpY)) {
             if (drawLabels) {
-              if (order.takeProfit !== undefined) {
-                hit.tpClears!.push({ id: orderKey, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, tpY, STAGED_COLORS.tp) });
-              }
-              const tpMoney =
-                drag && drag.kind === 'tp' && drag.id === orderKey && drag.money !== undefined
-                  ? drag.money
-                  : order.tpMoney;
-              exitHandle(tpY, 'tp', tpMoney, lineY);
+              row(orderKey, 'tp', tpY, (labelY) => {
+                if (order.takeProfit !== undefined) {
+                  hit.tpClears!.push({
+                    id: orderKey,
+                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.tp),
+                  });
+                }
+                const tpMoney =
+                  drag && drag.kind === 'tp' && drag.id === orderKey && drag.money !== undefined
+                    ? drag.money
+                    : order.tpMoney;
+                const box = exitHandle(labelY, 'tp', tpMoney, lineY);
+
+                return exitRowRect(labelY, box);
+              });
             }
             if (order.takeProfit !== undefined) {
               hit.tpLines!.push({ id: orderKey, y: tpY });

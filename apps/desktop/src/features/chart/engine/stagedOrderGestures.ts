@@ -1,3 +1,4 @@
+import type { TradingLabelTarget } from './labelLayout';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { ticketPrice } from '../../../shared/format';
 import type { ChartWorkspaceState } from '../useChartWorkspace';
@@ -89,6 +90,14 @@ export function createStagedOrderGestures(
       return 'entry';
     }
     return null;
+  };
+  const resolveLabelGrab = (level: TradingLabelTarget['level'], x: number, y: number) => {
+    const { hit, order } = stagedOrderState.current;
+    const chip = { entry: hit.entryCancel, sl: hit.slCancel, tp: hit.tpCancel }[level];
+    if (hitCircle(chip, x, y)) {
+      return ({ entry: 'entryCancel', sl: 'slCancel', tp: 'tpCancel' } as const)[level];
+    }
+    return level !== 'entry' || order?.orderKindLabel !== 'Market' ? level : null;
   };
   // Consumes the event as a widget grab/click (stop + prevent = only-on-grab).
   // Returns true when a drag target was claimed.
@@ -202,6 +211,7 @@ export function createStagedOrderGestures(
       return drag !== null;
     },
     resolveGrab,
+    resolveLabelGrab,
     applyGrab,
     applyDrag,
     endDrag,

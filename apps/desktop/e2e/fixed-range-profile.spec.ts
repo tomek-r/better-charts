@@ -249,7 +249,7 @@ const labelsOf = (ops: Op[]) => ops.filter((op) => op.kind === 'fillText');
 test('descriptor is the overlay-layer fixed-range profile plugin', () => {
   const plugin = createFixedRangeProfileOverlay(makeState(makeProfile(DEFAULT_BINS)));
   expect(plugin.descriptor).toEqual({
-    id: 'mt5-fixed-range-profile',
+    id: 'fixed-range-profile',
     name: 'Fixed Range Volume Profile',
     layer: 'overlay',
   });

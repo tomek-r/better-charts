@@ -3,6 +3,16 @@ import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './tauriStub'
 import type { PortfolioSnapshot } from '../src/shared/bridge/types';
 
 interface TradingGeometry {
+  labels: Array<{
+    source: string;
+    id: string;
+    level: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    lineY: number;
+  }>;
   posCloses: Array<{ id: string; x: number; y: number; r: number }>;
   orderCancels: Array<{ id: string; x: number; y: number; r: number }>;
   slLines: Array<{ id: string; y: number }>;
@@ -399,4 +409,61 @@ test('locked execution gate prevents trading-line dispatch after a completed dra
   expect(await invocations(page, 'modify_order')).toHaveLength(0);
   await drag(page, 'orderLines');
   expect(await invocations(page, 'modify_order')).toHaveLength(0);
+});
+
+test('overlapping P&L and SL stay separated while crossing to the position close button', async ({ page }) => {
+  const collected = await ready(page);
+  await pushEvent(page, 'portfolio-snapshot', {
+    ...portfolio,
+    orders: [],
+    positions: portfolio.positions.map((pos) => ({ ...pos, stopLoss: '1.08501', takeProfit: null })),
+  });
+  await expect.poll(async () => (await geometry(page)).orderLines.length).toBe(0);
+  const before = await geometry(page);
+  const entry = before.labels.find((row) => row.id === '885001' && row.level === 'entry')!;
+  const sl = before.labels.find((row) => row.id === '885001' && row.level === 'sl')!;
+  expect(Math.abs(entry.lineY - sl.lineY)).toBeLessThan(20);
+  expect(Math.abs(entry.y - sl.y)).toBeGreaterThanOrEqual(32);
+  const close = before.posCloses[0];
+  await page.mouse.move(entry.x + entry.w - 5, entry.y + entry.h / 2);
+  await page.mouse.move(close.x, close.y, { steps: 12 });
+  expect((await geometry(page)).labels).toEqual(before.labels);
+  await page.screenshot({ path: test.info().outputPath('spaced-trading-labels.png') });
+  await page.mouse.down();
+  expect(await invocations(page, 'close_position')).toHaveLength(0);
+  await page.mouse.up();
+  await expect.poll(async () => (await invocations(page, 'close_position')).length).toBe(1);
+  expect(await invocations(page, 'modify_order')).toHaveLength(0);
+  expect(collected.pageErrors).toEqual([]);
+  expect(collected.consoleErrors).toEqual([]);
+});
+
+test('dragging a displaced SL moves from its actual price instead of jumping to the label', async ({ page }) => {
+  await ready(page);
+  await pushEvent(page, 'portfolio-snapshot', {
+    ...portfolio,
+    orders: [],
+    positions: portfolio.positions.map((pos) => ({ ...pos, stopLoss: '1.08501', takeProfit: null })),
+  });
+  await expect.poll(async () => (await geometry(page)).orderLines.length).toBe(0);
+  const before = await geometry(page);
+  const sl = before.labels.find((row) => row.id === '885001' && row.level === 'sl')!;
+  expect(Math.abs(sl.y + sl.h / 2 - sl.lineY)).toBeGreaterThan(1);
+  const expected = await page.evaluate((y) => {
+    const w = window as unknown as {
+      __stagedWidgetTest: {
+        geometry(): { priceRange: { min: number; max: number }; chartRect: { y: number; height: number } };
+      };
+    };
+    const { priceRange, chartRect } = w.__stagedWidgetTest.geometry();
+    return priceRange.max - ((y - chartRect.y) / chartRect.height) * (priceRange.max - priceRange.min);
+  }, sl.lineY + 6);
+  await page.mouse.move(sl.x + sl.w - 5, sl.y + sl.h / 2);
+  await page.mouse.down();
+  await page.mouse.move(sl.x + sl.w - 5, sl.y + sl.h / 2 + 6, { steps: 3 });
+  await page.mouse.up();
+  await expect.poll(async () => (await invocations(page, 'modify_order')).length).toBe(1);
+  const call = (await invocations(page, 'modify_order'))[0];
+  expect(Number((call.args as { stopLoss: string }).stopLoss)).toBeCloseTo(expected, 5);
+  expect(await invocations(page, 'close_position')).toHaveLength(0);
 });

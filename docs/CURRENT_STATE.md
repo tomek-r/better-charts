@@ -34,7 +34,8 @@ Pine Script execution.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
   avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
 - Live P&L right-aligns within the widest amount observed per position, expanding
-  only as needed and resetting on removal; units/RR stay in place.
+  only as needed and resetting on removal; units/RR stay in place. Overlapping
+  trading rows spread vertically; close buttons follow labels, price lines stay put.
 - Ticket/chart SL/TP amounts and RR share a display model using actual volume
   and unrounded estimates. Drags project the last broker quote immediately;
   broker replies replace estimates. Pending orders retain RR with both exits.

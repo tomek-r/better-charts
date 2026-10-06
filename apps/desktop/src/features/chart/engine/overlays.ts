@@ -1,3 +1,5 @@
+import type { TradingLabelLayoutState } from './labelLayout';
+import { createTradingLabelsOverlay } from './tradingLabelsOverlay';
 import type { OverlayRenderer } from './overlayTypes';
 import { createFixedRangeProfileOverlay, type FixedRangeProfileState } from './fixedRangeProfileOverlay';
 import { createPositionOverlay, type PositionOverlayState } from './positionOverlay';
@@ -15,7 +17,7 @@ export interface ChartOverlayState {
 /**
  * Z-INDEX CONTRACT: the chart paints `ui`-layer plugins in REGISTRATION order
  * (the package filters `pluginManager.getOverlays()` per layer), so THIS ARRAY
- * is the z-order of every risk zone and label on the chart. Two rules:
+ * is the z-order of every risk zone and label on the chart. Three rules:
  *
  * 1. Native Lightweight Charts price lines (bid/ask, entry, SL, TP) and their
  *    axis labels render below this primitive. Risk-zone fills paint before row
@@ -24,10 +26,12 @@ export interface ChartOverlayState {
  * 2. Among row surfaces later registrations win: position/order rows under
  *    the staged draft row (the active draft is the primary surface). Native
  *    price-line axis labels are drawn by Lightweight Charts below this layer.
+ * 3. Trading rows are laid out together in the final pass to avoid collisions.
  *
  * Plugin ids carry the pass suffix because the plugin registry is keyed by id.
  */
 export function buildChartPlugins(state: ChartOverlayState): Array<{ kind: 'overlay'; plugin: OverlayRenderer }> {
+  const labels: TradingLabelLayoutState = { pending: [] };
   return [
     { kind: 'overlay', plugin: createFixedRangeProfileOverlay(state.fixedRangeProfile) },
     // ── lines passes: risk zones (native price lines are managed by PriceLineController).
@@ -36,7 +40,8 @@ export function buildChartPlugins(state: ChartOverlayState): Array<{ kind: 'over
     { kind: 'overlay', plugin: createStagedOrderOverlay(state.staged, 'lines') },
     // ── labels passes: ✕ chips, side pills, handles and qty.
     { kind: 'overlay', plugin: createPriceLinesOverlay(state.priceLines, 'labels') },
-    { kind: 'overlay', plugin: createPositionOverlay(state.positions, 'labels') },
-    { kind: 'overlay', plugin: createStagedOrderOverlay(state.staged, 'labels') },
+    { kind: 'overlay', plugin: createPositionOverlay(state.positions, 'labels', labels) },
+    { kind: 'overlay', plugin: createStagedOrderOverlay(state.staged, 'labels', labels) },
+    { kind: 'overlay', plugin: createTradingLabelsOverlay(labels) },
   ];
 }

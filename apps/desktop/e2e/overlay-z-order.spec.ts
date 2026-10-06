@@ -1,3 +1,4 @@
+import { layoutLabelCenters } from '../src/features/chart/engine/labelLayout';
 import { test, expect } from '@playwright/test';
 import type { OverlayRenderer as OverlayPlugin } from '../src/features/chart/engine/overlayTypes';
 import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart/engine/overlays';
@@ -226,19 +227,20 @@ test('chart plugin registration is the overlay z-index contract', () => {
   );
   // ALL lines passes first, then ALL labels passes (see features/chart/engine/overlays.ts).
   expect(ids).toEqual([
-    'mt5-fixed-range-profile',
-    'mt5-price-lines-lines',
-    'mt5-position-overlay-lines',
-    'mt5-staged-order-lines',
-    'mt5-price-lines-labels',
-    'mt5-position-overlay-labels',
-    'mt5-staged-order-labels',
+    'fixed-range-profile',
+    'price-lines-lines',
+    'position-overlay-lines',
+    'staged-order-lines',
+    'price-lines-labels',
+    'position-overlay-labels',
+    'staged-order-labels',
+    'trading-labels',
   ]);
 });
 
 test('every level/reference line paints under every row label', () => {
   const ops: Op[] = [];
-  renderAll(ops, (id) => id !== 'mt5-fixed-range-profile');
+  renderAll(ops, (id) => id !== 'fixed-range-profile');
   const lineOps = ops.filter(isLineOp);
   const labelOps = ops.filter(isLabelOp);
   // The collision scenario must actually exercise both classes.
@@ -273,5 +275,40 @@ test('row panels keep their inset from the chart left edge in both overlays', ()
   expect(rowOps.length).toBeGreaterThan(0);
   for (const op of rowOps) {
     expect(op.minX).toBeGreaterThanOrEqual(viewport.chartRect.x + 20);
+  }
+});
+
+test('colliding trading and staged rows spread apart without moving their price lines', () => {
+  const state = collidingStates();
+  const ops: Op[] = [];
+  for (const { plugin } of buildChartPlugins(state)) {
+    plugin.render(createRecordingCtx(ops, plugin.descriptor.id), renderArgs);
+  }
+  const rows = [...(state.positions.hit.labels ?? []), ...(state.staged.hit.labels ?? [])].sort((a, b) => a.y - b.y);
+  expect(rows).toHaveLength(9);
+  for (let i = 1; i < rows.length; i++) {
+    expect(rows[i].y - (rows[i - 1].y + rows[i - 1].h)).toBeGreaterThanOrEqual(12);
+  }
+  expect(state.positions.hit.slLines?.find((line) => line.id === 'pos-1')?.y).toBeCloseTo(viewport.priceToY(150.4));
+  expect(state.staged.hit.entryLineY).toBeCloseTo(viewport.priceToY(150));
+  const close = state.positions.hit.posCloses!.find((chip) => chip.id === 'pos-1')!;
+  const entry = rows.find((row) => row.id === 'pos-1' && row.level === 'entry')!;
+  expect(close.y).toBe(entry.y + entry.h / 2);
+});
+
+test('isolated labels retain their exact price coordinates', () => {
+  expect(layoutLabelCenters([100, 150, 250], 45, 445)).toEqual([100, 150, 250]);
+});
+
+test('clusters near either pane edge keep their buttons and tips visible', () => {
+  for (const desired of [
+    [45, 46, 47],
+    [443, 444, 445],
+  ]) {
+    const centres = layoutLabelCenters(desired, 45, 445);
+    expect(centres[0]).toBeGreaterThanOrEqual(60);
+    expect(centres.at(-1)).toBeLessThanOrEqual(430);
+    expect(centres[1] - centres[0]).toBe(32);
+    expect(centres[2] - centres[1]).toBe(32);
   }
 });
