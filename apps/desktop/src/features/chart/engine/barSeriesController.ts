@@ -14,7 +14,7 @@ import { palette } from '../../../shared/theme/palette';
  */
 export class BarSeriesController {
   private cache: RenderBar[] = [];
-  private interval = timeframeSeconds(DEFAULT_TIMEFRAME);
+  private period = DEFAULT_TIMEFRAME;
   private priceDigits = 2;
 
   constructor(
@@ -27,7 +27,11 @@ export class BarSeriesController {
   }
 
   get intervalSeconds(): number {
-    return this.interval;
+    return timeframeSeconds(this.period);
+  }
+
+  get timeframe(): string {
+    return this.period;
   }
 
   lastBar(): RenderBar | undefined {
@@ -44,7 +48,7 @@ export class BarSeriesController {
     if (bars.some((bar, index) => index > 0 && bar.time <= bars[index - 1].time)) {
       return false;
     }
-    this.interval = timeframeSeconds(timeframe);
+    this.period = timeframe;
     this.cache = bars;
     this.candles.setData(bars.map((bar) => ({ ...bar, time: bar.time as UTCTimestamp })));
     this.volume.setData(bars.map((bar) => this.volumeBar(bar)));

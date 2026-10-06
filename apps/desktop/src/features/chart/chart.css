@@ -153,6 +153,7 @@
 
 .timeframe-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 12px;
 }

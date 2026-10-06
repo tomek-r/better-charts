@@ -24,7 +24,9 @@ pub use control::{
 pub use framing::{
     decode_json, encode_frame, encode_frame_with_limit, encode_json, FrameDecoder, FrameError,
 };
-pub use limits::{default_frame_bytes, history_bars, max_frame_bytes, min_frame_bytes};
+pub use limits::{
+    default_frame_bytes, expert_adviser_version, history_bars, max_frame_bytes, min_frame_bytes,
+};
 pub use market::{
     BarUpdate, BrokerSymbol, HistoryRequest, HistorySnapshot, MarketCandle, MarketTick,
     QuoteUpdate, SymbolInfoRequest, SymbolInfoResult, SymbolSearchRequest, SymbolSearchResult,
@@ -37,7 +39,9 @@ pub use orders::{
     OrderModifyRequest, OrderSubmitRequest, RiskQuoteError, RiskQuoteRequest, RiskQuoteResult,
     TimeInForce,
 };
-pub use timeframes::{default_timeframe, is_supported_timeframe, timeframe_seconds};
+pub use timeframes::{
+    default_timeframe, is_supported_timeframe, supported_timeframes, timeframe_seconds,
+};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TransferLimits {
     pub max_frame_bytes: u32,

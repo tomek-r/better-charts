@@ -915,7 +915,7 @@ test('timeframe switch issues exactly one request_history', async ({ page }) => 
   // Bootstrap refreshes history and instrument metadata once; record that baseline.
   const before = await count();
   // Switching selection starts one deduplicated history request.
-  await page.locator('.timeframe-tabs button', { hasText: '1m' }).click();
+  await page.getByRole('button', { name: '1m', exact: true }).click();
   await expect(page.locator('.timeframe-tabs button[aria-pressed="true"]')).toHaveText('1m');
   await expect.poll(count, { timeout: 10_000 }).toBe(before + 1);
   expectClean(collected);
@@ -1015,7 +1015,7 @@ test('fixed range volume profile survives a timeframe switch and clears on a sym
   const beforeTimeframe = await settleProfile();
   expect(beforeTimeframe.range).not.toBeNull();
   // TIMEFRAME switch: selection + drawing + profile must ALL survive.
-  await page.locator('.timeframe-tabs button', { hasText: '1m' }).click();
+  await page.getByRole('button', { name: '1m', exact: true }).click();
   await expect(page.locator('.timeframe-tabs button[aria-pressed="true"]')).toHaveText('1m');
   await expect.poll(async () => (await chartData(page)).length).toBe(10);
   const profileRequests = (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_tick_profile').length;

@@ -1,3 +1,5 @@
+import { timeframeBarTime } from '../../../shared/bridge/timeframes';
+
 /**
  * Time-scale padding: the invisible points that let every real candle leave the
  * pane when panning. Pure math with no chart object and no library import, so
@@ -30,18 +32,18 @@ export function timeScaleBaseIndex(barCount: number, offset: number): number {
 }
 
 /**
- * The helper points themselves, one interval apart from the last real bar. They
+ * The helper points themselves, one bar apart from the last real bar. They
  * repeat the last close because the series holds real values; its separate price
  * scale and autoscale provider keep them out of the price fit.
  */
 export function futurePoints(
   lastBarTimeSeconds: number,
-  intervalSeconds: number,
+  timeframe: string,
   lastClose: number,
   count: number,
 ): { time: number; value: number }[] {
   return Array.from({ length: count }, (_, i) => ({
-    time: lastBarTimeSeconds + (i + 1) * intervalSeconds,
+    time: timeframeBarTime(timeframe, lastBarTimeSeconds, i + 1),
     value: lastClose,
   }));
 }

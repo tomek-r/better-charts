@@ -103,7 +103,7 @@ export class ChartController {
     });
     this.countdown = new CountdownController(this.countdownPrimitive, {
       symbol: () => this.symbol,
-      intervalSeconds: () => this.data.intervalSeconds,
+      timeframe: () => this.data.timeframe,
       barTimeSeconds: () => this.data.lastBar()?.time,
       bid: () => this.state.priceLines.bid,
       ask: () => this.state.priceLines.ask,

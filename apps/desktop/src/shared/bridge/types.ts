@@ -20,6 +20,8 @@ export interface BridgeStatus {
   message?: string;
   /** Absent until the first heartbeat carrying an observation (fail closed). */
   marketSession?: MarketSessionStatus;
+  /** Periods advertised by the connected EA. */
+  supportedTimeframes?: string[];
 }
 
 export interface ExecutionSafetyStatus {

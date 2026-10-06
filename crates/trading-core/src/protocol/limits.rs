@@ -1,4 +1,4 @@
-//! Transfer limits and history sizing.
+//! EA compatibility version, transfer limits, and history sizing.
 //!
 //! The values live once in `config/bridge.json` at the repository root, which
 //! this module embeds at compile time and the frontend imports (`shared/bridge/limits.ts`).
@@ -13,6 +13,7 @@ const CONFIG: &str = include_str!("../../../../config/bridge.json");
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BridgeConfig {
+    expert_adviser_version: String,
     frame_bytes: FrameBytes,
     history_bars: u16,
 }
@@ -31,6 +32,11 @@ fn config() -> &'static BridgeConfig {
     static CONFIG_ONCE: OnceLock<BridgeConfig> = OnceLock::new();
     CONFIG_ONCE
         .get_or_init(|| serde_json::from_str(CONFIG).expect("config/bridge.json must be valid"))
+}
+
+/// Exact EA version required by this desktop build.
+pub fn expert_adviser_version() -> &'static str {
+    &config().expert_adviser_version
 }
 
 /// Smallest frame the settings accept, and the lower bound of the handshake.
@@ -56,6 +62,16 @@ pub fn history_bars() -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ea_advertises_the_version_required_by_the_app() {
+        let ea = include_str!("../../../../mql5/bridge/Experts/BetterChartsBridge.mq5");
+        assert!(ea.contains(&format!(
+            "#define BRIDGE_EXPERT_VERSION \"{}\"",
+            expert_adviser_version()
+        )));
+        assert!(ea.contains("#property version BRIDGE_EXPERT_VERSION"));
+    }
 
     #[test]
     fn frame_bounds_are_ordered_and_leave_room_for_the_header() {

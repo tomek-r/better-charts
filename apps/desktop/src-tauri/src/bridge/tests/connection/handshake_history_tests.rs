@@ -318,3 +318,95 @@ async fn invalid_history_snapshot_closes_connection() {
         .expect("session mutex poisoned")
         .is_none());
 }
+
+#[tokio::test]
+async fn handshake_publishes_peer_timeframes() {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let mut hello = valid_hello(None);
+    hello.payload["supported_timeframes"] = serde_json::json!(["MN1", "M2", "M1"]);
+    complete_handshake_with_hello(&mut client, hello).await;
+    assert_eq!(
+        harness.state.status.lock().unwrap().supported_timeframes,
+        ["M1", "M2", "MN1"]
+    );
+    assert!(harness.events.events().iter().any(|(event, payload)| {
+        event == "bridge-status"
+            && payload["supportedTimeframes"] == serde_json::json!(["M1", "M2", "MN1"])
+    }));
+}
+
+#[tokio::test]
+async fn handshake_rejects_invalid_timeframe_capabilities() {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let mut hello = valid_hello(None);
+    hello.payload["supported_timeframes"] = serde_json::json!(["M1", "M7"]);
+    client.send(hello).await.unwrap();
+    let reply = client.recv(Duration::from_secs(2)).await.unwrap();
+    assert_eq!(reply.message_type, MessageType::Error);
+    assert_eq!(reply.payload["code"], "INVALID_MESSAGE");
+    assert!(harness.state.current_session.lock().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn handshake_requires_timeframe_capabilities() {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let mut hello = valid_hello(None);
+    hello
+        .payload
+        .as_object_mut()
+        .unwrap()
+        .remove("supported_timeframes");
+    client.send(hello).await.unwrap();
+    let reply = client.recv(Duration::from_secs(2)).await.unwrap();
+    assert_eq!(reply.message_type, MessageType::Error);
+    let message = "MT5 bridge sent an invalid connection handshake. Recompile and reattach BetterChartsBridge in MT5.";
+    assert_eq!(reply.payload["message"], message);
+    assert!(
+        wait_until(Duration::from_secs(1), || {
+            harness.state.status.lock().unwrap().message.as_deref() == Some(message)
+        })
+        .await
+    );
+    assert!(harness.state.current_session.lock().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn malformed_handshake_has_actionable_copy_without_echoing_payload_values() {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let mut hello = valid_hello(None);
+    hello.payload["terminal_build"] = serde_json::json!("private-value");
+    client.send(hello).await.unwrap();
+    let reply = client.recv(Duration::from_secs(2)).await.unwrap();
+    assert_eq!(reply.message_type, MessageType::Error);
+    assert_eq!(reply.payload["message"], "MT5 bridge sent an invalid connection handshake. Recompile and reattach BetterChartsBridge in MT5.");
+    assert!(harness.state.current_session.lock().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn older_ea_reports_required_and_installed_versions_before_schema_validation() {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let mut hello = valid_hello(None);
+    hello.payload["expert_version"] = serde_json::json!("0.6.0");
+    hello
+        .payload
+        .as_object_mut()
+        .unwrap()
+        .remove("supported_timeframes");
+    client.send(hello).await.unwrap();
+    let reply = client.recv(Duration::from_secs(2)).await.unwrap();
+    let message = format!("App requires MT5 bridge version {}, but installed bridge version is 0.6.0. Update and reattach BetterChartsBridge in MT5.", trading_core::protocol::expert_adviser_version());
+    assert_eq!(reply.payload["code"], "UNSUPPORTED_VERSION");
+    assert_eq!(reply.payload["message"], message);
+    assert!(
+        wait_until(Duration::from_secs(1), || {
+            harness.state.status.lock().unwrap().message.as_deref() == Some(message.as_str())
+        })
+        .await
+    );
+    assert!(harness.state.current_session.lock().unwrap().is_none());
+}

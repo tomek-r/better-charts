@@ -1,3 +1,4 @@
+import { timeframeBarTime } from '../../../shared/bridge/timeframes';
 import type { FixedRangeProfileState } from './fixedRangeProfileOverlay';
 import type { RenderViewport } from './overlayTypes';
 import type { TimeModel } from './viewportController';
@@ -252,7 +253,9 @@ export class FixedRangeProfileController {
     // Preserve the original end-exclusive rule: the preceding real-bar delta
     // determines the selected last candle end, including session gaps.
     let interval = this.deps.data.intervalSeconds;
-    if (end > 0) {
+    if (this.deps.data.timeframe === 'MN1') {
+      interval = timeframeBarTime('MN1', bars[end].time, 1) - bars[end].time;
+    } else if (end > 0) {
       interval = bars[end].time - bars[end - 1].time;
     } else if (bars.length > 1) {
       interval = bars[bars.length - 1].time - bars[bars.length - 2].time;

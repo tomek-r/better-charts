@@ -112,6 +112,8 @@ pub(crate) struct BridgeStatus {
     /// until the first heartbeat that carries one (fail closed).
     #[serde(rename = "marketSession", default)]
     pub market_session: Option<MarketSessionView>,
+    #[serde(rename = "supportedTimeframes")]
+    pub supported_timeframes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -134,6 +136,7 @@ impl Default for BridgeStatus {
             last_heartbeat: None,
             message: None,
             market_session: None,
+            supported_timeframes: Vec::new(),
         }
     }
 }

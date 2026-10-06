@@ -1,7 +1,7 @@
 import type { BridgeState, QuoteSnapshot } from '../../../../shared/bridge/types';
 import type { BarCountdownPrimitive } from './primitive';
 import type { BarCountdownState } from './types';
-import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../../shared/bridge/timeframes';
+import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
 
 /**
  * The live inputs the countdown mirrors, read at each sync so the controller
@@ -9,7 +9,7 @@ import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../../shared/bridge/t
  */
 export interface CountdownInputs {
   symbol(): string;
-  intervalSeconds(): number;
+  timeframe(): string;
   barTimeSeconds(): number | undefined;
   bid(): number | undefined;
   ask(): number | undefined;
@@ -36,7 +36,7 @@ export interface CountdownInputs {
 export class CountdownController {
   private readonly state: BarCountdownState = {
     symbol: '',
-    intervalSeconds: timeframeSeconds(DEFAULT_TIMEFRAME),
+    timeframe: DEFAULT_TIMEFRAME,
     connected: false,
     suspended: false,
     connectionIdentity: '',
@@ -67,7 +67,7 @@ export class CountdownController {
   sync(): void {
     const state = this.state;
     state.symbol = this.inputs.symbol();
-    state.intervalSeconds = this.inputs.intervalSeconds();
+    state.timeframe = this.inputs.timeframe();
     state.barTimeSeconds = this.inputs.barTimeSeconds();
     state.anchorPrice = this.inputs.bid();
     state.askPrice = this.inputs.ask();

@@ -339,7 +339,7 @@ test('late history from another timeframe is discarded after returning to the in
   const historyCount = async () =>
     (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history').length;
   const before = await historyCount();
-  await page.locator('.timeframe-tabs button', { hasText: '1m' }).click();
+  await page.getByRole('button', { name: '1m', exact: true }).click();
   await expect.poll(historyCount).toBe(before + 1);
   // Return to A while B's snapshot is still outstanding.
   await page.getByRole('button', { name: '5m', exact: true }).click();
@@ -373,7 +373,7 @@ test('history timeout releases loading after ten seconds without retrying automa
   await page.clock.install();
   await gotoWithStub(page, { responses: { request_history: null } });
   await expect.poll(async () => (await data(page)).length).toBe(10);
-  await page.locator('.timeframe-tabs button', { hasText: '1m' }).click();
+  await page.getByRole('button', { name: '1m', exact: true }).click();
   await expect
     .poll(
       async () =>

@@ -3,7 +3,8 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#property version "1.000"
+#define BRIDGE_EXPERT_VERSION "1.001"
+#property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
 #include <Trade\Trade.mqh>
@@ -348,15 +349,37 @@ long JsonIntegerField(const string json,const string field,const long fallback)
    return StringToInteger(StringSubstr(json,value_start,end-value_start));
   }
 
+// MT5's standard periods, shared by parsing and capability advertisement.
+ENUM_TIMEFRAMES g_supported_timeframes[]={
+   PERIOD_M1,PERIOD_M2,PERIOD_M3,PERIOD_M4,PERIOD_M5,PERIOD_M6,
+   PERIOD_M10,PERIOD_M12,PERIOD_M15,PERIOD_M20,PERIOD_M30,
+   PERIOD_H1,PERIOD_H2,PERIOD_H3,PERIOD_H4,PERIOD_H6,PERIOD_H8,PERIOD_H12,
+   PERIOD_D1,PERIOD_W1,PERIOD_MN1
+};
+
 bool ParseTimeframe(const string name,ENUM_TIMEFRAMES &timeframe)
   {
-   if(name=="M1") { timeframe=PERIOD_M1; return true; }
-   if(name=="M5") { timeframe=PERIOD_M5; return true; }
-   if(name=="M15") { timeframe=PERIOD_M15; return true; }
-   if(name=="H1") { timeframe=PERIOD_H1; return true; }
-   if(name=="H4") { timeframe=PERIOD_H4; return true; }
-   if(name=="D1") { timeframe=PERIOD_D1; return true; }
+   for(int i=0;i<ArraySize(g_supported_timeframes);i++)
+     {
+      const ENUM_TIMEFRAMES period=g_supported_timeframes[i];
+      if(name==StringSubstr(EnumToString(period),7))
+        {
+         timeframe=period;
+         return true;
+        }
+     }
    return false;
+  }
+
+string SupportedTimeframesJson()
+  {
+   string result="[";
+   for(int i=0;i<ArraySize(g_supported_timeframes);i++)
+     {
+      if(i>0) result+=",";
+      result+="\""+StringSubstr(EnumToString(g_supported_timeframes[i]),7)+"\"";
+     }
+   return result+"]";
   }
 
 // Advertise the same permission snapshot used when accepting and dispatching orders.
@@ -428,7 +451,7 @@ bool SendHello()
    const string broker_server=JsonEscape(AccountInfoString(ACCOUNT_SERVER));
    g_identity_login=account_login;
    g_identity_server=AccountInfoString(ACCOUNT_SERVER);
-   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"0.6.0\",\"tick_price_counts\":true,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),(TradingEnabled() ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
+   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_price_counts\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,SupportedTimeframesJson(),(TradingEnabled() ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
    return SendFrame(hello);
   }
 

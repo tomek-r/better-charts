@@ -3,9 +3,14 @@
 
 import json
 import os
+from pathlib import Path
 import socket
 import struct
 import time
+
+BRIDGE_CONFIG = json.loads((Path(__file__).resolve().parent.parent / "config/bridge.json").read_text())
+TIMEFRAMES = json.loads((Path(__file__).resolve().parent.parent / "config/timeframes.json").read_text())
+SUPPORTED_TIMEFRAMES = [entry["code"] for entry in TIMEFRAMES["timeframes"]]
 
 LEGACY_TRANSFER_LIMITS = {"max_frame_bytes": 1024 * 1024, "max_ticks_per_page": 5000}
 TRANSFER_LIMITS = {"max_frame_bytes": 8 * 1024 * 1024, "max_ticks_per_page": 65535}
@@ -403,7 +408,8 @@ def main() -> int:
         send_frame(conn, envelope("hello", "ea-test-1", None, {
             "token": token, "terminal_id": "mock-terminal", "terminal_build": 5000,
             "account_login": "12345678", "broker_server": "mock", "chart_symbol": "TEST.INIT",
-            "expert_version": "0.4.2", "trading_enabled": False,
+            "expert_version": BRIDGE_CONFIG["expertAdviserVersion"], "trading_enabled": False,
+            "supported_timeframes": SUPPORTED_TIMEFRAMES,
             "transfer_limits": TRANSFER_LIMITS,
             "tick_price_counts": True,
         }))
@@ -542,7 +548,7 @@ def main() -> int:
         history_request = wait_for(reader, conn, "history_request", session_id, deadline, heartbeat_state)
         assert history_request.get("symbol") == "US100.TEST"
         timeframe = history_request.get("timeframe")
-        assert timeframe in {"M1", "M5", "M15", "H1", "H4", "D1"}
+        assert timeframe in SUPPORTED_TIMEFRAMES
         send_frame(conn, envelope("history_snapshot", "ea-history-us100", session_id, {
             "request_id": history_request.get("_request_id"), "symbol": "US100.TEST", "timeframe": timeframe, "complete": True,
             "candles": [
