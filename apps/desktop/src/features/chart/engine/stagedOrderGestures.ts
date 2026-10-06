@@ -6,7 +6,16 @@ import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
 type StagedGestureWorkspace = Pick<ChartWorkspaceState, 'stagedOrderState'>;
 type StagedGestureTicket = Pick<
   OrderTicketState,
-  'unstageOrderDraft' | 'toggleExit' | 'setEntry' | 'setSlOn' | 'setStopLoss' | 'setTpOn' | 'setTakeProfit'
+  | 'unstageOrderDraft'
+  | 'toggleExit'
+  | 'setEntry'
+  | 'setSlOn'
+  | 'setStopLoss'
+  | 'setTpOn'
+  | 'setTakeProfit'
+  | 'setStagedDragging'
+  | 'setDragSlMoney'
+  | 'riskStopIntentRef'
 >;
 
 /** Owns staged-widget gestures; writes draft fields without dispatching orders. */
@@ -16,7 +25,18 @@ export function createStagedOrderGestures(
   ticket: StagedGestureTicket,
 ) {
   const { stagedOrderState } = workspace;
-  const { unstageOrderDraft, toggleExit, setEntry, setSlOn, setStopLoss, setTpOn, setTakeProfit } = ticket;
+  const {
+    unstageOrderDraft,
+    toggleExit,
+    setEntry,
+    setSlOn,
+    setStopLoss,
+    setTpOn,
+    setTakeProfit,
+    setStagedDragging,
+    setDragSlMoney,
+    riskStopIntentRef,
+  } = ticket;
   let drag: 'entry' | 'sl' | 'tp' | null = null;
   let stagedEntryDrag: {
     entry: number;
@@ -90,8 +110,11 @@ export function createStagedOrderGestures(
       toggleExit('tp', false);
       return false;
     }
+    riskStopIntentRef.current = undefined;
     drag = target as 'entry' | 'sl' | 'tp';
     const stagedOrder = stagedOrderState.current.order;
+    setDragSlMoney(stagedOrder?.slMoney);
+    setStagedDragging(true);
     const canMoveExits =
       stagedOrder !== null && (stagedOrder.orderKindLabel === 'Limit' || stagedOrder.orderKindLabel === 'Stop Limit');
     stagedEntryDrag =
@@ -154,6 +177,10 @@ export function createStagedOrderGestures(
     }
   };
   const reset = () => {
+    if (drag !== null) {
+      setStagedDragging(false);
+      setDragSlMoney(undefined);
+    }
     drag = null;
     stagedEntryDrag = null;
   };

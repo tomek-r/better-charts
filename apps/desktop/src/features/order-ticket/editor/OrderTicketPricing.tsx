@@ -1,3 +1,4 @@
+import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { useOrderTicketPricing } from '../OrderTicketProvider';
 
 export function OrderTicketPricing() {
@@ -136,9 +137,7 @@ export function OrderTicketPricing() {
         </div>
       )}
       {orderKind === 'stop_limit' && !limitPriceValid && (
-        <p className="ticket-hint error">
-          stop_limit requires limit price — enter the resting limit price after the trigger.
-        </p>
+        <ErrorNotification message="stop_limit requires limit price — enter the resting limit price after the trigger." />
       )}
       {orderKind === 'stop_limit' && limitPriceMisaligned && (
         <p className="ticket-hint">Limit price is not tick-aligned (step {instrument?.tickSize}).</p>

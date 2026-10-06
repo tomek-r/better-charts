@@ -1,3 +1,4 @@
+import { useErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { useRef, useState } from 'react';
 import type {
   AccountSnapshot,
@@ -44,12 +45,15 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
   const [entry, setEntry] = useState('');
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
+  const [equityAllocationPercent, setEquityAllocationPercent] = useState('100');
   const [riskAmount, setRiskAmount] = useState('');
   const [riskPreview, setRiskPreview] = useState<RiskPreview>();
+  const [riskProjection, setRiskProjection] = useState<RiskPreview>();
+  const riskBrokerVersion = useRef<number | undefined>(undefined);
   // Keep the last broker quote available for chart labels while freshness clears the active preview.
   const riskPreviewDisplayRef = useRef<RiskPreview | undefined>(undefined);
   const [riskLoading, setRiskLoading] = useState(false);
-  const [, setRiskError] = useState<string>();
+  const [riskError, setRiskError] = useState<string>();
   const [orderKind, setOrderKind] = useState<OrderKind>('market');
   const [timeInForce, setTimeInForce] = useState<TimeInForce>('gtc');
   const [limitPrice, setLimitPrice] = useState('');
@@ -68,10 +72,18 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
   const [slUnit, setSlUnit] = useState<'ticks' | 'price'>('ticks');
   const [tpUnit, setTpUnit] = useState<'ticks' | 'price'>('ticks');
   const [stagedOnChart, setStagedOnChart] = useState(false);
+  const [stagedDragging, setStagedDragging] = useState(false);
+  const [dragSlMoney, setDragSlMoney] = useState<string>();
   const [submittingSide, setSubmittingSide] = useState<RiskSide>();
   const [submitStatus, setSubmitStatus] = useState<{ kind: 'locked' | 'error'; text: string }>();
   const [orderVolume, setOrderVolume] = useState('1');
+  const riskStopIntentRef = useRef<
+    { volume: string; stopLoss: string; seedStopLoss: string; riskAmount: string; fitted: boolean } | undefined
+  >(undefined);
   const [volumeManual, setVolumeManual] = useState(false);
+  useErrorNotification(riskError);
+  useErrorNotification(orderCheckError);
+  useErrorNotification(submitStatus?.text);
   // Ticket fields stay canonical for check/submit; risk preview enhances sizing and risk estimates.
   const derived = deriveOrderTicket({
     symbol: snapshot.symbol,
@@ -88,6 +100,7 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
     limitPrice,
     timeInForce,
     unitsMode,
+    equityAllocationPercent,
     orderVolume,
     orderCheck,
     riskPreview,
@@ -117,8 +130,13 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
     setTakeProfit,
     riskAmount,
     setRiskAmount,
+    equityAllocationPercent,
+    setEquityAllocationPercent,
     riskPreview,
     setRiskPreview,
+    riskProjection,
+    setRiskProjection,
+    riskBrokerVersion,
     riskPreviewDisplayRef,
     riskLoading,
     setRiskLoading,
@@ -159,12 +177,17 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
     setTpUnit,
     stagedOnChart,
     setStagedOnChart,
+    stagedDragging,
+    setStagedDragging,
+    dragSlMoney,
+    setDragSlMoney,
     submittingSide,
     setSubmittingSide,
     submitStatus,
     setSubmitStatus,
     orderVolume,
     setOrderVolume,
+    riskStopIntentRef,
     volumeManual,
     setVolumeManual,
     ...derived,

@@ -46,6 +46,8 @@ export interface OrderTicketSizingProps {
   orderVolume: string;
   setOrderVolume: Dispatch<SetStateAction<string>>;
   setVolumeManual: Dispatch<SetStateAction<boolean>>;
+  equityAllocationPercent: string;
+  setEquityAllocationPercent: Dispatch<SetStateAction<string>>;
   riskAmount: string;
   setRiskAmount: (value: string) => void;
   applyUnitsMode: (mode: 'money' | 'equity' | 'units') => void;

@@ -18,7 +18,6 @@ export function PortfolioCard({
   onOpenSymbol,
   closingTarget,
   requestClosePosition,
-  closeCancelStatus,
 }: {
   portfolio: PortfolioSnapshot;
   account: AccountSnapshot | undefined;
@@ -29,9 +28,8 @@ export function PortfolioCard({
     positionId: string,
     actedDraft?: PendingModification,
   ) => Promise<void>;
-  closeCancelStatus: { kind: 'locked' | 'error'; text: string; source: 'portfolio' | 'draft' } | undefined;
 }) {
-  if (portfolio.positions.length === 0 && closeCancelStatus?.source !== 'portfolio') {
+  if (portfolio.positions.length === 0) {
     return null;
   }
 
@@ -120,11 +118,6 @@ export function PortfolioCard({
         </>
       )}
       {portfolio.positions.length > 8 && <p className="portfolio-more">{portfolio.positions.length - 8} more hidden</p>}
-      {closeCancelStatus?.source === 'portfolio' && (
-        <p className={`command-status ${closeCancelStatus.kind}`} role="status">
-          {closeCancelStatus.text}
-        </p>
-      )}
     </section>
   );
 }

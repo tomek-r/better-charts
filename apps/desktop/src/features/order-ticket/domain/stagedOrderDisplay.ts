@@ -18,11 +18,8 @@ type DisplayInput = Pick<
   | 'tpOn'
   | 'effectiveVolume'
   | 'unitsMode'
-  | 'volumeManual'
-  | 'riskAmount'
   | 'riskPreview'
   | 'draftVersion'
-  | 'stopGuard'
 > & { lastPreview?: RiskPreview };
 
 /** Display estimates only: the chart and ticket share these values, while
@@ -32,14 +29,6 @@ export function deriveStagedOrderDisplay(input: DisplayInput) {
   const entry = orderEntryPrice(input.orderKind, input.entry, input.limitPrice);
   const volume = Number(input.effectiveVolume);
   const contract = Number(input.instrument?.contractSize);
-  const budget = Number(input.riskAmount) * (input.unitsMode === 'equity' ? Number(input.account?.equity) / 100 : 1);
-  const automaticBudget =
-    input.unitsMode !== 'units' &&
-    !input.volumeManual &&
-    input.riskAmount.trim() !== '' &&
-    Number.isFinite(budget) &&
-    budget > 0 &&
-    Boolean(currency);
   const current = input.riskPreview;
   const currentMatches =
     input.unitsMode !== 'units' &&
@@ -51,13 +40,10 @@ export function deriveStagedOrderDisplay(input: DisplayInput) {
     current.currency === currency;
   const preview = currentMatches ? current : input.lastPreview;
   const previewMatches =
-    automaticBudget &&
     preview &&
     preview.symbol === input.snapshot.symbol &&
     preview.side === input.riskSide &&
-    preview.currency === currency &&
-    Number.isFinite(Number(preview.riskBudget)) &&
-    Math.abs(Number(preview.riskBudget) - budget) < 1e-8;
+    preview.currency === currency;
 
   // Project the last broker amount onto the edited price and current units.
   // This is a local display estimate; only a new broker response sizes orders.
@@ -112,8 +98,6 @@ export function deriveStagedOrderDisplay(input: DisplayInput) {
     const projected = previewAmount('sl');
     if (projected !== undefined) {
       loss = projected;
-    } else if (automaticBudget) {
-      loss = input.stopGuard?.slTooClose ? undefined : -budget;
     } else {
       loss = levelAmount(input.stopLoss, input.slOn);
     }
@@ -122,8 +106,8 @@ export function deriveStagedOrderDisplay(input: DisplayInput) {
   if (targetSet) {
     reward = previewAmount('tp') ?? levelAmount(input.takeProfit, input.tpOn);
   }
-  // Use the unrounded amounts behind the labels, including the pending SL
-  // budget. Price distances are a fallback only when no money basis is available.
+  // Risk budget is a ceiling, not the loss for the effective volume. Margin
+  // caps can reduce actual exposure well below that ceiling.
   const estimate =
     loss !== undefined && loss < 0 && reward !== undefined && reward >= 0
       ? { estimatedRisk: String(-loss), estimatedReward: String(reward) }

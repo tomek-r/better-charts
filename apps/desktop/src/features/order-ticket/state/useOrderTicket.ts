@@ -20,11 +20,22 @@ export function useOrderTicket(params: OrderTicketParams) {
   const pricing = useOrderTicketPricing(ticket);
   const sizing = useOrderTicketSizing({ ...ticket, enableRiskStopLoss: draft.enableRiskStopLoss });
   const brokerActions = useOrderTicketBrokerActions({ ...ticket, ...draft });
-  const display = deriveStagedOrderDisplay({ ...state, lastPreview: state.riskPreviewDisplayRef.current });
+  const display = deriveStagedOrderDisplay({
+    ...state,
+    lastPreview:
+      state.riskProjection?.draftVersion === state.draftVersion
+        ? state.riskProjection
+        : state.riskPreviewDisplayRef.current,
+  });
 
   return {
     ...state,
-    display,
+    display: {
+      ...display,
+      // Hold the grabbed USD label while prices/volume continue calculating.
+      slMoney:
+        state.stagedDragging && state.unitsMode !== 'units' ? (state.dragSlMoney ?? display.slMoney) : display.slMoney,
+    },
     tickSize,
     tickKnown,
     priceSwapDisabled,

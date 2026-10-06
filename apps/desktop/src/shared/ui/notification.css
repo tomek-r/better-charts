@@ -1,10 +1,10 @@
 /* Notifications. */
 
 .notification-layer {
-  position: absolute;
+  position: fixed;
   inset: 0;
   height: 100dvh;
-  z-index: 28;
+  z-index: 100;
   pointer-events: none;
 }
 

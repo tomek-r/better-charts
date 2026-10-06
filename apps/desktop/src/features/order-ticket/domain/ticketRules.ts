@@ -166,6 +166,13 @@ const samePrice = (echo: string | null | undefined, field: string | null): boole
     ? echo === null || echo === undefined
     : echo !== null && echo !== undefined && Number(echo) === Number(field);
 
+export function equityAllocationIssue(value: string): string | undefined {
+  const percent = Number(value);
+  return value.trim() && Number.isFinite(percent) && percent > 0 && percent <= 100
+    ? undefined
+    : 'Equity allocation must be greater than 0 and at most 100%.';
+}
+
 export type TicketDerivationInput = {
   symbol: string | undefined;
   bridgeState: BridgeStatus['state'];
@@ -181,6 +188,7 @@ export type TicketDerivationInput = {
   limitPrice: string;
   timeInForce: TimeInForce;
   unitsMode: 'money' | 'equity' | 'units';
+  equityAllocationPercent?: string;
   orderVolume: string;
   orderCheck: OrderCheckResult | undefined;
   riskPreview: RiskPreview | undefined;
@@ -253,7 +261,10 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
   // every field edit) instead. An enabled SL must still carry a price.
   // Owner flow: nothing is checkable until a staged order exists (Buy/Sell click
   // stages; (✕)/Esc/unstage disarm the ticket again).
+  const allocationIssue =
+    input.unitsMode === 'units' ? undefined : equityAllocationIssue(input.equityAllocationPercent ?? '100');
   const canCheckOrder = Boolean(
+    allocationIssue === undefined &&
     input.stagedOnChart &&
     input.bridgeState === 'connected' &&
     input.symbol &&
@@ -291,6 +302,7 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
   // every payload dep incl. orderKind/limitPrice/timeInForce/unitsMode — the
   // "fresh accepted check" rule is not loosened.
   const canSubmitOrder = Boolean(
+    allocationIssue === undefined &&
     input.stagedOnChart &&
     input.bridgeState === 'connected' &&
     input.marketOpen === true &&
@@ -342,6 +354,8 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
         effectiveVolume === '' ? 'Volume is required.' : (volumeIssue ?? 'Volume must be a positive decimal.');
     } else if (stopGuard?.reason) {
       ticketBlockedReason = stopGuard.reason;
+    } else if (allocationIssue) {
+      ticketBlockedReason = allocationIssue;
     } else if (!sizingAllowed) {
       ticketBlockedReason = 'Money/% sizing needs a stop distance — enable Stop loss or switch to Units mode.';
     } else if (!limitPriceValid) {

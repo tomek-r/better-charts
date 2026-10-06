@@ -6,7 +6,7 @@ export function PortfolioView() {
   const account = useBridgeAccount();
   const portfolio = useBridgePortfolio();
   const { chooseSymbolByName } = useBridgeActions();
-  const { closingTarget, closeCancelStatus, requestClosePosition } = useExecutionPortfolio();
+  const { closingTarget, requestClosePosition } = useExecutionPortfolio();
   if (!portfolio) {
     return null;
   }
@@ -17,7 +17,6 @@ export function PortfolioView() {
       onOpenSymbol={chooseSymbolByName}
       closingTarget={closingTarget}
       requestClosePosition={requestClosePosition}
-      closeCancelStatus={closeCancelStatus}
     />
   );
 }

@@ -5,7 +5,6 @@ import { ChartWorkspaceProvider } from '../chart/ChartWorkspaceProvider';
 import { ChartWorkspaceView } from '../chart/ChartWorkspaceView';
 import { DrawingToolsView } from '../tools/DrawingToolsView';
 import { ExecutionProvider } from '../execution/ExecutionProvider';
-import { ExecutionStatusView } from '../execution/ExecutionStatusView';
 import { OrderTicketFeature } from '../order-ticket/OrderTicketFeature';
 import { PortfolioView } from '../portfolio/PortfolioView';
 import { SymbolSearchProvider } from '../symbol-search/SymbolSearchProvider';
@@ -28,7 +27,6 @@ export function AppWorkspaceView() {
               <OrderTicketFeature>
                 <AppLifecycle />
               </OrderTicketFeature>
-              <ExecutionStatusView />
               <PortfolioView />
             </TradePanelView>
           </main>

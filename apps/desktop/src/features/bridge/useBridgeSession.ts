@@ -1,3 +1,4 @@
+import { useNotifyError } from '../../shared/ui/ErrorNotifications';
 // Bridge listeners are the sole source of accepted history and live candles.
 // Selection refs reject stale events; the coordinator owns request dedupe and timeout.
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -175,6 +176,9 @@ export function useBridgeSession({
       if (status.state !== 'connected' || !symbol) {
         return;
       }
+      if (symbol === snapshot.symbol || symbol === targetSymbol.current) {
+        return;
+      }
       pendingMetadata.current = undefined;
       targetSymbol.current = symbol;
       setInstrument(undefined);
@@ -202,7 +206,16 @@ export function useBridgeSession({
         console.info('Symbol history unavailable.', error);
       }
     },
-    [adapterRef, setChartError, setInstrument, setQuote, setSymbolLoading, snapshot.timeframe, status.state],
+    [
+      adapterRef,
+      setChartError,
+      setInstrument,
+      setQuote,
+      setSymbolLoading,
+      snapshot.symbol,
+      snapshot.timeframe,
+      status.state,
+    ],
   );
   return {
     status,
@@ -341,6 +354,7 @@ export function useBridgeBootstrapEffects(
     ticket: OrderTicketState;
   },
 ): void {
+  const notifyError = useNotifyError();
   const chartRef = chart;
   const marketAdapterRef = adapterRef;
   const {
@@ -366,6 +380,7 @@ export function useBridgeBootstrapEffects(
     riskVersion,
     setRiskPreview,
     riskPreviewDisplayRef,
+    riskBrokerVersion,
     setRiskLoading,
     setRiskError,
     orderCheckGeneration,
@@ -777,6 +792,7 @@ export function useBridgeBootstrapEffects(
               event.payload.endMs === expected.endMs &&
               expected.generation === profileGeneration.current
             ) {
+              notifyError(event.payload.message);
               expectedProfile.current = undefined;
               profileGeneration.current += 1;
             }
@@ -816,6 +832,7 @@ export function useBridgeBootstrapEffects(
               event.payload.draftVersion === riskVersion.current &&
               event.payload.symbol === currentSymbolRef.current
             ) {
+              riskBrokerVersion.current = event.payload.draftVersion;
               console.info('[risk-preview]', event.payload);
               setRiskPreview(event.payload);
               riskPreviewDisplayRef.current = event.payload;

@@ -1,3 +1,4 @@
+import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import type { OrderCheckResult as OrderCheckResultModel } from '../../../shared/bridge/types';
 import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
 
@@ -5,7 +6,7 @@ import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
 export function OrderCheckResult({ orderCheck }: { orderCheck: OrderCheckResultModel }) {
   return (
     <div className="order-check-result" aria-label="MT5 OrderCheck result">
-      {orderCheck.lastError !== 0 && <p className="error-text">Last error code {orderCheck.lastError}</p>}
+      {orderCheck.lastError !== 0 && <ErrorNotification message={`Last error code ${orderCheck.lastError}`} />}
       <div className="order-check-grid">
         <div>
           <small>Used price</small>

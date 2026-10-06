@@ -2,6 +2,50 @@
 use super::common::*;
 use super::*;
 
+#[test]
+fn equity_ticks_preserve_the_current_order_check_but_permission_changes_invalidate_it() {
+    let state = ready_state_with_result(order_check_result_for_test());
+    *state.expected_order_check.lock().unwrap() = expected_order_check_for_test();
+    let account = AccountSnapshot {
+        account_login: "123".into(),
+        broker_server: "Demo".into(),
+        currency: "USD".into(),
+        balance: "1000".into(),
+        equity: "999".into(),
+        margin: "10".into(),
+        free_margin: "989".into(),
+        margin_level: "9990".into(),
+        leverage: 100,
+        margin_mode: 0,
+        trade_allowed: true,
+        expert_allowed: true,
+        account_trade_mode: 0,
+        account_trade_mode_name: "demo".into(),
+    };
+    accept_account(&state, "session-1", account.clone())
+        .unwrap()
+        .unwrap();
+    assert!(state.validated_order_check.lock().unwrap().is_some());
+    assert!(state.expected_order_check.lock().unwrap().is_some());
+    assert!(
+        accept_and_store_order_check_result(&state, false, order_check_result_for_test())
+            .unwrap()
+            .is_some()
+    );
+    accept_account(
+        &state,
+        "session-1",
+        AccountSnapshot {
+            expert_allowed: false,
+            ..account
+        },
+    )
+    .unwrap()
+    .unwrap();
+    assert!(state.validated_order_check.lock().unwrap().is_none());
+    assert!(state.expected_order_check.lock().unwrap().is_none());
+}
+
 fn order_check_request_for_test() -> OrderCheckRequest {
     OrderCheckRequest {
         draft_id: "draft-7-1".into(),

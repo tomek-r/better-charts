@@ -14,6 +14,7 @@ import type {
   PendingModification,
 } from '../../shared/bridge/types';
 import type { PositionOverlayState } from '../chart/engine/positionOverlay';
+import { useErrorNotification, useNotifyError } from '../../shared/ui/ErrorNotifications';
 
 // Owner: recovery journal + execution-safety are LOG-ONLY now — same fetch
 // trigger as before, deterministic projection into the app log for
@@ -58,6 +59,7 @@ export function useExecutionCommands({
     text: string;
     source: 'portfolio' | 'draft';
   }>();
+  useErrorNotification(closeCancelStatus?.text);
   // §UX close/cancel/modify actions: full-close MVP for portfolio rows plus
   // confirmed close/cancel/modify drafts. One busy target at a time (mirrors
   // submitOrder's submittingSide); success is silent (owner — no confirmation
@@ -200,6 +202,7 @@ export type ExecutionCommandState = ReturnType<typeof useExecutionCommands>;
 /** Register the observational listener and initial queue read at its former App effect slot. */
 export function useExecutionCommandEffects(execution: ExecutionCommandState): void {
   const { setExecutionQueue } = execution;
+  const notifyError = useNotifyError();
   // Both operations are observational; a failure does not invent a command state.
   useEffect(() => {
     let disposed = false;
@@ -207,9 +210,15 @@ export function useExecutionCommandEffects(execution: ExecutionCommandState): vo
     void Promise.all([
       listen<CommandUpdate>('execution-command-update', (event) => {
         console.info(`[command-update] ${JSON.stringify(event.payload)}`);
+        if (!disposed && event.payload.status === 'rejected') {
+          notifyError(event.payload.message || `Order rejected by MT5 (code ${event.payload.retcode ?? 'unknown'}).`);
+        }
       }),
       listen<CommandError>('execution-command-error', (event) => {
         console.info(`[command-error] ${JSON.stringify(event.payload)}`);
+        if (!disposed) {
+          notifyError(event.payload.message);
+        }
       }),
     ])
       .then((listeners) => {
@@ -231,5 +240,5 @@ export function useExecutionCommandEffects(execution: ExecutionCommandState): vo
       disposed = true;
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [setExecutionQueue]);
+  }, [setExecutionQueue, notifyError]);
 }

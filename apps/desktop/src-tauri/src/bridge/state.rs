@@ -16,8 +16,19 @@ use trading_core::protocol::{
 pub(crate) const DEFAULT_ADDR: &str = "127.0.0.1:8765";
 pub(crate) const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(3);
 pub(crate) const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(6);
-pub(crate) type PendingRisk = (RiskQuoteRequest, rust_decimal::Decimal, u64);
-pub(crate) type ExpectedRisk = (String, RiskQuoteRequest, rust_decimal::Decimal, u64);
+pub(crate) type PendingRisk = (
+    RiskQuoteRequest,
+    rust_decimal::Decimal,
+    rust_decimal::Decimal,
+    u64,
+);
+pub(crate) type ExpectedRisk = (
+    String,
+    RiskQuoteRequest,
+    rust_decimal::Decimal,
+    rust_decimal::Decimal,
+    u64,
+);
 pub(crate) type PendingOrderCheck = (OrderCheckRequest, u64);
 pub(crate) type ExpectedOrderCheck = (String, OrderCheckRequest, u64);
 
@@ -201,6 +212,9 @@ pub(crate) struct BridgeState {
     pub(crate) quote: Arc<Mutex<Option<QuoteView>>>,
     pub(crate) account: Arc<Mutex<Option<AccountView>>>,
     pub(crate) portfolio: Arc<Mutex<Option<PortfolioView>>>,
+    /// Latest broker quote, bound to its originating session; display projection only.
+    pub(crate) last_risk_quote:
+        Arc<Mutex<Option<(String, trading_core::protocol::RiskQuoteResult)>>>,
     pub(crate) pending_risk: Arc<Mutex<Option<PendingRisk>>>,
     pub(crate) expected_risk: Arc<Mutex<Option<ExpectedRisk>>>,
     pub(crate) pending_order_check: Arc<Mutex<Option<PendingOrderCheck>>>,

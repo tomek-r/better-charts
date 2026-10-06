@@ -67,6 +67,7 @@ type OrderTicketEntryDraftInput = Pick<
   | 'setLimitPrice'
   | 'unitsMode'
   | 'setUnitsMode'
+  | 'riskStopIntentRef'
   | 'orderVolume'
   | 'setOrderVolume'
   | 'volumeManual'
@@ -110,6 +111,7 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
     unitsMode,
     setUnitsMode,
     orderVolume,
+    riskStopIntentRef,
     setOrderVolume,
     setVolumeManual,
     setSlOn,
@@ -135,6 +137,7 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
   }, [setSlOn, setTpOn, setStopLoss, setTakeProfit, setEntry]);
   const resetTicketToDefaults = () => {
     resetOrderDraft();
+    riskStopIntentRef.current = undefined;
     setRiskAmount('');
     setOrderKind('market');
     setLimitPrice('');
@@ -151,12 +154,11 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
   };
   const enableRiskStopLoss = useEventCallback((side: RiskSide, entryPrice: number, overwrite = false) => {
     setSlOn(true);
-    if (overwrite || !stopLoss.trim()) {
-      const defaultStop = defaultStopLossPrice(entryPrice, side, orderKind, instrument, quote);
-      if (defaultStop) {
-        setStopLoss(defaultStop);
-      }
+    const defaultStop = defaultStopLossPrice(entryPrice, side, orderKind, instrument, quote);
+    if ((overwrite || !stopLoss.trim()) && defaultStop) {
+      setStopLoss(defaultStop);
     }
+    return defaultStop;
   });
   const stageOrderDraft = useCallback(
     (side: RiskSide, fresh = false) => {
@@ -180,7 +182,16 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
         setOrderVolume('1');
       }
       if (unitsMode !== 'units' && Number(riskAmount) > 0 && (!stagedOnChart || fresh)) {
-        enableRiskStopLoss(side, price, fresh);
+        const seed = enableRiskStopLoss(side, price, fresh);
+        riskStopIntentRef.current = seed
+          ? {
+              volume: orderVolume,
+              stopLoss: fresh || !stopLoss.trim() ? seed : stopLoss,
+              seedStopLoss: seed,
+              riskAmount,
+              fitted: false,
+            }
+          : undefined;
       }
       setStagedOnChart(true);
     },
@@ -190,6 +201,8 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
       entry,
       quote,
       orderVolume,
+      riskStopIntentRef,
+      stopLoss,
       unitsMode,
       riskAmount,
       stagedOnChart,
@@ -218,6 +231,7 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
     submitSwapPendingRef.current = false;
     clearStagedWidget();
     if (wasStaged) {
+      riskStopIntentRef.current = undefined;
       resetOrderDraft();
     }
   };
