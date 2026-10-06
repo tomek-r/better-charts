@@ -119,7 +119,7 @@ export class ChartController {
     this.connection = new ConnectionIndicator(this.legend.container());
     // The price scale is painted on the library's own canvas, so its toggles
     // (A = auto scale, L = logarithmic) are DOM buttons in the axis column.
-    this.scaleControls = new PriceScaleController(host, this.chart);
+    this.scaleControls = new PriceScaleController(host, this.chart, this.candles);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
     this.resize();

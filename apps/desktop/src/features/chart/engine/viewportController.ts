@@ -1,4 +1,5 @@
 import type { IChartApi, ISeriesApi, Logical, UTCTimestamp } from 'lightweight-charts';
+import { setPriceScaleRange } from './priceScaleRange';
 import type { RenderBar } from './mt5DataAdapter';
 import type { RenderViewport } from './overlayTypes';
 import { END_MARGIN, futurePoints, neededFutureBarCount, timeScaleBaseIndex } from './futureTimePoints';
@@ -310,7 +311,7 @@ export class ViewportController {
       low -= padding;
       high += padding;
     }
-    scale.setVisibleRange({ from: low, to: high });
+    setPriceScaleRange(this.candles, { from: low, to: high });
   }
 
   /** Fractional logical index of a time, per the bar cache. */

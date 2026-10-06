@@ -137,6 +137,112 @@ test('the price-scale toggles appear only over the right price scale and toggle 
   expectClean(collected);
 });
 
+for (const { gesture, symbol, base, digits } of [
+  { gesture: 'plot', symbol: 'XBRUSD', base: 96, digits: 3 },
+  { gesture: 'axis', symbol: 'XBRUSD', base: 96, digits: 3 },
+  { gesture: 'none', symbol: 'NAS100', base: 31000, digits: 2 },
+] as const) {
+  test(`${symbol}: switching to log after ${gesture} gesture preserves actual prices`, async ({ page }) => {
+    await page.addInitScript(() => {
+      const drawn: string[] = [];
+      Object.assign(window, { __drawnPrices: drawn });
+      const fillText = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+        drawn.push(text);
+        if (maxWidth === undefined) {
+          fillText.call(this, text, x, y);
+        } else {
+          fillText.call(this, text, x, y, maxWidth);
+        }
+      };
+    });
+    const oil = shiftedCandles(1000, base).map((bar) => ({
+      ...bar,
+      high: (base + 0.4).toFixed(digits),
+      low: (base - 0.4).toFixed(digits),
+    }));
+    const collected = await gotoWithStub(page, {
+      historyByTimeframe: { M1: oil, M5: oil },
+      responses: {
+        get_market_snapshot: { symbol, timeframe: 'M5', complete: true, candles: oil },
+        get_quote_snapshot: {
+          symbol,
+          timeMs: STUB_NOW,
+          bid: (base + 0.1).toFixed(digits),
+          ask: (base + 0.13).toFixed(digits),
+          last: (base + 0.11).toFixed(digits),
+          volume: 10,
+          volumeReal: '0',
+          flags: 0,
+        },
+      },
+      symbolInfo: {
+        symbol,
+        description: 'Oil price fixture',
+        digits,
+        tickSize: (10 ** -digits).toFixed(digits),
+        pointSize: (10 ** -digits).toFixed(digits),
+        contractSize: '1',
+        volumeMin: '0.01',
+        volumeMax: '100',
+        volumeStep: '0.01',
+        stopsLevel: 0,
+        freezeLevel: 0,
+        fillingMode: 0,
+        orderMode: 0,
+        expirationMode: 0,
+        tradeExecution: 0,
+        tradeMode: 0,
+      },
+    });
+    await expect.poll(async () => (await chartData(page)).length).toBe(1000);
+    await page.getByRole('button', { name: '1m', exact: true }).click();
+    await expect.poll(async () => (await scaleState(page)).range?.from).toBe(base - 0.4);
+    const host = await hostRect(page);
+    const scale = await scaleState(page);
+    if (gesture !== 'none') {
+      const startX = gesture === 'axis' ? axisX(host, scale, 3) : host.left + host.width - scale.axisWidth - 40;
+      await page.mouse.move(startX, host.top + scale.paneHeight * 0.4);
+      await page.mouse.down();
+      await page.mouse.move(startX - (gesture === 'plot' ? 20 : 0), host.top + scale.paneHeight * 0.6, { steps: 12 });
+      await page.mouse.up();
+    }
+    const visible = await page.evaluate(() => window.__chartTest!.visibleRange()!);
+    expect(visible.from).toBeLessThan(999);
+    expect(visible.to).toBeGreaterThan(0);
+    const viewport = await page.evaluate(() => window.__chartTest!.visibleRange());
+    const before = (await scaleState(page)).range!;
+    if (gesture !== 'none') {
+      expect(before).not.toEqual(scale.range);
+    }
+    await page.mouse.move(host.left + host.width - 20, host.top + host.height / 2);
+    await page.evaluate(() => {
+      (window as unknown as { __drawnPrices: string[] }).__drawnPrices.length = 0;
+    });
+    await page.getByRole('button', { name: /^Logarithmic/ }).click();
+    await expect
+      .poll(async () => page.evaluate(() => (window as unknown as { __drawnPrices: string[] }).__drawnPrices.length))
+      .toBeGreaterThan(0);
+    await expect.poll(async () => (await scaleState(page)).mode).toBe(1);
+    const after = (await scaleState(page)).range!;
+    expect(after.from).toBeCloseTo(before.from, digits);
+    expect(after.to).toBeCloseTo(before.to, digits);
+    expect((await scaleState(page)).autoScale).toBe(false);
+    expect(await page.evaluate(() => window.__chartTest!.visibleRange())).toEqual(viewport);
+    const labels = await page.evaluate(() => (window as unknown as { __drawnPrices: string[] }).__drawnPrices);
+    expect(labels.filter((label) => new RegExp(`^\\d+\\.\\d{${digits}}$`).test(label)).length).toBeGreaterThan(0);
+    expect(labels.some((label) => /e\+\d+/.test(label))).toBe(false);
+    await pushEvent(page, 'bar-update', {
+      symbol,
+      timeframe: 'M1',
+      candle: { ...oil[oil.length - 1], high: (base + 2).toFixed(digits) },
+    });
+    await expect.poll(async () => await page.evaluate(() => window.__chartTest!.data().at(-1)?.high)).toBe(base + 2);
+    expect((await scaleState(page)).range).toEqual(after);
+    expectClean(collected);
+  });
+}
+
 test('A re-fits a manually dragged price scale to the visible data', async ({ page }) => {
   const collected = await gotoWithStub(page);
   await expect.poll(async () => (await chartData(page)).length, { timeout: 10_000 }).toBe(10);
@@ -234,5 +340,33 @@ test('auto scale is off by default and each loaded series is fitted once', async
   await expect.poll(async () => (await chartData(page)).length).toBe(10);
   await page.waitForTimeout(150);
   expect((await scaleState(page)).range).toEqual(expect.objectContaining({ from: 1.1996, to: 1.2004 }));
+  expectClean(collected);
+});
+
+test('loading oil-priced candles in log mode keeps the range in actual prices', async ({ page }) => {
+  const oil = shiftedCandles(10, 96);
+  const collected = await gotoWithStub(page, { historyByTimeframe: { M1: oil } });
+  await expect.poll(async () => (await chartData(page)).length).toBe(10);
+  await page.getByRole('button', { name: '1m', exact: true }).click();
+  await expect.poll(async () => (await scaleState(page)).range).toEqual({ from: 95.9996, to: 96.0004 });
+  const host = await hostRect(page);
+  await page.mouse.move(host.left + host.width - 20, host.top + host.height / 2);
+  await page.getByRole('button', { name: /^Logarithmic/ }).click();
+  await expect.poll(async () => (await scaleState(page)).mode).toBe(1);
+  await expect.poll(async () => (await scaleState(page)).range).toEqual({ from: 95.9996, to: 96.0004 });
+
+  await page.getByRole('button', { name: '5m', exact: true }).click();
+  await expect.poll(async () => (await scaleState(page)).range?.to).toBeLessThan(2);
+  await page.getByRole('button', { name: '1m', exact: true }).click();
+  await expect.poll(async () => (await scaleState(page)).range).toEqual({ from: 95.9996, to: 96.0004 });
+  expect((await scaleState(page)).mode).toBe(1);
+  expect((await scaleState(page)).autoScale).toBe(false);
+  const extent = await dataExtent(page);
+  expect(extent).toEqual({ min: 95.9996, max: 96.0004 });
+  await page.mouse.move(host.left + host.width - 20, host.top + host.height / 2);
+  await page.getByRole('button', { name: /^Logarithmic/ }).click();
+  expect((await scaleState(page)).mode).toBe(0);
+  expect((await scaleState(page)).range?.from).toBeCloseTo(95.9996, 6);
+  expect((await scaleState(page)).range?.to).toBeCloseTo(96.0004, 6);
   expectClean(collected);
 });
