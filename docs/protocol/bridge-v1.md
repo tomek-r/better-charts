@@ -54,9 +54,11 @@ token is required outside development builds.
 {
   "token": "example-token", "terminal_id": "installation-instance-id", "terminal_build": 5000,
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
-  "expert_version": "0.6.0", "trading_enabled": false,
+  "expert_version": "1.001", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 65535},
-  "tick_price_counts": true
+  "tick_price_counts": true,
+  "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
+    "H1", "H2", "H3", "H4", "H6", "H8", "H12", "D1", "W1", "MN1"]
 }
 ```
 
@@ -79,6 +81,16 @@ the server's permission; the app's local Settings permission is an additional
 startup restriction, optionally overridden with `MT5_BRIDGE_TRADING_ENABLED`.
 Neither flag submits a command or bypasses execution gates.
 
+The app requires an exact EA `expert_version` match (`1.001` for this build).
+The expected version lives in `config/bridge.json`; a regression guard checks
+that the EA's `BRIDGE_EXPERT_VERSION` matches it. The EA uses that same macro
+for its MT5 display version (`#property version`) and the handshake. Versions use
+MT5's two-part numeric format (for example, `1.001`); this is independent of the
+desktop app version. The version is checked before the full handshake schema so an older EA missing new fields
+still reports the required and installed versions, with update instructions.
+Missing or malformed versions are rejected without echoing arbitrary values.
+Other malformed handshakes include recompile/reattach instructions.
+
 ### Negotiated capabilities
 
 | Capability | Rule |
@@ -88,6 +100,7 @@ Neither flag submits a command or bypasses execution gates.
 | Current defaults | 8 MiB / 65,535 ticks per page. |
 | Valid limits | Rust frame bytes: `1024..=2147483643`; EA frame MiB: `1..=2047`; ticks: `1..=65535`. Invalid limits reject the handshake. The frame bounds, the 8 MiB default and the `1..=1000` history page live once in `config/bridge.json`, embedded by `crates/trading-core/src/protocol/limits.rs` and imported by `apps/desktop/src/shared/bridge/limits.ts`. |
 | `tick_price_counts` | Defaults to `false`; exact price summaries require support from both peers. Raw tick pages remain supported. |
+| `hello.supported_timeframes` | Required list of the EA's supported MT5 period codes. Must be a nonempty, unique subset of the standard periods and include `M1`. Missing, `null` or invalid advertisements reject the handshake. Published as `supportedTimeframes` on the Tauri bridge status; history commands reject periods the connected EA did not advertise. |
 
 Rust frame configuration uses Settings or the `MT5_BRIDGE_MAX_FRAME_BYTES`
 override; EA inputs are
@@ -100,6 +113,11 @@ sent before acknowledgement.
 timeout is 6 seconds. Heartbeats check transport liveness;
 market/account/portfolio publication runs independently. Reconnect delays are
 1, 2, 4, 8, then 10 seconds; a successful handshake resets backoff.
+If the desktop cannot bind the local bridge port, it also retries at
+1, 2, 4, 8, then 10-second intervals. The connection indicator stays red with
+the bind error while waiting, then changes to connecting once listening.
+Only an accepted EA handshake makes it connected. Invalid address configuration
+remains an error and requires correction.
 
 ### Market session
 
@@ -130,10 +148,19 @@ responses for stale request IDs, sessions, symbols, timeframes, or generations.
 ### Candles and quotes
 
 After the handshake, Rust requests M1 history for `chart_symbol`. Supported
-timeframes: `M1`, `M5`, `M15`, `H1`, `H4`, `D1` — the codes, their bar lengths
+timeframes are the 21 standard [MT5 periods](https://www.mql5.com/en/docs/constants/chartconstants/enum_timeframes):
+`M1`, `M2`, `M3`, `M4`, `M5`, `M6`, `M10`, `M12`, `M15`, `M20`, `M30`,
+`H1`, `H2`, `H3`, `H4`, `H6`, `H8`, `H12`, `D1`, `W1`, `MN1`. The codes, their nominal bar lengths
 and the default live once in `config/timeframes.json`, embedded by
 `crates/trading-core/src/protocol/timeframes.rs` and imported by
 `apps/desktop/src/shared/bridge/timeframes.ts`; `bars` is `1..=1000`.
+The selector uses only the connected EA's advertisement. The EA and desktop
+app must both be updated; EAs without the advertisement cannot connect. The EA derives advertised
+codes from its MT5 `ENUM_TIMEFRAMES` values, which also drive history parsing.
+`MN1` has MT5's nominal 30-day duration in configuration; chart padding,
+bar interpolation, countdowns and monthly profile ends use calendar month
+boundaries rather than treating every month as 30 days. Rebuild and reattach
+the EA to enable the additional periods; history request payloads are unchanged.
 
 **`history_request` payload:**
 

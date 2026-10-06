@@ -1,13 +1,20 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { OrderTicketBaseState } from './useOrderTicketState';
 import { orderEntryPrice } from '../domain/ticketRules';
+import { quoteDigits, ticketPrice } from '../../../shared/format';
 
 type PricingInput = Pick<
   OrderTicketBaseState,
   | 'instrument'
   | 'orderKind'
+  | 'ticketStage'
   | 'entry'
+  | 'setEntry'
+  | 'quote'
+  | 'priceReference'
+  | 'priceOffset'
+  | 'setPriceOffset'
   | 'limitPrice'
   | 'riskSide'
   | 'priceMode'
@@ -30,7 +37,13 @@ export function useOrderTicketPricing(ticket: PricingInput) {
   const {
     instrument,
     orderKind,
+    ticketStage,
     entry,
+    setEntry,
+    quote,
+    priceReference,
+    priceOffset,
+    setPriceOffset,
     limitPrice,
     riskSide,
     tickSize,
@@ -47,12 +60,26 @@ export function useOrderTicketPricing(ticket: PricingInput) {
     setSlOn,
     setTpOn,
   } = ticket;
-  const togglePriceMode = useCallback(() => {
+  const reference = quote ? Number(quote[priceReference]) : NaN;
+  const digits = instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : 2);
+  useEffect(() => {
+    if (orderKind === 'market' || priceMode !== 'offset' || ticketStage !== 'edit') {
+      return;
+    }
+    const ticks = Number(priceOffset);
+    const valid =
+      tickKnown && reference > 0 && Number.isFinite(reference) && priceOffset.trim() !== '' && Number.isInteger(ticks);
+    setEntry(valid ? ticketPrice((Math.round(reference / tickSize) + ticks) * tickSize, digits) : '');
+  }, [orderKind, ticketStage, priceMode, tickKnown, reference, priceOffset, tickSize, digits, setEntry]);
+  const togglePriceMode = useEventCallback(() => {
     if (priceSwapDisabled) {
       return;
     }
+    if (priceMode === 'absolute') {
+      setPriceOffset(String(Math.round((Number(entry) - reference) / tickSize)));
+    }
     setPriceMode(priceMode === 'absolute' ? 'offset' : 'absolute');
-  }, [priceSwapDisabled, priceMode, setPriceMode]);
+  });
   const priceToTicks = (price: string, _kind: 'sl' | 'tp'): string => {
     if (!tickKnown) {
       return '';

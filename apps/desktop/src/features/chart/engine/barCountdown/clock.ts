@@ -1,3 +1,4 @@
+import { timeframeBarOffset, timeframeBarTime } from '../../../../shared/bridge/timeframes';
 import type { BrokerQuote } from './types';
 
 /**
@@ -54,8 +55,8 @@ export class BrokerClock {
     this.quote = undefined;
   }
 
-  text(symbol: string, barTime: number | undefined, interval: number): string {
-    const reading = this.read(symbol, barTime, interval);
+  text(symbol: string, barTime: number | undefined, timeframe: string): string {
+    const reading = this.read(symbol, barTime, timeframe);
     if (!reading) {
       return '';
     }
@@ -75,8 +76,8 @@ export class BrokerClock {
    * broker within minutes, which shows up as a countdown that skips or lags a
    * second.
    */
-  nextTickDelayMs(symbol: string, barTime: number | undefined, interval: number): number | null {
-    const reading = this.read(symbol, barTime, interval);
+  nextTickDelayMs(symbol: string, barTime: number | undefined, timeframe: string): number | null {
+    const reading = this.read(symbol, barTime, timeframe);
     if (!reading) {
       return null;
     }
@@ -87,14 +88,13 @@ export class BrokerClock {
     return Math.min(...delays) + BOUNDARY_GUARD_MS;
   }
 
-  private read(symbol: string, barTime: number | undefined, interval: number): BrokerClockReading | null {
+  private read(symbol: string, barTime: number | undefined, timeframe: string): BrokerClockReading | null {
     const quote = this.quote;
     if (!quote?.live || quote.symbol !== symbol || barTime === undefined) {
       return null;
     }
     const ageMs = Math.max(0, performance.now() - quote.receivedAt);
     const nowMs = quote.timeMs + ageMs;
-    const intervalMs = interval * 1000;
     const startMs = barTime * 1000;
     if (nowMs < startMs) {
       return null;
@@ -103,13 +103,13 @@ export class BrokerClock {
     // broker has not confirmed yet, so the tag rolls over instead of blinking
     // off at every bar close; the grace keeps a stale feed from counting down a
     // bar that never opened.
-    const rolled = Math.floor((nowMs - startMs) / intervalMs);
+    const rolled = Math.floor(timeframeBarOffset(timeframe, barTime, nowMs / 1000));
     if (rolled > 0 && ageMs > ROLLOVER_GRACE_MS) {
       return null;
     }
     return {
       nowMs,
-      remainingMs: startMs + (rolled + 1) * intervalMs - nowMs,
+      remainingMs: timeframeBarTime(timeframe, barTime, rolled + 1) * 1000 - nowMs,
       rolling: rolled > 0,
       ageMs,
     };

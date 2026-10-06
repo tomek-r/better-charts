@@ -87,7 +87,6 @@ pub(crate) fn request_history(
         .session_work
         .lock()
         .map_err(|_| "bridge session unavailable".to_string())?;
-    invalidate_validated_order_check(&state);
     if state
         .current_session
         .lock()
@@ -96,6 +95,16 @@ pub(crate) fn request_history(
     {
         return Err("bridge is not connected".into());
     }
+    if !state
+        .status
+        .lock()
+        .expect("bridge status mutex poisoned")
+        .supported_timeframes
+        .contains(&request.timeframe)
+    {
+        return Err("timeframe is not supported by the connected EA".into());
+    }
+    invalidate_validated_order_check(&state);
     *state
         .pending_history
         .lock()
@@ -167,6 +176,15 @@ pub(crate) fn request_history_page(
         .is_none()
     {
         return Err("bridge is not connected".into());
+    }
+    if !state
+        .status
+        .lock()
+        .expect("bridge status mutex poisoned")
+        .supported_timeframes
+        .contains(&request.timeframe)
+    {
+        return Err("timeframe is not supported by the connected EA".into());
     }
     // Latest page wins: replacing the expected slot also drops a page whose
     // response is still on the wire, so nothing stale can be prepended.

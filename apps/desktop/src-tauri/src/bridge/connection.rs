@@ -226,6 +226,38 @@ pub(crate) async fn handle_connection(
     disconnect(&events, &state, &adapter, &session_id);
 }
 
+/// A busy port must not permanently stop the bridge server. Retrying only
+/// creates the listener; session establishment still requires a valid handshake.
+pub(crate) async fn bind_listener(
+    address: SocketAddr,
+    events: &Arc<dyn BridgeEvents>,
+    state: &BridgeState,
+) -> TcpListener {
+    let mut delay = std::time::Duration::from_secs(1);
+    loop {
+        match TcpListener::bind(address).await {
+            Ok(listener) => {
+                publish(events, state, |status| {
+                    status.state = BridgeConnectionState::Connecting;
+                    status.message = Some("Waiting for MT5 bridge to connect.".into());
+                });
+                return listener;
+            }
+            Err(error) => {
+                publish(events, state, |status| {
+                    status.state = BridgeConnectionState::ProtocolError;
+                    status.message = Some(format!(
+                        "bridge bind failed: {error}; retrying in {}s",
+                        delay.as_secs()
+                    ));
+                });
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(std::time::Duration::from_secs(10));
+            }
+        }
+    }
+}
+
 pub(crate) async fn run_server(
     app: tauri::AppHandle,
     state: BridgeState,
@@ -240,16 +272,7 @@ pub(crate) async fn run_server(
             return;
         }
     };
-    let listener = match TcpListener::bind(address).await {
-        Ok(v) => v,
-        Err(error) => {
-            publish(&events, &state, |status| {
-                status.state = BridgeConnectionState::ProtocolError;
-                status.message = Some(format!("bridge bind failed: {error}"));
-            });
-            return;
-        }
-    };
+    let listener = bind_listener(address, &events, &state).await;
     let token = Arc::new(env::var("MT5_BRIDGE_TOKEN").unwrap_or_default());
     let mut session_number = 0u64;
     loop {

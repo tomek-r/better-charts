@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { openTradePanel } from './panel';
-import { gotoWithStub, STUB_NOW } from './tauriStub';
+import { gotoWithStub, pushEvent, STUB_NOW } from './tauriStub';
 
 // Without the Tauri shell, every `invoke()` call fails (window.__TAURI_INTERNALS__
 // is missing). The app swallows those failures into its `tauriAvailable=false`
@@ -297,4 +297,41 @@ test.describe('tool rail', () => {
     await expect(pointer).toHaveClass(/active/);
     expect(pageErrors).toEqual([]);
   });
+});
+
+test('the connection dot recovers from a bind error through connecting to connected', async ({ page }) => {
+  await gotoWithStub(page);
+  const dot = page.locator('.chart-connection-dot');
+  await expect(dot).toHaveAttribute('aria-label', 'MT5 connected');
+  await pushEvent(page, 'bridge-status', {
+    state: 'protocol_error',
+    message: 'bridge bind failed: Address already in use; retrying in 1s',
+  });
+  await expect(dot).toHaveClass(/chart-connection-protocol_error/);
+  await expect(dot).toHaveAttribute('title', /retrying in 1s/);
+  await pushEvent(page, 'bridge-status', {
+    state: 'connecting',
+    message: 'Waiting for MT5 bridge to connect.',
+  });
+  await expect(dot).toHaveAttribute('aria-label', 'MT5 connecting');
+  await pushEvent(page, 'bridge-status', {
+    state: 'connected',
+    supportedTimeframes: ['M1'],
+    message: 'Bridge connected.',
+  });
+  await expect(dot).toHaveAttribute('aria-label', 'MT5 connected');
+  await expect(dot).toHaveAttribute('title', 'Bridge connected.');
+});
+
+test('an outdated MT5 bridge shows the update instructions while waiting for data', async ({ page }) => {
+  const message =
+    'App requires MT5 bridge version 1.001, but installed bridge version is 0.6.0. Update and reattach BetterChartsBridge in MT5.';
+  await gotoWithStub(page, {
+    responses: {
+      get_bridge_status: { state: 'protocol_error', message },
+      get_market_snapshot: { complete: false, candles: [] },
+    },
+  });
+  await expect(page.getByText('Waiting for market data', { exact: true })).toBeVisible();
+  await expect(page.getByText(message, { exact: true })).toBeVisible();
 });

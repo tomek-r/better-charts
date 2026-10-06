@@ -27,6 +27,8 @@ pub struct HelloPayload {
     pub transfer_limits: TransferLimits,
     #[serde(default)]
     pub tick_price_counts: bool,
+    /// Standard MT5 periods supported by this EA.
+    pub supported_timeframes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

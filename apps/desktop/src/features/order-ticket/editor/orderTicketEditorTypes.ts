@@ -4,6 +4,7 @@ import type {
   BrokerSymbol,
   OrderKind,
   QuoteSnapshot,
+  RiskPreview,
   RiskSide,
   TimeInForce,
 } from '../../../shared/bridge/types';
@@ -27,8 +28,8 @@ export interface OrderTicketPricingProps {
   priceMode: 'offset' | 'absolute';
   priceOffset: string;
   setPriceOffset: Dispatch<SetStateAction<string>>;
-  priceReference: 'ask' | 'bid' | 'last';
-  setPriceReference: Dispatch<SetStateAction<'ask' | 'bid' | 'last'>>;
+  priceReference: 'ask' | 'bid';
+  setPriceReference: Dispatch<SetStateAction<'ask' | 'bid'>>;
   priceSwapDisabled: boolean;
   priceSwapTitle: string;
   togglePriceMode: () => void;
@@ -59,6 +60,7 @@ export interface OrderTicketSizingProps {
 }
 
 export interface OrderTicketExitsProps {
+  riskRewardEstimate?: Pick<RiskPreview, 'estimatedRisk' | 'estimatedReward'>;
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
   slTooClose: boolean;

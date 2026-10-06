@@ -177,6 +177,7 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
         last_heartbeat: None,
         message: None,
         market_session: None,
+        supported_timeframes: vec!["M1".into(), "M5".into()],
     };
     let account = AccountSnapshot {
         account_login: "123".into(),

@@ -10,6 +10,7 @@ type OrderTicketEntryEffectsInput = Pick<
   | 'entry'
   | 'setEntry'
   | 'orderKind'
+  | 'priceMode'
   | 'stagedOnChart'
   | 'ticketStage'
   | 'stopLoss'
@@ -31,6 +32,7 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
     entry,
     setEntry,
     orderKind,
+    priceMode,
     stagedOnChart,
     ticketStage,
     stopLoss,
@@ -41,11 +43,11 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
     setTakeProfit,
   } = ticket;
   useEffect(() => {
-    if (quote && !entry) {
+    if (quote && !entry && !(priceMode === 'offset' && orderKind !== 'market')) {
       setEntry(riskSide === 'buy' ? quote.ask : quote.bid);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- P5d: hook-provided setter, stable identity (P5a pattern); dep array frozen 1:1
-  }, [quote, riskSide, entry]);
+  }, [quote, riskSide, entry, priceMode, orderKind]);
   // A staged market order follows quote ticks while it is being edited.
   // Translate enabled exits by the same delta to preserve their distances.
   useEffect(() => {

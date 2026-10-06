@@ -1,4 +1,6 @@
+import { timeframeBarOffset } from '../../../shared/bridge/timeframes';
 import type { IChartApi, ISeriesApi, Logical, UTCTimestamp } from 'lightweight-charts';
+import { setPriceScaleRange } from './priceScaleRange';
 import type { RenderBar } from './mt5DataAdapter';
 import type { RenderViewport } from './overlayTypes';
 import { END_MARGIN, futurePoints, neededFutureBarCount, timeScaleBaseIndex } from './futureTimePoints';
@@ -23,6 +25,7 @@ export interface ViewportAnchor {
 /** The bar facts the time scale is derived from; written by BarSeriesController. */
 export interface TimeModel {
   readonly bars: readonly RenderBar[];
+  readonly timeframe: string;
   readonly intervalSeconds: number;
   lastBar(): RenderBar | undefined;
 }
@@ -184,7 +187,7 @@ export class ViewportController {
     const range = this.visibleRange();
     // Rebuilt only on a new real bar or resize; never on an existing-bar tick.
     this.future.setData(
-      futurePoints(last.time, this.data.intervalSeconds, last.close, count).map(({ time, value }) => ({
+      futurePoints(last.time, this.data.timeframe, last.close, count).map(({ time, value }) => ({
         time: time as UTCTimestamp,
         value,
       })),
@@ -310,7 +313,7 @@ export class ViewportController {
       low -= padding;
       high += padding;
     }
-    scale.setVisibleRange({ from: low, to: high });
+    setPriceScaleRange(this.candles, { from: low, to: high });
   }
 
   /** Fractional logical index of a time, per the bar cache. */
@@ -345,7 +348,7 @@ export class ViewportController {
     if (time >= bars[bars.length - 1].time) {
       // A minute selection can lie inside the current hourly candle. Retain
       // its sub-bar time rather than collapsing both boundaries to its open.
-      index = bars.length - 1 + (time - bars[bars.length - 1].time) / this.data.intervalSeconds;
+      index = bars.length - 1 + timeframeBarOffset(this.data.timeframe, bars[bars.length - 1].time, time);
     } else if (lo === hi) {
       index = lo;
     } else if (hi < 0) {

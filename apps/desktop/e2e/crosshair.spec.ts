@@ -4,7 +4,7 @@ import type { CrosshairReadout } from '../src/features/chart/engine/crosshairPri
 
 /**
  * The Cross tool: the rail's arrow reveals the tool menu (Escape closes it and
- * only it), the Cross row arms a pointer crosshair, and that crosshair reports
+ * only it), the Cross row arms crosshair lines, and every pointer reports
  * the bar time and price under the pointer together with the two axis labels it
  * paints.
  *
@@ -153,86 +153,99 @@ test.describe('crosshair', () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test('the crosshair reports the bar time and price under the pointer with both axis labels', async ({ page }) => {
-    const { pageErrors } = await gotoWithStub(page);
-    await expect.poll(async () => chartBars(page), { timeout: 10_000 }).toBe(10);
-    await armCrosshair(page);
-    const host = (await page.locator('.chart-host').boundingBox())!;
-    const pane = await chartGeometry(page);
-    // Aim at the oldest real candle — far enough from the right edge for the
-    // time label to sit dead centre on the pointer — at 40% of the pane height.
-    const timeMs = STUB_NOW - 9 * BAR_MS;
-    const local = { x: await candleX(page, timeMs), y: Math.round(pane.paneHeight * 0.4) };
-    await page.mouse.move(host.x + local.x, host.y + local.y);
-    await expect.poll(async () => (await crosshair(page)) !== null, { timeout: 5_000 }).toBe(true);
-    const state = (await crosshair(page))!;
-    // The crosshair sits exactly under the pointer, in pane coordinates.
-    expect(state.x).toBeCloseTo(local.x, 0);
-    expect(state.y).toBeCloseTo(local.y, 0);
-    // Time readout: the bar under the pointer, in the axis' own UTC frame.
-    const seconds = timeMs / 1000;
-    expect(state.timeSeconds).toBe(seconds);
-    expect(state.timeLabel).toBe(expectedLabel(seconds));
-    // Price readout: the series' own formatting of the price at that y.
-    expect(state.priceLabel).toMatch(/^\d+\.\d+$/);
-    expect(Number(state.priceLabel)).toBeCloseTo(state.price!, 4);
-    // Price label: hugged against the pane's right edge, centred on the pointer.
-    const price = state.priceLabelBox!;
-    expect(price.x + price.width).toBeCloseTo(pane.paneWidth - 4, 0);
-    expect(price.height).toBe(22);
-    expect(price.y + price.height / 2).toBeCloseTo(state.y, 0);
-    // Time label: centred on the pointer x, in the time axis' own canvas
-    // (its y is measured from the top of that axis, not of the pane).
-    const timeAxisHeight = await page.evaluate(() => window.__chartTest!.priceScale().timeAxisHeight);
-    const time = state.timeLabelBox!;
-    expect(time.x + time.width / 2).toBeCloseTo(state.x, 0);
-    expect(time.x).toBeGreaterThanOrEqual(0);
-    expect(time.x + time.width).toBeLessThanOrEqual(pane.paneWidth + 1);
-    expect(time.y).toBeGreaterThanOrEqual(0);
-    expect(time.y + time.height).toBeLessThanOrEqual(timeAxisHeight + 1);
-    expect(time.y + time.height / 2).toBeCloseTo(timeAxisHeight / 2, 0);
-    // Horizontal moves keep the price, vertical moves change it — the readout
-    // tracks the pointer rather than the last resolved value.
-    await page.mouse.move(host.x + local.x - 40, host.y + local.y);
-    await expect.poll(async () => (await crosshair(page))?.price).toBe(state.price);
-    await page.mouse.move(host.x + local.x - 40, host.y + local.y - 60);
-    await expect.poll(async () => (await crosshair(page))?.price).not.toBe(state.price);
-    // Near the pane's right edge the time label is pushed back inside the pane
-    // instead of overflowing it.
-    const last = { x: await candleX(page, STUB_NOW - BAR_MS), y: local.y };
-    await page.mouse.move(host.x + last.x, host.y + last.y);
-    await expect.poll(async () => (await crosshair(page))?.x).toBeCloseTo(last.x, 0);
-    const edge = (await crosshair(page))!.timeLabelBox!;
-    expect(edge.x + edge.width).toBeLessThanOrEqual(pane.paneWidth + 1);
-    expect(edge.x + edge.width / 2).toBeCloseTo(Math.min(last.x, pane.paneWidth - edge.width / 2), 0);
-    expect(pageErrors).toEqual([]);
-  });
+  for (const pointer of ['arrow', 'crosshair', 'profile'] as const) {
+    test(`${pointer} pointer reports the bar time and price with both labels`, async ({ page }) => {
+      const { pageErrors } = await gotoWithStub(page);
+      await expect.poll(async () => chartBars(page), { timeout: 10_000 }).toBe(10);
+      if (pointer === 'crosshair') {
+        await armCrosshair(page);
+      } else if (pointer === 'profile') {
+        await page.locator('.tool-rail button[aria-label="Fixed range volume profile"]').click();
+      }
+      const host = (await page.locator('.chart-host').boundingBox())!;
+      const pane = await chartGeometry(page);
+      // Aim at the oldest real candle — far enough from the right edge for the
+      // time label to sit dead centre on the pointer — at 40% of the pane height.
+      const timeMs = STUB_NOW - 9 * BAR_MS;
+      const local = { x: await candleX(page, timeMs), y: Math.round(pane.paneHeight * 0.4) };
+      await page.mouse.move(host.x + local.x, host.y + local.y);
+      await expect.poll(async () => (await crosshair(page)) !== null, { timeout: 5_000 }).toBe(true);
+      const state = (await crosshair(page))!;
+      expect(state.linesVisible).toBe(pointer === 'crosshair');
+      // The crosshair sits exactly under the pointer, in pane coordinates.
+      expect(state.x).toBeCloseTo(local.x, 0);
+      expect(state.y).toBeCloseTo(local.y, 0);
+      // Time readout: the bar under the pointer, in the axis' own UTC frame.
+      const seconds = timeMs / 1000;
+      expect(state.timeSeconds).toBe(seconds);
+      expect(state.timeLabel).toBe(expectedLabel(seconds));
+      // Price readout: the series' own formatting of the price at that y.
+      expect(state.priceLabel).toMatch(/^\d+\.\d+$/);
+      expect(Number(state.priceLabel)).toBeCloseTo(state.price!, 4);
+      // Price label: hugged against the pane's right edge, centred on the pointer.
+      const price = state.priceLabelBox!;
+      expect(price.x + price.width).toBeCloseTo(pane.paneWidth, 0);
+      expect(price.height).toBe(22);
+      expect(price.y + price.height / 2).toBeCloseTo(state.y, 0);
+      // Time badge: centred on the pointer x, just above the time axis in the pane.
+      const time = state.timeLabelBox!;
+      expect(time.x + time.width / 2).toBeCloseTo(state.x, 0);
+      expect(time.x).toBeGreaterThanOrEqual(0);
+      expect(time.x + time.width).toBeLessThanOrEqual(pane.paneWidth + 1);
+      expect(time.y).toBeGreaterThanOrEqual(0);
+      expect(time.y + time.height).toBeCloseTo(pane.paneHeight, 0);
+      // Horizontal moves keep the price, vertical moves change it — the readout
+      // tracks the pointer rather than the last resolved value.
+      await page.mouse.move(host.x + local.x - 40, host.y + local.y);
+      await expect.poll(async () => (await crosshair(page))?.price).toBe(state.price);
+      await page.mouse.move(host.x + local.x - 40, host.y + local.y - 60);
+      await expect.poll(async () => (await crosshair(page))?.price).not.toBe(state.price);
+      // Near the pane's right edge the time label is pushed back inside the pane
+      // instead of overflowing it.
+      const last = { x: await candleX(page, STUB_NOW - BAR_MS), y: local.y };
+      await page.mouse.move(host.x + last.x, host.y + last.y);
+      await expect.poll(async () => (await crosshair(page))?.x).toBeCloseTo(last.x, 0);
+      const edge = (await crosshair(page))!.timeLabelBox!;
+      expect(edge.x + edge.width).toBeLessThanOrEqual(pane.paneWidth + 1);
+      expect(edge.x + edge.width / 2).toBeCloseTo(Math.min(last.x, pane.paneWidth - edge.width / 2), 0);
+      expect(pageErrors).toEqual([]);
+    });
+  }
 
-  test('the crosshair hides outside the pane, on pointer leave and when the tool is disarmed', async ({ page }) => {
+  test('pointer labels hide outside the pane and survive switching tools', async ({ page }) => {
     const { pageErrors } = await gotoWithStub(page);
     await expect.poll(async () => chartBars(page), { timeout: 10_000 }).toBe(10);
     const host = (await page.locator('.chart-host').boundingBox())!;
     const pane = await chartGeometry(page);
-    const centre = { x: Math.round(pane.paneWidth / 2), y: Math.round(pane.paneHeight / 2) };
-    // Cursor (no tool): hovering the pane must not draw a crosshair at all.
-    await page.mouse.move(host.x + centre.x, host.y + centre.y);
-    expect(await crosshair(page)).toBeNull();
+    // A real bar supplies the time label; empty chart space has no bar time.
+    const point = { x: await candleX(page, STUB_NOW - 5 * BAR_MS), y: Math.round(pane.paneHeight / 2) };
+    // Arrow is the default pointer: it shows labels without crosshair lines.
+    await page.mouse.move(host.x + point.x, host.y + point.y);
+    await expect.poll(async () => (await crosshair(page))?.priceLabel).not.toBeNull();
+    expect((await crosshair(page))?.linesVisible).toBe(false);
     await armCrosshair(page);
-    await page.mouse.move(host.x + centre.x, host.y + centre.y);
+    await page.mouse.move(host.x + point.x, host.y + point.y);
     await expect.poll(async () => (await crosshair(page)) !== null).toBe(true);
     // Over the price axis the crosshair has no time/price to report: it hides.
-    await page.mouse.move(host.x + pane.paneWidth + 20, host.y + centre.y);
+    await page.mouse.move(host.x + pane.paneWidth + 20, host.y + point.y);
     await expect.poll(async () => await crosshair(page)).toBeNull();
     // Leaving the chart hides it too.
-    await page.mouse.move(host.x + centre.x, host.y + centre.y);
+    await page.mouse.move(host.x + point.x, host.y + point.y);
     await expect.poll(async () => (await crosshair(page)) !== null).toBe(true);
-    await page.mouse.move(host.x + centre.x, host.y - 40);
+    await page.mouse.move(host.x + point.x, host.y - 40);
     await expect.poll(async () => await crosshair(page)).toBeNull();
-    // Disarming the tool (the profile tool) hides a crosshair still under the pointer.
-    await page.mouse.move(host.x + centre.x, host.y + centre.y);
+    // Escape changes Crosshair to Arrow while the pointer stays in the pane.
+    await page.mouse.move(host.x + point.x, host.y + point.y);
     await expect.poll(async () => (await crosshair(page)) !== null).toBe(true);
+    await page.locator('.chart-host').focus();
+    await page.keyboard.press('Escape');
+    await expect.poll(async () => (await crosshair(page))?.linesVisible).toBe(false);
+    expect((await crosshair(page))?.priceLabel).not.toBeNull();
+    expect((await crosshair(page))?.timeLabel).not.toBeNull();
     await page.locator('.tool-rail button[aria-label="Fixed range volume profile"]').click();
-    await expect.poll(async () => await crosshair(page)).toBeNull();
+    await page.mouse.move(host.x + point.x, host.y + point.y);
+    await expect.poll(async () => (await crosshair(page))?.priceLabel).not.toBeNull();
+    expect((await crosshair(page))?.linesVisible).toBe(false);
     expect(pageErrors).toEqual([]);
   });
 });

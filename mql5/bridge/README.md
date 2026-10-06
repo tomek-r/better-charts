@@ -66,3 +66,8 @@ Boolean values accept `1/true/yes/on` and `0/false/no/off`. Wine settings are
 ignored on Windows. Overrides are shown in app settings; change them at their
 source and restart. Invalid configuration disables trading and auto-start.
 Keep `.env`, saved settings, startup files, journals and logs private.
+
+The EA advertises all 21 standard MT5 timeframes during the handshake. Recompile
+and reattach the EA after updating to expose the full list in Better Charts.
+Older EAs without the advertisement cannot connect; update both the EA and app. Monthly history comes
+from MT5's `PERIOD_MN1`, with calendar month boundaries in the chart.

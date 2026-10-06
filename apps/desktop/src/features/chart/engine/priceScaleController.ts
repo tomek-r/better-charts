@@ -1,4 +1,5 @@
-import { PriceScaleMode, type IChartApi, type IPriceScaleApi } from 'lightweight-charts';
+import { PriceScaleMode, type IChartApi, type IPriceScaleApi, type ISeriesApi } from 'lightweight-charts';
+import { setPriceScaleRange } from './priceScaleRange';
 
 /** The scale the candles and the price axis are bound to. */
 const PRICE_SCALE_ID = 'right';
@@ -34,6 +35,7 @@ export class PriceScaleController {
   constructor(
     private readonly host: HTMLElement,
     private readonly chart: IChartApi,
+    private readonly candles: ISeriesApi<'Candlestick'>,
   ) {
     this.axis = chart.priceScale(PRICE_SCALE_ID);
     this.root = document.createElement('div');
@@ -84,9 +86,14 @@ export class PriceScaleController {
 
   private readonly toggleLogarithmic = (): void => {
     const mode = this.axis.options().mode;
+    const range = this.axis.options().autoScale ? null : this.axis.getVisibleRange();
     this.axis.applyOptions({
       mode: mode === PriceScaleMode.Logarithmic ? PriceScaleMode.Normal : PriceScaleMode.Logarithmic,
     });
+    // Preserve the actual-price range across LWC's manual mode switch.
+    if (range !== null) {
+      setPriceScaleRange(this.candles, range);
+    }
     this.sync();
   };
 

@@ -22,6 +22,7 @@ export function OrderTicketPricing() {
     side: riskSide,
     hasQuote,
   } = useOrderTicketPricing();
+  const absolutePrice = orderKind === 'market' || priceMode === 'absolute';
   let displayedPriceReference = priceReference;
   if (orderKind === 'market') {
     displayedPriceReference = riskSide === 'buy' ? 'ask' : 'bid';
@@ -64,26 +65,23 @@ export function OrderTicketPricing() {
           <select
             className="ticket-ref"
             value={displayedPriceReference}
-            disabled={priceMode === 'absolute' || !hasQuote || orderKind === 'market'}
-            onChange={(event) => setPriceReference(event.target.value as 'ask' | 'bid' | 'last')}
+            disabled={absolutePrice || !hasQuote}
+            onChange={(event) => setPriceReference(event.target.value as 'ask' | 'bid')}
             aria-label="Price reference"
           >
             <option value="ask">Ask</option>
             <option value="bid">Bid</option>
-            <option value="last">Last</option>
           </select>
           <button
             className="ticket-swap"
             disabled={priceSwapDisabled}
             onClick={togglePriceMode}
-            aria-label={
-              priceMode === 'absolute' ? 'Enter price as an offset from the reference' : 'Enter an absolute price'
-            }
+            aria-label={absolutePrice ? 'Enter price as an offset from the reference' : 'Enter an absolute price'}
             title={priceSwapTitle}
           >
             ⇄
           </button>
-          {priceMode === 'absolute' ? (
+          {absolutePrice ? (
             <input
               autoComplete="one-time-code"
               autoCorrect="off"
@@ -95,6 +93,7 @@ export function OrderTicketPricing() {
               disabled={orderKind === 'market'}
               onChange={(event) => setEntry(event.target.value)}
               placeholder="Price"
+              type="number"
               aria-label="Order price"
             />
           ) : (
@@ -108,10 +107,11 @@ export function OrderTicketPricing() {
               value={priceOffset}
               onChange={(event) => setPriceOffset(event.target.value)}
               placeholder="Ticks"
+              type="number"
               aria-label="Price offset in ticks"
             />
           )}
-          <span className="ticket-unit">{priceMode === 'absolute' ? 'price' : 'ticks'}</span>
+          <span className="ticket-unit">{absolutePrice ? 'price' : 'ticks'}</span>
         </div>
       </div>
       {orderKind === 'stop_limit' && (
@@ -128,6 +128,7 @@ export function OrderTicketPricing() {
               value={limitPrice}
               onChange={(event) => setLimitPrice(event.target.value)}
               placeholder="Price"
+              type="number"
               aria-label="Limit price"
             />
             <span className="ticket-unit">price</span>

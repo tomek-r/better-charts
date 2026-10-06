@@ -11,8 +11,7 @@ import type {
 import { palette } from '../../../shared/theme/palette';
 
 /**
- * The Cross tool: a pointer-driven crosshair drawn over the pane, its price
- * axis and its time axis.
+ * Pointer price/time labels for every tool, with crosshair lines only for Cross.
  *
  * The library's own crosshair is off on this chart (`CrosshairMode.Hidden`):
  * its price label fills the price axis and its time label prints the axis tick
@@ -20,10 +19,10 @@ import { palette } from '../../../shared/theme/palette';
  * overlay stack below the pointer is ours anyway. Both labels are therefore
  * painted here, from the same coordinates the chart uses:
  *
- *  - the lines are 1 CSS px solid and continue over both axes, so the two
+ *  - Cross lines are 1 CSS px solid and continue over both axes, so the two
  *    readouts are visibly attached to them;
- *  - the time label is a box centred on the pointer x, drawn inside the time
- *    axis canvas (which is exactly as wide as the pane, so x needs no shift);
+ *  - the time label is centred on the pointer x just above the time axis,
+ *    leaving the axis tick labels visible;
  *  - the price label is a box hugged against the pane's right edge — just
  *    before the price axis, where the reference has it — with the app accent
  *    as its left edge.
@@ -41,13 +40,11 @@ const LINE_COLOR = palette.textLabel;
 const LABEL_BACKGROUND = palette.border;
 const LABEL_TEXT_COLOR = palette.text;
 const LABEL_ACCENT_COLOR = palette.accent;
-const LABEL_FONT_WEIGHT = 600;
+const LABEL_FONT_WEIGHT = 400;
 /** Text padding inside a label box, the box's minimum width, the accent bar width. */
 const LABEL_PADDING = 8;
 const MIN_LABEL_WIDTH = 54;
 const ACCENT_WIDTH = 2;
-/** Gap between the pane's right edge and the price box, so it hugs — never covers — the axis. */
-const PRICE_LABEL_GAP = 4;
 /** Label height per chart font size: 22px at the default 11. */
 const LABEL_HEIGHT_FACTOR = 2;
 
@@ -91,10 +88,11 @@ interface PaneRect {
   height: number;
 }
 
-/** Everything the dev-only test hook reports about one crosshair position. */
+/** Everything the dev-only test hook reports about one pointer position. */
 export interface CrosshairReadout {
   x: number;
   y: number;
+  linesVisible: boolean;
   timeSeconds: number | null;
   timeLabel: string | null;
   timeLabelBox: LabelBox | null;
@@ -113,20 +111,20 @@ function priceLabelBox(text: string, y: number, pane: PaneRect, font: string, fo
   const width = Math.max(MIN_LABEL_WIDTH, Math.ceil(textWidth(text, font)) + LABEL_PADDING * 2 + ACCENT_WIDTH);
   const height = labelHeight(fontSize);
   return {
-    x: Math.max(0, pane.width - PRICE_LABEL_GAP - width),
+    x: Math.max(0, pane.width - width),
     y: clamp(y - height / 2, 0, pane.height - height),
     width,
     height,
   };
 }
 
-/** The time label: centred on the pointer x, clamped to the axis it is drawn in. */
-function timeLabelBox(text: string, x: number, axis: PaneRect, font: string, fontSize: number): LabelBox {
+/** The time label: centred on pointer x, along the pane bottom above the axis. */
+function timeLabelBox(text: string, x: number, pane: PaneRect, font: string, fontSize: number): LabelBox {
   const width = Math.max(MIN_LABEL_WIDTH, Math.ceil(textWidth(text, font)) + LABEL_PADDING * 2);
   const height = labelHeight(fontSize);
   return {
-    x: clamp(x - width / 2, 0, axis.width - width),
-    y: clamp((axis.height - height) / 2, 0, axis.height - height),
+    x: clamp(x - width / 2, 0, pane.width - width),
+    y: Math.max(0, pane.height - height),
     width,
     height,
   };
@@ -146,8 +144,9 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
   private chart: IChartApi | null = null;
   private series: ISeriesApi<SeriesType, Time> | null = null;
   private requestUpdate: (() => void) | null = null;
-  /** Pointer position in pane CSS px; null while the crosshair is hidden. */
+  /** Pointer position in pane CSS px; null outside the pane. */
   private point: { x: number; y: number } | null = null;
+  private linesVisible = false;
   private readonly pane: readonly IPrimitivePaneView[];
   private readonly timeAxis: readonly IPrimitivePaneView[];
   private readonly priceAxis: readonly IPrimitivePaneView[];
@@ -172,6 +171,17 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
     }
     this.point = { x, y };
     this.requestUpdate?.();
+  }
+
+  /** Tool changes affect the lines without dropping the pointer's axis labels. */
+  setLinesVisible(visible: boolean): void {
+    if (this.linesVisible === visible) {
+      return;
+    }
+    this.linesVisible = visible;
+    if (this.point !== null) {
+      this.requestUpdate?.();
+    }
   }
 
   hide(): void {
@@ -215,7 +225,6 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
       return null;
     }
     const pane = { width: chart.timeScale().width(), height: chart.panes()[0]?.getHeight() ?? 0 };
-    const axis = { width: pane.width, height: chart.timeScale().height() };
     const font = this.labelFont();
     const fontSize = this.fontSize();
     const time = this.timeAt(point.x);
@@ -223,9 +232,10 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
     return {
       x: point.x,
       y: point.y,
+      linesVisible: this.linesVisible,
       timeSeconds: time?.seconds ?? null,
       timeLabel: time?.text ?? null,
-      timeLabelBox: time === null ? null : timeLabelBox(time.text, point.x, axis, font, fontSize),
+      timeLabelBox: time === null ? null : timeLabelBox(time.text, point.x, pane, font, fontSize),
       price: price?.price ?? null,
       priceLabel: price?.text ?? null,
       priceLabelBox: price === null ? null : priceLabelBox(price.text, point.y, pane, font, fontSize),
@@ -239,35 +249,31 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
     }
     this.drawLines(target, [point.x], [point.y]);
     const price = this.priceAt(point.y);
-    if (price === null) {
+    const time = this.timeAt(point.x);
+    if (price === null && time === null) {
       return;
     }
     target.useMediaCoordinateSpace(({ context, mediaSize }) => {
       const font = this.labelFont();
-      const box = priceLabelBox(price.text, point.y, mediaSize, font, this.fontSize());
+      const fontSize = this.fontSize();
       context.save();
-      this.drawLabel(context, box, price.text, font, true);
+      if (price !== null) {
+        const box = priceLabelBox(price.text, point.y, mediaSize, font, fontSize);
+        this.drawLabel(context, box, price.text, font, 'left');
+      }
+      if (time !== null) {
+        const box = timeLabelBox(time.text, point.x, mediaSize, font, fontSize);
+        this.drawLabel(context, box, time.text, font, 'top');
+      }
       context.restore();
     });
   }
 
   private drawTimeAxis(target: RenderTarget): void {
     const point = this.point;
-    if (point === null) {
-      return;
+    if (point !== null) {
+      this.drawLines(target, [point.x], []);
     }
-    this.drawLines(target, [point.x], []);
-    const time = this.timeAt(point.x);
-    if (time === null) {
-      return;
-    }
-    target.useMediaCoordinateSpace(({ context, mediaSize }) => {
-      const font = this.labelFont();
-      const box = timeLabelBox(time.text, point.x, mediaSize, font, this.fontSize());
-      context.save();
-      this.drawLabel(context, box, time.text, font, false);
-      context.restore();
-    });
   }
 
   private drawPriceAxis(target: RenderTarget): void {
@@ -283,6 +289,9 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
    * 1px line stays 1px (and stays sharp) at every device pixel ratio.
    */
   private drawLines(target: RenderTarget, columns: number[], rows: number[]): void {
+    if (!this.linesVisible) {
+      return;
+    }
     target.useBitmapCoordinateSpace(({ context, horizontalPixelRatio, verticalPixelRatio }) => {
       const { width, height } = context.canvas;
       context.save();
@@ -307,25 +316,27 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
     });
   }
 
-  /** Opaque box (plus the accent edge on the price label) and its centred text. */
+  /** Opaque badge with an accent edge: left for price, top for date/time. */
   private drawLabel(
     context: CanvasRenderingContext2D,
     box: LabelBox,
     text: string,
     font: string,
-    accent: boolean,
+    accent: 'left' | 'top',
   ): void {
     context.fillStyle = LABEL_BACKGROUND;
     context.fillRect(box.x, box.y, box.width, box.height);
-    if (accent) {
-      context.fillStyle = LABEL_ACCENT_COLOR;
+    context.fillStyle = LABEL_ACCENT_COLOR;
+    if (accent === 'left') {
       context.fillRect(box.x, box.y, ACCENT_WIDTH, box.height);
+    } else {
+      context.fillRect(box.x, box.y, box.width, ACCENT_WIDTH);
     }
     context.font = font;
     context.fillStyle = LABEL_TEXT_COLOR;
     context.textAlign = 'left';
     context.textBaseline = 'middle';
-    context.fillText(text, box.x + LABEL_PADDING + (accent ? ACCENT_WIDTH : 0), box.y + box.height / 2);
+    context.fillText(text, box.x + LABEL_PADDING + (accent === 'left' ? ACCENT_WIDTH : 0), box.y + box.height / 2);
   }
 
   private timeAt(x: number): { seconds: number; text: string } | null {

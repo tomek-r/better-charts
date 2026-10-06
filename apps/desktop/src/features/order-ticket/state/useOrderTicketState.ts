@@ -58,7 +58,7 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
   const [orderCheckError, setOrderCheckError] = useState<string>();
   const [ticketStage, setTicketStage] = useState<'edit' | 'review'>('edit');
   const [priceMode, setPriceMode] = useState<'offset' | 'absolute'>('absolute');
-  const [priceReference, setPriceReference] = useState<'ask' | 'bid' | 'last'>('ask');
+  const [priceReference, setPriceReference] = useState<'ask' | 'bid'>('ask');
   const [priceOffset, setPriceOffset] = useState('0');
   const [unitsMode, setUnitsMode] = useState<'money' | 'equity' | 'units'>('units');
   const [exitsOpen, setExitsOpen] = useState(true);

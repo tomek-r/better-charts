@@ -29,8 +29,8 @@ export const barCountdownDefaultOptions: BarCountdownOptions = {
 export interface BarCountdownState {
   /** Symbol whose bars the countdown belongs to. */
   symbol: string;
-  /** Bar length in seconds (the chart timeframe). */
-  intervalSeconds: number;
+  /** MT5 timeframe code, including calendar-based MN1. */
+  timeframe: string;
   /** Open time of the newest real bar, in broker seconds. */
   barTimeSeconds?: number;
   /** Price whose axis tag the countdown sits under (the Bid line). */

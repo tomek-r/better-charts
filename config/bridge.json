@@ -1,4 +1,5 @@
 {
+  "expertAdviserVersion": "1.001",
   "frameBytes": {
     "default": 8388608,
     "min": 1024,

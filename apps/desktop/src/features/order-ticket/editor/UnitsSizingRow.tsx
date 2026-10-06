@@ -110,6 +110,7 @@ export function UnitsSizingRow({
           autoCapitalize="off"
           spellCheck={false}
           className="ticket-value"
+          type="number"
           inputMode="decimal"
           value={unitsMode === 'units' ? orderVolume : riskAmount}
           onChange={(event) => {

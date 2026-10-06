@@ -12,7 +12,7 @@ export function useOrderTicket(params: OrderTicketParams) {
   const tickSize = state.instrument ? Number(state.instrument.tickSize) : NaN;
   const tickKnown = Number.isFinite(tickSize) && tickSize > 0;
   const priceSwapDisabled =
-    state.priceMode === 'absolute' && (state.orderKind === 'market' || !state.quote || !tickKnown);
+    state.orderKind === 'market' || (state.priceMode === 'absolute' && (!state.quote || !tickKnown));
   const ticket = { ...state, tickSize, tickKnown, priceSwapDisabled };
 
   const draft = useOrderTicketDraft(ticket);

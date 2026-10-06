@@ -1,6 +1,6 @@
 # Project status
 
-Updated 2026-10-04. This is the current feature and validation summary. See
+This is the current feature and validation summary. See
 [architecture](architecture/README.md) for implementation boundaries and the
 [bridge contract](protocol/bridge-v1.md) for wire semantics.
 

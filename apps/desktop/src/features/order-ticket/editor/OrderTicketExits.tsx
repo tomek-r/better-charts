@@ -4,6 +4,7 @@ import { useOrderTicketExits } from '../OrderTicketProvider';
 
 export function OrderTicketExits() {
   const {
+    riskRewardEstimate,
     open: exitsOpen,
     setOpen: setExitsOpen,
     slTooClose,
@@ -29,7 +30,13 @@ export function OrderTicketExits() {
   } = useOrderTicketExits();
   const riskRewardLabel =
     tpOn && slOn
-      ? riskRewardRatio(riskSide, orderEntryPrice(orderKind, entry, limitPrice), stopLoss, takeProfit)
+      ? riskRewardRatio(
+          riskSide,
+          orderEntryPrice(orderKind, entry, limitPrice),
+          stopLoss,
+          takeProfit,
+          riskRewardEstimate,
+        )
       : undefined;
   return (
     <div className="ticket-collapse">

@@ -21,7 +21,7 @@ test('anchors the base index on the last real bar plus the offset', () => {
 });
 
 test('spaces the helper points one interval apart from the last real bar', () => {
-  expect(futurePoints(1000, 60, 1.086, 3)).toEqual([
+  expect(futurePoints(1000, 'M1', 1.086, 3)).toEqual([
     { time: 1060, value: 1.086 },
     { time: 1120, value: 1.086 },
     { time: 1180, value: 1.086 },
@@ -29,5 +29,5 @@ test('spaces the helper points one interval apart from the last real bar', () =>
 });
 
 test('produces no helper points when none are needed', () => {
-  expect(futurePoints(1000, 60, 1.086, 0)).toEqual([]);
+  expect(futurePoints(1000, 'M1', 1.086, 0)).toEqual([]);
 });

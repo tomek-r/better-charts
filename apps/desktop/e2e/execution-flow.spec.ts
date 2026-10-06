@@ -69,6 +69,7 @@ interface StagedGeom {
   tpHandle: { x: number; y: number; w: number; h: number } | null;
   slMoney: string | null;
   tpMoney: string | null;
+  riskRewardLabel: string | null;
   chartRect: { x: number; y: number; width: number; height: number } | null;
   visibleRange: { from: number; to: number } | null;
   priceRange: { min: number; max: number } | null;
@@ -915,7 +916,7 @@ test('timeframe switch issues exactly one request_history', async ({ page }) => 
   // Bootstrap refreshes history and instrument metadata once; record that baseline.
   const before = await count();
   // Switching selection starts one deduplicated history request.
-  await page.locator('.timeframe-tabs button', { hasText: '1m' }).click();
+  await page.getByRole('button', { name: '1m', exact: true }).click();
   await expect(page.locator('.timeframe-tabs button[aria-pressed="true"]')).toHaveText('1m');
   await expect.poll(count, { timeout: 10_000 }).toBe(before + 1);
   expectClean(collected);
@@ -1015,7 +1016,7 @@ test('fixed range volume profile survives a timeframe switch and clears on a sym
   const beforeTimeframe = await settleProfile();
   expect(beforeTimeframe.range).not.toBeNull();
   // TIMEFRAME switch: selection + drawing + profile must ALL survive.
-  await page.locator('.timeframe-tabs button', { hasText: '1m' }).click();
+  await page.getByRole('button', { name: '1m', exact: true }).click();
   await expect(page.locator('.timeframe-tabs button[aria-pressed="true"]')).toHaveText('1m');
   await expect.poll(async () => (await chartData(page)).length).toBe(10);
   const profileRequests = (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_tick_profile').length;
@@ -1486,5 +1487,36 @@ test('Risk, USD sizing must not break the chart scale after a symbol switch (own
   expect(after).not.toBeNull();
   expect(after!.min).toBeGreaterThan(30_000);
   expect(after!.max).toBeGreaterThan(30_000);
+  expectClean(collected);
+});
+
+test('staged RR matches broker SL/TP amounts rather than equal price distances', async ({ page }) => {
+  const collected = await gotoWithStub(page, { responses: { request_risk_preview: null } });
+  await openTradePanel(page);
+  await fillRiskDraft(page);
+  await page.getByLabel('Take profit enabled').check();
+  await page.getByLabel('Take profit price').fill('1.0900');
+  await expect
+    .poll(
+      async () =>
+        (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)?.args.takeProfit,
+    )
+    .toBe('1.0900');
+  const request = (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
+  await pushEvent(page, 'risk-preview', {
+    ...request.args,
+    riskBudget: '25.00',
+    volume: '2.60',
+    estimatedRisk: '57.56',
+    estimatedReward: '56.19',
+    estimatedMargin: '105.00',
+    rr: '0.98',
+    currency: 'USD',
+    quotedAtMs: STUB_NOW,
+  });
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-$57.56');
+  await expect.poll(async () => (await stagedGeom(page))?.tpMoney).toBe('+$56.19');
+  await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).toBe('0.98');
+  await expect(page.locator('.ticket-risk-reward')).toHaveText('RR 0.98');
   expectClean(collected);
 });

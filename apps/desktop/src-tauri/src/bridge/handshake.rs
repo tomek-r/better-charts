@@ -73,6 +73,35 @@ pub(crate) async fn run_handshake(
         protocol_error(events, state, "hello required");
         return None;
     }
+    let expected_version = trading_core::protocol::expert_adviser_version();
+    let reported_version = hello
+        .payload
+        .get("expert_version")
+        .and_then(|value| value.as_str())
+        .filter(|value| {
+            value.len() <= 32
+                && matches!(value.split('.').count(), 2 | 3)
+                && value
+                    .split('.')
+                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        });
+    if reported_version != Some(expected_version) {
+        let message = match reported_version {
+            Some(version) => format!("App requires MT5 bridge version {expected_version}, but installed bridge version is {version}. Update and reattach BetterChartsBridge in MT5."),
+            None => format!("App requires MT5 bridge version {expected_version}, but the bridge did not report a valid version. Update and reattach BetterChartsBridge in MT5."),
+        };
+        send_error(
+            stream,
+            "rust-error".into(),
+            None,
+            ErrorCode::UnsupportedVersion,
+            &message,
+        )
+        .await;
+        protocol_error(events, state, message);
+        return None;
+    }
+    let invalid_hello_message = "MT5 bridge sent an invalid connection handshake. Recompile and reattach BetterChartsBridge in MT5.";
     let hello_payload: HelloPayload = match serde_json::from_value(hello.payload) {
         Ok(v) => v,
         Err(_) => {
@@ -81,10 +110,10 @@ pub(crate) async fn run_handshake(
                 "rust-error".into(),
                 None,
                 ErrorCode::InvalidMessage,
-                "invalid hello",
+                invalid_hello_message,
             )
             .await;
-            protocol_error(events, state, "invalid hello");
+            protocol_error(events, state, invalid_hello_message);
             return None;
         }
     };
@@ -102,6 +131,22 @@ pub(crate) async fn run_handshake(
         protocol_error(events, state, "authentication failed");
         return None;
     }
+    let supported_timeframes =
+        match trading_core::protocol::supported_timeframes(&hello_payload.supported_timeframes) {
+            Ok(codes) => codes,
+            Err(message) => {
+                send_error(
+                    stream,
+                    "rust-error".into(),
+                    None,
+                    ErrorCode::InvalidMessage,
+                    message,
+                )
+                .await;
+                protocol_error(events, state, message);
+                return None;
+            }
+        };
     let configured_frame = std::env::var("MT5_BRIDGE_MAX_FRAME_BYTES").ok();
     let transfer_limits = match configured_transfer_limits(configured_frame.as_deref())
         .and_then(|limits| limits.negotiate(hello_payload.transfer_limits))
@@ -233,6 +278,7 @@ pub(crate) async fn run_handshake(
         .expect("order check mutex poisoned") = None;
     publish(events, state, |status| {
         status.state = BridgeConnectionState::Connected;
+        status.supported_timeframes = supported_timeframes;
         status.terminal = Some(hello_payload.terminal_id.clone());
         status.account = Some(hello_payload.account_login.clone());
         status.server = Some(hello_payload.broker_server.clone());

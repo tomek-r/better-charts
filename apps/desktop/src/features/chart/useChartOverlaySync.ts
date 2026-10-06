@@ -198,7 +198,13 @@ export function useChartWorkspaceMirrorLayoutEffect(
           : undefined,
       riskRewardLabel:
         slOn && tpOn && stopLoss.trim() !== '' && takeProfit.trim() !== ''
-          ? riskRewardRatio(riskSide, orderEntryPrice(orderKind, entry, limitPrice), stopLoss, takeProfit)
+          ? riskRewardRatio(
+              riskSide,
+              orderEntryPrice(orderKind, entry, limitPrice),
+              stopLoss,
+              takeProfit,
+              brokerPreviewMatchesDraft ? lastBrokerPreview : undefined,
+            )
           : undefined,
     };
     const previous = state.order;

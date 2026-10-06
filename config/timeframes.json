@@ -2,10 +2,25 @@
   "default": "M1",
   "timeframes": [
     { "code": "M1", "seconds": 60 },
+    { "code": "M2", "seconds": 120 },
+    { "code": "M3", "seconds": 180 },
+    { "code": "M4", "seconds": 240 },
     { "code": "M5", "seconds": 300 },
+    { "code": "M6", "seconds": 360 },
+    { "code": "M10", "seconds": 600 },
+    { "code": "M12", "seconds": 720 },
     { "code": "M15", "seconds": 900 },
+    { "code": "M20", "seconds": 1200 },
+    { "code": "M30", "seconds": 1800 },
     { "code": "H1", "seconds": 3600 },
+    { "code": "H2", "seconds": 7200 },
+    { "code": "H3", "seconds": 10800 },
     { "code": "H4", "seconds": 14400 },
-    { "code": "D1", "seconds": 86400 }
+    { "code": "H6", "seconds": 21600 },
+    { "code": "H8", "seconds": 28800 },
+    { "code": "H12", "seconds": 43200 },
+    { "code": "D1", "seconds": 86400 },
+    { "code": "W1", "seconds": 604800 },
+    { "code": "MN1", "seconds": 2592000 }
   ]
 }

@@ -16,6 +16,16 @@ Browser installation requires network access once. Playwright starts Vite on
 port 1420 and reuses an existing server. Traces are saved on failure. On busy
 machines, limit concurrency with `pnpm test:e2e --workers=2`.
 
+Price-scale regressions also have a WebKit suite for the macOS desktop browser
+engine. It covers XBRUSD scale dragging, NAS100 logarithmic switching, and
+keeping manual ranges fixed during live bar updates. It starts its own Vite
+server on port 1421 to avoid reusing a desktop dev session.
+
+```bash
+pnpm --filter better-charts exec playwright install webkit
+pnpm --filter better-charts exec playwright test --config playwright.webkit.config.ts
+```
+
 ## Test boundaries
 
 - `tauriStub.ts` installs before app load. Commands have scripted responses,

@@ -11,7 +11,7 @@ import type {
 import { BrokerClock } from './clock';
 import { priceTagHeight, priceTagOffset } from '../priceAxisTagsPrimitive';
 import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './types';
-import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../../shared/bridge/timeframes';
+import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
 
 /**
  * Counts the current bar down on the price axis, under the Bid label.
@@ -34,7 +34,7 @@ export class BarCountdownPrimitive implements ISeriesPrimitive<Time> {
   private options: BarCountdownOptions;
   private readonly state: BarCountdownState = {
     symbol: '',
-    intervalSeconds: timeframeSeconds(DEFAULT_TIMEFRAME),
+    timeframe: DEFAULT_TIMEFRAME,
     connected: false,
     suspended: false,
     connectionIdentity: '',
@@ -71,7 +71,7 @@ export class BarCountdownPrimitive implements ISeriesPrimitive<Time> {
     const next = this.state;
     const previousIdentity = next.connectionIdentity;
     next.symbol = state.symbol;
-    next.intervalSeconds = state.intervalSeconds;
+    next.timeframe = state.timeframe;
     next.barTimeSeconds = state.barTimeSeconds;
     next.anchorPrice = state.anchorPrice;
     next.askPrice = state.askPrice;
@@ -136,8 +136,8 @@ export class BarCountdownPrimitive implements ISeriesPrimitive<Time> {
 
   /** Countdown text for the current broker second, ignoring visibility. */
   private tagText(): string {
-    const { connected, suspended, symbol, barTimeSeconds, intervalSeconds } = this.state;
-    return connected && !suspended ? this.clock.text(symbol, barTimeSeconds, intervalSeconds) : '';
+    const { connected, suspended, symbol, barTimeSeconds, timeframe } = this.state;
+    return connected && !suspended ? this.clock.text(symbol, barTimeSeconds, timeframe) : '';
   }
 
   /** Anchor price to axis coordinate, below which the label is placed. */
@@ -187,12 +187,12 @@ export class BarCountdownPrimitive implements ISeriesPrimitive<Time> {
    * eventually skips a second.
    */
   private schedule(): void {
-    const { connected, suspended, symbol, barTimeSeconds, intervalSeconds } = this.state;
+    const { connected, suspended, symbol, barTimeSeconds, timeframe } = this.state;
     if (!this.requestUpdate || !connected || suspended || document.hidden) {
       this.stopTimer();
       return;
     }
-    const delay = this.clock.nextTickDelayMs(symbol, barTimeSeconds, intervalSeconds);
+    const delay = this.clock.nextTickDelayMs(symbol, barTimeSeconds, timeframe);
     if (delay === null) {
       this.stopTimer();
       return;
