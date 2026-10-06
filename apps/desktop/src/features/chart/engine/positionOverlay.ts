@@ -159,10 +159,10 @@ export const LINE_DRAG_THRESHOLD = 3;
 const titleCase = (label: string) => label.toLowerCase().replace(/(^|\s)\S/g, (char) => char.toUpperCase());
 
 export function createPositionOverlay(state: PositionOverlayState, pass: OverlayPass): OverlayRenderer {
-  // Widest P&L box seen per position id: the live value reflows every tick,
-  // so the pill keeps the largest width it has had instead of resizing.
+  // Size the P&L column from actual amounts only. Wider values expand it;
+  // shorter values never move the units and RR back to the left.
   // (The `lines` pass never writes it; the two renderers are independent.)
-  const pnlBoxWidths = new Map<string, number>();
+  const pnlColumnWidths = new Map<string, number>();
   return {
     // `ui` layer: row widgets render over the chart. Two-pass z-order (`lines`
     // before `labels`, features/chart/engine/overlays.ts) keeps risk zones beneath row labels;
@@ -287,13 +287,13 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
               // updates it live exactly like the staged tag.
               const rrLabel =
                 sl !== undefined && tp !== undefined ? riskRewardRatio(pos.side, pos.entry, sl, tp) : undefined;
-              const label = `P&L ${pos.pnl} · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`;
-              // Same font/metrics as drawHandle: remember the widest box so the
-              // pill width stays stable while the live value reflows.
               ctx.font = '400 12px system-ui, sans-serif';
-              const stable = Math.max(pnlBoxWidths.get(pos.id) ?? 0, ctx.measureText(`⋮⋮  ${label}`).width + 14);
-              pnlBoxWidths.set(pos.id, stable);
-              drawHandle(ctx, x + HANDLE_X, entryY, label, pnlColor, pos.side !== 'buy', stable);
+              const columnWidth = Math.max(pnlColumnWidths.get(pos.id) ?? 0, ctx.measureText(pos.pnl).width);
+              pnlColumnWidths.set(pos.id, columnWidth);
+              drawHandle(ctx, x + HANDLE_X, entryY, 'P&L ', pnlColor, pos.side !== 'buy', {
+                text: ` · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`,
+                amount: { text: pos.pnl, width: columnWidth },
+              });
             }
           }
         }
@@ -342,9 +342,9 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
       }
       // Forget widths of positions that are gone (ids may be recycled later).
       const livePositionIds = new Set(state.positions.map((pos) => pos.id));
-      for (const id of pnlBoxWidths.keys()) {
+      for (const id of pnlColumnWidths.keys()) {
         if (!livePositionIds.has(id)) {
-          pnlBoxWidths.delete(id);
+          pnlColumnWidths.delete(id);
         }
       }
 
@@ -355,6 +355,9 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
         const orderDrag = drag?.kind === 'order' && drag.id === order.id ? drag : undefined;
         const previewedStopLoss = orderDrag?.exitPreview ? orderDrag.stopLoss : order.stopLoss;
         const previewedTakeProfit = orderDrag?.exitPreview ? orderDrag.takeProfit : order.takeProfit;
+        const orderKey = `order:${order.id}`;
+        const sl = preview('sl', orderKey, previewedStopLoss);
+        const tp = preview('tp', orderKey, previewedTakeProfit);
         const lineY = toY(price);
         if (inBand(lineY)) {
           if (drawLabels) {
@@ -369,10 +372,12 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
               sideColor,
               order.side !== 'buy',
             );
+            const rrLabel =
+              sl !== undefined && tp !== undefined ? riskRewardRatio(order.side, price, sl, tp) : undefined;
             qtyTag(
               sideBox.x + sideBox.w + 6,
               lineY,
-              `⋮⋮  |  ${order.quantity}  |  ${titleCase(order.label)}`,
+              `⋮⋮  |  ${order.quantity}  |  ${titleCase(order.label)}${rrLabel ? `  |  RR ${rrLabel}` : ''}`,
               sideColor,
             );
           }
@@ -382,8 +387,6 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
         // the order price line) AND draggable — the modify wire carries
         // stop_loss/take_profit for pending orders too. Hit ids carry the
         // `order:` prefix so the drag handler can pick the right flow.
-        const orderKey = `order:${order.id}`;
-        const sl = preview('sl', orderKey, previewedStopLoss);
         if (sl === undefined) {
           const slY = floatingExitY(lineY, 'sl', order.side);
           if (drawLabels && inBand(slY)) {
@@ -407,7 +410,6 @@ export function createPositionOverlay(state: PositionOverlayState, pass: Overlay
             }
           }
         }
-        const tp = preview('tp', orderKey, previewedTakeProfit);
         if (tp === undefined) {
           const tpY = floatingExitY(lineY, 'tp', order.side);
           if (drawLabels && inBand(tpY)) {

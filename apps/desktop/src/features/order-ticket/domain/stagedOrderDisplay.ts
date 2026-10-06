@@ -1,0 +1,139 @@
+import type { RiskPreview } from '../../../shared/bridge/types';
+import { formatSignedMoney } from '../../../shared/format';
+import type { OrderTicketBaseState } from '../state/useOrderTicketState';
+import { orderEntryPrice, riskRewardRatio } from './ticketRules';
+
+type DisplayInput = Pick<
+  OrderTicketBaseState,
+  | 'instrument'
+  | 'account'
+  | 'snapshot'
+  | 'riskSide'
+  | 'entry'
+  | 'limitPrice'
+  | 'orderKind'
+  | 'stopLoss'
+  | 'takeProfit'
+  | 'slOn'
+  | 'tpOn'
+  | 'effectiveVolume'
+  | 'unitsMode'
+  | 'volumeManual'
+  | 'riskAmount'
+  | 'riskPreview'
+  | 'draftVersion'
+  | 'stopGuard'
+> & { lastPreview?: RiskPreview };
+
+/** Display estimates only: the chart and ticket share these values, while
+ * broker sizing and submission keep their own freshness and execution gates. */
+export function deriveStagedOrderDisplay(input: DisplayInput) {
+  const currency = input.account?.currency;
+  const entry = orderEntryPrice(input.orderKind, input.entry, input.limitPrice);
+  const volume = Number(input.effectiveVolume);
+  const contract = Number(input.instrument?.contractSize);
+  const budget = Number(input.riskAmount) * (input.unitsMode === 'equity' ? Number(input.account?.equity) / 100 : 1);
+  const automaticBudget =
+    input.unitsMode !== 'units' &&
+    !input.volumeManual &&
+    input.riskAmount.trim() !== '' &&
+    Number.isFinite(budget) &&
+    budget > 0 &&
+    Boolean(currency);
+  const current = input.riskPreview;
+  const currentMatches =
+    input.unitsMode !== 'units' &&
+    current &&
+    current.draftVersion === input.draftVersion &&
+    current.symbol === input.snapshot.symbol &&
+    current.side === input.riskSide &&
+    current.volume === input.effectiveVolume &&
+    current.currency === currency;
+  const preview = currentMatches ? current : input.lastPreview;
+  const previewMatches =
+    automaticBudget &&
+    preview &&
+    preview.symbol === input.snapshot.symbol &&
+    preview.side === input.riskSide &&
+    preview.currency === currency &&
+    Number.isFinite(Number(preview.riskBudget)) &&
+    Math.abs(Number(preview.riskBudget) - budget) < 1e-8;
+
+  // Project the last broker amount onto the edited price and current units.
+  // This is a local display estimate; only a new broker response sizes orders.
+  const previewAmount = (kind: 'sl' | 'tp'): number | undefined => {
+    if (!previewMatches || !preview) {
+      return undefined;
+    }
+    const amount = kind === 'sl' ? -Number(preview.estimatedRisk) : Number(preview.estimatedReward);
+    const previousLevel = kind === 'sl' ? preview.stopLoss : preview.takeProfit;
+    if (previousLevel == null || (kind === 'tp' && preview.estimatedReward == null)) {
+      return undefined;
+    }
+    const oldDistance = Number(previousLevel) - Number(preview.entry);
+    const newDistance = Number(kind === 'sl' ? input.stopLoss : input.takeProfit) - Number(entry);
+    const previousVolume = Number(preview.volume);
+    if (
+      !Number.isFinite(amount) ||
+      !Number.isFinite(oldDistance) ||
+      oldDistance === 0 ||
+      previousVolume <= 0 ||
+      !Number.isFinite(previousVolume)
+    ) {
+      return undefined;
+    }
+    const projected = amount * (newDistance / oldDistance) * (volume / previousVolume);
+    return Number.isFinite(projected) ? projected : undefined;
+  };
+
+  const levelAmount = (price: string, enabled: boolean): number | undefined => {
+    const open = Number(entry);
+    const level = Number(price);
+    if (
+      !enabled ||
+      !price.trim() ||
+      !currency?.trim() ||
+      ![open, level, volume, contract].every((value) => Number.isFinite(value) && value > 0)
+    ) {
+      return undefined;
+    }
+    const amount = (level - open) * (input.riskSide === 'buy' ? 1 : -1) * contract * volume;
+    return Number.isFinite(amount) ? amount : undefined;
+  };
+  const stopSet =
+    input.slOn && input.stopLoss.trim() !== '' && Number(input.stopLoss) > 0 && Number.isFinite(Number(input.stopLoss));
+  const targetSet =
+    input.tpOn &&
+    input.takeProfit.trim() !== '' &&
+    Number(input.takeProfit) > 0 &&
+    Number.isFinite(Number(input.takeProfit));
+  let loss: number | undefined;
+  if (stopSet) {
+    const projected = previewAmount('sl');
+    if (projected !== undefined) {
+      loss = projected;
+    } else if (automaticBudget) {
+      loss = input.stopGuard?.slTooClose ? undefined : -budget;
+    } else {
+      loss = levelAmount(input.stopLoss, input.slOn);
+    }
+  }
+  let reward: number | undefined;
+  if (targetSet) {
+    reward = previewAmount('tp') ?? levelAmount(input.takeProfit, input.tpOn);
+  }
+  // Use the unrounded amounts behind the labels, including the pending SL
+  // budget. Price distances are a fallback only when no money basis is available.
+  const estimate =
+    loss !== undefined && loss < 0 && reward !== undefined && reward >= 0
+      ? { estimatedRisk: String(-loss), estimatedReward: String(reward) }
+      : undefined;
+  return {
+    slMoney: currency && loss !== undefined ? formatSignedMoney(loss, currency) : undefined,
+    tpMoney: currency && reward !== undefined ? formatSignedMoney(reward, currency) : undefined,
+    riskRewardLabel:
+      stopSet && targetSet
+        ? riskRewardRatio(input.riskSide, entry, input.stopLoss, input.takeProfit, estimate)
+        : undefined,
+  };
+}

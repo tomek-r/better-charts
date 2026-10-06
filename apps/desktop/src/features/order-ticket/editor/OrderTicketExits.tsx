@@ -1,10 +1,9 @@
-import { orderEntryPrice, riskRewardRatio } from '../domain/ticketRules';
 import { TicketExitRow } from './TicketExitRow';
 import { useOrderTicketExits } from '../OrderTicketProvider';
 
 export function OrderTicketExits() {
   const {
-    riskRewardEstimate,
+    riskRewardLabel,
     open: exitsOpen,
     setOpen: setExitsOpen,
     slTooClose,
@@ -23,21 +22,7 @@ export function OrderTicketExits() {
     toggleExit,
     applyExitTicks,
     swapExitUnit,
-    side: riskSide,
-    orderKind,
-    entry,
-    limitPrice,
   } = useOrderTicketExits();
-  const riskRewardLabel =
-    tpOn && slOn
-      ? riskRewardRatio(
-          riskSide,
-          orderEntryPrice(orderKind, entry, limitPrice),
-          stopLoss,
-          takeProfit,
-          riskRewardEstimate,
-        )
-      : undefined;
   return (
     <div className="ticket-collapse">
       <button className="ticket-collapse-head" aria-expanded={exitsOpen} onClick={() => setExitsOpen(!exitsOpen)}>

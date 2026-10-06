@@ -1490,6 +1490,133 @@ test('Risk, USD sizing must not break the chart scale after a symbol switch (own
   expectClean(collected);
 });
 
+test('pending risk sizing uses the displayed SL budget and TP estimate for RR', async ({ page }) => {
+  const collected = await gotoWithStub(page, { responses: { request_risk_preview: null } });
+  await openTradePanel(page);
+  await fillRiskDraft(page);
+  await pushEvent(page, 'symbol-info', {
+    symbol: 'EURUSD',
+    description: 'Euro vs US Dollar',
+    digits: 4,
+    tickSize: '0.0001',
+    pointSize: '0.0001',
+    contractSize: '2750',
+    volumeMin: '0.01',
+    volumeMax: '100',
+    volumeStep: '0.01',
+    stopsLevel: 0,
+    freezeLevel: 0,
+    fillingMode: 0,
+    orderMode: 0,
+    expirationMode: 0,
+    tradeExecution: 0,
+    tradeMode: 0,
+  });
+  await page.getByLabel('Take profit enabled').check();
+  await page.getByRole('button', { name: 'Swap Take profit input to price' }).click();
+  await page.getByLabel('Take profit price').fill('1.0900');
+  await expect
+    .poll(
+      async () =>
+        (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)?.args.takeProfit,
+    )
+    .toBe('1.0900');
+  const request = (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
+  await pushEvent(page, 'risk-preview', {
+    ...request.args,
+    riskBudget: '25.00',
+    volume: '4.20',
+    estimatedRisk: '57.75',
+    estimatedReward: '57.75',
+    estimatedMargin: '105.00',
+    rr: '1.00',
+    currency: 'USD',
+    quotedAtMs: STUB_NOW,
+  });
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-$57.75');
+  await page.getByLabel('Risk amount').fill('59');
+  // While the new broker preview is pending, the last 4.2 units and 0.005 price
+  // distance give TP +$57.75, while SL displays the requested $59 budget.
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-$59');
+  await expect.poll(async () => (await stagedGeom(page))?.tpMoney).toBe('+$57.75');
+  await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).toBe('0.98');
+  await expect(page.locator('.ticket-risk-reward')).toHaveText('RR 0.98');
+  await expect
+    .poll(
+      async () =>
+        (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)?.args.riskAmount,
+    )
+    .toBe('59');
+  const updated = (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
+  await pushEvent(page, 'risk-preview', {
+    ...updated.args,
+    riskBudget: '59.00',
+    volume: '4.20',
+    estimatedRisk: '58.80',
+    estimatedReward: '64.68',
+    estimatedMargin: '105.00',
+    rr: '1.10',
+    currency: 'USD',
+    quotedAtMs: STUB_NOW,
+  });
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-$58.8');
+  await expect.poll(async () => (await stagedGeom(page))?.tpMoney).toBe('+$64.68');
+  await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).toBe('1.10');
+  await expect(page.locator('.ticket-risk-reward')).toHaveText('RR 1.10');
+  expectClean(collected);
+});
+
+for (const level of ['sl', 'tp'] as const) {
+  test(`staged ${level.toUpperCase()} drag updates money and shared RR before MT5 responds`, async ({ page }) => {
+    const collected = await gotoWithStub(page, { responses: { request_risk_preview: null } });
+    await openTradePanel(page);
+    await fillRiskDraft(page);
+    await page.getByLabel('Stop loss price').fill('1.0840');
+    await page.getByLabel('Take profit enabled').check();
+    await page.getByLabel('Take profit price').fill('1.0860');
+    await expect
+      .poll(
+        async () => (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)?.args,
+      )
+      .toMatchObject({ stopLoss: '1.0840', takeProfit: '1.0860' });
+    const request = (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
+    await pushEvent(page, 'risk-preview', {
+      ...request.args,
+      riskBudget: '25.00',
+      volume: '2.60',
+      estimatedRisk: '25.00',
+      estimatedReward: '24.50',
+      estimatedMargin: '105.00',
+      rr: '0.98',
+      currency: 'USD',
+      quotedAtMs: STUB_NOW,
+    });
+    await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).toBe('0.98');
+    const before = (await stagedGeom(page))!;
+    const handle = level === 'sl' ? before.slHandle! : before.tpHandle!;
+    const start = { x: handle.x + handle.w / 2, y: handle.y + handle.h / 2 };
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x, start.y + (level === 'sl' ? 24 : -24), { steps: 8 });
+    const priceLabel = level === 'sl' ? 'Stop loss price' : 'Take profit price';
+    await expect(page.getByLabel(priceLabel)).not.toHaveValue(level === 'sl' ? '1.0840' : '1.0860');
+    const moneyBefore = level === 'sl' ? before.slMoney : before.tpMoney;
+    await expect
+      .poll(async () => {
+        const current = await stagedGeom(page);
+        return level === 'sl' ? current?.slMoney : current?.tpMoney;
+      })
+      .not.toBe(moneyBefore);
+    await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).not.toBe('0.98');
+    const during = (await stagedGeom(page))!;
+    await expect(page.locator('.ticket-risk-reward')).toHaveText(`RR ${during.riskRewardLabel}`);
+    expect(level === 'sl' ? during.tpMoney : during.slMoney).toBe(level === 'sl' ? before.tpMoney : before.slMoney);
+    await page.mouse.up();
+    expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
+    expectClean(collected);
+  });
+}
+
 test('staged RR matches broker SL/TP amounts rather than equal price distances', async ({ page }) => {
   const collected = await gotoWithStub(page, { responses: { request_risk_preview: null } });
   await openTradePanel(page);

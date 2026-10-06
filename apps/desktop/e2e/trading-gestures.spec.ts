@@ -119,11 +119,18 @@ async function drag(page: Page, line: 'slLines' | 'tpLines' | 'orderLines', rele
 async function recordCanvasText(page: Page) {
   await page.addInitScript(() => {
     const texts = new Set<string>();
+    const prefixes = new WeakMap<CanvasRenderingContext2D, string>();
     const w = window as unknown as { __paintedTradingText: Set<string> };
     w.__paintedTradingText = texts;
     const fillText = CanvasRenderingContext2D.prototype.fillText;
     CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
       texts.add(text);
+      if (text.endsWith('P&L ')) {
+        prefixes.set(this, text);
+      } else if (prefixes.has(this)) {
+        texts.add(prefixes.get(this) + text);
+        prefixes.delete(this);
+      }
       if (maxWidth === undefined) {
         fillText.call(this, text, x, y);
       } else {
@@ -149,6 +156,73 @@ test('live position paints broker P&L before symbol metadata is available', asyn
   // before symbol metadata (contract size / currency) arrives.
   await expect.poll(() => paintedText(page)).toContain('RR 1.00');
   expect(await paintedText(page)).not.toContain('SL -$');
+});
+
+test('live P&L column grows to the widest observed amount and never shrinks', async ({ page }) => {
+  await recordCanvasText(page);
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __positionSuffixX: number;
+      __positionAmountRightX: number;
+      __positionAmountStartX: number;
+      __positionAmountWidth: number;
+    };
+    const fillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+      if (text.endsWith('P&L ')) {
+        w.__positionAmountStartX = x + this.measureText(text).width;
+      }
+      if (this.textAlign === 'right' && /^[+-]/.test(text)) {
+        w.__positionAmountRightX = x;
+        w.__positionAmountWidth = this.measureText(text).width;
+      }
+      if (text.includes(' units')) {
+        w.__positionSuffixX = x + this.measureText(text.slice(0, text.indexOf(' · '))).width;
+      }
+      if (maxWidth === undefined) {
+        fillText.call(this, text, x, y);
+      } else {
+        fillText.call(this, text, x, y, maxWidth);
+      }
+    };
+  });
+  await ready(page);
+  await expect.poll(() => paintedText(page)).toContain('P&L +$1.2');
+  const layout = () =>
+    page.evaluate(() => {
+      const w = window as unknown as {
+        __positionSuffixX: number;
+        __positionAmountRightX: number;
+        __positionAmountStartX: number;
+        __positionAmountWidth: number;
+      };
+      return {
+        start: w.__positionAmountStartX,
+        width: w.__positionAmountWidth,
+        right: w.__positionAmountRightX,
+        suffix: w.__positionSuffixX,
+      };
+    });
+  const initial = await layout();
+  let widest = initial.width;
+  expect(initial.suffix).toBe(initial.start + widest);
+  for (const profit of ['-15.60', '9999.99', '0.00', '1.20']) {
+    await clearPaintedText(page);
+    await pushEvent(page, 'portfolio-snapshot', {
+      ...portfolio,
+      positions: portfolio.positions.map((position) => ({ ...position, profit })),
+    });
+    await expect
+      .poll(() => paintedText(page))
+      .toContain(
+        `P&L ${Number(profit) < 0 ? '-' : '+'}$${Math.abs(Number(profit)).toLocaleString('en-US', { maximumFractionDigits: 2 })}`,
+      );
+    const current = await layout();
+    widest = Math.max(widest, current.width);
+    expect(current.start).toBe(initial.start);
+    expect(current.suffix).toBe(initial.start + widest);
+    expect(current.right).toBe(current.suffix);
+  }
 });
 
 test('bootstrap requests history once and restores live SL/TP amounts from symbol metadata', async ({ page }) => {
@@ -228,6 +302,23 @@ test('live SL drag updates the entry RR before release, like the staged tag', as
   await page.mouse.move(x, y + 24, { steps: 8 });
   await expect.poll(() => paintedText(page)).toMatch(/RR (?!1\.00)\d/);
   await page.mouse.up();
+});
+
+test('submitted limit order retains RR and updates it during an exit drag', async ({ page }) => {
+  await recordCanvasText(page);
+  await ready(page, true, { stopLoss: '1.0860', takeProfit: '1.0850' });
+  await expect.poll(() => paintedText(page)).toMatch(/Limit.*RR 1\.00/);
+  await clearPaintedText(page);
+  const orderSl = (await geometry(page)).slLines.find((line) => line.id === 'order:990001')!;
+  const host = (await page.locator('.chart-host').boundingBox())!;
+  const x = host.x + host.width * 0.65;
+  await page.mouse.move(x, orderSl.y);
+  await page.mouse.down();
+  await page.mouse.move(x, orderSl.y - 24, { steps: 8 });
+  await expect.poll(() => paintedText(page)).toMatch(/Limit.*RR (?!1\.00)\d/);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  expect(await invocations(page, 'modify_order')).toHaveLength(0);
 });
 
 test('Escape cancels a trading drag and restores the line without dispatch', async ({ page }) => {

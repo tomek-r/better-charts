@@ -159,7 +159,8 @@
 }
 
 .timeframe-tabs button {
-  min-width: 44px;
+  width: 44px;
+  flex: 0 0 44px;
   border: 1px solid transparent;
   border-radius: var(--border-radius);
   padding: 7px 8px;

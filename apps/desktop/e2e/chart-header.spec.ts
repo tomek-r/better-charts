@@ -21,6 +21,29 @@ const brokerSymbol = (symbol: string, description: string): BrokerSymbol => ({
   tradeMode: 0,
 });
 
+test('timeframe buttons have equal widths and selection preserves their layout', async ({ page }) => {
+  await gotoWithStub(page);
+  // Larger system text must not let the longer labels resize their buttons.
+  await page.addStyleTag({ content: '.timeframe-tabs button { font-size: 14px; }' });
+  const tabs = page.getByRole('group', { name: 'Chart timeframe' });
+  const buttons = tabs.getByRole('button');
+  const bounds = () =>
+    buttons.evaluateAll((elements) =>
+      elements.map((element) => {
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return { x, y, width, height };
+      }),
+    );
+  await expect(tabs.getByRole('button', { name: '30m', exact: true })).toBeEnabled();
+  const initial = await bounds();
+  expect(new Set(initial.map((button) => button.width)).size).toBe(1);
+  for (const label of ['30m', '1m']) {
+    await tabs.getByRole('button', { name: label, exact: true }).click();
+    await expect(tabs.locator('[aria-pressed="true"]')).toHaveText(label);
+    expect(await bounds()).toEqual(initial);
+  }
+});
+
 test('chart title shows current broker description and updates it without changing the symbol', async ({ page }) => {
   await gotoWithStub(page);
   const title = page.locator('.chart-heading h1');

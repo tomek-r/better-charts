@@ -223,19 +223,10 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
   const tpTooClose = ticket.stagedOnChart && Boolean(ticket.stopGuard?.tpTooClose);
   const tpTicksView = ticket.priceToTicks(ticket.takeProfit, 'tp');
   const slTicksView = ticket.priceToTicks(ticket.stopLoss, 'sl');
-  const riskRewardEstimate =
-    ticket.unitsMode !== 'units' &&
-    !ticket.volumeManual &&
-    ticket.riskPreview?.draftVersion === ticket.draftVersion &&
-    ticket.riskPreview.symbol === ticket.snapshot.symbol &&
-    ticket.riskPreview.side === ticket.riskSide &&
-    ticket.riskPreview.volume === ticket.effectiveVolume &&
-    ticket.riskPreview.currency === account?.currency
-      ? ticket.riskPreview
-      : undefined;
+  const riskRewardLabel = ticket.display.riskRewardLabel;
   const exitsProps = useMemo<OrderTicketExitsProps>(
     () => ({
-      riskRewardEstimate,
+      riskRewardLabel,
       open: ticket.exitsOpen,
       setOpen: ticket.setExitsOpen,
       slTooClose,
@@ -261,7 +252,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
       stagedOnChart: ticket.stagedOnChart,
     }),
     [
-      riskRewardEstimate,
+      riskRewardLabel,
       ticket.exitsOpen,
       ticket.setExitsOpen,
       slTooClose,

@@ -38,6 +38,18 @@ execution are not implemented.
   The selection survives timeframe changes and clears on symbol changes.
 - Position SL/TP and pending-order price drags use the execution guard.
   Shift+drag moves a pending entry and its SL/TP together.
+- Timeframe buttons have equal fixed widths. Live position labels right-align
+  P&L amounts in a column sized to the widest amount observed for that position,
+  with no preset width. Wider amounts expand it; shorter amounts keep units
+  and RR in place. The remembered width clears when the position leaves.
+- Staged SL/TP money labels and ticket/chart RR share one display model. RR
+  uses the unrounded amounts behind the labels, including the SL risk budget
+  while broker sizing is pending; price distances are a fallback when money
+  estimates are unavailable.
+- Staged SL/TP drags immediately project the last broker money estimates onto
+  the edited prices and current units. MT5 responses replace those local display
+  estimates. Submitted pending orders keep RR when both exits are present,
+  including during exit and entry drag previews.
 
 Check the corresponding E2E regressions before changing these behaviors.
 

@@ -4,6 +4,7 @@ import { useOrderTicketDraft } from './useOrderTicketDraft';
 import { useOrderTicketPricing } from './useOrderTicketPricing';
 import { useOrderTicketSizing } from './useOrderTicketSizing';
 import { useOrderTicketState } from './useOrderTicketState';
+import { deriveStagedOrderDisplay } from '../domain/stagedOrderDisplay';
 
 export type OrderTicketParams = OrderTicketStateParams;
 
@@ -19,9 +20,11 @@ export function useOrderTicket(params: OrderTicketParams) {
   const pricing = useOrderTicketPricing(ticket);
   const sizing = useOrderTicketSizing({ ...ticket, enableRiskStopLoss: draft.enableRiskStopLoss });
   const brokerActions = useOrderTicketBrokerActions({ ...ticket, ...draft });
+  const display = deriveStagedOrderDisplay({ ...state, lastPreview: state.riskPreviewDisplayRef.current });
 
   return {
     ...state,
+    display,
     tickSize,
     tickKnown,
     priceSwapDisabled,

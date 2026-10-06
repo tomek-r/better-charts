@@ -364,14 +364,16 @@ export function drawHandle(
   label: string,
   color: string,
   tipDown: boolean,
-  /** Optional floor for the box width: lets a caller pin a stable width so a
-   *  live value (e.g. the position P&L) does not resize the box every frame. */
-  minWidth?: number,
+  /** Right-align the live amount so reserved space stays before it, not after it. */
+  trailing?: { text: string; amount: { text: string; width: number } },
 ): StagedHitRect {
   // 12px regular — same type size as the side pill (owner); no bold.
   ctx.font = '400 12px system-ui, sans-serif';
   ctx.textAlign = 'left';
-  const w = Math.max(ctx.measureText(`⋮⋮  ${label}`).width + 14, minWidth ?? 0);
+  const leadingWidth = ctx.measureText(`⋮⋮  ${label}`).width;
+  const trailingOffset =
+    leadingWidth + (trailing ? Math.max(trailing.amount.width, ctx.measureText(trailing.amount.text).width) : 0);
+  const w = (trailing ? trailingOffset + ctx.measureText(trailing.text).width : leadingWidth) + 14;
   const h = 20;
   const top = centerY - h / 2;
   roundedRect(ctx, x, top, w, h, WIDGET_RADIUS);
@@ -396,5 +398,11 @@ export function drawHandle(
   ctx.fill();
   ctx.fillStyle = color;
   ctx.fillText(`⋮⋮  ${label}`, x + 7, centerY + 0.5);
+  if (trailing) {
+    ctx.textAlign = 'right';
+    ctx.fillText(trailing.amount.text, x + 7 + trailingOffset, centerY + 0.5);
+    ctx.textAlign = 'left';
+    ctx.fillText(trailing.text, x + 7 + trailingOffset, centerY + 0.5);
+  }
   return { x, y: top, w, h };
 }
