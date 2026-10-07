@@ -568,6 +568,12 @@ and free-margin updates do not create a new reviewed draft or invalidate an
 in-flight check for the same account. Account currency, leverage, margin mode
 and trading permission changes still invalidate it. The EA rechecks the exact
 submission against current broker/account state immediately before sending.
+The UI flushes debounced risk-preview requests before queuing OrderCheck, because
+requesting a new sizing preview invalidates the backend's pending check. The
+check uses the current explicit draft version, independently of cached sizing
+responses. After 15 seconds without a matching response, review reports a timeout,
+discards its pending response correlation and leaves submission disabled. A new
+check requires an explicit review; there is no automatic retry or order dispatch.
 
 ### Time-in-force and Stop Limit
 

@@ -52,6 +52,8 @@ export interface TauriStubOptions {
    * failed check carrying the broker's own `comment`/`retcode`.
    */
   orderCheckResult?: Record<string, unknown>;
+  /** Delay the broker check event while the command itself resolves normally. */
+  orderCheckDelayMs?: number;
   /**
    * Full older-history pages the stub serves before reporting the end of
    * history. Each `request_history_page` returns `pageBars` candles, and every
@@ -363,7 +365,7 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
         return null;
       }
       if (cmd === 'request_order_check') {
-        emit('order-check-result', {
+        const result = {
           draftVersion: args.draftVersion,
           draftId: 'draft-001',
           accountLogin: args.accountLogin,
@@ -390,7 +392,12 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
           comment: 'Done',
           checkedAtMs: NOW,
           ...opts.orderCheckResult,
-        });
+        };
+        if (opts.orderCheckDelayMs !== undefined) {
+          setTimeout(() => emit('order-check-result', result), opts.orderCheckDelayMs);
+        } else {
+          emit('order-check-result', result);
+        }
         return null;
       }
       if (cmd === 'request_history') {

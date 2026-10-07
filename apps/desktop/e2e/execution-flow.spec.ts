@@ -354,6 +354,68 @@ test('failed OrderCheck without a broker comment falls back to the retcode copy'
   expectClean(collected);
 });
 
+test('100 percent risk review flushes debounced sizing before OrderCheck', async ({ page }) => {
+  const collected = await gotoWithStub(page, { orderCheckDelayMs: 500 });
+  await openTradePanel(page);
+  await fillRiskDraft(page);
+  await page.locator('.ticket-menu-trigger').click();
+  await page.getByRole('menuitemradio', { name: 'Risk, % equity' }).click();
+  await page.getByLabel('Risk percent').fill('100');
+  await expect(page.locator('.ticket-cta')).toBeEnabled();
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  // A floating equity tick schedules another sizing request without changing
+  // the explicit draft. Start review before its debounce expires.
+  await pushEvent(page, 'account-snapshot', {
+    accountLogin: '50123456',
+    brokerServer: 'Broker-Demo',
+    currency: 'USD',
+    balance: '10000.00',
+    equity: '9999.00',
+    margin: '0.00',
+    freeMargin: '9999.00',
+    leverage: 100,
+    marginMode: 2,
+    tradeAllowed: true,
+    tradeExpert: true,
+  });
+  await page.locator('.ticket-cta').click();
+  await expect.poll(async () => await wasInvoked(page, 'request_order_check')).toBeTruthy();
+  const invocations = await stubInvocations(page);
+  const sizingIndex = invocations.map((item) => item.cmd).lastIndexOf('request_risk_preview');
+  const checkIndex = invocations.map((item) => item.cmd).lastIndexOf('request_order_check');
+  expect(sizingIndex).toBeLessThan(checkIndex);
+  expect(invocations[sizingIndex].args).toMatchObject({ riskAmount: '9999.00' });
+  expect(invocations[checkIndex].args.draftVersion).toBe(invocations[sizingIndex].args.draftVersion);
+  const before = (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').length;
+  await page.clock.runFor(600);
+  expect((await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview')).toHaveLength(before);
+  await expect(page.locator('.order-check-result')).toBeVisible();
+  expectClean(collected);
+});
+
+test('review times out safely and ignores a late broker check', async ({ page }) => {
+  const collected = await gotoWithStub(page, { orderCheckDelayMs: 20_000 });
+  await openTradePanel(page);
+  await fillRiskDraft(page);
+  await expect(page.locator('.ticket-cta')).toBeEnabled();
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  await page.locator('.ticket-cta').click();
+  await expect(page.getByText('Checking with MT5…', { exact: true })).toBeVisible();
+  await page.clock.runFor(15_001);
+  await expect(page.getByText('Checking with MT5…', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.notification-region [role=alert]')).toContainText('OrderCheck timed out');
+  await expect(page.locator('.ticket-cta.send')).toBeDisabled();
+  await page.clock.runFor(5_000);
+  await expect(page.locator('.order-check-result')).toHaveCount(0);
+  await expect(page.locator('.ticket-cta.send')).toBeDisabled();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('.ticket-cta')).toBeEnabled();
+  expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
+  expectClean(collected);
+});
+
 test('submit sends the accepted draft', async ({ page }) => {
   const collected = await gotoWithStub(page);
   await openTradePanel(page);

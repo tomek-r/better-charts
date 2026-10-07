@@ -63,6 +63,8 @@ Pine Script execution.
   resumes quotes and shows the latest calculated SL amount.
 - Review shows checked units alongside price and margin, and pins checked sizing
   across equity/free-margin ticks; editing recalculates.
+  Entering review flushes queued sizing before OrderCheck. Checks time out after 15 seconds
+  with a notification; late replies cannot enable submission after timeout.
   SL/TP and pending-entry drags use the execution guard; Shift+drag moves all levels.
 
 Check corresponding E2E regressions before changing these decisions.

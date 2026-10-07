@@ -17,6 +17,8 @@ export function useOrderTicketOrderCheckEffects(
     | 'setOrderCheck'
     | 'setOrderCheckError'
     | 'setOrderCheckLoading'
+    | 'orderCheckLoading'
+    | 'ticketStage'
     | 'setSubmitStatus'
     | 'setTicketStage'
     | 'riskSide'
@@ -48,6 +50,8 @@ export function useOrderTicketOrderCheckEffects(
     setOrderCheck,
     setOrderCheckError,
     setOrderCheckLoading,
+    orderCheckLoading,
+    ticketStage,
     setSubmitStatus,
     setTicketStage,
     riskSide,
@@ -71,6 +75,39 @@ export function useOrderTicketOrderCheckEffects(
   } = ticket;
   const orderCheckGenerationRef = orderCheckGeneration;
   const orderCheckPendingRef = orderCheckPending;
+  useEffect(() => {
+    if (!orderCheckLoading) {
+      return;
+    }
+    if (ticketStage !== 'review') {
+      orderCheckGeneration.current += 1;
+      orderCheckPending.current = undefined;
+      setOrderCheckLoading(false);
+      return;
+    }
+    const pending = orderCheckPending.current;
+    const timer = window.setTimeout(() => {
+      if (!pending || orderCheckPending.current !== pending) {
+        return;
+      }
+      // A timeout is not an accepted check. Discard late replies and require
+      // a new explicit review before submission can become available.
+      orderCheckGeneration.current += 1;
+      orderCheckPending.current = undefined;
+      setOrderCheck(undefined);
+      setOrderCheckLoading(false);
+      setOrderCheckError('OrderCheck timed out. Check the MT5 connection and start the review again.');
+    }, 15_000);
+    return () => window.clearTimeout(timer);
+  }, [
+    orderCheckLoading,
+    ticketStage,
+    orderCheckGeneration,
+    orderCheckPending,
+    setOrderCheck,
+    setOrderCheckLoading,
+    setOrderCheckError,
+  ]);
   useLayoutEffect(() => {
     orderCheckGenerationRef.current += 1;
     orderCheckPendingRef.current = undefined;
