@@ -40,6 +40,9 @@ export function SymbolSearchView() {
   }, [searchQuery, searchQueryRef]);
 
   useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
     let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<SymbolSearchResult>('symbol-search-result', (event) => {
@@ -68,7 +71,7 @@ export function SymbolSearchView() {
       disposed = true;
       unlisten?.();
     };
-  }, [searchQueryRef, setSearchError, setSearchLoading, setSearchResults, setSearchSource]);
+  }, [searchOpen, searchQueryRef, setSearchError, setSearchLoading, setSearchResults, setSearchSource]);
 
   useEffect(() => {
     if (!searchOpen || !searchQuery.trim()) {
@@ -77,18 +80,25 @@ export function SymbolSearchView() {
       setSearchLoading(false);
       return;
     }
+    let active = true;
     setSearchLoading(true);
     setSearchResults([]);
     setSearchSource(undefined);
     setSearchError(undefined);
     const timer = window.setTimeout(() => {
       void invoke('search_symbols', { query: searchQuery.trim(), limit: 20 }).catch((error) => {
+        if (!active) {
+          return;
+        }
         setSearchLoading(false);
         setSearchError('Symbol search is unavailable.');
         console.info('Symbol search unavailable.', error);
       });
     }, 200);
-    return () => window.clearTimeout(timer);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [searchOpen, searchQuery, setSearchError, setSearchLoading, setSearchResults, setSearchSource]);
 
   useEffect(() => {

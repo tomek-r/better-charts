@@ -60,6 +60,120 @@ test('header and keyboard shortcut open search; debounced results reject stale r
   await expect(dialog).toBeVisible();
 });
 
+test('a delayed search failure cannot replace results from a newer query', async ({ page }) => {
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  const input = dialog.getByPlaceholder('Search symbol — e.g. NAS100');
+
+  await page.evaluate(() => {
+    const internals = window as unknown as {
+      __TAURI_INTERNALS__: {
+        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+      };
+      __rejectFirstSearch?: () => void;
+      __searchCalls?: string[];
+    };
+    const invoke = internals.__TAURI_INTERNALS__.invoke;
+    internals.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd === 'search_symbols') {
+        (internals.__searchCalls ??= []).push(String(args?.query));
+      }
+      if (cmd === 'search_symbols' && args?.query === 'FIRST') {
+        return new Promise((_, reject) => {
+          internals.__rejectFirstSearch = () => reject(new Error('delayed failure'));
+        });
+      }
+      if (cmd === 'search_symbols') {
+        return Promise.resolve(null);
+      }
+      return invoke(cmd, args);
+    };
+  });
+
+  await input.fill('FIRST');
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __searchCalls: string[] }).__searchCalls))
+    .toEqual(['FIRST']);
+  await input.fill('SECOND');
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __searchCalls: string[] }).__searchCalls))
+    .toEqual(['FIRST', 'SECOND']);
+
+  await pushEvent(page, 'symbol-search-result', {
+    query: 'SECOND',
+    source: 'live',
+    symbols: [brokerSymbol('SECOND', 'Newer query result')],
+  });
+  await expect(dialog.getByText('Newer query result')).toBeVisible();
+
+  await page.evaluate(() => {
+    const internals = window as unknown as { __rejectFirstSearch?: () => void };
+    internals.__rejectFirstSearch?.();
+  });
+
+  await page.waitForTimeout(25);
+  await expect(dialog.getByText('Newer query result')).toBeVisible();
+  await expect(page.getByText('Symbol search is unavailable.')).toHaveCount(0);
+});
+
+test('a search failure from before close cannot affect the same query after reopening', async ({ page }) => {
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  const input = dialog.getByPlaceholder('Search symbol — e.g. NAS100');
+
+  await page.evaluate(() => {
+    const internals = window as unknown as {
+      __TAURI_INTERNALS__: {
+        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+      };
+      __rejectOldSearch?: () => void;
+      __searchCalls?: string[];
+    };
+    const invoke = internals.__TAURI_INTERNALS__.invoke;
+    internals.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd !== 'search_symbols') {
+        return invoke(cmd, args);
+      }
+      const calls = (internals.__searchCalls ??= []);
+      calls.push(String(args?.query));
+      if (calls.length === 1) {
+        return new Promise((_, reject) => {
+          internals.__rejectOldSearch = () => reject(new Error('delayed failure'));
+        });
+      }
+      return Promise.resolve(null);
+    };
+  });
+
+  await input.fill('SAME');
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __searchCalls: string[] }).__searchCalls))
+    .toEqual(['SAME']);
+  await dialog.getByRole('button', { name: 'Close search' }).click();
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __searchCalls: string[] }).__searchCalls))
+    .toEqual(['SAME', 'SAME']);
+
+  await pushEvent(page, 'symbol-search-result', {
+    query: 'SAME',
+    source: 'live',
+    symbols: [brokerSymbol('SAME', 'Reopened query result')],
+  });
+  await expect(dialog.getByText('Reopened query result')).toBeVisible();
+
+  await page.evaluate(() => {
+    const internals = window as unknown as { __rejectOldSearch?: () => void };
+    internals.__rejectOldSearch?.();
+  });
+
+  await page.waitForTimeout(25);
+  await expect(dialog.getByText('Reopened query result')).toBeVisible();
+  await expect(page.getByText('Symbol search is unavailable.')).toHaveCount(0);
+});
+
 test('favorites persist and recents are recorded only after history accepts a selection', async ({ page }) => {
   await page.addInitScript(() => {
     const favorite = {

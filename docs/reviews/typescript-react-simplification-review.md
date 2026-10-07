@@ -3,11 +3,14 @@
 Date: 2026-10-07. Reviewed checkout: `4dd4d40162d82208c85cb16849794c2aac1c2299`.
 
 Snapshot note: `main` was subsequently pulled to `e3ec86d` (account-currency
-changes). Findings and source line references below describe the reviewed
-checkout; they have not yet been reassessed against that newer revision.
+changes). Original evidence and source line references describe the reviewed
+checkout. Each implementation is reassessed against the current code and recorded
+below; remaining proposals retain their original review scope.
 
-Status: proposals for owner review. F01's documentation correction is resolved
-following owner confirmation. No application behavior or tests changed.
+Status: implementation authorized after owner review, on
+`refactor/typescript-react-findings`, with a separate commit per finding. F01's
+documentation correction is resolved; implementation and validation notes track
+the subsequent findings.
 
 ## Assessment
 
@@ -38,7 +41,8 @@ Priorities describe suggested implementation order, not a merge verdict:
 - **P3:** optional, local cleanup.
 
 Confidence distinguishes **confirmed in source** from **runtime impact unmeasured**.
-Failure scenarios described here have not been reproduced in a running app.
+Original failure scenarios were identified statically; implementation notes
+record which have since been reproduced with browser or domain regressions.
 Effort is relative: small means a local change; medium means several related
 modules; large means a staged architectural change.
 
@@ -148,6 +152,12 @@ allocation limits, manual money risk, and review pinning across account ticks.
 No claim is made that the native dispatch gates are bypassed by this calculation.
 
 ### F04 — P1: stale search errors are not guarded like stale successes
+
+**Implemented:** each debounced request uses its effect lifetime to ignore
+failures after query changes, closure, or cleanup. Result subscriptions exist
+only while the dialog is open. Regressions cover a newer successful query and
+closing/reopening the same query before an old rejection; the stale-error case
+failed before the fix and passed afterward.
 
 **Evidence:** [result listener](../../apps/desktop/src/features/symbol-search/SymbolSearchView.tsx#L44)
 and [debounced request](../../apps/desktop/src/features/symbol-search/SymbolSearchView.tsx#L84).
