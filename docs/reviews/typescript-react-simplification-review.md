@@ -234,6 +234,10 @@ Measure allocation and render work with long histories before claiming a speedup
 
 ### F07 — P2: use one candle rendering-validation policy
 
+**Implemented:** live candle acceptance delegates to the chart adapter's existing
+conversion policy. A regression reproduces the sub-second timestamp disagreement
+and covers the accepted boundary, malformed values, and exact raw price strings.
+
 **Evidence:** [bridge predicate](../../apps/desktop/src/features/bridge/normalizers.ts#L47)
 and [render conversion](../../apps/desktop/src/features/chart/engine/mt5DataAdapter.ts#L19).
 
