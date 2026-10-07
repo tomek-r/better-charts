@@ -65,6 +65,7 @@ modules; large means a staged architectural change.
 | F13 | P2       | Shared drawing primitives belong to a specific renderer          | Medium             | Medium      |
 | F14 | P3       | History coordination contains a needless asynchronous helper     | Small              | Medium      |
 | F15 | P3       | Search derives the same favorite/recent list in state and JSX    | Small              | Low         |
+| F16 | Bug      | Reconnect can move the chart to a different point in time        | Small              | Medium      |
 
 ## Detailed findings
 
@@ -432,6 +433,34 @@ another state variable; see [its guidance on unnecessary effects](https://react.
 **Validation needed:** favorites persistence, duplicate recents, Enter with an
 empty query, no results, toggling favorites, and recents recorded only after
 accepted history.
+
+### F16 — Bug: chart position changes after MT5 reconnect
+
+**Owner report:** exiting MT5 and reconnecting after relaunch restores the
+connection but moves the chart to a different point in time.
+
+**Reproduced with the browser stub:** replacing a longer history with a shorter
+window and refilling older pages can move a previously viewed candle off-screen.
+Disconnect also leaves the older-page request guard active after the adapter's
+requests are reset.
+
+**Owner decision:** reconnect should load candles like the initial app load and
+reset the chart to the latest bars. Do not preserve the previous historical
+viewport or add absolute-time restoration and refill machinery. Keep normal
+older-history paging and the existing timeframe-change viewport behavior.
+Regression coverage must include reconnect from a panned view, shorter history,
+and recovery while an older-page request is pending. Real MT5 relaunch has not
+been tested.
+
+**Implementation:** invalidate the accepted history key and clear older-page
+request bookkeeping on bridge-session reset. The next accepted history uses the
+same end-view reset as initial loading. The shared reset rebuilds time-scale
+padding at the default zoom before anchoring the view, and cancels a queued
+helper rebuild that could carry over a stale range. `HistoryViewportMode` names
+reset and bars-from-end behavior; absolute-time restoration is unnecessary.
+The browser regression compares reconnect framing with a fresh app load, checks
+real timestamp gaps are preserved, and verifies stale pages cannot refill the
+new history. The initial-load comparison failed without key invalidation.
 
 ## Additional small cleanups
 

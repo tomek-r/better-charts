@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { SubscriptionScope } from '../../shared/bridge/subscriptionScope';
-import type { ChartController } from '../chart/engine/chartController';
+import { HistoryViewportMode, type ChartController } from '../chart/engine/chartController';
 import { toRenderBar, type Mt5DataAdapter, type Mt5HistoryError } from '../chart/engine/mt5DataAdapter';
 import type { FixedRangeProfileState } from '../chart/engine/fixedRangeProfileOverlay';
 import type { PositionOverlayState } from '../chart/engine/positionOverlay';
@@ -613,6 +613,11 @@ export function useBridgeBootstrapEffects(
               ) {
                 cancelCandles();
                 marketAdapterRef.current?.resetRequests();
+                pageState.key = '';
+                pageState.symbol = '';
+                pageState.timeframe = '';
+                pageState.inFlight = false;
+                pageState.anchorMs = undefined;
                 loadingTimeframeRef.current = undefined;
                 setLoadingTimeframe(undefined);
                 expectedProfile.current = undefined;
@@ -620,6 +625,7 @@ export function useBridgeBootstrapEffects(
                 chartRef.current?.clearProfileSelection();
                 currentSymbolRef.current = undefined;
                 currentTimeframeRef.current = undefined;
+                dataKeyRef.current = '';
                 latestCandleRef.current = undefined;
                 setLatestCandle(undefined);
               }
@@ -675,10 +681,13 @@ export function useBridgeBootstrapEffects(
               // touched anything yet" case to fall back to: a timeframe change
               // always carries the view over, and `replaceHistory` fits the scale
               // to the new candles itself.
-              const preserveViewport =
+              const preserveTimeframeViewport =
                 currentSymbolRef.current === accepted.symbol &&
                 currentTimeframeRef.current !== accepted.timeframe &&
                 hasHistory;
+              const viewportMode = preserveTimeframeViewport
+                ? HistoryViewportMode.BarsFromEnd
+                : HistoryViewportMode.Reset;
               // The selection refs describe what is on screen, so they are set
               // before the swap: a carried-over viewport can ask for an older page
               // from inside `replaceHistory`, and that request has to name the
@@ -689,15 +698,13 @@ export function useBridgeBootstrapEffects(
               latestCandleRef.current = accepted.candles[accepted.candles.length - 1];
               setLatestCandle(latestCandleRef.current);
               chartRef.current?.setSymbol(accepted.symbol ?? '');
-              // A timeframe change carries the view over by its offset from the
-              // right edge. `preserved` is false when there was no viewport to
-              // carry, and the default end anchor is then the only position that
-              // is guaranteed to show candles.
+              // Timeframe changes keep the intentional offset from the right
+              // edge; reconnects and other history replacements reset to latest.
               const preserved =
                 chartRef.current?.replaceHistory(
                   accepted.candles,
                   accepted.timeframe ?? DEFAULT_TIMEFRAME,
-                  preserveViewport,
+                  viewportMode,
                 ) ?? false;
               if (replaced && !preserved) {
                 chartRef.current?.resetView();
