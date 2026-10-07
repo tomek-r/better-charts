@@ -294,6 +294,8 @@ test('colliding trading and staged rows spread apart without moving their price 
   const close = state.positions.hit.posCloses!.find((chip) => chip.id === 'pos-1')!;
   const entry = rows.find((row) => row.id === 'pos-1' && row.level === 'entry')!;
   expect(close.y).toBe(entry.y + entry.h / 2);
+  const gutterStrokes = ops.filter((op) => op.kind === 'stroke' && !op.dashed && op.maxX <= viewport.chartRect.x + 24);
+  expect(gutterStrokes).toHaveLength(0);
 });
 
 test('isolated labels retain their exact price coordinates', () => {

@@ -1,5 +1,4 @@
 import type { RenderViewport } from './overlayTypes';
-import { palette } from '../../../shared/theme/palette';
 
 export interface TradingLabelTarget {
   source: 'trading' | 'staged';
@@ -74,19 +73,6 @@ export function paintTradingLabel(
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.globalAlpha = 1;
-    if (Math.abs(labelY - lineY) > 1) {
-      // A small elbow to the left of the controls links a displaced row to
-      // its level without crossing its close button or text.
-      ctx.beginPath();
-      ctx.moveTo(x + 24, lineY);
-      ctx.lineTo(x + 20, lineY);
-      ctx.lineTo(x + 20, labelY);
-      ctx.lineTo(x + 24, labelY);
-      ctx.strokeStyle = target.level === 'sl' ? palette.warn : palette.textLabel;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([]);
-      ctx.stroke();
-    }
     const rect = draw(labelY);
     rows.push({ ...target, ...rect, lineY });
     ctx.restore();

@@ -170,6 +170,9 @@ async function completeOrderCheck(page: Page) {
   await expect(cta).toBeEnabled();
   await cta.click();
   await expect(page.locator('.order-check-result')).toBeVisible();
+  await expect(
+    page.locator('.order-check-grid > div').filter({ has: page.getByText('Units', { exact: true }) }),
+  ).toHaveText('Units0.10');
   await expect(page.locator('.order-check-grid')).toBeVisible();
   expect((await wasInvoked(page, 'request_order_check'))?.args).toMatchObject({ volume: '0.10' });
 }

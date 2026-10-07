@@ -39,6 +39,10 @@ export function OrderCheckResult({ orderCheck }: { orderCheck: OrderCheckResultM
           <b>{formatOrderMetric(orderCheck.freeMargin)}</b>
         </div>
         <div>
+          <small>Units</small>
+          <b>{formatOrderMetric(orderCheck.volume)}</b>
+        </div>
+        <div>
           <small>Margin level</small>
           <b>{formatOrderMetric(orderCheck.marginLevel, orderCheck.marginLevel ? '%' : '')}</b>
         </div>

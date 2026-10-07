@@ -38,7 +38,8 @@ Pine Script execution.
   avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
 - Live P&L right-aligns within the widest amount observed per position, expanding
   only as needed and resetting on removal; units/RR stay in place. Overlapping
-  trading rows spread vertically; close buttons follow labels, price lines stay put.
+  trading rows spread vertically without connector brackets; close buttons follow
+  labels, price lines stay put.
 - Ticket/chart SL/TP amounts and RR share a display model using actual volume
   and unrounded estimates. Drags project the last broker quote immediately;
   broker replies replace estimates. Pending orders retain RR with both exits.
@@ -55,7 +56,8 @@ Pine Script execution.
   sizing; local projections cannot replace the fresh broker preview required to send.
   Market entry/exits and the grabbed SL USD label hold during a drag; release
   resumes quotes and shows the latest calculated SL amount.
-- Review pins checked sizing across equity/free-margin ticks; editing recalculates.
+- Review shows checked units alongside price and margin, and pins checked sizing
+  across equity/free-margin ticks; editing recalculates.
   SL/TP and pending-entry drags use the execution guard; Shift+drag moves all levels.
 
 Check corresponding E2E regressions before changing these decisions.
