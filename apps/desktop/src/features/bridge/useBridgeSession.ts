@@ -133,58 +133,17 @@ export function useBridgeSession({
     },
     [adapterRef, setChartError, setLoadingTimeframe, snapshot.symbol, status.state],
   );
-  const chooseSymbol = useCallback(
-    async (item: BrokerSymbol) => {
+  const requestSymbolSelection = useCallback(
+    async (symbol: string, metadata?: BrokerSymbol) => {
       if (status.state !== 'connected') {
         return;
       }
-      pendingMetadata.current = item;
-      targetSymbol.current = item.symbol;
-      console.info('[instrument]', item);
-      setInstrument(item);
-      setQuote(undefined);
-      setSymbolLoading(true);
-      setChartError(undefined);
-      const generation = ++requestGeneration.current;
-      try {
-        const adapter = adapterRef.current;
-        if (!adapter) {
-          throw new Error('chart adapter unavailable');
-        }
-        await adapter.requestHistory(
-          item.symbol,
-          loadingTimeframeRef.current ?? snapshot.timeframe ?? DEFAULT_TIMEFRAME,
-          HISTORY_BARS,
-        );
-      } catch (error) {
-        if (generation !== requestGeneration.current) {
-          return;
-        }
-        pendingMetadata.current = undefined;
-        targetSymbol.current = undefined;
-        setInstrument(undefined);
-        setSymbolLoading(false);
-        setChartError('History request could not be sent.');
-        console.info('Symbol history unavailable.', error);
-      }
-    },
-    [adapterRef, setChartError, setInstrument, setQuote, setSymbolLoading, snapshot.timeframe, status.state],
-  );
-  // Position-row selection: the portfolio only knows the symbol NAME, so this
-  // is chooseSymbol without the eager BrokerSymbol — instrument metadata lands
-  // via the `symbol-info` the history command triggers (same as a fresh pick).
-  const chooseSymbolByName = useCallback(
-    async (rawSymbol: string) => {
-      const symbol = rawSymbol.trim();
-      if (status.state !== 'connected' || !symbol) {
-        return;
-      }
-      if (symbol === snapshot.symbol || symbol === targetSymbol.current) {
-        return;
-      }
-      pendingMetadata.current = undefined;
+      pendingMetadata.current = metadata;
       targetSymbol.current = symbol;
-      setInstrument(undefined);
+      if (metadata) {
+        console.info('[instrument]', metadata);
+      }
+      setInstrument(metadata);
       setQuote(undefined);
       setSymbolLoading(true);
       setChartError(undefined);
@@ -203,22 +162,36 @@ export function useBridgeSession({
         if (generation !== requestGeneration.current) {
           return;
         }
+        pendingMetadata.current = undefined;
         targetSymbol.current = undefined;
+        if (metadata) {
+          setInstrument(undefined);
+        }
         setSymbolLoading(false);
         setChartError('History request could not be sent.');
         console.info('Symbol history unavailable.', error);
       }
     },
-    [
-      adapterRef,
-      setChartError,
-      setInstrument,
-      setQuote,
-      setSymbolLoading,
-      snapshot.symbol,
-      snapshot.timeframe,
-      status.state,
-    ],
+    [adapterRef, setChartError, setInstrument, setQuote, setSymbolLoading, snapshot.timeframe, status.state],
+  );
+  const chooseSymbol = useCallback(
+    (item: BrokerSymbol) => requestSymbolSelection(item.symbol, item),
+    [requestSymbolSelection],
+  );
+  // Position rows have only a symbol name; metadata arrives from the bridge
+  // during its history request, so this path clears instrument state meanwhile.
+  const chooseSymbolByName = useCallback(
+    async (rawSymbol: string) => {
+      const symbol = rawSymbol.trim();
+      if (status.state !== 'connected' || !symbol) {
+        return;
+      }
+      if (symbol === snapshot.symbol || symbol === targetSymbol.current) {
+        return;
+      }
+      await requestSymbolSelection(symbol);
+    },
+    [requestSymbolSelection, snapshot.symbol, status.state],
   );
   return {
     status,

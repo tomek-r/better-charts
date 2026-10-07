@@ -259,6 +259,12 @@ seconds, and ordering. Extend the malformed-bar cases in `chart-migration.spec.t
 
 ### F08 — P2: collapse duplicated symbol-selection orchestration
 
+**Implemented:** the public metadata and name-only selection callbacks share a
+local request lifecycle. Name-only trimming and same-selection no-ops remain in
+that entry point; eager metadata and its failure cleanup remain explicit.
+Recents still record accepted history only. Characterization covers dispatch
+failure through both entry points and a delayed failure after a newer selection.
+
 **Evidence:** [metadata selection](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L133)
 and [name-only selection](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L173).
 

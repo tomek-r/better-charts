@@ -227,3 +227,87 @@ test('favorites persist and recents are recorded only after history accepts a se
   expect(stored.favorites.map((item: { symbol: string }) => item.symbol)).toEqual(['EURUSD']);
   expect(stored.recent.map((item: { symbol: string }) => item.symbol)).toEqual(['NAS100']);
 });
+
+test('failed symbol history clears loading and does not record a recent selection', async ({ page }) => {
+  await gotoWithStub(page);
+  await page.evaluate(() => {
+    const internals = window as unknown as {
+      __TAURI_INTERNALS__: {
+        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+      };
+    };
+    const invoke = internals.__TAURI_INTERNALS__.invoke;
+    internals.__TAURI_INTERNALS__.invoke = (cmd, args) =>
+      cmd === 'request_history' && args?.symbol === 'NAS100'
+        ? Promise.reject(new Error('history dispatch failed'))
+        : invoke(cmd, args);
+  });
+
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill('NAS100');
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter((entry) => entry.cmd === 'search_symbols'))
+    .toHaveLength(1);
+  await pushEvent(page, 'symbol-search-result', {
+    query: 'NAS100',
+    source: 'live',
+    symbols: [brokerSymbol('NAS100', 'US Tech 100')],
+  });
+  await dialog.locator('.search-result-row').filter({ hasText: 'NAS100' }).getByRole('button').first().click();
+
+  await expect(page.getByText('History request could not be sent.')).toBeVisible();
+  await expect(page.locator('.chart-heading h1')).toHaveText('EURUSD');
+  await expect(page.locator('.chart-overlay')).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('better-charts.symbol-recent.v1') ?? '[]'))).toEqual(
+    [],
+  );
+});
+
+test('a stale symbol history failure cannot affect a newer accepted selection', async ({ page }) => {
+  await gotoWithStub(page);
+  await page.evaluate(() => {
+    const internals = window as unknown as {
+      __TAURI_INTERNALS__: {
+        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+      };
+      __rejectOldHistory?: () => void;
+    };
+    const invoke = internals.__TAURI_INTERNALS__.invoke;
+    internals.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd === 'request_history' && args?.symbol === 'OLD') {
+        return new Promise((_, reject) => {
+          internals.__rejectOldHistory = () => reject(new Error('delayed old history failure'));
+        });
+      }
+      return invoke(cmd, args);
+    };
+  });
+
+  const selectSearchResult = async (symbol: string) => {
+    await page.getByRole('button', { name: 'Search symbols' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+    await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill(symbol);
+    await expect
+      .poll(async () => (await stubInvocations(page)).filter((entry) => entry.cmd === 'search_symbols'))
+      .toHaveLength(symbol === 'OLD' ? 1 : 2);
+    await pushEvent(page, 'symbol-search-result', {
+      query: symbol,
+      source: 'live',
+      symbols: [brokerSymbol(symbol, `${symbol} description`)],
+    });
+    await dialog.locator('.search-result-row').filter({ hasText: symbol }).getByRole('button').first().click();
+  };
+
+  await selectSearchResult('OLD');
+  await expect(page.locator('.chart-overlay')).toContainText('Loading market data');
+  await selectSearchResult('NEW');
+  await expect(page.locator('.chart-heading h1')).toHaveText('NEW');
+  await page.evaluate(() => (window as unknown as { __rejectOldHistory?: () => void }).__rejectOldHistory?.());
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(true))));
+  await expect(page.locator('.chart-heading h1')).toHaveText('NEW');
+  await expect(page.getByText('History request could not be sent.')).toHaveCount(0);
+  await expect(page.locator('.chart-overlay')).toHaveCount(0);
+  const recent = await page.evaluate(() => JSON.parse(localStorage.getItem('better-charts.symbol-recent.v1') ?? '[]'));
+  expect(recent.map((item: { symbol: string }) => item.symbol)).toEqual(['NEW']);
+});

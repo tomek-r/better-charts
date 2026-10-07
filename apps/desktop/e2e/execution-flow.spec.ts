@@ -685,6 +685,53 @@ test('clicking a position row opens that symbol on the chart', async ({ page }) 
   expect(await wasInvoked(page, 'close_position')).toBeUndefined();
 });
 
+test('a failed portfolio symbol request leaves the displayed selection intact', async ({ page }) => {
+  await gotoWithStub(page, {
+    responses: {
+      get_portfolio_snapshot: {
+        accountLogin: '50123456',
+        capturedAtMs: STUB_NOW,
+        positions: [
+          {
+            ticket: '2001',
+            positionId: '885002',
+            symbol: 'GBPUSD',
+            timeMs: STUB_NOW,
+            magic: 0,
+            side: 'sell',
+            volume: '0.20',
+            priceOpen: '1.2700',
+            priceCurrent: '1.2690',
+            profit: '2.00',
+            swap: '0.00',
+            stopLoss: '1.2750',
+            takeProfit: '1.2600',
+          },
+        ],
+        orders: [],
+      },
+    },
+  });
+  await openTradePanel(page);
+  await page.evaluate(() => {
+    const internals = window as unknown as {
+      __TAURI_INTERNALS__: {
+        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+      };
+    };
+    const invoke = internals.__TAURI_INTERNALS__.invoke;
+    internals.__TAURI_INTERNALS__.invoke = (cmd, args) =>
+      cmd === 'request_history' && args?.symbol === 'GBPUSD'
+        ? Promise.reject(new Error('history dispatch failed'))
+        : invoke(cmd, args);
+  });
+
+  await page.locator('.portfolio-open').first().click();
+  await expect(page.getByText('History request could not be sent.')).toBeVisible();
+  await expect(page.locator('.chart-heading h1')).toHaveText('EURUSD');
+  await expect(page.locator('.chart-overlay')).toHaveCount(0);
+});
+
 // NOTE: the draft-modification card (`.draft-modification-card` / "Confirm
 // close") was removed by the owner, so there is no panel confirm UI to cover
 // here: `pendingModification` is only ever created by OUR chart interactions —
