@@ -24,11 +24,15 @@ with no private settings or credentials.
 
 The `Validate` CI workflow checks Rust, frontend tooling, Python diagnostics
 and native compilation on macOS, Windows and Linux. Browser E2E runs on Linux.
+Windows CI also checks that the release executable uses the GUI subsystem.
 Build success does not establish MT5 runtime support.
 
 Before distributing installers, verify on each supported OS:
 
-1. Install and launch from a clean user account without a checkout.
+1. Install and launch from a clean user account without a checkout. Confirm no
+   console/terminal window opens, including during process status checks and
+   manual MT5 stop. Windows release builds must use the GUI subsystem; debug
+   builds retain their development console.
 2. Confirm the unconfigured app starts no MT5 process.
 3. Configure a token and manually connect MT5: check history, quotes, search,
    portfolio and volume profiles.
