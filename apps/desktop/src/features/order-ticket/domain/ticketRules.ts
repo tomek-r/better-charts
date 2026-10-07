@@ -217,9 +217,9 @@ export type TicketDerivation = {
   ticketBlockedReason: string | undefined;
 };
 
-// P2b: the ticket gate derivations as pure functions of the App state they
-// read. Branch order of the `?:` chains below is SEMANTICS (conditions
-// overlap); `''` is not `undefined`.
+// Derive ticket gates from App state. The ordered blocked-reason chain is
+// observable policy; overlapping failures retain their precedence, and `''`
+// is a distinct reason value.
 export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivation {
   const orderCheckEntry = normalizedPrice(input.entry);
   const orderCheckStopLoss = input.slOn ? normalizedPrice(input.stopLoss) : null;
@@ -263,29 +263,59 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
   // stages; (✕)/Esc/unstage disarm the ticket again).
   const allocationIssue =
     input.unitsMode === 'units' ? undefined : equityAllocationIssue(input.equityAllocationPercent ?? '100');
+  const bridgeConnected = input.bridgeState === 'connected';
+  const accountAvailable = Boolean(input.account?.accountLogin && input.account.brokerServer);
+  const stopDistanceAllowed = stopGuard?.reason === undefined;
+  const stopDistanceReason = stopGuard?.reason;
+  const currentPreviewMatchesDraft = Boolean(
+    input.riskPreview &&
+    input.riskPreview.draftVersion === input.draftVersion &&
+    input.riskPreview.symbol === input.symbol &&
+    input.riskPreview.side === input.riskSide,
+  );
+  // A market draft follows quote ticks, so review may run while its preview refetches.
+  const previewReadyForCheck = !previewRequired || input.orderKind === 'market' || currentPreviewMatchesDraft;
+  const acceptedCurrentCheck = Boolean(
+    input.orderCheck?.checkPassed && input.orderCheck.draftId && input.orderCheck.draftVersion === input.draftVersion,
+  );
+  const previewCurrentForSubmit = Boolean(
+    currentPreviewMatchesDraft && input.riskPreview?.draftVersion === input.orderCheck?.draftVersion,
+  );
+  const orderCheckVolumeMatches = input.orderCheck?.volume === effectiveVolume;
+  const orderCheckAccountMatches = Boolean(
+    input.orderCheck &&
+    input.orderCheck.accountLogin === input.account?.accountLogin &&
+    input.orderCheck.brokerServer === input.account?.brokerServer,
+  );
+  const orderCheckIdentityMatches = Boolean(
+    input.orderCheck &&
+    input.orderCheck.orderKind === input.orderKind &&
+    input.orderCheck.symbol === input.symbol &&
+    input.orderCheck.side === input.riskSide,
+  );
+  const orderCheckPricesMatch = Boolean(
+    input.orderCheck &&
+    orderCheckEntry &&
+    samePrice(input.orderCheck.requestedEntry, orderCheckEntry) &&
+    samePrice(input.orderCheck.stopLoss, input.slOn ? orderCheckStopLoss : null) &&
+    samePrice(input.orderCheck.takeProfit, orderCheckTakeProfit) &&
+    samePrice(input.orderCheck.limitPrice, normalizedLimitPrice),
+  );
+  const orderCheckTimeInForceMatches = (input.orderCheck?.timeInForce ?? 'gtc') === input.timeInForce;
+  const takeProfitInputValid = !input.tpOn || input.takeProfit.trim() === '' || orderCheckTakeProfit !== null;
   const canCheckOrder = Boolean(
     allocationIssue === undefined &&
     input.stagedOnChart &&
-    input.bridgeState === 'connected' &&
+    bridgeConnected &&
     input.symbol &&
-    input.account?.accountLogin &&
-    input.account.brokerServer &&
+    accountAvailable &&
     sizingAllowed &&
     orderVolumeValid &&
     orderCheckEntry &&
     limitPriceValid &&
     (!input.slOn || orderCheckStopLoss) &&
-    // A staged market draft follows each quote tick, which invalidates its
-    // sizing preview while the next preview is being calculated. OrderCheck
-    // can still safely inspect the current explicit volume; submission below
-    // continues to require a fresh preview whenever sizing depends on one.
-    (!previewRequired ||
-      input.orderKind === 'market' ||
-      (input.riskPreview &&
-        input.riskPreview.draftVersion === input.draftVersion &&
-        input.riskPreview.symbol === input.symbol &&
-        input.riskPreview.side === input.riskSide)) &&
-    stopGuard?.reason === undefined,
+    previewReadyForCheck &&
+    stopDistanceAllowed,
   );
   // §11 submit gate: connected bridge + accepted current OrderCheck (draftId) +
   // current risk preview + valid effective volume echoed by that OrderCheck +
@@ -304,43 +334,29 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
   const canSubmitOrder = Boolean(
     allocationIssue === undefined &&
     input.stagedOnChart &&
-    input.bridgeState === 'connected' &&
+    bridgeConnected &&
     input.marketOpen === true &&
-    input.account?.accountLogin &&
-    input.account.brokerServer &&
+    accountAvailable &&
     sizingAllowed &&
-    input.orderCheck?.checkPassed &&
-    input.orderCheck.draftId &&
-    input.orderCheck.draftVersion === input.draftVersion &&
-    input.orderCheck.accountLogin === input.account.accountLogin &&
-    input.orderCheck.brokerServer === input.account.brokerServer &&
-    input.orderCheck.orderKind === input.orderKind &&
-    input.orderCheck.symbol === input.symbol &&
-    input.orderCheck.side === input.riskSide &&
+    acceptedCurrentCheck &&
+    orderCheckAccountMatches &&
+    orderCheckIdentityMatches &&
     orderVolumeValid &&
-    input.orderCheck.volume === effectiveVolume &&
+    orderCheckVolumeMatches &&
     orderCheckEntry &&
-    samePrice(input.orderCheck.requestedEntry, orderCheckEntry) &&
     (!input.slOn || orderCheckStopLoss) &&
-    samePrice(input.orderCheck.stopLoss, input.slOn ? orderCheckStopLoss : null) &&
-    samePrice(input.orderCheck.takeProfit, orderCheckTakeProfit) &&
-    (!input.tpOn || input.takeProfit.trim() === '' || orderCheckTakeProfit !== null) &&
+    takeProfitInputValid &&
+    orderCheckPricesMatch &&
     limitPriceValid &&
-    samePrice(input.orderCheck.limitPrice, normalizedLimitPrice) &&
-    (input.orderCheck.timeInForce ?? 'gtc') === input.timeInForce &&
-    stopGuard?.reason === undefined &&
-    (!previewRequired ||
-      (input.riskPreview &&
-        input.riskPreview.draftVersion === input.draftVersion &&
-        input.riskPreview.draftVersion === input.orderCheck.draftVersion &&
-        input.riskPreview.symbol === input.symbol &&
-        input.riskPreview.side === input.riskSide)),
+    orderCheckTimeInForceMatches &&
+    stopDistanceAllowed &&
+    (!previewRequired || previewCurrentForSubmit),
   );
   let ticketBlockedReason: string | undefined;
   if (!canSubmitOrder) {
-    if (input.bridgeState !== 'connected') {
+    if (!bridgeConnected) {
       ticketBlockedReason = 'Bridge not connected.';
-    } else if (!input.account?.accountLogin || !input.account.brokerServer) {
+    } else if (!accountAvailable) {
       ticketBlockedReason = 'Account snapshot unavailable.';
     } else if (input.marketOpen !== true) {
       ticketBlockedReason =
@@ -352,34 +368,23 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
     } else if (!orderVolumeValid) {
       ticketBlockedReason =
         effectiveVolume === '' ? 'Volume is required.' : (volumeIssue ?? 'Volume must be a positive decimal.');
-    } else if (stopGuard?.reason) {
-      ticketBlockedReason = stopGuard.reason;
+    } else if (stopDistanceReason) {
+      ticketBlockedReason = stopDistanceReason;
     } else if (allocationIssue) {
       ticketBlockedReason = allocationIssue;
     } else if (!sizingAllowed) {
       ticketBlockedReason = 'Money/% sizing needs a stop distance — enable Stop loss or switch to Units mode.';
     } else if (!limitPriceValid) {
       ticketBlockedReason = 'stop_limit requires limit price — enter the resting limit price on the ticket.';
-    } else if (
-      !input.orderCheck?.checkPassed ||
-      !input.orderCheck.draftId ||
-      input.orderCheck.draftVersion !== input.draftVersion
-    ) {
+    } else if (!acceptedCurrentCheck) {
       ticketBlockedReason = 'Run OrderCheck in MT5 — an accepted result for the current draft is required.';
-    } else if (
-      previewRequired &&
-      (!input.riskPreview ||
-        input.riskPreview.draftVersion !== input.draftVersion ||
-        input.riskPreview.draftVersion !== input.orderCheck.draftVersion ||
-        input.riskPreview.symbol !== input.symbol ||
-        input.riskPreview.side !== input.riskSide)
-    ) {
+    } else if (previewRequired && !previewCurrentForSubmit) {
       ticketBlockedReason = '';
-    } else if (input.orderCheck.volume !== effectiveVolume) {
+    } else if (!orderCheckVolumeMatches) {
       ticketBlockedReason = 'Volume changed — run OrderCheck in MT5 again.';
     } else if (!orderCheckEntry || (input.slOn && !orderCheckStopLoss)) {
       ticketBlockedReason = 'Entry and stop loss must be valid prices.';
-    } else if (input.tpOn && input.takeProfit.trim() !== '' && orderCheckTakeProfit === null) {
+    } else if (!takeProfitInputValid) {
       ticketBlockedReason = 'Take profit must be a valid price or empty.';
     } else {
       ticketBlockedReason = 'Order panel is not ready.';

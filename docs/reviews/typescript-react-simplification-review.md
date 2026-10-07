@@ -284,6 +284,12 @@ portfolio selection cases in `execution-flow.spec.ts`, and history regressions.
 
 ### F09 — P2: ticket gates and explanations should consume named policy results
 
+**Implemented:** named local predicates now feed check eligibility, submission,
+and ordered blocked reasons. The policies retain their different requirements,
+including preview freshness, exact volume echo, account/check identity, nullable
+exits, TIF, and the empty blocked reason. A 26-case characterization matrix passed
+on both the original and refactored derivation; execution gates are unchanged.
+
 **Evidence:** [ticket derivation](../../apps/desktop/src/features/order-ticket/domain/ticketRules.ts#L266).
 
 **Confirmed duplication:** check eligibility, submit eligibility, and blocked
