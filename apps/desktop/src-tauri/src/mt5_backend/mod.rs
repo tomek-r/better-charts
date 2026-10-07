@@ -384,18 +384,20 @@ enum AutoStartPlan {
 
 fn auto_start_plan(
     bridge_session_active: bool,
-    terminal: ProcessCheck,
+    inspect: impl FnOnce() -> ProcessCheck,
     enabled: bool,
     configured: bool,
 ) -> AutoStartPlan {
     if bridge_session_active {
         return AutoStartPlan::SessionActive;
     }
-    match terminal {
+    if !enabled {
+        return AutoStartPlan::Disabled;
+    }
+    match inspect() {
         ProcessCheck::Running => AutoStartPlan::AlreadyRunning,
         // Inspection failed: unknown must never bias toward spawning.
         ProcessCheck::Unknown => AutoStartPlan::InspectUnknown,
-        ProcessCheck::NotRunning if !enabled => AutoStartPlan::Disabled,
         ProcessCheck::NotRunning if !configured => AutoStartPlan::Unconfigured,
         ProcessCheck::NotRunning => AutoStartPlan::Start,
     }
@@ -460,7 +462,7 @@ impl Mt5BackendState {
     pub fn auto_start_best_effort(&self, bridge_session_active: bool) {
         let plan = auto_start_plan(
             bridge_session_active,
-            inspect_terminal(),
+            inspect_terminal,
             self.config.enabled,
             is_configured(&self.config),
         );

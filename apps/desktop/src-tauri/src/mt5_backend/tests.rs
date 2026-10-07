@@ -1,5 +1,18 @@
 use super::*;
 
+#[test]
+fn disabled_auto_start_skips_process_inspection() {
+    assert_eq!(
+        auto_start_plan(
+            false,
+            || panic!("Disabled auto-start must not inspect processes"),
+            false,
+            true,
+        ),
+        AutoStartPlan::Disabled
+    );
+}
+
 fn config_with(get: impl Fn(&str) -> Option<String>) -> Mt5BackendConfig {
     Mt5BackendConfig::from_env_with(get)
 }
@@ -52,7 +65,7 @@ fn unconfigured_install_never_infers_paths_from_home() {
     assert_eq!(config.config_ini_windows, None);
     assert!(!is_configured(&config));
     assert_eq!(
-        auto_start_plan(false, ProcessCheck::NotRunning, config.enabled, false),
+        auto_start_plan(false, || ProcessCheck::NotRunning, config.enabled, false),
         AutoStartPlan::Unconfigured
     );
 }
@@ -114,28 +127,34 @@ fn empty_install_overrides_remain_unconfigured() {
 }
 
 #[test]
-fn auto_start_plan_prefers_session_then_inspection_then_gates() {
+fn auto_start_plan_prefers_session_then_enabled_then_inspection() {
     use AutoStartPlan::*;
     use ProcessCheck::*;
     // (a) an active bridge session means the terminal behind it runs…
-    assert_eq!(auto_start_plan(true, Running, true, true), SessionActive);
-    assert_eq!(auto_start_plan(true, Unknown, false, false), SessionActive);
-    // …then the process inspection: running → skip; FAILED inspection is
-    // `Unknown` and never reaches a spawn…
-    assert_eq!(auto_start_plan(false, Running, true, true), AlreadyRunning);
-    assert_eq!(auto_start_plan(false, Unknown, true, true), InspectUnknown);
+    assert_eq!(auto_start_plan(true, || Running, true, true), SessionActive);
     assert_eq!(
-        auto_start_plan(false, Unknown, false, false),
+        auto_start_plan(true, || Unknown, false, false),
+        SessionActive
+    );
+    // …then disabled auto-start skips inspection; enabled inspection: running → skip.
+    // Failed inspection is `Unknown` and never reaches a spawn.
+    assert_eq!(
+        auto_start_plan(false, || Running, true, true),
+        AlreadyRunning
+    );
+    assert_eq!(
+        auto_start_plan(false, || Unknown, true, true),
         InspectUnknown
     );
-    // …then the opt-out flag, then the on-disk configuration…
-    assert_eq!(auto_start_plan(false, NotRunning, false, true), Disabled);
+    assert_eq!(auto_start_plan(false, || Unknown, false, false), Disabled);
+    // …then the on-disk configuration…
+    assert_eq!(auto_start_plan(false, || NotRunning, false, true), Disabled);
     assert_eq!(
-        auto_start_plan(false, NotRunning, true, false),
+        auto_start_plan(false, || NotRunning, true, false),
         Unconfigured
     );
     // …and only a fully gated plan actually starts a terminal.
-    assert_eq!(auto_start_plan(false, NotRunning, true, true), Start);
+    assert_eq!(auto_start_plan(false, || NotRunning, true, true), Start);
 }
 
 #[test]

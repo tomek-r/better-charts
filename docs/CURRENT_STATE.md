@@ -70,7 +70,8 @@ permissions. New submissions require an open broker session; modify/close/cancel
 are exempt. No automatic retries; session loss/change drains the queue. Missing
 broker records do not prove non-execution. Preview/check/reconciliation never send orders.
 
-Trading/MT5 auto-start default off; settings apply after restart. Precedence:
+Trading/MT5 auto-start default off; disabled auto-start skips startup process
+inspection on every platform. Settings apply after restart. Precedence:
 process environment → first applicable `.env` → saved settings; only `MT5_` keys
 load. Invalid configuration disables trading/auto-start. See [setup](../README.md#connect-to-metatrader-5).
 
