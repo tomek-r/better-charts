@@ -44,7 +44,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
   ticket: OrderTicketState,
 ): void {
   const { chart, stagedOrderState, instrumentDigitsRef } = workspace;
-  const { instrument, quote, snapshot } = session;
+  const { instrument, quote, snapshot, latestCandle } = session;
   const {
     submitSwapPendingRef,
     stagedPrevPriceRef,
@@ -84,7 +84,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
       return;
     }
     const entryPrice = Number(entry);
-    const last = snapshot.candles[snapshot.candles.length - 1];
+    const last = latestCandle ?? snapshot.candles[snapshot.candles.length - 1];
     let current: number | undefined;
     if (quote && Number(quote.last) > 0) {
       current = Number(quote.last);
@@ -144,7 +144,8 @@ export function useChartWorkspaceMirrorLayoutEffect(
     orderKind,
     quote,
     snapshot.timeframe,
-    snapshot.candles.length,
+    latestCandle,
+    snapshot.candles,
     instrument?.digits,
     display.slMoney,
     display.tpMoney,

@@ -14,6 +14,7 @@ type OrderTicketEntryDraftInput = Pick<
   | 'stagedActiveRef'
   | 'instrument'
   | 'snapshot'
+  | 'latestCandle'
   | 'quote'
   | 'riskSide'
   | 'setRiskSide'
@@ -59,6 +60,7 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
     stagedActiveRef,
     instrument,
     snapshot,
+    latestCandle,
     quote,
     riskSide,
     setRiskSide,
@@ -140,7 +142,7 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
   const stageOrderDraft = useCallback(
     (side: RiskSide, fresh = false) => {
       submitSwapPendingRef.current = false;
-      if (snapshot.candles.length === 0) {
+      if (snapshot.candles.length === 0 && !latestCandle) {
         return;
       }
       const digits = instrumentDigitsRef.current;
@@ -148,7 +150,7 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
       if (!Number.isFinite(price) || price <= 0) {
         const fallback = quote
           ? Number(side === 'buy' ? quote.ask : quote.bid)
-          : Number(snapshot.candles[snapshot.candles.length - 1]?.close);
+          : Number(latestCandle?.close ?? snapshot.candles[snapshot.candles.length - 1]?.close);
         if (!Number.isFinite(fallback) || fallback <= 0) {
           return;
         }
@@ -164,6 +166,7 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
       setStagedOnChart(true);
     },
     [
+      latestCandle,
       snapshot.candles,
       instrumentDigitsRef,
       entry,

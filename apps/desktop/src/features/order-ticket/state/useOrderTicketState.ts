@@ -4,6 +4,7 @@ import type {
   AccountSnapshot,
   BridgeStatus,
   BrokerSymbol,
+  Candle,
   MarketSnapshot,
   OrderCheckResult,
   OrderKind,
@@ -25,6 +26,7 @@ export type OrderTicketStateParams = {
   account: AccountSnapshot | undefined;
   quote: QuoteSnapshot | undefined;
   snapshot: MarketSnapshot;
+  latestCandle: Candle | undefined;
   status: BridgeStatus;
 };
 

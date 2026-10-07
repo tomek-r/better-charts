@@ -5,6 +5,7 @@ import type {
   BrokerSymbol,
   MarketSnapshot,
   PortfolioSnapshot,
+  Candle,
   QuoteSnapshot,
 } from '../../shared/bridge/types';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
@@ -16,7 +17,10 @@ export interface BridgeConnection {
 }
 
 export interface BridgeMarket {
+  /** Latest accepted history window; live frames are exposed through latestCandle. */
   snapshot: MarketSnapshot;
+  /** Current accepted raw candle, including live bar updates. */
+  latestCandle: Candle | undefined;
   quote: QuoteSnapshot | undefined;
   instrument: BrokerSymbol | undefined;
   symbolLoading: boolean;
@@ -68,18 +72,26 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
   const market = useMemo(
     () => ({
       snapshot: session.snapshot,
+      latestCandle: session.latestCandle,
       quote: session.quote,
       instrument: session.instrument,
       symbolLoading: session.symbolLoading,
       chartError: session.chartError,
     }),
-    [session.snapshot, session.quote, session.instrument, session.symbolLoading, session.chartError],
+    [
+      session.snapshot,
+      session.latestCandle,
+      session.quote,
+      session.instrument,
+      session.symbolLoading,
+      session.chartError,
+    ],
   );
 
   const symbol = session.snapshot.symbol;
   const timeframe = session.snapshot.timeframe;
   const description = session.instrument?.symbol === symbol ? session.instrument?.description : undefined;
-  const hasCandles = session.snapshot.candles.length > 0;
+  const hasCandles = session.snapshot.candles.length > 0 || session.latestCandle !== undefined;
   const chartState = useMemo<BridgeChartState>(
     () => ({
       symbol,

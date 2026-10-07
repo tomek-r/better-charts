@@ -71,7 +71,7 @@ export function useBridgeSession({
   const fixedRangeProfileRef = fixedRangeProfileState;
   const pendingMetadata = useRef<BrokerSymbol | undefined>(undefined);
   const dataKeyRef = useRef('');
-  const latestCandle = useRef<Candle | undefined>(undefined);
+  const latestCandleRef = useRef<Candle | undefined>(undefined);
   const currentSymbol = useRef<string | undefined>(undefined);
   const currentTimeframe = useRef<string | undefined>(undefined);
   const requestGeneration = useRef(0);
@@ -80,6 +80,7 @@ export function useBridgeSession({
   const targetSymbol = useRef<string | undefined>(undefined);
   const [status, setStatus] = useState(initialStatus);
   const [snapshot, setSnapshot] = useState(emptySnapshot);
+  const [latestCandle, setLatestCandle] = useState<Candle | undefined>(undefined);
   const [quote, setQuote] = useState<QuoteSnapshot>();
   const [instrument, setInstrument] = useState<BrokerSymbol>();
   const [lastSymbolSelection, setLastSymbolSelection] = useState<BrokerSymbol>();
@@ -224,6 +225,8 @@ export function useBridgeSession({
     setStatus,
     snapshot,
     setSnapshot,
+    latestCandle,
+    setLatestCandle,
     quote,
     setQuote,
     instrument,
@@ -246,7 +249,7 @@ export function useBridgeSession({
     pendingMetadata,
     targetSymbol,
     currentSymbol,
-    latestCandle,
+    latestCandleRef,
     dataKeyRef,
     mounted,
     requestGeneration,
@@ -367,6 +370,7 @@ export function useBridgeBootstrapEffects(
     setChartError,
     setStatus,
     setSnapshot,
+    setLatestCandle,
     setQuote,
     setAccount,
     setPortfolio,
@@ -377,7 +381,7 @@ export function useBridgeBootstrapEffects(
     pendingMetadata,
     currentSymbol: currentSymbolRef,
     currentTimeframe: currentTimeframeRef,
-    latestCandle: latestCandleRef,
+    latestCandleRef,
     dataKeyRef,
   } = session;
   const {
@@ -432,18 +436,10 @@ export function useBridgeBootstrapEffects(
         for (const candle of candles) {
           chartRef.current.updateCandle(candle);
         }
-        // Copy history once per paint, rather than twice for every incoming tick.
-        setSnapshot((previous) => {
-          const next = [...previous.candles];
-          for (const candle of candles) {
-            if (next[next.length - 1]?.timeMs === candle.timeMs) {
-              next[next.length - 1] = candle;
-            } else {
-              next.push(candle);
-            }
-          }
-          return { ...previous, candles: next };
-        });
+        // React consumers need the raw live tail, while the chart engine owns
+        // the mutable render history. Keep snapshot history stable between
+        // accepted history replacements instead of copying it on every paint.
+        setLatestCandle(candles[candles.length - 1]);
       } catch (error) {
         setChartError('Live bar could not be rendered.');
         console.error(error);
@@ -576,6 +572,7 @@ export function useBridgeBootstrapEffects(
           currentSymbolRef.current = acceptedInitial.symbol;
           currentTimeframeRef.current = acceptedInitial.timeframe;
           latestCandleRef.current = acceptedInitial.candles[acceptedInitial.candles.length - 1];
+          setLatestCandle(latestCandleRef.current);
           dataKeyRef.current = dataKey;
           chartRef.current?.setSymbol(acceptedInitial.symbol);
           const preserved =
@@ -624,6 +621,7 @@ export function useBridgeBootstrapEffects(
                 currentSymbolRef.current = undefined;
                 currentTimeframeRef.current = undefined;
                 latestCandleRef.current = undefined;
+                setLatestCandle(undefined);
               }
               bridgeIdentity = identity;
               bridgeState = next.state;
@@ -689,6 +687,7 @@ export function useBridgeBootstrapEffects(
               currentSymbolRef.current = accepted.symbol;
               currentTimeframeRef.current = accepted.timeframe;
               latestCandleRef.current = accepted.candles[accepted.candles.length - 1];
+              setLatestCandle(latestCandleRef.current);
               chartRef.current?.setSymbol(accepted.symbol ?? '');
               // A timeframe change carries the view over by its offset from the
               // right edge. `preserved` is false when there was no viewport to

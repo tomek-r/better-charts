@@ -204,6 +204,13 @@ animation/focus tests must remain unchanged.
 
 ### F06 — P2: remove whole-history work from live React updates
 
+**Implemented:** accepted history stays stable between snapshot replacements;
+live frames update one raw `latestCandle` value. The chart engine continues to own
+rendered and paged bars. Draft and staged-price fallbacks consume the latest raw
+candle, including same-bar changes. Browser regressions cover stable history
+identity, exact raw decimals, and first-live-bar staging after empty history.
+The history-array copy is removed from the flush; no measured speedup is claimed.
+
 **Evidence:** [frame flush](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L419),
 [chart cache](../../apps/desktop/src/features/chart/engine/barSeriesController.ts#L17),
 and [older-page acceptance](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L715).

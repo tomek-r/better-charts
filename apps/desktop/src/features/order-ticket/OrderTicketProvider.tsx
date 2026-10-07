@@ -34,7 +34,7 @@ const ActionContext = createContext<OrderTicketActionProps | null>(null);
 
 export function OrderTicketProvider({ children }: { children: ReactNode }) {
   const { chart, stagedOrderState, instrumentDigitsRef, stagedActiveRef } = useChartResources();
-  const { instrument, quote, snapshot } = useBridgeMarket();
+  const { instrument, quote, snapshot, latestCandle } = useBridgeMarket();
   const account = useBridgeAccount();
   const { status } = useBridgeConnection();
   const ticket = useOrderTicket({
@@ -46,6 +46,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
     account,
     quote,
     snapshot,
+    latestCandle,
     status,
   });
   const header = useMemo<HeaderState>(() => ({ account, symbol: snapshot.symbol }), [account, snapshot.symbol]);
