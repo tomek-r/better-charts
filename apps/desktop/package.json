@@ -2,6 +2,18 @@
   "name": "better-charts",
   "private": true,
   "version": "0.0.1",
+  "keywords": [
+    "trading",
+    "trading-terminal",
+    "metatrader5",
+    "mt5",
+    "financial-charts",
+    "lightweight-charts",
+    "tauri",
+    "desktop-app",
+    "forex",
+    "stock-market"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",
