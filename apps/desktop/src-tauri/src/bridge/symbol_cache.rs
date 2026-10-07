@@ -119,6 +119,7 @@ impl BridgeState {
             quote: Arc::new(Mutex::new(None)),
             account: Arc::new(Mutex::new(None)),
             portfolio: Arc::new(Mutex::new(None)),
+            last_risk_quote: Arc::new(Mutex::new(None)),
             pending_risk: Arc::new(Mutex::new(None)),
             expected_risk: Arc::new(Mutex::new(None)),
             pending_order_check: Arc::new(Mutex::new(None)),

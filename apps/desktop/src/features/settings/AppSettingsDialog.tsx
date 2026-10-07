@@ -1,3 +1,4 @@
+import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppSettingsData } from './settingsTypes';
@@ -174,16 +175,7 @@ export function AppSettingsDialog({
               {settings?.firstLaunch && (
                 <p className="settings-intro">Welcome to Better Charts. Set up your MT5 connection to get started.</p>
               )}
-              {loadError && (
-                <p className="settings-error" role="alert">
-                  {loadError}
-                </p>
-              )}
-              {settings?.configurationError && (
-                <p className="settings-error" role="alert">
-                  {settings.configurationError}
-                </p>
-              )}
+              {loadError && <ErrorNotification message={loadError} />}
               {!draft && !loadError && <p role="status">Loading settings…</p>}
               {draft && category === 'MT5 setup' && (
                 <>
@@ -310,11 +302,7 @@ export function AppSettingsDialog({
                   Environment or .env values override saved settings: {settings.overriddenKeys.join(', ')}.
                 </p>
               )}
-              {error && (
-                <p className="settings-error" role="alert">
-                  {error}
-                </p>
-              )}
+              {error && <ErrorNotification message={error} />}
             </div>
           </fieldset>
           <footer className="settings-footer">

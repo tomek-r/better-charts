@@ -11,6 +11,7 @@ mod frontend_views;
 mod market_data;
 mod order_check;
 mod reconciliation;
+mod risk_sizing;
 mod symbol_cache;
 pub(super) mod tick_cache;
 mod tick_profile;

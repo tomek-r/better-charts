@@ -1,3 +1,9 @@
+import {
+  paintTradingLabel,
+  type TradingLabelHit,
+  type TradingLabelTarget,
+  type TradingLabelLayoutState,
+} from './labelLayout';
 import type { OverlayRenderer } from './overlayTypes';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { palette } from '../../../shared/theme/palette';
@@ -54,6 +60,7 @@ export interface StagedOrderState {
   currentPrice?: number;
   /** Fresh geometry every paint; read by the host pointer handlers. */
   hit: {
+    labels?: TradingLabelHit[];
     chartRect?: { x: number; y: number; width: number; height: number };
     /** Viewport px → price inverse transform from the last paint. */
     toPrice?: (y: number) => number;
@@ -191,11 +198,15 @@ function cancelChip(
  *  render underneath the overlay primitive. */
 export type OverlayPass = 'lines' | 'labels';
 
-export function createStagedOrderOverlay(state: StagedOrderState, pass: OverlayPass): OverlayRenderer {
+export function createStagedOrderOverlay(
+  state: StagedOrderState,
+  pass: OverlayPass,
+  labels?: TradingLabelLayoutState,
+): OverlayRenderer {
   return {
     // `ui` layer: row widgets render without a chartRect clip; native price
     // labels are rendered by Lightweight Charts.
-    descriptor: { id: `mt5-staged-order-${pass}`, name: `Staged Order (${pass})`, layer: 'ui' },
+    descriptor: { id: `staged-order-${pass}`, name: `Staged Order (${pass})`, layer: 'ui' },
     render(ctx, { viewport }) {
       const { x, y, width, height } = viewport.chartRect;
       // Two-pass z-index (features/chart/engine/overlays.ts): this pass paints risk zones; the
@@ -204,7 +215,9 @@ export function createStagedOrderOverlay(state: StagedOrderState, pass: OverlayP
       const drawLines = pass === 'lines';
       const drawLabels = pass === 'labels';
       const { min, max } = viewport.priceRange;
-      const hit: StagedOrderState['hit'] = {};
+      const hit: StagedOrderState['hit'] = { labels: [] };
+      const row = (level: TradingLabelTarget['level'], lineY: number, draw: (labelY: number) => StagedHitRect) =>
+        paintTradingLabel(ctx, viewport, hit.labels!, { source: 'staged', id: 'draft', level }, lineY, draw, labels);
       // Viewport snapshots for the dev test helper (pan/zoom E2E assertions).
       hit.priceRange = { min, max };
       hit.barSpacing = viewport.barSpacing;
@@ -272,35 +285,39 @@ export function createStagedOrderOverlay(state: StagedOrderState, pass: OverlayP
       const inView = entryY >= y - 20 && entryY <= y + height + 20;
       if (inView) {
         if (drawLabels) {
-          cancelChip(ctx, x + CANCEL_CHIP_X, entryY, sideColor, hit, 'entryCancel');
+          row('entry', entryY, (labelY) => {
+            cancelChip(ctx, x + CANCEL_CHIP_X, labelY, sideColor, hit, 'entryCancel');
 
-          // Side marker (visual only — side is owned by the ticket quote row) in
-          // the SAME handle style as the SL/TP boxes (owner: the marker must look
-          // the same before the entry into the transaction). Tip: UP for long,
-          // DOWN for short.
-          const sideBox = drawHandle(
-            ctx,
-            x + HANDLE_X,
-            entryY,
-            order.side === 'buy' ? 'Buy' : 'Sell',
-            sideColor,
-            order.side !== 'buy',
-          );
-          const cx = sideBox.x + sideBox.w + 6;
+            // Side marker (visual only — side is owned by the ticket quote row) in
+            // the SAME handle style as the SL/TP boxes (owner: the marker must look
+            // the same before the entry into the transaction). Tip: UP for long,
+            // DOWN for short.
+            const sideBox = drawHandle(
+              ctx,
+              x + HANDLE_X,
+              labelY,
+              order.side === 'buy' ? 'Buy' : 'Sell',
+              sideColor,
+              order.side !== 'buy',
+            );
+            const cx = sideBox.x + sideBox.w + 6;
 
-          // Pointed tag: grip dots + qty + order type, " | " separators (TV look).
-          ctx.font = '600 12px system-ui, sans-serif';
-          const qty = order.volume.trim() || '—';
-          const tagText = `⋮⋮  |  ${qty}  |  ${order.orderKindLabel}${order.riskRewardLabel ? `  |  RR ${order.riskRewardLabel}` : ''}`;
-          const tagW = ctx.measureText(tagText).width + 16;
-          tagPath(ctx, cx, entryY - 10, tagW + 8, 20, 7);
-          ctx.fillStyle = STAGED_COLORS.surface;
-          ctx.fill();
-          ctx.strokeStyle = sideColor;
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.fillStyle = STAGED_COLORS.text;
-          ctx.fillText(tagText, cx + 8, entryY + 0.5);
+            // Pointed tag: grip dots + qty + order type, " | " separators (TV look).
+            ctx.font = '600 12px system-ui, sans-serif';
+            const qty = order.volume.trim() || '—';
+            const tagText = `⋮⋮  |  ${qty}  |  ${order.orderKindLabel}${order.riskRewardLabel ? `  |  RR ${order.riskRewardLabel}` : ''}`;
+            const tagW = ctx.measureText(tagText).width + 16;
+            tagPath(ctx, cx, labelY - 10, tagW + 8, 20, 7);
+            ctx.fillStyle = STAGED_COLORS.surface;
+            ctx.fill();
+            ctx.strokeStyle = sideColor;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.fillStyle = STAGED_COLORS.text;
+            ctx.fillText(tagText, cx + 8, labelY + 0.5);
+
+            return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: cx + tagW + 8 - (x + CANCEL_CHIP_X - 10), h: 20 };
+          });
         }
 
         hit.entryLineY = entryY;
@@ -312,13 +329,17 @@ export function createStagedOrderOverlay(state: StagedOrderState, pass: OverlayP
       // Unset handle floats on the SL side of the entry line FOR THE ORDER SIDE
       // (SELL: SL is above entry → handle above, tip points down at the line;
       //  BUY: SL is below entry → handle below, tip points up).
-      let slY: number | null = null;
       if (order.stopLoss !== null && Number.isFinite(order.stopLoss) && order.stopLoss > 0) {
-        slY = toY(order.stopLoss);
+        const slY = toY(order.stopLoss);
         if (slY >= y - 20 && slY <= y + height + 20) {
           if (drawLabels) {
-            cancelChip(ctx, x + CANCEL_CHIP_X, slY, STAGED_COLORS.sl, hit, 'slCancel');
-            hit.slHandle = drawHandle(ctx, x + HANDLE_X, slY, slLabel, STAGED_COLORS.sl, slY < entryY);
+            row('sl', slY, (labelY) => {
+              cancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.sl, hit, 'slCancel');
+              hit.slHandle = drawHandle(ctx, x + HANDLE_X, labelY, slLabel, STAGED_COLORS.sl, labelY < entryY);
+
+              const box = hit.slHandle!;
+              return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: box.x + box.w - (x + CANCEL_CHIP_X - 10), h: 20 };
+            });
           }
           hit.slLineY = slY;
         }
@@ -326,18 +347,26 @@ export function createStagedOrderOverlay(state: StagedOrderState, pass: OverlayP
         const floatAbove = order.side === 'sell';
         const floatY = floatAbove ? entryY - 30 : entryY + 30;
         if (drawLabels && floatY >= y - 4 && floatY <= y + height + 4) {
-          hit.slHandle = drawHandle(ctx, x + HANDLE_X, floatY, 'SL', STAGED_COLORS.sl, floatAbove);
+          row('sl', floatY, (labelY) => {
+            const box = drawHandle(ctx, x + HANDLE_X, labelY, 'SL', STAGED_COLORS.sl, floatAbove);
+            hit.slHandle = box;
+            return box;
+          });
         }
       }
 
       // ── TP: mirrored below the entry line when unset.
-      let tpY: number | null = null;
       if (order.takeProfit !== null && Number.isFinite(order.takeProfit) && order.takeProfit > 0) {
-        tpY = toY(order.takeProfit);
+        const tpY = toY(order.takeProfit);
         if (tpY >= y - 20 && tpY <= y + height + 20) {
           if (drawLabels) {
-            cancelChip(ctx, x + CANCEL_CHIP_X, tpY, STAGED_COLORS.tp, hit, 'tpCancel');
-            hit.tpHandle = drawHandle(ctx, x + HANDLE_X, tpY, tpLabel, STAGED_COLORS.tp, tpY < entryY);
+            row('tp', tpY, (labelY) => {
+              cancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.tp, hit, 'tpCancel');
+              hit.tpHandle = drawHandle(ctx, x + HANDLE_X, labelY, tpLabel, STAGED_COLORS.tp, labelY < entryY);
+
+              const box = hit.tpHandle!;
+              return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: box.x + box.w - (x + CANCEL_CHIP_X - 10), h: 20 };
+            });
           }
           hit.tpLineY = tpY;
         }
@@ -346,7 +375,11 @@ export function createStagedOrderOverlay(state: StagedOrderState, pass: OverlayP
         const floatY = floatAbove ? entryY - 30 : entryY + 30;
         if (drawLabels && floatY >= y - 4 && floatY <= y + height + 4) {
           // tip always points AT the entry line: down when above, up when below.
-          hit.tpHandle = drawHandle(ctx, x + HANDLE_X, floatY, 'TP', STAGED_COLORS.tp, floatAbove);
+          row('tp', floatY, (labelY) => {
+            const box = drawHandle(ctx, x + HANDLE_X, labelY, 'TP', STAGED_COLORS.tp, floatAbove);
+            hit.tpHandle = box;
+            return box;
+          });
         }
       }
 
@@ -364,14 +397,16 @@ export function drawHandle(
   label: string,
   color: string,
   tipDown: boolean,
-  /** Optional floor for the box width: lets a caller pin a stable width so a
-   *  live value (e.g. the position P&L) does not resize the box every frame. */
-  minWidth?: number,
+  /** Right-align the live amount so reserved space stays before it, not after it. */
+  trailing?: { text: string; amount: { text: string; width: number } },
 ): StagedHitRect {
   // 12px regular — same type size as the side pill (owner); no bold.
   ctx.font = '400 12px system-ui, sans-serif';
   ctx.textAlign = 'left';
-  const w = Math.max(ctx.measureText(`⋮⋮  ${label}`).width + 14, minWidth ?? 0);
+  const leadingWidth = ctx.measureText(`⋮⋮  ${label}`).width;
+  const trailingOffset =
+    leadingWidth + (trailing ? Math.max(trailing.amount.width, ctx.measureText(trailing.amount.text).width) : 0);
+  const w = (trailing ? trailingOffset + ctx.measureText(trailing.text).width : leadingWidth) + 14;
   const h = 20;
   const top = centerY - h / 2;
   roundedRect(ctx, x, top, w, h, WIDGET_RADIUS);
@@ -396,5 +431,11 @@ export function drawHandle(
   ctx.fill();
   ctx.fillStyle = color;
   ctx.fillText(`⋮⋮  ${label}`, x + 7, centerY + 0.5);
+  if (trailing) {
+    ctx.textAlign = 'right';
+    ctx.fillText(trailing.amount.text, x + 7 + trailingOffset, centerY + 0.5);
+    ctx.textAlign = 'left';
+    ctx.fillText(trailing.text, x + 7 + trailingOffset, centerY + 0.5);
+  }
   return { x, y: top, w, h };
 }

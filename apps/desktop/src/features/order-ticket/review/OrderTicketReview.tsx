@@ -1,3 +1,4 @@
+import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { type Dispatch, type SetStateAction } from 'react';
 import type { OrderCheckResult, RiskSide } from '../../../shared/bridge/types';
 import { OrderCheckResult as OrderCheckResultView } from './OrderCheckResult';
@@ -38,23 +39,15 @@ export function OrderTicketReview({
         </span>
       </div>
       {orderCheckLoading && !orderCheck && !orderCheckError && <p className="search-hint">Checking with MT5…</p>}
-      {orderCheckError && (
-        <p className="error-text" role="alert">
-          {orderCheckError}
-        </p>
-      )}
       {orderCheck && <OrderCheckResultView orderCheck={orderCheck} />}
       {orderCheck && orderCheck.checkPassed === false && (
-        <p className="ticket-reason" role="alert">
-          {orderCheck.comment.trim() !== ''
-            ? `${orderCheck.comment.trim()} (code ${orderCheck.retcode}). Adjust the ticket and start the review again.`
-            : `Retcode ${orderCheck.retcode}. Adjust the ticket and start the review again.`}
-        </p>
-      )}
-      {submitStatus && (
-        <p className={`command-status ${submitStatus.kind}`} role="status">
-          {submitStatus.text}
-        </p>
+        <ErrorNotification
+          message={
+            orderCheck.comment.trim() !== ''
+              ? `${orderCheck.comment.trim()} (code ${orderCheck.retcode}). Adjust the ticket and start the review again.`
+              : `Retcode ${orderCheck.retcode}. Adjust the ticket and start the review again.`
+          }
+        />
       )}
       {!submitStatus &&
         orderCheck &&

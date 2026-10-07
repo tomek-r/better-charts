@@ -1,3 +1,4 @@
+import type { TradingLabelHit } from './labelLayout';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlay';
 import { levelMoneyText } from './overlayLines';
@@ -116,6 +117,24 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
       }
     }
     return null;
+  };
+  const resolveLabelGrab = (row: TradingLabelHit, x: number, y: number): OverlayGrab | null => {
+    const { hit } = positionOverlayState.current;
+    if (row.level === 'entry') {
+      if (row.id.startsWith('order:')) {
+        const id = row.id.slice('order:'.length);
+        const chip = hit.orderCancels?.find((item) => item.id === id);
+        return hitCircle(chip, x, y) ? { kind: 'orderCancel', id } : { kind: 'line', line: 'order', id };
+      }
+      const chip = hit.posCloses?.find((item) => item.id === row.id);
+      return hitCircle(chip, x, y) ? { kind: 'posClose', id: row.id } : null;
+    }
+    const chips = row.level === 'sl' ? hit.slClears : hit.tpClears;
+    const chip = chips?.find((item) => item.id === row.id);
+    if (hitCircle(chip, x, y)) {
+      return { kind: row.level === 'sl' ? 'slClear' : 'tpClear', id: row.id };
+    }
+    return { kind: 'line', line: row.level, id: row.id };
   };
   // Custom-overlay line drag — library TradingDragHandler semantics: claim on
   // pointerdown, only start tracking after LINE_DRAG_THRESHOLD vertical px
@@ -357,6 +376,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
       return chipPress !== null;
     },
     resolveGrab: resolveOverlayGrab,
+    resolveLabelGrab,
     startPointer,
     startTouch,
     applyLineDrag,

@@ -24,7 +24,7 @@ export function createPriceLinesOverlay(state: PriceLinesState, pass: OverlayPas
   return {
     // This overlay retains diagnostic geometry; Lightweight Charts owns the
     // visible lines and price-axis labels.
-    descriptor: { id: `mt5-price-lines-${pass}`, name: `Bid/Ask Lines (${pass})`, layer: 'ui' },
+    descriptor: { id: `price-lines-${pass}`, name: `Bid/Ask Lines (${pass})`, layer: 'ui' },
     render(_ctx, { viewport }) {
       const { y, width, height } = viewport.chartRect;
       const hit: PriceLinesState['hit'] = {};

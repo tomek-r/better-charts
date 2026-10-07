@@ -1,3 +1,4 @@
+import type { TradingLabelTarget } from './labelLayout';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { ticketPrice } from '../../../shared/format';
 import type { ChartWorkspaceState } from '../useChartWorkspace';
@@ -6,7 +7,15 @@ import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
 type StagedGestureWorkspace = Pick<ChartWorkspaceState, 'stagedOrderState'>;
 type StagedGestureTicket = Pick<
   OrderTicketState,
-  'unstageOrderDraft' | 'toggleExit' | 'setEntry' | 'setSlOn' | 'setStopLoss' | 'setTpOn' | 'setTakeProfit'
+  | 'unstageOrderDraft'
+  | 'toggleExit'
+  | 'setEntry'
+  | 'setSlOn'
+  | 'setStopLoss'
+  | 'setTpOn'
+  | 'setTakeProfit'
+  | 'setStagedDragging'
+  | 'setDragSlMoney'
 >;
 
 /** Owns staged-widget gestures; writes draft fields without dispatching orders. */
@@ -16,7 +25,17 @@ export function createStagedOrderGestures(
   ticket: StagedGestureTicket,
 ) {
   const { stagedOrderState } = workspace;
-  const { unstageOrderDraft, toggleExit, setEntry, setSlOn, setStopLoss, setTpOn, setTakeProfit } = ticket;
+  const {
+    unstageOrderDraft,
+    toggleExit,
+    setEntry,
+    setSlOn,
+    setStopLoss,
+    setTpOn,
+    setTakeProfit,
+    setStagedDragging,
+    setDragSlMoney,
+  } = ticket;
   let drag: 'entry' | 'sl' | 'tp' | null = null;
   let stagedEntryDrag: {
     entry: number;
@@ -70,6 +89,14 @@ export function createStagedOrderGestures(
     }
     return null;
   };
+  const resolveLabelGrab = (level: TradingLabelTarget['level'], x: number, y: number) => {
+    const { hit, order } = stagedOrderState.current;
+    const chip = { entry: hit.entryCancel, sl: hit.slCancel, tp: hit.tpCancel }[level];
+    if (hitCircle(chip, x, y)) {
+      return ({ entry: 'entryCancel', sl: 'slCancel', tp: 'tpCancel' } as const)[level];
+    }
+    return level !== 'entry' || order?.orderKindLabel !== 'Market' ? level : null;
+  };
   // Consumes the event as a widget grab/click (stop + prevent = only-on-grab).
   // Returns true when a drag target was claimed.
   const applyGrab = (
@@ -92,6 +119,8 @@ export function createStagedOrderGestures(
     }
     drag = target as 'entry' | 'sl' | 'tp';
     const stagedOrder = stagedOrderState.current.order;
+    setDragSlMoney(stagedOrder?.slMoney);
+    setStagedDragging(true);
     const canMoveExits =
       stagedOrder !== null && (stagedOrder.orderKindLabel === 'Limit' || stagedOrder.orderKindLabel === 'Stop Limit');
     stagedEntryDrag =
@@ -154,6 +183,10 @@ export function createStagedOrderGestures(
     }
   };
   const reset = () => {
+    if (drag !== null) {
+      setStagedDragging(false);
+      setDragSlMoney(undefined);
+    }
     drag = null;
     stagedEntryDrag = null;
   };
@@ -175,6 +208,7 @@ export function createStagedOrderGestures(
       return drag !== null;
     },
     resolveGrab,
+    resolveLabelGrab,
     applyGrab,
     applyDrag,
     endDrag,

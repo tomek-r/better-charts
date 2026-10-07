@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react';
 import type { StagedOrderLevels } from './engine/stagedOrderOverlay';
-import { quoteDigits, formatSignedMoney } from '../../shared/format';
-import { orderEntryPrice, riskRewardRatio } from '../order-ticket/domain/ticketRules';
+import { quoteDigits } from '../../shared/format';
 import type { BridgeSessionState } from '../bridge/useBridgeSession';
 import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
 import type { useExecutionCommands } from '../execution/useExecutionCommands';
@@ -45,7 +44,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
   ticket: OrderTicketState,
 ): void {
   const { chart, stagedOrderState, instrumentDigitsRef } = workspace;
-  const { instrument, quote, snapshot, account } = session;
+  const { instrument, quote, snapshot } = session;
   const {
     submitSwapPendingRef,
     stagedPrevPriceRef,
@@ -57,47 +56,10 @@ export function useChartWorkspaceMirrorLayoutEffect(
     tpOn,
     riskSide,
     effectiveVolume,
-    riskAmount,
-    riskPreview,
-    riskPreviewDisplayRef,
-    riskVersion,
-    volumeManual,
-    stopGuard,
-    unitsMode,
+    display,
     orderKind,
-    limitPrice,
   } = ticket;
   const stagedOrderRef = stagedOrderState;
-  // Signed P&L at an exit level in the ACCOUNT currency (owner: "TP +$60,
-  // SL -$50 — waluta wybrana, nie zahardkodowana"): (level − entry) × side ×
-  // contractSize × volume — the same estimate basis as the ticket's Tick value
-  // (the broker's true tick value is not exposed by the bridge). Only for SET
-  // levels: undefined keeps the plain SL/TP handle label.
-  const levelMoney = (level: number | null): string | undefined => {
-    const entryPrice = Number(orderEntryPrice(orderKind, entry, limitPrice));
-    const volume = Number(effectiveVolume);
-    const contract = instrument ? Number(instrument.contractSize) : NaN;
-    const currency = account?.currency?.trim();
-    if (level === null || !Number.isFinite(level) || !currency) {
-      return undefined;
-    }
-    if (
-      !Number.isFinite(entryPrice) ||
-      entryPrice <= 0 ||
-      !Number.isFinite(volume) ||
-      volume <= 0 ||
-      !Number.isFinite(contract) ||
-      contract <= 0
-    ) {
-      return undefined;
-    }
-    const direction = riskSide === 'buy' ? 1 : -1;
-    const value = (level - entryPrice) * direction * contract * volume;
-    if (!Number.isFinite(value)) {
-      return undefined;
-    }
-    return formatSignedMoney(value, currency);
-  };
   // Mirror the ticket into the staged widget every relevant edit (two-way sync:
   // widget drags write the ticket fields, ticket edits move the widget lines)
   // and repaint the chart so the ui-layer overlay re-renders with fresh geometry.
@@ -121,15 +83,6 @@ export function useChartWorkspaceMirrorLayoutEffect(
       }
       return;
     }
-    const riskPreviewMatchesOrder = Boolean(
-      unitsMode !== 'units' &&
-      riskPreview &&
-      riskPreview.draftVersion === riskVersion.current &&
-      riskPreview.symbol === snapshot.symbol &&
-      riskPreview.side === riskSide &&
-      riskPreview.volume === effectiveVolume &&
-      riskPreview.currency === account?.currency,
-    );
     const entryPrice = Number(entry);
     const last = snapshot.candles[snapshot.candles.length - 1];
     let current: number | undefined;
@@ -139,40 +92,6 @@ export function useChartWorkspaceMirrorLayoutEffect(
       current = Number(last.close);
     }
     state.currentPrice = current !== undefined && Number.isFinite(current) && current > 0 ? current : undefined;
-    const stopLossNumber = Number(stopLoss);
-    const takeProfitNumber = Number(takeProfit);
-    const enteredRisk = Number(riskAmount);
-    const equity = Number(account?.equity);
-    const riskBudget = unitsMode === 'equity' ? (enteredRisk * equity) / 100 : enteredRisk;
-    const automaticRiskBudget =
-      unitsMode !== 'units' &&
-      !volumeManual &&
-      riskAmount.trim() !== '' &&
-      Number.isFinite(riskBudget) &&
-      riskBudget > 0 &&
-      Boolean(account?.currency);
-    const pendingRiskBudgetLabel =
-      automaticRiskBudget && !stopGuard?.slTooClose && account?.currency
-        ? formatSignedMoney(-riskBudget, account.currency)
-        : undefined;
-    const lastBrokerPreview = riskPreviewMatchesOrder ? riskPreview : riskPreviewDisplayRef.current;
-    const brokerPreviewMatchesDraft = Boolean(
-      automaticRiskBudget &&
-      lastBrokerPreview &&
-      lastBrokerPreview.symbol === snapshot.symbol &&
-      lastBrokerPreview.side === riskSide &&
-      lastBrokerPreview.currency === account?.currency &&
-      Number.isFinite(Number(lastBrokerPreview.riskBudget)) &&
-      Math.abs(Number(lastBrokerPreview.riskBudget) - riskBudget) < 1e-8,
-    );
-    const previewStopLossMoney =
-      brokerPreviewMatchesDraft && lastBrokerPreview
-        ? formatSignedMoney(-Number(lastBrokerPreview.estimatedRisk), lastBrokerPreview.currency)
-        : pendingRiskBudgetLabel;
-    const previewTakeProfitMoney =
-      brokerPreviewMatchesDraft && lastBrokerPreview?.estimatedReward
-        ? formatSignedMoney(Number(lastBrokerPreview.estimatedReward), lastBrokerPreview.currency)
-        : undefined;
     const next: StagedOrderLevels = {
       side: riskSide,
       entry: Number.isFinite(entryPrice) && entryPrice > 0 ? entryPrice : NaN,
@@ -187,25 +106,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
       volume: effectiveVolume,
       orderKindLabel:
         orderKind === 'stop_limit' ? 'Stop Limit' : orderKind.charAt(0).toUpperCase() + orderKind.slice(1),
-      // Money labels ride on the SAME set-only rule as the levels above.
-      slMoney:
-        slOn && stopLoss.trim() !== '' && Number.isFinite(Number(stopLoss)) && Number(stopLoss) > 0
-          ? (previewStopLossMoney ?? (automaticRiskBudget ? undefined : levelMoney(stopLossNumber)))
-          : undefined,
-      tpMoney:
-        tpOn && takeProfit.trim() !== '' && Number.isFinite(Number(takeProfit)) && Number(takeProfit) > 0
-          ? (previewTakeProfitMoney ?? levelMoney(takeProfitNumber))
-          : undefined,
-      riskRewardLabel:
-        slOn && tpOn && stopLoss.trim() !== '' && takeProfit.trim() !== ''
-          ? riskRewardRatio(
-              riskSide,
-              orderEntryPrice(orderKind, entry, limitPrice),
-              stopLoss,
-              takeProfit,
-              brokerPreviewMatchesDraft ? lastBrokerPreview : undefined,
-            )
-          : undefined,
+      ...display,
     };
     const previous = state.order;
     const changed =
@@ -240,15 +141,13 @@ export function useChartWorkspaceMirrorLayoutEffect(
     tpOn,
     riskSide,
     effectiveVolume,
-    riskPreview,
-    unitsMode,
     orderKind,
-    limitPrice,
     quote,
     snapshot.timeframe,
     snapshot.candles.length,
     instrument?.digits,
-    instrument?.contractSize,
-    account?.currency,
+    display.slMoney,
+    display.tpMoney,
+    display.riskRewardLabel,
   ]);
 }

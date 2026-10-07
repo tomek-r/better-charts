@@ -1,82 +1,88 @@
 # Project status
 
-This is the current feature and validation summary. See
-[architecture](architecture/README.md) for implementation boundaries and the
-[bridge contract](protocol/bridge-v1.md) for wire semantics.
+Current behavior and owner decisions. See [architecture](architecture/README.md)
+and the [bridge contract](protocol/bridge-v1.md) for implementation details.
 
 ## Available
 
-- Live candlestick charts, Bid/Ask quotes, symbol search and metadata, and
-  M1, M5, M15, H1, H4 and D1 timeframes. Older history loads as the chart pans.
-- Fixed Range Volume Profile with BID/ASK tick activity and POC/VAH/VAL.
-  Calculation supports cancellation and reports incomplete history.
-- Market, Limit, Stop and Stop Limit orders; risk sizing, optional SL/TP,
-  time-in-force, risk preview and read-only MT5 `OrderCheck`.
-- Positions and pending orders on the chart and in the portfolio drawer,
-  with close, cancel and modification controls.
-- Local authenticated TCP bridge, account/session binding, reconciliation,
-  append-only execution journals and one command in flight.
-- Saved app settings and optional, explicitly configured MT5 startup.
+- Live candles, Bid/Ask, symbol search/metadata, configurable timeframes and
+  older-history paging; Fixed Range Volume Profile with BID/ASK and POC/VAH/VAL.
+- Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
+  risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
+- Automatic sizing respects SL risk, broker lot limits and margin budget:
+  `min(equity × Equity use % / 100, free margin)`. Equity use defaults to 100%
+  and accepts greater than 0 through 100%; Risk % uses allocated equity,
+  money risk stays fixed, and manual Units keeps explicit volume. Risk % input
+  stays in 0–100; zero/empty drafts cannot produce a risk preview.
+  MT5 quotes incorporate price, contract and leverage; `OrderCheck` checks affordability.
+- Authenticated local TCP, account/session binding, reconciliation, append-only
+  journals, one command in flight, saved settings and opt-in MT5 startup.
 
-Partial close, removing SL/TP, Break Even, multiple charts and Pine Script
-execution are not implemented.
+Not implemented: partial close, removing SL/TP, Break Even, multiple charts or
+Pine Script execution.
 
 ## Interface decisions
 
-- The chart is the main workspace. The Panel button opens the ticket and
-  portfolio drawer; at widths of 900 px or less it overlays the chart.
-- There is no separate execution-status panel or Commands list.
-- Arrow and MT5-style Crosshair pointers share a toolbar group. Escape closes
-  its menu without disarming the tool. Fixed Range Volume Profile is separate.
-- The price scale fits on series load, then holds until the user rescales it.
-  Hovering the right axis reveals auto-scale (`A`) and logarithmic (`L`) controls.
-- History paging preserves the viewport. Timeframe changes preserve bar spacing
-  and the viewport's pixel distance from the right edge.
-- The countdown uses broker quote time and hides when quotes stop. Bid/Ask
-  labels avoid overlap and axis-width changes that would move the chart.
-- Profile boundaries can be dragged; Delete/Backspace clears the profile.
-  The selection survives timeframe changes and clears on symbol changes.
-- Position SL/TP and pending-order price drags use the execution guard.
-  Shift+drag moves a pending entry and its SL/TP together.
+- Chart-first workspace; Panel opens the ticket/portfolio drawer (overlay at
+  ≤900 px). No separate execution-status panel or Commands list. Errors use
+  dismissible bottom-right notifications with bright text, red borders and an error
+  icon; messages start with a capital letter. Failed OrderCheck shows one broker
+  rejection notice, without a separate last-error-code notice. Negative free margin preserves charts.
+- Arrow/Crosshair share a toolbar group; Escape closes the menu without disarming.
+  Volume Profile is separate; boundaries drag, Delete/Backspace clears it,
+  timeframe changes preserve selection and symbol changes clear it.
+- Price scale fits on load, then holds until rescaled; axis hover exposes `A`/`L`.
+  History paging preserves viewport; timeframe changes preserve bar spacing and
+  right-edge pixel distance. Clicking the current portfolio symbol keeps the chart.
+- Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
+  avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
+- Live P&L right-aligns within the widest amount observed per position, expanding
+  only as needed and resetting on removal; units/RR stay in place. Overlapping
+  trading rows spread vertically without connector brackets; close buttons follow
+  labels, price lines stay put.
+- Ticket/chart SL/TP amounts and RR share a display model using actual volume
+  and unrounded estimates. Drags project the last broker quote immediately;
+  broker replies replace estimates. Pending orders retain RR with both exits.
+- Entering money/% risk seeds a visible SL beyond the broker minimum, then sizes
+  volume to the budget using MT5 quotes. Higher risk increases volume; margin/lot
+  caps reduce achievable risk without moving SL outward. Existing SL edits stay put.
+  Selecting a risk mode with an empty budget shows no risk validation notification;
+  entering a value enables validation. Review still requires a valid stop and sizing.
+  Below-minimum sizing reports that risk is too low for the minimum order size
+  at the current SL distance.
+  Without metadata, the seed uses a quarter of the visible price span. If no valid
+  stop fits, a notification asks for zooming out or a manual SL; the scale stays fixed.
+- Money/% SL drags resize volume from the cached broker quote using native Decimal
+  sizing; local projections cannot replace the fresh broker preview required to send.
+  Market entry/exits and the grabbed SL USD label hold during a drag; release
+  resumes quotes and shows the latest calculated SL amount.
+- Review shows checked units alongside price and margin, and pins checked sizing
+  across equity/free-margin ticks; editing recalculates.
+  SL/TP and pending-entry drags use the execution guard; Shift+drag moves all levels.
 
-Check the corresponding E2E regressions before changing these behaviors.
+Check corresponding E2E regressions before changing these decisions.
 
 ## Execution and configuration
 
-`DISPATCH_ENABLED` is currently `true`. Dispatch also requires the app's
-trading permission, handshake `trading_enabled=true`, complete reconciliation
-and an available journal. The EA rechecks trading permissions before execution.
-New submissions additionally require an observed open broker trade session;
-modify, close and cancel are not subject to that session-hours check.
+`DISPATCH_ENABLED=true`; dispatch also needs app trading permission, handshake
+`trading_enabled`, complete reconciliation and a working journal. EA rechecks
+permissions. New submissions require an open broker session; modify/close/cancel
+are exempt. No automatic retries; session loss/change drains the queue. Missing
+broker records do not prove non-execution. Preview/check/reconciliation never send orders.
 
-Commands are never retried automatically. A session change or loss drains the
-queue. Missing broker records do not prove non-execution. Risk preview,
-`OrderCheck` and reconciliation never call `OrderSend`.
+Trading/MT5 auto-start default off; settings apply after restart. Precedence:
+process environment → first applicable `.env` → saved settings; only `MT5_` keys
+load. Invalid configuration disables trading/auto-start. See [setup](../README.md#connect-to-metatrader-5).
 
-Trading and MT5 auto-start default to disabled. Settings apply after restart;
-process environment overrides the first applicable `.env`, which overrides
-saved settings. Only `MT5_` keys are loaded. Invalid configuration disables
-trading and auto-start. See [setup](../README.md#connect-to-metatrader-5).
+## Validation and plans
 
-## Validation status
+Earlier MVP was verified on a demo account. Current changes, packaged builds and
+native Windows/Linux behavior need manual verification; browser E2E uses a Tauri
+stub. Real-account testing is unvalidated. See [release checklist](RELEASING.md).
 
-The earlier MVP was verified end to end on a demo account. Current chart
-changes, packaged builds and native Windows/Linux runtime behavior still need
-manual verification. Browser E2E tests use a Tauri stub and do not establish
-MT5 runtime correctness. Real-account testing has not been validated.
-
-Use the [release checklist](RELEASING.md) before publishing installers.
-
-## Planned Pine Script support
-
-Piner is the preferred engine to evaluate for v6 indicators, recorded on
-2026-10-04. Run calculations in a Web Worker and render through the existing
-chart adapter. Integration has not started; the repository remains MIT licensed.
-
-[Piner](https://github.com/heyphat/piner) 0.13.0 passed targeted Node checks for
-basic v6 syntax, series history, persistent state and open-bar rollback, and
-browser bundling. Full upstream tests and the Tauri runtime were not checked.
-Validate representative indicators against TradingView before integration.
-Adoption requires a compatible AGPL licensing plan; for proprietary distribution,
-evaluate [PineTS's commercial license](https://github.com/LuxAlgo/PineTS/blob/main/LICENSE-COMMERCIAL.md).
-Script calculations remain separate from order execution.
+Pine integration has not started. [Piner](https://github.com/heyphat/piner) 0.13.0
+is preferred for v6 indicators (2026-10-04): targeted Node semantics/browser-bundle
+checks passed; upstream suite/Tauri runtime and TradingView parity remain unchecked.
+Use a Web Worker and existing chart adapter; keep scripts separate from execution.
+Repository remains MIT; adoption needs an AGPL-compatible plan, or evaluate
+[PineTS commercial licensing](https://github.com/LuxAlgo/PineTS/blob/main/LICENSE-COMMERCIAL.md).

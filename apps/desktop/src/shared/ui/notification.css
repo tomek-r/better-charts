@@ -1,10 +1,10 @@
 /* Notifications. */
 
 .notification-layer {
-  position: absolute;
+  position: fixed;
   inset: 0;
   height: 100dvh;
-  z-index: 28;
+  z-index: 100;
   pointer-events: none;
 }
 
@@ -37,6 +37,26 @@
 .notification.is-closing {
   animation: notification-out 180ms ease-in forwards;
   pointer-events: none;
+}
+
+.notification-alert {
+  padding: 16px;
+  border-color: var(--color-sell);
+  border-left-width: 4px;
+  background: var(--color-sell-fill);
+  color: var(--color-text-bright);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.notification-error-icon {
+  flex: none;
+  margin-top: 2px;
+  fill: none;
+  stroke: var(--color-danger-text);
+  stroke-width: 1.75;
+  stroke-linecap: round;
 }
 
 @keyframes notification-in {

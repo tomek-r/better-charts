@@ -582,6 +582,30 @@ fn validates_account_snapshot_values() {
     };
     assert!(account.validate().is_ok());
     assert!(AccountSnapshot {
+        equity: "0.50".into(),
+        free_margin: "-0.50".into(),
+        margin_level: "50".into(),
+        ..account.clone()
+    }
+    .validate()
+    .is_ok());
+    assert!(AccountSnapshot {
+        equity: "-1".into(),
+        free_margin: "-2".into(),
+        margin_level: "-100".into(),
+        ..account.clone()
+    }
+    .validate()
+    .is_ok());
+    for invalid in ["NaN", "", "not-a-number"] {
+        assert!(AccountSnapshot {
+            free_margin: invalid.into(),
+            ..account.clone()
+        }
+        .validate()
+        .is_err());
+    }
+    assert!(AccountSnapshot {
         leverage: 0,
         ..account.clone()
     }
@@ -1140,6 +1164,7 @@ fn order_check_requires_valid_prices_and_exact_request_identity() {
     assert!(OrderCheckResult {
         equity: "-1".into(),
         free_margin: "-2".into(),
+        margin_level: "-100".into(),
         ..result.clone()
     }
     .validate(&request)

@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { clampRiskPercentInput } from '../domain/riskBasis';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { orderEntryPrice } from '../domain/ticketRules';
 import type { OrderTicketBaseState } from './useOrderTicketState';
@@ -20,7 +21,7 @@ type SizingInput = Pick<
   | 'setStopLoss'
   | 'setTakeProfit'
   | 'unitsAutoMode'
-> & { enableRiskStopLoss: (side: RiskSide, entry: number, overwrite?: boolean) => void };
+> & { enableRiskStopLoss: (side: RiskSide, entry: number, overwrite?: boolean) => string | undefined };
 
 export function useOrderTicketSizing(ticket: SizingInput) {
   const {
@@ -43,7 +44,8 @@ export function useOrderTicketSizing(ticket: SizingInput) {
   } = ticket;
   const unitsAutoModeRef = unitsAutoMode;
   const setRiskAmountFromInput = useCallback(
-    (value: string) => {
+    (input: string) => {
+      const value = unitsMode === 'equity' ? clampRiskPercentInput(input) : input;
       setRiskAmount(value);
       if (stagedOnChart && unitsMode !== 'units' && Number(value) > 0) {
         enableRiskStopLoss(riskSide, Number(orderEntryPrice(orderKind, entry, limitPrice)));

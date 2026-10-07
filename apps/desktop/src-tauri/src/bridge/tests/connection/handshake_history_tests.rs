@@ -99,6 +99,51 @@ async fn valid_history_snapshot_publishes_and_enables_quotes() {
         0,
         "only the symbol-matching quote publishes"
     );
+    // After a filled order consumes margin, MT5 can report a deficit. This
+    // account observation must not tear down the session or clear its bars.
+    client
+        .send(BridgeClient::envelope(
+            MessageType::AccountSnapshot,
+            "account-deficit",
+            Some(&session),
+            serde_json::json!({
+                "account_login": "001234", "broker_server": "Broker-Demo", "currency": "USD",
+                "balance": "100", "equity": "99", "margin": "100", "free_margin": "-1",
+                "margin_level": "99", "leverage": 100, "margin_mode": 0,
+                "trade_allowed": true, "expert_allowed": true
+            }),
+        ))
+        .await
+        .unwrap();
+    assert!(
+        wait_until(Duration::from_secs(2), || {
+            harness
+                .state
+                .account
+                .lock()
+                .unwrap()
+                .as_ref()
+                .is_some_and(|account| account.free_margin == "-1")
+        })
+        .await
+    );
+    assert_eq!(
+        harness.state.current_session.lock().unwrap().as_deref(),
+        Some(session.as_str())
+    );
+    assert_eq!(harness.state.market.lock().unwrap().candles.len(), 1);
+    client.send(BridgeClient::envelope(
+        MessageType::Heartbeat, "heartbeat-after-deficit", Some(&session),
+        serde_json::json!({"sequence": 1, "terminal_connected": true, "account_connected": true, "broker_server": "Broker-Demo"}),
+    )).await.unwrap();
+    assert_eq!(
+        client
+            .recv(Duration::from_secs(2))
+            .await
+            .unwrap()
+            .message_type,
+        MessageType::HeartbeatAck
+    );
 }
 
 #[tokio::test]

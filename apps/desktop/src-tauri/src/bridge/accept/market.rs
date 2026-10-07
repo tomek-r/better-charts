@@ -180,7 +180,21 @@ pub(crate) fn accept_account(
         return Err("account identity changed");
     }
     let view = AccountView::from(account);
-    invalidate_validated_order_check(state);
-    *state.account.lock().expect("account mutex poisoned") = Some(view.clone());
+    let mut account = state.account.lock().expect("account mutex poisoned");
+    let contract_changed = account.as_ref().map_or(true, |previous| {
+        previous.currency != view.currency
+            || previous.leverage != view.leverage
+            || previous.margin_mode != view.margin_mode
+            || previous.trade_allowed != view.trade_allowed
+            || previous.expert_allowed != view.expert_allowed
+            || previous.account_trade_mode != view.account_trade_mode
+    });
+    *account = Some(view.clone());
+    drop(account);
+    // Equity/free-margin ticks do not change the checked request. The EA runs
+    // a new OrderCheck over the exact request immediately before OrderSend.
+    if contract_changed {
+        invalidate_validated_order_check(state);
+    }
     Ok(Some(view))
 }

@@ -163,7 +163,7 @@ pub(crate) async fn risk_quote_error(inbound: &Inbound<'_>, message: Envelope) -
             .lock()
             .expect("risk mutex poisoned")
             .clone();
-        let Some((expected_id, _, _, draft_version)) = expected else {
+        let Some((expected_id, _, _, _, draft_version)) = expected else {
             return false;
         };
         if error.draft_id != expected_id {
@@ -204,7 +204,7 @@ pub(crate) async fn risk_quote_result(inbound: &Inbound<'_>, message: Envelope) 
             .lock()
             .expect("risk mutex poisoned")
             .clone();
-        let Some((expected_id, request, risk, draft_version)) = expected else {
+        let Some((expected_id, request, risk, allocation, draft_version)) = expected else {
             return Ok(());
         };
         if result.draft_id != expected_id {
@@ -213,7 +213,7 @@ pub(crate) async fn risk_quote_result(inbound: &Inbound<'_>, message: Envelope) 
         if result.validate(&request).is_err() {
             return Err("invalid risk quote");
         }
-        let sizing = match calculate_risk_sizing(risk, &result) {
+        let sizing = match size_risk_quote(inbound.state, risk, allocation, &result) {
             Ok(value) => value,
             Err(error) => {
                 *inbound
@@ -232,22 +232,13 @@ pub(crate) async fn risk_quote_result(inbound: &Inbound<'_>, message: Envelope) 
                 return Ok(());
             }
         };
-        let view = RiskPreviewView {
-            draft_version,
-            symbol: result.symbol,
-            side: result.side,
-            currency: result.currency,
-            entry: result.entry,
-            stop_loss: result.stop_loss,
-            take_profit: result.take_profit,
-            risk_budget: risk.normalize().to_string(),
-            volume: sizing.volume,
-            estimated_risk: sizing.estimated_risk,
-            estimated_margin: sizing.estimated_margin,
-            estimated_reward: sizing.estimated_reward,
-            rr: sizing.rr,
-            quoted_at_ms: result.quoted_at_ms,
-        };
+        *inbound
+            .state
+            .last_risk_quote
+            .lock()
+            .expect("risk quote mutex poisoned") =
+            Some((inbound.session_id.to_owned(), result.clone()));
+        let view = risk_preview_view(result, risk, sizing, draft_version);
         *inbound
             .state
             .expected_risk
@@ -261,6 +252,64 @@ pub(crate) async fn risk_quote_result(inbound: &Inbound<'_>, message: Envelope) 
         Ok(Err(reason)) => return InboundOutcome::Teardown(reason),
     }
     InboundOutcome::Continue
+}
+
+pub(crate) fn risk_preview_view(
+    result: RiskQuoteResult,
+    risk: rust_decimal::Decimal,
+    sizing: trading_core::position_sizing::RiskSizingResult,
+    draft_version: u64,
+) -> RiskPreviewView {
+    RiskPreviewView {
+        draft_version,
+        symbol: result.symbol,
+        side: result.side,
+        currency: result.currency,
+        entry: result.entry,
+        stop_loss: result.stop_loss,
+        take_profit: result.take_profit,
+        risk_budget: risk.normalize().to_string(),
+        volume: sizing.volume,
+        estimated_risk: sizing.estimated_risk,
+        estimated_margin: sizing.estimated_margin,
+        estimated_reward: sizing.estimated_reward,
+        rr: sizing.rr,
+        quoted_at_ms: result.quoted_at_ms,
+    }
+}
+
+/// Called inside the session claim: use the most recent bound account snapshot,
+/// including updates received while the broker quote was in flight.
+pub(super) fn size_risk_quote(
+    state: &super::BridgeState,
+    risk: rust_decimal::Decimal,
+    allocation: rust_decimal::Decimal,
+    quote: &RiskQuoteResult,
+) -> Result<trading_core::position_sizing::RiskSizingResult, String> {
+    let margin_budget = risk_margin_budget(state, allocation, quote)?;
+    calculate_risk_sizing(risk, margin_budget, quote).map_err(|error| error.to_string())
+}
+
+pub(super) fn risk_margin_budget(
+    state: &super::BridgeState,
+    allocation: rust_decimal::Decimal,
+    quote: &RiskQuoteResult,
+) -> Result<rust_decimal::Decimal, String> {
+    let account = state.account.lock().expect("account mutex poisoned");
+    let account = account.as_ref().ok_or("account snapshot unavailable")?;
+    if account.currency != quote.currency {
+        return Err("risk quote currency does not match account".into());
+    }
+    let free_margin = account
+        .free_margin
+        .parse()
+        .map_err(|_| "invalid account free margin")?;
+    let equity = account
+        .equity
+        .parse()
+        .map_err(|_| "invalid account equity")?;
+    trading_core::position_sizing::equity_margin_budget(equity, free_margin, allocation)
+        .map_err(|error| error.to_string())
 }
 
 /// `order_command_update`: validate the terminal's apply result and settle

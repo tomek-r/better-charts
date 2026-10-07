@@ -1,3 +1,4 @@
+import { defaultStopLossPrice } from '../src/features/order-ticket/domain/defaultStopLoss';
 import { test, expect } from '@playwright/test';
 import {
   deriveOrderTicket,
@@ -296,15 +297,15 @@ test('risk input uses the latest market quote for its default stop', async ({ pa
   await pushEvent(page, 'quote-update', {
     ...quote,
     symbol: 'EURUSD',
-    bid: '1.09000',
-    ask: '1.09020',
-    last: '1.09000',
+    bid: '1.08540',
+    ask: '1.08560',
+    last: '1.08540',
     timeMs: 1745700001000,
   });
-  await expect(page.getByLabel('Order price')).toHaveValue('1.09020');
+  await expect(page.getByLabel('Order price')).toHaveValue('1.08560');
   await page.getByLabel('Risk amount').fill('25');
   await page.getByLabel('Swap Stop loss input to price').click();
-  await expect(page.getByLabel('Stop loss price')).toHaveValue('1.08978');
+  await expect(page.getByLabel('Stop loss price')).toHaveValue('1.08518');
   expect(collected.pageErrors).toEqual([]);
   expect(collected.consoleErrors).toEqual([]);
 });
@@ -416,4 +417,75 @@ test('pending price offsets preserve entry on swap and follow the selected quote
   await expect(
     page.getByRole('button', { name: 'Enter price as an offset from the reference', exact: true }),
   ).toBeDisabled();
+});
+
+for (const side of ['buy', 'sell'] as const) {
+  test(`${side} default SL uses the visible range when metadata is missing`, () => {
+    const stop = Number(defaultStopLossPrice(100, side, 'limit', undefined, undefined, { min: 99.98, max: 100.02 }));
+    expect(stop).toBeGreaterThan(99.98);
+    expect(stop).toBeLessThan(100.02);
+    expect(side === 'buy' ? stop < 100 : stop > 100).toBe(true);
+  });
+  test(`${side} default SL respects spread and broker minimum without changing chart range`, () => {
+    const result = defaultStopLossPrice(
+      side === 'buy' ? 30432.24 : 30431.74,
+      side,
+      'market',
+      instrument,
+      {
+        symbol: 'NAS100',
+        bid: '30431.74',
+        ask: '30432.24',
+        last: '30432',
+        timeMs: 0,
+        volume: 0,
+        volumeReal: '0',
+        flags: 3,
+      },
+      { min: 30400, max: 30460 },
+    );
+    const stop = Number(result);
+    expect(stop).toBeGreaterThan(30400);
+    expect(stop).toBeLessThan(30460);
+    const reference = side === 'buy' ? 30431.74 : 30432.24;
+    expect(side === 'buy' ? reference - stop : stop - reference).toBeGreaterThan(20 * Number(instrument.tickSize));
+  });
+}
+
+test('default SL declines when the visible range has no room for the broker minimum', () => {
+  expect(
+    defaultStopLossPrice(
+      30432.24,
+      'buy',
+      'market',
+      instrument,
+      {
+        symbol: 'NAS100',
+        bid: '30431.74',
+        ask: '30432.24',
+        last: '30432',
+        timeMs: 0,
+        volume: 0,
+        volumeReal: '0',
+        flags: 3,
+      },
+      { min: 30431.7, max: 30432.5 },
+    ),
+  ).toBeUndefined();
+});
+
+test('risk entry reports when the broker minimum cannot fit a visible SL', async ({ page }) => {
+  const collected = await gotoWithStub(page, { symbolInfo: { ...eurusd, stopsLevel: 1000000 } });
+  await openTradePanel(page);
+  await page.locator('.ticket-quote-side.buy').click();
+  await page.locator('.ticket-menu-trigger').click();
+  await page.getByRole('menuitemradio', { name: 'Risk, USD' }).click();
+  await page.getByLabel('Risk amount').fill('1000');
+  await expect(page.getByRole('alert').filter({ hasText: 'No valid stop loss fits' })).toBeVisible();
+  await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
+  await expect(page.getByLabel('Stop loss ticks')).toHaveValue('');
+  expect(await wasInvoked(page, 'request_risk_preview')).toBeUndefined();
+  expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
+  expect(collected.pageErrors).toEqual([]);
+  expect(collected.consoleErrors).toEqual([]);
 });

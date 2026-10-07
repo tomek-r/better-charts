@@ -122,7 +122,7 @@ export class PriceLineController {
         this.nativePriceLines.set(
           id,
           this.candles.createPriceLine({
-            id: `mt5-${id}`,
+            id,
             price,
             color,
             lineWidth: 1,

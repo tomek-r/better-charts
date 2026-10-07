@@ -318,7 +318,7 @@ pub(crate) async fn flush_outbound(
             .expect("risk mutex poisoned")
             .take()
     })?;
-    if let Some((request, risk, draft_version)) = pending_risk {
+    if let Some((request, risk, allocation, draft_version)) = pending_risk {
         let request_id = request.draft_id.clone();
         send(
             stream,
@@ -330,7 +330,7 @@ pub(crate) async fn flush_outbound(
         .await?;
         claim_for_session(state, session_id, || {
             *state.expected_risk.lock().expect("risk mutex poisoned") =
-                Some((request_id, request, risk, draft_version));
+                Some((request_id, request, risk, allocation, draft_version));
         })?;
     }
 

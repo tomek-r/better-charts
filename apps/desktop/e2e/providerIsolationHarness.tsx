@@ -1,5 +1,6 @@
 import { Profiler, type ProfilerOnRenderCallback } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ErrorNotificationsProvider } from '../src/shared/ui/ErrorNotifications';
 import type { ReactNode } from 'react';
 import { AppHeaderView } from '../src/features/app-header/AppHeaderView';
 import {
@@ -305,8 +306,10 @@ export function mountProviderIsolationHarness(container: HTMLElement): void {
   };
 
   createRoot(container).render(
-    <PanelVisibilityProvider>
-      <WorkspaceProbes />
-    </PanelVisibilityProvider>,
+    <ErrorNotificationsProvider>
+      <PanelVisibilityProvider>
+        <WorkspaceProbes />
+      </PanelVisibilityProvider>
+    </ErrorNotificationsProvider>,
   );
 }

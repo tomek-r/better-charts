@@ -4,7 +4,6 @@ import type {
   BrokerSymbol,
   OrderKind,
   QuoteSnapshot,
-  RiskPreview,
   RiskSide,
   TimeInForce,
 } from '../../../shared/bridge/types';
@@ -47,6 +46,8 @@ export interface OrderTicketSizingProps {
   orderVolume: string;
   setOrderVolume: Dispatch<SetStateAction<string>>;
   setVolumeManual: Dispatch<SetStateAction<boolean>>;
+  equityAllocationPercent: string;
+  setEquityAllocationPercent: Dispatch<SetStateAction<string>>;
   riskAmount: string;
   setRiskAmount: (value: string) => void;
   applyUnitsMode: (mode: 'money' | 'equity' | 'units') => void;
@@ -60,7 +61,7 @@ export interface OrderTicketSizingProps {
 }
 
 export interface OrderTicketExitsProps {
-  riskRewardEstimate?: Pick<RiskPreview, 'estimatedRisk' | 'estimatedReward'>;
+  riskRewardLabel: string | undefined;
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
   slTooClose: boolean;

@@ -1,3 +1,4 @@
+import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
 import type { Dispatch, SetStateAction } from 'react';
 import type { BrokerSymbol } from '../../shared/bridge/types';
 
@@ -65,11 +66,7 @@ export function SymbolSearchDialog({
             <span />
           </div>
         )}
-        {searchError && (
-          <p className="error-text" role="alert">
-            {searchError}
-          </p>
-        )}
+        {searchError && <ErrorNotification message={searchError} />}
         {!searchLoading && searchQuery && !searchError && searchResults.length === 0 && (
           <p className="search-hint">No symbols found.</p>
         )}

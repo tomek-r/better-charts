@@ -460,15 +460,17 @@ impl AccountSnapshot {
             .map_err(|_| "invalid account decimal")?;
         let _: Decimal = self.equity.parse().map_err(|_| "invalid account decimal")?;
         let margin: Decimal = self.margin.parse().map_err(|_| "invalid account decimal")?;
-        let free_margin: Decimal = self
+        let _: Decimal = self
             .free_margin
             .parse()
             .map_err(|_| "invalid account decimal")?;
-        let margin_level: Decimal = self
+        let _: Decimal = self
             .margin_level
             .parse()
             .map_err(|_| "invalid account decimal")?;
-        if margin < Decimal::ZERO || free_margin < Decimal::ZERO || margin_level < Decimal::ZERO {
+        // Observations can report exhausted funds: free margin can be negative,
+        // and margin level inherits the sign of equity / used margin.
+        if margin < Decimal::ZERO {
             return Err("invalid account values");
         }
         if !matches!(

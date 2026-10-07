@@ -3,6 +3,16 @@ import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './tauriStub'
 import type { PortfolioSnapshot } from '../src/shared/bridge/types';
 
 interface TradingGeometry {
+  labels: Array<{
+    source: string;
+    id: string;
+    level: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    lineY: number;
+  }>;
   posCloses: Array<{ id: string; x: number; y: number; r: number }>;
   orderCancels: Array<{ id: string; x: number; y: number; r: number }>;
   slLines: Array<{ id: string; y: number }>;
@@ -119,11 +129,18 @@ async function drag(page: Page, line: 'slLines' | 'tpLines' | 'orderLines', rele
 async function recordCanvasText(page: Page) {
   await page.addInitScript(() => {
     const texts = new Set<string>();
+    const prefixes = new WeakMap<CanvasRenderingContext2D, string>();
     const w = window as unknown as { __paintedTradingText: Set<string> };
     w.__paintedTradingText = texts;
     const fillText = CanvasRenderingContext2D.prototype.fillText;
     CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
       texts.add(text);
+      if (text.endsWith('P&L ')) {
+        prefixes.set(this, text);
+      } else if (prefixes.has(this)) {
+        texts.add(prefixes.get(this) + text);
+        prefixes.delete(this);
+      }
       if (maxWidth === undefined) {
         fillText.call(this, text, x, y);
       } else {
@@ -149,6 +166,73 @@ test('live position paints broker P&L before symbol metadata is available', asyn
   // before symbol metadata (contract size / currency) arrives.
   await expect.poll(() => paintedText(page)).toContain('RR 1.00');
   expect(await paintedText(page)).not.toContain('SL -$');
+});
+
+test('live P&L column grows to the widest observed amount and never shrinks', async ({ page }) => {
+  await recordCanvasText(page);
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __positionSuffixX: number;
+      __positionAmountRightX: number;
+      __positionAmountStartX: number;
+      __positionAmountWidth: number;
+    };
+    const fillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+      if (text.endsWith('P&L ')) {
+        w.__positionAmountStartX = x + this.measureText(text).width;
+      }
+      if (this.textAlign === 'right' && /^[+-]/.test(text)) {
+        w.__positionAmountRightX = x;
+        w.__positionAmountWidth = this.measureText(text).width;
+      }
+      if (text.includes(' units')) {
+        w.__positionSuffixX = x + this.measureText(text.slice(0, text.indexOf(' · '))).width;
+      }
+      if (maxWidth === undefined) {
+        fillText.call(this, text, x, y);
+      } else {
+        fillText.call(this, text, x, y, maxWidth);
+      }
+    };
+  });
+  await ready(page);
+  await expect.poll(() => paintedText(page)).toContain('P&L +$1.2');
+  const layout = () =>
+    page.evaluate(() => {
+      const w = window as unknown as {
+        __positionSuffixX: number;
+        __positionAmountRightX: number;
+        __positionAmountStartX: number;
+        __positionAmountWidth: number;
+      };
+      return {
+        start: w.__positionAmountStartX,
+        width: w.__positionAmountWidth,
+        right: w.__positionAmountRightX,
+        suffix: w.__positionSuffixX,
+      };
+    });
+  const initial = await layout();
+  let widest = initial.width;
+  expect(initial.suffix).toBe(initial.start + widest);
+  for (const profit of ['-15.60', '9999.99', '0.00', '1.20']) {
+    await clearPaintedText(page);
+    await pushEvent(page, 'portfolio-snapshot', {
+      ...portfolio,
+      positions: portfolio.positions.map((position) => ({ ...position, profit })),
+    });
+    await expect
+      .poll(() => paintedText(page))
+      .toContain(
+        `P&L ${Number(profit) < 0 ? '-' : '+'}$${Math.abs(Number(profit)).toLocaleString('en-US', { maximumFractionDigits: 2 })}`,
+      );
+    const current = await layout();
+    widest = Math.max(widest, current.width);
+    expect(current.start).toBe(initial.start);
+    expect(current.suffix).toBe(initial.start + widest);
+    expect(current.right).toBe(current.suffix);
+  }
 });
 
 test('bootstrap requests history once and restores live SL/TP amounts from symbol metadata', async ({ page }) => {
@@ -230,6 +314,23 @@ test('live SL drag updates the entry RR before release, like the staged tag', as
   await page.mouse.up();
 });
 
+test('submitted limit order retains RR and updates it during an exit drag', async ({ page }) => {
+  await recordCanvasText(page);
+  await ready(page, true, { stopLoss: '1.0860', takeProfit: '1.0850' });
+  await expect.poll(() => paintedText(page)).toMatch(/Limit.*RR 1\.00/);
+  await clearPaintedText(page);
+  const orderSl = (await geometry(page)).slLines.find((line) => line.id === 'order:990001')!;
+  const host = (await page.locator('.chart-host').boundingBox())!;
+  const x = host.x + host.width * 0.65;
+  await page.mouse.move(x, orderSl.y);
+  await page.mouse.down();
+  await page.mouse.move(x, orderSl.y - 24, { steps: 8 });
+  await expect.poll(() => paintedText(page)).toMatch(/Limit.*RR (?!1\.00)\d/);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  expect(await invocations(page, 'modify_order')).toHaveLength(0);
+});
+
 test('Escape cancels a trading drag and restores the line without dispatch', async ({ page }) => {
   await ready(page);
   const before = (await geometry(page)).slLines[0].y;
@@ -308,4 +409,61 @@ test('locked execution gate prevents trading-line dispatch after a completed dra
   expect(await invocations(page, 'modify_order')).toHaveLength(0);
   await drag(page, 'orderLines');
   expect(await invocations(page, 'modify_order')).toHaveLength(0);
+});
+
+test('overlapping P&L and SL stay separated while crossing to the position close button', async ({ page }) => {
+  const collected = await ready(page);
+  await pushEvent(page, 'portfolio-snapshot', {
+    ...portfolio,
+    orders: [],
+    positions: portfolio.positions.map((pos) => ({ ...pos, stopLoss: '1.08501', takeProfit: null })),
+  });
+  await expect.poll(async () => (await geometry(page)).orderLines.length).toBe(0);
+  const before = await geometry(page);
+  const entry = before.labels.find((row) => row.id === '885001' && row.level === 'entry')!;
+  const sl = before.labels.find((row) => row.id === '885001' && row.level === 'sl')!;
+  expect(Math.abs(entry.lineY - sl.lineY)).toBeLessThan(20);
+  expect(Math.abs(entry.y - sl.y)).toBeGreaterThanOrEqual(32);
+  const close = before.posCloses[0];
+  await page.mouse.move(entry.x + entry.w - 5, entry.y + entry.h / 2);
+  await page.mouse.move(close.x, close.y, { steps: 12 });
+  expect((await geometry(page)).labels).toEqual(before.labels);
+  await page.screenshot({ path: test.info().outputPath('spaced-trading-labels.png') });
+  await page.mouse.down();
+  expect(await invocations(page, 'close_position')).toHaveLength(0);
+  await page.mouse.up();
+  await expect.poll(async () => (await invocations(page, 'close_position')).length).toBe(1);
+  expect(await invocations(page, 'modify_order')).toHaveLength(0);
+  expect(collected.pageErrors).toEqual([]);
+  expect(collected.consoleErrors).toEqual([]);
+});
+
+test('dragging a displaced SL moves from its actual price instead of jumping to the label', async ({ page }) => {
+  await ready(page);
+  await pushEvent(page, 'portfolio-snapshot', {
+    ...portfolio,
+    orders: [],
+    positions: portfolio.positions.map((pos) => ({ ...pos, stopLoss: '1.08501', takeProfit: null })),
+  });
+  await expect.poll(async () => (await geometry(page)).orderLines.length).toBe(0);
+  const before = await geometry(page);
+  const sl = before.labels.find((row) => row.id === '885001' && row.level === 'sl')!;
+  expect(Math.abs(sl.y + sl.h / 2 - sl.lineY)).toBeGreaterThan(1);
+  const expected = await page.evaluate((y) => {
+    const w = window as unknown as {
+      __stagedWidgetTest: {
+        geometry(): { priceRange: { min: number; max: number }; chartRect: { y: number; height: number } };
+      };
+    };
+    const { priceRange, chartRect } = w.__stagedWidgetTest.geometry();
+    return priceRange.max - ((y - chartRect.y) / chartRect.height) * (priceRange.max - priceRange.min);
+  }, sl.lineY + 6);
+  await page.mouse.move(sl.x + sl.w - 5, sl.y + sl.h / 2);
+  await page.mouse.down();
+  await page.mouse.move(sl.x + sl.w - 5, sl.y + sl.h / 2 + 6, { steps: 3 });
+  await page.mouse.up();
+  await expect.poll(async () => (await invocations(page, 'modify_order')).length).toBe(1);
+  const call = (await invocations(page, 'modify_order'))[0];
+  expect(Number((call.args as { stopLoss: string }).stopLoss)).toBeCloseTo(expected, 5);
+  expect(await invocations(page, 'close_position')).toHaveLength(0);
 });

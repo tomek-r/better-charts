@@ -1,4 +1,5 @@
 import { Notification } from '../../shared/ui/Notification';
+import { ErrorNotifications } from '../../shared/ui/ErrorNotifications';
 import { useAppSettingsView } from '../settings/AppSettingsProvider';
 
 /** Settings notifications: the configuration error and the restart reminder. */
@@ -7,9 +8,10 @@ export function AppNotificationsView() {
 
   return (
     <Notification.Region>
+      <ErrorNotifications />
       {settings.configurationNotice ? (
         <Notification.Alert key={`error-${settings.notificationRevision}-${settings.configurationNotice}`}>
-          <span>{settings.configurationNotice}</span>
+          <Notification.Message>{settings.configurationNotice}</Notification.Message>
           <Notification.Dismiss
             label="Dismiss configuration notification"
             onDismiss={settings.dismissConfigurationNotice}

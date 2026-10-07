@@ -197,3 +197,67 @@ test('moving quotes keep unchanged sizing, exits and review action consumers idl
   expect(counts['ticket-exits'] ?? 0).toBe(0);
   expect(counts['ticket-action'] ?? 0).toBe(0);
 });
+
+test('equity allocation scales percent risk but leaves explicit money risk unchanged', () => {
+  for (const [allocation, budget] of [
+    ['100', '100.00'],
+    ['50', '50.00'],
+    ['40', '40.00'],
+    ['60', '60.00'],
+  ]) {
+    const basis = deriveOrderRiskBasis({
+      unitsMode: 'equity',
+      riskAmount: '1',
+      equity: '10000',
+      currency: 'USD',
+      stagedOnChart: true,
+      equityAllocationPercent: allocation,
+    });
+    expect(basis.effectiveRiskAmount).toBe(budget);
+    expect(basis.riskModeHint).toBe(`≈ ${budget} USD`);
+  }
+  const money = deriveOrderRiskBasis({
+    unitsMode: 'money',
+    riskAmount: '100',
+    equity: '10000',
+    currency: 'USD',
+    stagedOnChart: true,
+    equityAllocationPercent: '50',
+  });
+  expect(money.effectiveRiskAmount).toBe('100');
+  for (const allocation of ['', '0', '-1', '101']) {
+    expect(
+      deriveOrderRiskBasis({
+        unitsMode: 'equity',
+        riskAmount: '1',
+        equity: '10000',
+        currency: 'USD',
+        stagedOnChart: true,
+        equityAllocationPercent: allocation,
+      }).effectiveRiskAmount,
+    ).toBe('');
+  }
+});
+
+test('equity risk rejects percentages outside the positive 0–100 range', () => {
+  for (const riskAmount of ['0', '-1', '100.01', '200', 'Infinity', '']) {
+    expect(
+      deriveOrderRiskBasis({
+        unitsMode: 'equity',
+        riskAmount,
+        equity: '5600',
+        currency: 'USD',
+        stagedOnChart: true,
+      }).effectiveRiskAmount,
+    ).toBe('');
+  }
+  expect(
+    deriveOrderRiskBasis({
+      unitsMode: 'equity',
+      riskAmount: '100',
+      equity: '5600',
+      currency: 'USD',
+      stagedOnChart: true,
+    }).effectiveRiskAmount,
+  ).toBe('5600.00');
+});

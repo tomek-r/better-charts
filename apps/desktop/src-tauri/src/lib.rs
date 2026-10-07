@@ -12,9 +12,9 @@ use bridge::commands::{
     cancel_order, cancel_tick_profile, close_position, get_account_snapshot, get_bridge_status,
     get_execution_queue_status, get_execution_recovery_snapshot, get_execution_safety_status,
     get_market_snapshot, get_mt5_backend_status, get_portfolio_snapshot, get_quote_snapshot,
-    get_reconciliation_status, modify_order, request_history, request_history_page,
-    request_order_check, request_risk_preview, request_tick_profile, search_symbols,
-    start_mt5_backend, stop_mt5_backend, submit_order,
+    get_reconciliation_status, modify_order, project_risk_preview, request_history,
+    request_history_page, request_order_check, request_risk_preview, request_tick_profile,
+    search_symbols, start_mt5_backend, stop_mt5_backend, submit_order,
 };
 use bridge::connection::run_server;
 use bridge::state::BridgeState;
@@ -51,6 +51,7 @@ pub fn run() {
             get_quote_snapshot,
             get_account_snapshot,
             get_portfolio_snapshot,
+            project_risk_preview,
             request_risk_preview,
             request_order_check,
             request_history,

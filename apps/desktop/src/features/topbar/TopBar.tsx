@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 /** Static brand mark: hoisted so a re-render reuses the same element. */
 const brandMark = (
   <span className="brand-mark" aria-hidden="true">
-    <svg width="27" height="27" viewBox="0 0 1024 1024">
+    <svg width="40" height="40" viewBox="0 0 1024 1024">
       <defs>
         <linearGradient id="brand-icon-bg" x1="128" y1="128" x2="896" y2="896" gradientUnits="userSpaceOnUse">
           <stop stopColor="var(--color-raised)" />

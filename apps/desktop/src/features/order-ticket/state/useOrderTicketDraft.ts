@@ -1,44 +1,10 @@
+import { defaultStopLossPrice } from '../domain/defaultStopLoss';
 import { useCallback } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
-import type { BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
-import { quoteDigits, ticketPrice } from '../../../shared/format';
+import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
+import type { RiskSide } from '../../../shared/bridge/types';
+import { ticketPrice } from '../../../shared/format';
 import type { OrderTicketBaseState } from './useOrderTicketState';
-
-function defaultStopLossPrice(
-  entry: number,
-  side: RiskSide,
-  orderKind: OrderKind,
-  instrument: BrokerSymbol | undefined,
-  quote: QuoteSnapshot | undefined,
-): string | undefined {
-  if (!Number.isFinite(entry) || entry <= 0) {
-    return undefined;
-  }
-  const point = Number(instrument?.pointSize);
-  const tick = Number(instrument?.tickSize);
-  const known = Number.isFinite(point) && point > 0 && Number.isFinite(tick) && tick > 0;
-  const minimum = known ? Math.max((instrument?.stopsLevel ?? 0) * point, 20 * tick) : entry * 0.001;
-  const bid = quote ? Number(quote.bid) : NaN;
-  const ask = quote ? Number(quote.ask) : NaN;
-  const hasQuote = Number.isFinite(bid) && bid > 0 && Number.isFinite(ask) && ask > 0;
-  let reference = entry;
-  if (orderKind === 'market' && hasQuote) {
-    reference = side === 'buy' ? bid : ask;
-  }
-  const direction = side === 'buy' ? -1 : 1;
-  const digits = instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : 2);
-  const step = known ? Math.max(tick, minimum * 0.25) : minimum * 0.25;
-  let distance = known ? minimum + 2 * tick : minimum;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const stopLoss = ticketPrice(reference + direction * distance, digits);
-    const actual = direction * (Number(stopLoss) - reference);
-    if (stopLoss !== '' && Number(stopLoss) > 0 && actual > minimum) {
-      return stopLoss;
-    }
-    distance += step;
-  }
-  return undefined;
-}
 
 type OrderTicketEntryDraftInput = Pick<
   OrderTicketBaseState,
@@ -125,6 +91,7 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
     submitSwapPendingRef,
     stagedPrevPriceRef,
   } = ticket;
+  const notifyError = useNotifyError();
   const stagedOrderStateRef = stagedOrderState;
   const resetOrderDraft = useCallback(() => {
     setSlOn(false);
@@ -150,13 +117,25 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
     setTicketStage('edit');
   };
   const enableRiskStopLoss = useEventCallback((side: RiskSide, entryPrice: number, overwrite = false) => {
-    setSlOn(true);
-    if (overwrite || !stopLoss.trim()) {
-      const defaultStop = defaultStopLossPrice(entryPrice, side, orderKind, instrument, quote);
-      if (defaultStop) {
-        setStopLoss(defaultStop);
-      }
+    if (!overwrite && stopLoss.trim()) {
+      setSlOn(true);
+      return stopLoss;
     }
+    const defaultStop = defaultStopLossPrice(
+      entryPrice,
+      side,
+      orderKind,
+      instrument,
+      quote,
+      chart.current?.viewport().priceRange,
+    );
+    if (!defaultStop) {
+      notifyError('No valid stop loss fits in the visible chart range. Zoom out or set SL manually.');
+      return undefined;
+    }
+    setSlOn(true);
+    setStopLoss(defaultStop);
+    return defaultStop;
   });
   const stageOrderDraft = useCallback(
     (side: RiskSide, fresh = false) => {

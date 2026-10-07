@@ -28,6 +28,12 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
         const lines = (rows: Array<{ id: string; y: number }> = []) =>
           rows.map((row) => ({ ...row, y: row.y + rect.top }));
         return {
+          labels: (hit.labels ?? []).map((row) => ({
+            ...row,
+            x: row.x + rect.left,
+            y: row.y + rect.top,
+            lineY: row.lineY + rect.top,
+          })),
           posCloses: chips(hit.posCloses),
           orderCancels: chips(hit.orderCancels),
           slLines: lines(hit.slLines),
@@ -57,6 +63,7 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
           tpCancel: circle(hit.tpCancel),
           slHandle: box(hit.slHandle),
           tpHandle: box(hit.tpHandle),
+          volume: state.order?.volume ?? null,
           slMoney: state.order?.slMoney ?? null,
           tpMoney: state.order?.tpMoney ?? null,
           riskRewardLabel: state.order?.riskRewardLabel ?? null,

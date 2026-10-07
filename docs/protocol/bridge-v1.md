@@ -295,7 +295,9 @@ are observations and do not enable execution by themselves.
 
 The EA supplies the raw `account_trade_mode` and semantic name
 `demo|contest|real|unknown`; absent fields default to `-1` / `unknown`.
-Account `margin`, `free_margin`, and `margin_level` are nonnegative.
+Account `margin` is nonnegative. `balance`, `equity`, `free_margin`, and
+`margin_level` are signed decimal observations. Negative free margin does not
+invalidate the snapshot or disconnect market data; it blocks automatic sizing.
 
 **`portfolio_snapshot` payload:**
 
@@ -426,8 +428,68 @@ only while preserving geometry and differing by less than one tick.
 The EA uses `OrderCalcProfit` and `OrderCalcMargin` at `reference_volume`.
 Loss, reward, and margin scale with normalized volume. Margin is nonnegative;
 zero is valid. `reward_at_reference` is nullable when no TP is present.
+Rust sizes against both the risk budget and the latest session-bound account
+snapshot's `free_margin`, in the quote's matching account currency. The desktop
+`request_risk_preview` command accepts an optional decimal-string
+`equityAllocationPercent` (greater than 0, at most 100; absent defaults to
+`100`). Rust computes the margin budget as
+`min(account.equity × equityAllocationPercent / 100, account.free_margin)`
+using checked decimal arithmetic and positive equity. This allocation stays
+attached to the correlated pending/expected preview, and uses the latest bound
+account snapshot when the quote arrives. It applies to automatic money/% risk
+sizing. In Risk % mode the desktop derives `riskAmount` from
+`account.equity × equityAllocationPercent / 100 × riskPercent / 100`;
+therefore 50% allocation with 1% risk uses a 0.5%-of-total-equity SL budget.
+The command receives that already allocated risk amount and does not scale
+it again. Explicit money risk stays fixed; allocation caps its margin only.
+Manual Units keeps its explicit volume and broker OrderCheck. Editing
+the allocation invalidates the preview and accepted review. The percentage
+is a maximum margin budget per order, not a promise to spend it: SL risk and
+broker volume limits can produce a smaller order. This is desktop policy; the
+EA wire quote request/result are unchanged. Volume is
+capped by broker maximum and rounded down to the broker step; estimated loss
+and margin must remain within their budgets. A missing account, currency
+mismatch, or unaffordable minimum volume yields a preview error. The margin
+estimate inherits MT5's price, contract and leverage rules through
+`OrderCalcMargin`; it is not a reservation and does not include existing
+positions/orders in that calculation. Every new quote uses current cached
+free margin; `OrderCheck` remains the final broker affordability check.
 `risk_quote_error` contains `draft_id`, `code`, and `message`; it leaves the
 session connected.
+
+The read-only desktop command `project_risk_preview` accepts the same draft
+fields as `request_risk_preview` (allocation is required) and returns a nullable
+`RiskPreview` view. An optional decimal-string `targetVolume` selects inverse
+risk fitting: retain that preferred volume on the broker lot grid, capped by
+margin and the risk possible at the supplied seed SL; move SL outward from
+that seed to the nearest price tick whose estimated loss does not exceed the
+budget. The caller must supply a valid seed, including the market spread and
+minimum-distance guard. This optional inverse-fitting command remains available,
+but the ticket does not use it when entering money/% risk: it seeds SL inside the
+visible chart range and sizes volume at that stop. Known symbols use the closest
+permitted stop; without metadata, the seed uses a quarter of the visible price
+span. If no valid seed fits, the UI requests zooming out or a manual SL instead
+of changing the price scale. Existing user stops are preserved. Margin and lot
+caps reduce achievable risk; they never move SL outward to consume the budget.
+Automatic market-quote following translates entry and exits together to preserve
+distance. Projections never satisfy preview freshness or OrderCheck; wire quotes
+remain unchanged.
+Without `targetVolume`, it projects the last accepted broker quote from the current
+session, symbol and side using checked Decimal SL/TP distance ratios, then runs
+the same sizing function with the latest equity/free-margin allocation and lot
+limits. Cached currency conversion and margin estimates are approximate until
+MT5 requotes. No cache or a mismatched session/symbol/side returns `null`.
+The frontend uses this immediately for automatic money/% volume/labels while
+dragging; it remains separate from the broker preview and never satisfies
+submission freshness. Stale local results, results arriving during review and
+results superseded by a fresh MT5 preview are ignored. The command neither
+queues broker traffic nor changes the validated-check slot; EA wire is unchanged.
+While a staged level is being dragged, quote updates do not shift its market
+entry or exits, and broker SL normalization is deferred. Release/cancel resumes
+following the latest quote, translating exits to preserve the edited distances.
+In money/% modes the grabbed SL USD label is held until release, even if a
+fresh broker result refines volume during the drag. The hold is display-only;
+release shows the latest actual estimate and all preview/check gates remain.
 
 ### OrderCheck
 
@@ -474,12 +536,17 @@ For each present exit, minimum distance is strictly greater than
 
 The result echoes draft/account fields exactly as text, using
 `requested_entry` for the requested entry. `check_price` is positive.
-`balance`, `equity`, `profit`, and `free_margin` may be negative; `margin` and
-`margin_level` cannot. `comment` is at most 256 characters; `checked_at_ms`
+`balance`, `equity`, `profit`, `free_margin`, and `margin_level` may be negative;
+`margin` cannot. `comment` is at most 256 characters; `checked_at_ms`
 is nonnegative. `time_in_force` and `limit_price` echo supplied draft values
 and are `null` when absent. `order_check_error` contains `draft_id`, `code`,
 and `message`. Tauri publishes `order-check-result` / `order-check-error` with
 `draftVersion` so the UI can reject stale responses.
+Order review pins sizing inputs, prices and volume. Floating account equity
+and free-margin updates do not create a new reviewed draft or invalidate an
+in-flight check for the same account. Account currency, leverage, margin mode
+and trading permission changes still invalidate it. The EA rechecks the exact
+submission against current broker/account state immediately before sending.
 
 ### Time-in-force and Stop Limit
 

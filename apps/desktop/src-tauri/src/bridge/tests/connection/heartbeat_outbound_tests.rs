@@ -127,6 +127,7 @@ async fn flush_outbound_drains_pending_slots_in_order() {
             take_profit: None,
         },
         rust_decimal::Decimal::new(1, 2),
+        rust_decimal::Decimal::from(100),
         1,
     ));
     *state.pending_order_check.lock().unwrap() = Some((

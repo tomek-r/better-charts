@@ -283,6 +283,7 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
       // scripted so the command inventory stays complete.
       modify_order: null,
       // Event-result commands: resolve the invoke AND push the matching event.
+      project_risk_preview: null,
       request_risk_preview: 'reactive',
       request_order_check: 'reactive',
       request_history: 'reactive',
@@ -321,10 +322,27 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
       return id;
     }
 
-    function runReactive(cmd: string, args: Record<string, unknown>): null {
+    function runReactive(cmd: string, args: Record<string, unknown>): unknown {
+      if (cmd === 'project_risk_preview') {
+        // Canned native projection for UI flow coverage; Rust tests cover math.
+        return {
+          ...args,
+          riskBudget: args.riskAmount,
+          volume: typeof args.targetVolume === 'string' ? args.targetVolume : '0.50',
+          stopLoss: typeof args.targetVolume === 'string' ? '1.0800' : args.stopLoss,
+          estimatedRisk: '100',
+          estimatedMargin: '100',
+          estimatedReward: null,
+          rr: null,
+          currency: 'USD',
+          quotedAtMs: NOW,
+        };
+      }
       if (cmd === 'request_risk_preview') {
         // Echo = symbol/side/draftVersion/entry/SL/TP only; the figures below are
-        // fixed stub values (pipeline coverage, not risk-math).
+        // fixed stub values (pipeline coverage, not risk-math). The optional
+        // equityAllocationPercent is a decimal-string desktop sizing cap;
+        // production Rust applies it to the latest account, defaulting to 100.
         emit('risk-preview', {
           symbol: args.symbol,
           side: args.side,

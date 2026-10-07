@@ -80,7 +80,7 @@ interface ProfileRow {
 
 export function createFixedRangeProfileOverlay(state: FixedRangeProfileState): OverlayRenderer {
   return {
-    descriptor: { id: 'mt5-fixed-range-profile', name: 'Fixed Range Volume Profile', layer: 'overlay' },
+    descriptor: { id: 'fixed-range-profile', name: 'Fixed Range Volume Profile', layer: 'overlay' },
     render(ctx, { viewport }) {
       const range = state.range;
       const profile = state.profile;

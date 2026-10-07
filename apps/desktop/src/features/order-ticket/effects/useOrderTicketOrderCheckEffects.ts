@@ -23,6 +23,7 @@ export function useOrderTicketOrderCheckEffects(
     | 'entry'
     | 'stopLoss'
     | 'takeProfit'
+    | 'equityAllocationPercent'
     | 'riskAmount'
     | 'orderKind'
     | 'slOn'
@@ -31,6 +32,7 @@ export function useOrderTicketOrderCheckEffects(
     | 'timeInForce'
     | 'unitsMode'
     | 'volumeManual'
+    | 'stagedDragging'
     | 'riskPreview'
     | 'setOrderVolume'
     | 'riskVersion'
@@ -52,6 +54,7 @@ export function useOrderTicketOrderCheckEffects(
     entry,
     stopLoss,
     takeProfit,
+    equityAllocationPercent,
     riskAmount,
     orderKind,
     slOn,
@@ -60,6 +63,7 @@ export function useOrderTicketOrderCheckEffects(
     timeInForce,
     unitsMode,
     volumeManual,
+    stagedDragging,
     riskPreview,
     setOrderVolume,
     riskVersion,
@@ -88,6 +92,7 @@ export function useOrderTicketOrderCheckEffects(
     stopLoss,
     takeProfit,
     riskAmount,
+    equityAllocationPercent,
     orderKind,
     slOn,
     tpOn,
@@ -96,8 +101,8 @@ export function useOrderTicketOrderCheckEffects(
     unitsMode,
   ]);
   // §11 volume auto-sync: mirror each NEW risk-sizing volume while the user has not
-  // overridden the field. Deps track only the preview on purpose — re-running on
-  // volumeManual would instantly refill a just-cleared field instead of letting the
+  // overridden the field. Drag release also applies deferred SL normalization.
+  // Re-running on volumeManual would refill a just-cleared field instead of letting the
   // user type a fresh volume (clearing is what returns the field to auto mode).
   useEffect(() => {
     if (
@@ -106,6 +111,7 @@ export function useOrderTicketOrderCheckEffects(
       riskPreview.symbol === snapshot.symbol &&
       riskPreview.side === riskSide &&
       slOn &&
+      !stagedDragging &&
       riskPreview.stopLoss !== stopLoss
     ) {
       // MT5 normalizes SL to the instrument's tick grid. Make that broker
@@ -113,9 +119,9 @@ export function useOrderTicketOrderCheckEffects(
       // typed level and the returned level.
       setStopLoss(riskPreview.stopLoss);
     }
-    if (!volumeManual && riskPreview !== undefined) {
+    if (!volumeManual && riskPreview !== undefined && riskPreview.draftVersion === riskVersion.current) {
       setOrderVolume(riskPreview.volume);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [riskPreview]);
+  }, [riskPreview, stagedDragging]);
 }

@@ -58,7 +58,7 @@ test('settings notifications stack in the bottom right and clear drawing tools a
     for (const height of [480, 800]) {
       await page.setViewportSize({ width, height });
       await expectBannerTextUncovered(page.getByRole('alert'));
-      await expect(page.getByRole('alert')).toHaveCSS('color', 'rgb(196, 201, 208)');
+      await expect(page.getByRole('alert')).toHaveCSS('color', 'rgb(242, 245, 250)');
       await expectBannerTextUncovered(page.getByRole('status').filter({ hasText: 'Restart Better Charts' }));
       await expect(page.getByRole('status').filter({ hasText: 'Restart Better Charts' })).toHaveCSS(
         'color',
@@ -253,18 +253,18 @@ test('first launch opens connection setup, validates and saves all settings', as
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Welcome to Better Charts.', { exact: false })).toBeVisible();
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('nonempty token');
+  await expect(page.locator('.notification-region [role=alert]').filter({ hasText: 'nonempty token' })).toBeVisible();
   await dialog.getByLabel('Token', { exact: true }).fill('private-demo-token');
   await expect(dialog.getByLabel('Token', { exact: true })).toHaveAttribute('type', 'password');
   await dialog.getByLabel('Show token').check();
   await expect(dialog.getByLabel('Token', { exact: true })).toHaveAttribute('type', 'text');
   await dialog.getByLabel('Address', { exact: true }).fill('0.0.0.0:8765');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('local address');
+  await expect(page.locator('.notification-region [role=alert]').filter({ hasText: 'local address' })).toBeVisible();
   await dialog.getByLabel('Address', { exact: true }).fill('127.0.0.2:8766');
   await dialog.getByLabel('Maximum frame bytes').fill('1023');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('1024');
+  await expect(page.locator('.notification-region [role=alert]').filter({ hasText: '1024' })).toBeVisible();
   await dialog.getByLabel('Maximum frame bytes').fill('4194304');
   await dialog.getByRole('button', { name: 'Trading', exact: true }).click();
   await dialog.getByLabel('Allow order execution').check();
@@ -272,7 +272,7 @@ test('first launch opens connection setup, validates and saves all settings', as
   await expect(dialog.getByLabel('Start MT5 when Better Charts launches')).toBeVisible();
   await dialog.getByLabel('Start MT5 when Better Charts launches').check();
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('terminal path');
+  await expect(page.locator('.notification-region [role=alert]').filter({ hasText: 'terminal path' })).toBeVisible();
   await dialog.getByLabel('MT5 executable path').fill('/opt/mt5/terminal64.exe');
   await dialog.getByLabel('Wine binary path').fill('/usr/bin/wine');
   await dialog.getByLabel('Wine prefix path').fill('/home/demo/.wine');
@@ -355,7 +355,9 @@ test('failed save stays open and preserves input', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await dialog.getByLabel('Token', { exact: true }).fill('keep-this-token');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('Could not save settings');
+  await expect(
+    page.locator('.notification-region [role=alert]').filter({ hasText: 'Could not save settings' }),
+  ).toBeVisible();
   await expect(dialog.getByLabel('Token', { exact: true })).toHaveValue('keep-this-token');
   await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 });

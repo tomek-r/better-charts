@@ -191,9 +191,7 @@ impl OrderCheckResult {
             return Err("invalid order check decimal");
         }
         order_decimal(&self.free_margin, false)?;
-        if order_decimal(&self.margin_level, false)? < Decimal::ZERO {
-            return Err("invalid order check decimal");
-        }
+        order_decimal(&self.margin_level, false)?;
         Ok(())
     }
 }
