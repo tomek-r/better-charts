@@ -239,6 +239,7 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
         accountTradeMode: 0,
         accountTradeModeName: 'demo',
         currency: 'USD',
+        currencyDigits: 2,
         balance: '10000.00',
         equity: '10000.00',
         margin: '500.00',
@@ -334,7 +335,7 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
           estimatedMargin: '100',
           estimatedReward: null,
           rr: null,
-          currency: 'USD',
+          currency: String((responses.get_account_snapshot as { currency?: string })?.currency ?? 'USD'),
           quotedAtMs: NOW,
         };
       }
@@ -356,7 +357,7 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
           estimatedReward: '25.00',
           estimatedMargin: '105.00',
           rr: '2.00',
-          currency: 'USD',
+          currency: String((responses.get_account_snapshot as { currency?: string })?.currency ?? 'USD'),
           quotedAtMs: NOW,
         });
         return null;

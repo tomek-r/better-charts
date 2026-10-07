@@ -8,6 +8,8 @@ pub struct AccountSnapshot {
     pub account_login: String,
     pub broker_server: String,
     pub currency: String,
+    #[serde(default = "default_currency_digits")]
+    pub currency_digits: u32,
     pub balance: String,
     pub equity: String,
     pub margin: String,
@@ -34,6 +36,10 @@ fn unknown_account_trade_mode() -> i64 {
     -1
 }
 
+fn default_currency_digits() -> u32 {
+    2
+}
+
 fn unknown_account_trade_mode_name() -> String {
     "unknown".to_owned()
 }
@@ -49,6 +55,10 @@ pub struct OpenPosition {
     pub price_current: String,
     pub stop_loss: Option<String>,
     pub take_profit: Option<String>,
+    #[serde(default)]
+    pub stop_loss_profit: Option<String>,
+    #[serde(default)]
+    pub take_profit_profit: Option<String>,
     pub profit: String,
     pub swap: String,
     pub time_ms: i64,
@@ -70,6 +80,12 @@ impl OpenPosition {
         validate_optional_positive(&self.stop_loss)?;
         validate_optional_positive(&self.take_profit)?;
         validate_decimal(&self.profit)?;
+        for amount in [&self.stop_loss_profit, &self.take_profit_profit]
+            .into_iter()
+            .flatten()
+        {
+            validate_decimal(amount)?;
+        }
         validate_decimal(&self.swap)
     }
 }
@@ -86,6 +102,10 @@ pub struct PendingOrder {
     pub price_current: String,
     pub stop_loss: Option<String>,
     pub take_profit: Option<String>,
+    #[serde(default)]
+    pub stop_loss_profit: Option<String>,
+    #[serde(default)]
+    pub take_profit_profit: Option<String>,
     pub time_setup_ms: i64,
     pub expiration_ms: Option<i64>,
     pub magic: String,
@@ -116,7 +136,14 @@ impl PendingOrder {
         validate_positive(&self.price_open)?;
         validate_nonnegative(&self.price_current)?;
         validate_optional_positive(&self.stop_loss)?;
-        validate_optional_positive(&self.take_profit)
+        validate_optional_positive(&self.take_profit)?;
+        for amount in [&self.stop_loss_profit, &self.take_profit_profit]
+            .into_iter()
+            .flatten()
+        {
+            validate_decimal(amount)?;
+        }
+        Ok(())
     }
 }
 
@@ -451,6 +478,7 @@ impl AccountSnapshot {
             || self.broker_server.trim().is_empty()
             || self.currency.trim().is_empty()
             || self.leverage == 0
+            || self.currency_digits > 8
         {
             return Err("invalid account identity");
         }

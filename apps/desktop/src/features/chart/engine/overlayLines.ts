@@ -1,4 +1,5 @@
 import { formatSignedMoney, normalizedPrice } from '../../../shared/format';
+import { estimateLevelMoney, type AccountMoneyBasis } from '../../../shared/money';
 import type { OpenPosition, PendingOrder, PortfolioSnapshot, RiskSide } from '../../../shared/bridge/types';
 import type { OrderLine, PositionLine, PositionOverlayState } from './positionOverlay';
 
@@ -14,30 +15,24 @@ function chartPrice(value?: string | null) {
   return Number.isFinite(price) && price > 0 ? price : undefined;
 }
 
-/** Signed money at a price level (account currency) — the SAME estimate basis
- *  as the ticket's levelMoney ("SL -$50"): (level − entry) × side × contractSize
- *  × volume. Mirrored for positions so their overlay rows match the preview. */
+/** Account-currency display estimates shared by live and staged labels. */
 export function levelMoneyText(
   entry: number,
   level: number,
   volume: number,
   side: RiskSide,
-  money: { contractSize: number; currency: string },
+  money: AccountMoneyBasis,
 ): string | undefined {
-  const contract = money.contractSize;
-  if (!Number.isFinite(contract) || contract <= 0) {
-    return undefined;
-  }
-  const direction = side === 'buy' ? 1 : -1;
-  const value = (level - entry) * direction * contract * volume;
-  if (!Number.isFinite(value)) {
-    return undefined;
-  }
-  return formatSignedMoney(value, money.currency);
+  const value = estimateLevelMoney(entry, level, volume, side, money);
+  return value === undefined ? undefined : formatSignedMoney(value, money.currency, money.currencyDigits);
 }
 /** Signed money P&L in the ACCOUNT currency, the levelMoneyText format
- *  ("-$6.63" / "+$1.04") so the P&L box reads exactly like SL/TP money. */
-export function pnlMoneyText(profit: string | undefined, currency: string | undefined): string | undefined {
+ *  ("-6.63 USD" / "+1.04 USD") so the P&L box reads exactly like SL/TP money. */
+export function pnlMoneyText(
+  profit: string | undefined,
+  currency: string | undefined,
+  currencyDigits?: number,
+): string | undefined {
   if (profit === undefined || profit.trim() === '' || !currency) {
     return undefined;
   }
@@ -45,24 +40,13 @@ export function pnlMoneyText(profit: string | undefined, currency: string | unde
   if (!Number.isFinite(value)) {
     return undefined;
   }
-  const absolute = Math.abs(value);
-  let formatted: string;
-  try {
-    formatted = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(absolute);
-  } catch {
-    formatted = `${absolute.toFixed(2)} ${currency}`;
-  }
-  return `${value >= 0 ? '+' : '-'}${formatted}`;
+  return formatSignedMoney(value, currency, currencyDigits);
 }
 export function toPositionLine(
   item: OpenPosition,
-  money?: { contractSize: number; currency: string },
+  money?: AccountMoneyBasis,
   accountCurrency = money?.currency,
+  currencyDigits = money?.currencyDigits,
 ): PositionLine | null {
   if (item.side !== 'buy' && item.side !== 'sell') {
     return null;
@@ -73,8 +57,14 @@ export function toPositionLine(
   if (!Number.isFinite(entry) || entry <= 0 || !Number.isFinite(quantity) || quantity <= 0) {
     return null;
   }
-  const level = (raw?: string | null) => {
+  const level = (raw?: string | null, profit?: string | null) => {
     const price = chartPrice(raw);
+    if (price !== undefined && profit != null) {
+      const amount = pnlMoneyText(profit, accountCurrency, currencyDigits);
+      if (amount !== undefined) {
+        return amount;
+      }
+    }
     return price !== undefined && money ? levelMoneyText(entry, price, quantity, side, money) : undefined;
   };
   return {
@@ -84,12 +74,17 @@ export function toPositionLine(
     entry,
     stopLoss: chartPrice(item.stopLoss),
     takeProfit: chartPrice(item.takeProfit),
-    pnl: pnlMoneyText(item.profit, accountCurrency),
-    slMoney: level(item.stopLoss),
-    tpMoney: level(item.takeProfit),
+    pnl: pnlMoneyText(item.profit, accountCurrency, currencyDigits),
+    slMoney: level(item.stopLoss, item.stopLossProfit),
+    tpMoney: level(item.takeProfit, item.takeProfitProfit),
   };
 }
-export function toOrderLine(item: PendingOrder, money?: { contractSize: number; currency: string }): OrderLine | null {
+export function toOrderLine(
+  item: PendingOrder,
+  money?: AccountMoneyBasis,
+  accountCurrency = money?.currency,
+  currencyDigits = money?.currencyDigits,
+): OrderLine | null {
   const match = ORDER_TYPE.exec(item.orderType);
   const price = Number(item.priceOpen);
   if (!match || !Number.isFinite(price) || price <= 0) {
@@ -109,8 +104,14 @@ export function toOrderLine(item: PendingOrder, money?: { contractSize: number; 
   } else {
     type = 'STOP LIMIT';
   }
-  const level = (raw?: string | null) => {
+  const level = (raw?: string | null, profit?: string | null) => {
     const levelPrice = chartPrice(raw);
+    if (levelPrice !== undefined && profit != null) {
+      const amount = pnlMoneyText(profit, accountCurrency, currencyDigits);
+      if (amount !== undefined) {
+        return amount;
+      }
+    }
     return levelPrice !== undefined && money ? levelMoneyText(price, levelPrice, volume, side, money) : undefined;
   };
   return {
@@ -121,8 +122,8 @@ export function toOrderLine(item: PendingOrder, money?: { contractSize: number; 
     label: type,
     stopLoss: chartPrice(item.stopLoss),
     takeProfit: chartPrice(item.takeProfit),
-    slMoney: level(item.stopLoss),
-    tpMoney: level(item.takeProfit),
+    slMoney: level(item.stopLoss, item.stopLossProfit),
+    tpMoney: level(item.takeProfit, item.takeProfitProfit),
   };
 }
 // §13 source of truth: replace-style re-sync into OUR overlay (features/chart/engine/positionOverlay.ts). The library's built-in trading overlay is deliberately NEVER fed — chart.setPositions()/setOrders() stay empty, so it paints nothing and its drag hit-testing falls through to pan. Returns true when the painted content changed (or a drag preview was dropped) so the caller can repaint.
@@ -131,22 +132,23 @@ export function syncPositionOverlay(
   portfolio: PortfolioSnapshot | undefined,
   symbol: string | undefined,
   digits: number,
-  money?: { contractSize: number; currency: string },
+  money?: AccountMoneyBasis,
   accountCurrency = money?.currency,
+  currencyDigits = money?.currencyDigits,
 ): boolean {
   const positions =
     !portfolio || !symbol
       ? []
       : portfolio.positions
           .filter((item) => item.symbol === symbol)
-          .map((item) => toPositionLine(item, money, accountCurrency))
+          .map((item) => toPositionLine(item, money, accountCurrency, currencyDigits))
           .filter((item): item is PositionLine => item !== null);
   const orders =
     !portfolio || !symbol
       ? []
       : portfolio.orders
           .filter((item) => item.symbol === symbol)
-          .map((item) => toOrderLine(item, money))
+          .map((item) => toOrderLine(item, money, accountCurrency, currencyDigits))
           .filter((item): item is OrderLine => item !== null);
   const changed =
     state.digits !== digits ||

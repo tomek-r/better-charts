@@ -141,6 +141,12 @@ pub struct BrokerSymbol {
     pub tick_size: String,
     pub point_size: String,
     pub contract_size: String,
+    #[serde(default)]
+    pub tick_value_profit: Option<String>,
+    #[serde(default)]
+    pub tick_value_loss: Option<String>,
+    #[serde(default)]
+    pub tick_value_currency: Option<String>,
     pub volume_min: String,
     pub volume_max: String,
     pub volume_step: String,
@@ -157,6 +163,25 @@ impl BrokerSymbol {
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.symbol.trim().is_empty() {
             return Err("empty symbol");
+        }
+        if self
+            .tick_value_currency
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err("empty tick value currency");
+        }
+        match (&self.tick_value_profit, &self.tick_value_loss) {
+            (None, None) => {}
+            (Some(profit), Some(loss)) if self.tick_value_currency.is_some() => {
+                for value in [profit, loss] {
+                    let amount: Decimal = value.parse().map_err(|_| "invalid tick value")?;
+                    if amount < Decimal::ZERO {
+                        return Err("invalid tick value");
+                    }
+                }
+            }
+            _ => return Err("incomplete tick value metadata"),
         }
         let tick_size: Decimal = self
             .tick_size

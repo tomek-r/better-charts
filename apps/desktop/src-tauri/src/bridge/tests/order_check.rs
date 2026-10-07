@@ -10,6 +10,7 @@ fn equity_ticks_preserve_the_current_order_check_but_permission_changes_invalida
         account_login: "123".into(),
         broker_server: "Demo".into(),
         currency: "USD".into(),
+        currency_digits: 2,
         balance: "1000".into(),
         equity: "999".into(),
         margin: "10".into(),

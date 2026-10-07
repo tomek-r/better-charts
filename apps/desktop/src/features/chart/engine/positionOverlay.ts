@@ -6,6 +6,7 @@ import {
 } from './labelLayout';
 import type { OverlayRenderer } from './overlayTypes';
 import type { RiskSide } from '../../../shared/bridge/types';
+import type { AccountMoneyBasis } from '../../../shared/money';
 import { riskRewardRatio } from '../../order-ticket/domain/ticketRules';
 import {
   STAGED_COLORS,
@@ -18,39 +19,6 @@ import {
   HANDLE_X,
 } from './stagedOrderOverlay';
 import { palette } from '../../../shared/theme/palette';
-
-/**
- * OUR trading overlay — position entry/SL/TP lines and pending-order lines for
- * the ACTIVE symbol, drawn as a `ui`-layer overlay on the SAME mechanism
- * contract as stagedOrderOverlay.ts (geometry recorded per frame in state.hit;
- * all input through App's capture-phase handlers).
- *
- * VISUAL IDENTITY (owner): after an order fills the overlay must look EXACTLY
- * like the staged widget the user composed it with — same primitives imported
- * from stagedOrderOverlay (native dashed price lines, side pill, pointed "⋮⋮ | qty | kind"
- * tag, "⋮⋮ SL/TP" handles, 12% risk zones, ✕ chips) — the ONLY addition is the
- * signed P&L pill on the position entry row. Native price lines provide the
- * right-axis level labels.
- *
- * This REPLACES the library's built-in trading overlay (PositionRenderer /
- * OrderRenderer + axis badges): App never feeds chart.setPositions() /
- * chart.setOrders(), so the library paints nothing and its drag hit-testing
- * falls through to pan.
- *
- * COORDINATE FRAME (see stagedOrderOverlay.ts for the full bug class): every
- * geometry and input share chart-host CSS pixels, including on Retina displays.
- *
- * DRAG PARITY with the library's TradingDragHandler: grab tolerance ±8px on y
- * (TRADING_GRAB), 3px vertical threshold before a drag "starts"
- * (LINE_DRAG_THRESHOLD), dispatch on release — for a pending order's PRICE
- * line and a position's SL/TP lines. Entry lines are display-only.
- *
- * ✕ CHIPS: entry-row ✕ closes the position / cancels the pending order (the
- * library never had ✕ affordances). SL/TP rows carry NO ✕: the staged ✕
- * unsets a DRAFT level, but the modify wire only accepts positive prices
- * (null/absent = unchanged) — there is no safe "clear the stop" path, and a
- * one-click removal of a protective SL must not exist.
- */
 
 export interface PositionLine {
   id: string;
@@ -128,7 +96,7 @@ export interface PositionOverlayState {
   digits: number;
   /** Money-label basis (account currency) — lets App recompute the dragged
    *  level's money label live; the painter only formats. */
-  money?: { contractSize: number; currency: string };
+  money?: AccountMoneyBasis;
   /** Live drag preview; cleared by the next sync / drag end. */
   drag: PositionDrag | null;
   /** Fresh geometry every paint; read by the host pointer handlers. */

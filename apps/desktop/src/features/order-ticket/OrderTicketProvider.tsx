@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ComponentProps, type ReactNode } from 'react';
 import { useOrderTicket, type OrderTicketState } from './state/useOrderTicket';
 import { quoteDigits } from '../../shared/format';
+import { accountMoneyBasis } from '../../shared/money';
 import type { AccountSnapshot } from '../../shared/bridge/types';
 import { OrderTicketReview } from './review/OrderTicketReview';
 import { useBridgeAccount, useBridgeConnection, useBridgeMarket } from '../bridge/BridgeSessionProvider';
@@ -56,6 +57,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
         equity: account?.equity,
         equityAllocationPercent: ticket.equityAllocationPercent,
         currency: account?.currency,
+        currencyDigits: account?.currencyDigits,
         stagedOnChart: ticket.stagedOnChart,
       }),
     [
@@ -64,6 +66,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
       ticket.equityAllocationPercent,
       account?.equity,
       account?.currency,
+      account?.currencyDigits,
       ticket.stagedOnChart,
     ],
   );
@@ -76,8 +79,8 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
     Number.isFinite(bid) && Number.isFinite(ask) && Number.isFinite(pointSize) && pointSize > 0
       ? Math.round((ask - bid) / pointSize)
       : null;
-  // Estimate only: the bridge does not expose the broker's true tick value.
-  const tickValueRaw = instrument ? Number(instrument.tickSize) * Number(instrument.contractSize) : NaN;
+  const tickValueRaw =
+    accountMoneyBasis(instrument, account?.currency, account?.currencyDigits)?.tickValueProfit ?? NaN;
   const tickValueText =
     Number.isFinite(tickValueRaw) && tickValueRaw > 0 ? String(Number(tickValueRaw.toPrecision(8))) : '—';
   const limitPriceNum = Number(ticket.limitPrice.trim());
@@ -100,6 +103,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
   }
   const review = useMemo<ReviewProps>(
     () => ({
+      account,
       canSubmitOrder: ticket.canSubmitOrder,
       effectiveVolume: ticket.effectiveVolume,
       orderCheck: ticket.orderCheck,
@@ -114,6 +118,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
       submittingSide: ticket.submittingSide,
     }),
     [
+      account,
       ticket.canSubmitOrder,
       ticket.effectiveVolume,
       ticket.orderCheck,

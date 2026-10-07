@@ -40,7 +40,7 @@ export function useOrderTicketRiskPreviewEffects(
     | 'setRiskError'
     | 'setRiskLoading'
   >,
-  { riskMode, effectiveRiskAmount }: { riskMode: 'usd' | 'equity'; effectiveRiskAmount: string },
+  { riskMode, effectiveRiskAmount }: { riskMode: 'money' | 'equity'; effectiveRiskAmount: string },
 ): void {
   const {
     snapshot,
@@ -170,6 +170,7 @@ export function useOrderTicketRiskPreviewEffects(
     account?.accountLogin,
     account?.brokerServer,
     account?.currency,
+    account?.currencyDigits,
     riskSide,
     entry,
     orderKind,

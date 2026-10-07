@@ -1,9 +1,20 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
-import type { OrderCheckResult as OrderCheckResultModel } from '../../../shared/bridge/types';
+import type { AccountSnapshot, OrderCheckResult as OrderCheckResultModel } from '../../../shared/bridge/types';
+import { formatMoney } from '../../../shared/format';
 import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
 
 /** MT5 OrderCheck result panel shown in the ticket's review stage. */
-export function OrderCheckResult({ orderCheck }: { orderCheck: OrderCheckResultModel }) {
+export function OrderCheckResult({
+  orderCheck,
+  account,
+}: {
+  orderCheck: OrderCheckResultModel;
+  account: AccountSnapshot | undefined;
+}) {
+  const money = (value: string) =>
+    account?.currency && value.trim() && Number.isFinite(Number(value))
+      ? formatMoney(Number(value), account.currency, account.currencyDigits)
+      : '—';
   return (
     <div className="order-check-result" aria-label="MT5 OrderCheck result">
       {orderCheck.checkPassed && orderCheck.lastError !== 0 && (
@@ -32,11 +43,11 @@ export function OrderCheckResult({ orderCheck }: { orderCheck: OrderCheckResultM
         )}
         <div>
           <small>Margin</small>
-          <b>{formatOrderMetric(orderCheck.margin)}</b>
+          <b>{money(orderCheck.margin)}</b>
         </div>
         <div>
           <small>Free margin</small>
-          <b>{formatOrderMetric(orderCheck.freeMargin)}</b>
+          <b>{money(orderCheck.freeMargin)}</b>
         </div>
         <div>
           <small>Units</small>

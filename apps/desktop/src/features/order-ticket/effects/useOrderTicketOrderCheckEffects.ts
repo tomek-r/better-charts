@@ -86,6 +86,7 @@ export function useOrderTicketOrderCheckEffects(
     account?.accountLogin,
     account?.brokerServer,
     account?.currency,
+    account?.currencyDigits,
     status.state,
     riskSide,
     entry,
