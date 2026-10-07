@@ -236,7 +236,7 @@ test.describe('portfolio card overflow regression', () => {
     expect(sizes.rowScroll).toBeLessThanOrEqual(sizes.rowWidth + 1);
     expect(sizes.panelScroll).toBeLessThanOrEqual(sizes.panelWidth + 1);
     // And no value is ellipsized away — the full string must stay rendered.
-    await expect(row).toContainText('30375.67 · P/L 80.68 · Swap 0.00');
+    await expect(row).toContainText('30375.67 · P/L 80.68 USD · Swap 0.00 USD');
     expect(pageErrors).toEqual([]);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
@@ -325,7 +325,7 @@ test('the connection dot recovers from a bind error through connecting to connec
 
 test('an outdated MT5 bridge shows the update instructions while waiting for data', async ({ page }) => {
   const message =
-    'App requires MT5 bridge version 1.001, but installed bridge version is 0.6.0. Update and reattach BetterChartsBridge in MT5.';
+    'App requires MT5 bridge version 1.002, but installed bridge version is 0.6.0. Update and reattach BetterChartsBridge in MT5.';
   await gotoWithStub(page, {
     responses: {
       get_bridge_status: { state: 'protocol_error', message },

@@ -27,6 +27,10 @@ submit/modify/close/cancel can execute trades. Commands are session-bound,
 journaled and sequential, with no automatic retries. See the
 [protocol contract](../../docs/protocol/bridge-v1.md).
 
+EA version `1.002` includes account-currency TP/SL amounts in live portfolio
+snapshots, calculated with read-only `OrderCalcProfit` at actual entry and volume.
+Recompile and reattach the EA after updating both the app and bridge.
+
 The legacy EA journal filename `TradeCanvasBridge.commands.log` is retained
 for recovery compatibility. Preserve it when upgrading and replace the old EA
 rather than running two bridges. Temporary tick-reader files under

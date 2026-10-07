@@ -54,7 +54,7 @@ token is required outside development builds.
 {
   "token": "example-token", "terminal_id": "installation-instance-id", "terminal_build": 5000,
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
-  "expert_version": "1.001", "trading_enabled": false,
+  "expert_version": "1.002", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 65535},
   "tick_price_counts": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
@@ -81,7 +81,7 @@ the server's permission; the app's local Settings permission is an additional
 startup restriction, optionally overridden with `MT5_BRIDGE_TRADING_ENABLED`.
 Neither flag submits a command or bypasses execution gates.
 
-The app requires an exact EA `expert_version` match (`1.001` for this build).
+The app requires an exact EA `expert_version` match (`1.002` for this build).
 The expected version lives in `config/bridge.json`; a regression guard checks
 that the EA's `BRIDGE_EXPERT_VERSION` matches it. The EA uses that same macro
 for its MT5 display version (`#property version`) and the handshake. Versions use
@@ -272,6 +272,16 @@ for a different feed.
 
 `tick_size`, `point_size`, `contract_size`, and volume parameters are decimal
 strings; positive parameters and valid volume bounds/step are validated.
+Optional `tick_value_profit` and `tick_value_loss` are nonnegative decimal strings
+per lot in `tick_value_currency`, the MT5 deposit currency. The EA estimates one
+profitable/losing price tick with read-only `OrderCalcProfit` at a valid reference
+volume. Up to six progressively wider probes avoid deposit-currency rounding to
+zero; each result scales back to one lot/tick. Unavailable calculations emit both values as `null`;
+older EAs may omit all three fields. Values provided require both amounts and a
+nonempty currency. UI estimates use only values matching the current account
+currency; they never substitute price distance × contract size as account money.
+Cached tick conversion estimates are approximate; fresh risk quotes and OrderCheck
+remain authoritative. No changes to dispatch or trading permissions are involved.
 Restriction levels and mode masks are unsigned integers passed directly from
 MT5. Selecting a symbol uses the same history feed; it does not create another
 connection. Rust publishes active metadata as the camelCase `symbol-info`
@@ -295,11 +305,22 @@ are observations and do not enable execution by themselves.
 
 The EA supplies the raw `account_trade_mode` and semantic name
 `demo|contest|real|unknown`; absent fields default to `-1` / `unknown`.
+`currency_digits` is the optional MT5 monetary precision (`0..=8`); absent defaults
+to 2 for older EAs. Money inputs, budget rounding, account and chart labels use
+the account currency and precision. Monetary displays use `amount CODE`, including
+USD, EUR, PLN and broker-specific deposit currencies; there is no display conversion.
 Account `margin` is nonnegative. `balance`, `equity`, `free_margin`, and
 `margin_level` are signed decimal observations. Negative free margin does not
 invalidate the snapshot or disconnect market data; it blocks automatic sizing.
 
 **`portfolio_snapshot` payload:**
+
+Positions and pending orders optionally include signed decimal strings
+`stop_loss_profit` and `take_profit_profit`. The EA uses read-only `OrderCalcProfit`
+with the actual open/resting price, volume and exit level, in account currency,
+excluding commissions and swap. Unset exits or unavailable calculations are `null`;
+older payloads may omit them. Live labels prefer these broker amounts and fall back
+to converted tick estimates when absent. No order is sent by these calculations.
 
 ```json
 {
@@ -487,7 +508,7 @@ queues broker traffic nor changes the validated-check slot; EA wire is unchanged
 While a staged level is being dragged, quote updates do not shift its market
 entry or exits, and broker SL normalization is deferred. Release/cancel resumes
 following the latest quote, translating exits to preserve the edited distances.
-In money/% modes the grabbed SL USD label is held until release, even if a
+In money/% modes the grabbed SL account-currency label is held until release, even if a
 fresh broker result refines volume during the drag. The hold is display-only;
 release shows the latest actual estimate and all preview/check gates remain.
 
@@ -547,6 +568,12 @@ and free-margin updates do not create a new reviewed draft or invalidate an
 in-flight check for the same account. Account currency, leverage, margin mode
 and trading permission changes still invalidate it. The EA rechecks the exact
 submission against current broker/account state immediately before sending.
+The UI flushes debounced risk-preview requests before queuing OrderCheck, because
+requesting a new sizing preview invalidates the backend's pending check. The
+check uses the current explicit draft version, independently of cached sizing
+responses. After 15 seconds without a matching response, review reports a timeout,
+discards its pending response correlation and leaves submission disabled. A new
+check requires an explicit review; there is no automatic retry or order dispatch.
 
 ### Time-in-force and Stop Limit
 

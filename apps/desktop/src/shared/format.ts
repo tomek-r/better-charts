@@ -1,3 +1,5 @@
+import { currencyFractionDigits } from './money';
+
 export function quoteDigits(...values: string[]) {
   return Math.min(
     8,
@@ -38,19 +40,12 @@ export function normalizedPrice(value?: string | null) {
   const text = value.trim();
   return /^\d+(\.\d+)?$/.test(text) ? text : null;
 }
-// Signed money shared by the chart level labels (levelMoneyText) and the ticket's levelMoney: absolute value through Intl currency (fallback `toFixed(2) + ' ' + currency`), then the `+`/`-` prefix.
-export function formatSignedMoney(value: number, currency: string): string {
-  const absolute = Math.abs(value);
-  let formatted: string;
-  try {
-    formatted = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(absolute);
-  } catch {
-    formatted = `${absolute.toFixed(2)} ${currency}`;
-  }
-  return `${value >= 0 ? '+' : '-'}${formatted}`;
+/** MT5-style amounts: account precision and the deposit currency code. */
+export function formatMoney(value: number, currency: string, digits?: number): string {
+  const precision = currencyFractionDigits(digits);
+  return `${value.toLocaleString('en-US', { minimumFractionDigits: precision, maximumFractionDigits: precision })} ${currency}`;
+}
+
+export function formatSignedMoney(value: number, currency: string, digits?: number): string {
+  return `${value >= 0 ? '+' : '-'}${formatMoney(Math.abs(value), currency, digits)}`;
 }

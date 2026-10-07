@@ -85,6 +85,7 @@ export function normalizeQuote(raw: RawQuote): QuoteSnapshot {
 
 export type RawAccount = Partial<AccountSnapshot> & {
   account_login?: string;
+  currency_digits?: number;
   broker_server?: string;
   free_margin?: string;
   margin_level?: string;
@@ -99,6 +100,7 @@ export function normalizeAccount(raw: RawAccount): AccountSnapshot {
     accountLogin: String(raw.accountLogin ?? raw.account_login ?? ''),
     brokerServer: String(raw.brokerServer ?? raw.broker_server ?? ''),
     currency: String(raw.currency ?? ''),
+    currencyDigits: raw.currencyDigits ?? raw.currency_digits ?? 2,
     balance: String(raw.balance ?? ''),
     equity: String(raw.equity ?? ''),
     margin: String(raw.margin ?? ''),

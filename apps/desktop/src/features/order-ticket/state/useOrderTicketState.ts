@@ -35,6 +35,7 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
   // The overlay mirror uses this for its light current-price repaint path.
   const stagedPrevPriceRef = useRef<number | undefined>(undefined);
   const riskVersion = useRef(0);
+  const pendingRiskRequestRef = useRef<(() => Promise<unknown>) | undefined>(undefined);
   const [draftVersion, setDraftVersion] = useState(0);
   const orderCheckGeneration = useRef(0);
   const orderCheckPending = useRef<
@@ -112,6 +113,7 @@ export function useOrderTicketState(params: OrderTicketStateParams) {
     submitSwapPendingRef,
     stagedPrevPriceRef,
     riskVersion,
+    pendingRiskRequestRef,
     draftVersion,
     setDraftVersion,
     orderCheckGeneration,

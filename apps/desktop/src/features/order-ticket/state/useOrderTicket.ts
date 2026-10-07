@@ -32,7 +32,7 @@ export function useOrderTicket(params: OrderTicketParams) {
     ...state,
     display: {
       ...display,
-      // Hold the grabbed USD label while prices/volume continue calculating.
+      // Hold the grabbed account-currency label while prices/volume continue calculating.
       slMoney:
         state.stagedDragging && state.unitsMode !== 'units' ? (state.dragSlMoney ?? display.slMoney) : display.slMoney,
     },

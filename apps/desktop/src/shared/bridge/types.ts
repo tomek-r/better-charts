@@ -211,6 +211,10 @@ export interface BrokerSymbol {
   tickSize: string;
   pointSize: string;
   contractSize: string;
+  /** Per-lot tick estimates in tickValueCurrency, supplied by MT5. */
+  tickValueProfit?: string | null;
+  tickValueLoss?: string | null;
+  tickValueCurrency?: string | null;
   volumeMin: string;
   volumeMax: string;
   volumeStep: string;
@@ -244,6 +248,8 @@ export interface AccountSnapshot {
   accountLogin: string;
   brokerServer: string;
   currency: string;
+  /** ACCOUNT_CURRENCY_DIGITS; older peers default to two decimals. */
+  currencyDigits?: number;
   balance: string;
   equity: string;
   margin: string;
@@ -338,6 +344,8 @@ export interface OpenPosition {
   swap: string;
   stopLoss?: string | null;
   takeProfit?: string | null;
+  stopLossProfit?: string | null;
+  takeProfitProfit?: string | null;
 }
 
 export interface PendingOrder {
@@ -354,6 +362,8 @@ export interface PendingOrder {
   priceCurrent: string;
   stopLoss?: string | null;
   takeProfit?: string | null;
+  stopLossProfit?: string | null;
+  takeProfitProfit?: string | null;
 }
 
 export interface PortfolioSnapshot {

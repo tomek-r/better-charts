@@ -347,6 +347,9 @@ fn validates_symbol_search_and_serializes_snake_case() {
         tick_size: "0.1".into(),
         point_size: "0.1".into(),
         contract_size: "1".into(),
+        tick_value_profit: None,
+        tick_value_loss: None,
+        tick_value_currency: None,
         volume_min: "0.01".into(),
         volume_max: "100".into(),
         volume_step: "0.01".into(),
@@ -376,6 +379,40 @@ fn validates_symbol_search_and_serializes_snake_case() {
     }
     .validate()
     .is_err());
+    let converted = BrokerSymbol {
+        tick_value_profit: Some("0.4".into()),
+        tick_value_loss: Some("0.42".into()),
+        tick_value_currency: Some("PLN".into()),
+        ..symbol.clone()
+    };
+    converted.validate().unwrap();
+    for invalid in [
+        BrokerSymbol {
+            tick_value_profit: Some("-1".into()),
+            ..converted.clone()
+        },
+        BrokerSymbol {
+            tick_value_loss: None,
+            ..converted.clone()
+        },
+        BrokerSymbol {
+            tick_value_currency: None,
+            ..converted.clone()
+        },
+    ] {
+        assert!(invalid.validate().is_err());
+    }
+    let mut legacy = serde_json::to_value(&symbol).unwrap();
+    for field in [
+        "tick_value_profit",
+        "tick_value_loss",
+        "tick_value_currency",
+    ] {
+        legacy.as_object_mut().unwrap().remove(field);
+    }
+    let legacy: BrokerSymbol = serde_json::from_value(legacy).unwrap();
+    legacy.validate().unwrap();
+    assert_eq!(legacy.tick_value_profit, None);
     let info_request = SymbolInfoRequest {
         symbol: "NAS100".into(),
     };
@@ -431,6 +468,9 @@ fn rejects_invalid_broker_symbol_parameters() {
         tick_size: "0".into(),
         point_size: "0".into(),
         contract_size: "0".into(),
+        tick_value_profit: None,
+        tick_value_loss: None,
+        tick_value_currency: None,
         volume_min: "0".into(),
         volume_max: "1".into(),
         volume_step: "0.01".into(),
@@ -568,6 +608,7 @@ fn validates_account_snapshot_values() {
         account_login: "123".into(),
         broker_server: "Demo".into(),
         currency: "USD".into(),
+        currency_digits: 2,
         balance: "100".into(),
         equity: "99".into(),
         margin: "1".into(),
@@ -581,6 +622,20 @@ fn validates_account_snapshot_values() {
         account_trade_mode_name: "demo".into(),
     };
     assert!(account.validate().is_ok());
+    let mut legacy = serde_json::to_value(&account).unwrap();
+    legacy.as_object_mut().unwrap().remove("currency_digits");
+    assert_eq!(
+        serde_json::from_value::<AccountSnapshot>(legacy)
+            .unwrap()
+            .currency_digits,
+        2
+    );
+    assert!(AccountSnapshot {
+        currency_digits: 9,
+        ..account.clone()
+    }
+    .validate()
+    .is_err());
     assert!(AccountSnapshot {
         equity: "0.50".into(),
         free_margin: "-0.50".into(),
@@ -1006,6 +1061,8 @@ fn validates_portfolio_limits_and_unique_ids() {
         price_current: "11".into(),
         stop_loss: None,
         take_profit: Some("12".into()),
+        stop_loss_profit: None,
+        take_profit_profit: Some("2".into()),
         profit: "1".into(),
         swap: "0".into(),
         time_ms: 1,
@@ -1017,6 +1074,19 @@ fn validates_portfolio_limits_and_unique_ids() {
         positions: vec![position.clone()],
         orders: vec![],
     };
+    let mut legacy = serde_json::to_value(&position).unwrap();
+    for field in ["stop_loss_profit", "take_profit_profit"] {
+        legacy.as_object_mut().unwrap().remove(field);
+    }
+    let legacy: OpenPosition = serde_json::from_value(legacy).unwrap();
+    legacy.validate().unwrap();
+    assert_eq!(legacy.take_profit_profit, None);
+    assert!(OpenPosition {
+        stop_loss_profit: Some("NaN".into()),
+        ..position.clone()
+    }
+    .validate()
+    .is_err());
     assert!(snapshot.validate().is_ok());
     assert!(PortfolioSnapshot {
         positions: vec![position.clone(), position],

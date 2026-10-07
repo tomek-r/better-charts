@@ -17,8 +17,11 @@ and the [bridge contract](protocol/bridge-v1.md) for implementation details.
   MT5 quotes incorporate price, contract and leverage; `OrderCheck` checks affordability.
 - Authenticated local TCP, account/session binding, reconciliation, append-only
   journals, one command in flight, saved settings and opt-in MT5 startup.
+- Money amounts use the MT5 account currency and precision, formatted as
+  `100.00 USD`, `100.00 EUR` or `100.00 PLN`. Chart estimates use broker tick
+  values converted to account currency; unavailable or mismatched values are omitted.
 
-Not implemented: partial close, removing SL/TP, Break Even, multiple charts or
+Not implemented: partial close, break even, multiple charts or
 Pine Script execution.
 
 ## Interface decisions
@@ -41,7 +44,9 @@ Pine Script execution.
   trading rows spread vertically without connector brackets; close buttons follow
   labels, price lines stay put.
 - Ticket/chart SL/TP amounts and RR share a display model using actual volume
-  and unrounded estimates. Drags project the last broker quote immediately;
+  and unrounded estimates. Live exit amounts come from MT5 portfolio snapshots
+  at actual entry and volume, with converted tick estimates as a fallback.
+  Drags project the last broker quote immediately;
   broker replies replace estimates. Pending orders retain RR with both exits.
 - Entering money/% risk seeds a visible SL beyond the broker minimum, then sizes
   volume to the budget using MT5 quotes. Higher risk increases volume; margin/lot
@@ -54,10 +59,12 @@ Pine Script execution.
   stop fits, a notification asks for zooming out or a manual SL; the scale stays fixed.
 - Money/% SL drags resize volume from the cached broker quote using native Decimal
   sizing; local projections cannot replace the fresh broker preview required to send.
-  Market entry/exits and the grabbed SL USD label hold during a drag; release
+  Market entry/exits and the grabbed SL account-currency label hold during a drag; release
   resumes quotes and shows the latest calculated SL amount.
 - Review shows checked units alongside price and margin, and pins checked sizing
   across equity/free-margin ticks; editing recalculates.
+  Entering review flushes queued sizing before OrderCheck. Checks time out after 15 seconds
+  with a notification; late replies cannot enable submission after timeout.
   SL/TP and pending-entry drags use the execution guard; Shift+drag moves all levels.
 
 Check corresponding E2E regressions before changing these decisions.

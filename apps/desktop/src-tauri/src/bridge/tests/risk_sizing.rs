@@ -46,6 +46,27 @@ fn risk_sizing_uses_latest_bound_account_free_margin() {
 }
 
 #[test]
+fn risk_sizing_uses_broker_amounts_in_non_usd_deposit_currencies() {
+    for currency in ["EUR", "PLN", "JPY", "KWD"] {
+        let state = ready_state_with_result(order_check_result_for_test());
+        state.account.lock().unwrap().as_mut().unwrap().currency = currency.into();
+        let mut broker_quote = quote();
+        broker_quote.currency = currency.into();
+        broker_quote.loss_at_reference = "400".into();
+        let result = size_risk_quote(
+            &state,
+            Decimal::from(100),
+            Decimal::from(100),
+            &broker_quote,
+        )
+        .unwrap();
+        assert_eq!(result.volume, "0.25");
+        assert_eq!(result.estimated_risk, "100");
+        assert_eq!(result.estimated_margin, "300");
+    }
+}
+
+#[test]
 fn risk_sizing_fails_closed_without_matching_account_currency_or_valid_margin() {
     let state = ready_state_with_result(order_check_result_for_test());
     let mut wrong_currency = quote();

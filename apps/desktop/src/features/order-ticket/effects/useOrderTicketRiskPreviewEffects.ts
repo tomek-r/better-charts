@@ -35,12 +35,13 @@ export function useOrderTicketRiskPreviewEffects(
     | 'riskPreviewDisplayRef'
     | 'setOrderVolume'
     | 'riskVersion'
+    | 'pendingRiskRequestRef'
     | 'setDraftVersion'
     | 'setRiskPreview'
     | 'setRiskError'
     | 'setRiskLoading'
   >,
-  { riskMode, effectiveRiskAmount }: { riskMode: 'usd' | 'equity'; effectiveRiskAmount: string },
+  { riskMode, effectiveRiskAmount }: { riskMode: 'money' | 'equity'; effectiveRiskAmount: string },
 ): void {
   const {
     snapshot,
@@ -65,6 +66,7 @@ export function useOrderTicketRiskPreviewEffects(
     riskPreviewDisplayRef,
     setOrderVolume,
     riskVersion,
+    pendingRiskRequestRef,
     setDraftVersion,
     setRiskPreview,
     setRiskError,
@@ -83,9 +85,13 @@ export function useOrderTicketRiskPreviewEffects(
     // Review pins the explicit request's prices and volume. Floating equity
     // must not create another draft or cancel its outstanding sizing response.
     if (ticketStage === 'review') {
+      // A queued sizing command clears the backend's pending OrderCheck.
+      // The review action flushes sizing before queuing its check.
+      window.clearTimeout(pendingTimer.current);
       return;
     }
     window.clearTimeout(pendingTimer.current);
+    pendingRiskRequestRef.current = undefined;
     const version = ++riskVersionRef.current;
     // Update the rendered freshness gate before paint, including the no-SL path.
     setDraftVersion(version);
@@ -147,14 +153,24 @@ export function useOrderTicketRiskPreviewEffects(
         })
         .catch((error) => console.info('Local risk projection unavailable.', error));
     }
-    pendingTimer.current = window.setTimeout(() => {
-      void invoke('request_risk_preview', data).catch((error) => {
+    const request = () => {
+      window.clearTimeout(pendingTimer.current);
+      pendingRiskRequestRef.current = undefined;
+      return invoke('request_risk_preview', data).catch((error) => {
         if (version === riskVersionRef.current) {
           setRiskLoading(false);
           setRiskError('Risk preview is unavailable.');
         }
         console.info('Risk preview unavailable.', error);
+        throw error;
       });
+    };
+    pendingRiskRequestRef.current = request;
+    pendingTimer.current = window.setTimeout(() => {
+      if (currentStage.current !== 'edit' || version !== riskVersionRef.current) {
+        return;
+      }
+      void request().catch(() => undefined);
     }, RISK_PREVIEW_DEBOUNCE_MS);
   }, [
     snapshot.symbol,
@@ -170,6 +186,7 @@ export function useOrderTicketRiskPreviewEffects(
     account?.accountLogin,
     account?.brokerServer,
     account?.currency,
+    account?.currencyDigits,
     riskSide,
     entry,
     orderKind,
@@ -188,6 +205,7 @@ export function useOrderTicketRiskPreviewEffects(
     stopGuard?.tpTooClose,
     equity,
     riskVersionRef,
+    pendingRiskRequestRef,
     setDraftVersion,
     setRiskPreview,
     setRiskError,

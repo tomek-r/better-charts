@@ -1,5 +1,6 @@
 import type { RiskPreview } from '../../../shared/bridge/types';
 import { formatSignedMoney } from '../../../shared/format';
+import { accountMoneyBasis, estimateLevelMoney } from '../../../shared/money';
 import type { OrderTicketBaseState } from '../state/useOrderTicketState';
 import { orderEntryPrice, riskRewardRatio } from './ticketRules';
 
@@ -28,7 +29,7 @@ export function deriveStagedOrderDisplay(input: DisplayInput) {
   const currency = input.account?.currency;
   const entry = orderEntryPrice(input.orderKind, input.entry, input.limitPrice);
   const volume = Number(input.effectiveVolume);
-  const contract = Number(input.instrument?.contractSize);
+  const money = accountMoneyBasis(input.instrument, currency, input.account?.currencyDigits);
   const current = input.riskPreview;
   const currentMatches =
     input.unitsMode !== 'units' &&
@@ -73,18 +74,10 @@ export function deriveStagedOrderDisplay(input: DisplayInput) {
   };
 
   const levelAmount = (price: string, enabled: boolean): number | undefined => {
-    const open = Number(entry);
-    const level = Number(price);
-    if (
-      !enabled ||
-      !price.trim() ||
-      !currency?.trim() ||
-      ![open, level, volume, contract].every((value) => Number.isFinite(value) && value > 0)
-    ) {
+    if (!enabled || !price.trim() || !money) {
       return undefined;
     }
-    const amount = (level - open) * (input.riskSide === 'buy' ? 1 : -1) * contract * volume;
-    return Number.isFinite(amount) ? amount : undefined;
+    return estimateLevelMoney(Number(entry), Number(price), volume, input.riskSide, money);
   };
   const stopSet =
     input.slOn && input.stopLoss.trim() !== '' && Number(input.stopLoss) > 0 && Number.isFinite(Number(input.stopLoss));
@@ -113,8 +106,10 @@ export function deriveStagedOrderDisplay(input: DisplayInput) {
       ? { estimatedRisk: String(-loss), estimatedReward: String(reward) }
       : undefined;
   return {
-    slMoney: currency && loss !== undefined ? formatSignedMoney(loss, currency) : undefined,
-    tpMoney: currency && reward !== undefined ? formatSignedMoney(reward, currency) : undefined,
+    slMoney:
+      currency && loss !== undefined ? formatSignedMoney(loss, currency, input.account?.currencyDigits) : undefined,
+    tpMoney:
+      currency && reward !== undefined ? formatSignedMoney(reward, currency, input.account?.currencyDigits) : undefined,
     riskRewardLabel:
       stopSet && targetSet
         ? riskRewardRatio(input.riskSide, entry, input.stopLoss, input.takeProfit, estimate)

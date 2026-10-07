@@ -284,6 +284,7 @@ def symbol_info(symbol: str, description: str) -> dict:
     return {
         "symbol": symbol, "description": description, "digits": 1,
         "tick_size": "0.1", "point_size": "0.1", "contract_size": "1",
+        "tick_value_profit": "0.1", "tick_value_loss": "0.1", "tick_value_currency": "USD",
         "volume_min": "0.01", "volume_max": "100.00", "volume_step": "0.01", "trade_mode": 0,
         "stops_level": 0, "freeze_level": 0, "filling_mode": 1, "order_mode": 127,
         "expiration_mode": 15, "trade_execution": 2,
@@ -488,7 +489,7 @@ def main() -> int:
 
         if mode in {"smoke", "ordercheck"}:
             send_frame(conn, envelope("account_snapshot", "ea-account-1", session_id, {
-                "account_login": "12345678", "broker_server": "mock", "currency": "USD",
+                "account_login": "12345678", "broker_server": "mock", "currency": "USD", "currency_digits": 2,
                 "balance": "10000.00", "equity": "10000.00", "margin": "0.00",
                 "free_margin": "10000.00", "margin_level": "0.0000", "leverage": 100,
                 "margin_mode": 2, "trade_allowed": False, "expert_allowed": False,
@@ -500,12 +501,14 @@ def main() -> int:
                     "position_id": "9001", "ticket": "9001", "symbol": "TEST.INIT", "side": "buy",
                     "volume": "0.10", "price_open": "100.0", "price_current": "102.5",
                     "stop_loss": "98.0", "take_profit": None, "profit": "25.00", "swap": "-0.10",
+                    "stop_loss_profit": "-20.00", "take_profit_profit": None,
                     "time_ms": 1700000000000, "magic": "42",
                 }],
                 "orders": [{
                     "order_id": "7001", "symbol": "US100.TEST", "order_type": "buy_limit", "state": "placed",
                     "volume_initial": "0.10", "volume_current": "0.10", "price_open": "18000.0",
                     "price_current": "18000.0", "stop_loss": None, "take_profit": "18100.0",
+                    "stop_loss_profit": None, "take_profit_profit": "100.00",
                     "time_setup_ms": 1700000120000, "expiration_ms": 1700003720000, "magic": "42",
                 }],
             }))

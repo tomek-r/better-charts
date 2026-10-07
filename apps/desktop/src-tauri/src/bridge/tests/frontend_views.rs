@@ -22,6 +22,9 @@ fn symbol_search_view_uses_frontend_camel_case_shape() {
             tick_size: "0.1".into(),
             point_size: "0.1".into(),
             contract_size: "1".into(),
+            tick_value_profit: Some("0.4".into()),
+            tick_value_loss: Some("0.42".into()),
+            tick_value_currency: Some("PLN".into()),
             volume_min: "0.01".into(),
             volume_max: "100".into(),
             volume_step: "0.01".into(),
@@ -42,6 +45,9 @@ fn symbol_search_view_uses_frontend_camel_case_shape() {
     assert_eq!(json["symbols"][0]["contractSize"], "1");
     assert_eq!(json["symbols"][0]["stopsLevel"], 10);
     assert_eq!(json["symbols"][0]["tradeExecution"], 2);
+    assert_eq!(json["symbols"][0]["tickValueProfit"], "0.4");
+    assert_eq!(json["symbols"][0]["tickValueLoss"], "0.42");
+    assert_eq!(json["symbols"][0]["tickValueCurrency"], "PLN");
 }
 
 #[test]
@@ -183,6 +189,7 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
         account_login: "123".into(),
         broker_server: "Demo".into(),
         currency: "USD".into(),
+        currency_digits: 2,
         balance: "1".into(),
         equity: "1".into(),
         margin: "0".into(),

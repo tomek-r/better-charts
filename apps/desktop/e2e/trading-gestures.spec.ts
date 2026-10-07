@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './tauriStub';
 import type { PortfolioSnapshot } from '../src/shared/bridge/types';
+import { openTradePanel } from './panel';
 
 interface TradingGeometry {
   labels: Array<{
@@ -63,6 +64,9 @@ const instrument = {
   tickSize: '0.0001',
   pointSize: '0.0001',
   contractSize: '100000',
+  tickValueProfit: '10.0000',
+  tickValueLoss: '10.0000',
+  tickValueCurrency: 'USD',
   volumeMin: '0.01',
   volumeMax: '100',
   volumeStep: '0.01',
@@ -161,11 +165,11 @@ async function clearPaintedText(page: Page) {
 test('live position paints broker P&L before symbol metadata is available', async ({ page }) => {
   await recordCanvasText(page);
   await ready(page);
-  await expect.poll(() => paintedText(page)).toContain('P&L +$1.2');
+  await expect.poll(() => paintedText(page)).toContain('P&L +1.20 USD');
   // RR is derived from the entry/SL/TP prices, so a live position shows it even
   // before symbol metadata (contract size / currency) arrives.
   await expect.poll(() => paintedText(page)).toContain('RR 1.00');
-  expect(await paintedText(page)).not.toContain('SL -$');
+  expect(await paintedText(page)).not.toContain('SL -');
 });
 
 test('live P&L column grows to the widest observed amount and never shrinks', async ({ page }) => {
@@ -197,7 +201,7 @@ test('live P&L column grows to the widest observed amount and never shrinks', as
     };
   });
   await ready(page);
-  await expect.poll(() => paintedText(page)).toContain('P&L +$1.2');
+  await expect.poll(() => paintedText(page)).toContain('P&L +1.20 USD');
   const layout = () =>
     page.evaluate(() => {
       const w = window as unknown as {
@@ -225,7 +229,7 @@ test('live P&L column grows to the widest observed amount and never shrinks', as
     await expect
       .poll(() => paintedText(page))
       .toContain(
-        `P&L ${Number(profit) < 0 ? '-' : '+'}$${Math.abs(Number(profit)).toLocaleString('en-US', { maximumFractionDigits: 2 })}`,
+        `P&L ${Number(profit) < 0 ? '-' : '+'}${Math.abs(Number(profit)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`,
       );
     const current = await layout();
     widest = Math.max(widest, current.width);
@@ -238,22 +242,68 @@ test('live P&L column grows to the widest observed amount and never shrinks', as
 test('bootstrap requests history once and restores live SL/TP amounts from symbol metadata', async ({ page }) => {
   await recordCanvasText(page);
   await gotoWithStub(page, { responses: { get_portfolio_snapshot: portfolio }, symbolInfo: instrument });
-  await expect.poll(() => paintedText(page)).toContain('P&L +$1.2');
-  await expect.poll(() => paintedText(page)).toContain('SL -$10');
-  await expect.poll(() => paintedText(page)).toContain('TP +$10');
+  await expect.poll(() => paintedText(page)).toContain('P&L +1.20 USD');
+  await expect.poll(() => paintedText(page)).toContain('SL -10.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('TP +10.00 USD');
   expect((await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history')).toHaveLength(1);
+});
+
+test('placing a manual order retains SL and TP account amounts on the live position', async ({ page }) => {
+  await recordCanvasText(page);
+  await gotoWithStub(page, {
+    symbolInfo: {
+      ...instrument,
+      tickSize: '0.00001',
+      tickValueProfit: '1',
+      tickValueLoss: '1',
+      tradeMode: 4,
+      orderMode: 127,
+      fillingMode: 1,
+      expirationMode: 15,
+      tradeExecution: 2,
+    },
+  });
+  await openTradePanel(page);
+  await page.locator('.ticket-quote-side.buy').click();
+  for (const [label, price] of [
+    ['Stop loss', '1.0840'],
+    ['Take profit', '1.0860'],
+  ]) {
+    await page.getByLabel(`${label} enabled`).check();
+    await page.getByLabel(`Swap ${label} input to price`).click();
+    await page.getByLabel(`${label} price`).fill(price);
+  }
+  await expect.poll(() => paintedText(page)).toContain('SL -100.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('TP +100.00 USD');
+  await page.getByRole('button', { name: 'Start creating order', exact: true }).click();
+  await page.getByRole('button', { name: 'Send order', exact: true }).click();
+  await expect.poll(async () => (await invocations(page, 'submit_order')).length).toBe(1);
+  await clearPaintedText(page);
+  await pushEvent(page, 'portfolio-snapshot', {
+    ...portfolio,
+    positions: [{ ...portfolio.positions[0], volume: '1' }],
+    orders: [],
+  });
+  await expect.poll(async () => (await geometry(page)).posCloses.length).toBe(1);
+  await expect.poll(() => paintedText(page)).toContain('SL -100.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('TP +100.00 USD');
 });
 
 test('late contract and currency updates repaint live P&L and SL/TP amounts', async ({ page }) => {
   await recordCanvasText(page);
   await ready(page);
   await pushEvent(page, 'symbol-info', instrument);
-  await expect.poll(() => paintedText(page)).toContain('SL -$10');
-  await expect.poll(() => paintedText(page)).toContain('TP +$10');
+  await expect.poll(() => paintedText(page)).toContain('SL -10.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('TP +10.00 USD');
   await clearPaintedText(page);
-  await pushEvent(page, 'symbol-info', { ...instrument, contractSize: '200000' });
-  await expect.poll(() => paintedText(page)).toContain('SL -$20');
-  await expect.poll(() => paintedText(page)).toContain('TP +$20');
+  await pushEvent(page, 'symbol-info', {
+    ...instrument,
+    contractSize: '200000',
+    tickValueProfit: '20',
+    tickValueLoss: '20',
+  });
+  await expect.poll(() => paintedText(page)).toContain('SL -20.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('TP +20.00 USD');
   await clearPaintedText(page);
   await pushEvent(page, 'account-snapshot', {
     accountLogin: portfolio.accountLogin,
@@ -269,9 +319,16 @@ test('late contract and currency updates repaint live P&L and SL/TP amounts', as
     tradeAllowed: true,
     expertAllowed: true,
   });
-  await expect.poll(() => paintedText(page)).toContain('P&L +€1.2');
-  await expect.poll(() => paintedText(page)).toContain('SL -€20');
-  await expect.poll(() => paintedText(page)).toContain('TP +€20');
+  await expect.poll(() => paintedText(page)).toContain('P&L +1.20 EUR');
+  await clearPaintedText(page);
+  await pushEvent(page, 'symbol-info', {
+    ...instrument,
+    tickValueCurrency: 'EUR',
+    tickValueProfit: '18',
+    tickValueLoss: '19',
+  });
+  await expect.poll(() => paintedText(page)).toContain('SL -19.00 EUR');
+  await expect.poll(() => paintedText(page)).toContain('TP +18.00 EUR');
 });
 
 for (const level of ['slLines', 'tpLines'] as const) {

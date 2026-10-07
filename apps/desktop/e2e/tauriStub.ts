@@ -52,6 +52,8 @@ export interface TauriStubOptions {
    * failed check carrying the broker's own `comment`/`retcode`.
    */
   orderCheckResult?: Record<string, unknown>;
+  /** Delay the broker check event while the command itself resolves normally. */
+  orderCheckDelayMs?: number;
   /**
    * Full older-history pages the stub serves before reporting the end of
    * history. Each `request_history_page` returns `pageBars` candles, and every
@@ -239,6 +241,7 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
         accountTradeMode: 0,
         accountTradeModeName: 'demo',
         currency: 'USD',
+        currencyDigits: 2,
         balance: '10000.00',
         equity: '10000.00',
         margin: '500.00',
@@ -334,7 +337,7 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
           estimatedMargin: '100',
           estimatedReward: null,
           rr: null,
-          currency: 'USD',
+          currency: String((responses.get_account_snapshot as { currency?: string })?.currency ?? 'USD'),
           quotedAtMs: NOW,
         };
       }
@@ -356,13 +359,13 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
           estimatedReward: '25.00',
           estimatedMargin: '105.00',
           rr: '2.00',
-          currency: 'USD',
+          currency: String((responses.get_account_snapshot as { currency?: string })?.currency ?? 'USD'),
           quotedAtMs: NOW,
         });
         return null;
       }
       if (cmd === 'request_order_check') {
-        emit('order-check-result', {
+        const result = {
           draftVersion: args.draftVersion,
           draftId: 'draft-001',
           accountLogin: args.accountLogin,
@@ -389,7 +392,12 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
           comment: 'Done',
           checkedAtMs: NOW,
           ...opts.orderCheckResult,
-        });
+        };
+        if (opts.orderCheckDelayMs !== undefined) {
+          setTimeout(() => emit('order-check-result', result), opts.orderCheckDelayMs);
+        } else {
+          emit('order-check-result', result);
+        }
         return null;
       }
       if (cmd === 'request_history') {

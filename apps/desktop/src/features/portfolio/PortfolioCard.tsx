@@ -1,12 +1,16 @@
+import { formatMoney } from '../../shared/format';
 import type { AccountSnapshot, PendingModification, PortfolioSnapshot } from '../../shared/bridge/types';
 
-/** MT5-style 2-decimal account figure for the live-trading account bar. */
-function accountAmount(value?: string): string {
+/** Account precision for money; two decimals for nonmonetary account metrics. */
+function accountAmount(value?: string, currency?: string, digits?: number): string {
   const text = value?.trim();
   if (!text) {
     return '—';
   }
   const parsed = Number(text);
+  if (currency && Number.isFinite(parsed)) {
+    return formatMoney(parsed, currency, digits);
+  }
   return Number.isFinite(parsed)
     ? parsed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : text;
@@ -43,22 +47,19 @@ export function PortfolioCard({
         <div className="portfolio-account" aria-label="Account state">
           <span>
             <small>Balance</small>
-            <b>
-              {accountAmount(account.balance)}
-              {account.currency ? ` ${account.currency}` : ''}
-            </b>
+            <b>{accountAmount(account.balance, account.currency, account.currencyDigits)}</b>
           </span>
           <span>
             <small>Equity</small>
-            <b>{accountAmount(account.equity)}</b>
+            <b>{accountAmount(account.equity, account.currency, account.currencyDigits)}</b>
           </span>
           <span>
             <small>Margin</small>
-            <b>{accountAmount(account.margin)}</b>
+            <b>{accountAmount(account.margin, account.currency, account.currencyDigits)}</b>
           </span>
           <span>
             <small>Free margin</small>
-            <b>{accountAmount(account.freeMargin)}</b>
+            <b>{accountAmount(account.freeMargin, account.currency, account.currencyDigits)}</b>
           </span>
           <span>
             <small>Margin level</small>
@@ -93,8 +94,11 @@ export function PortfolioCard({
                     </div>
                     <div>
                       <span>
-                        {item.priceCurrent} · P/L {item.profit ?? '—'}
-                        {item.swap ? ` · Swap ${item.swap}` : ''}
+                        {item.priceCurrent} · P/L{' '}
+                        {accountAmount(item.profit, account?.currency, account?.currencyDigits)}
+                        {item.swap
+                          ? ` · Swap ${accountAmount(item.swap, account?.currency, account?.currencyDigits)}`
+                          : ''}
                       </span>
                       <small>
                         SL {item.stopLoss ?? '—'} · TP {item.takeProfit ?? '—'}

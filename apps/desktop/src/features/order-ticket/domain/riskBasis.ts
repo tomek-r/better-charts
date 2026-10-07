@@ -1,4 +1,5 @@
 import { equityAllocationIssue } from './ticketRules';
+import { currencyFractionDigits } from '../../../shared/money';
 
 export const MAX_RISK_PERCENT = 100;
 
@@ -14,7 +15,7 @@ export function clampRiskPercentInput(value: string): string {
 }
 
 export type OrderRiskBasis = {
-  riskMode: 'usd' | 'equity';
+  riskMode: 'money' | 'equity';
   effectiveRiskAmount: string;
   equityValue: number | undefined;
   riskModeHint: string | undefined;
@@ -26,6 +27,7 @@ export function deriveOrderRiskBasis({
   equity,
   equityAllocationPercent = '100',
   currency,
+  currencyDigits,
   stagedOnChart,
 }: {
   unitsMode: 'money' | 'equity' | 'units';
@@ -33,9 +35,10 @@ export function deriveOrderRiskBasis({
   equity: string | undefined;
   equityAllocationPercent?: string;
   currency: string | undefined;
+  currencyDigits?: number;
   stagedOnChart: boolean;
 }): OrderRiskBasis {
-  const riskMode = unitsMode === 'equity' ? 'equity' : 'usd';
+  const riskMode = unitsMode === 'equity' ? 'equity' : 'money';
   const parsedEquity = equity?.trim() ? Number(equity) : NaN;
   const equityValue = Number.isFinite(parsedEquity) && parsedEquity > 0 ? parsedEquity : undefined;
   const parsedRisk = Number(riskAmount);
@@ -47,9 +50,11 @@ export function deriveOrderRiskBasis({
     Number.isFinite(parsedRisk) &&
     parsedRisk > 0 &&
     parsedRisk <= MAX_RISK_PERCENT
-      ? ((parsedRisk / 100) * equityValue * (Number(equityAllocationPercent) / 100)).toFixed(2)
+      ? ((parsedRisk / 100) * equityValue * (Number(equityAllocationPercent) / 100)).toFixed(
+          currencyFractionDigits(currencyDigits),
+        )
       : '';
-  const effectiveRiskAmount = riskMode === 'usd' ? riskAmount : percentRiskAmount;
+  const effectiveRiskAmount = riskMode === 'money' ? riskAmount : percentRiskAmount;
   let riskModeHint: string | undefined;
   if (riskMode === 'equity' && equityValue === undefined) {
     riskModeHint = stagedOnChart ? 'Account data required' : undefined;

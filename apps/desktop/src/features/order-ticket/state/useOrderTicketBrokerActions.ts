@@ -9,8 +9,8 @@ type BrokerInput = Pick<
   | 'snapshot'
   | 'account'
   | 'orderCheckEntry'
-  | 'riskPreview'
   | 'riskVersion'
+  | 'pendingRiskRequestRef'
   | 'orderCheckGeneration'
   | 'orderCheckPending'
   | 'setOrderCheck'
@@ -43,8 +43,8 @@ export function useOrderTicketBrokerActions(ticket: BrokerInput) {
     snapshot,
     account,
     orderCheckEntry,
-    riskPreview,
     riskVersion,
+    pendingRiskRequestRef,
     orderCheckGeneration: orderCheckGenerationRef,
     orderCheckPending: orderCheckPendingRef,
     setOrderCheck,
@@ -74,8 +74,8 @@ export function useOrderTicketBrokerActions(ticket: BrokerInput) {
     if (!canCheckOrder || !snapshot.symbol || !account || orderCheckEntry === null) {
       return;
     }
-    // With SL off there is no preview; riskVersion still advances on every edit.
-    const draftVersion = riskPreview?.draftVersion ?? riskVersion.current;
+    // The explicit draft can be newer than the last sizing response.
+    const draftVersion = riskVersion.current;
     const generation = ++orderCheckGenerationRef.current;
     const pending = { generation, draftVersion, symbol: snapshot.symbol, accountLogin: account.accountLogin };
     orderCheckPendingRef.current = { ...pending, brokerServer: account.brokerServer };
@@ -83,6 +83,12 @@ export function useOrderTicketBrokerActions(ticket: BrokerInput) {
     setOrderCheckError(undefined);
     setOrderCheckLoading(true);
     try {
+      // Queue any debounced sizing first: a later sizing command would clear
+      // the backend check. This also refreshes projections used after a drag.
+      await pendingRiskRequestRef.current?.();
+      if (orderCheckPendingRef.current?.generation !== generation) {
+        return;
+      }
       await invoke('request_order_check', {
         accountLogin: account.accountLogin,
         brokerServer: account.brokerServer,

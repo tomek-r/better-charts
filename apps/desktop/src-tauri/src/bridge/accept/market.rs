@@ -183,6 +183,7 @@ pub(crate) fn accept_account(
     let mut account = state.account.lock().expect("account mutex poisoned");
     let contract_changed = account.as_ref().map_or(true, |previous| {
         previous.currency != view.currency
+            || previous.currency_digits != view.currency_digits
             || previous.leverage != view.leverage
             || previous.margin_mode != view.margin_mode
             || previous.trade_allowed != view.trade_allowed

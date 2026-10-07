@@ -1,9 +1,10 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { type Dispatch, type SetStateAction } from 'react';
-import type { OrderCheckResult, RiskSide } from '../../../shared/bridge/types';
+import type { AccountSnapshot, OrderCheckResult, RiskSide } from '../../../shared/bridge/types';
 import { OrderCheckResult as OrderCheckResultView } from './OrderCheckResult';
 
 export function OrderTicketReview({
+  account,
   canSubmitOrder,
   effectiveVolume,
   orderCheck,
@@ -17,6 +18,7 @@ export function OrderTicketReview({
   submitStatus,
   submittingSide,
 }: {
+  account: AccountSnapshot | undefined;
   canSubmitOrder: boolean;
   effectiveVolume: string;
   orderCheck: OrderCheckResult | undefined;
@@ -39,7 +41,7 @@ export function OrderTicketReview({
         </span>
       </div>
       {orderCheckLoading && !orderCheck && !orderCheckError && <p className="search-hint">Checking with MT5…</p>}
-      {orderCheck && <OrderCheckResultView orderCheck={orderCheck} />}
+      {orderCheck && <OrderCheckResultView orderCheck={orderCheck} account={account} />}
       {orderCheck && orderCheck.checkPassed === false && (
         <ErrorNotification
           message={

@@ -1,4 +1,5 @@
 import { useNotifyError } from '../../shared/ui/ErrorNotifications';
+import { accountMoneyBasis } from '../../shared/money';
 // Bridge listeners are the sole source of accepted history and live candles.
 // Selection refs reject stale events; the coordinator owns request dedupe and timeout.
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -285,12 +286,8 @@ export function useBridgeStreamEffects(
     try {
       const matchingInstrument = instrument?.symbol === snapshot.symbol ? instrument : undefined;
       const pnlCurrency = account?.currency.trim() || undefined;
-      const contractSize = matchingInstrument ? Number(matchingInstrument.contractSize) : NaN;
       const quotePrecision = quote && quote.symbol === snapshot.symbol ? quoteDigits(quote.bid, quote.ask) : undefined;
-      const estimatedMoney =
-        pnlCurrency && Number.isFinite(contractSize) && contractSize > 0
-          ? { contractSize, currency: pnlCurrency }
-          : undefined;
+      const estimatedMoney = accountMoneyBasis(matchingInstrument, pnlCurrency, account?.currencyDigits);
       const changed = syncPositionOverlay(
         positionOverlayState.current,
         portfolio,
@@ -298,6 +295,7 @@ export function useBridgeStreamEffects(
         matchingInstrument?.digits ?? quotePrecision ?? positionOverlayState.current.digits,
         estimatedMoney,
         pnlCurrency,
+        account?.currencyDigits,
       );
       // Repaint so the ui-layer overlay re-renders (the sync previously piggy-backed on setPositions' requestRender).
       if (submitSwapPendingRef.current) {
@@ -322,7 +320,12 @@ export function useBridgeStreamEffects(
     instrument?.symbol,
     instrument?.digits,
     instrument?.contractSize,
+    instrument?.tickSize,
+    instrument?.tickValueProfit,
+    instrument?.tickValueLoss,
+    instrument?.tickValueCurrency,
     account?.currency,
+    account?.currencyDigits,
     quote?.symbol,
     quote?.bid,
     quote?.ask,

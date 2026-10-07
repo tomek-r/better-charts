@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.001"
+#define BRIDGE_EXPERT_VERSION "1.002"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -469,8 +469,8 @@ string AccountPayload()
    if(trade_mode==ACCOUNT_TRADE_MODE_DEMO) trade_mode_name="demo";
    else if(trade_mode==ACCOUNT_TRADE_MODE_CONTEST) trade_mode_name="contest";
    else if(trade_mode==ACCOUNT_TRADE_MODE_REAL) trade_mode_name="real";
-   return StringFormat("{\"account_login\":\"%s\",\"broker_server\":\"%s\",\"currency\":\"%s\",\"balance\":\"%s\",\"equity\":\"%s\",\"margin\":\"%s\",\"free_margin\":\"%s\",\"margin_level\":\"%s\",\"leverage\":%d,\"margin_mode\":%d,\"trade_allowed\":%s,\"expert_allowed\":%s,\"account_trade_mode\":%I64d,\"account_trade_mode_name\":\"%s\"}",
-                       JsonEscape(IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN))),JsonEscape(AccountInfoString(ACCOUNT_SERVER)),JsonEscape(AccountInfoString(ACCOUNT_CURRENCY)),
+   return StringFormat("{\"account_login\":\"%s\",\"broker_server\":\"%s\",\"currency\":\"%s\",\"currency_digits\":%d,\"balance\":\"%s\",\"equity\":\"%s\",\"margin\":\"%s\",\"free_margin\":\"%s\",\"margin_level\":\"%s\",\"leverage\":%d,\"margin_mode\":%d,\"trade_allowed\":%s,\"expert_allowed\":%s,\"account_trade_mode\":%I64d,\"account_trade_mode_name\":\"%s\"}",
+                       JsonEscape(IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN))),JsonEscape(AccountInfoString(ACCOUNT_SERVER)),JsonEscape(AccountInfoString(ACCOUNT_CURRENCY)),amount_digits,
                        DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),amount_digits),DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY),amount_digits),DoubleToString(margin,amount_digits),DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE),amount_digits),DoubleToString(margin_level,4),
                        AccountInfoInteger(ACCOUNT_LEVERAGE),AccountInfoInteger(ACCOUNT_MARGIN_MODE),(AccountInfoInteger(ACCOUNT_TRADE_ALLOWED)!=0?"true":"false"),(AccountInfoInteger(ACCOUNT_TRADE_EXPERT)!=0?"true":"false"),trade_mode,trade_mode_name);
   }
@@ -502,6 +502,16 @@ bool PollAccountSnapshot()
 string NullablePrice(const double value,const int digits)
   { return (value==0.0 ? "null" : "\""+DoubleToString(value,digits)+"\""); }
 
+// Actual position/order volume and entry avoid tiny reference-tick rounding.
+// This is a read-only estimate in the account currency, excluding fees/swap.
+string ExitProfitJson(const string symbol,const ENUM_ORDER_TYPE side,const double volume,const double entry,const double exit_price)
+  {
+   double profit=0.0;
+   if(volume<=0.0 || entry<=0.0 || exit_price<=0.0 ||
+      !OrderCalcProfit(side,symbol,volume,entry,exit_price,profit) || !MathIsValidNumber(profit)) return "null";
+   return "\""+DoubleToString(profit,8)+"\"";
+  }
+
 string PositionJson()
   {
    const string symbol=PositionGetString(POSITION_SYMBOL);
@@ -511,7 +521,13 @@ string PositionJson()
    const long type=PositionGetInteger(POSITION_TYPE);
    const int currency_digits=(int)AccountInfoInteger(ACCOUNT_CURRENCY_DIGITS);
    const int amount_digits=(currency_digits>=0 && currency_digits<=8 ? currency_digits : 2);
-   return StringFormat("{\"position_id\":\"%I64d\",\"ticket\":\"%I64d\",\"symbol\":\"%s\",\"side\":\"%s\",\"volume\":\"%s\",\"price_open\":\"%s\",\"price_current\":\"%s\",\"stop_loss\":%s,\"take_profit\":%s,\"profit\":\"%s\",\"swap\":\"%s\",\"time_ms\":%I64d,\"magic\":\"%I64d\"}",position_id,ticket,JsonEscape(symbol),(type==POSITION_TYPE_BUY?"buy":"sell"),DoubleToString(PositionGetDouble(POSITION_VOLUME),8),DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN),digits),DoubleToString(PositionGetDouble(POSITION_PRICE_CURRENT),digits),NullablePrice(PositionGetDouble(POSITION_SL),digits),NullablePrice(PositionGetDouble(POSITION_TP),digits),DoubleToString(PositionGetDouble(POSITION_PROFIT),amount_digits),DoubleToString(PositionGetDouble(POSITION_SWAP),amount_digits),PositionGetInteger(POSITION_TIME_MSC),PositionGetInteger(POSITION_MAGIC));
+   const string metadata=StringFormat("{\"position_id\":\"%I64d\",\"ticket\":\"%I64d\",\"symbol\":\"%s\",\"side\":\"%s\",\"volume\":\"%s\",\"price_open\":\"%s\",\"price_current\":\"%s\",\"stop_loss\":%s,\"take_profit\":%s,\"profit\":\"%s\",\"swap\":\"%s\",\"time_ms\":%I64d,\"magic\":\"%I64d\"}",position_id,ticket,JsonEscape(symbol),(type==POSITION_TYPE_BUY?"buy":"sell"),DoubleToString(PositionGetDouble(POSITION_VOLUME),8),DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN),digits),DoubleToString(PositionGetDouble(POSITION_PRICE_CURRENT),digits),NullablePrice(PositionGetDouble(POSITION_SL),digits),NullablePrice(PositionGetDouble(POSITION_TP),digits),DoubleToString(PositionGetDouble(POSITION_PROFIT),amount_digits),DoubleToString(PositionGetDouble(POSITION_SWAP),amount_digits),PositionGetInteger(POSITION_TIME_MSC),PositionGetInteger(POSITION_MAGIC));
+   const ENUM_ORDER_TYPE side=(type==POSITION_TYPE_BUY ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
+   const double volume=PositionGetDouble(POSITION_VOLUME);
+   const double entry=PositionGetDouble(POSITION_PRICE_OPEN);
+   return StringSubstr(metadata,0,StringLen(metadata)-1)+",\"stop_loss_profit\":"+
+          ExitProfitJson(symbol,side,volume,entry,PositionGetDouble(POSITION_SL))+",\"take_profit_profit\":"+
+          ExitProfitJson(symbol,side,volume,entry,PositionGetDouble(POSITION_TP))+"}";
   }
 
 string OrderTypeName(const long type)
@@ -551,7 +567,15 @@ string OrderJson()
    const string symbol=OrderGetString(ORDER_SYMBOL);
    const int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
    const long expiration=OrderGetInteger(ORDER_TIME_EXPIRATION);
-   return StringFormat("{\"order_id\":\"%I64d\",\"symbol\":\"%s\",\"order_type\":\"%s\",\"state\":\"%s\",\"volume_initial\":\"%s\",\"volume_current\":\"%s\",\"price_open\":\"%s\",\"price_current\":\"%s\",\"stop_loss\":%s,\"take_profit\":%s,\"time_setup_ms\":%I64d,\"expiration_ms\":%s,\"magic\":\"%I64d\"}",OrderGetInteger(ORDER_TICKET),JsonEscape(symbol),OrderTypeName(OrderGetInteger(ORDER_TYPE)),OrderStateName(OrderGetInteger(ORDER_STATE)),DoubleToString(OrderGetDouble(ORDER_VOLUME_INITIAL),8),DoubleToString(OrderGetDouble(ORDER_VOLUME_CURRENT),8),DoubleToString(OrderGetDouble(ORDER_PRICE_OPEN),digits),DoubleToString(OrderGetDouble(ORDER_PRICE_CURRENT),digits),NullablePrice(OrderGetDouble(ORDER_SL),digits),NullablePrice(OrderGetDouble(ORDER_TP),digits),OrderGetInteger(ORDER_TIME_SETUP_MSC),(expiration==0?"null":IntegerToString(expiration*1000)),OrderGetInteger(ORDER_MAGIC));
+   const string metadata=StringFormat("{\"order_id\":\"%I64d\",\"symbol\":\"%s\",\"order_type\":\"%s\",\"state\":\"%s\",\"volume_initial\":\"%s\",\"volume_current\":\"%s\",\"price_open\":\"%s\",\"price_current\":\"%s\",\"stop_loss\":%s,\"take_profit\":%s,\"time_setup_ms\":%I64d,\"expiration_ms\":%s,\"magic\":\"%I64d\"}",OrderGetInteger(ORDER_TICKET),JsonEscape(symbol),OrderTypeName(OrderGetInteger(ORDER_TYPE)),OrderStateName(OrderGetInteger(ORDER_STATE)),DoubleToString(OrderGetDouble(ORDER_VOLUME_INITIAL),8),DoubleToString(OrderGetDouble(ORDER_VOLUME_CURRENT),8),DoubleToString(OrderGetDouble(ORDER_PRICE_OPEN),digits),DoubleToString(OrderGetDouble(ORDER_PRICE_CURRENT),digits),NullablePrice(OrderGetDouble(ORDER_SL),digits),NullablePrice(OrderGetDouble(ORDER_TP),digits),OrderGetInteger(ORDER_TIME_SETUP_MSC),(expiration==0?"null":IntegerToString(expiration*1000)),OrderGetInteger(ORDER_MAGIC));
+   const ENUM_ORDER_TYPE side=(StringFind(OrderTypeName(OrderGetInteger(ORDER_TYPE)),"buy_")==0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
+   const double volume=OrderGetDouble(ORDER_VOLUME_CURRENT);
+   const long order_type=OrderGetInteger(ORDER_TYPE);
+   const double entry=(order_type==ORDER_TYPE_BUY_STOP_LIMIT || order_type==ORDER_TYPE_SELL_STOP_LIMIT ?
+                       OrderGetDouble(ORDER_PRICE_STOPLIMIT) : OrderGetDouble(ORDER_PRICE_OPEN));
+   return StringSubstr(metadata,0,StringLen(metadata)-1)+",\"stop_loss_profit\":"+
+          ExitProfitJson(symbol,side,volume,entry,OrderGetDouble(ORDER_SL))+",\"take_profit_profit\":"+
+          ExitProfitJson(symbol,side,volume,entry,OrderGetDouble(ORDER_TP))+"}";
   }
 
 bool PollPortfolioSnapshot()
@@ -1125,6 +1149,38 @@ bool HasValidSymbolMetadata(const string symbol)
    return tick_size>0.0 && volume_step>0.0 && volume_min>0.0 && volume_max>=volume_min && point_size>0.0 && contract_size>0.0;
   }
 
+// Read-only per-lot tick estimates; OrderCalcProfit returns deposit currency.
+string AccountTickValuesJson(const string symbol,const double tick_size)
+  {
+   const string currency=JsonEscape(AccountInfoString(ACCOUNT_CURRENCY));
+   MqlTick quote;
+   const double minimum=SymbolInfoDouble(symbol,SYMBOL_VOLUME_MIN);
+   const double maximum=SymbolInfoDouble(symbol,SYMBOL_VOLUME_MAX);
+   const double step=SymbolInfoDouble(symbol,SYMBOL_VOLUME_STEP);
+   const string unavailable=StringFormat("\"tick_value_profit\":null,\"tick_value_loss\":null,\"tick_value_currency\":\"%s\"",currency);
+   if(minimum<=0.0 || maximum<minimum || step<=0.0 || tick_size<=0.0 || !SymbolInfoTick(symbol,quote)) return unavailable;
+   const double cap=MathMax(minimum,MathMin(1.0,maximum));
+   const double volume=minimum+MathFloor((cap-minimum)/step+1e-9)*step;
+   const int digits=(int)AccountInfoInteger(ACCOUNT_CURRENCY_DIGITS);
+   // A minimum-lot single tick may round to zero in the deposit currency.
+   // Probe enough money for useful precision, then scale back to one lot/tick.
+   const double threshold=100.0*MathPow(10.0,-(digits>=0 && digits<=8 ? digits : 2));
+   double ticks=1.0;
+   for(int attempt=0;attempt<6;attempt++,ticks*=10.0)
+     {
+      const double distance=tick_size*ticks;
+      if(quote.ask<=distance) break;
+      double profit=0.0,loss=0.0;
+      if(!OrderCalcProfit(ORDER_TYPE_BUY,symbol,volume,quote.ask,quote.ask+distance,profit) ||
+         !OrderCalcProfit(ORDER_TYPE_BUY,symbol,volume,quote.ask,quote.ask-distance,loss) ||
+         !MathIsValidNumber(profit) || !MathIsValidNumber(loss)) return unavailable;
+      if(profit<threshold || -loss<threshold) continue;
+      return StringFormat("\"tick_value_profit\":\"%s\",\"tick_value_loss\":\"%s\",\"tick_value_currency\":\"%s\"",
+                          DoubleToString(profit/(volume*ticks),8),DoubleToString(-loss/(volume*ticks),8),currency);
+     }
+   return unavailable;
+  }
+
 string SymbolMetadataJson(const string symbol)
   {
    const int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
@@ -1136,7 +1192,8 @@ string SymbolMetadataJson(const string symbol)
    const double point_size=SymbolInfoDouble(symbol,SYMBOL_POINT);
    const double contract_size=SymbolInfoDouble(symbol,SYMBOL_TRADE_CONTRACT_SIZE);
    const string description=JsonEscape(SymbolInfoString(symbol,SYMBOL_DESCRIPTION));
-   return StringFormat("{\"symbol\":\"%s\",\"description\":\"%s\",\"digits\":%d,\"tick_size\":\"%s\",\"volume_min\":\"%s\",\"volume_max\":\"%s\",\"volume_step\":\"%s\",\"trade_mode\":%I64d,\"point_size\":\"%s\",\"contract_size\":\"%s\",\"stops_level\":%I64d,\"freeze_level\":%I64d,\"filling_mode\":%I64d,\"order_mode\":%I64d,\"expiration_mode\":%I64d,\"trade_execution\":%I64d}",JsonEscape(symbol),description,digits,DoubleToString(tick_size,tick_digits),DoubleToString(volume_min,8),DoubleToString(volume_max,8),DoubleToString(volume_step,8),SymbolInfoInteger(symbol,SYMBOL_TRADE_MODE),DoubleToString(point_size,tick_digits),DoubleToString(contract_size,8),SymbolInfoInteger(symbol,SYMBOL_TRADE_STOPS_LEVEL),SymbolInfoInteger(symbol,SYMBOL_TRADE_FREEZE_LEVEL),SymbolInfoInteger(symbol,SYMBOL_FILLING_MODE),SymbolInfoInteger(symbol,SYMBOL_ORDER_MODE),SymbolInfoInteger(symbol,SYMBOL_EXPIRATION_MODE),SymbolInfoInteger(symbol,SYMBOL_TRADE_EXEMODE));
+   const string metadata=StringFormat("{\"symbol\":\"%s\",\"description\":\"%s\",\"digits\":%d,\"tick_size\":\"%s\",\"volume_min\":\"%s\",\"volume_max\":\"%s\",\"volume_step\":\"%s\",\"trade_mode\":%I64d,\"point_size\":\"%s\",\"contract_size\":\"%s\",\"stops_level\":%I64d,\"freeze_level\":%I64d,\"filling_mode\":%I64d,\"order_mode\":%I64d,\"expiration_mode\":%I64d,\"trade_execution\":%I64d}",JsonEscape(symbol),description,digits,DoubleToString(tick_size,tick_digits),DoubleToString(volume_min,8),DoubleToString(volume_max,8),DoubleToString(volume_step,8),SymbolInfoInteger(symbol,SYMBOL_TRADE_MODE),DoubleToString(point_size,tick_digits),DoubleToString(contract_size,8),SymbolInfoInteger(symbol,SYMBOL_TRADE_STOPS_LEVEL),SymbolInfoInteger(symbol,SYMBOL_TRADE_FREEZE_LEVEL),SymbolInfoInteger(symbol,SYMBOL_FILLING_MODE),SymbolInfoInteger(symbol,SYMBOL_ORDER_MODE),SymbolInfoInteger(symbol,SYMBOL_EXPIRATION_MODE),SymbolInfoInteger(symbol,SYMBOL_TRADE_EXEMODE));
+   return StringSubstr(metadata,0,StringLen(metadata)-1)+","+AccountTickValuesJson(symbol,tick_size)+"}";
   }
 
 bool SendSymbolSearchResult(const string request_id,const string query,const long limit)
