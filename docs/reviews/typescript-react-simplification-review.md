@@ -179,6 +179,12 @@ checks successful events from different queries.
 
 ### F05 — P1: unify settings load acceptance
 
+**Implemented:** initial and explicit-open reads share generation-checked
+acceptance for values and errors. New reads, saves, availability changes, and
+unmount invalidate earlier responses. Initial-load restart/first-launch handling
+remains explicit; opening still preserves restart-notice dismissal. Regressions
+reproduced older reads overwriting both a newer response and a completed save.
+
 **Evidence:** [initial load and open](../../apps/desktop/src/features/settings/useAppSettings.ts#L16)
 and [save acceptance](../../apps/desktop/src/features/settings/useAppSettings.ts#L85).
 

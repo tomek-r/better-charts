@@ -6,38 +6,50 @@ export function useAppSettings(tauriAvailable: boolean) {
   const [settings, setSettings] = useState<AppSettingsData>();
   const [isOpen, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const settingsLoadGeneration = useRef(0);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(closeTimer.current), []);
   const [loadError, setLoadError] = useState<string>();
   const [restartRequired, setRestartRequired] = useState(false);
   const [restartNoticeDismissed, setRestartNoticeDismissed] = useState(false);
   const [dismissedConfigurationError, setDismissedConfigurationError] = useState<string>();
   const [notificationRevision, setNotificationRevision] = useState(0);
+  const loadSettings = useCallback((errorMessage: string, onLoaded?: (next: AppSettingsData) => void) => {
+    const generation = ++settingsLoadGeneration.current;
+    void invoke<AppSettingsData>('get_app_settings')
+      .then((next) => {
+        if (generation !== settingsLoadGeneration.current) {
+          return;
+        }
+        setSettings(next);
+        onLoaded?.(next);
+      })
+      .catch(() => {
+        if (generation === settingsLoadGeneration.current) {
+          setLoadError(errorMessage);
+        }
+      });
+  }, []);
+  useEffect(
+    () => () => {
+      clearTimeout(closeTimer.current);
+      settingsLoadGeneration.current += 1;
+    },
+    [],
+  );
   useEffect(() => {
     if (!tauriAvailable) {
       return;
     }
-    let active = true;
-    void invoke<AppSettingsData>('get_app_settings')
-      .then((next) => {
-        if (!active) {
-          return;
-        }
-        setSettings(next);
-        setRestartRequired(next.restartRequired);
-        if (next.firstLaunch || next.configurationError) {
-          setOpen(true);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setLoadError('Could not load app settings. Reopen settings to try again.');
-        }
-      });
+    loadSettings('Could not load app settings. Reopen settings to try again.', (next) => {
+      setRestartRequired(next.restartRequired);
+      if (next.firstLaunch || next.configurationError) {
+        setOpen(true);
+      }
+    });
     return () => {
-      active = false;
+      settingsLoadGeneration.current += 1;
     };
-  }, [tauriAvailable]);
+  }, [loadSettings, tauriAvailable]);
   const open = useCallback(() => {
     clearTimeout(closeTimer.current);
     closeTimer.current = undefined;
@@ -45,12 +57,8 @@ export function useAppSettings(tauriAvailable: boolean) {
     setOpen(true);
     setDismissedConfigurationError(undefined);
     setLoadError(undefined);
-    void invoke<AppSettingsData>('get_app_settings')
-      .then(setSettings)
-      .catch(() => {
-        setLoadError('Could not load app settings. Close and reopen settings to try again.');
-      });
-  }, []);
+    loadSettings('Could not load app settings. Close and reopen settings to try again.');
+  }, [loadSettings]);
   const close = useCallback(() => {
     if (closeTimer.current !== undefined) {
       return;
@@ -83,6 +91,7 @@ export function useAppSettings(tauriAvailable: boolean) {
     open,
     close,
     saved: (next: AppSettingsData) => {
+      settingsLoadGeneration.current += 1;
       setSettings(next);
       setRestartRequired(next.restartRequired);
       setRestartNoticeDismissed(false);
