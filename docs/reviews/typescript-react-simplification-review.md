@@ -312,6 +312,12 @@ rules. This is a high-risk refactor despite its DRY motivation.
 
 ### F10 — P2: reduce lifecycle coupling without flattening providers
 
+**Implemented:** bridge bootstrap accepts a named response port limited to its
+11 ticket refs/setters. The existing ticket object satisfies that port without
+new forwarding boilerplate. Staged display declares an independent domain input
+instead of importing a React state-hook type. Lifecycle order, listeners,
+effect dependencies, and provider state ownership are unchanged.
+
 **Evidence:** [central lifecycle](../../apps/desktop/src/AppLifecycle.tsx#L29),
 [bridge bootstrap inputs](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L336),
 [ticket state](../../apps/desktop/src/features/order-ticket/state/useOrderTicketState.ts#L111),

@@ -45,6 +45,21 @@ import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
 import { HISTORY_BARS } from '../../shared/bridge/limits';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
 
+type BridgeTicketResponsePort = Pick<
+  OrderTicketState,
+  | 'riskVersion'
+  | 'riskBrokerVersion'
+  | 'riskPreviewDisplayRef'
+  | 'setRiskPreview'
+  | 'setRiskLoading'
+  | 'setRiskError'
+  | 'orderCheckGeneration'
+  | 'orderCheckPending'
+  | 'setOrderCheck'
+  | 'setOrderCheckLoading'
+  | 'setOrderCheckError'
+>;
+
 const emptySnapshot: MarketSnapshot = { complete: false, candles: [] };
 /** Bars per lazy-loading page; the protocol's per-request maximum. */
 const LAZY_HISTORY_BARS = HISTORY_BARS;
@@ -331,7 +346,7 @@ export function useBridgeBootstrapEffects(
     profileGeneration: { current: number };
     accountLoginRef: { current: string | undefined };
     brokerServerRef: { current: string | undefined };
-    ticket: OrderTicketState;
+    ticket: BridgeTicketResponsePort;
   },
 ): void {
   const notifyError = useNotifyError();
