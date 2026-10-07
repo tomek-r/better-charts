@@ -158,10 +158,10 @@ export function useExecutionCommands({
     );
   // §12 modify drafts: same busy/status path as close/cancel. `targetKind` uses
   // the backend's wire strings ("position"/"pending_order"); explicit nulls are
-  // the backend's "leave this level unchanged" signal, and this path never
-  // requests a level removal (out of MVP scope). Shared by pending-order
-  // price drags and SL/TP drag auto-send (keepDraftOnSuccess), so both
-  // emit byte-identical modify_order payloads.
+  // the backend's "leave this level unchanged" signal; the decimal string "0"
+  // removes the selected SL/TP. Shared by live level-clear chips, pending-order
+  // price drags and SL/TP drag auto-send (keepDraftOnSuccess), all using the
+  // same modify_order serialization.
   const requestModifyDraft = (draft: PendingModification, keepDraftOnSuccess = false) => {
     if (!draft.targetId) {
       return;

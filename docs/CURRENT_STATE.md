@@ -9,6 +9,8 @@ and the [bridge contract](protocol/bridge-v1.md) for implementation details.
   older-history paging; Fixed Range Volume Profile with BID/ASK and POC/VAH/VAL.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
+- Chart SL/TP clear chips remove the selected live level from positions or
+  pending orders through the guarded modify pipeline.
 - Automatic sizing respects SL risk, broker lot limits and margin budget:
   `min(equity × Equity use % / 100, free margin)`. Equity use defaults to 100%
   and accepts greater than 0 through 100%; Risk % uses allocated equity,

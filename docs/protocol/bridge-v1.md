@@ -657,9 +657,19 @@ rules: missing/null SL means an order without SL.
 }
 ```
 
-`target_kind` is `position|pending_order`. Each `null` level means **unchanged**;
-SL/TP removal is unsupported. `price` is valid only for a pending order and
-must be `null` for a position. This null rule differs from check/submit.
+`target_kind` is `position|pending_order`. Each omitted or `null` level means
+**unchanged**. A positive decimal-string `stop_loss` or `take_profit` sets that
+level; the decimal string `"0"` **removes** the selected SL/TP. Removal is supported
+for both positions and pending orders through the same guarded modify pipeline.
+Negative or malformed values are rejected. For example,
+`"stop_loss":"0","take_profit":null,"price":null` removes SL while preserving TP
+and the pending-order price.
+
+`price` must be a positive decimal string when supplied, is valid only for a
+pending order, and must be omitted or `null` for a position. At least one of
+`stop_loss`, `take_profit`, or `price` must be supplied with a non-null value.
+The unchanged-level null rule differs from check/submit, where missing/null SL
+means an order without SL.
 
 **`order_close_request` payload:**
 
