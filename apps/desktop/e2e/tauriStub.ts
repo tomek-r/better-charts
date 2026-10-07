@@ -41,6 +41,8 @@ export interface TauriStubOptions {
   responses?: Record<string, unknown>;
   /** Command → message; `invoke(cmd)` rejects with `new Error(message)`. */
   failures?: Record<string, string>;
+  /** Event names whose registration fails, after other listeners may succeed. */
+  listenerFailures?: string[];
   /** Delay automatic market-snapshot replies to exercise overlapping selection requests. */
   historyDelayMs?: number;
   /** Real timeframe-specific timestamps for chart remapping regressions. */
@@ -454,6 +456,9 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
     async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
       invocations.push({ cmd, args });
       if (cmd === 'plugin:event|listen') {
+        if (opts.listenerFailures?.includes(args.event as string)) {
+          throw new Error(`Listener unavailable: ${args.event as string}`);
+        }
         const id = args.handler as number;
         const registered = listeners.get(args.event as string) ?? [];
         registered.push(id);

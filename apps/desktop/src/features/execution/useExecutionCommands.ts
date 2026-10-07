@@ -3,7 +3,8 @@
 // identity checks, single in-flight target, and no-retry behavior stay unchanged.
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
+import { SubscriptionScope } from '../../shared/bridge/subscriptionScope';
 import type { ChartController } from '../chart/engine/chartController';
 import type {
   AccountSnapshot,
@@ -206,28 +207,22 @@ export function useExecutionCommandEffects(execution: ExecutionCommandState): vo
   // Both operations are observational; a failure does not invent a command state.
   useEffect(() => {
     let disposed = false;
-    let cleanups: UnlistenFn[] = [];
-    void Promise.all([
-      listen<CommandUpdate>('execution-command-update', (event) => {
-        console.info(`[command-update] ${JSON.stringify(event.payload)}`);
-        if (!disposed && event.payload.status === 'rejected') {
-          notifyError(event.payload.message || `Order rejected by MT5 (code ${event.payload.retcode ?? 'unknown'}).`);
-        }
-      }),
-      listen<CommandError>('execution-command-error', (event) => {
-        console.info(`[command-error] ${JSON.stringify(event.payload)}`);
-        if (!disposed) {
-          notifyError(event.payload.message);
-        }
-      }),
-    ])
-      .then((listeners) => {
-        if (disposed) {
-          listeners.forEach((cleanup) => cleanup());
-          return;
-        }
-        cleanups = listeners;
-      })
+    const subscriptions = new SubscriptionScope();
+    void subscriptions
+      .register([
+        listen<CommandUpdate>('execution-command-update', (event) => {
+          console.info(`[command-update] ${JSON.stringify(event.payload)}`);
+          if (!disposed && event.payload.status === 'rejected') {
+            notifyError(event.payload.message || `Order rejected by MT5 (code ${event.payload.retcode ?? 'unknown'}).`);
+          }
+        }),
+        listen<CommandError>('execution-command-error', (event) => {
+          console.info(`[command-error] ${JSON.stringify(event.payload)}`);
+          if (!disposed) {
+            notifyError(event.payload.message);
+          }
+        }),
+      ])
       .catch((error) => console.info('Execution command status unavailable.', error));
     void invoke<ExecutionQueueView>('get_execution_queue_status')
       .then((view) => {
@@ -238,7 +233,7 @@ export function useExecutionCommandEffects(execution: ExecutionCommandState): vo
       .catch((error) => console.info('Execution queue status unavailable.', error));
     return () => {
       disposed = true;
-      cleanups.forEach((cleanup) => cleanup());
+      subscriptions.dispose();
     };
   }, [setExecutionQueue, notifyError]);
 }

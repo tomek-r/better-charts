@@ -4,7 +4,8 @@ import { accountMoneyBasis } from '../../shared/money';
 // Selection refs reject stale events; the coordinator owns request dedupe and timeout.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
+import { SubscriptionScope } from '../../shared/bridge/subscriptionScope';
 import type { ChartController } from '../chart/engine/chartController';
 import { toRenderBar, type Mt5DataAdapter, type Mt5HistoryError } from '../chart/engine/mt5DataAdapter';
 import type { FixedRangeProfileState } from '../chart/engine/fixedRangeProfileOverlay';
@@ -394,7 +395,8 @@ export function useBridgeBootstrapEffects(
   } = ticket;
   useEffect(() => {
     let disposed = false;
-    let cleanups: UnlistenFn[] = [];
+    const subscriptions = new SubscriptionScope();
+    let runtimeAvailable = false;
     let bridgeIdentity = '';
     let bridgeState: BridgeStatus['state'] = 'disconnected';
     const pendingCandles = new Map<number, Candle>();
@@ -541,6 +543,7 @@ export function useBridgeBootstrapEffects(
         if (disposed) {
           return;
         }
+        runtimeAvailable = true;
         setStatus(bridge);
         bridgeState = bridge.state;
         bridgeIdentity = `${bridge.terminal ?? ''}|${bridge.account ?? ''}|${bridge.server ?? ''}`;
@@ -601,7 +604,7 @@ export function useBridgeBootstrapEffects(
         if (initialPortfolio) {
           setPortfolio(normalizePortfolio(initialPortfolio));
         }
-        const listeners = await Promise.all([
+        await subscriptions.register([
           listen<BridgeStatus>('bridge-status', (event) => {
             if (!disposed) {
               const next = event.payload;
@@ -912,22 +915,19 @@ export function useBridgeBootstrapEffects(
             }
           }),
         ]);
-        // Unmounted while the listeners were registering: the effect cleanup
-        // already ran against an empty list, so unlisten them right here.
+        // The scope releases late registrations after this run is disposed.
         if (disposed) {
-          listeners.forEach((cleanup) => cleanup());
           return;
         }
-        cleanups = listeners;
         if (adapter) {
-          cleanups.push(adapter.onError(onAdapterHistoryError));
+          subscriptions.add(adapter.onError(onAdapterHistoryError));
           // The chart reports a revealed gap; the hook owns the request and the
           // in-flight guard it needs. Cleared only if it is still the callback
           // this effect installed, so a remount cannot detach the new one.
           const chart = chartRef.current;
           if (chart) {
             chart.onOlderHistoryNeeded = requestOlderHistory;
-            cleanups.push(() => {
+            subscriptions.add(() => {
               if (chart.onOlderHistoryNeeded === requestOlderHistory) {
                 chart.onOlderHistoryNeeded = undefined;
               }
@@ -946,20 +946,22 @@ export function useBridgeBootstrapEffects(
         }
       } catch (error) {
         if (!disposed) {
-          setTauriAvailable(false);
+          setTauriAvailable(runtimeAvailable);
           setStatus({
             state: 'disconnected',
-            message: 'Tauri runtime unavailable. Run this screen through the desktop shell to connect.',
+            message: runtimeAvailable
+              ? 'Bridge event listeners could not be initialized.'
+              : 'Tauri runtime unavailable. Run this screen through the desktop shell to connect.',
           });
         }
-        console.info('Market data is unavailable outside Tauri.', error);
+        console.info('Bridge initialization unavailable.', error);
       }
     };
     void start();
     return () => {
       disposed = true;
       cancelCandles();
-      cleanups.forEach((cleanup) => cleanup());
+      subscriptions.dispose();
     };
     // The app-level listeners are the sole source for history and realtime chart updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hook-provided setters/ref, stable identity (P5a)

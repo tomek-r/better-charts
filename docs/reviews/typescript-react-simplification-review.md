@@ -87,6 +87,12 @@ refactor is proposed by this finding.
 
 ### F02 — P1: listener registration is not safe under partial failure
 
+**Implemented:** bridge and execution effects share `SubscriptionScope`, which
+owns each registration as it resolves and disposes successful/late subscriptions
+on failure or unmount. Bridge initialization distinguishes a subscription failure
+from an unavailable Tauri runtime. Both failure regressions failed before the fix;
+all three listener-lifetime tests now pass. `pnpm check` and `pnpm build` pass.
+
 **Evidence:** [bridge setup](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L601)
 and [execution setup](../../apps/desktop/src/features/execution/useExecutionCommands.ts#L210).
 
