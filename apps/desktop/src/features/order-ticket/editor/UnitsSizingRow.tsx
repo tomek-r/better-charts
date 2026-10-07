@@ -1,5 +1,4 @@
 import { type Dispatch, type RefObject, type SetStateAction, useEffect, useRef, useState } from 'react';
-import type { AccountSnapshot } from '../../../shared/bridge/types';
 import { MAX_RISK_PERCENT } from '../domain/riskBasis';
 import { CaretIcon } from '../../../shared/ui/CaretIcon';
 
@@ -13,7 +12,7 @@ export function UnitsSizingRow({
   setVolumeManual,
   setRiskAmount,
   applyUnitsMode,
-  account,
+  currency,
   unitsAutoMode,
 }: {
   unitsMode: 'money' | 'equity' | 'units';
@@ -23,7 +22,7 @@ export function UnitsSizingRow({
   setVolumeManual: Dispatch<SetStateAction<boolean>>;
   setRiskAmount: (value: string) => void;
   applyUnitsMode: (mode: 'money' | 'equity' | 'units') => void;
-  account: AccountSnapshot | undefined;
+  currency: string | undefined;
   unitsAutoMode: RefObject<'money' | 'equity'>;
 }) {
   // TV-style sizing-mode menu for the ONE Units input: opens from the row label
@@ -77,7 +76,7 @@ export function UnitsSizingRow({
   if (unitsMode === 'units') {
     sizingIndicator = 'Units';
   } else if (unitsMode === 'money') {
-    sizingIndicator = `Risk, ${account?.currency ?? 'CCY'}`;
+    sizingIndicator = `Risk, ${currency ?? 'CCY'}`;
   }
   let placeholder = 'Amount';
   let inputLabel = 'Risk amount';
@@ -206,7 +205,7 @@ export function UnitsSizingRow({
               closeUnitsMenu();
             }}
           >
-            <span>Risk, {account?.currency ?? 'CCY'}</span>
+            <span>Risk, {currency ?? 'CCY'}</span>
             <span
               className="ticket-menu-info"
               title="Volume sized from the risk amount and SL distance"

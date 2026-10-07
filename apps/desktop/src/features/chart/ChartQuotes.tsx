@@ -1,8 +1,8 @@
-import { useBridgeMarket } from '../bridge/BridgeSessionProvider';
+import { useBridgeQuote } from '../bridge/BridgeSessionProvider';
 import { formatQuote, quoteDigits } from '../../shared/format';
 
 export function ChartQuotes() {
-  const { quote } = useBridgeMarket();
+  const quote = useBridgeQuote();
   const quotePrecision = quote ? quoteDigits(quote.bid, quote.ask, quote.last) : 2;
   const bid = quote ? Number(quote.bid) : NaN;
   const ask = quote ? Number(quote.ask) : NaN;

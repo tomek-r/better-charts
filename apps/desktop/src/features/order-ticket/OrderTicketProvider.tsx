@@ -2,11 +2,16 @@ import { createContext, useContext, useMemo, type ComponentProps, type ReactNode
 import { useOrderTicket, type OrderTicketState } from './state/useOrderTicket';
 import { quoteDigits } from '../../shared/format';
 import { accountMoneyBasis } from '../../shared/money';
-import type { AccountSnapshot } from '../../shared/bridge/types';
 import { OrderTicketReview } from './review/OrderTicketReview';
-import { useBridgeAccount, useBridgeConnection, useBridgeMarket } from '../bridge/BridgeSessionProvider';
+import {
+  useBridgeAccount,
+  useBridgeConnection,
+  useBridgeMarket,
+  useBridgeQuote,
+} from '../bridge/BridgeSessionProvider';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 import { deriveOrderRiskBasis, type OrderRiskBasis } from './domain/riskBasis';
+import { accountEnvironment } from './domain/ticketFormatting';
 import type {
   OrderTicketActionProps,
   OrderTicketExitsProps,
@@ -18,7 +23,8 @@ import type {
 } from './editor/orderTicketEditorTypes';
 
 const OrderTicketContext = createContext<OrderTicketState | null>(null);
-type HeaderState = { account: AccountSnapshot | undefined; symbol: string | undefined };
+type HeaderEnvironment = ReturnType<typeof accountEnvironment>;
+type HeaderState = { environment: HeaderEnvironment | undefined; symbol: string | undefined };
 type ReviewProps = ComponentProps<typeof OrderTicketReview>;
 const HeaderContext = createContext<HeaderState | null>(null);
 const RiskBasisContext = createContext<OrderRiskBasis | null>(null);
@@ -34,7 +40,8 @@ const ActionContext = createContext<OrderTicketActionProps | null>(null);
 
 export function OrderTicketProvider({ children }: { children: ReactNode }) {
   const { chart, stagedOrderState, instrumentDigitsRef, stagedActiveRef } = useChartResources();
-  const { instrument, quote, snapshot, latestCandle } = useBridgeMarket();
+  const { instrument, snapshot, latestCandle } = useBridgeMarket();
+  const quote = useBridgeQuote();
   const account = useBridgeAccount();
   const { status } = useBridgeConnection();
   const ticket = useOrderTicket({
@@ -49,7 +56,18 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
     latestCandle,
     status,
   });
-  const header = useMemo<HeaderState>(() => ({ account, symbol: snapshot.symbol }), [account, snapshot.symbol]);
+  const accountPresent = account !== undefined;
+  const { kind: environmentKind, label: environmentLabel, title: environmentTitle } = accountEnvironment(account);
+  const symbol = snapshot.symbol;
+  const header = useMemo<HeaderState>(
+    () => ({
+      symbol,
+      environment: accountPresent
+        ? { kind: environmentKind, label: environmentLabel, title: environmentTitle }
+        : undefined,
+    }),
+    [symbol, accountPresent, environmentKind, environmentLabel, environmentTitle],
+  );
   const basis = useMemo(
     () =>
       deriveOrderRiskBasis({
@@ -193,7 +211,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
   );
   const sizingProps = useMemo<OrderTicketSizingProps>(
     () => ({
-      account,
+      currency: account?.currency,
       unitsMode: ticket.unitsMode,
       orderVolume: ticket.orderVolume,
       setOrderVolume: ticket.setOrderVolume,
@@ -212,7 +230,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
       stopLoss: ticket.stopLoss,
     }),
     [
-      account,
+      account?.currency,
       ticket.unitsMode,
       ticket.orderVolume,
       ticket.setOrderVolume,

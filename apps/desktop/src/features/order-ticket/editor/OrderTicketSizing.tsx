@@ -8,7 +8,7 @@ export function OrderTicketSizing() {
     stagedOnChart,
     slOn,
     stopLoss,
-    account,
+    currency,
     unitsMode,
     orderVolume,
     setOrderVolume,
@@ -41,7 +41,7 @@ export function OrderTicketSizing() {
         setRiskAmount={setRiskAmount}
         applyUnitsMode={applyUnitsMode}
         unitsAutoMode={unitsAutoMode}
-        account={account}
+        currency={currency}
       />
       <div className="ticket-row">
         <label className="ticket-row-label" htmlFor="equity-allocation">

@@ -345,6 +345,13 @@ regressions before changing each boundary.
 
 ### F11 — P2: narrow the remaining broad subscriptions where measurements justify it
 
+**Implemented and measured:** a quote-only bridge context keeps chart quotes
+idle on candle updates. The ticket header consumes stable environment data and
+sizing consumes currency, instead of whole account snapshots. Profiler regressions
+changed candle-only chart-quote and balance-only ticket-header render counts from
+1 to 0; sizing is also idle on balance changes. Currency and environment changes
+still update their relevant consumers. The provider-isolation suite passed 11/11.
+
 **Evidence:** [chart quotes](../../apps/desktop/src/features/chart/ChartQuotes.tsx#L5),
 [market context](../../apps/desktop/src/features/bridge/BridgeSessionProvider.tsx#L67),
 and [ticket header/sizing](../../apps/desktop/src/features/order-ticket/OrderTicketProvider.tsx#L50).

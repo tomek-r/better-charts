@@ -91,7 +91,7 @@ test('ticket edits and panel toggles update only their owning consumers', async 
   expect(panelCounts['chart-resources'] ?? 0).toBe(0);
 });
 
-test('candle updates with unchanged chart identity keep title and timeframe consumers idle', async ({ page }) => {
+test('candle updates keep quote and unchanged chart-identity consumers idle', async ({ page }) => {
   await mountHarness(page);
   await page.getByRole('button', { name: 'Load candle' }).click();
   await expect(page.getByTestId('probe-candle-close')).toHaveText('1.0850');
@@ -103,9 +103,46 @@ test('candle updates with unchanged chart identity keep title and timeframe cons
 
   const counts = await probeCounts(page);
   expect(counts.market).toBeGreaterThan(0);
+  expect(counts['chart-quotes'] ?? 0).toBe(0);
   expect(counts['chart-title'] ?? 0).toBe(0);
   expect(counts['chart-timeframes'] ?? 0).toBe(0);
   expect(counts['chart-canvas'] ?? 0).toBe(0);
+});
+
+test('irrelevant account fields stay out of ticket views while currency changes reach sizing', async ({ page }) => {
+  await mountHarness(page);
+  await page.getByRole('button', { name: 'Set test account' }).click();
+  await expect(page.getByTestId('probe-account')).toHaveText('1000.00');
+  await page.getByRole('button', { name: 'Use money sizing' }).click();
+  const sizingMode = page.getByRole('button', { name: 'Sizing mode' });
+  await expect(sizingMode).toContainText('Risk, USD');
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+
+  await page.getByRole('button', { name: 'Update balance' }).click();
+  await expect(page.getByTestId('probe-account')).toHaveText('2000.00');
+  const balanceCounts = await probeCounts(page);
+  expect(balanceCounts.account).toBeGreaterThan(0);
+  expect(balanceCounts['ticket-header'] ?? 0).toBe(0);
+  expect(balanceCounts['ticket-sizing'] ?? 0).toBe(0);
+
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Set EUR account' }).click();
+  await expect(sizingMode).toContainText('Risk, EUR');
+  const currencyCounts = await probeCounts(page);
+  expect(currencyCounts['ticket-sizing']).toBeGreaterThan(0);
+  expect(currencyCounts['ticket-header'] ?? 0).toBe(0);
+
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Set real account' }).click();
+  await expect(page.getByTestId('probe-ticket-header')).toContainText('REAL · 001234');
+  const environmentCounts = await probeCounts(page);
+  expect(environmentCounts['ticket-header']).toBeGreaterThan(0);
 });
 
 test('settings updates do not rerender the header action consumer', async ({ page }) => {

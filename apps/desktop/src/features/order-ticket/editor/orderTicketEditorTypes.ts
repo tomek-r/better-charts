@@ -1,12 +1,5 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
-import type {
-  AccountSnapshot,
-  BrokerSymbol,
-  OrderKind,
-  QuoteSnapshot,
-  RiskSide,
-  TimeInForce,
-} from '../../../shared/bridge/types';
+import type { BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide, TimeInForce } from '../../../shared/bridge/types';
 
 export interface OrderTicketQuoteProps {
   value: QuoteSnapshot | undefined;
@@ -41,7 +34,7 @@ export interface OrderTicketPricingProps {
 }
 
 export interface OrderTicketSizingProps {
-  account: AccountSnapshot | undefined;
+  currency: string | undefined;
   unitsMode: 'money' | 'equity' | 'units';
   orderVolume: string;
   setOrderVolume: Dispatch<SetStateAction<string>>;

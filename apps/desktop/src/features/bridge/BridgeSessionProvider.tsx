@@ -21,7 +21,6 @@ export interface BridgeMarket {
   snapshot: MarketSnapshot;
   /** Current accepted raw candle, including live bar updates. */
   latestCandle: Candle | undefined;
-  quote: QuoteSnapshot | undefined;
   instrument: BrokerSymbol | undefined;
   symbolLoading: boolean;
   chartError: string | undefined;
@@ -48,6 +47,7 @@ const RuntimeContext = createContext<BridgeSessionState | null>(null);
 const ConnectionContext = createContext<BridgeConnection | null>(null);
 const TauriAvailableContext = createContext<boolean | null>(null);
 const MarketContext = createContext<BridgeMarket | null>(null);
+const QuoteContext = createContext<QuoteSnapshot | undefined | null>(null);
 const ChartStateContext = createContext<BridgeChartState | null>(null);
 const AccountContext = createContext<AccountSnapshot | undefined | null>(null);
 const PortfolioContext = createContext<PortfolioSnapshot | undefined | null>(null);
@@ -73,19 +73,11 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
     () => ({
       snapshot: session.snapshot,
       latestCandle: session.latestCandle,
-      quote: session.quote,
       instrument: session.instrument,
       symbolLoading: session.symbolLoading,
       chartError: session.chartError,
     }),
-    [
-      session.snapshot,
-      session.latestCandle,
-      session.quote,
-      session.instrument,
-      session.symbolLoading,
-      session.chartError,
-    ],
+    [session.snapshot, session.latestCandle, session.instrument, session.symbolLoading, session.chartError],
   );
 
   const symbol = session.snapshot.symbol;
@@ -118,15 +110,17 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
       <ConnectionContext.Provider value={connection}>
         <TauriAvailableContext.Provider value={session.tauriAvailable}>
           <MarketContext.Provider value={market}>
-            <ChartStateContext.Provider value={chartState}>
-              <AccountContext.Provider value={session.account}>
-                <PortfolioContext.Provider value={session.portfolio}>
-                  <LastSymbolSelectionContext.Provider value={session.lastSymbolSelection}>
-                    <ActionsContext.Provider value={actions}>{children}</ActionsContext.Provider>
-                  </LastSymbolSelectionContext.Provider>
-                </PortfolioContext.Provider>
-              </AccountContext.Provider>
-            </ChartStateContext.Provider>
+            <QuoteContext.Provider value={session.quote}>
+              <ChartStateContext.Provider value={chartState}>
+                <AccountContext.Provider value={session.account}>
+                  <PortfolioContext.Provider value={session.portfolio}>
+                    <LastSymbolSelectionContext.Provider value={session.lastSymbolSelection}>
+                      <ActionsContext.Provider value={actions}>{children}</ActionsContext.Provider>
+                    </LastSymbolSelectionContext.Provider>
+                  </PortfolioContext.Provider>
+                </AccountContext.Provider>
+              </ChartStateContext.Provider>
+            </QuoteContext.Provider>
           </MarketContext.Provider>
         </TauriAvailableContext.Provider>
       </ConnectionContext.Provider>
@@ -162,6 +156,10 @@ export function useTauriAvailable(): boolean {
 
 export function useBridgeMarket(): BridgeMarket {
   return useRequiredContext(MarketContext, 'useBridgeMarket');
+}
+
+export function useBridgeQuote(): QuoteSnapshot | undefined {
+  return useRequiredContext(QuoteContext, 'useBridgeQuote');
 }
 
 export function useBridgeChartState(): BridgeChartState {

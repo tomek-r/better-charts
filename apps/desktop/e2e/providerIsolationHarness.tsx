@@ -11,6 +11,7 @@ import {
 import {
   useBridgeAccount,
   useBridgeMarket,
+  useBridgeQuote,
   useBridgePortfolio,
   useBridgeSessionRuntime,
   BridgeSessionProvider,
@@ -22,9 +23,10 @@ import { ChartQuotes } from '../src/features/chart/ChartQuotes';
 import { ChartCanvas } from '../src/features/chart/ChartCanvas';
 import { ChartTimeframes } from '../src/features/chart/ChartTimeframes';
 import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
-import type { QuoteSnapshot } from '../src/shared/bridge/types';
+import type { AccountSnapshot, QuoteSnapshot } from '../src/shared/bridge/types';
 import {
   OrderTicketProvider,
+  useOrderTicketHeader,
   useOrderTicketPricing,
   useOrderTicketRuntime,
 } from '../src/features/order-ticket/OrderTicketProvider';
@@ -59,11 +61,12 @@ function Probe({ children, id }: { children: ReactNode; id: string }) {
 }
 
 function MarketProbe() {
-  const { quote, snapshot } = useBridgeMarket();
+  const { snapshot, latestCandle } = useBridgeMarket();
+  const quote = useBridgeQuote();
   return (
     <>
       <output data-testid="probe-market">{quote?.bid ?? snapshot.symbol}</output>
-      <output data-testid="probe-candle-close">{snapshot.candles[0]?.close}</output>
+      <output data-testid="probe-candle-close">{latestCandle?.close ?? snapshot.candles[0]?.close}</output>
     </>
   );
 }
@@ -126,6 +129,15 @@ function PanelProbe() {
   return <output data-testid="probe-panel">{String(panelOpen)}</output>;
 }
 
+function TicketHeaderProbe() {
+  const { environment, symbol } = useOrderTicketHeader();
+  return (
+    <output data-testid="probe-ticket-header">
+      {symbol ?? '—'}|{environment?.label ?? 'none'}
+    </output>
+  );
+}
+
 function BridgeControls() {
   const session = useBridgeSessionRuntime();
   const updateQuote = () => {
@@ -148,30 +160,47 @@ function BridgeControls() {
         : quote,
     );
   };
+  const setAccount = (next: Partial<AccountSnapshot> = {}) => {
+    session.setAccount({
+      accountLogin: '001234',
+      brokerServer: 'Broker-Demo',
+      currency: 'USD',
+      currencyDigits: 2,
+      balance: '1000.00',
+      equity: '1000.00',
+      margin: '0.00',
+      freeMargin: '1000.00',
+      marginLevel: '0',
+      leverage: 100,
+      marginMode: 0,
+      tradeAllowed: true,
+      expertAllowed: true,
+      accountTradeMode: 0,
+      accountTradeModeName: 'demo',
+      ...next,
+    });
+  };
   const updateCandle = () => {
-    session.setSnapshot((snapshot) => ({
-      ...snapshot,
-      candles: snapshot.candles.map((candle, index) => (index === 0 ? { ...candle, close: '1.0852' } : candle)),
-    }));
+    session.setLatestCandle((candle) => (candle ? { ...candle, close: '1.0852' } : candle));
+  };
+  const loadedCandle = {
+    timeMs: 1745700000000,
+    open: '1.0846',
+    high: '1.0860',
+    low: '1.0840',
+    close: '1.0850',
+    tickVolume: 10,
+    spread: 2,
+    realVolume: 0,
   };
   const loadCandle = () => {
     session.setSnapshot({
       symbol: 'EURUSD',
       timeframe: 'M5',
       complete: true,
-      candles: [
-        {
-          timeMs: 1745700000000,
-          open: '1.0846',
-          high: '1.0860',
-          low: '1.0840',
-          close: '1.0850',
-          tickVolume: 10,
-          spread: 2,
-          realVolume: 0,
-        },
-      ],
+      candles: [loadedCandle],
     });
+    session.setLatestCandle(loadedCandle);
   };
   return (
     <div data-testid="provider-probe-ready">
@@ -187,6 +216,21 @@ function BridgeControls() {
       <button type="button" onClick={loadCandle}>
         Load candle
       </button>
+      <button type="button" onClick={() => setAccount()}>
+        Set test account
+      </button>
+      <button
+        type="button"
+        onClick={() => session.setAccount((account) => (account ? { ...account, balance: '2000.00' } : undefined))}
+      >
+        Update balance
+      </button>
+      <button type="button" onClick={() => setAccount({ currency: 'EUR' })}>
+        Set EUR account
+      </button>
+      <button type="button" onClick={() => setAccount({ accountTradeMode: 2, accountTradeModeName: 'real' })}>
+        Set real account
+      </button>
     </div>
   );
 }
@@ -194,9 +238,14 @@ function BridgeControls() {
 function TicketControls() {
   const ticket = useOrderTicketRuntime();
   return (
-    <button type="button" onClick={() => ticket.setEntry('1.2345')}>
-      Edit ticket
-    </button>
+    <>
+      <button type="button" onClick={() => ticket.setEntry('1.2345')}>
+        Edit ticket
+      </button>
+      <button type="button" onClick={() => ticket.applyUnitsMode('money')}>
+        Use money sizing
+      </button>
+    </>
   );
 }
 
@@ -264,6 +313,9 @@ function WorkspaceProbes() {
         </Probe>
         <ExecutionProvider>
           <OrderTicketProvider>
+            <Probe id="ticket-header">
+              <TicketHeaderProbe />
+            </Probe>
             <Probe id="ticket-edit">
               <TicketEditProbe />
             </Probe>
