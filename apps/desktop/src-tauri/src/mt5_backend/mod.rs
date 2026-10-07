@@ -4,6 +4,8 @@
 //! Installation paths and startup INI files must be explicitly configured.
 //! Unknown process state and an active bridge session always suppress startup.
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::{env, ffi::OsStr};
@@ -14,6 +16,9 @@ use serde::{Deserialize, Serialize};
 const DEFAULT_WINE_BINARY: &str = "wine";
 /// Process pattern matched against full command lines for detection and stop.
 const TERMINAL_PROCESS_PATTERN: &str = "terminal64.exe";
+/// Background console helpers must not create windows alongside the GUI app.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 /// `O_EXCL` spawn lock in the Wine prefix or Windows app data; held through spawn and
 /// removed on every normal exit path.
 const SPAWN_LOCK_FILE: &str = ".mt5-backend-spawn.lock";
@@ -139,6 +144,7 @@ fn inspect_terminal() -> ProcessCheck {
         {
             // Exit codes avoid localized tasklist output and code-page decoding.
             let output = Command::new("powershell.exe")
+                .creation_flags(CREATE_NO_WINDOW)
                 .args([
                     "-NoProfile", "-NonInteractive", "-Command",
                     "$ErrorActionPreference = 'Stop'; try { if (Get-Process | Where-Object { $_.ProcessName -eq 'terminal64' }) { exit 0 }; exit 1 } catch { exit 2 }",
@@ -378,18 +384,20 @@ enum AutoStartPlan {
 
 fn auto_start_plan(
     bridge_session_active: bool,
-    terminal: ProcessCheck,
+    inspect: impl FnOnce() -> ProcessCheck,
     enabled: bool,
     configured: bool,
 ) -> AutoStartPlan {
     if bridge_session_active {
         return AutoStartPlan::SessionActive;
     }
-    match terminal {
+    if !enabled {
+        return AutoStartPlan::Disabled;
+    }
+    match inspect() {
         ProcessCheck::Running => AutoStartPlan::AlreadyRunning,
         // Inspection failed: unknown must never bias toward spawning.
         ProcessCheck::Unknown => AutoStartPlan::InspectUnknown,
-        ProcessCheck::NotRunning if !enabled => AutoStartPlan::Disabled,
         ProcessCheck::NotRunning if !configured => AutoStartPlan::Unconfigured,
         ProcessCheck::NotRunning => AutoStartPlan::Start,
     }
@@ -428,6 +436,7 @@ impl Mt5BackendState {
         }
         #[cfg(windows)]
         let output = Command::new("taskkill")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["/IM", TERMINAL_PROCESS_PATTERN])
             .output();
         #[cfg(not(windows))]
@@ -453,7 +462,7 @@ impl Mt5BackendState {
     pub fn auto_start_best_effort(&self, bridge_session_active: bool) {
         let plan = auto_start_plan(
             bridge_session_active,
-            inspect_terminal(),
+            inspect_terminal,
             self.config.enabled,
             is_configured(&self.config),
         );

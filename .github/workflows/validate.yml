@@ -49,6 +49,20 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked --offline -- -D warnings
       - run: pnpm check
       - run: pnpm tauri build --no-bundle
+      - name: Verify Windows release has no console subsystem
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          from pathlib import Path
+          import struct
+
+          image = Path('target/release/better-charts.exe').read_bytes()
+          assert image[:2] == b'MZ', 'Missing DOS executable header'
+          pe_offset = struct.unpack_from('<I', image, 0x3C)[0]
+          assert image[pe_offset:pe_offset + 4] == b'PE\0\0', 'Missing PE header'
+          # Subsystem is at offset 68 in both PE32 and PE32+ optional headers.
+          subsystem = struct.unpack_from('<H', image, pe_offset + 24 + 68)[0]
+          assert subsystem == 2, f'Expected Windows GUI subsystem (2), got {subsystem}'
       - run: python -m py_compile scripts/mock_mt5_bridge.py scripts/capture_reconcile_snapshot.py scripts/check_tick_reader.py
       - run: python scripts/check_tick_reader.py
       - name: Mock bridge self-test
