@@ -348,6 +348,8 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
         // fixed stub values (pipeline coverage, not risk-math). The optional
         // equityAllocationPercent is a decimal-string desktop sizing cap;
         // production Rust applies it to the latest account, defaulting to 100.
+        // Optional riskPercent supersedes the display-rounded riskAmount there;
+        // canonical percentage arithmetic is covered by Rust tests.
         emit('risk-preview', {
           symbol: args.symbol,
           side: args.side,

@@ -42,6 +42,7 @@ export function deriveOrderRiskBasis({
   const parsedEquity = equity?.trim() ? Number(equity) : NaN;
   const equityValue = Number.isFinite(parsedEquity) && parsedEquity > 0 ? parsedEquity : undefined;
   const parsedRisk = Number(riskAmount);
+  // Display hint only: native sizing receives the raw percentage and uses Decimal.
   const percentRiskAmount =
     riskMode === 'equity' &&
     equityValue !== undefined &&

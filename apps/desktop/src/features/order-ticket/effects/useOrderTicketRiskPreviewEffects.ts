@@ -118,7 +118,7 @@ export function useOrderTicketRiskPreviewEffects(
       Number.isFinite(Number(sizingEntry)) &&
       Number(sizingEntry) > 0 &&
       Number.isFinite(Number(stopLoss)) &&
-      Number(effectiveRiskAmount) > 0 &&
+      (riskMode === 'equity' ? Number(riskAmount) > 0 && Number(riskAmount) <= 100 : Number(effectiveRiskAmount) > 0) &&
       !stopGuard?.slTooClose &&
       !stopGuard?.tpTooClose,
     );
@@ -133,6 +133,7 @@ export function useOrderTicketRiskPreviewEffects(
       stopLoss: slOn ? stopLoss : '',
       takeProfit: tpOn && takeProfit.trim() ? takeProfit.trim() : null,
       riskAmount: effectiveRiskAmount,
+      riskPercent: riskMode === 'equity' ? riskAmount : null,
       equityAllocationPercent,
       draftVersion: version,
     };

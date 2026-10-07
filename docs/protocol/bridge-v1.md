@@ -461,8 +461,17 @@ account snapshot when the quote arrives. It applies to automatic money/% risk
 sizing. In Risk % mode the desktop derives `riskAmount` from
 `account.equity × equityAllocationPercent / 100 × riskPercent / 100`;
 therefore 50% allocation with 1% risk uses a 0.5%-of-total-equity SL budget.
-The command receives that already allocated risk amount and does not scale
-it again. Explicit money risk stays fixed; allocation caps its margin only.
+The read-only desktop commands `request_risk_preview` and `project_risk_preview`
+also accept an optional decimal-string `riskPercent` (greater than 0, at most
+100). When supplied, Rust derives the canonical risk budget from the current
+session-bound account equity and allocation using checked Decimal arithmetic;
+`riskAmount` is then a display hint and is not used for sizing. This preserves
+positive sub-cent budgets and avoids rounding sizing inputs to currency display
+precision. The ticket sends this field for Risk % mode. When `riskPercent` is
+absent/null, the command uses the supplied `riskAmount` without scaling it again,
+preserving existing callers and explicit money risk. Allocation caps money
+risk's margin only. This extension affects desktop commands only; EA wire quote
+requests/results and the mock bridge remain unchanged.
 Manual Units keeps its explicit volume and broker OrderCheck. Editing
 the allocation invalidates the preview and accepted review. The percentage
 is a maximum margin budget per order, not a promise to spend it: SL risk and

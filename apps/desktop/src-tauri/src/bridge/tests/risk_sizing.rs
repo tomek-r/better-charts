@@ -26,6 +26,32 @@ fn quote() -> RiskQuoteResult {
 }
 
 #[test]
+fn percentage_budget_uses_native_account_equity_and_keeps_money_risk_explicit() {
+    let state = ready_state_with_result(order_check_result_for_test());
+    state.account.lock().unwrap().as_mut().unwrap().equity = "100".into();
+    let allocation = Decimal::from(100);
+    assert_eq!(
+        resolve_risk_budget(&state, "0.00", allocation, Some("0.004")).unwrap(),
+        Decimal::new(4, 3)
+    );
+    state.account.lock().unwrap().as_mut().unwrap().equity = "200".into();
+    assert_eq!(
+        resolve_risk_budget(&state, "0.00", allocation, Some("0.004")).unwrap(),
+        Decimal::new(8, 3)
+    );
+    assert_eq!(
+        resolve_risk_budget(&state, "25", allocation, None).unwrap(),
+        Decimal::from(25)
+    );
+    *state.account.lock().unwrap() = None;
+    assert!(resolve_risk_budget(&state, "0.00", allocation, Some("1")).is_err());
+    assert_eq!(
+        resolve_risk_budget(&state, "25", allocation, None).unwrap(),
+        Decimal::from(25)
+    );
+}
+
+#[test]
 fn risk_sizing_uses_latest_bound_account_free_margin() {
     let state = ready_state_with_result(order_check_result_for_test());
     assert_eq!(

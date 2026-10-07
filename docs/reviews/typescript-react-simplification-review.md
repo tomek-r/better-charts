@@ -118,6 +118,13 @@ React requires cleanup to undo the effect's external subscriptions; see
 
 ### F03 — P1: distinguish a display estimate from the canonical risk budget
 
+**Implemented:** an additive `riskPercent` desktop command argument selects
+checked Decimal budgeting in `trading-core` from native account equity. The
+rounded hint remains display-only; money-mode callers retain explicit budgets.
+Domain and native adapter tests cover sub-cent budgets, allocation, invalid input,
+precision loss, and account updates. The browser regression reproduces and
+guards sizing requests for a positive budget below currency display precision.
+
 **Evidence:** [risk basis](../../apps/desktop/src/features/order-ticket/domain/riskBasis.ts#L41),
 [preview request](../../apps/desktop/src/features/order-ticket/effects/useOrderTicketRiskPreviewEffects.ts#L140),
 and [risk contract](../protocol/bridge-v1.md#risk-preview).

@@ -6,6 +6,18 @@ import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBa
 import { gotoWithStub, stubInvocations } from './tauriStub';
 import { openTradePanel } from './panel';
 
+test('a percentage budget below currency precision still requests native sizing', async ({ page }) => {
+  await gotoWithStub(page);
+  await openTradePanel(page);
+  await page.locator('.ticket-quote-side.buy').click();
+  await page.getByRole('button', { name: 'Sizing mode' }).click();
+  await page.getByRole('menuitemradio', { name: 'Risk, % equity' }).click();
+  await page.getByRole('spinbutton', { name: 'Risk percent', exact: true }).fill('0.000004');
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)?.args)
+    .toMatchObject({ riskPercent: '0.000004' });
+});
+
 test('exit estimates use converted account-currency tick values for gains and losses', () => {
   const money = {
     currency: 'PLN',
