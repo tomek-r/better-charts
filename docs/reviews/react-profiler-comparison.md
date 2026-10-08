@@ -79,3 +79,24 @@ The latest experimental capture is [17:09](../../.react-profiler/2026-10-08T17-0
 - Browser testing uses the Tauri stub; real Tauri/MT5 and live broker interaction were not exercised.
 
 The browser suite covers sizing, review, broker-response correlation, chart gestures, reconnect, scoped provider isolation, and stale previews. Five rounds and small cumulative timings warrant caution; the quote regression remains measurable and requires further investigation.
+
+## structuredClone experiment — 18:08 UTC
+
+Tested cloning the plain draft snapshots after `useStore` in the entry, order-check, risk-preview, and chart lifecycle hooks. This keeps the external-store snapshot stable and leaves refs, setters, commands, and broker-response identities intact. Draft values are primitive scalars or `undefined`. `structuredClone` creates an independent copy; it does not merge objects or preserve their identity ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Window/structuredClone)).
+
+For this experiment, the baseline is the committed **uncloned refactor**, `31b203ef166facc35547a68e2a693373932541c1`, rather than main. The report's baseline/“main” series represents that commit. The working candidate also contains the owner's previously described edits. Command: `PROFILE_BASE_REF=31b203e PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare`.
+
+[Clone experiment report](../../.react-profiler/2026-10-08T18-08-19-574Z/full-report.html) · [metadata](../../.react-profiler/2026-10-08T18-08-19-574Z/metadata.json). Candidate source hash: `18f0699acb8a58afb584d643f80cb51671401eb2aec3c53751b170729d0390ab`.
+
+| Phase | Uncloned ms | structuredClone ms |
+| --- | --- | --- |
+| Changing-price quotes | 10.9 [9.9, 11.3] | 12.9 [11.9, 13.3] |
+| Timestamp-only quotes | 9.1 [8.4, 9.2] | 10.9 [10.2, 11.4] |
+| Entry edits | 5.1 [4.7, 5.4] | 6.1 [5.4, 6.5] |
+| Time-in-force edits | 4.3 [4.2, 5.6] | 5.8 [5.2, 6.6] |
+
+Changing-price quotes became 18.3% slower than the uncloned refactor, with non-overlapping ranges. AppLifecycle's estimated self time increased from 3.0 [2.6, 3.8] ms to 4.9 [4.1, 5.3] ms. Root commits and component work counts stayed at 40 for the quote phase. ChartQuotes and OrderTicketQuotes self times were approximately unchanged.
+
+Compiled-bundle inspection shows React Compiler caches entry/check clones by the draft snapshot reference. Preview/chart clones execute on each render. This experiment therefore adds copying work without reducing renders; it is not a remedy for the measured quote regression. The four code changes were reverted. The current source hash again matches the retained 16:55 capture.
+
+`pnpm check`, `pnpm build`, and `pnpm test:e2e` (266 passed) all passed for the clone variant. Every profiling step completed, with no browser errors or order submissions. Browser testing uses the Tauri stub; no real MT5 runtime was started.
