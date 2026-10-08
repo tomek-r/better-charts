@@ -210,3 +210,22 @@ Changing-price quote medians decrease 13.5% versus the prior branch, but ranges 
 Commands: PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare; PROFILE_BASE_REF=9b0bc7d PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare. Both captures use the same candidate source hash listed above.
 
 Validation: pnpm check, pnpm build, pnpm test:e2e (267 passed), and git diff --check pass. New assertions guard zero quote renders in the lifecycle input projection and fresh status/account/market updates; the existing broad runtime projection remains live. Initial ref-mutation lint warnings were resolved using typed, destructured refs, without suppressions. All profiling steps completed with no browser errors, observer errors, or submissions. Real Tauri/MT5 was not exercised.
+
+## Deferred symbol-search initialization — reverted
+
+After the previous PR merged, tested deferring symbol-search query/results state, favorites/recent storage initialization, and search effects until first open. A small permanent shell retained keyboard shortcuts and recorded accepted selections before opening. The search session stayed mounted after first open to preserve query state and existing close/reopen behavior. Bridge, chart, and execution initialization remained unchanged.
+
+Baseline: merged main `8c96bea`. Command: `PROFILE_BASE_REF=main PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare`. Five alternating production rounds used fresh browser contexts. Baseline source hash: `b966e7cf7d84a533a914690cbaba67e5a2eb13167ff4eb97eca03a3173785a48`; experimental source hash: `7fe561f97b773f49df19246f6c87f52163d8eda9eeff494e86880313ffb6db95`. Captured at 2026-10-08 22:02 UTC. Capture files are local and ignored; this record contains the relevant results without links to ignored artifacts.
+
+| Measurement | Main median [min, max] ms | Deferred search median [min, max] ms |
+| --- | ---: | ---: |
+| Startup cumulative React render time | 13.4 [13.0, 13.9] | 13.4 [12.5, 13.9] |
+| Startup wall time | 138 [138, 141] | 141 [138, 156] |
+| First search scenario cumulative React render time | 0.4 [0.2, 0.5] | 0.8 [0.7, 1.0] |
+| First search scenario wall time | 67 [67, 68] | 67 [67, 68] |
+
+Both builds recorded seven root commits during startup and four in the search scenario. The first search scenario opens the dialog, enters EUR, and closes it; it is not an isolated measurement of opening latency. Startup render medians are equal and ranges overlap. Search scenario render time increases with non-overlapping ranges, although its wall time is unchanged. No measurable startup improvement justifies retaining the additional lifecycle state and component boundary, so the production experiment and its newly added regression tests were reverted together. Existing tests were not removed or weakened.
+
+The temporary regression first failed on the baseline's eager storage accesses, then passed with the experiment: startup accessed neither symbol-storage key, first open initialized both, and closing/reopening preserved the query without additional storage access. A second regression preserved deduplicated NAS100/EURUSD/NAS100 selections before first open without initializing favorites. All 26 focused search/provider tests and `pnpm check` passed for the experiment. An initial focused run was blocked by Vite's lint overlay due to two missing braces in the new test probe; fixing those conditions resolved it without suppressions. Every profiler scenario completed without browser errors, observer errors, or order submissions. Only the browser Tauri stub was exercised.
+
+Verdict: reverted. Deferring cheap state initialization moved work into the first interaction without demonstrating faster startup. Future startup work should first attribute expensive initialization or module loading rather than assuming store construction is the bottleneck.
