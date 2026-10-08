@@ -98,6 +98,18 @@ then keeps them mounted across toggles to preserve local UI state. Its code is
 statically loaded. Ticket stores, lifecycle effects, chart gestures, and bridge
 updates remain active before the panel opens.
 
+The trading panel always shows Balance, Equity, Margin, Free margin, and Margin
+level in aligned label/value rows, independently of open positions. Missing
+account data shows placeholders; monetary values retain account currency and
+precision, while margin level uses percent.
+
+Long symbol-search result lists expose a visible scrollbar so every result is
+reachable by scrolling or dragging the thumb. Scrollbars across the app use the
+dark border palette color for slim thumbs, with transparent tracks and a subtly
+lighter hover state.
+Search favorite stars use a fixed-width column and a shared icon outline;
+reserved scrollbar space prevents horizontal movement as rows are added or removed.
+
 ## Validation and plans
 
 Windows release builds use the GUI subsystem; background process checks and stop

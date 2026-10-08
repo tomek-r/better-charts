@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { gotoWithStub, pushEvent, stubInvocations } from './tauriStub';
 
+// Headless Chromium hides scrollbars by default; keep them visible for layout checks and screenshots.
+test.use({ launchOptions: { ignoreDefaultArgs: ['--hide-scrollbars'] } });
+
 const brokerSymbol = (symbol: string, description: string) => ({
   symbol,
   description,
@@ -58,6 +61,99 @@ test('header and keyboard shortcut open search; debounced results reject stale r
   await expect(dialog).toBeHidden();
   await page.getByRole('button', { name: 'Search symbols' }).click();
   await expect(dialog).toBeVisible();
+});
+
+test('long symbol results expose a scrollbar and the last result remains reachable', async ({ page }, testInfo) => {
+  const { pageErrors, consoleErrors } = await gotoWithStub(page);
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill('TEST');
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'search_symbols'))
+    .toHaveLength(1);
+  await pushEvent(page, 'symbol-search-result', {
+    query: 'TEST',
+    source: 'live',
+    symbols: Array.from({ length: 20 }, (_, index) => brokerSymbol(`TEST${index}`, `Test symbol ${index}`)),
+  });
+  const results = dialog.locator('.search-results');
+  await expect(results.locator('.search-result-row')).toHaveCount(20);
+  const scrolling = await results.evaluate((element) => ({
+    height: element.clientHeight,
+    contentHeight: element.scrollHeight,
+    scrollbarSpace: element.getBoundingClientRect().width - element.clientWidth,
+    scrollbarWidth: getComputedStyle(element).scrollbarWidth,
+    scrollbarDisplay: getComputedStyle(element, '::-webkit-scrollbar').display,
+    thumbColor: getComputedStyle(element, '::-webkit-scrollbar-thumb').backgroundColor,
+  }));
+  expect(scrolling.contentHeight).toBeGreaterThan(scrolling.height);
+  expect(scrolling.scrollbarSpace).toBeGreaterThan(0);
+  expect(scrolling.scrollbarWidth).not.toBe('none');
+  expect(scrolling.scrollbarDisplay).not.toBe('none');
+  expect(scrolling.thumbColor).toBe('rgb(43, 56, 75)');
+  await results.screenshot({ path: testInfo.outputPath('search-results-scrollbar.png') });
+  const last = results.getByRole('button', { name: 'TEST19 Test symbol 19', exact: true });
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  expect(await results.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+});
+
+test('favorite stars keep their column when toggled beside long descriptions', async ({ page }) => {
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill('TEST');
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'search_symbols'))
+    .toHaveLength(1);
+  await pushEvent(page, 'symbol-search-result', {
+    query: 'TEST',
+    source: 'live',
+    symbols: [
+      brokerSymbol('TEST', 'Short description'),
+      brokerSymbol('TEST_LONG', 'ExtremelyLongUnbrokenBrokerDescriptionThatDoesNotFitInTheAvailableSpaceAtAll'),
+    ],
+  });
+  const normal = dialog.getByRole('button', { name: 'Add TEST to favorites', exact: true });
+  const toggle = dialog.getByRole('button', { name: 'Add TEST_LONG to favorites', exact: true });
+  const before = await toggle.boundingBox();
+  const normalBox = await normal.boundingBox();
+  expect(before).not.toBeNull();
+  expect(normalBox).not.toBeNull();
+  expect(before!.x).toBeCloseTo(normalBox!.x, 0);
+  expect(before!.width).toBeCloseTo(normalBox!.width, 0);
+  await toggle.click();
+  const selected = dialog.getByRole('button', { name: 'Remove TEST_LONG from favorites', exact: true });
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  const after = await selected.boundingBox();
+  expect(after!.x).toBeCloseTo(before!.x, 0);
+  expect(after!.width).toBeCloseTo(before!.width, 0);
+  await selected.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  expect((await toggle.boundingBox())!.x).toBeCloseTo(before!.x, 0);
+});
+
+test('favorite stars do not move horizontally when removing rows ends overflow', async ({ page }) => {
+  const favorites = Array.from({ length: 8 }, (_, index) => brokerSymbol(`TEST${index}`, `Test symbol ${index}`));
+  await page.addInitScript((symbols) => {
+    localStorage.setItem('better-charts.symbol-favorites.v1', JSON.stringify(symbols));
+  }, favorites);
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  const results = dialog.locator('.search-results');
+  const retained = dialog.getByRole('button', { name: 'Remove TEST0 from favorites', exact: true });
+  const before = await retained.boundingBox();
+  expect(await results.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  for (let index = 7; index >= 3; index -= 1) {
+    await dialog.getByRole('button', { name: `Remove TEST${index} from favorites`, exact: true }).click();
+  }
+  expect(await results.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(false);
+  const after = await retained.boundingBox();
+  expect(after!.x).toBeCloseTo(before!.x, 0);
+  expect(after!.width).toBeCloseTo(before!.width, 0);
 });
 
 test('a delayed search failure cannot replace results from a newer query', async ({ page }) => {

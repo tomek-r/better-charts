@@ -7,31 +7,33 @@
   border-top: 1px solid var(--color-border);
 }
 
-/* Account state bar (MT5 layout) shown while a position is live: balance,
-   equity, margin, free margin and margin level. Wraps inside the 314px card
-   instead of overflowing like MT5's full-width terminal strip. */
+/* Compact account summary stays readable in the narrow order panel. */
 .portfolio-account {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  margin: 10px 0 0;
 }
 
-.portfolio-account span {
-  display: inline-flex;
-  gap: 4px;
+.portfolio-account-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
   align-items: baseline;
   font-size: 10px;
-  white-space: nowrap;
 }
 
-.portfolio-account small {
+.portfolio-account dt {
   color: var(--color-muted);
 }
 
-.portfolio-account b {
+.portfolio-account dd {
+  min-width: 0;
+  margin: 0;
   color: var(--color-text-secondary);
+  text-align: right;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .portfolio-heading {

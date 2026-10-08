@@ -1,20 +1,5 @@
-import { formatMoney } from '../../shared/format';
 import type { AccountSnapshot, PendingModification, PortfolioSnapshot } from '../../shared/bridge/types';
-
-/** Account precision for money; two decimals for nonmonetary account metrics. */
-function accountAmount(value?: string, currency?: string, digits?: number): string {
-  const text = value?.trim();
-  if (!text) {
-    return '—';
-  }
-  const parsed = Number(text);
-  if (currency && Number.isFinite(parsed)) {
-    return formatMoney(parsed, currency, digits);
-  }
-  return Number.isFinite(parsed)
-    ? parsed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : text;
-}
+import { accountAmount } from './accountAmount';
 
 export function PortfolioCard({
   portfolio,
@@ -39,32 +24,6 @@ export function PortfolioCard({
 
   return (
     <section className="portfolio-card" aria-label="Open positions">
-      {/* Account state bar (MT5 layout): shown while at least one position is
-          live, so balance/equity/margin sit with the trade that moves them. */}
-      {account && (
-        <div className="portfolio-account" aria-label="Account state">
-          <span>
-            <small>Balance</small>
-            <b>{accountAmount(account.balance, account.currency, account.currencyDigits)}</b>
-          </span>
-          <span>
-            <small>Equity</small>
-            <b>{accountAmount(account.equity, account.currency, account.currencyDigits)}</b>
-          </span>
-          <span>
-            <small>Margin</small>
-            <b>{accountAmount(account.margin, account.currency, account.currencyDigits)}</b>
-          </span>
-          <span>
-            <small>Free margin</small>
-            <b>{accountAmount(account.freeMargin, account.currency, account.currencyDigits)}</b>
-          </span>
-          <span>
-            <small>Margin level</small>
-            <b>{account.marginLevel ? `${accountAmount(account.marginLevel)} %` : '—'}</b>
-          </span>
-        </div>
-      )}
       <div className="portfolio-heading">
         <h3>Positions</h3>
         <span>{portfolio.positions.length} positions</span>
