@@ -100,3 +100,29 @@ Changing-price quotes became 18.3% slower than the uncloned refactor, with non-o
 Compiled-bundle inspection shows React Compiler caches entry/check clones by the draft snapshot reference. Preview/chart clones execute on each render. This experiment therefore adds copying work without reducing renders; it is not a remedy for the measured quote regression. The four code changes were reverted. The current source hash again matches the retained 16:55 capture.
 
 `pnpm check`, `pnpm build`, and `pnpm test:e2e` (266 passed) all passed for the clone variant. Every profiling step completed, with no browser errors or order submissions. Browser testing uses the Tauri stub; no real MT5 runtime was started.
+
+## Shallow-copy and allocation audit — 19:05 UTC
+
+The candidate performs more explicit spread-source evaluations but copies far fewer top-level properties than main. Additional selector comparisons and their temporary allocations are a stronger lead than the amount of data copied by spreads. This is allocation-count evidence, not proof of the timing cause.
+
+Temporary Vite diagnostics instrumented application object literals, spread sources, and Object.assign source arguments **after React Compiler**. A second pass also counted the installed Zustand shallow comparator, Object.entries results, and Map construction. All diagnostics lived under `/tmp` and isolated profiler snapshots; application files and installed dependencies were not edited. Compiler-generated cache branches remain before the counters. Counter overhead makes the resulting timing report unsuitable for performance comparisons.
+
+Two alternating rounds per build replayed 40 changing-price quotes. Baseline: main `e3ec86da4af14f1d6d3998fd9b59999fcd7af1cc`. The candidate source hash matches the retained 16:55 capture. The following counts were identical across both rounds for each build:
+
+| Executed during 40 changing-price quotes | Main | Candidate |
+| --- | ---: | ---: |
+| Explicit spread-source evaluations in application code | 520 | 640 |
+| Enumerable top-level properties read by those spreads | 22,720 | 3,200 |
+| Application object-literal evaluations, excluding chart engine and profiler probes | 2,081 | 2,243 |
+| Zustand shallow-comparator calls | 0 | 960 |
+| Object.entries result arrays inside that comparator | 0 | 1,760 |
+| Key/value pair arrays produced by those Object.entries calls | 0 | 10,400 |
+| Map constructions inside that comparator | 0 | 1,760 |
+
+Spread sources per quote increase from 13 to 16 (+23%); copied properties decrease about 86%. These counts track explicit source spreads, rather than every implicit React/library copy. Object literals include JSX props and field projections, which are allocations rather than clones. Object-rest copies in function parameters, React internals, and other dependency allocations are outside this coverage. No explicit application Object.assign source evaluations occurred in this phase. Nested candles, account objects, and arrays are referenced by spreads, not recursively cloned.
+
+The source-level bridge hotspot is `useBridgeSessionRuntime`: it merges 11 sources on every quote render, copying 39 properties. That contributes 440 source evaluations / 1,560 properties over 40 quotes, whereas main returns its context object directly. Candidate actions add four sources / 18 properties per quote; the derivation-cache input copy adds one source / 23 properties. Main's removed broad ticket composer alone copies 21,760 properties across 440 spread-source evaluations.
+
+Candidate quote presentation creates 240 three-field selector projections across the two mounted quote consumers (six evaluations per quote combined). Other grouped selectors contribute additional projections and shallow comparisons. The installed Zustand comparator uses Object.entries and Maps to compare plain objects, including equal projections that are later discarded. This can cost allocation and comparison time even when no extra render occurs. Uninstrumented profiles still identify AppLifecycle and ChartQuotes as the largest regression contributors; a focused experiment reducing repeated selector projections/comparisons is needed to establish causality.
+
+[Raw copy/selector counters](../../.react-profiler/2026-10-08T19-05-40-982Z/full-raw.json) · [capture metadata](../../.react-profiler/2026-10-08T19-05-40-982Z/metadata.json). Earlier application-only counters are in [19:03](../../.react-profiler/2026-10-08T19-03-47-974Z/full-raw.json). All scenario steps completed with no browser errors, observer errors, or order submissions. The experiment uses the browser Tauri stub and does not start MT5.
