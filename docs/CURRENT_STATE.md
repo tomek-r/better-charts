@@ -3,6 +3,8 @@
 Current behavior and owner decisions. See [architecture](architecture/README.md)
 and the [bridge contract](protocol/bridge-v1.md) for implementation details.
 
+React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders.
+
 ## Available
 
 - Live candles, Bid/Ask, symbol search/metadata, configurable timeframes and
