@@ -98,6 +98,11 @@ then keeps them mounted across toggles to preserve local UI state. Its code is
 statically loaded. Ticket stores, lifecycle effects, chart gestures, and bridge
 updates remain active before the panel opens.
 
+The trading panel always shows Balance, Equity, Margin, Free margin, and Margin
+level in aligned label/value rows, independently of open positions. Missing
+account data shows placeholders; monetary values retain account currency and
+precision, while margin level uses percent.
+
 ## Validation and plans
 
 Windows release builds use the GUI subsystem; background process checks and stop

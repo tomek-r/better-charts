@@ -607,7 +607,7 @@ test('portfolio shows positions only and dispatches close through the stubbed br
   // Owner: pending orders are OUT of the portfolio UI — the stub above still
   // carries one and it must not render (no row, no Cancel action).
   await expect(rows).toHaveCount(1);
-  // Account state bar rides with the live position (MT5 layout).
+  // Account summary remains independent of the live positions list.
   const account = page.locator('.portfolio-account');
   await expect(account).toContainText('10,000.00 USD');
   await expect(account).toContainText('9,500.00');
