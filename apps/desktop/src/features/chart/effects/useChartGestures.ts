@@ -1,9 +1,9 @@
-import { containsLabel } from './engine/labelLayout';
+import { containsLabel } from '../engine/labelLayout';
 import { useEffect } from 'react';
-import { createStagedOrderGestures } from './engine/stagedOrderGestures';
-import { createTradingOverlayGestures } from './engine/tradingOverlayGestures';
-import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
-import type { ChartWorkspaceState } from './useChartWorkspace';
+import { createStagedOrderGestures } from '../engine/stagedOrderGestures';
+import { createTradingOverlayGestures } from '../engine/tradingOverlayGestures';
+import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 import { useChartGestureDiagnostics } from './useChartGestureDiagnostics';
 
 export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, ticket: OrderTicketState): void {

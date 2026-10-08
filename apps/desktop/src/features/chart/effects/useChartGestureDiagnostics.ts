@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { ticketPrice } from '../../shared/format';
-import type { ChartWorkspaceState } from './useChartWorkspace';
+import { ticketPrice } from '../../../shared/format';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
 export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void {
   const { chartHost, stagedOrderState, positionOverlayState, priceLinesState, fixedRangeProfileState, chart } =

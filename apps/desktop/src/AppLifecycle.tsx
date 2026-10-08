@@ -6,12 +6,12 @@ import {
   useChartWorkspaceChartEffects,
   useChartWorkspaceResetEffects,
   useChartWorkspaceHotkeyEffect,
-} from './features/chart/useChartLifecycle';
-import { useChartWorkspacePointerEffects } from './features/chart/useChartGestures';
+} from './features/chart/effects/useChartLifecycle';
+import { useChartWorkspacePointerEffects } from './features/chart/effects/useChartGestures';
 import {
   useChartWorkspaceMirrorRefEffect,
   useChartWorkspaceMirrorLayoutEffect,
-} from './features/chart/useChartOverlaySync';
+} from './features/chart/effects/useChartOverlaySync';
 import { useOrderTicketEntryEffects } from './features/order-ticket/effects/useOrderTicketEntryEffects';
 import { useOrderTicketOrderCheckEffects } from './features/order-ticket/effects/useOrderTicketOrderCheckEffects';
 import { useOrderTicketRiskPreviewEffects } from './features/order-ticket/effects/useOrderTicketRiskPreviewEffects';

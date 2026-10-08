@@ -1,5 +1,5 @@
 import { createContext, useMemo, type ReactNode } from 'react';
-import { useChartWorkspace, type ChartWorkspaceState } from './useChartWorkspace';
+import { useChartWorkspace, type ChartWorkspaceState } from './state/useChartWorkspace';
 import { DrawingContextProvider } from '../tools/DrawingContextProvider';
 import { useRequiredContext } from '../../shared/state/useRequiredContext';
 

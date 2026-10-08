@@ -1,6 +1,6 @@
 import { useState, type RefObject } from 'react';
-import type { PendingModification } from '../../shared/bridge/types';
-import { draftLevel } from '../../shared/format';
+import type { PendingModification } from '../../../shared/bridge/types';
+import { draftLevel } from '../../../shared/format';
 
 /** Builds drag/clear drafts and dispatches only through the latest execution gate. */
 export function useChartModificationDrafts(

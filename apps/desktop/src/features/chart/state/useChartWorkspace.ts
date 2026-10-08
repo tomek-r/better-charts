@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
-import type { ChartController } from './engine/chartController';
-import type { DrawingTool } from '../tools/toolTypes';
-import type { Mt5DataAdapter } from './engine/mt5DataAdapter';
-import type { FixedRangeProfileState } from './engine/fixedRangeProfileOverlay';
-import type { StagedOrderState } from './engine/stagedOrderOverlay';
-import type { PositionOverlayState } from './engine/positionOverlay';
-import type { PriceLinesState } from './engine/priceLinesOverlay';
-import type { PendingModification } from '../../shared/bridge/types';
+import type { ChartController } from '../engine/chartController';
+import type { DrawingTool } from '../../tools/toolTypes';
+import type { Mt5DataAdapter } from '../engine/mt5DataAdapter';
+import type { FixedRangeProfileState } from '../engine/fixedRangeProfileOverlay';
+import type { StagedOrderState } from '../engine/stagedOrderOverlay';
+import type { PositionOverlayState } from '../engine/positionOverlay';
+import type { PriceLinesState } from '../engine/priceLinesOverlay';
+import type { PendingModification } from '../../../shared/bridge/types';
 import { useChartModificationDrafts } from './useChartModificationDrafts';
 
 export function useChartWorkspace() {

@@ -2,7 +2,7 @@ import type { TradingLabelHit } from './labelLayout';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlay';
 import { levelMoneyText } from './overlayLines';
-import type { ChartWorkspaceState } from '../useChartWorkspace';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
 type TradingGestureWorkspace = Pick<
   ChartWorkspaceState,

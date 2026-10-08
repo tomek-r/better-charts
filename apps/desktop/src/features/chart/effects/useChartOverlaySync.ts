@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect } from 'react';
-import type { StagedOrderLevels } from './engine/stagedOrderOverlay';
-import { quoteDigits } from '../../shared/format';
-import type { BridgeSessionState } from '../bridge/useBridgeSession';
-import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
-import type { useExecutionCommands } from '../execution/useExecutionCommands';
-import type { ChartWorkspaceState } from './useChartWorkspace';
+import type { StagedOrderLevels } from '../engine/stagedOrderOverlay';
+import { quoteDigits } from '../../../shared/format';
+import type { BridgeSessionState } from '../../bridge/useBridgeSession';
+import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
+import type { useExecutionCommands } from '../../execution/useExecutionCommands';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
 /** The §12 execution actions App passes to the dispatch-ref mirror slot. */
 export type ChartWorkspaceExecutionActions = Pick<

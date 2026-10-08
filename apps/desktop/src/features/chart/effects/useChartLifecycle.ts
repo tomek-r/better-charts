@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ChartController } from './engine/chartController';
-import { Mt5DataAdapter } from './engine/mt5DataAdapter';
-import { quoteDigits } from '../../shared/format';
-import type { BridgeSessionState } from '../bridge/useBridgeSession';
-import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
-import type { ChartWorkspaceState } from './useChartWorkspace';
+import { ChartController } from '../engine/chartController';
+import { Mt5DataAdapter } from '../engine/mt5DataAdapter';
+import { quoteDigits } from '../../../shared/format';
+import type { BridgeSessionState } from '../../bridge/useBridgeSession';
+import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
 /**
  * The rail's tool flyout, when open, owns Escape: it closes itself and restores
