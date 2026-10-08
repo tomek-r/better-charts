@@ -57,10 +57,36 @@ test('quote updates rerender market and ticket consumers without waking unrelate
     (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
   );
   await page.getByRole('button', { name: 'Update quote' }).click();
-  const nextCounts = await probeCounts(page);
-  expect(nextCounts['ticket-quotes']).toBeGreaterThan(0);
-  expect(nextCounts['ticket-edit'] ?? 0).toBe(0);
-  expect(nextCounts['ticket-extra-settings'] ?? 0).toBe(0);
+  await expect(page.getByTestId('probe-market')).toHaveText('1.0852');
+  const identicalQuoteCounts = await probeCounts(page);
+  expect(identicalQuoteCounts['ticket-quotes'] ?? 0).toBe(0);
+  expect(identicalQuoteCounts['ticket-edit'] ?? 0).toBe(0);
+  expect(identicalQuoteCounts['ticket-extra-settings'] ?? 0).toBe(0);
+
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Move quote' }).click();
+  await expect(page.getByTestId('probe-market')).toHaveText('1.08530');
+  const changedQuoteCounts = await probeCounts(page);
+  expect(changedQuoteCounts['ticket-quotes']).toBeGreaterThan(0);
+  expect(changedQuoteCounts['ticket-edit'] ?? 0).toBe(0);
+  expect(changedQuoteCounts['ticket-extra-settings'] ?? 0).toBe(0);
+});
+
+test('bridge domain stores remain isolated across provider instances', async ({ page }) => {
+  await mountHarness(page);
+
+  await page.getByRole('button', { name: 'Update quote' }).click();
+  await expect(page.getByTestId('secondary-quote')).toHaveText('none');
+  await page.getByRole('button', { name: 'Set test account' }).click();
+  await expect(page.getByTestId('secondary-account')).toHaveText('none');
+  await page.getByRole('button', { name: 'Set test portfolio' }).click();
+  await expect(page.getByTestId('secondary-portfolio')).toHaveText('none');
+
+  const counts = await probeCounts(page);
+  expect(counts['secondary-market'] ?? 0).toBe(0);
+  expect(await page.getByTestId('secondary-market')).toHaveText('none');
 });
 
 test('ticket edits and panel toggles update only their owning consumers', async ({ page }) => {

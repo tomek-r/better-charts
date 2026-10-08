@@ -1,14 +1,19 @@
-import { createContext, useContext, useMemo, type Context, type ReactNode } from 'react';
+import { createContext, useMemo, useState, type ReactNode } from 'react';
+import { useStore } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import type {
   AccountSnapshot,
   BridgeStatus,
   BrokerSymbol,
+  Candle,
   MarketSnapshot,
   PortfolioSnapshot,
-  Candle,
   QuoteSnapshot,
 } from '../../shared/bridge/types';
+import { useRequiredContext } from '../../shared/state/useRequiredContext';
+import { useDomainField } from '../../shared/state/domainStore';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
+import { createBridgeSessionStores, type BridgeSessionStores } from './bridgeSessionStores';
 import { useBridgeSession, type BridgeSessionState } from './useBridgeSession';
 
 export interface BridgeConnection {
@@ -43,20 +48,30 @@ export interface BridgeActions {
   chooseSymbolByName: (symbol: string) => Promise<void>;
 }
 
-const RuntimeContext = createContext<BridgeSessionState | null>(null);
-const ConnectionContext = createContext<BridgeConnection | null>(null);
-const TauriAvailableContext = createContext<boolean | null>(null);
-const MarketContext = createContext<BridgeMarket | null>(null);
-const QuoteContext = createContext<QuoteSnapshot | undefined | null>(null);
-const ChartStateContext = createContext<BridgeChartState | null>(null);
-const AccountContext = createContext<AccountSnapshot | undefined | null>(null);
-const PortfolioContext = createContext<PortfolioSnapshot | undefined | null>(null);
-const ActionsContext = createContext<BridgeActions | null>(null);
-const LastSymbolSelectionContext = createContext<BrokerSymbol | undefined | null>(null);
+type BridgeRuntimeInjection = Pick<
+  BridgeSessionState,
+  | 'stores'
+  | 'loadingTimeframeRef'
+  | 'pendingMetadata'
+  | 'targetSymbol'
+  | 'currentSymbol'
+  | 'latestCandleRef'
+  | 'dataKeyRef'
+  | 'mounted'
+  | 'requestGeneration'
+  | 'currentTimeframe'
+  | 'requestHistory'
+  | 'chooseSymbol'
+  | 'chooseSymbolByName'
+  | 'requestProfileRange'
+> & { actions: BridgeActions };
+const RuntimeContext = createContext<BridgeRuntimeInjection | null>(null);
 
 export function BridgeSessionProvider({ children }: { children: ReactNode }) {
   const resources = useChartResources();
+  const [stores] = useState(createBridgeSessionStores);
   const session = useBridgeSession({
+    stores,
     chart: resources.chart,
     adapterRef: resources.adapterRef,
     fixedRangeProfileState: resources.fixedRangeProfileState,
@@ -64,38 +79,6 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
     profileGeneration: resources.profileGeneration,
     lastRequestedRangeRef: resources.lastRequestedRangeRef,
   });
-
-  const connection = useMemo(
-    () => ({ status: session.status, tauriAvailable: session.tauriAvailable }),
-    [session.status, session.tauriAvailable],
-  );
-  const market = useMemo(
-    () => ({
-      snapshot: session.snapshot,
-      latestCandle: session.latestCandle,
-      instrument: session.instrument,
-      symbolLoading: session.symbolLoading,
-      chartError: session.chartError,
-    }),
-    [session.snapshot, session.latestCandle, session.instrument, session.symbolLoading, session.chartError],
-  );
-
-  const symbol = session.snapshot.symbol;
-  const timeframe = session.snapshot.timeframe;
-  const description = session.instrument?.symbol === symbol ? session.instrument?.description : undefined;
-  const hasCandles = session.snapshot.candles.length > 0 || session.latestCandle !== undefined;
-  const chartState = useMemo<BridgeChartState>(
-    () => ({
-      symbol,
-      timeframe,
-      description,
-      hasCandles,
-      symbolLoading: session.symbolLoading,
-      chartError: session.chartError,
-    }),
-    [symbol, timeframe, description, hasCandles, session.symbolLoading, session.chartError],
-  );
-
   const actions = useMemo<BridgeActions>(
     () => ({
       requestHistory: session.requestHistory,
@@ -104,92 +87,184 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
     }),
     [session.requestHistory, session.chooseSymbol, session.chooseSymbolByName],
   );
-
-  return (
-    <RuntimeContext.Provider value={session}>
-      <ConnectionContext.Provider value={connection}>
-        <TauriAvailableContext.Provider value={session.tauriAvailable}>
-          <MarketContext.Provider value={market}>
-            <QuoteContext.Provider value={session.quote}>
-              <ChartStateContext.Provider value={chartState}>
-                <AccountContext.Provider value={session.account}>
-                  <PortfolioContext.Provider value={session.portfolio}>
-                    <LastSymbolSelectionContext.Provider value={session.lastSymbolSelection}>
-                      <ActionsContext.Provider value={actions}>{children}</ActionsContext.Provider>
-                    </LastSymbolSelectionContext.Provider>
-                  </PortfolioContext.Provider>
-                </AccountContext.Provider>
-              </ChartStateContext.Provider>
-            </QuoteContext.Provider>
-          </MarketContext.Provider>
-        </TauriAvailableContext.Provider>
-      </ConnectionContext.Provider>
-    </RuntimeContext.Provider>
+  const runtime = useMemo<BridgeRuntimeInjection>(
+    () => ({
+      stores,
+      loadingTimeframeRef: session.loadingTimeframeRef,
+      pendingMetadata: session.pendingMetadata,
+      targetSymbol: session.targetSymbol,
+      currentSymbol: session.currentSymbol,
+      latestCandleRef: session.latestCandleRef,
+      dataKeyRef: session.dataKeyRef,
+      mounted: session.mounted,
+      requestGeneration: session.requestGeneration,
+      currentTimeframe: session.currentTimeframe,
+      requestHistory: session.requestHistory,
+      chooseSymbol: session.chooseSymbol,
+      chooseSymbolByName: session.chooseSymbolByName,
+      requestProfileRange: session.requestProfileRange,
+      actions,
+    }),
+    [
+      actions,
+      session.loadingTimeframeRef,
+      session.pendingMetadata,
+      session.targetSymbol,
+      session.currentSymbol,
+      session.latestCandleRef,
+      session.dataKeyRef,
+      session.mounted,
+      session.requestGeneration,
+      session.currentTimeframe,
+      session.requestHistory,
+      session.chooseSymbol,
+      session.chooseSymbolByName,
+      session.requestProfileRange,
+      stores,
+    ],
   );
+
+  return <RuntimeContext value={runtime}>{children}</RuntimeContext>;
 }
 
-function useRequiredContext<T>(context: Context<T | null>, name: string): T {
-  const value = useContext(context);
-  if (value === null) {
-    throw new Error(`${name} must be used inside BridgeSessionProvider.`);
-  }
-  return value;
+function useRuntime(name: string): BridgeRuntimeInjection {
+  return useRequiredContext(RuntimeContext, `${name} must be used inside BridgeSessionProvider.`);
+}
+
+function useStores(name: string): BridgeSessionStores {
+  return useRuntime(name).stores;
 }
 
 /** Full bridge state for ordered lifecycle effects and domain integration only. */
 export function useBridgeSessionRuntime(): BridgeSessionState {
-  return useRequiredContext(RuntimeContext, 'useBridgeSessionRuntime');
+  const runtime = useRuntime('useBridgeSessionRuntime');
+  const [status, setStatus] = useDomainField(runtime.stores.connection, 'status');
+  const [tauriAvailable, setTauriAvailable] = useDomainField(runtime.stores.connection, 'tauriAvailable');
+  const [snapshot, setSnapshot] = useDomainField(runtime.stores.market, 'snapshot');
+  const [latestCandle, setLatestCandle] = useDomainField(runtime.stores.market, 'latestCandle');
+  const [instrument, setInstrument] = useDomainField(runtime.stores.market, 'instrument');
+  const [lastSymbolSelection, setLastSymbolSelection] = useDomainField(runtime.stores.market, 'lastSymbolSelection');
+  const [loadingTimeframe, setLoadingTimeframe] = useDomainField(runtime.stores.market, 'loadingTimeframe');
+  const [symbolLoading, setSymbolLoading] = useDomainField(runtime.stores.market, 'symbolLoading');
+  const [chartError, setChartError] = useDomainField(runtime.stores.market, 'chartError');
+  const [quote, setQuote] = useDomainField(runtime.stores.quote, 'quote');
+  const [account, setAccount] = useDomainField(runtime.stores.account, 'account');
+  const [portfolio, setPortfolio] = useDomainField(runtime.stores.portfolio, 'portfolio');
+  return {
+    ...runtime,
+    status,
+    setStatus,
+    tauriAvailable,
+    setTauriAvailable,
+    snapshot,
+    setSnapshot,
+    latestCandle,
+    setLatestCandle,
+    instrument,
+    setInstrument,
+    lastSymbolSelection,
+    setLastSymbolSelection,
+    loadingTimeframe,
+    setLoadingTimeframe,
+    symbolLoading,
+    setSymbolLoading,
+    chartError,
+    setChartError,
+    quote,
+    setQuote,
+    account,
+    setAccount,
+    portfolio,
+    setPortfolio,
+  };
 }
 
 export function useBridgeConnection(): BridgeConnection {
-  return useRequiredContext(ConnectionContext, 'useBridgeConnection');
+  const stores = useStores('useBridgeConnection');
+  return useStore(
+    stores.connection,
+    useShallow(({ status, tauriAvailable }) => ({ status, tauriAvailable })),
+  );
+}
+
+export function useBridgeConnectionSelector<T>(selector: (connection: BridgeConnection) => T): T {
+  const stores = useStores('useBridgeConnectionSelector');
+  return useStore(
+    stores.connection,
+    useShallow(({ status, tauriAvailable }) => selector({ status, tauriAvailable })),
+  );
 }
 
 /** Read this separately when a consumer needs Tauri availability but not status updates. */
 export function useTauriAvailable(): boolean {
-  const value = useContext(TauriAvailableContext);
-  if (value === null) {
-    throw new Error('useTauriAvailable must be used inside BridgeSessionProvider.');
-  }
-  return value;
+  const stores = useStores('useTauriAvailable');
+  return useStore(stores.connection, (state) => state.tauriAvailable);
+}
+
+function selectMarket(state: ReturnType<BridgeSessionStores['market']['getState']>): BridgeMarket {
+  return {
+    snapshot: state.snapshot,
+    latestCandle: state.latestCandle,
+    instrument: state.instrument,
+    symbolLoading: state.symbolLoading,
+    chartError: state.chartError,
+  };
+}
+
+export function useBridgeMarketSelector<T>(selector: (market: BridgeMarket) => T): T {
+  const stores = useStores('useBridgeMarketSelector');
+  return useStore(
+    stores.market,
+    useShallow((state) => selector(selectMarket(state))),
+  );
 }
 
 export function useBridgeMarket(): BridgeMarket {
-  return useRequiredContext(MarketContext, 'useBridgeMarket');
+  return useBridgeMarketSelector((market) => market);
+}
+
+export function useBridgeQuoteSelector<T>(selector: (quote: QuoteSnapshot | undefined) => T): T {
+  const stores = useStores('useBridgeQuoteSelector');
+  return useStore(stores.quote, (state) => selector(state.quote));
 }
 
 export function useBridgeQuote(): QuoteSnapshot | undefined {
-  return useRequiredContext(QuoteContext, 'useBridgeQuote');
+  return useBridgeQuoteSelector((quote) => quote);
 }
 
 export function useBridgeChartState(): BridgeChartState {
-  return useRequiredContext(ChartStateContext, 'useBridgeChartState');
+  return useBridgeMarketSelector((market) => {
+    const symbol = market.snapshot.symbol;
+    return {
+      symbol,
+      timeframe: market.snapshot.timeframe,
+      description: market.instrument?.symbol === symbol ? market.instrument?.description : undefined,
+      symbolLoading: market.symbolLoading,
+      hasCandles: market.snapshot.candles.length > 0 || market.latestCandle !== undefined,
+      chartError: market.chartError,
+    };
+  });
+}
+
+export function useBridgeAccountSelector<T>(selector: (account: AccountSnapshot | undefined) => T): T {
+  const stores = useStores('useBridgeAccountSelector');
+  return useStore(stores.account, (state) => selector(state.account));
 }
 
 export function useBridgeAccount(): AccountSnapshot | undefined {
-  const value = useContext(AccountContext);
-  if (value === null) {
-    throw new Error('useBridgeAccount must be used inside BridgeSessionProvider.');
-  }
-  return value;
+  return useBridgeAccountSelector((account) => account);
 }
 
 export function useBridgePortfolio(): PortfolioSnapshot | undefined {
-  const value = useContext(PortfolioContext);
-  if (value === null) {
-    throw new Error('useBridgePortfolio must be used inside BridgeSessionProvider.');
-  }
-  return value;
+  const stores = useStores('useBridgePortfolio');
+  return useStore(stores.portfolio, (state) => state.portfolio);
 }
 
 export function useBridgeActions(): BridgeActions {
-  return useRequiredContext(ActionsContext, 'useBridgeActions');
+  return useRuntime('useBridgeActions').actions;
 }
 
 export function useLastSymbolSelection(): BrokerSymbol | undefined {
-  const value = useContext(LastSymbolSelectionContext);
-  if (value === null) {
-    throw new Error('useLastSymbolSelection must be used inside BridgeSessionProvider.');
-  }
-  return value;
+  const stores = useStores('useLastSymbolSelection');
+  return useStore(stores.market, (state) => state.lastSymbolSelection);
 }

@@ -34,6 +34,11 @@ for (const empty of [false, true]) {
           }
         ).__readLiveProbe(),
       );
+    await expect
+      .poll(() =>
+        page.evaluate(() => typeof (window as unknown as { __readLiveProbe?: unknown }).__readLiveProbe === 'function'),
+      )
+      .toBe(true);
     await expect.poll(async () => (await read()).historyStable).toBe(true);
     const candle = {
       timeMs: STUB_NOW,

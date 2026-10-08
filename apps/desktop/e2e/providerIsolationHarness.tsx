@@ -105,6 +105,21 @@ function PortfolioProbe() {
   return <output data-testid="probe-portfolio">{portfolio?.capturedAtMs ?? 'none'}</output>;
 }
 
+function SecondaryBridgeProbes() {
+  const quote = useBridgeQuote();
+  const account = useBridgeAccount();
+  const portfolio = useBridgePortfolio();
+  const market = useBridgeMarket();
+  return (
+    <div data-testid="secondary-bridge-probes">
+      <output data-testid="secondary-quote">{quote?.bid ?? 'none'}</output>
+      <output data-testid="secondary-account">{account?.balance ?? 'none'}</output>
+      <output data-testid="secondary-portfolio">{portfolio?.capturedAtMs ?? 'none'}</output>
+      <output data-testid="secondary-market">{market.snapshot.symbol ?? 'none'}</output>
+    </div>
+  );
+}
+
 function SettingsProbe() {
   const settings = useAppSettingsView();
   return (
@@ -180,6 +195,9 @@ function BridgeControls() {
       ...next,
     });
   };
+  const setPortfolio = () => {
+    session.setPortfolio({ accountLogin: '001234', capturedAtMs: 1745700001000, positions: [], orders: [] });
+  };
   const updateCandle = () => {
     session.setLatestCandle((candle) => (candle ? { ...candle, close: '1.0852' } : candle));
   };
@@ -230,6 +248,9 @@ function BridgeControls() {
       </button>
       <button type="button" onClick={() => setAccount({ accountTradeMode: 2, accountTradeModeName: 'real' })}>
         Set real account
+      </button>
+      <button type="button" onClick={setPortfolio}>
+        Set test portfolio
       </button>
     </div>
   );
@@ -289,64 +310,73 @@ function HeaderProbes() {
 
 function WorkspaceProbes() {
   return (
-    <ChartWorkspaceProvider>
-      <BridgeSessionProvider>
-        <SymbolSearchProvider>
-          <HeaderProbes />
-          <SymbolSearchView />
-        </SymbolSearchProvider>
-        <Probe id="bridge-runtime">
-          <BridgeRuntimeProbe />
-        </Probe>
-        <Probe id="market">
-          <MarketProbe />
-        </Probe>
-        <ChartHeaderProbes />
-        <Probe id="account">
-          <AccountProbe />
-        </Probe>
-        <Probe id="portfolio">
-          <PortfolioProbe />
-        </Probe>
-        <Probe id="chart-resources">
-          <ChartResourcesProbe />
-        </Probe>
-        <ExecutionProvider>
-          <OrderTicketProvider>
-            <Probe id="ticket-header">
-              <TicketHeaderProbe />
-            </Probe>
-            <Probe id="ticket-edit">
-              <TicketEditProbe />
-            </Probe>
-            <Probe id="ticket-quotes">
-              <OrderTicketQuotes />
-            </Probe>
-            <Probe id="ticket-extra-settings">
-              <OrderTicketExtraSettings />
-            </Probe>
-            <Probe id="ticket-sizing">
-              <OrderTicketSizing />
-            </Probe>
-            <Probe id="ticket-tick-value">
-              <OrderTicketTickValue />
-            </Probe>
-            <Probe id="ticket-exits">
-              <OrderTicketExits />
-            </Probe>
-            <Probe id="ticket-action">
-              <OrderTicketReviewAction />
-            </Probe>
-            <TicketControls />
-          </OrderTicketProvider>
-        </ExecutionProvider>
-        <Probe id="panel">
-          <PanelProbe />
-        </Probe>
-        <PanelControls />
-        <BridgeControls />
-      </BridgeSessionProvider>
-    </ChartWorkspaceProvider>
+    <>
+      <ChartWorkspaceProvider>
+        <BridgeSessionProvider>
+          <Probe id="secondary-market">
+            <SecondaryBridgeProbes />
+          </Probe>
+        </BridgeSessionProvider>
+      </ChartWorkspaceProvider>
+      <ChartWorkspaceProvider>
+        <BridgeSessionProvider>
+          <SymbolSearchProvider>
+            <HeaderProbes />
+            <SymbolSearchView />
+          </SymbolSearchProvider>
+          <Probe id="bridge-runtime">
+            <BridgeRuntimeProbe />
+          </Probe>
+          <Probe id="market">
+            <MarketProbe />
+          </Probe>
+          <ChartHeaderProbes />
+          <Probe id="account">
+            <AccountProbe />
+          </Probe>
+          <Probe id="portfolio">
+            <PortfolioProbe />
+          </Probe>
+          <Probe id="chart-resources">
+            <ChartResourcesProbe />
+          </Probe>
+          <ExecutionProvider>
+            <OrderTicketProvider>
+              <Probe id="ticket-header">
+                <TicketHeaderProbe />
+              </Probe>
+              <Probe id="ticket-edit">
+                <TicketEditProbe />
+              </Probe>
+              <Probe id="ticket-quotes">
+                <OrderTicketQuotes />
+              </Probe>
+              <Probe id="ticket-extra-settings">
+                <OrderTicketExtraSettings />
+              </Probe>
+              <Probe id="ticket-sizing">
+                <OrderTicketSizing />
+              </Probe>
+              <Probe id="ticket-tick-value">
+                <OrderTicketTickValue />
+              </Probe>
+              <Probe id="ticket-exits">
+                <OrderTicketExits />
+              </Probe>
+              <Probe id="ticket-action">
+                <OrderTicketReviewAction />
+              </Probe>
+              <TicketControls />
+            </OrderTicketProvider>
+          </ExecutionProvider>
+          <Probe id="panel">
+            <PanelProbe />
+          </Probe>
+          <PanelControls />
+          <BridgeControls />
+        </BridgeSessionProvider>
+      </ChartWorkspaceProvider>
+    </>
   );
 }
 

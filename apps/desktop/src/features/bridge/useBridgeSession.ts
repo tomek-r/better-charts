@@ -2,7 +2,8 @@ import { useNotifyError } from '../../shared/ui/ErrorNotifications';
 import { accountMoneyBasis } from '../../shared/money';
 // Bridge listeners are the sole source of accepted history and live candles.
 // Selection refs reject stale events; the coordinator owns request dedupe and timeout.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import type { SetStateAction } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { SubscriptionScope } from '../../shared/bridge/subscriptionScope';
@@ -44,6 +45,15 @@ import { quoteDigits } from '../../shared/format';
 import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
 import { HISTORY_BARS } from '../../shared/bridge/limits';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
+import type { DomainStore } from '../../shared/state/domainStore';
+import type { BridgeSessionStores } from './bridgeSessionStores';
+
+function useFieldSetter<T extends object, K extends keyof T>(
+  store: DomainStore<T>,
+  field: K,
+): (action: SetStateAction<T[K]>) => void {
+  return useCallback((action: SetStateAction<T[K]>) => store.setField(field, action), [store, field]);
+}
 
 type BridgeTicketResponsePort = Pick<
   OrderTicketState,
@@ -60,12 +70,11 @@ type BridgeTicketResponsePort = Pick<
   | 'setOrderCheckError'
 >;
 
-const emptySnapshot: MarketSnapshot = { complete: false, candles: [] };
 /** Bars per lazy-loading page; the protocol's per-request maximum. */
 const LAZY_HISTORY_BARS = HISTORY_BARS;
-const initialStatus: BridgeStatus = { state: 'disconnected', message: 'Waiting for the local bridge to start.' };
 
 type BridgeSessionParams = {
+  stores: BridgeSessionStores;
   chart: { current: ChartController | null };
   adapterRef: { current: Mt5DataAdapter | null };
   fixedRangeProfileState: { current: FixedRangeProfileState };
@@ -74,6 +83,7 @@ type BridgeSessionParams = {
   lastRequestedRangeRef: { current: { fromMs: number; endMs: number } | undefined };
 };
 export function useBridgeSession({
+  stores,
   chart,
   adapterRef,
   fixedRangeProfileState,
@@ -93,39 +103,49 @@ export function useBridgeSession({
   const loadingTimeframeRef = useRef<string | undefined>(undefined);
   const mounted = useRef(false);
   const targetSymbol = useRef<string | undefined>(undefined);
-  const [status, setStatus] = useState(initialStatus);
-  const [snapshot, setSnapshot] = useState(emptySnapshot);
-  const [latestCandle, setLatestCandle] = useState<Candle | undefined>(undefined);
-  const [quote, setQuote] = useState<QuoteSnapshot>();
-  const [instrument, setInstrument] = useState<BrokerSymbol>();
-  const [lastSymbolSelection, setLastSymbolSelection] = useState<BrokerSymbol>();
-  const [account, setAccount] = useState<AccountSnapshot>();
-  const [portfolio, setPortfolio] = useState<PortfolioSnapshot>();
-  const [loadingTimeframe, setLoadingTimeframe] = useState<string>();
-  const [symbolLoading, setSymbolLoading] = useState(false);
-  const [tauriAvailable, setTauriAvailable] = useState(true);
-  const [chartError, setChartError] = useState<string>();
-  const requestProfileRange = (reason: string, range = chart.current?.getProfileRange() ?? undefined) => {
-    const symbol = currentSymbol.current;
-    if (!symbol || !range) {
-      return;
-    }
-    const { fromMs, endMs } = range;
-    lastRequestedRangeRef.current = { fromMs, endMs };
-    const generation = ++profileGenerationRef.current;
-    expectedProfileRef.current = { symbol, fromMs, endMs, generation };
-    fixedRangeProfileRef.current.range = { fromMs, toMs: endMs };
-    fixedRangeProfileState.current.profile = undefined;
-    chart.current?.refreshOverlays();
-    console.debug('Tick profile requested:', reason);
-    void invoke('request_tick_profile', { symbol, fromMs, endMs, rows: 128 }).catch(() => {
-      console.info('Tick profile request failed.');
-    });
-  };
+  const setStatus = useFieldSetter(stores.connection, 'status');
+  const setTauriAvailable = useFieldSetter(stores.connection, 'tauriAvailable');
+  const setSnapshot = useFieldSetter(stores.market, 'snapshot');
+  const setLatestCandle = useFieldSetter(stores.market, 'latestCandle');
+  const setInstrument = useFieldSetter(stores.market, 'instrument');
+  const setLastSymbolSelection = useFieldSetter(stores.market, 'lastSymbolSelection');
+  const setLoadingTimeframe = useFieldSetter(stores.market, 'loadingTimeframe');
+  const setSymbolLoading = useFieldSetter(stores.market, 'symbolLoading');
+  const setChartError = useFieldSetter(stores.market, 'chartError');
+  const setQuote = useFieldSetter(stores.quote, 'quote');
+  const setAccount = useFieldSetter(stores.account, 'account');
+  const setPortfolio = useFieldSetter(stores.portfolio, 'portfolio');
+  const requestProfileRange = useCallback(
+    (reason: string, range = chart.current?.getProfileRange() ?? undefined) => {
+      const symbol = currentSymbol.current;
+      if (!symbol || !range) {
+        return;
+      }
+      const { fromMs, endMs } = range;
+      lastRequestedRangeRef.current = { fromMs, endMs };
+      const generation = ++profileGenerationRef.current;
+      expectedProfileRef.current = { symbol, fromMs, endMs, generation };
+      fixedRangeProfileRef.current.range = { fromMs, toMs: endMs };
+      fixedRangeProfileState.current.profile = undefined;
+      chart.current?.refreshOverlays();
+      console.debug('Tick profile requested:', reason);
+      void invoke('request_tick_profile', { symbol, fromMs, endMs, rows: 128 }).catch(() => {
+        console.info('Tick profile request failed.');
+      });
+    },
+    [
+      chart,
+      expectedProfileRef,
+      fixedRangeProfileRef,
+      fixedRangeProfileState,
+      lastRequestedRangeRef,
+      profileGenerationRef,
+    ],
+  );
   const requestHistory = useCallback(
     async (wire: string) => {
-      const symbol = targetSymbol.current ?? snapshot.symbol;
-      if (!symbol || status.state !== 'connected') {
+      const symbol = targetSymbol.current ?? stores.market.getState().snapshot.symbol;
+      if (!symbol || stores.connection.getState().status.state !== 'connected') {
         return;
       }
       const generation = ++requestGeneration.current;
@@ -146,11 +166,11 @@ export function useBridgeSession({
         console.info('History request unavailable.', error);
       }
     },
-    [adapterRef, setChartError, setLoadingTimeframe, snapshot.symbol, status.state],
+    [adapterRef, setChartError, setLoadingTimeframe, stores],
   );
   const requestSymbolSelection = useCallback(
     async (symbol: string, metadata?: BrokerSymbol) => {
-      if (status.state !== 'connected') {
+      if (stores.connection.getState().status.state !== 'connected') {
         return;
       }
       pendingMetadata.current = metadata;
@@ -170,7 +190,7 @@ export function useBridgeSession({
         }
         await adapter.requestHistory(
           symbol,
-          loadingTimeframeRef.current ?? snapshot.timeframe ?? DEFAULT_TIMEFRAME,
+          loadingTimeframeRef.current ?? stores.market.getState().snapshot.timeframe ?? DEFAULT_TIMEFRAME,
           HISTORY_BARS,
         );
       } catch (error) {
@@ -187,7 +207,7 @@ export function useBridgeSession({
         console.info('Symbol history unavailable.', error);
       }
     },
-    [adapterRef, setChartError, setInstrument, setQuote, setSymbolLoading, snapshot.timeframe, status.state],
+    [adapterRef, setChartError, setInstrument, setQuote, setSymbolLoading, stores],
   );
   const chooseSymbol = useCallback(
     (item: BrokerSymbol) => requestSymbolSelection(item.symbol, item),
@@ -198,7 +218,8 @@ export function useBridgeSession({
   const chooseSymbolByName = useCallback(
     async (rawSymbol: string) => {
       const symbol = rawSymbol.trim();
-      if (status.state !== 'connected' || !symbol) {
+      const snapshot = stores.market.getState().snapshot;
+      if (stores.connection.getState().status.state !== 'connected' || !symbol) {
         return;
       }
       if (symbol === snapshot.symbol || symbol === targetSymbol.current) {
@@ -206,32 +227,33 @@ export function useBridgeSession({
       }
       await requestSymbolSelection(symbol);
     },
-    [requestSymbolSelection, snapshot.symbol, status.state],
+    [requestSymbolSelection, stores],
   );
   return {
-    status,
+    stores,
+    status: stores.connection.getState().status,
     setStatus,
-    snapshot,
+    snapshot: stores.market.getState().snapshot,
     setSnapshot,
-    latestCandle,
+    latestCandle: stores.market.getState().latestCandle,
     setLatestCandle,
-    quote,
+    quote: stores.quote.getState().quote,
     setQuote,
-    instrument,
+    instrument: stores.market.getState().instrument,
     setInstrument,
-    lastSymbolSelection,
+    lastSymbolSelection: stores.market.getState().lastSymbolSelection,
     setLastSymbolSelection,
-    account,
+    account: stores.account.getState().account,
     setAccount,
-    portfolio,
+    portfolio: stores.portfolio.getState().portfolio,
     setPortfolio,
-    symbolLoading,
+    symbolLoading: stores.market.getState().symbolLoading,
     setSymbolLoading,
-    chartError,
+    chartError: stores.market.getState().chartError,
     setChartError,
-    tauriAvailable,
+    tauriAvailable: stores.connection.getState().tauriAvailable,
     setTauriAvailable,
-    loadingTimeframe,
+    loadingTimeframe: stores.market.getState().loadingTimeframe,
     setLoadingTimeframe,
     loadingTimeframeRef,
     pendingMetadata,
