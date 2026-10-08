@@ -1,45 +1,83 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { useExecutionCommands, type ExecutionCommandState } from './useExecutionCommands';
+import { createContext, useMemo, useState, type ReactNode } from 'react';
+import { useStore } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
+import { createDomainStore, type DomainStore } from '../../shared/state/domainStore';
+import { useRequiredContext } from '../../shared/state/useRequiredContext';
+import { useEventCallback } from '../../shared/hooks/useEventCallback';
+import { useExecutionCommands, type ExecutionCommandState, type ExecutionStoreState } from './useExecutionCommands';
 import { useBridgeAccount } from '../bridge/BridgeSessionProvider';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 
+type ExecutionActions = Pick<
+  ExecutionCommandState,
+  'setExecutionQueue' | 'runCloseCancel' | 'requestClosePosition' | 'requestCancelOrder' | 'requestModifyDraft'
+>;
 type PortfolioActions = Pick<ExecutionCommandState, 'closingTarget' | 'closeCancelStatus' | 'requestClosePosition'>;
-const ExecutionContext = createContext<ExecutionCommandState | null>(null);
-const PortfolioActionsContext = createContext<PortfolioActions | null>(null);
+
+interface ExecutionContextValue {
+  store: DomainStore<ExecutionStoreState>;
+  actions: ExecutionActions;
+}
+
+const ExecutionContext = createContext<ExecutionContextValue | null>(null);
 
 export function ExecutionProvider({ children }: { children: ReactNode }) {
   const account = useBridgeAccount();
   const { chart, positionOverlayState, setPendingModification } = useChartResources();
-  const execution = useExecutionCommands({ account, setPendingModification, positionOverlayState, chart });
-  const portfolioActions = useMemo<PortfolioActions>(
-    () => ({
-      closingTarget: execution.closingTarget,
-      closeCancelStatus: execution.closeCancelStatus,
-      requestClosePosition: execution.requestClosePosition,
+  const [store] = useState(() =>
+    createDomainStore<ExecutionStoreState>({
+      executionQueue: undefined,
+      closingTarget: undefined,
+      closeCancelStatus: undefined,
     }),
-    [execution.closingTarget, execution.closeCancelStatus, execution.requestClosePosition],
   );
+  const execution = useExecutionCommands({ account, setPendingModification, positionOverlayState, chart, store });
+  const setExecutionQueue = useEventCallback(execution.setExecutionQueue);
+  const runCloseCancel = useEventCallback(execution.runCloseCancel);
+  const requestClosePosition = useEventCallback(execution.requestClosePosition);
+  const requestCancelOrder = useEventCallback(execution.requestCancelOrder);
+  const requestModifyDraft = useEventCallback(execution.requestModifyDraft);
+  const actions = useMemo<ExecutionActions>(
+    () => ({
+      setExecutionQueue,
+      runCloseCancel,
+      requestClosePosition,
+      requestCancelOrder,
+      requestModifyDraft,
+    }),
+    [requestCancelOrder, requestClosePosition, requestModifyDraft, runCloseCancel, setExecutionQueue],
+  );
+  const contextValue = useMemo(() => ({ store, actions }), [actions, store]);
 
-  return (
-    <ExecutionContext.Provider value={execution}>
-      <PortfolioActionsContext.Provider value={portfolioActions}>{children}</PortfolioActionsContext.Provider>
-    </ExecutionContext.Provider>
-  );
+  return <ExecutionContext value={contextValue}>{children}</ExecutionContext>;
+}
+
+function useExecutionContext(errorMessage: string): ExecutionContextValue {
+  return useRequiredContext(ExecutionContext, errorMessage);
 }
 
 export function useExecutionRuntime(): ExecutionCommandState {
-  const execution = useContext(ExecutionContext);
-  if (execution === null) {
-    throw new Error('Execution hooks must be used inside ExecutionProvider.');
-  }
-  return execution;
+  const { store, actions } = useExecutionContext('Execution hooks must be used inside ExecutionProvider.');
+  const state = useStore(
+    store,
+    useShallow((current) => ({
+      executionQueue: current.executionQueue,
+      closingTarget: current.closingTarget,
+      closeCancelStatus: current.closeCancelStatus,
+    })),
+  );
+  return { ...state, ...actions };
 }
 
 /** Close-position status and action used by the portfolio panel. */
 export function useExecutionPortfolio(): PortfolioActions {
-  const actions = useContext(PortfolioActionsContext);
-  if (actions === null) {
-    throw new Error('Portfolio execution actions must be used inside ExecutionProvider.');
-  }
-  return actions;
+  const { store, actions } = useExecutionContext('Portfolio execution actions must be used inside ExecutionProvider.');
+  const state = useStore(
+    store,
+    useShallow((current) => ({
+      closingTarget: current.closingTarget,
+      closeCancelStatus: current.closeCancelStatus,
+    })),
+  );
+  return { ...state, requestClosePosition: actions.requestClosePosition };
 }

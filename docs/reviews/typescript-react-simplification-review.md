@@ -507,6 +507,12 @@ new history. The initial-load comparison failed without key invalidation.
 
 **Implemented:** PortfolioCard redundant position checks are removed; the account guard, eight-row limit, and separate close action are preserved.
 
+**Implemented:** the chart overlay caller uses `refreshOverlays` directly, and the redundant price wrapper is removed. Entry label visibility combines the nested conditions without changing SL/TP branches.
+
+**Implemented:** price-to-ticks conversion has a pure shared helper and no unused exit-kind argument. Ticket views calculate from current draft inputs; an entry-edit regression verifies the displayed tick distance changes.
+
+**Implemented:** all required-context guards share one generic helper, and providers use React 19 context syntax. Frequent provider values are replaced by scoped Zustand domain stores under the subsequent owner decision; see [the migration review](domain-store-migration.md).
+
 - [PortfolioCard](../../apps/desktop/src/features/portfolio/PortfolioCard.tsx#L32)
   returns for zero positions, then checks `hasPositions` repeatedly. Remove the
   always-true conditions and flatten the fragment while preserving the account
@@ -529,8 +535,10 @@ new history. The initial-load comparison failed without key invalidation.
 
 ## What I would preserve
 
-- Separate bridge, account, portfolio, chart identity, and ticket view contexts:
-  existing isolation tests make their purpose concrete.
+- Separate bridge, account, portfolio, chart identity, and ticket subscriptions:
+  existing isolation tests make their purpose concrete. The 2026-10-08 owner
+  decision replaces frequent value contexts with scoped Zustand domain stores;
+  see [the migration review](domain-store-migration.md).
 - Imperative chart updates, requestAnimationFrame candle batching, and mutable
   overlay geometry captured by long-lived gesture handlers.
 - Broker preview, local projection, accepted check, and display estimate as
@@ -555,9 +563,11 @@ new history. The initial-load comparison failed without key invalidation.
 6. Refactor F09/F10/F13 in separate, bounded steps. Preserve ordering and
    compare behavior after each step. Handle F14 with explicit race tests.
 
-No new dependencies or global state-management framework are recommended.
+The original review did not recommend a new state dependency. The subsequent
+2026-10-08 owner decision explicitly selects Zustand with scoped stores; it
+does not introduce a global application store.
 
-## Verification and limits
+## Original review verification and limits
 
 Performed: source and regression-test inspection; protocol cross-checks;
 production file/line inventory; clean-working-tree check before review; report

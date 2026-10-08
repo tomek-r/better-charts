@@ -1,7 +1,7 @@
 // ExecutionProvider owns command state. WorkspaceLifecycle registers the
 // observational listener at its original effect slot. Dispatch gates, draft
 // identity checks, single in-flight target, and no-retry behavior stay unchanged.
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { SubscriptionScope } from '../../shared/bridge/subscriptionScope';
@@ -16,6 +16,19 @@ import type {
 } from '../../shared/bridge/types';
 import type { PositionOverlayState } from '../chart/engine/positionOverlay';
 import { useErrorNotification, useNotifyError } from '../../shared/ui/ErrorNotifications';
+import { useDomainField, type DomainStore } from '../../shared/state/domainStore';
+
+export interface ExecutionStoreState {
+  executionQueue: ExecutionQueueView | undefined;
+  closingTarget: string | undefined;
+  closeCancelStatus:
+    | {
+        kind: 'locked' | 'error';
+        text: string;
+        source: 'portfolio' | 'draft';
+      }
+    | undefined;
+}
 
 // Owner: recovery journal + execution-safety are LOG-ONLY now — same fetch
 // trigger as before, deterministic projection into the app log for
@@ -42,24 +55,22 @@ export function useExecutionCommands({
   setPendingModification,
   positionOverlayState,
   chart,
+  store,
 }: {
   account: AccountSnapshot | undefined;
   setPendingModification: Dispatch<SetStateAction<PendingModification | undefined>>;
   positionOverlayState: { current: PositionOverlayState };
   chart: { current: ChartController | null };
+  store: DomainStore<ExecutionStoreState>;
 }) {
   const positionOverlayRef = positionOverlayState;
   // The former Order panel is gone, but its queue view still supplies the
   // authoritative dispatch gate used by the ticket and chart actions.
-  const [executionQueue, setExecutionQueue] = useState<ExecutionQueueView>();
+  const [executionQueue, setExecutionQueue] = useDomainField(store, 'executionQueue');
   // §UX close/cancel: the single in-flight portfolio/draft target (mirrors submittingSide)
   // and the last close/cancel outcome line — its `source` decides where it renders.
-  const [closingTarget, setClosingTarget] = useState<string>();
-  const [closeCancelStatus, setCloseCancelStatus] = useState<{
-    kind: 'locked' | 'error';
-    text: string;
-    source: 'portfolio' | 'draft';
-  }>();
+  const [closingTarget, setClosingTarget] = useDomainField(store, 'closingTarget');
+  const [closeCancelStatus, setCloseCancelStatus] = useDomainField(store, 'closeCancelStatus');
   useErrorNotification(closeCancelStatus?.text);
   // §UX close/cancel/modify actions: full-close MVP for portfolio rows plus
   // confirmed close/cancel/modify drafts. One busy target at a time (mirrors

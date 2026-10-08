@@ -1,48 +1,47 @@
 import {
   createContext,
-  useContext,
+  useCallback,
   useMemo,
   useState,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
 } from 'react';
+import { createDomainStore, useDomainField, type DomainStore } from '../../shared/state/domainStore';
+import { useRequiredContext } from '../../shared/state/useRequiredContext';
 
+interface PanelState {
+  panelOpen: boolean;
+}
+
+type PanelStore = DomainStore<PanelState>;
 interface PanelActions {
   setPanelOpen: Dispatch<SetStateAction<boolean>>;
 }
 
-const PanelOpenContext = createContext<boolean | null>(null);
-const PanelActionsContext = createContext<PanelActions | null>(null);
+const PanelStoreContext = createContext<PanelStore | null>(null);
 
 /**
  * Trade-panel visibility: the open flag the panel renders from and the toggle
- * in the header dispatches to. Split into state and actions so the header
- * toggle does not re-render when only the flag changes.
+ * in the header dispatches to. The store context remains stable as the flag
+ * changes, so action-only header consumers stay idle.
  */
 export function PanelVisibilityProvider({ children }: { children: ReactNode }) {
-  const [panelOpen, setPanelOpen] = useState(false);
-  const panelActions = useMemo(() => ({ setPanelOpen }), [setPanelOpen]);
-
-  return (
-    <PanelActionsContext.Provider value={panelActions}>
-      <PanelOpenContext.Provider value={panelOpen}>{children}</PanelOpenContext.Provider>
-    </PanelActionsContext.Provider>
-  );
+  const [store] = useState(() => createDomainStore<PanelState>({ panelOpen: false }));
+  return <PanelStoreContext value={store}>{children}</PanelStoreContext>;
 }
 
 export function usePanelOpen(): boolean {
-  const panelOpen = useContext(PanelOpenContext);
-  if (panelOpen === null) {
-    throw new Error('usePanelOpen must be used within PanelVisibilityProvider.');
-  }
+  const store = useRequiredContext(PanelStoreContext, 'usePanelOpen must be used within PanelVisibilityProvider.');
+  const [panelOpen] = useDomainField(store, 'panelOpen');
   return panelOpen;
 }
 
 export function usePanelActions(): PanelActions {
-  const actions = useContext(PanelActionsContext);
-  if (!actions) {
-    throw new Error('usePanelActions must be used within PanelVisibilityProvider.');
-  }
-  return actions;
+  const store = useRequiredContext(PanelStoreContext, 'usePanelActions must be used within PanelVisibilityProvider.');
+  const setPanelOpen = useCallback<PanelActions['setPanelOpen']>(
+    (action) => store.setField('panelOpen', action),
+    [store],
+  );
+  return useMemo(() => ({ setPanelOpen }), [setPanelOpen]);
 }

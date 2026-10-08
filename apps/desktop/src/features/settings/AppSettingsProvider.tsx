@@ -1,6 +1,9 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
-
-import { useAppSettings } from './useAppSettings';
+import { createContext, useMemo, useState, type ReactNode } from 'react';
+import { useStore } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
+import { createDomainStore } from '../../shared/state/domainStore';
+import { useRequiredContext } from '../../shared/state/useRequiredContext';
+import { useAppSettings, initialAppSettingsState, type AppSettingsStore } from './useAppSettings';
 import type { AppSettingsData } from './settingsTypes';
 
 export interface AppSettingsViewState {
@@ -21,45 +24,65 @@ export interface AppSettingsActions {
   openSettings: () => void;
 }
 
-const AppSettingsViewContext = createContext<AppSettingsViewState | null>(null);
-const AppSettingsActionsContext = createContext<AppSettingsActions | null>(null);
+interface AppSettingsContextValue {
+  store: AppSettingsStore;
+  actions: {
+    openSettings: () => void;
+    dismissRestartNotice: () => void;
+    dismissConfigurationNotice: () => void;
+    close: () => void;
+    saved: (settings: AppSettingsData) => void;
+  };
+}
+
+const AppSettingsContext = createContext<AppSettingsContextValue | null>(null);
 
 export function AppSettingsProvider({ children, tauriAvailable }: { children: ReactNode; tauriAvailable: boolean }) {
-  const settings = useAppSettings(tauriAvailable);
-  const view: AppSettingsViewState = {
-    settings: settings.settings,
-    isOpen: settings.isOpen,
-    closing: settings.closing,
-    loadError: settings.loadError,
-    notificationRevision: settings.notificationRevision,
-    restartNoticeVisible: settings.restartNoticeVisible,
-    configurationNotice: settings.configurationNotice,
-    dismissRestartNotice: settings.dismissRestartNotice,
-    dismissConfigurationNotice: settings.dismissConfigurationNotice,
-    close: settings.close,
-    saved: settings.saved,
-  };
-  const actions = useMemo(() => ({ openSettings: settings.open }), [settings.open]);
-
-  return (
-    <AppSettingsActionsContext.Provider value={actions}>
-      <AppSettingsViewContext.Provider value={view}>{children}</AppSettingsViewContext.Provider>
-    </AppSettingsActionsContext.Provider>
+  const [store] = useState(() => createDomainStore(initialAppSettingsState));
+  const settings = useAppSettings(store, tauriAvailable);
+  const actions = useMemo(
+    () => ({
+      openSettings: settings.open,
+      dismissRestartNotice: settings.dismissRestartNotice,
+      dismissConfigurationNotice: settings.dismissConfigurationNotice,
+      close: settings.close,
+      saved: settings.saved,
+    }),
+    [settings.close, settings.dismissConfigurationNotice, settings.dismissRestartNotice, settings.open, settings.saved],
   );
+  const contextValue = useMemo(() => ({ store, actions }), [actions, store]);
+
+  return <AppSettingsContext value={contextValue}>{children}</AppSettingsContext>;
 }
 
 export function useAppSettingsView(): AppSettingsViewState {
-  const view = useContext(AppSettingsViewContext);
-  if (!view) {
-    throw new Error('useAppSettingsView must be used within AppSettingsProvider.');
-  }
-  return view;
+  const { store, actions } = useRequiredContext(
+    AppSettingsContext,
+    'useAppSettingsView must be used within AppSettingsProvider.',
+  );
+  const view = useStore(
+    store,
+    useShallow((state) => ({
+      settings: state.settings,
+      isOpen: state.isOpen,
+      closing: state.closing,
+      loadError: state.loadError,
+      notificationRevision: state.notificationRevision,
+      restartNoticeVisible: state.restartRequired && !state.restartNoticeDismissed,
+      configurationNotice:
+        state.settings?.configurationError !== state.dismissedConfigurationError
+          ? state.settings?.configurationError
+          : undefined,
+    })),
+  );
+
+  return { ...view, ...actions };
 }
 
 export function useAppSettingsActions(): AppSettingsActions {
-  const actions = useContext(AppSettingsActionsContext);
-  if (!actions) {
-    throw new Error('useAppSettingsActions must be used within AppSettingsProvider.');
-  }
-  return actions;
+  const { actions } = useRequiredContext(
+    AppSettingsContext,
+    'useAppSettingsActions must be used within AppSettingsProvider.',
+  );
+  return useMemo(() => ({ openSettings: actions.openSettings }), [actions]);
 }

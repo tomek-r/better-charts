@@ -1,4 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useEffect, useState, type ReactNode } from 'react';
+import { useStore } from 'zustand';
+import { createDomainStore, type DomainStore } from '../state/domainStore';
+import { useRequiredContext } from '../state/useRequiredContext';
 import { Notification } from './Notification';
 
 interface ErrorNotice {
@@ -6,38 +9,40 @@ interface ErrorNotice {
   message: string;
 }
 
-const ErrorNotificationsContext = createContext<{
+interface ErrorNoticeState {
   notices: ErrorNotice[];
+}
+
+type ErrorNoticeStore = DomainStore<ErrorNoticeState> & {
   show: (message: string) => void;
   dismiss: (id: number) => void;
   retire: (message: string) => void;
-} | null>(null);
+};
+
+const ErrorNotificationsContext = createContext<ErrorNoticeStore | null>(null);
 
 export function ErrorNotificationsProvider({ children }: { children: ReactNode }) {
-  const [notices, setNotices] = useState<ErrorNotice[]>([]);
-  const nextId = useRef(0);
-  const show = useCallback((message: string) => {
-    const id = ++nextId.current;
-    setNotices((current) =>
-      current.some((notice) => notice.message === message) ? current : [...current.slice(-4), { id, message }],
-    );
-  }, []);
-  const dismiss = useCallback((id: number) => {
-    setNotices((current) => current.filter((notice) => notice.id !== id));
-  }, []);
-  const retire = useCallback((message: string) => {
-    setNotices((current) => current.filter((notice) => notice.message !== message));
-  }, []);
-  const value = useMemo(() => ({ notices, show, dismiss, retire }), [notices, show, dismiss, retire]);
-  return <ErrorNotificationsContext.Provider value={value}>{children}</ErrorNotificationsContext.Provider>;
+  const [store] = useState<ErrorNoticeStore>(() => {
+    const state = createDomainStore<ErrorNoticeState>({ notices: [] });
+    let nextId = 0;
+    return Object.assign(state, {
+      show: (message: string) => {
+        const id = ++nextId;
+        state.setField('notices', (current) =>
+          current.some((notice) => notice.message === message) ? current : [...current.slice(-4), { id, message }],
+        );
+      },
+      dismiss: (id: number) => state.setField('notices', (current) => current.filter((notice) => notice.id !== id)),
+      retire: (message: string) =>
+        state.setField('notices', (current) => current.filter((notice) => notice.message !== message)),
+    });
+  });
+
+  return <ErrorNotificationsContext value={store}>{children}</ErrorNotificationsContext>;
 }
 
-function useErrorNotifications() {
-  const value = useContext(ErrorNotificationsContext);
-  if (!value) {
-    throw new Error('Error notifications require ErrorNotificationsProvider.');
-  }
-  return value;
+function useErrorNotifications(): ErrorNoticeStore {
+  return useRequiredContext(ErrorNotificationsContext, 'Error notifications require ErrorNotificationsProvider.');
 }
 
 export function useErrorNotification(message: string | undefined) {
@@ -68,11 +73,12 @@ export function ErrorNotification({ message }: { message: string | undefined }) 
 }
 
 export function ErrorNotifications() {
-  const { notices, dismiss } = useErrorNotifications();
+  const store = useErrorNotifications();
+  const notices = useStore(store, (state) => state.notices);
   return notices.map((notice) => (
     <Notification.Alert key={notice.id}>
       <Notification.Message>{notice.message}</Notification.Message>
-      <Notification.Dismiss label="Dismiss error notification" onDismiss={() => dismiss(notice.id)} />
+      <Notification.Dismiss label="Dismiss error notification" onDismiss={() => store.dismiss(notice.id)} />
     </Notification.Alert>
   ));
 }
