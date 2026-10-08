@@ -11,7 +11,6 @@ import type {
   QuoteSnapshot,
 } from '../../shared/bridge/types';
 import { useRequiredContext } from '../../shared/state/useRequiredContext';
-import { useDomainField } from '../../shared/state/domainStore';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 import { createBridgeSessionStores, type BridgeSessionStores } from './bridgeSessionStores';
 import { useBridgeSession, type BridgeSessionState } from './useBridgeSession';
@@ -135,47 +134,31 @@ function useStores(name: string): BridgeSessionStores {
   return useRuntime(name).stores;
 }
 
+/** Stable bridge domain stores for focused cross-domain selectors. */
+export function useBridgeSessionStores(): BridgeSessionStores {
+  return useStores('useBridgeSessionStores');
+}
+
 /** Full bridge state for ordered lifecycle effects and domain integration only. */
 export function useBridgeSessionRuntime(): BridgeSessionState {
   const runtime = useRuntime('useBridgeSessionRuntime');
-  const [status, setStatus] = useDomainField(runtime.stores.connection, 'status');
-  const [tauriAvailable, setTauriAvailable] = useDomainField(runtime.stores.connection, 'tauriAvailable');
-  const [snapshot, setSnapshot] = useDomainField(runtime.stores.market, 'snapshot');
-  const [latestCandle, setLatestCandle] = useDomainField(runtime.stores.market, 'latestCandle');
-  const [instrument, setInstrument] = useDomainField(runtime.stores.market, 'instrument');
-  const [lastSymbolSelection, setLastSymbolSelection] = useDomainField(runtime.stores.market, 'lastSymbolSelection');
-  const [loadingTimeframe, setLoadingTimeframe] = useDomainField(runtime.stores.market, 'loadingTimeframe');
-  const [symbolLoading, setSymbolLoading] = useDomainField(runtime.stores.market, 'symbolLoading');
-  const [chartError, setChartError] = useDomainField(runtime.stores.market, 'chartError');
-  const [quote, setQuote] = useDomainField(runtime.stores.quote, 'quote');
-  const [account, setAccount] = useDomainField(runtime.stores.account, 'account');
-  const [portfolio, setPortfolio] = useDomainField(runtime.stores.portfolio, 'portfolio');
+  const connection = useStore(runtime.stores.connection);
+  const market = useStore(runtime.stores.market);
+  const quote = useStore(runtime.stores.quote);
+  const account = useStore(runtime.stores.account);
+  const portfolio = useStore(runtime.stores.portfolio);
   return {
     ...runtime,
-    status,
-    setStatus,
-    tauriAvailable,
-    setTauriAvailable,
-    snapshot,
-    setSnapshot,
-    latestCandle,
-    setLatestCandle,
-    instrument,
-    setInstrument,
-    lastSymbolSelection,
-    setLastSymbolSelection,
-    loadingTimeframe,
-    setLoadingTimeframe,
-    symbolLoading,
-    setSymbolLoading,
-    chartError,
-    setChartError,
-    quote,
-    setQuote,
-    account,
-    setAccount,
-    portfolio,
-    setPortfolio,
+    ...connection,
+    ...runtime.stores.connection.setters,
+    ...market,
+    ...runtime.stores.market.setters,
+    ...quote,
+    ...runtime.stores.quote.setters,
+    ...account,
+    ...runtime.stores.account.setters,
+    ...portfolio,
+    ...runtime.stores.portfolio.setters,
   };
 }
 

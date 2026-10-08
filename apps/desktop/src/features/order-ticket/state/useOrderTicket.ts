@@ -4,7 +4,7 @@ import { useOrderTicketDraft } from './useOrderTicketDraft';
 import { useOrderTicketPricing } from './useOrderTicketPricing';
 import { useOrderTicketSizing } from './useOrderTicketSizing';
 import { useOrderTicketState } from './useOrderTicketState';
-import { deriveStagedOrderDisplay } from '../domain/stagedOrderDisplay';
+import type { deriveStagedOrderDisplay } from '../domain/stagedOrderDisplay';
 import type { OrderTicketStores } from './orderTicketStores';
 
 export type OrderTicketParams = OrderTicketStateParams & { stores: OrderTicketStores };
@@ -22,22 +22,9 @@ export function useOrderTicket(params: OrderTicketParams) {
   const pricing = useOrderTicketPricing(ticket);
   const sizing = useOrderTicketSizing({ ...ticket, enableRiskStopLoss: draft.enableRiskStopLoss });
   const brokerActions = useOrderTicketBrokerActions({ ...ticket, ...draft });
-  const display = deriveStagedOrderDisplay({
-    ...state,
-    lastPreview:
-      state.riskProjection?.draftVersion === state.draftVersion
-        ? state.riskProjection
-        : state.riskPreviewDisplayRef.current,
-  });
 
   return {
     ...state,
-    display: {
-      ...display,
-      // Hold the grabbed account-currency label while prices/volume continue calculating.
-      slMoney:
-        state.stagedDragging && state.unitsMode !== 'units' ? (state.dragSlMoney ?? display.slMoney) : display.slMoney,
-    },
     tickSize,
     tickKnown,
     priceSwapDisabled,
@@ -48,4 +35,7 @@ export function useOrderTicket(params: OrderTicketParams) {
   };
 }
 
-export type OrderTicketState = ReturnType<typeof useOrderTicket>;
+export type OrderTicketProducerState = ReturnType<typeof useOrderTicket>;
+export type OrderTicketState = OrderTicketProducerState & {
+  display: ReturnType<typeof deriveStagedOrderDisplay>;
+};

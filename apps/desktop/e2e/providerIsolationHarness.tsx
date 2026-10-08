@@ -23,8 +23,9 @@ import { ChartQuotes } from '../src/features/chart/ChartQuotes';
 import { ChartCanvas } from '../src/features/chart/ChartCanvas';
 import { ChartTimeframes } from '../src/features/chart/ChartTimeframes';
 import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
-import type { AccountSnapshot, QuoteSnapshot } from '../src/shared/bridge/types';
+import type { AccountSnapshot, BrokerSymbol, QuoteSnapshot } from '../src/shared/bridge/types';
 import { OrderTicketProvider } from '../src/features/order-ticket/OrderTicketProvider';
+import { useOrderTicketAction } from '../src/features/order-ticket/editor/useOrderTicketAction';
 import { useOrderTicketHeader } from '../src/features/order-ticket/editor/useOrderTicketHeader';
 import { useOrderTicketPricing } from '../src/features/order-ticket/editor/useOrderTicketPricing';
 import { useOrderTicketRuntime } from '../src/features/order-ticket/state/useOrderTicketRuntime';
@@ -90,7 +91,19 @@ function ChartHeaderProbes() {
 
 function BridgeRuntimeProbe() {
   const session = useBridgeSessionRuntime();
-  return <output data-testid="probe-bridge-runtime">{session.status.state}</output>;
+  return (
+    <output data-testid="probe-bridge-runtime">
+      {[
+        session.status.state,
+        String(session.tauriAvailable),
+        session.snapshot.symbol ?? '',
+        session.latestCandle?.close ?? '',
+        session.quote?.bid ?? '',
+        session.account?.balance ?? '',
+        String(session.portfolio?.capturedAtMs ?? ''),
+      ].join('|')}
+    </output>
+  );
 }
 
 function AccountProbe() {
@@ -199,6 +212,7 @@ function BridgeControls() {
   const updateCandle = () => {
     session.setLatestCandle((candle) => (candle ? { ...candle, close: '1.0852' } : candle));
   };
+  const setBridgeStatus = () => session.setStatus({ state: 'connected', message: 'Harness bridge is connected.' });
   const loadedCandle = {
     timeMs: 1745700000000,
     open: '1.0846',
@@ -222,6 +236,12 @@ function BridgeControls() {
     <div data-testid="provider-probe-ready">
       <button type="button" onClick={updateQuote}>
         Update quote
+      </button>
+      <button type="button" onClick={setBridgeStatus}>
+        Set test bridge status
+      </button>
+      <button type="button" onClick={() => session.setTauriAvailable(false)}>
+        Mark Tauri unavailable
       </button>
       <button type="button" onClick={moveQuote}>
         Move quote
@@ -255,7 +275,77 @@ function BridgeControls() {
 }
 
 function TicketControls() {
-  const ticket = useOrderTicketRuntime();
+  const bridge = useBridgeSessionRuntime();
+  const { chart, stagedOrderState, instrumentDigitsRef, stagedActiveRef } = useChartResources();
+  const ticket = useOrderTicketRuntime({
+    chart,
+    stagedOrderState,
+    instrumentDigitsRef,
+    stagedActiveRef,
+    instrument: bridge.instrument,
+    account: bridge.account,
+    quote: bridge.quote,
+    snapshot: bridge.snapshot,
+    latestCandle: bridge.latestCandle,
+    status: bridge.status,
+  });
+  const configureActionGate = () => {
+    const instrument: BrokerSymbol = {
+      symbol: 'EURUSD',
+      description: 'Euro vs US Dollar',
+      digits: 5,
+      tickSize: '0.00001',
+      pointSize: '0.00001',
+      contractSize: '100000',
+      volumeMin: '0.01',
+      volumeMax: '100',
+      volumeStep: '0.01',
+      stopsLevel: 0,
+      freezeLevel: 0,
+      fillingMode: 0,
+      orderMode: 0,
+      expirationMode: 0,
+      tradeExecution: 0,
+      tradeMode: 0,
+    };
+    bridge.setStatus({ state: 'connected', message: 'Harness bridge is connected.' });
+    bridge.setSnapshot({ symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: [] });
+    bridge.setInstrument(instrument);
+    bridge.setAccount({
+      accountLogin: '001234',
+      brokerServer: 'Broker-Demo',
+      currency: 'USD',
+      currencyDigits: 2,
+      balance: '1000.00',
+      equity: '1000.00',
+      margin: '0.00',
+      freeMargin: '1000.00',
+      marginLevel: '0',
+      leverage: 100,
+      marginMode: 0,
+      tradeAllowed: true,
+      expertAllowed: true,
+      accountTradeMode: 0,
+      accountTradeModeName: 'demo',
+    });
+    bridge.setQuote({
+      symbol: 'EURUSD',
+      timeMs: 1745700001000,
+      bid: '1.0850',
+      ask: '1.0852',
+      last: '1.0850',
+      volume: 10,
+      volumeReal: '0',
+      flags: 0,
+    });
+    ticket.setStagedOnChart(true);
+    ticket.setRiskSide('buy');
+    ticket.setEntry('1.0850');
+    ticket.setUnitsMode('units');
+    ticket.setSlOn(false);
+    ticket.setOrderVolume('1');
+  };
+
   return (
     <>
       <button type="button" onClick={() => ticket.setEntry('1.2345')}>
@@ -264,7 +354,55 @@ function TicketControls() {
       <button type="button" onClick={() => ticket.applyUnitsMode('money')}>
         Use money sizing
       </button>
+      <button type="button" onClick={configureActionGate}>
+        Prepare action gate
+      </button>
+      <button type="button" onClick={() => ticket.setEntry('1.0851')}>
+        Change action entry
+      </button>
+      <button type="button" onClick={() => ticket.setTimeInForce('ioc')}>
+        Change action time in force
+      </button>
+      <button type="button" onClick={() => ticket.setOrderVolume('0')}>
+        Invalidate action volume
+      </button>
+      <button type="button" onClick={() => bridge.setAccount(undefined)}>
+        Remove action account
+      </button>
+      <button
+        type="button"
+        onClick={() => bridge.setStatus({ state: 'disconnected', message: 'Harness disconnected.' })}
+      >
+        Disconnect action bridge
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          bridge.setStatus({
+            state: 'connected',
+            message: 'Harness bridge is connected.',
+            marketSession: { symbol: 'EURUSD', isOpen: false, tradeMode: 0, serverTimeMs: 1745700001000 },
+          })
+        }
+      >
+        Close action market
+      </button>
+      <button type="button" onClick={() => ticket.setRiskSide('sell')}>
+        Change action side
+      </button>
+      <button type="button" onClick={() => ticket.setOrderCheckLoading(true)}>
+        Load action check
+      </button>
     </>
+  );
+}
+
+function TicketActionProbe() {
+  const action = useOrderTicketAction();
+  return (
+    <output data-testid="probe-ticket-action">
+      {String(action.canCheckOrder)}|{String(action.orderCheckLoading)}|{action.side}
+    </output>
   );
 }
 
@@ -362,6 +500,7 @@ function WorkspaceProbes() {
                 <OrderTicketExits />
               </Probe>
               <Probe id="ticket-action">
+                <TicketActionProbe />
                 <OrderTicketReviewAction />
               </Probe>
               <TicketControls />

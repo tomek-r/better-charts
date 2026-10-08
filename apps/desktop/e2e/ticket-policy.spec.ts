@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { deriveOrderTicket, type TicketDerivationInput } from '../src/features/order-ticket/domain/ticketRules';
+import { createOrderTicketStores } from '../src/features/order-ticket/state/orderTicketStores';
 import type { AccountSnapshot, BrokerSymbol, OrderCheckResult, RiskPreview } from '../src/shared/bridge/types';
 
 const account: AccountSnapshot = {
@@ -307,6 +308,7 @@ const cases: PolicyCase[] = [
 ];
 
 test('deriveOrderTicket preserves check, submit, and blocked-reason policy', () => {
+  const stores = createOrderTicketStores();
   for (const scenario of cases) {
     const input: TicketDerivationInput = {
       ...eligibleTicket,
@@ -314,8 +316,38 @@ test('deriveOrderTicket preserves check, submit, and blocked-reason policy', () 
       orderCheck: scenario.check === null ? undefined : { ...acceptedCheck, ...scenario.check },
     };
     const result = deriveOrderTicket(input);
-    expect(result.canCheckOrder, scenario.name).toBe(scenario.canCheckOrder);
-    expect(result.canSubmitOrder, scenario.name).toBe(scenario.canSubmitOrder);
-    expect(result.ticketBlockedReason, scenario.name).toBe(scenario.blockedReason);
+    const cachedResult = stores.deriveTicket(input);
+    expect(cachedResult).toEqual(result);
+    expect(cachedResult.canCheckOrder, scenario.name).toBe(scenario.canCheckOrder);
+    expect(cachedResult.canSubmitOrder, scenario.name).toBe(scenario.canSubmitOrder);
+    expect(cachedResult.ticketBlockedReason, scenario.name).toBe(scenario.blockedReason);
   }
+});
+
+test('ticket-store derivation reuses exact inputs and refreshes gate-critical optional inputs', () => {
+  const stores = createOrderTicketStores();
+  const initial = stores.deriveTicket(eligibleTicket);
+
+  expect(stores.deriveTicket({ ...eligibleTicket })).toBe(initial);
+  expect(initial.canSubmitOrder).toBe(true);
+
+  const closedMarket = stores.deriveTicket({ ...eligibleTicket, marketOpen: false });
+  expect(closedMarket).not.toBe(initial);
+  expect(closedMarket.canSubmitOrder).toBe(false);
+  expect(closedMarket.ticketBlockedReason).toContain('Market is closed');
+
+  const invalidOptionalAllocation: TicketDerivationInput = {
+    ...eligibleTicket,
+    unitsMode: 'money',
+    equityAllocationPercent: '0',
+    slOn: false,
+    instrument: undefined,
+  };
+  const allocationFailure = stores.deriveTicket(invalidOptionalAllocation);
+  expect(allocationFailure).not.toBe(closedMarket);
+  expect(allocationFailure.canCheckOrder).toBe(false);
+  expect(allocationFailure.ticketBlockedReason).toBe('Equity allocation must be greater than 0 and at most 100%.');
+
+  const otherProviderStores = createOrderTicketStores();
+  expect(otherProviderStores.deriveTicket(eligibleTicket)).not.toBe(initial);
 });

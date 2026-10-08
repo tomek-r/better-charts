@@ -49,6 +49,14 @@ The extraction reduced the session file from 978 to 213 lines. Review compared t
 
 Review compared all 16 moved function bodies against the previous provider and found no executable changes. Selectors, coordination refs, action identities, and trading eligibility calculations retain their existing behavior. Type checking, linting, formatting, the frontend build, and the browser regression suite verify the extraction.
 
+The subsequent profiler review found excessive subscription setup in consumers that already read every field. The ticket producer now subscribes once per draft, broker, and editor domain; the bridge lifecycle subscribes once per bridge domain. Their stable setter maps remain write-only. Focused UI consumers retain field selections.
+
+`AppLifecycle` passes its already-subscribed bridge and chart inputs explicitly to `useOrderTicketRuntime` and computes risk basis from those inputs. The producer no longer computes an unused staged display; the runtime retains that display and its held drag label.
+
+The Action hook subscribes to a read-only selector adapter over the canonical ticket and bridge stores. Its cached snapshot contains only eligibility, loading, and side, and notifications occur only when those outputs change. It has no writable derived state. Regression checks cover unchanged eligibility after entry/time-in-force edits and fresh output after account, connection, volume, side, and loading changes.
+
+`domain/ticketDerivation.ts` supplies the shared input mapping for producer, lifecycle, and gate selectors. Each ticket scope also owns a bounded, one-entry memo of the pure eligibility derivation. Producer and lifecycle pass their subscribed snapshots explicitly; the memo reads no stores, accepts every domain input, and recomputes on any input change. It introduces no observable derived store. The existing policy matrix verifies cached check/submit decisions and blocked reasons, including stale checks and account mismatches.
+
 ## Frontend console removal
 
 Subsequent owner decision: remove production frontend `console.*` calls. The frontend had no forwarding to a Tauri file logger. Logging-only execution-safety/recovery/reconciliation reads and the reconciliation log listener are removed rather than retained as unused work. The remaining listener order and mounted-session effect are preserved. Backend readers and durable execution journaling are unchanged.

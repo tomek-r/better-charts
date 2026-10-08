@@ -89,6 +89,22 @@ test('bridge domain stores remain isolated across provider instances', async ({ 
   expect(await page.getByTestId('secondary-market')).toHaveText('none');
 });
 
+test('bridge runtime projection reads current state from each canonical domain store', async ({ page }) => {
+  await mountHarness(page);
+
+  await page.getByRole('button', { name: 'Set test bridge status' }).click();
+  await page.getByRole('button', { name: 'Mark Tauri unavailable' }).click();
+  await page.getByRole('button', { name: 'Update quote' }).click();
+  await page.getByRole('button', { name: 'Load candle' }).click();
+  await page.getByRole('button', { name: 'Update candle' }).click();
+  await page.getByRole('button', { name: 'Set test account' }).click();
+  await page.getByRole('button', { name: 'Set test portfolio' }).click();
+
+  await expect(page.getByTestId('probe-bridge-runtime')).toHaveText(
+    'connected|false|EURUSD|1.0852|1.0852|1000.00|1745700001000',
+  );
+});
+
 test('ticket edits and panel toggles update only their owning consumers', async ({ page }) => {
   await mountHarness(page);
 
@@ -259,6 +275,76 @@ test('moving quotes keep unchanged sizing, exits and review action consumers idl
   expect(counts['ticket-tick-value'] ?? 0).toBe(0);
   expect(counts['ticket-exits'] ?? 0).toBe(0);
   expect(counts['ticket-action'] ?? 0).toBe(0);
+});
+
+test('ticket action updates only when its derived eligibility output changes', async ({ page }) => {
+  await mountHarness(page);
+  await page.getByRole('button', { name: 'Prepare action gate' }).click();
+  await expect(page.getByTestId('probe-ticket-action')).toHaveText('true|false|buy');
+  await expect(page.getByRole('button', { name: 'Start creating order' })).toBeEnabled();
+
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Change action entry' }).click();
+  await page.getByRole('button', { name: 'Change action time in force' }).click();
+  await expect(page.getByTestId('probe-ticket-action')).toHaveText('true|false|buy');
+  expect((await probeCounts(page))['ticket-action'] ?? 0).toBe(0);
+
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Invalidate action volume' }).click();
+  await expect(page.getByTestId('probe-ticket-action')).toHaveText('false|false|buy');
+  await expect(page.getByRole('button', { name: 'Start creating order' })).toBeDisabled();
+  expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
+});
+
+test('ticket action follows canonical gate inputs and all displayed action fields', async ({ page }) => {
+  await mountHarness(page);
+  await page.getByRole('button', { name: 'Prepare action gate' }).click();
+  const action = page.getByTestId('probe-ticket-action');
+  const review = page.getByRole('button', { name: 'Start creating order' });
+  await expect(action).toHaveText('true|false|buy');
+  await expect(review).toBeEnabled();
+
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Close action market' }).click();
+  await expect(action).toHaveText('true|false|buy');
+  await expect(review).toBeEnabled();
+  expect((await probeCounts(page))['ticket-action'] ?? 0).toBe(0);
+
+  await page.getByRole('button', { name: 'Remove action account' }).click();
+  await expect(action).toHaveText('false|false|buy');
+  await expect(review).toBeDisabled();
+  expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
+
+  await page.getByRole('button', { name: 'Prepare action gate' }).click();
+  await expect(action).toHaveText('true|false|buy');
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Disconnect action bridge' }).click();
+  await expect(action).toHaveText('false|false|buy');
+  expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
+
+  await page.getByRole('button', { name: 'Prepare action gate' }).click();
+  await expect(action).toHaveText('true|false|buy');
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Change action side' }).click();
+  await expect(action).toHaveText('true|false|sell');
+  expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
+
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Load action check' }).click();
+  await expect(action).toHaveText('true|true|sell');
+  expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
 });
 
 test('equity allocation scales percent risk but leaves explicit money risk unchanged', () => {

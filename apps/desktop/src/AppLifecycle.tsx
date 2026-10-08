@@ -20,7 +20,7 @@ import { usePortfolioAccountResetEffect } from './features/portfolio/usePortfoli
 import { useBridgeSessionRuntime } from './features/bridge/BridgeSessionProvider';
 import { useChartWorkspaceRuntime } from './features/chart/ChartWorkspaceProvider';
 import { useExecutionRuntime } from './features/execution/ExecutionProvider';
-import { useOrderRiskBasis } from './features/order-ticket/editor/useOrderTicketSizing';
+import { deriveOrderRiskBasis } from './features/order-ticket/domain/riskBasis';
 import { useOrderTicketRuntime } from './features/order-ticket/state/useOrderTicketRuntime';
 
 /**
@@ -33,9 +33,28 @@ import { useOrderTicketRuntime } from './features/order-ticket/state/useOrderTic
 export function AppLifecycle() {
   const workspace = useChartWorkspaceRuntime();
   const session = useBridgeSessionRuntime();
-  const ticket = useOrderTicketRuntime();
+  const ticket = useOrderTicketRuntime({
+    chart: workspace.chart,
+    stagedOrderState: workspace.stagedOrderState,
+    instrumentDigitsRef: workspace.instrumentDigitsRef,
+    stagedActiveRef: workspace.stagedActiveRef,
+    instrument: session.instrument,
+    account: session.account,
+    quote: session.quote,
+    snapshot: session.snapshot,
+    latestCandle: session.latestCandle,
+    status: session.status,
+  });
   const execution = useExecutionRuntime();
-  const riskBasis = useOrderRiskBasis();
+  const riskBasis = deriveOrderRiskBasis({
+    unitsMode: ticket.unitsMode,
+    riskAmount: ticket.riskAmount,
+    equity: session.account?.equity,
+    equityAllocationPercent: ticket.equityAllocationPercent,
+    currency: session.account?.currency,
+    currencyDigits: session.account?.currencyDigits,
+    stagedOnChart: ticket.stagedOnChart,
+  });
   const { chart, adapterRef, fixedRangeProfileState, expectedProfile, profileGeneration } = workspace;
   const { mounted: mountedRef, account } = session;
 

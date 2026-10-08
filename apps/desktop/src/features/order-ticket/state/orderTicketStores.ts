@@ -1,6 +1,7 @@
 import type { OrderCheckResult, OrderKind, RiskPreview, RiskSide, TimeInForce } from '../../../shared/bridge/types';
 import type { MutableRefObject } from 'react';
 import { createDomainStore } from '../../../shared/state/domainStore';
+import { createTicketDerivationCache } from '../domain/ticketDerivation';
 
 type OrderCheckPending = {
   generation: number;
@@ -120,6 +121,7 @@ export function createOrderTicketStores() {
     draft,
     broker,
     editor,
+    deriveTicket: createTicketDerivationCache(),
     setters: {
       draft: draft.setters,
       broker: broker.setters,

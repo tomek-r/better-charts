@@ -13,7 +13,18 @@ import type { Candle } from '../src/shared/bridge/types';
 function LiveProbe() {
   const session = useBridgeSessionRuntime();
   const workspace = useChartWorkspaceRuntime();
-  const ticket = useOrderTicketRuntime();
+  const ticket = useOrderTicketRuntime({
+    chart: workspace.chart,
+    stagedOrderState: workspace.stagedOrderState,
+    instrumentDigitsRef: workspace.instrumentDigitsRef,
+    stagedActiveRef: workspace.stagedActiveRef,
+    instrument: session.instrument,
+    account: session.account,
+    quote: session.quote,
+    snapshot: session.snapshot,
+    latestCandle: session.latestCandle,
+    status: session.status,
+  });
   useEffect(() => {
     const target = window as unknown as {
       __initialLiveHistory?: Candle[];

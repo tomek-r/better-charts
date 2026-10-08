@@ -7,7 +7,41 @@ import {
   useBridgeQuoteSelector,
 } from '../../bridge/BridgeSessionProvider';
 import { useOrderTicketStores } from '../state/orderTicketContext';
+import { buildTicketDerivationInput } from '../domain/ticketDerivation';
+import type { TicketDerivationBroker, TicketDerivationDraft } from '../domain/ticketDerivation';
 import { deriveOrderTicket } from '../domain/ticketRules';
+import type { BridgeStatus, BrokerSymbol, QuoteSnapshot } from '../../../shared/bridge/types';
+
+export type TicketGateSources = {
+  symbol: string | undefined;
+  instrument: BrokerSymbol | undefined;
+  bridgeState: BridgeStatus['state'];
+  marketOpen: boolean | undefined;
+  accountLogin: string | undefined;
+  brokerServer: string | undefined;
+  draft: TicketDerivationDraft;
+  broker: TicketDerivationBroker;
+  quote: QuoteSnapshot | undefined;
+};
+
+export function deriveTicketGateProjection(source: TicketGateSources) {
+  const input = buildTicketDerivationInput(
+    {
+      symbol: source.symbol,
+      bridgeState: source.bridgeState,
+      account:
+        source.accountLogin === undefined
+          ? undefined
+          : { accountLogin: source.accountLogin, brokerServer: source.brokerServer },
+      instrument: source.instrument,
+      quote: source.quote,
+      marketOpen: source.marketOpen,
+    },
+    source.draft,
+    source.broker,
+  );
+  return deriveOrderTicket(input);
+}
 
 export function useTicketGateProjection() {
   const stores = useOrderTicketStores();
@@ -52,29 +86,15 @@ export function useTicketGateProjection() {
       riskLoading: state.riskLoading,
     })),
   );
-  return deriveOrderTicket({
+  return deriveTicketGateProjection({
     symbol,
-    bridgeState,
-    account: accountLogin === undefined ? undefined : { accountLogin, brokerServer },
-    stagedOnChart: draft.stagedOnChart,
-    riskSide: draft.riskSide,
-    entry: draft.entry,
-    stopLoss: draft.stopLoss,
-    takeProfit: draft.takeProfit,
-    slOn: draft.slOn,
-    tpOn: draft.tpOn,
-    orderKind: draft.orderKind,
-    limitPrice: draft.limitPrice,
-    timeInForce: draft.timeInForce,
-    unitsMode: draft.unitsMode,
-    equityAllocationPercent: draft.equityAllocationPercent,
-    orderVolume: draft.orderVolume,
-    orderCheck,
-    riskPreview,
-    draftVersion: draft.draftVersion,
-    riskLoading,
     instrument,
-    quote,
+    bridgeState,
     marketOpen,
+    accountLogin,
+    brokerServer,
+    draft,
+    broker: { orderCheck, riskPreview, riskLoading },
+    quote,
   });
 }
