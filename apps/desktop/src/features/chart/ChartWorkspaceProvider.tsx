@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo, type Context, type ReactNode } from 'react';
+import { createContext, useMemo, type ReactNode } from 'react';
 import { useChartWorkspace, type ChartWorkspaceState } from './useChartWorkspace';
 import { DrawingContextProvider } from '../tools/DrawingContextProvider';
+import { useRequiredContext } from '../../shared/state/useRequiredContext';
 
 export type ChartWorkspaceResources = Pick<
   ChartWorkspaceState,
@@ -64,30 +65,22 @@ export function ChartWorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <RuntimeContext.Provider value={workspace}>
-      <ResourcesContext.Provider value={resources}>
+    <RuntimeContext value={workspace}>
+      <ResourcesContext value={resources}>
         <DrawingContextProvider drawingTool={workspace.drawingTool} setDrawingTool={workspace.setDrawingTool}>
           {children}
         </DrawingContextProvider>
-      </ResourcesContext.Provider>
-    </RuntimeContext.Provider>
+      </ResourcesContext>
+    </RuntimeContext>
   );
-}
-
-function useRequiredContext<T>(context: Context<T | null>, name: string): T {
-  const value = useContext(context);
-  if (value === null) {
-    throw new Error(`${name} must be used inside ChartWorkspaceProvider.`);
-  }
-  return value;
 }
 
 /** Full mutable workspace state for lifecycle and integration components only. */
 export function useChartWorkspaceRuntime(): ChartWorkspaceState {
-  return useRequiredContext(RuntimeContext, 'useChartWorkspaceRuntime');
+  return useRequiredContext(RuntimeContext, 'useChartWorkspaceRuntime must be used inside ChartWorkspaceProvider.');
 }
 
 /** Stable chart refs shared with bridge, ticket, and execution domains. */
 export function useChartResources(): ChartWorkspaceResources {
-  return useRequiredContext(ResourcesContext, 'useChartResources');
+  return useRequiredContext(ResourcesContext, 'useChartResources must be used inside ChartWorkspaceProvider.');
 }

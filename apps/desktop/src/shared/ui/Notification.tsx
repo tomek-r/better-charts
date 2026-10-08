@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRequiredContext } from '../state/useRequiredContext';
 
 const DismissContext = createContext<{ closing: boolean; dismiss: (action: () => void) => void } | null>(null);
 
@@ -26,7 +27,7 @@ function Frame({ children, role }: { children: ReactNode; role: 'status' | 'aler
     timer.current = setTimeout(action, 180);
   };
   return (
-    <DismissContext.Provider value={{ closing, dismiss }}>
+    <DismissContext value={{ closing, dismiss }}>
       <div className={`notification notification-${role}${closing ? ' is-closing' : ''}`} role={role}>
         {role === 'alert' ? (
           <svg className="notification-error-icon" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
@@ -36,7 +37,7 @@ function Frame({ children, role }: { children: ReactNode; role: 'status' | 'aler
         ) : null}
         {children}
       </div>
-    </DismissContext.Provider>
+    </DismissContext>
   );
 }
 
@@ -54,10 +55,10 @@ function Message({ children }: { children: string }) {
 }
 
 function Dismiss({ onDismiss, label }: { onDismiss: () => void; label: string }) {
-  const lifecycle = useContext(DismissContext);
-  if (!lifecycle) {
-    throw new Error('Notification.Dismiss requires a Notification.Status or Notification.Alert.');
-  }
+  const lifecycle = useRequiredContext(
+    DismissContext,
+    'Notification.Dismiss requires a Notification.Status or Notification.Alert.',
+  );
   return (
     <button
       type="button"
