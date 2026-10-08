@@ -102,16 +102,6 @@ export function SymbolSearchView() {
   }, [searchOpen, searchQuery, setSearchError, setSearchLoading, setSearchResults, setSearchSource]);
 
   useEffect(() => {
-    if (searchOpen && !searchQuery.trim()) {
-      const combined = [
-        ...favorites,
-        ...recent.filter((item) => !favorites.some((favorite) => favorite.symbol === item.symbol)),
-      ];
-      setSearchResults(combined);
-    }
-  }, [searchOpen, searchQuery, favorites, recent, setSearchResults]);
-
-  useEffect(() => {
     saveSymbols(favoritesKey, favorites);
   }, [favorites]);
 

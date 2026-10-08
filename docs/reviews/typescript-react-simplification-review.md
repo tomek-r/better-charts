@@ -451,6 +451,8 @@ they intentionally have different cancellation behavior.
 
 ### F15 — P3: derive favorite/recent search presentation once
 
+**Implemented:** favorites and deduplicated recents determine both rendering and Enter selection directly. One row component preserves group labels and favorite controls. Search and stale-request regressions pass.
+
 **Evidence:** [combined-list effect](../../apps/desktop/src/features/symbol-search/SymbolSearchView.tsx#L94)
 and [dialog list branches](../../apps/desktop/src/features/symbol-search/SymbolSearchDialog.tsx#L78).
 

@@ -228,6 +228,39 @@ test('favorites persist and recents are recorded only after history accepts a se
   expect(stored.recent.map((item: { symbol: string }) => item.symbol)).toEqual(['NAS100']);
 });
 
+test('empty-query Enter chooses the first favorite and hides it from Recent', async ({ page }) => {
+  const favorite = brokerSymbol('EURUSD', 'Saved favorite');
+  const recentDuplicate = brokerSymbol('EURUSD', 'Older Euro entry');
+  const recent = [recentDuplicate, brokerSymbol('NAS100', 'US Tech 100')];
+  await page.addInitScript(
+    ({ favoriteSymbol, recentSymbols }) => {
+      localStorage.setItem('better-charts.symbol-favorites.v1', JSON.stringify([favoriteSymbol]));
+      localStorage.setItem('better-charts.symbol-recent.v1', JSON.stringify(recentSymbols));
+    },
+    { favoriteSymbol: favorite, recentSymbols: recent },
+  );
+  await gotoWithStub(page);
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history').length)
+    .toBeGreaterThan(0);
+  const initialHistoryCount = (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history').length;
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  const rows = dialog.locator('.search-result-row');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0).locator('strong')).toHaveText('EURUSD');
+  await expect(rows.nth(1).locator('strong')).toHaveText('NAS100');
+  await expect(dialog.getByText('Older Euro entry')).toHaveCount(0);
+
+  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').press('Enter');
+  await expect(dialog).toBeHidden();
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history'))
+    .toHaveLength(initialHistoryCount + 1);
+  const historyRequests = (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history');
+  expect(historyRequests.at(-1)?.args.symbol).toBe('EURUSD');
+});
+
 test('failed symbol history clears loading and does not record a recent selection', async ({ page }) => {
   await gotoWithStub(page);
   await page.evaluate(() => {
