@@ -33,6 +33,8 @@ The provider creates its store instances once with a lazy React initializer. Rea
 
 Select related fields together from the same store. Use `useShallow` for object/tuple selections so unrelated updates do not rerender the consumer. The bridge market and connection selector helpers apply it internally; account and quote selectors and direct `useStore` calls apply it at the call site when needed. Grouping does not combine independent domains into a global store.
 
+For write-only access, `useFieldSetterSelector(store, selector)` selects from the store's stable typed setter map without subscribing to state. The bridge groups setters once per domain. Ticket stores reuse the same setter generation; functional updates and unchanged-value suppression retain their existing behavior.
+
 ## Review and validation
 
 Implemented on `refactor/typescript-react-findings` in separate commits for the foundation, chart cleanups, context syntax, bridge domains, secondary providers, and ticket domains. Chart state hooks now live in `features/chart/state`; lifecycle, gesture, diagnostics, and overlay effects live in `features/chart/effects`. The folder move changes imports only and preserves lifecycle registration order.

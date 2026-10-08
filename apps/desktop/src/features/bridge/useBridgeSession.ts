@@ -3,7 +3,6 @@ import { accountMoneyBasis } from '../../shared/money';
 // Bridge listeners are the sole source of accepted history and live candles.
 // Selection refs reject stale events; the coordinator owns request dedupe and timeout.
 import { useCallback, useEffect, useRef } from 'react';
-import type { SetStateAction } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { SubscriptionScope } from '../../shared/bridge/subscriptionScope';
@@ -45,15 +44,8 @@ import { quoteDigits } from '../../shared/format';
 import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
 import { HISTORY_BARS } from '../../shared/bridge/limits';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
-import type { DomainStore } from '../../shared/state/domainStore';
+import { useFieldSetterSelector } from '../../shared/state/domainStore';
 import type { BridgeSessionStores } from './bridgeSessionStores';
-
-function useFieldSetter<T extends object, K extends keyof T>(
-  store: DomainStore<T>,
-  field: K,
-): (action: SetStateAction<T[K]>) => void {
-  return useCallback((action: SetStateAction<T[K]>) => store.setField(field, action), [store, field]);
-}
 
 type BridgeTicketResponsePort = Pick<
   OrderTicketState,
@@ -103,18 +95,19 @@ export function useBridgeSession({
   const loadingTimeframeRef = useRef<string | undefined>(undefined);
   const mounted = useRef(false);
   const targetSymbol = useRef<string | undefined>(undefined);
-  const setStatus = useFieldSetter(stores.connection, 'status');
-  const setTauriAvailable = useFieldSetter(stores.connection, 'tauriAvailable');
-  const setSnapshot = useFieldSetter(stores.market, 'snapshot');
-  const setLatestCandle = useFieldSetter(stores.market, 'latestCandle');
-  const setInstrument = useFieldSetter(stores.market, 'instrument');
-  const setLastSymbolSelection = useFieldSetter(stores.market, 'lastSymbolSelection');
-  const setLoadingTimeframe = useFieldSetter(stores.market, 'loadingTimeframe');
-  const setSymbolLoading = useFieldSetter(stores.market, 'symbolLoading');
-  const setChartError = useFieldSetter(stores.market, 'chartError');
-  const setQuote = useFieldSetter(stores.quote, 'quote');
-  const setAccount = useFieldSetter(stores.account, 'account');
-  const setPortfolio = useFieldSetter(stores.portfolio, 'portfolio');
+  const { setStatus, setTauriAvailable } = useFieldSetterSelector(stores.connection, (setters) => setters);
+  const {
+    setSnapshot,
+    setLatestCandle,
+    setInstrument,
+    setLastSymbolSelection,
+    setLoadingTimeframe,
+    setSymbolLoading,
+    setChartError,
+  } = useFieldSetterSelector(stores.market, (setters) => setters);
+  const { setQuote } = useFieldSetterSelector(stores.quote, (setters) => setters);
+  const { setAccount } = useFieldSetterSelector(stores.account, (setters) => setters);
+  const { setPortfolio } = useFieldSetterSelector(stores.portfolio, (setters) => setters);
   const requestProfileRange = useCallback(
     (reason: string, range = chart.current?.getProfileRange() ?? undefined) => {
       const symbol = currentSymbol.current;

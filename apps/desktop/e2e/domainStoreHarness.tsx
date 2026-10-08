@@ -1,9 +1,10 @@
-import { act, createElement, Fragment } from 'react';
+import { act, createElement, Fragment, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createDomainStore, useDomainField } from '../src/shared/state/domainStore';
+import { createDomainStore, useDomainField, useFieldSetterSelector } from '../src/shared/state/domainStore';
 
 interface DomainStoreHarnessWindow extends Window {
   __domainStoreNotifications: { first: number; second: number };
+  __domainStoreSetterMetrics: { writerRenders: number; stableAcrossRenders: boolean };
 }
 
 const getHarnessWindow = () => window as unknown as DomainStoreHarnessWindow;
@@ -13,6 +14,7 @@ export function mountDomainStoreHarness(): void {
   const firstStore = createDomainStore({ count: 0 });
   const secondStore = createDomainStore({ count: 10 });
   const notifications = { first: 0, second: 0 };
+  const setterMetrics = { writerRenders: 0, stableAcrossRenders: true };
   const unsubscribeFirst = firstStore.subscribe(() => notifications.first++);
   const unsubscribeSecond = secondStore.subscribe(() => notifications.second++);
 
@@ -22,6 +24,30 @@ export function mountDomainStoreHarness(): void {
       'button',
       { 'data-testid': id, onClick: () => setCount((previous) => previous + 1) },
       String(count),
+    );
+  }
+
+  function WriteOnlyCounter({ store }: { store: typeof firstStore }) {
+    const setters = useFieldSetterSelector(store, (availableSetters) => ({ setCount: availableSetters.setCount }));
+    const previousSetters = useRef(setters);
+    const [localVersion, setLocalVersion] = useState(0);
+    setterMetrics.writerRenders++;
+    setterMetrics.stableAcrossRenders &&=
+      previousSetters.current === setters && previousSetters.current.setCount === setters.setCount;
+    previousSetters.current = setters;
+    return createElement(
+      Fragment,
+      null,
+      createElement(
+        'button',
+        { 'data-testid': 'write-only-counter', onClick: () => setters.setCount((value) => value + 1) },
+        'write',
+      ),
+      createElement(
+        'button',
+        { 'data-testid': 'rerender-writer', onClick: () => setLocalVersion((value) => value + 1) },
+        String(localVersion),
+      ),
     );
   }
 
@@ -36,12 +62,14 @@ export function mountDomainStoreHarness(): void {
         null,
         createElement(Counter, { id: 'first-counter', store: firstStore }),
         createElement(Counter, { id: 'second-counter', store: secondStore }),
+        createElement(WriteOnlyCounter, { store: firstStore }),
       ),
     );
   });
 
   firstStore.setField('count', 0);
   getHarnessWindow().__domainStoreNotifications = notifications;
+  getHarnessWindow().__domainStoreSetterMetrics = setterMetrics;
   cleanupHarness = () => {
     root.unmount();
     unsubscribeFirst();

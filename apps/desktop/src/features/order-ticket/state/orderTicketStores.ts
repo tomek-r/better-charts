@@ -1,22 +1,6 @@
 import type { OrderCheckResult, OrderKind, RiskPreview, RiskSide, TimeInForce } from '../../../shared/bridge/types';
 import type { MutableRefObject } from 'react';
-import type { SetStateAction } from 'react';
-import { createDomainStore, type DomainStore } from '../../../shared/state/domainStore';
-
-export type FieldSetters<T extends object> = {
-  [K in keyof T as `set${Capitalize<string & K>}`]: (action: SetStateAction<T[K]>) => void;
-};
-
-function createFieldSetters<T extends object>(store: DomainStore<T>): FieldSetters<T> {
-  const setters = {} as FieldSetters<T>;
-  for (const key of Object.keys(store.getState()) as Array<keyof T>) {
-    const setter = (action: SetStateAction<T[typeof key]>) => store.setField(key, action);
-    (setters as unknown as Record<string, (action: SetStateAction<T[typeof key]>) => void>)[
-      `set${String(key).charAt(0).toUpperCase()}${String(key).slice(1)}`
-    ] = setter;
-  }
-  return setters;
-}
+import { createDomainStore } from '../../../shared/state/domainStore';
 
 type OrderCheckPending = {
   generation: number;
@@ -137,9 +121,9 @@ export function createOrderTicketStores() {
     broker,
     editor,
     setters: {
-      draft: createFieldSetters(draft),
-      broker: createFieldSetters(broker),
-      editor: createFieldSetters(editor),
+      draft: draft.setters,
+      broker: broker.setters,
+      editor: editor.setters,
     },
     coordination,
   };
