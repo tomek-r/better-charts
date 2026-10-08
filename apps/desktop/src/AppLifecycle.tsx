@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { refreshExecutionRecovery, useExecutionCommandEffects } from './features/execution/useExecutionCommands';
-import { useBridgeBootstrapEffects, useBridgeStreamEffects } from './features/bridge/useBridgeSession';
+import { useBridgeBootstrapEffects } from './features/bridge/effects/useBridgeBootstrapEffects';
+import { useBridgeStreamEffects } from './features/bridge/effects/useBridgeStreamEffects';
 import {
   useChartWorkspaceInitEffects,
   useChartWorkspaceChartEffects,

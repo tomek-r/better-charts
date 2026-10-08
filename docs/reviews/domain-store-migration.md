@@ -35,6 +35,12 @@ Select related fields together from the same store. Use `useShallow` for object/
 
 For write-only access, `useFieldSetterSelector(store, selector)` selects from the store's stable typed setter map without subscribing to state. The bridge groups setters once per domain. Ticket stores reuse the same setter generation; functional updates and unchanged-value suppression retain their existing behavior.
 
+## Bridge session responsibilities
+
+`useBridgeSession.ts` owns scoped session coordination refs and symbol/history/profile actions. `effects/useBridgeBootstrapEffects.ts` owns startup reads, the single subscription scope, listener registration order, and cleanup. `effects/useBridgeStreamEffects.ts` synchronizes portfolio overlays. `bridgeMarketRuntime.ts` owns accepted market events, paging, live-candle batching, and profile responses; `bridgeTicketResponseHandlers.ts` owns risk-preview and OrderCheck acceptance guards.
+
+The extraction reduces the session file from 978 to 213 lines. Review compared the 16 listener registrations and moved executable bodies against the prior implementation, preserving registration order, acceptance policies, adapter capture before awaits, candle cancellation, and cleanup. The existing 261 browser tests pass after extraction.
+
 ## Review and validation
 
 Implemented on `refactor/typescript-react-findings` in separate commits for the foundation, chart cleanups, context syntax, bridge domains, secondary providers, and ticket domains. Chart state hooks now live in `features/chart/state`; lifecycle, gesture, diagnostics, and overlay effects live in `features/chart/effects`. The folder move changes imports only and preserves lifecycle registration order.
