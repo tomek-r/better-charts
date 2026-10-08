@@ -1,4 +1,4 @@
-import { useOrderTicketTickValue } from '../OrderTicketProvider';
+import { useOrderTicketTickValue } from './orderTicketSizingViews';
 
 export function OrderTicketTickValue() {
   const { hasInstrument, tickValueText, currency } = useOrderTicketTickValue();

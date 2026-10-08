@@ -5,7 +5,8 @@ import { BridgeSessionProvider, useBridgeSessionRuntime } from '../src/features/
 import { ChartWorkspaceProvider, useChartWorkspaceRuntime } from '../src/features/chart/ChartWorkspaceProvider';
 import { ChartCanvas } from '../src/features/chart/ChartCanvas';
 import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
-import { OrderTicketProvider, useOrderTicketRuntime } from '../src/features/order-ticket/OrderTicketProvider';
+import { OrderTicketProvider } from '../src/features/order-ticket/OrderTicketProvider';
+import { useOrderTicketRuntime } from '../src/features/order-ticket/state/useOrderTicketRuntime';
 import { ErrorNotificationsProvider } from '../src/shared/ui/ErrorNotifications';
 import type { Candle } from '../src/shared/bridge/types';
 

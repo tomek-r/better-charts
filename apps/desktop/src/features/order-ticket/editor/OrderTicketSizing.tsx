@@ -1,7 +1,7 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { equityAllocationIssue } from '../domain/ticketRules';
 import { UnitsSizingRow } from './UnitsSizingRow';
-import { useOrderTicketSizing } from '../OrderTicketProvider';
+import { useOrderTicketSizing } from './orderTicketSizingViews';
 
 export function OrderTicketSizing() {
   const {

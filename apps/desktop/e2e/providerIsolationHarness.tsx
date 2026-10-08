@@ -24,12 +24,10 @@ import { ChartCanvas } from '../src/features/chart/ChartCanvas';
 import { ChartTimeframes } from '../src/features/chart/ChartTimeframes';
 import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
 import type { AccountSnapshot, QuoteSnapshot } from '../src/shared/bridge/types';
-import {
-  OrderTicketProvider,
-  useOrderTicketHeader,
-  useOrderTicketPricing,
-  useOrderTicketRuntime,
-} from '../src/features/order-ticket/OrderTicketProvider';
+import { OrderTicketProvider } from '../src/features/order-ticket/OrderTicketProvider';
+import { useOrderTicketHeader } from '../src/features/order-ticket/editor/orderTicketGateViews';
+import { useOrderTicketPricing } from '../src/features/order-ticket/editor/orderTicketQuotesPricing';
+import { useOrderTicketRuntime } from '../src/features/order-ticket/state/useOrderTicketRuntime';
 import { OrderTicketTickValue } from '../src/features/order-ticket/editor/OrderTicketTickValue';
 import { OrderTicketSizing } from '../src/features/order-ticket/editor/OrderTicketSizing';
 import { OrderTicketExits } from '../src/features/order-ticket/editor/OrderTicketExits';

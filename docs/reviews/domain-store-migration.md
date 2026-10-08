@@ -41,6 +41,14 @@ For write-only access, `useFieldSetterSelector(store, selector)` selects from th
 
 The extraction reduced the session file from 978 to 213 lines. Review compared the 16 listener registrations and moved executable bodies against the prior implementation, preserving registration order, acceptance policies, adapter capture before awaits, candle cancellation, and cleanup. The existing 261 browser tests passed after extraction.
 
+## Order ticket responsibilities
+
+`OrderTicketProvider.tsx` now owns only scoped store creation, the ticket producer, stable action bindings, and context injection. The extraction reduces it from 680 to 98 lines without adding stores or providers.
+
+`state/orderTicketContext.ts` owns injection types and required store/action accessors. `state/useOrderTicketRuntime.ts` reconstructs the lifecycle projection from the canonical stores. Editor hooks are grouped by responsibility: gate/header/review/action views, quotes/pricing, sizing/risk basis/tick value, and exits/extra settings. Consumers import their hooks directly from these modules.
+
+Review compared all 16 moved function bodies against the previous provider and found no executable changes. Selectors, coordination refs, action identities, and trading eligibility calculations retain their existing behavior. Type checking, linting, formatting, the frontend build, and the browser regression suite verify the extraction.
+
 ## Frontend console removal
 
 Subsequent owner decision: remove production frontend `console.*` calls. The frontend had no forwarding to a Tauri file logger. Logging-only execution-safety/recovery/reconciliation reads and the reconciliation log listener are removed rather than retained as unused work. The remaining listener order and mounted-session effect are preserved. Backend readers and durable execution journaling are unchanged.
