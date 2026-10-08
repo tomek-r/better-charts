@@ -123,13 +123,10 @@ export function useChartWorkspaceMirrorLayoutEffect(
     state.order = next;
     const priceMoved = stagedPrevPriceRef.current !== state.currentPrice;
     stagedPrevPriceRef.current = state.currentPrice;
-    // Levels changed → full repaint; a quote tick alone takes the LIGHT path:
-    // setCurrentPrice → scheduleRender (rAF, no container re-measure). The old
-    // resize() here re-laid-out the chart on EVERY quote tick while staged.
-    if (changed) {
+    // Level changes and current-price moves both repaint overlays without a
+    // container re-measure; the old resize() here re-laid out the chart on EVERY quote tick.
+    if (changed || (priceMoved && state.currentPrice !== undefined)) {
       chart.current?.refreshOverlays();
-    } else if (priceMoved && state.currentPrice !== undefined) {
-      chart.current?.setCurrentPrice(state.currentPrice);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [

@@ -321,9 +321,6 @@ export class ChartController {
   private syncCountdown(): void {
     this.countdown.sync();
   }
-  setCurrentPrice(_price: number): void {
-    this.refreshOverlays();
-  }
   visibleRange(): { from: number; to: number } | null {
     return this.view.visibleRange();
   }
