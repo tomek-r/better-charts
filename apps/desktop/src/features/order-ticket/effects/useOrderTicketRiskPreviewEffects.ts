@@ -152,7 +152,7 @@ export function useOrderTicketRiskPreviewEffects(
             setOrderVolume(projected.volume);
           }
         })
-        .catch((error) => console.info('Local risk projection unavailable.', error));
+        .catch(() => undefined);
     }
     const request = () => {
       window.clearTimeout(pendingTimer.current);
@@ -162,7 +162,6 @@ export function useOrderTicketRiskPreviewEffects(
           setRiskLoading(false);
           setRiskError('Risk preview is unavailable.');
         }
-        console.info('Risk preview unavailable.', error);
         throw error;
       });
     };

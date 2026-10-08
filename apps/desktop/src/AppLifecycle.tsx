@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { refreshExecutionRecovery, useExecutionCommandEffects } from './features/execution/useExecutionCommands';
+import { useExecutionCommandEffects } from './features/execution/useExecutionCommands';
 import { useBridgeBootstrapEffects } from './features/bridge/effects/useBridgeBootstrapEffects';
 import { useBridgeStreamEffects } from './features/bridge/effects/useBridgeStreamEffects';
 import {
@@ -40,7 +40,6 @@ export function AppLifecycle() {
 
   useEffect(() => {
     mountedRef.current = true;
-    void refreshExecutionRecovery();
     return () => {
       mountedRef.current = false;
     };

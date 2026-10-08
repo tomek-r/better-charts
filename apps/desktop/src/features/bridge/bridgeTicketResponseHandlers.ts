@@ -50,7 +50,6 @@ export function createBridgeTicketResponseHandlers(
       event.payload.symbol === currentSymbol.current
     ) {
       riskBrokerVersion.current = event.payload.draftVersion;
-      console.info('[risk-preview]', event.payload);
       setRiskPreview(event.payload);
       riskPreviewDisplayRef.current = event.payload;
       setRiskLoading(false);

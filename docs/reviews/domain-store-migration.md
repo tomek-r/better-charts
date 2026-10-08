@@ -39,7 +39,13 @@ For write-only access, `useFieldSetterSelector(store, selector)` selects from th
 
 `useBridgeSession.ts` owns scoped session coordination refs and symbol/history/profile actions. `effects/useBridgeBootstrapEffects.ts` owns startup reads, the single subscription scope, listener registration order, and cleanup. `effects/useBridgeStreamEffects.ts` synchronizes portfolio overlays. `bridgeMarketRuntime.ts` owns accepted market events, paging, live-candle batching, and profile responses; `bridgeTicketResponseHandlers.ts` owns risk-preview and OrderCheck acceptance guards.
 
-The extraction reduces the session file from 978 to 213 lines. Review compared the 16 listener registrations and moved executable bodies against the prior implementation, preserving registration order, acceptance policies, adapter capture before awaits, candle cancellation, and cleanup. The existing 261 browser tests pass after extraction.
+The extraction reduced the session file from 978 to 213 lines. Review compared the 16 listener registrations and moved executable bodies against the prior implementation, preserving registration order, acceptance policies, adapter capture before awaits, candle cancellation, and cleanup. The existing 261 browser tests passed after extraction.
+
+## Frontend console removal
+
+Subsequent owner decision: remove production frontend `console.*` calls. The frontend had no forwarding to a Tauri file logger. Logging-only execution-safety/recovery/reconciliation reads and the reconciliation log listener are removed rather than retained as unused work. The remaining listener order and mounted-session effect are preserved. Backend readers and durable execution journaling are unchanged.
+
+Command rejection/error notifications, chart/search/risk errors, queue updates, promise rejection handling, response acceptance checks, and execution gates remain active. Profile requests no longer take the unused logging-reason argument. Browser regressions assert visible rejection/error notifications and dispatch-lock recovery with no frontend info logs, and confirm the three logging-only snapshot commands are no longer requested.
 
 ## Review and validation
 

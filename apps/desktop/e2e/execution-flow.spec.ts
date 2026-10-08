@@ -15,8 +15,8 @@ import {
 // command-status list and the close/cancel dispatch path, driven end-to-end in
 // the browser against the stubbed `window.__TAURI_INTERNALS__` (see tauriStub.ts).
 // Unlike smoke.spec.ts there is NO tauri/invoke console tolerance here: with the
-// stub installed every invoke resolves or rejects in-page (legitimate rejections
-// log via console.info), so any console error is a real regression.
+// stub installed every invoke resolves or rejects in-page, so any console error
+// is a real regression.
 
 function expectClean({ pageErrors, consoleErrors }: { pageErrors: string[]; consoleErrors: string[] }) {
   expect(pageErrors).toEqual([]);
@@ -185,7 +185,7 @@ test('stubbed runtime connects: sidebar, account badge and chart data render', a
   await expect(page.locator('aside.trade-panel')).toBeVisible();
   await expect(page.locator('.runtime-label')).toHaveCount(0);
   // Safety surfaces (Execution safety / Recovery journal / Reconciliation / MT5
-  // backend cards) were removed from the UI — their data is log-only now.
+  // backend cards) were removed from the UI, so the frontend does not fetch them.
   await expect(page.locator('.execution-safety-card')).toHaveCount(0);
   await expect(page.locator('.recovery-card')).toHaveCount(0);
   await expect(page.locator('.reconciliation-card')).toHaveCount(0);
@@ -200,7 +200,7 @@ test('stubbed runtime connects: sidebar, account badge and chart data render', a
   // Stubbed snapshot flows: symbol visible, bars painted (no waiting overlay).
   await expect(page.locator('.chart-heading h1')).toHaveText('EURUSD');
   await expect(page.locator('.chart-overlay')).toHaveCount(0);
-  // The Order panel is gone — command lifecycle is log-only now.
+  // The Order panel is gone; rejected commands remain visible as notifications.
   await expect(page.locator('.order-panel-card')).toHaveCount(0);
   await expect(page.locator('.backend-running')).toHaveCount(0);
   // The invocation log proves the app talked to the stub, not a real shell.
@@ -209,23 +209,23 @@ test('stubbed runtime connects: sidebar, account badge and chart data render', a
     'get_bridge_status',
     'get_market_snapshot',
     'get_account_snapshot',
-    'get_execution_safety_status',
-    'get_execution_recovery_snapshot',
     'get_execution_queue_status',
-    'get_reconciliation_status',
     'plugin:event|listen',
   ]) {
     expect(invoked, `expected invoke log to contain "${cmd}"`).toContain(cmd);
   }
+  for (const cmd of ['get_execution_safety_status', 'get_execution_recovery_snapshot', 'get_reconciliation_status']) {
+    expect(invoked, `expected no invoke log entry for "${cmd}"`).not.toContain(cmd);
+  }
   expectClean(collected);
 });
 
-test('command errors notify and lifecycle events remain logged', async ({ page }) => {
+test('command errors notify without frontend console logging', async ({ page }) => {
   const collected = await gotoWithStub(page);
-  const logs: string[] = [];
+  const infoLogs: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'info') {
-      logs.push(message.text());
+      infoLogs.push(message.text());
     }
   });
   await pushCommandUpdate(page, { commandId: 'cmd-2001', status: 'accepted' });
@@ -249,25 +249,19 @@ test('command errors notify and lifecycle events remain logged', async ({ page }
     code: 'journal_write_failed',
     message: 'Journal write rejected by disk policy.',
   });
-  const updates = () => logs.filter((line) => line.startsWith('[command-update]'));
-  const errors = () => logs.filter((line) => line.startsWith('[command-error]'));
-  await expect.poll(() => updates().length).toBe(4);
-  await expect.poll(() => errors().length).toBe(1);
-  // Payload evidence is preserved verbatim in the logs.
-  expect(updates()[0]).toContain('"status":"accepted"');
-  expect(updates()[1]).toContain('"status":"filled"');
-  expect(updates()[1]).toContain('"dealId":"777001"');
-  expect(updates()[2]).toContain('"status":"rejected"');
-  expect(updates()[2]).toContain('Invalid volume');
-  expect(updates()[3]).toContain('"status":"unknown"');
-  expect(errors()[0]).toContain('journal_write_failed');
-  expect(errors()[0]).toContain('Journal write rejected by disk policy.');
+  const rejectionNotification = page
+    .locator('.notification-region [role=alert]')
+    .filter({ hasText: 'Invalid volume: below broker minimum' });
+  await expect(rejectionNotification).toBeVisible();
   const notification = page
     .locator('.notification-region [role=alert]')
     .filter({ hasText: 'Journal write rejected by disk policy.' });
   await expect(notification).toBeVisible();
+  expect(infoLogs).toEqual([]);
   await notification.getByRole('button', { name: 'Dismiss error notification' }).click();
   await expect(notification).toBeHidden();
+  await rejectionNotification.getByRole('button', { name: 'Dismiss error notification' }).click();
+  await expect(rejectionNotification).toBeHidden();
   // The Order panel itself is gone from the DOM.
   await expect(page.locator('.order-panel-card')).toHaveCount(0);
   expectClean(collected);
@@ -543,21 +537,15 @@ test('closed market session blocks submission and explains why', async ({ page }
   expectClean(collected);
 });
 
-test('submit dispatch-lock rejection is logged and re-enables the button', async ({ page }) => {
+test('submit dispatch-lock rejection remains visible and re-enables the button', async ({ page }) => {
   const collected = await gotoWithStub(page, {
     failures: { submit_order: 'Dispatch is disabled by owner policy.' },
   });
   await openTradePanel(page);
-  const logs: string[] = [];
-  page.on('console', (message) => {
-    if (message.type() === 'info') {
-      logs.push(message.text());
-    }
-  });
+  const infoLogs: string[] = [];
+  page.on('console', (message) => message.type() === 'info' && infoLogs.push(message.text()));
   await completeOrderCheck(page);
   await page.locator('.ticket-cta.send').click();
-  await expect.poll(() => logs.some((line) => line.startsWith('[submit-order] rejected'))).toBe(true);
-  expect(logs.find((line) => line.startsWith('[submit-order] rejected'))).toContain('Dispatch is disabled');
   // The calm locked line explains the rejection instead of a stale gate reason.
   await expect(page.locator('.notification-region [role=alert]').filter({ hasText: 'Dispatch locked' })).toHaveText(
     'Dispatch locked — nothing was sent to MT5. Owner approval required.',
@@ -566,6 +554,7 @@ test('submit dispatch-lock rejection is logged and re-enables the button', async
   const send = page.locator('.ticket-cta.send');
   await expect(send).toBeEnabled();
   await expect(send).toHaveText('Send order');
+  expect(infoLogs).toEqual([]);
   const submit = await wasInvoked(page, 'submit_order');
   expect(submit).toBeDefined();
   expectClean(collected);

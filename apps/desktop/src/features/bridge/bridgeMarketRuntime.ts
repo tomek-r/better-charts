@@ -111,9 +111,8 @@ export function createBridgeMarketRuntime(
       // the mutable render history. Keep snapshot history stable between
       // accepted history replacements instead of copying it on every paint.
       setLatestCandle(candles[candles.length - 1]);
-    } catch (error) {
+    } catch {
       setChartError('Live bar could not be rendered.');
-      console.error(error);
     }
   };
 
@@ -138,9 +137,7 @@ export function createBridgeMarketRuntime(
     }
     pageState.inFlight = true;
     pageState.anchorMs = beforeMs;
-    void adapter.requestHistoryPage(symbol, timeframe, HISTORY_BARS, beforeMs).catch((error) => {
-      console.info('Older history page unavailable.', error);
-    });
+    void adapter.requestHistoryPage(symbol, timeframe, HISTORY_BARS, beforeMs).catch(() => undefined);
   };
   const resetPageState = () => {
     pageState.key = '';
@@ -164,7 +161,6 @@ export function createBridgeMarketRuntime(
       }
       return;
     }
-    console.info('History request failed.', failure.message);
     const expectedSymbol = targetSymbol.current ?? currentSymbolRef.current;
     const expectedTimeframe = loadingTimeframeRef.current ?? currentTimeframeRef.current;
     if (
@@ -252,9 +248,8 @@ export function createBridgeMarketRuntime(
           ? 'MT5 returned candles, but none of them contain valid OHLC values.'
           : undefined,
       );
-    } catch (error) {
+    } catch {
       setChartError('Chart data could not be rendered.');
-      console.error(error);
     }
     setSnapshot(accepted);
     if (loadingTimeframeRef.current === accepted.timeframe) {
@@ -340,7 +335,6 @@ export function createBridgeMarketRuntime(
   const onSymbolInfo = (event: PayloadEvent<BrokerSymbol>) => {
     const expected = targetSymbol.current ?? currentSymbolRef.current;
     if (!run.disposed && expected && event.payload.symbol === expected) {
-      console.info('[instrument]', event.payload);
       setInstrument(event.payload);
     }
   };

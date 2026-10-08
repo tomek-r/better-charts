@@ -57,8 +57,8 @@ export function useBridgeStreamEffects(
       } else if (changed) {
         instance.refreshOverlays();
       }
-    } catch (error) {
-      console.info('Trading overlay could not be synced.', error);
+    } catch {
+      // Keep the bridge stream alive if an overlay update cannot be applied.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs and callbacks are stable app-owned values.
   }, [

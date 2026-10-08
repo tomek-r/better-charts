@@ -93,6 +93,9 @@ Windows release builds use the GUI subsystem; background process checks and stop
 commands create no console window. Debug builds retain console output. macOS/Linux
 launch helpers directly without opening a terminal emulator.
 
+Production frontend console logging is removed. Actionable errors remain visible
+in the UI; backend diagnostics and the durable execution journal remain active.
+
 Earlier MVP was verified on a demo account. Current changes, packaged builds and
 native Windows/Linux behavior need manual verification; browser E2E uses a Tauri
 stub. Real-account testing is unvalidated. See [release checklist](RELEASING.md).

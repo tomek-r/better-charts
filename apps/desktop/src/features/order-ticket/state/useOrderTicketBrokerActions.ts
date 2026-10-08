@@ -103,13 +103,12 @@ export function useOrderTicketBrokerActions(ticket: BrokerInput) {
         limitPrice: normalizedLimitPrice,
         draftVersion,
       });
-    } catch (error) {
+    } catch {
       if (orderCheckPendingRef.current?.generation === generation) {
         orderCheckPendingRef.current = undefined;
         setOrderCheckLoading(false);
         setOrderCheckError('OrderCheck could not be requested.');
       }
-      console.info('MT5 OrderCheck unavailable.', error);
     }
   };
   // Submit only the accepted check's draft, then keep its chart widget frozen until fill sync.
@@ -120,7 +119,6 @@ export function useOrderTicketBrokerActions(ticket: BrokerInput) {
       return;
     }
     setSubmittingSide(side);
-    console.info(`[submit-order] ${JSON.stringify({ side, symbol: snapshot.symbol, orderKind })}`);
     try {
       await invoke('submit_order', {
         draftId: check.draftId,
@@ -139,10 +137,8 @@ export function useOrderTicketBrokerActions(ticket: BrokerInput) {
       submitSwapPendingRef.current = true;
       setStagedOnChart(false);
       resetTicketToDefaults();
-      console.info(`[submit-order] submitted ${side} ${snapshot.symbol}`);
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
-      console.info(`[submit-order] rejected ${text}`);
       setSubmitStatus(
         /dispatch is disabled/i.test(text)
           ? { kind: 'locked', text: 'Dispatch locked — nothing was sent to MT5. Owner approval required.' }

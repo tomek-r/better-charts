@@ -60,11 +60,10 @@ export function SymbolSearchView() {
           unlisten = stopListening;
         }
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (!disposed) {
           setSearchLoading(false);
           setSearchError('Symbol search is unavailable.');
-          console.info('Symbol search unavailable.', error);
         }
       });
     return () => {
@@ -86,13 +85,12 @@ export function SymbolSearchView() {
     setSearchSource(undefined);
     setSearchError(undefined);
     const timer = window.setTimeout(() => {
-      void invoke('search_symbols', { query: searchQuery.trim(), limit: 20 }).catch((error) => {
+      void invoke('search_symbols', { query: searchQuery.trim(), limit: 20 }).catch(() => {
         if (!active) {
           return;
         }
         setSearchLoading(false);
         setSearchError('Symbol search is unavailable.');
-        console.info('Symbol search unavailable.', error);
       });
     }, 200);
     return () => {

@@ -55,7 +55,7 @@ export function useBridgeSession({
   const { setAccount } = useFieldSetterSelector(stores.account, (setters) => setters);
   const { setPortfolio } = useFieldSetterSelector(stores.portfolio, (setters) => setters);
   const requestProfileRange = useCallback(
-    (reason: string, range = chart.current?.getProfileRange() ?? undefined) => {
+    (range = chart.current?.getProfileRange() ?? undefined) => {
       const symbol = currentSymbol.current;
       if (!symbol || !range) {
         return;
@@ -67,10 +67,7 @@ export function useBridgeSession({
       fixedRangeProfileRef.current.range = { fromMs, toMs: endMs };
       fixedRangeProfileState.current.profile = undefined;
       chart.current?.refreshOverlays();
-      console.debug('Tick profile requested:', reason);
-      void invoke('request_tick_profile', { symbol, fromMs, endMs, rows: 128 }).catch(() => {
-        console.info('Tick profile request failed.');
-      });
+      void invoke('request_tick_profile', { symbol, fromMs, endMs, rows: 128 }).catch(() => undefined);
     },
     [
       chart,
@@ -96,13 +93,12 @@ export function useBridgeSession({
           throw new Error('chart adapter unavailable');
         }
         await adapter.requestHistory(symbol, wire, HISTORY_BARS);
-      } catch (error) {
+      } catch {
         if (generation === requestGeneration.current) {
           loadingTimeframeRef.current = undefined;
           setLoadingTimeframe(undefined);
           setChartError('History request could not be sent.');
         }
-        console.info('History request unavailable.', error);
       }
     },
     [adapterRef, setChartError, setLoadingTimeframe, stores],
@@ -114,9 +110,6 @@ export function useBridgeSession({
       }
       pendingMetadata.current = metadata;
       targetSymbol.current = symbol;
-      if (metadata) {
-        console.info('[instrument]', metadata);
-      }
       setInstrument(metadata);
       setQuote(undefined);
       setSymbolLoading(true);
@@ -132,7 +125,7 @@ export function useBridgeSession({
           loadingTimeframeRef.current ?? stores.market.getState().snapshot.timeframe ?? DEFAULT_TIMEFRAME,
           HISTORY_BARS,
         );
-      } catch (error) {
+      } catch {
         if (generation !== requestGeneration.current) {
           return;
         }
@@ -143,7 +136,6 @@ export function useBridgeSession({
         }
         setSymbolLoading(false);
         setChartError('History request could not be sent.');
-        console.info('Symbol history unavailable.', error);
       }
     },
     [adapterRef, setChartError, setInstrument, setQuote, setSymbolLoading, stores],

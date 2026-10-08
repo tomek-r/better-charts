@@ -11,7 +11,6 @@ import type {
   CommandError,
   CommandUpdate,
   ExecutionQueueView,
-  ExecutionRecoverySnapshot,
   PendingModification,
 } from '../../shared/bridge/types';
 import type { PositionOverlayState } from '../chart/engine/positionOverlay';
@@ -28,26 +27,6 @@ export interface ExecutionStoreState {
         source: 'portfolio' | 'draft';
       }
     | undefined;
-}
-
-// Owner: recovery journal + execution-safety are LOG-ONLY now — same fetch
-// trigger as before, deterministic projection into the app log for
-// post-mortems; neither surface renders in the sidebar anymore.
-export async function refreshExecutionRecovery(): Promise<void> {
-  try {
-    const result = await invoke<ExecutionRecoverySnapshot>('get_execution_recovery_snapshot');
-    console.info('[recovery]', {
-      entries: result.entries.length,
-      items: result.entries.map((item) => ({
-        commandId: item.commandId,
-        state: item.state,
-        recoveryStatus: item.recoveryStatus,
-      })),
-    });
-    console.info('[execution-safety]', result.safety);
-  } catch (error) {
-    console.info('[recovery] unavailable.', error);
-  }
 }
 
 export function useExecutionCommands({
@@ -222,26 +201,24 @@ export function useExecutionCommandEffects(execution: ExecutionCommandState): vo
     void subscriptions
       .register([
         listen<CommandUpdate>('execution-command-update', (event) => {
-          console.info(`[command-update] ${JSON.stringify(event.payload)}`);
           if (!disposed && event.payload.status === 'rejected') {
             notifyError(event.payload.message || `Order rejected by MT5 (code ${event.payload.retcode ?? 'unknown'}).`);
           }
         }),
         listen<CommandError>('execution-command-error', (event) => {
-          console.info(`[command-error] ${JSON.stringify(event.payload)}`);
           if (!disposed) {
             notifyError(event.payload.message);
           }
         }),
       ])
-      .catch((error) => console.info('Execution command status unavailable.', error));
+      .catch(() => undefined);
     void invoke<ExecutionQueueView>('get_execution_queue_status')
       .then((view) => {
         if (!disposed) {
           setExecutionQueue(view);
         }
       })
-      .catch((error) => console.info('Execution queue status unavailable.', error));
+      .catch(() => undefined);
     return () => {
       disposed = true;
       subscriptions.dispose();

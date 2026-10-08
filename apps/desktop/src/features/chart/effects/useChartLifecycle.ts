@@ -47,7 +47,7 @@ export function useChartWorkspaceInitEffects(workspace: ChartWorkspaceState, ses
         priceLines: priceLinesState.current,
       });
       chartRef.current = instance;
-      instance.onProfileCommit = (range) => requestProfileRange('gesture-committed', range);
+      instance.onProfileCommit = requestProfileRange;
       instance.onToolRelease = () => setDrawingTool(null);
       instance.onProfileDelete = () => {
         expectedProfile.current = undefined;
@@ -55,9 +55,8 @@ export function useChartWorkspaceInitEffects(workspace: ChartWorkspaceState, ses
         lastRequestedRangeRef.current = undefined;
         void invoke('cancel_tick_profile').catch(() => undefined);
       };
-    } catch (error) {
+    } catch {
       setChartError('Chart renderer could not be initialized.');
-      console.error(error);
     }
     return () => {
       instance?.destroy();

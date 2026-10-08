@@ -15,7 +15,6 @@ import type {
   BarUpdate,
   BrokerSymbol,
   Candle,
-  ExecutionSafetyStatus,
   HistoryPage,
   MarketSnapshot,
   OrderCheckError,
@@ -27,7 +26,6 @@ import type {
   QuoteSnapshot,
   RiskPreview,
   RiskPreviewError,
-  ReconciliationStatus,
 } from '../../../shared/bridge/types';
 import { normalizeAccount, normalizePortfolio, normalizeQuote, normalizeSnapshot } from '../normalizers';
 import { HISTORY_BARS } from '../../../shared/bridge/limits';
@@ -94,28 +92,12 @@ export function useBridgeBootstrapEffects(
       // may already point at the NEXT mount's adapter, which we must not touch.
       const adapter = marketAdapterRef.current;
       try {
-        const [
-          bridge,
-          market,
-          initialQuote,
-          initialAccount,
-          initialPortfolio,
-          initialExecutionSafety,
-          initialReconciliation,
-        ] = await Promise.all([
+        const [bridge, market, initialQuote, initialAccount, initialPortfolio] = await Promise.all([
           invoke<BridgeStatus>('get_bridge_status'),
           invoke<MarketSnapshot>('get_market_snapshot'),
           invoke<QuoteSnapshot | null>('get_quote_snapshot'),
           invoke<AccountSnapshot | null>('get_account_snapshot'),
           invoke<PortfolioSnapshot | null>('get_portfolio_snapshot'),
-          invoke<ExecutionSafetyStatus>('get_execution_safety_status').catch((error) => {
-            console.info('Execution safety status unavailable.', error);
-            return undefined;
-          }),
-          invoke<ReconciliationStatus>('get_reconciliation_status').catch((error) => {
-            console.info('Reconciliation status unavailable.', error);
-            return undefined;
-          }),
         ]);
         if (run.disposed) {
           return;
@@ -126,22 +108,6 @@ export function useBridgeBootstrapEffects(
         bridgeIdentity = `${bridge.terminal ?? ''}|${bridge.account ?? ''}|${bridge.server ?? ''}`;
         if (bridge.state !== 'connected') {
           adapter?.resetRequests();
-        }
-        if (initialExecutionSafety) {
-          console.info('[execution-safety]', initialExecutionSafety);
-        }
-        if (initialReconciliation) {
-          console.info('[reconciliation]', {
-            state: initialReconciliation.state,
-            requestId: initialReconciliation.requestId,
-            snapshotId: initialReconciliation.snapshotId,
-            capturedAtMs: initialReconciliation.capturedAtMs,
-            positions: initialReconciliation.positionCount,
-            activeOrders: initialReconciliation.activeOrderCount,
-            historyOrders: initialReconciliation.historyOrderCount,
-            historyDeals: initialReconciliation.historyDealCount,
-            message: initialReconciliation.message,
-          });
         }
         const initialMarket = normalizeSnapshot(market);
         const initialCandles = initialMarket.candles.filter((candle) => toRenderBar(candle) !== null);
@@ -176,7 +142,6 @@ export function useBridgeBootstrapEffects(
         }
         if (initialAccount) {
           const nextAccount = normalizeAccount(initialAccount);
-          console.info('[account]', nextAccount);
           setAccount(nextAccount);
         }
         if (initialPortfolio) {
@@ -213,19 +178,6 @@ export function useBridgeBootstrapEffects(
           }),
           listen<MarketSnapshot>('market-snapshot', marketRuntime.onMarketSnapshot),
           listen<HistoryPage>('history-page', marketRuntime.onHistoryPage),
-          listen<ReconciliationStatus>('reconciliation-status', (event) => {
-            if (!run.disposed) {
-              console.info('[reconciliation]', {
-                state: event.payload.state,
-                requestId: event.payload.requestId,
-                snapshotId: event.payload.snapshotId,
-                positions: event.payload.positionCount,
-                activeOrders: event.payload.activeOrderCount,
-                historyDeals: event.payload.historyDealCount,
-                message: event.payload.message,
-              });
-            }
-          }),
           listen<ProfileResult>('tick-profile', marketRuntime.onTickProfile),
           listen<ProfileCancelled>('tick-profile-cancelled', marketRuntime.onTickProfileCancelled),
           listen<ProfileError>('tick-profile-error', marketRuntime.onTickProfileError),
@@ -236,7 +188,6 @@ export function useBridgeBootstrapEffects(
               const nextAccount = normalizeAccount(event.payload);
               accountLoginRef.current = nextAccount.accountLogin;
               brokerServerRef.current = nextAccount.brokerServer;
-              console.info('[account]', nextAccount);
               setAccount(nextAccount);
             }
           }),
@@ -276,12 +227,10 @@ export function useBridgeBootstrapEffects(
           if (run.bridgeState === 'connected' && acceptedInitial.symbol && acceptedInitial.timeframe) {
             void adapter
               .requestHistory(acceptedInitial.symbol, acceptedInitial.timeframe, HISTORY_BARS)
-              .catch((error) => {
-                console.info('Initial history request unavailable.', error);
-              });
+              .catch(() => undefined);
           }
         }
-      } catch (error) {
+      } catch {
         if (!run.disposed) {
           setTauriAvailable(runtimeAvailable);
           setStatus({
@@ -291,7 +240,6 @@ export function useBridgeBootstrapEffects(
               : 'Tauri runtime unavailable. Run this screen through the desktop shell to connect.',
           });
         }
-        console.info('Bridge initialization unavailable.', error);
       }
     };
     void start();
