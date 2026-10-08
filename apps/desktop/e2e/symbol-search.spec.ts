@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { gotoWithStub, pushEvent, stubInvocations } from './tauriStub';
 
+// Headless Chromium hides scrollbars by default; keep them visible for layout checks and screenshots.
+test.use({ launchOptions: { ignoreDefaultArgs: ['--hide-scrollbars'] } });
+
 const brokerSymbol = (symbol: string, description: string) => ({
   symbol,
   description,
@@ -58,6 +61,43 @@ test('header and keyboard shortcut open search; debounced results reject stale r
   await expect(dialog).toBeHidden();
   await page.getByRole('button', { name: 'Search symbols' }).click();
   await expect(dialog).toBeVisible();
+});
+
+test('long symbol results expose a scrollbar and the last result remains reachable', async ({ page }, testInfo) => {
+  const { pageErrors, consoleErrors } = await gotoWithStub(page);
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill('TEST');
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'search_symbols'))
+    .toHaveLength(1);
+  await pushEvent(page, 'symbol-search-result', {
+    query: 'TEST',
+    source: 'live',
+    symbols: Array.from({ length: 20 }, (_, index) => brokerSymbol(`TEST${index}`, `Test symbol ${index}`)),
+  });
+  const results = dialog.locator('.search-results');
+  await expect(results.locator('.search-result-row')).toHaveCount(20);
+  const scrolling = await results.evaluate((element) => ({
+    height: element.clientHeight,
+    contentHeight: element.scrollHeight,
+    scrollbarSpace: element.getBoundingClientRect().width - element.clientWidth,
+    scrollbarWidth: getComputedStyle(element).scrollbarWidth,
+    scrollbarDisplay: getComputedStyle(element, '::-webkit-scrollbar').display,
+    thumbColor: getComputedStyle(element, '::-webkit-scrollbar-thumb').backgroundColor,
+  }));
+  expect(scrolling.contentHeight).toBeGreaterThan(scrolling.height);
+  expect(scrolling.scrollbarSpace).toBeGreaterThan(0);
+  expect(scrolling.scrollbarWidth).not.toBe('none');
+  expect(scrolling.scrollbarDisplay).not.toBe('none');
+  expect(scrolling.thumbColor).toBe('rgb(43, 56, 75)');
+  await results.screenshot({ path: testInfo.outputPath('search-results-scrollbar.png') });
+  const last = results.getByRole('button', { name: 'TEST19 Test symbol 19', exact: true });
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  expect(await results.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
 });
 
 test('a delayed search failure cannot replace results from a newer query', async ({ page }) => {

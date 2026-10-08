@@ -61,17 +61,12 @@
   font-size: 12px;
 }
 
-/* TV-style list: scrollable but scrollbar-free (wheel/keyboard only). */
+/* Keep long result lists scrollable. */
 .search-results {
   max-height: 310px;
   overflow: auto;
   margin-top: 10px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.search-results::-webkit-scrollbar {
-  display: none;
+  padding-right: 4px;
 }
 
 .search-results button {

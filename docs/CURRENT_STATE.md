@@ -103,6 +103,11 @@ level in aligned label/value rows, independently of open positions. Missing
 account data shows placeholders; monetary values retain account currency and
 precision, while margin level uses percent.
 
+Long symbol-search result lists expose a visible scrollbar so every result is
+reachable by scrolling or dragging the thumb. Scrollbars across the app use the
+dark border palette color for slim thumbs, with transparent tracks and a subtly
+lighter hover state.
+
 ## Validation and plans
 
 Windows release builds use the GUI subsystem; background process checks and stop
