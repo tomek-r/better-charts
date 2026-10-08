@@ -503,6 +503,8 @@ new history. The initial-load comparison failed without key invalidation.
 
 ## Additional small cleanups
 
+**Implemented:** PortfolioCard redundant position checks are removed; the account guard, eight-row limit, and separate close action are preserved.
+
 - [PortfolioCard](../../apps/desktop/src/features/portfolio/PortfolioCard.tsx#L32)
   returns for zero positions, then checks `hasPositions` repeatedly. Remove the
   always-true conditions and flatten the fragment while preserving the account
