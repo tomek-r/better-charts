@@ -1,38 +1,12 @@
 import { useCallback, useEffect } from 'react';
+import { useStore } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { OrderKind } from '../../../shared/bridge/types';
-import type { OrderTicketBaseState } from './useOrderTicketState';
-import { orderEntryPrice } from '../domain/ticketRules';
 import { quoteDigits, ticketPrice } from '../../../shared/format';
-
-type PricingInput = Pick<
-  OrderTicketBaseState,
-  | 'instrument'
-  | 'orderKind'
-  | 'ticketStage'
-  | 'entry'
-  | 'setEntry'
-  | 'quote'
-  | 'priceReference'
-  | 'priceOffset'
-  | 'setPriceOffset'
-  | 'limitPrice'
-  | 'riskSide'
-  | 'priceMode'
-  | 'setPriceMode'
-  | 'stopLoss'
-  | 'setStopLoss'
-  | 'takeProfit'
-  | 'setTakeProfit'
-  | 'slUnit'
-  | 'setSlUnit'
-  | 'tpUnit'
-  | 'setTpUnit'
-  | 'slOn'
-  | 'setSlOn'
-  | 'tpOn'
-  | 'setTpOn'
-> & { tickSize: number; tickKnown: boolean; priceSwapDisabled: boolean };
+import { orderEntryPrice } from '../domain/ticketRules';
+import type { OrderTicketInputs } from './orderTicketInputs';
+import type { OrderTicketStores } from './orderTicketStores';
 
 export function priceToTicks(
   price: string,
@@ -53,35 +27,44 @@ export function priceToTicks(
   return String(Math.round(Math.abs(value - base) / tickSize));
 }
 
-export function useOrderTicketPricing(ticket: PricingInput) {
+export function useOrderTicketPricing(
+  inputs: Pick<OrderTicketInputs, 'instrument' | 'quote'>,
+  stores: OrderTicketStores,
+) {
+  const { instrument, quote } = inputs;
   const {
-    instrument,
     orderKind,
     ticketStage,
     entry,
-    setEntry,
-    quote,
     priceReference,
     priceOffset,
-    setPriceOffset,
     limitPrice,
     riskSide,
-    tickSize,
-    tickKnown,
     priceMode,
-    setPriceMode,
-    priceSwapDisabled,
-    setStopLoss,
-    setTakeProfit,
     slUnit,
-    setSlUnit,
     tpUnit,
-    setTpUnit,
-    setSlOn,
-    setTpOn,
-  } = ticket;
+  } = useStore(
+    stores.draft,
+    useShallow((draft) => ({
+      orderKind: draft.orderKind,
+      ticketStage: draft.ticketStage,
+      entry: draft.entry,
+      priceReference: draft.priceReference,
+      priceOffset: draft.priceOffset,
+      limitPrice: draft.limitPrice,
+      riskSide: draft.riskSide,
+      priceMode: draft.priceMode,
+      slUnit: draft.slUnit,
+      tpUnit: draft.tpUnit,
+    })),
+  );
+  const setters = stores.setters.draft;
+  const tickSize = instrument ? Number(instrument.tickSize) : NaN;
+  const tickKnown = Number.isFinite(tickSize) && tickSize > 0;
   const reference = quote ? Number(quote[priceReference]) : NaN;
   const digits = instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : 2);
+  const priceSwapDisabled = orderKind === 'market' || (priceMode === 'absolute' && (!quote || !tickKnown));
+
   useEffect(() => {
     if (orderKind === 'market' || priceMode !== 'offset' || ticketStage !== 'edit') {
       return;
@@ -89,16 +72,17 @@ export function useOrderTicketPricing(ticket: PricingInput) {
     const ticks = Number(priceOffset);
     const valid =
       tickKnown && reference > 0 && Number.isFinite(reference) && priceOffset.trim() !== '' && Number.isInteger(ticks);
-    setEntry(valid ? ticketPrice((Math.round(reference / tickSize) + ticks) * tickSize, digits) : '');
-  }, [orderKind, ticketStage, priceMode, tickKnown, reference, priceOffset, tickSize, digits, setEntry]);
+    setters.setEntry(valid ? ticketPrice((Math.round(reference / tickSize) + ticks) * tickSize, digits) : '');
+  }, [orderKind, ticketStage, priceMode, tickKnown, reference, priceOffset, tickSize, digits, setters]);
+
   const togglePriceMode = useEventCallback(() => {
     if (priceSwapDisabled) {
       return;
     }
     if (priceMode === 'absolute') {
-      setPriceOffset(String(Math.round((Number(entry) - reference) / tickSize)));
+      setters.setPriceOffset(String(Math.round((Number(entry) - reference) / tickSize)));
     }
-    setPriceMode(priceMode === 'absolute' ? 'offset' : 'absolute');
+    setters.setPriceMode(priceMode === 'absolute' ? 'offset' : 'absolute');
   });
   const toTicks = (price: string) => priceToTicks(price, tickKnown, orderKind, entry, limitPrice, tickSize);
   const ticksToPrice = useCallback(
@@ -128,9 +112,9 @@ export function useOrderTicketPricing(ticket: PricingInput) {
   const applyExitTicks = useEventCallback((kind: 'sl' | 'tp', text: string) => {
     if (text.trim() === '') {
       if (kind === 'sl') {
-        setStopLoss('');
+        setters.setStopLoss('');
       } else {
-        setTakeProfit('');
+        setters.setTakeProfit('');
       }
       return;
     }
@@ -139,9 +123,9 @@ export function useOrderTicketPricing(ticket: PricingInput) {
       return;
     }
     if (kind === 'sl') {
-      setStopLoss(price);
+      setters.setStopLoss(price);
     } else {
-      setTakeProfit(price);
+      setters.setTakeProfit(price);
     }
   });
   const swapExitUnit = useCallback(
@@ -150,23 +134,22 @@ export function useOrderTicketPricing(ticket: PricingInput) {
         return;
       }
       if (kind === 'sl') {
-        setSlUnit(slUnit === 'ticks' ? 'price' : 'ticks');
+        setters.setSlUnit(slUnit === 'ticks' ? 'price' : 'ticks');
       } else {
-        setTpUnit(tpUnit === 'ticks' ? 'price' : 'ticks');
+        setters.setTpUnit(tpUnit === 'ticks' ? 'price' : 'ticks');
       }
     },
-    [tickKnown, slUnit, tpUnit, setSlUnit, setTpUnit],
+    [tickKnown, slUnit, tpUnit, setters],
   );
-  // Turning an exit off keeps its value; downstream preview and submit gates exclude it.
   const toggleExit = useCallback(
     (kind: 'sl' | 'tp', on: boolean) => {
       if (kind === 'sl') {
-        setSlOn(on);
+        setters.setSlOn(on);
       } else {
-        setTpOn(on);
+        setters.setTpOn(on);
       }
     },
-    [setSlOn, setTpOn],
+    [setters],
   );
 
   return { togglePriceMode, priceToTicks: toTicks, ticksToPrice, applyExitTicks, swapExitUnit, toggleExit };

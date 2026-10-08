@@ -4,7 +4,7 @@ import { ChartController } from '../engine/chartController';
 import { Mt5DataAdapter } from '../engine/mt5DataAdapter';
 import { quoteDigits } from '../../../shared/format';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
-import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
+import type { OrderTicketStores } from '../../order-ticket/state/orderTicketStores';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
 /**
@@ -103,7 +103,7 @@ export function useChartWorkspaceInitEffects(workspace: ChartWorkspaceState, ses
 export function useChartWorkspaceChartEffects(
   workspace: ChartWorkspaceState,
   session: BridgeSessionState,
-  ticket: OrderTicketState,
+  ticket: { clearStagedWidget: () => boolean },
 ): void {
   const { chart, setPendingModification, priceLinesState } = workspace;
   const {
@@ -178,7 +178,7 @@ export function useChartWorkspaceChartEffects(
 export function useChartWorkspaceResetEffects(
   workspace: ChartWorkspaceState,
   session: BridgeSessionState,
-  ticket: OrderTicketState,
+  ticket: Pick<OrderTicketStores['setters']['draft'], 'setEntry' | 'setStopLoss' | 'setTakeProfit'>,
 ): void {
   const { chart, fixedRangeProfileState, expectedProfile, profileGeneration } = workspace;
   const {
@@ -274,7 +274,10 @@ export function useChartWorkspaceResetEffects(
   }, [chart, setEntry, setStopLoss, setTakeProfit, snapshot.timeframe]);
 }
 
-export function useChartWorkspaceHotkeyEffect(workspace: ChartWorkspaceState, ticket: OrderTicketState): void {
+export function useChartWorkspaceHotkeyEffect(
+  workspace: ChartWorkspaceState,
+  ticket: { unstageOrderDraft: () => void },
+): void {
   const { stagedActiveRef } = workspace;
   const { unstageOrderDraft } = ticket;
   // Escape also reaches the chart's document handler to cancel drawing tools.

@@ -6,25 +6,17 @@ import { ChartWorkspaceProvider, useChartWorkspaceRuntime } from '../src/feature
 import { ChartCanvas } from '../src/features/chart/ChartCanvas';
 import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
 import { OrderTicketProvider } from '../src/features/order-ticket/OrderTicketProvider';
-import { useOrderTicketRuntime } from '../src/features/order-ticket/state/useOrderTicketRuntime';
+import { useOrderTicketActions, useOrderTicketStores } from '../src/features/order-ticket/state/orderTicketContext';
 import { ErrorNotificationsProvider } from '../src/shared/ui/ErrorNotifications';
 import type { Candle } from '../src/shared/bridge/types';
+import { useStore } from 'zustand';
 
 function LiveProbe() {
   const session = useBridgeSessionRuntime();
   const workspace = useChartWorkspaceRuntime();
-  const ticket = useOrderTicketRuntime({
-    chart: workspace.chart,
-    stagedOrderState: workspace.stagedOrderState,
-    instrumentDigitsRef: workspace.instrumentDigitsRef,
-    stagedActiveRef: workspace.stagedActiveRef,
-    instrument: session.instrument,
-    account: session.account,
-    quote: session.quote,
-    snapshot: session.snapshot,
-    latestCandle: session.latestCandle,
-    status: session.status,
-  });
+  const stores = useOrderTicketStores();
+  const actions = useOrderTicketActions();
+  const entry = useStore(stores.draft, (draft) => draft.entry);
   useEffect(() => {
     const target = window as unknown as {
       __initialLiveHistory?: Candle[];
@@ -43,8 +35,8 @@ function LiveProbe() {
   return (
     <>
       <output data-testid="live-close">{session.latestCandle?.close}</output>
-      <output data-testid="live-entry">{ticket.entry}</output>
-      <button onClick={() => ticket.stageOrderDraft('buy', true)}>Stage live fallback</button>
+      <output data-testid="live-entry">{entry}</output>
+      <button onClick={() => actions.stageOrderDraft('buy', true)}>Stage live fallback</button>
     </>
   );
 }

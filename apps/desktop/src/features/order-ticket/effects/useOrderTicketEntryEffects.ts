@@ -1,14 +1,12 @@
 import { useEffect, useRef } from 'react';
-import type { OrderKind, RiskSide } from '../../../shared/bridge/types';
+import type { OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
 import { quoteDigits, ticketPrice } from '../../../shared/format';
-import type { OrderTicketState } from '../state/useOrderTicket';
+import type { OrderTicketDraftStore, OrderTicketStores } from '../state/orderTicketStores';
 
-type OrderTicketEntryEffectsInput = Pick<
-  OrderTicketState,
-  | 'quote'
+export type OrderTicketEntryEffectsInput = Pick<
+  OrderTicketDraftStore,
   | 'riskSide'
   | 'entry'
-  | 'setEntry'
   | 'orderKind'
   | 'priceMode'
   | 'stagedOnChart'
@@ -18,9 +16,12 @@ type OrderTicketEntryEffectsInput = Pick<
   | 'takeProfit'
   | 'slOn'
   | 'tpOn'
-  | 'setStopLoss'
-  | 'setTakeProfit'
->;
+> & {
+  quote: QuoteSnapshot | undefined;
+  setEntry: OrderTicketStores['setters']['draft']['setEntry'];
+  setStopLoss: OrderTicketStores['setters']['draft']['setStopLoss'];
+  setTakeProfit: OrderTicketStores['setters']['draft']['setTakeProfit'];
+};
 
 // Effect slots (4) + (5): entry reseed from the live quote and the market
 // follow — registered at their former slot between the portfolio guard and the

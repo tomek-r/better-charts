@@ -2,20 +2,31 @@ import { useEffect, useLayoutEffect } from 'react';
 import type { StagedOrderLevels } from '../engine/stagedOrderOverlay';
 import { quoteDigits } from '../../../shared/format';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
-import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
+import type { OrderTicketCoordination, OrderTicketDraftStore } from '../../order-ticket/state/orderTicketStores';
+import type { TicketDerivation } from '../../order-ticket/domain/ticketRules';
+import type { deriveStagedOrderDisplay } from '../../order-ticket/domain/stagedOrderDisplay';
 import type { useExecutionCommands } from '../../execution/useExecutionCommands';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
-/** The §12 execution actions App passes to the dispatch-ref mirror slot. */
+/** The execution actions App passes to the dispatch-ref mirror slot. */
 export type ChartWorkspaceExecutionActions = Pick<
   ReturnType<typeof useExecutionCommands>,
   'requestModifyDraft' | 'requestClosePosition' | 'requestCancelOrder'
 >;
 
+export type ChartTicketOverlayState = Pick<OrderTicketCoordination, 'submitSwapPendingRef' | 'stagedPrevPriceRef'> &
+  Pick<
+    OrderTicketDraftStore,
+    'stagedOnChart' | 'entry' | 'stopLoss' | 'takeProfit' | 'slOn' | 'tpOn' | 'riskSide' | 'orderKind'
+  > &
+  Pick<TicketDerivation, 'effectiveVolume'> & {
+    display: Pick<ReturnType<typeof deriveStagedOrderDisplay>, 'slMoney' | 'tpMoney' | 'riskRewardLabel'>;
+  };
+
 export function useChartWorkspaceMirrorRefEffect(
   workspace: ChartWorkspaceState,
   session: BridgeSessionState,
-  ticket: OrderTicketState,
+  ticket: Pick<OrderTicketDraftStore, 'stagedOnChart'>,
   execution: ChartWorkspaceExecutionActions,
   dispatchEnabledNow: boolean,
 ): void {
@@ -41,7 +52,7 @@ export function useChartWorkspaceMirrorRefEffect(
 export function useChartWorkspaceMirrorLayoutEffect(
   workspace: ChartWorkspaceState,
   session: BridgeSessionState,
-  ticket: OrderTicketState,
+  ticket: ChartTicketOverlayState,
 ): void {
   const { chart, stagedOrderState, instrumentDigitsRef } = workspace;
   const { instrument, quote, snapshot, latestCandle } = session;

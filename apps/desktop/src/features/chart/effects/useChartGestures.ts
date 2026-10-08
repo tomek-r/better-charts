@@ -1,13 +1,15 @@
 import { containsLabel } from '../engine/labelLayout';
 import { useEffect } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
-import { createStagedOrderGestures } from '../engine/stagedOrderGestures';
+import { createStagedOrderGestures, type StagedOrderGestureTicket } from '../engine/stagedOrderGestures';
 import { createTradingOverlayGestures } from '../engine/tradingOverlayGestures';
-import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 import { useChartGestureDiagnostics } from './useChartGestureDiagnostics';
 
-export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, ticket: OrderTicketState): void {
+export function useChartWorkspacePointerEffects(
+  workspace: ChartWorkspaceState,
+  ticket: StagedOrderGestureTicket,
+): void {
   const { chartHost, chart, stagedOrderState, positionOverlayState, closeActionsRef, setDrawingTool } = workspace;
   const {
     unstageOrderDraft,

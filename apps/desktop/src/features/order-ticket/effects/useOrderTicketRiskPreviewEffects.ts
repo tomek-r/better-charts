@@ -1,21 +1,20 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { RiskPreview } from '../../../shared/bridge/types';
-import type { OrderTicketState } from '../state/useOrderTicket';
+import type { OrderTicketInputs } from '../state/orderTicketInputs';
+import type { OrderTicketCoordination, OrderTicketDraftStore, OrderTicketStores } from '../state/orderTicketStores';
+import type { StopDistanceGuard } from '../domain/ticketRules';
 import { equityAllocationIssue, orderEntryPrice } from '../domain/ticketRules';
 
 const RISK_PREVIEW_DEBOUNCE_MS = 100;
 
 // Effect slot (2): the debounced risk-preview request [layout] — registered at
 // its former slot between the timeframe reset and the staged-widget mirror.
-// `riskMode`/`effectiveRiskAmount` are App's §10 risk-basis derivations (they
+// `riskMode`/`effectiveRiskAmount` are App's risk-basis derivations (they
 // feed the display too), passed in as the effect's external inputs.
-export function useOrderTicketRiskPreviewEffects(
-  ticket: Pick<
-    OrderTicketState,
-    | 'snapshot'
-    | 'status'
-    | 'account'
+export type OrderTicketRiskPreviewEffectsInput = Pick<OrderTicketInputs, 'snapshot' | 'status' | 'account'> &
+  Pick<
+    OrderTicketDraftStore,
     | 'riskSide'
     | 'entry'
     | 'orderKind'
@@ -26,22 +25,28 @@ export function useOrderTicketRiskPreviewEffects(
     | 'riskAmount'
     | 'slOn'
     | 'tpOn'
-    | 'stopGuard'
     | 'ticketStage'
     | 'unitsMode'
     | 'volumeManual'
-    | 'riskBrokerVersion'
-    | 'setRiskProjection'
-    | 'riskPreviewDisplayRef'
-    | 'setOrderVolume'
-    | 'riskVersion'
-    | 'pendingRiskRequestRef'
-    | 'setDraftVersion'
-    | 'setRiskPreview'
-    | 'setRiskError'
-    | 'setRiskLoading'
-  >,
-  { riskMode, effectiveRiskAmount }: { riskMode: 'money' | 'equity'; effectiveRiskAmount: string },
+  > &
+  Pick<
+    OrderTicketCoordination,
+    'riskBrokerVersion' | 'riskPreviewDisplayRef' | 'riskVersion' | 'pendingRiskRequestRef'
+  > & {
+    stopGuard: StopDistanceGuard | undefined;
+    setRiskProjection: OrderTicketStores['setters']['broker']['setRiskProjection'];
+    setOrderVolume: OrderTicketStores['setters']['draft']['setOrderVolume'];
+    setDraftVersion: OrderTicketStores['setters']['draft']['setDraftVersion'];
+    setRiskPreview: OrderTicketStores['setters']['broker']['setRiskPreview'];
+    setRiskError: OrderTicketStores['setters']['broker']['setRiskError'];
+    setRiskLoading: OrderTicketStores['setters']['broker']['setRiskLoading'];
+  };
+
+export type OrderTicketRiskBasis = { riskMode: 'money' | 'equity'; effectiveRiskAmount: string };
+
+export function useOrderTicketRiskPreviewEffects(
+  ticket: OrderTicketRiskPreviewEffectsInput,
+  { riskMode, effectiveRiskAmount }: OrderTicketRiskBasis,
 ): void {
   const {
     snapshot,

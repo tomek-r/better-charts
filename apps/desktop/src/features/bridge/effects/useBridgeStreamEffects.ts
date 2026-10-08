@@ -4,7 +4,6 @@ import { accountMoneyBasis } from '../../../shared/money';
 import { quoteDigits } from '../../../shared/format';
 import type { ChartController } from '../../chart/engine/chartController';
 import type { PositionOverlayState } from '../../chart/engine/positionOverlay';
-import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
 import { syncPositionOverlay } from '../../chart/engine/overlayLines';
 import type { BridgeSessionState } from '../useBridgeSession';
 
@@ -21,7 +20,7 @@ export function useBridgeStreamEffects(
     positionOverlayState: { current: PositionOverlayState };
     tradingSyncTick: number;
     submitSwapPendingRef: { current: boolean };
-    clearStagedWidget: OrderTicketState['clearStagedWidget'];
+    clearStagedWidget: () => boolean;
   },
 ): void {
   const { snapshot, instrument, account, portfolio, quote } = session;

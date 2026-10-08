@@ -3,7 +3,7 @@
 Current behavior and owner decisions. See [architecture](architecture/README.md)
 and the [bridge contract](protocol/bridge-v1.md) for implementation details.
 
-React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders.
+React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object.
 
 ## Available
 

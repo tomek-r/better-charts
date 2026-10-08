@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useEventCallback } from '../../shared/hooks/useEventCallback';
 import { OrderTicketStoresContext, type TicketActions } from './state/orderTicketContext';
 import { createOrderTicketStores } from './state/orderTicketStores';
-import { useOrderTicket } from './state/useOrderTicket';
+import { useOrderTicketActionsProducer } from './state/useOrderTicketActionsProducer';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 import {
   useBridgeAccountSelector,
@@ -18,7 +18,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
   const quote = useBridgeQuote();
   const account = useBridgeAccountSelector((value) => value);
   const { status } = useBridgeConnection();
-  const ticket = useOrderTicket({
+  const ticketActions = useOrderTicketActionsProducer({
     chart,
     stagedOrderState,
     instrumentDigitsRef,
@@ -32,24 +32,24 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
     stores,
   });
 
-  const togglePriceMode = useEventCallback(ticket.togglePriceMode);
-  const priceToTicks = useEventCallback(ticket.priceToTicks);
-  const ticksToPrice = useEventCallback(ticket.ticksToPrice);
-  const applyExitTicks = useEventCallback(ticket.applyExitTicks);
-  const swapExitUnit = useEventCallback(ticket.swapExitUnit);
-  const toggleExit = useEventCallback(ticket.toggleExit);
-  const resetOrderDraft = useEventCallback(ticket.resetOrderDraft);
-  const resetTicketToDefaults = useEventCallback(ticket.resetTicketToDefaults);
-  const enableRiskStopLoss = useEventCallback(ticket.enableRiskStopLoss);
-  const stageOrderDraft = useEventCallback(ticket.stageOrderDraft);
-  const clearStagedWidget = useEventCallback(ticket.clearStagedWidget);
-  const unstageOrderDraft = useEventCallback(ticket.unstageOrderDraft);
-  const stageFromQuote = useEventCallback(ticket.stageFromQuote);
-  const setRiskAmountFromInput = useEventCallback(ticket.setRiskAmountFromInput);
-  const applyUnitsMode = useEventCallback(ticket.applyUnitsMode);
-  const requestOrderCheck = useEventCallback(ticket.requestOrderCheck);
-  const submitOrder = useEventCallback(ticket.submitOrder);
-  const startOrderReview = useEventCallback(ticket.startOrderReview);
+  const togglePriceMode = useEventCallback(ticketActions.togglePriceMode);
+  const priceToTicks = useEventCallback(ticketActions.priceToTicks);
+  const ticksToPrice = useEventCallback(ticketActions.ticksToPrice);
+  const applyExitTicks = useEventCallback(ticketActions.applyExitTicks);
+  const swapExitUnit = useEventCallback(ticketActions.swapExitUnit);
+  const toggleExit = useEventCallback(ticketActions.toggleExit);
+  const resetOrderDraft = useEventCallback(ticketActions.resetOrderDraft);
+  const resetTicketToDefaults = useEventCallback(ticketActions.resetTicketToDefaults);
+  const enableRiskStopLoss = useEventCallback(ticketActions.enableRiskStopLoss);
+  const stageOrderDraft = useEventCallback(ticketActions.stageOrderDraft);
+  const clearStagedWidget = useEventCallback(ticketActions.clearStagedWidget);
+  const unstageOrderDraft = useEventCallback(ticketActions.unstageOrderDraft);
+  const stageFromQuote = useEventCallback(ticketActions.stageFromQuote);
+  const setRiskAmountFromInput = useEventCallback(ticketActions.setRiskAmountFromInput);
+  const applyUnitsMode = useEventCallback(ticketActions.applyUnitsMode);
+  const requestOrderCheck = useEventCallback(ticketActions.requestOrderCheck);
+  const submitOrder = useEventCallback(ticketActions.submitOrder);
+  const startOrderReview = useEventCallback(ticketActions.startOrderReview);
   const actions = useMemo<TicketActions>(
     () => ({
       togglePriceMode,

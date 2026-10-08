@@ -20,8 +20,16 @@ import { usePortfolioAccountResetEffect } from './features/portfolio/usePortfoli
 import { useBridgeSessionRuntime } from './features/bridge/BridgeSessionProvider';
 import { useChartWorkspaceRuntime } from './features/chart/ChartWorkspaceProvider';
 import { useExecutionRuntime } from './features/execution/ExecutionProvider';
-import { deriveOrderRiskBasis } from './features/order-ticket/domain/riskBasis';
-import { useOrderTicketRuntime } from './features/order-ticket/state/useOrderTicketRuntime';
+import type { OrderTicketInputs } from './features/order-ticket/state/orderTicketInputs';
+import { useOrderTicketEntryRuntime } from './features/order-ticket/state/useOrderTicketEntryRuntime';
+import { useOrderTicketCheckRuntime } from './features/order-ticket/state/useOrderTicketCheckRuntime';
+import { useOrderTicketPreviewRuntime } from './features/order-ticket/state/useOrderTicketPreviewRuntime';
+import {
+  useOrderTicketChartActions,
+  useOrderTicketChartControls,
+  useOrderTicketChartRuntime,
+} from './features/order-ticket/state/useOrderTicketChartRuntime';
+import { useOrderTicketBridgeResponsePort } from './features/order-ticket/state/useOrderTicketBridgeResponsePort';
 
 /**
  * Registers the cross-domain effect slots in their frozen registration order.
@@ -33,28 +41,21 @@ import { useOrderTicketRuntime } from './features/order-ticket/state/useOrderTic
 export function AppLifecycle() {
   const workspace = useChartWorkspaceRuntime();
   const session = useBridgeSessionRuntime();
-  const ticket = useOrderTicketRuntime({
-    chart: workspace.chart,
-    stagedOrderState: workspace.stagedOrderState,
-    instrumentDigitsRef: workspace.instrumentDigitsRef,
-    stagedActiveRef: workspace.stagedActiveRef,
+  const ticketInputs: Pick<OrderTicketInputs, 'instrument' | 'account' | 'quote' | 'snapshot' | 'status'> = {
     instrument: session.instrument,
     account: session.account,
     quote: session.quote,
     snapshot: session.snapshot,
-    latestCandle: session.latestCandle,
     status: session.status,
-  });
+  };
+  const ticketEntry = useOrderTicketEntryRuntime(ticketInputs);
+  const ticketCheck = useOrderTicketCheckRuntime(ticketInputs);
+  const ticketPreview = useOrderTicketPreviewRuntime(ticketInputs);
+  const ticketChart = useOrderTicketChartRuntime(ticketInputs);
+  const ticketActions = useOrderTicketChartActions();
+  const ticketControls = useOrderTicketChartControls();
+  const bridgeTicket = useOrderTicketBridgeResponsePort();
   const execution = useExecutionRuntime();
-  const riskBasis = deriveOrderRiskBasis({
-    unitsMode: ticket.unitsMode,
-    riskAmount: ticket.riskAmount,
-    equity: session.account?.equity,
-    equityAllocationPercent: ticket.equityAllocationPercent,
-    currency: session.account?.currency,
-    currencyDigits: session.account?.currencyDigits,
-    stagedOnChart: ticket.stagedOnChart,
-  });
   const { chart, adapterRef, fixedRangeProfileState, expectedProfile, profileGeneration } = workspace;
   const { mounted: mountedRef, account } = session;
 
@@ -70,10 +71,10 @@ export function AppLifecycle() {
     chart,
     positionOverlayState: workspace.positionOverlayState,
     tradingSyncTick: workspace.tradingSyncTick,
-    submitSwapPendingRef: ticket.submitSwapPendingRef,
-    clearStagedWidget: ticket.clearStagedWidget,
+    submitSwapPendingRef: ticketChart.submitSwapPendingRef,
+    clearStagedWidget: ticketActions.clearStagedWidget,
   });
-  useChartWorkspaceChartEffects(workspace, session, ticket);
+  useChartWorkspaceChartEffects(workspace, session, { clearStagedWidget: ticketActions.clearStagedWidget });
 
   const accountLoginRef = useRef<string | undefined>(undefined);
   const brokerServerRef = useRef<string | undefined>(undefined);
@@ -82,10 +83,14 @@ export function AppLifecycle() {
     brokerServerRef.current = account?.brokerServer;
   }, [account?.accountLogin, account?.brokerServer]);
 
-  useOrderTicketOrderCheckEffects(ticket);
-  useChartWorkspaceResetEffects(workspace, session, ticket);
+  useOrderTicketOrderCheckEffects(ticketCheck);
+  useChartWorkspaceResetEffects(workspace, session, {
+    setEntry: ticketControls.setEntry,
+    setStopLoss: ticketControls.setStopLoss,
+    setTakeProfit: ticketControls.setTakeProfit,
+  });
   usePortfolioAccountResetEffect(session);
-  useOrderTicketEntryEffects(ticket);
+  useOrderTicketEntryEffects(ticketEntry);
   useBridgeBootstrapEffects(session, {
     chart,
     adapterRef,
@@ -94,15 +99,19 @@ export function AppLifecycle() {
     profileGeneration,
     accountLoginRef,
     brokerServerRef,
-    ticket,
+    ticket: bridgeTicket,
   });
-  useChartWorkspaceHotkeyEffect(workspace, ticket);
-  useChartWorkspacePointerEffects(workspace, ticket);
-  useOrderTicketRiskPreviewEffects(ticket, riskBasis);
+  useChartWorkspaceHotkeyEffect(workspace, { unstageOrderDraft: ticketActions.unstageOrderDraft });
+  useChartWorkspacePointerEffects(workspace, {
+    unstageOrderDraft: ticketActions.unstageOrderDraft,
+    toggleExit: ticketActions.toggleExit,
+    ...ticketControls,
+  });
+  useOrderTicketRiskPreviewEffects(ticketPreview.input, ticketPreview.riskBasis);
   useChartWorkspaceMirrorRefEffect(
     workspace,
     session,
-    ticket,
+    { stagedOnChart: ticketChart.stagedOnChart },
     {
       requestModifyDraft: execution.requestModifyDraft,
       requestClosePosition: execution.requestClosePosition,
@@ -110,6 +119,6 @@ export function AppLifecycle() {
     },
     execution.executionQueue?.dispatchEnabled === true,
   );
-  useChartWorkspaceMirrorLayoutEffect(workspace, session, ticket);
+  useChartWorkspaceMirrorLayoutEffect(workspace, session, ticketChart);
   return null;
 }

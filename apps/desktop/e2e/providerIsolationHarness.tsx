@@ -25,10 +25,10 @@ import { ChartTimeframes } from '../src/features/chart/ChartTimeframes';
 import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
 import type { AccountSnapshot, BrokerSymbol, QuoteSnapshot, RiskPreview } from '../src/shared/bridge/types';
 import { OrderTicketProvider } from '../src/features/order-ticket/OrderTicketProvider';
+import { useOrderTicketActions, useOrderTicketStores } from '../src/features/order-ticket/state/orderTicketContext';
 import { useOrderTicketAction } from '../src/features/order-ticket/editor/useOrderTicketAction';
 import { useOrderTicketHeader } from '../src/features/order-ticket/editor/useOrderTicketHeader';
 import { useOrderTicketPricing } from '../src/features/order-ticket/editor/useOrderTicketPricing';
-import { useOrderTicketRuntime } from '../src/features/order-ticket/state/useOrderTicketRuntime';
 import { OrderTicketTickValue } from '../src/features/order-ticket/editor/OrderTicketTickValue';
 import { OrderTicketSizing } from '../src/features/order-ticket/editor/OrderTicketSizing';
 import { OrderTicketExits } from '../src/features/order-ticket/editor/OrderTicketExits';
@@ -276,19 +276,10 @@ function BridgeControls() {
 
 function TicketControls() {
   const bridge = useBridgeSessionRuntime();
-  const { chart, stagedOrderState, instrumentDigitsRef, stagedActiveRef } = useChartResources();
-  const ticket = useOrderTicketRuntime({
-    chart,
-    stagedOrderState,
-    instrumentDigitsRef,
-    stagedActiveRef,
-    instrument: bridge.instrument,
-    account: bridge.account,
-    quote: bridge.quote,
-    snapshot: bridge.snapshot,
-    latestCandle: bridge.latestCandle,
-    status: bridge.status,
-  });
+  const stores = useOrderTicketStores();
+  const actions = useOrderTicketActions();
+  const ticket = stores.setters.draft;
+  const broker = stores.setters.broker;
   const configureActionGate = () => {
     const instrument: BrokerSymbol = {
       symbol: 'EURUSD',
@@ -368,15 +359,15 @@ function TicketControls() {
       currency: 'USD',
       quotedAtMs: 1745700001000,
     };
-    ticket.setRiskPreview(preview);
-    ticket.setRiskProjection(preview);
+    broker.setRiskPreview(preview);
+    broker.setRiskProjection(preview);
   };
   return (
     <>
       <button type="button" onClick={() => ticket.setEntry('1.2345')}>
         Edit ticket
       </button>
-      <button type="button" onClick={() => ticket.applyUnitsMode('money')}>
+      <button type="button" onClick={() => actions.applyUnitsMode('money')}>
         Use money sizing
       </button>
       <button type="button" onClick={configureActionGate}>
@@ -415,7 +406,7 @@ function TicketControls() {
       <button type="button" onClick={() => ticket.setRiskSide('sell')}>
         Change action side
       </button>
-      <button type="button" onClick={() => ticket.setOrderCheckLoading(true)}>
+      <button type="button" onClick={() => broker.setOrderCheckLoading(true)}>
         Load action check
       </button>
       <button type="button" onClick={() => ticket.setDraftVersion((version) => version + 1)}>

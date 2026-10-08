@@ -1,23 +1,22 @@
 import type { OrderCheckError, OrderCheckResult, RiskPreview, RiskPreviewError } from '../../shared/bridge/types';
-import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
+import type { OrderTicketCoordination, OrderTicketStores } from '../order-ticket/state/orderTicketStores';
 import type { BridgeSessionState } from './useBridgeSession';
 
 type PayloadEvent<T> = { payload: T };
 
 export type BridgeTicketResponsePort = Pick<
-  OrderTicketState,
-  | 'riskVersion'
-  | 'riskBrokerVersion'
-  | 'riskPreviewDisplayRef'
-  | 'setRiskPreview'
-  | 'setRiskLoading'
-  | 'setRiskError'
-  | 'orderCheckGeneration'
-  | 'orderCheckPending'
-  | 'setOrderCheck'
-  | 'setOrderCheckLoading'
-  | 'setOrderCheckError'
->;
+  OrderTicketCoordination,
+  'riskVersion' | 'riskBrokerVersion' | 'riskPreviewDisplayRef' | 'orderCheckGeneration' | 'orderCheckPending'
+> &
+  Pick<
+    OrderTicketStores['setters']['broker'],
+    | 'setRiskPreview'
+    | 'setRiskLoading'
+    | 'setRiskError'
+    | 'setOrderCheck'
+    | 'setOrderCheckLoading'
+    | 'setOrderCheckError'
+  >;
 
 type BridgeTicketSession = Pick<BridgeSessionState, 'currentSymbol'>;
 
