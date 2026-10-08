@@ -1,5 +1,5 @@
 import { TicketExitRow } from './TicketExitRow';
-import { useOrderTicketExits } from '../OrderTicketProvider';
+import { useOrderTicketExits } from './useOrderTicketExits';
 
 export function OrderTicketExits() {
   const {

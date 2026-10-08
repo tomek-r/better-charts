@@ -9,15 +9,15 @@ import type { RiskSide } from '../../../shared/bridge/types';
 import type { AccountMoneyBasis } from '../../../shared/money';
 import { riskRewardRatio } from '../../order-ticket/domain/ticketRules';
 import {
-  STAGED_COLORS,
-  tagPath,
-  drawHandle,
-  drawCancelChip,
-  type StagedHitRect,
-  type OverlayPass,
   CANCEL_CHIP_X,
+  drawCancelChip,
+  drawHandle,
   HANDLE_X,
-} from './stagedOrderOverlay';
+  tagPath,
+  TRADING_COLORS,
+  type TradingHitRect,
+  type OverlayPass,
+} from './tradingOverlayDrawing';
 import { palette } from '../../../shared/theme/palette';
 
 export interface PositionLine {
@@ -76,7 +76,7 @@ export interface PositionLineHit {
   id: string;
   y: number;
 }
-export interface PositionHandleHit extends StagedHitRect {
+export interface PositionHandleHit extends TradingHitRect {
   id: string;
 }
 /** ✕ chip hit geometry (the staged drawCancelChip circumscribing circle, r = 10)
@@ -157,10 +157,10 @@ export function createPositionOverlay(
         id: string,
         level: TradingLabelTarget['level'],
         lineY: number,
-        draw: (labelY: number) => StagedHitRect,
+        draw: (labelY: number) => TradingHitRect,
       ) => paintTradingLabel(ctx, viewport, hit.labels!, { source: 'trading', id, level }, lineY, draw, labels);
 
-      const exitRowRect = (labelY: number, box: StagedHitRect): StagedHitRect => ({
+      const exitRowRect = (labelY: number, box: TradingHitRect): TradingHitRect => ({
         x: x + CANCEL_CHIP_X - 10,
         y: labelY - 10,
         w: box.x + box.w - (x + CANCEL_CHIP_X - 10),
@@ -198,12 +198,12 @@ export function createPositionOverlay(
         ctx.font = '600 12px system-ui, sans-serif';
         const tagW = ctx.measureText(text).width + 16;
         tagPath(ctx, cx, lineY - 10, tagW + 8, 20, 7);
-        ctx.fillStyle = STAGED_COLORS.surface;
+        ctx.fillStyle = TRADING_COLORS.surface;
         ctx.fill();
         ctx.strokeStyle = color;
         ctx.lineWidth = 1;
         ctx.stroke();
-        ctx.fillStyle = STAGED_COLORS.text;
+        ctx.fillStyle = TRADING_COLORS.text;
         ctx.fillText(text, cx + 8, lineY + 0.5);
         return cx + tagW + 6;
       };
@@ -218,7 +218,7 @@ export function createPositionOverlay(
           x + HANDLE_X,
           lineY,
           `${kind === 'sl' ? 'SL' : 'TP'}${money ? ` ${money}` : ''}`,
-          kind === 'sl' ? STAGED_COLORS.sl : STAGED_COLORS.tp,
+          kind === 'sl' ? TRADING_COLORS.sl : TRADING_COLORS.tp,
           lineY < entryY,
         );
       const floatingExitY = (entryY: number, kind: 'sl' | 'tp', side: RiskSide) => {
@@ -245,7 +245,7 @@ export function createPositionOverlay(
 
       // ── Positions: staged entry row (+ the P&L pill) and staged SL/TP rows.
       for (const pos of state.positions) {
-        const sideColor = pos.side === 'buy' ? STAGED_COLORS.buy : STAGED_COLORS.sell;
+        const sideColor = pos.side === 'buy' ? TRADING_COLORS.buy : TRADING_COLORS.sell;
         const entryY = toY(pos.entry);
         const sl = preview('sl', pos.id, pos.stopLoss);
         const tp = preview('tp', pos.id, pos.takeProfit);
@@ -257,43 +257,41 @@ export function createPositionOverlay(
             zone(entryY, toY(tp), palette.accent);
           }
         }
-        if (inBand(entryY)) {
-          if (drawLabels) {
-            row(pos.id, 'entry', entryY, (labelY) => {
-              // The ✕ echoes the P&L state — red losing, green profiting — not the
-              // side: a red sell ✕ beside a green P&L read as a contradiction.
-              // Before the first P&L arrives it falls back to the side colour.
-              let pnlColor = sideColor;
-              if (pos.pnl !== undefined) {
-                pnlColor = pos.pnl.startsWith('-') ? STAGED_COLORS.sell : palette.up;
-              }
-              hit.posCloses!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, pnlColor) });
-              // Owner: a LIVE position row keeps ONLY the ✕ and the P&L box — the
-              // Buy/Sell marker and the draft grip tag are HIDDEN (they speak of the
-              // draft that made the position). The box is the SL/TP handle (same
-              // drawHandle, same palette red/teal as the other elements) and the
-              // number rides the SL/TP money format ("-$6.63").
-              let right = x + CANCEL_CHIP_X + 10;
-              if (pos.pnl !== undefined) {
-                // Tip: UP for long, DOWN for short. The trade size reads as
-                // "10 units" after the P&L ("P&L -$19.8 · 10 units").
-                // RR is recomputed from the PREVIEWED exits, so dragging SL/TP
-                // updates it live exactly like the staged tag.
-                const rrLabel =
-                  sl !== undefined && tp !== undefined ? riskRewardRatio(pos.side, pos.entry, sl, tp) : undefined;
-                ctx.font = '400 12px system-ui, sans-serif';
-                const columnWidth = Math.max(pnlColumnWidths.get(pos.id) ?? 0, ctx.measureText(pos.pnl).width);
-                pnlColumnWidths.set(pos.id, columnWidth);
-                const box = drawHandle(ctx, x + HANDLE_X, labelY, 'P&L ', pnlColor, pos.side !== 'buy', {
-                  text: ` · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`,
-                  amount: { text: pos.pnl, width: columnWidth },
-                });
-                right = box.x + box.w;
-              }
+        if (inBand(entryY) && drawLabels) {
+          row(pos.id, 'entry', entryY, (labelY) => {
+            // The ✕ echoes the P&L state — red losing, green profiting — not the
+            // side: a red sell ✕ beside a green P&L read as a contradiction.
+            // Before the first P&L arrives it falls back to the side colour.
+            let pnlColor = sideColor;
+            if (pos.pnl !== undefined) {
+              pnlColor = pos.pnl.startsWith('-') ? TRADING_COLORS.sell : palette.up;
+            }
+            hit.posCloses!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, pnlColor) });
+            // Owner: a LIVE position row keeps ONLY the ✕ and the P&L box — the
+            // Buy/Sell marker and the draft grip tag are HIDDEN (they speak of the
+            // draft that made the position). The box is the SL/TP handle (same
+            // drawHandle, same palette red/teal as the other elements) and the
+            // number rides the SL/TP money format ("-$6.63").
+            let right = x + CANCEL_CHIP_X + 10;
+            if (pos.pnl !== undefined) {
+              // Tip: UP for long, DOWN for short. The trade size reads as
+              // "10 units" after the P&L ("P&L -$19.8 · 10 units").
+              // RR is recomputed from the PREVIEWED exits, so dragging SL/TP
+              // updates it live exactly like the staged tag.
+              const rrLabel =
+                sl !== undefined && tp !== undefined ? riskRewardRatio(pos.side, pos.entry, sl, tp) : undefined;
+              ctx.font = '400 12px system-ui, sans-serif';
+              const columnWidth = Math.max(pnlColumnWidths.get(pos.id) ?? 0, ctx.measureText(pos.pnl).width);
+              pnlColumnWidths.set(pos.id, columnWidth);
+              const box = drawHandle(ctx, x + HANDLE_X, labelY, 'P&L ', pnlColor, pos.side !== 'buy', {
+                text: ` · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`,
+                amount: { text: pos.pnl, width: columnWidth },
+              });
+              right = box.x + box.w;
+            }
 
-              return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: right - (x + CANCEL_CHIP_X - 10), h: 20 };
-            });
-          }
+            return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: right - (x + CANCEL_CHIP_X - 10), h: 20 };
+          });
         }
         if (sl !== undefined) {
           const slY = toY(sl);
@@ -303,7 +301,7 @@ export function createPositionOverlay(
                 if (pos.stopLoss !== undefined) {
                   hit.slClears!.push({
                     id: pos.id,
-                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.sl),
+                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, TRADING_COLORS.sl),
                   });
                 }
                 const slMoney =
@@ -337,7 +335,7 @@ export function createPositionOverlay(
                 if (pos.takeProfit !== undefined) {
                   hit.tpClears!.push({
                     id: pos.id,
-                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.tp),
+                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, TRADING_COLORS.tp),
                   });
                 }
                 const tpMoney =
@@ -374,7 +372,7 @@ export function createPositionOverlay(
 
       // ── Pending orders: the same staged row at the order price (no P&L).
       for (const order of state.orders) {
-        const sideColor = order.side === 'buy' ? STAGED_COLORS.buy : STAGED_COLORS.sell;
+        const sideColor = order.side === 'buy' ? TRADING_COLORS.buy : TRADING_COLORS.sell;
         const price = preview('order', order.id, order.price) ?? order.price;
         const orderDrag = drag?.kind === 'order' && drag.id === order.id ? drag : undefined;
         const previewedStopLoss = orderDrag?.exitPreview ? orderDrag.stopLoss : order.stopLoss;
@@ -432,7 +430,7 @@ export function createPositionOverlay(
                 if (order.stopLoss !== undefined) {
                   hit.slClears!.push({
                     id: orderKey,
-                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.sl),
+                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, TRADING_COLORS.sl),
                   });
                 }
                 const slMoney =
@@ -466,7 +464,7 @@ export function createPositionOverlay(
                 if (order.takeProfit !== undefined) {
                   hit.tpClears!.push({
                     id: orderKey,
-                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.tp),
+                    ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, TRADING_COLORS.tp),
                   });
                 }
                 const tpMoney =

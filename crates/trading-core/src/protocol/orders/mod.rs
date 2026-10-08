@@ -343,10 +343,10 @@ impl OrderSubmitRequest {
     }
 }
 
-/// Re-prices a resting pending order or sets its Stop Loss/Take Profit.
-/// A `null` field means "leave that level unchanged"; removing an existing
-/// SL/TP is out of MVP and requires an explicit encoding in a future version
-/// of the protocol.
+/// Re-prices a resting pending order or sets/removes a position/order SL/TP.
+/// An omitted or `null` field means "leave that level unchanged". A positive
+/// decimal-string SL/TP sets that level; "0" removes it. `price`, when supplied,
+/// must be positive and is valid only for pending orders.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OrderModifyRequest {
     pub command_id: String,

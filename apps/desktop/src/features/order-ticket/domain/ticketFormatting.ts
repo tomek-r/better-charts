@@ -4,7 +4,11 @@ import type { AccountSnapshot } from '../../../shared/bridge/types';
  * falls back to the raw enum int (0 demo / 1 contest / 2 real), else unknown —
  * tolerant of older payloads missing both fields. Safety-relevant: which
  * environment an order would hit, shown with the account number. */
-export function accountEnvironment(account?: AccountSnapshot): {
+export function accountEnvironment(
+  account?: Partial<
+    Pick<AccountSnapshot, 'accountTradeModeName' | 'accountTradeMode' | 'brokerServer' | 'accountLogin'>
+  >,
+): {
   kind: 'demo' | 'contest' | 'real' | 'unknown';
   label: string;
   title: string;

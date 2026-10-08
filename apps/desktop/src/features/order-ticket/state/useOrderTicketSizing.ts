@@ -1,86 +1,47 @@
 import { useCallback } from 'react';
-import { clampRiskPercentInput } from '../domain/riskBasis';
 import type { RiskSide } from '../../../shared/bridge/types';
+import { clampRiskPercentInput } from '../domain/riskBasis';
 import { orderEntryPrice } from '../domain/ticketRules';
-import type { OrderTicketBaseState } from './useOrderTicketState';
+import type { OrderTicketStores } from './orderTicketStores';
 
-type SizingInput = Pick<
-  OrderTicketBaseState,
-  | 'riskSide'
-  | 'setRiskAmount'
-  | 'stagedOnChart'
-  | 'unitsMode'
-  | 'setUnitsMode'
-  | 'orderKind'
-  | 'entry'
-  | 'limitPrice'
-  | 'setOrderVolume'
-  | 'setVolumeManual'
-  | 'setSlOn'
-  | 'setTpOn'
-  | 'setStopLoss'
-  | 'setTakeProfit'
-  | 'unitsAutoMode'
-> & { enableRiskStopLoss: (side: RiskSide, entry: number, overwrite?: boolean) => string | undefined };
+export function useOrderTicketSizing(
+  stores: OrderTicketStores,
+  enableRiskStopLoss: (side: RiskSide, entry: number, overwrite?: boolean) => string | undefined,
+) {
+  const setters = stores.setters.draft;
+  const { unitsAutoMode: unitsAutoModeRef } = stores.coordination;
 
-export function useOrderTicketSizing(ticket: SizingInput) {
-  const {
-    riskSide,
-    setRiskAmount,
-    stagedOnChart,
-    unitsMode,
-    setUnitsMode,
-    orderKind,
-    entry,
-    limitPrice,
-    setOrderVolume,
-    setVolumeManual,
-    setSlOn,
-    setTpOn,
-    setStopLoss,
-    setTakeProfit,
-    unitsAutoMode,
-    enableRiskStopLoss,
-  } = ticket;
-  const unitsAutoModeRef = unitsAutoMode;
   const setRiskAmountFromInput = useCallback(
     (input: string) => {
+      const { riskSide, stagedOnChart, unitsMode, orderKind, entry, limitPrice } = stores.draft.getState();
       const value = unitsMode === 'equity' ? clampRiskPercentInput(input) : input;
-      setRiskAmount(value);
+      setters.setRiskAmount(value);
       if (stagedOnChart && unitsMode !== 'units' && Number(value) > 0) {
         enableRiskStopLoss(riskSide, Number(orderEntryPrice(orderKind, entry, limitPrice)));
       }
     },
-    [stagedOnChart, unitsMode, enableRiskStopLoss, riskSide, orderKind, entry, limitPrice, setRiskAmount],
+    [stores.draft, setters, enableRiskStopLoss],
   );
+
   const applyUnitsMode = useCallback(
     (mode: 'money' | 'equity' | 'units') => {
+      const { unitsMode } = stores.draft.getState();
       if (mode !== unitsMode) {
-        setOrderVolume('1');
-        setVolumeManual(false);
-        setRiskAmount('');
-        setSlOn(false);
-        setTpOn(false);
-        setStopLoss('');
-        setTakeProfit('');
+        setters.setOrderVolume('1');
+        setters.setVolumeManual(false);
+        setters.setRiskAmount('');
+        setters.setSlOn(false);
+        setters.setTpOn(false);
+        setters.setStopLoss('');
+        setters.setTakeProfit('');
       }
       if (mode !== 'units') {
         unitsAutoModeRef.current = mode;
       }
-      setUnitsMode(mode);
+      setters.setUnitsMode(mode);
     },
-    [
-      unitsMode,
-      setOrderVolume,
-      setVolumeManual,
-      setRiskAmount,
-      setSlOn,
-      setTpOn,
-      setStopLoss,
-      setTakeProfit,
-      unitsAutoModeRef,
-      setUnitsMode,
-    ],
+    [stores.draft, setters, unitsAutoModeRef],
   );
+
   return { setRiskAmountFromInput, applyUnitsMode };
 }

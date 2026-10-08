@@ -22,6 +22,7 @@ pub(crate) fn project_risk_preview(
     stop_loss: String,
     take_profit: Option<String>,
     risk_amount: String,
+    risk_percent: Option<String>,
     equity_allocation_percent: String,
     draft_version: u64,
     target_volume: Option<String>,
@@ -43,10 +44,10 @@ pub(crate) fn project_risk_preview(
         stop_loss,
         take_profit,
     };
-    let risk = risk_amount.parse().map_err(|_| "invalid risk amount")?;
     let allocation = equity_allocation_percent
         .parse()
         .map_err(|_| "invalid equity allocation percent")?;
+    let risk = resolve_risk_budget(&state, &risk_amount, allocation, risk_percent.as_deref())?;
     let target = target_volume
         .as_deref()
         .map(|value| {
@@ -140,6 +141,7 @@ pub(crate) fn request_risk_preview(
     stop_loss: String,
     take_profit: Option<String>,
     risk_amount: String,
+    risk_percent: Option<String>,
     equity_allocation_percent: Option<String>,
     draft_version: u64,
 ) -> Result<(), String> {
@@ -152,12 +154,6 @@ pub(crate) fn request_risk_preview(
         "sell" => OrderSide::Sell,
         _ => return Err("invalid order side".into()),
     };
-    let risk = risk_amount
-        .parse::<rust_decimal::Decimal>()
-        .map_err(|_| "invalid risk amount".to_string())?;
-    if risk <= rust_decimal::Decimal::ZERO {
-        return Err("risk amount must be non-negative".into());
-    }
     let allocation = equity_allocation_percent
         .as_deref()
         .unwrap_or("100")
@@ -169,6 +165,7 @@ pub(crate) fn request_risk_preview(
         allocation,
     )
     .map_err(|error| error.to_string())?;
+    let risk = resolve_risk_budget(&state, &risk_amount, allocation, risk_percent.as_deref())?;
     invalidate_validated_order_check(&state);
     let request = RiskQuoteRequest {
         draft_id: format!(
@@ -213,6 +210,35 @@ pub(crate) fn request_risk_preview(
     *state.expected_risk.lock().expect("risk mutex poisoned") = None;
     state.wake_outbound();
     Ok(())
+}
+
+pub(crate) fn resolve_risk_budget(
+    state: &BridgeState,
+    risk_amount: &str,
+    allocation: rust_decimal::Decimal,
+    risk_percent: Option<&str>,
+) -> Result<rust_decimal::Decimal, String> {
+    if let Some(percent) = risk_percent {
+        let account = state
+            .account
+            .lock()
+            .map_err(|_| "account snapshot unavailable")?;
+        let account = account.as_ref().ok_or("account snapshot unavailable")?;
+        let equity = account
+            .equity
+            .parse()
+            .map_err(|_| "invalid account equity")?;
+        let percent = percent.parse().map_err(|_| "invalid risk percent")?;
+        return trading_core::position_sizing::equity_risk_budget(equity, allocation, percent)
+            .map_err(|error| error.to_string());
+    }
+    let risk = risk_amount
+        .parse::<rust_decimal::Decimal>()
+        .map_err(|_| "invalid risk amount")?;
+    if risk <= rust_decimal::Decimal::ZERO {
+        return Err("risk amount must be positive".into());
+    }
+    Ok(risk)
 }
 
 #[tauri::command]

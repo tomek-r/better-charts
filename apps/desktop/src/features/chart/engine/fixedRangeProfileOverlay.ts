@@ -14,7 +14,7 @@ export interface FixedRangeProfileState {
   hit: { anchorX?: number; profileLeft?: number; profileRight?: number; pocY?: number; vahY?: number; valY?: number };
 }
 
-// The app's sell/buy convention (stagedOrderOverlay STAGED_COLORS): the bid is
+// The app's sell/buy convention (tradingOverlayDrawing TRADING_COLORS): the bid is
 // what you SELL at (red, mirrored LEFT), the ask what you BUY at (blue, RIGHT).
 const BID_COLOR = palette.sell;
 const ASK_COLOR = palette.buy;
@@ -25,7 +25,7 @@ const POC_ROW_ALPHA = 1;
 // Level lines keep the TAP look: same alpha.
 const LEVEL_ALPHA = 0.95;
 
-// Weights arrive as decimal strings (§8) but are parsed defensively, exactly
+// Weights arrive as decimal strings but are parsed defensively, exactly
 // like tickActivityOverlay's binWeight: invalid or non-positive counts as 0.
 type WeightSide = 'bid' | 'ask' | 'total';
 

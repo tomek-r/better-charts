@@ -1,39 +1,32 @@
 // ExecutionProvider owns command state. WorkspaceLifecycle registers the
 // observational listener at its original effect slot. Dispatch gates, draft
 // identity checks, single in-flight target, and no-retry behavior stay unchanged.
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
+import { SubscriptionScope } from '../../shared/bridge/subscriptionScope';
 import type { ChartController } from '../chart/engine/chartController';
 import type {
   AccountSnapshot,
   CommandError,
   CommandUpdate,
   ExecutionQueueView,
-  ExecutionRecoverySnapshot,
   PendingModification,
 } from '../../shared/bridge/types';
 import type { PositionOverlayState } from '../chart/engine/positionOverlay';
 import { useErrorNotification, useNotifyError } from '../../shared/ui/ErrorNotifications';
+import { useDomainField, type DomainStore } from '../../shared/state/domainStore';
 
-// Owner: recovery journal + execution-safety are LOG-ONLY now — same fetch
-// trigger as before, deterministic projection into the app log for
-// post-mortems; neither surface renders in the sidebar anymore.
-export async function refreshExecutionRecovery(): Promise<void> {
-  try {
-    const result = await invoke<ExecutionRecoverySnapshot>('get_execution_recovery_snapshot');
-    console.info('[recovery]', {
-      entries: result.entries.length,
-      items: result.entries.map((item) => ({
-        commandId: item.commandId,
-        state: item.state,
-        recoveryStatus: item.recoveryStatus,
-      })),
-    });
-    console.info('[execution-safety]', result.safety);
-  } catch (error) {
-    console.info('[recovery] unavailable.', error);
-  }
+export interface ExecutionStoreState {
+  executionQueue: ExecutionQueueView | undefined;
+  closingTarget: string | undefined;
+  closeCancelStatus:
+    | {
+        kind: 'locked' | 'error';
+        text: string;
+        source: 'portfolio' | 'draft';
+      }
+    | undefined;
 }
 
 export function useExecutionCommands({
@@ -41,26 +34,24 @@ export function useExecutionCommands({
   setPendingModification,
   positionOverlayState,
   chart,
+  store,
 }: {
   account: AccountSnapshot | undefined;
   setPendingModification: Dispatch<SetStateAction<PendingModification | undefined>>;
   positionOverlayState: { current: PositionOverlayState };
   chart: { current: ChartController | null };
+  store: DomainStore<ExecutionStoreState>;
 }) {
   const positionOverlayRef = positionOverlayState;
   // The former Order panel is gone, but its queue view still supplies the
   // authoritative dispatch gate used by the ticket and chart actions.
-  const [executionQueue, setExecutionQueue] = useState<ExecutionQueueView>();
-  // §UX close/cancel: the single in-flight portfolio/draft target (mirrors submittingSide)
+  const [executionQueue, setExecutionQueue] = useDomainField(store, 'executionQueue');
+  // UX close/cancel: the single in-flight portfolio/draft target (mirrors submittingSide)
   // and the last close/cancel outcome line — its `source` decides where it renders.
-  const [closingTarget, setClosingTarget] = useState<string>();
-  const [closeCancelStatus, setCloseCancelStatus] = useState<{
-    kind: 'locked' | 'error';
-    text: string;
-    source: 'portfolio' | 'draft';
-  }>();
+  const [closingTarget, setClosingTarget] = useDomainField(store, 'closingTarget');
+  const [closeCancelStatus, setCloseCancelStatus] = useDomainField(store, 'closeCancelStatus');
   useErrorNotification(closeCancelStatus?.text);
-  // §UX close/cancel/modify actions: full-close MVP for portfolio rows plus
+  // UX close/cancel/modify actions: full-close MVP for portfolio rows plus
   // confirmed close/cancel/modify drafts. One busy target at a time (mirrors
   // submitOrder's submittingSide); success is silent (owner — no confirmation
   // copy), a dispatch-locked rejection reuses
@@ -156,12 +147,12 @@ export function useExecutionCommands({
         invoke('cancel_order', { accountLogin: account?.accountLogin, brokerServer: account?.brokerServer, orderId }),
       actedDraft,
     );
-  // §12 modify drafts: same busy/status path as close/cancel. `targetKind` uses
+  // Modify drafts: same busy/status path as close/cancel. `targetKind` uses
   // the backend's wire strings ("position"/"pending_order"); explicit nulls are
-  // the backend's "leave this level unchanged" signal, and this path never
-  // requests a level removal (out of MVP scope). Shared by pending-order
-  // price drags and SL/TP drag auto-send (keepDraftOnSuccess), so both
-  // emit byte-identical modify_order payloads.
+  // the backend's "leave this level unchanged" signal; the decimal string "0"
+  // removes the selected SL/TP. Shared by live level-clear chips, pending-order
+  // price drags and SL/TP drag auto-send (keepDraftOnSuccess), all using the
+  // same modify_order serialization.
   const requestModifyDraft = (draft: PendingModification, keepDraftOnSuccess = false) => {
     if (!draft.targetId) {
       return;
@@ -206,39 +197,31 @@ export function useExecutionCommandEffects(execution: ExecutionCommandState): vo
   // Both operations are observational; a failure does not invent a command state.
   useEffect(() => {
     let disposed = false;
-    let cleanups: UnlistenFn[] = [];
-    void Promise.all([
-      listen<CommandUpdate>('execution-command-update', (event) => {
-        console.info(`[command-update] ${JSON.stringify(event.payload)}`);
-        if (!disposed && event.payload.status === 'rejected') {
-          notifyError(event.payload.message || `Order rejected by MT5 (code ${event.payload.retcode ?? 'unknown'}).`);
-        }
-      }),
-      listen<CommandError>('execution-command-error', (event) => {
-        console.info(`[command-error] ${JSON.stringify(event.payload)}`);
-        if (!disposed) {
-          notifyError(event.payload.message);
-        }
-      }),
-    ])
-      .then((listeners) => {
-        if (disposed) {
-          listeners.forEach((cleanup) => cleanup());
-          return;
-        }
-        cleanups = listeners;
-      })
-      .catch((error) => console.info('Execution command status unavailable.', error));
+    const subscriptions = new SubscriptionScope();
+    void subscriptions
+      .register([
+        listen<CommandUpdate>('execution-command-update', (event) => {
+          if (!disposed && event.payload.status === 'rejected') {
+            notifyError(event.payload.message || `Order rejected by MT5 (code ${event.payload.retcode ?? 'unknown'}).`);
+          }
+        }),
+        listen<CommandError>('execution-command-error', (event) => {
+          if (!disposed) {
+            notifyError(event.payload.message);
+          }
+        }),
+      ])
+      .catch(() => undefined);
     void invoke<ExecutionQueueView>('get_execution_queue_status')
       .then((view) => {
         if (!disposed) {
           setExecutionQueue(view);
         }
       })
-      .catch((error) => console.info('Execution queue status unavailable.', error));
+      .catch(() => undefined);
     return () => {
       disposed = true;
-      cleanups.forEach((cleanup) => cleanup());
+      subscriptions.dispose();
     };
   }, [setExecutionQueue, notifyError]);
 }

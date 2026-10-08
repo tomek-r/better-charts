@@ -265,8 +265,9 @@ pub enum TargetKind {
 /// Values remain decimal strings so the command payload does not inherit a
 /// floating-point representation or silently change its serialized spelling.
 /// `None` on `stop_loss`/`take_profit`/`price` means "leave that level
-/// unchanged": removing an SL/TP is out of MVP and requires an explicit
-/// encoding in a future version of the protocol.
+/// unchanged". A positive decimal string sets an SL/TP; the decimal string
+/// "0" removes it. `price`, when supplied, must remain positive and applies
+/// only to pending orders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ModifyOrder {

@@ -1,4 +1,4 @@
-//! Optional MT5 process management (spec §25).
+//! Optional MT5 process management.
 //!
 //! Windows launches a configured terminal directly; macOS and Linux use Wine.
 //! Installation paths and startup INI files must be explicitly configured.

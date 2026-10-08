@@ -1,4 +1,5 @@
-import { createContext, useContext, useMemo, type Context, type ReactNode } from 'react';
+import { createContext, useMemo, type ReactNode } from 'react';
+import { useRequiredContext } from '../../shared/state/useRequiredContext';
 import type { DrawingTool } from './toolTypes';
 
 export interface DrawingState {
@@ -22,17 +23,9 @@ export function DrawingContextProvider({
 }: DrawingState & { children: ReactNode }) {
   const value = useMemo<DrawingState>(() => ({ drawingTool, setDrawingTool }), [drawingTool, setDrawingTool]);
 
-  return <DrawingContext.Provider value={value}>{children}</DrawingContext.Provider>;
+  return <DrawingContext value={value}>{children}</DrawingContext>;
 }
 
 export function useChartDrawing(): DrawingState {
-  return useRequiredContext(DrawingContext, 'useChartDrawing');
-}
-
-function useRequiredContext<T>(context: Context<T | null>, name: string): T {
-  const value = useContext(context);
-  if (value === null) {
-    throw new Error(`${name} must be used inside DrawingContextProvider.`);
-  }
-  return value;
+  return useRequiredContext(DrawingContext, 'useChartDrawing must be used inside DrawingContextProvider.');
 }

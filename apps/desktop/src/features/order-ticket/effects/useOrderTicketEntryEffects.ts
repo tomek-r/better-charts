@@ -1,14 +1,12 @@
 import { useEffect, useRef } from 'react';
-import type { OrderKind, RiskSide } from '../../../shared/bridge/types';
+import type { OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
 import { quoteDigits, ticketPrice } from '../../../shared/format';
-import type { OrderTicketState } from '../state/useOrderTicket';
+import type { OrderTicketDraftStore, OrderTicketStores } from '../state/orderTicketStores';
 
-type OrderTicketEntryEffectsInput = Pick<
-  OrderTicketState,
-  | 'quote'
+export type OrderTicketEntryEffectsInput = Pick<
+  OrderTicketDraftStore,
   | 'riskSide'
   | 'entry'
-  | 'setEntry'
   | 'orderKind'
   | 'priceMode'
   | 'stagedOnChart'
@@ -18,9 +16,12 @@ type OrderTicketEntryEffectsInput = Pick<
   | 'takeProfit'
   | 'slOn'
   | 'tpOn'
-  | 'setStopLoss'
-  | 'setTakeProfit'
->;
+> & {
+  quote: QuoteSnapshot | undefined;
+  setEntry: OrderTicketStores['setters']['draft']['setEntry'];
+  setStopLoss: OrderTicketStores['setters']['draft']['setStopLoss'];
+  setTakeProfit: OrderTicketStores['setters']['draft']['setTakeProfit'];
+};
 
 // Effect slots (4) + (5): entry reseed from the live quote and the market
 // follow — registered at their former slot between the portfolio guard and the
@@ -48,8 +49,7 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
     if (!stagedDragging && quote && !entry && !(priceMode === 'offset' && orderKind !== 'market')) {
       setEntry(riskSide === 'buy' ? quote.ask : quote.bid);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5d: hook-provided setter, stable identity (P5a pattern); dep array frozen 1:1
-  }, [quote, riskSide, entry, priceMode, orderKind, stagedDragging]);
+  }, [quote, riskSide, entry, priceMode, orderKind, stagedDragging, setEntry]);
   // A staged market order follows quote ticks while it is being edited.
   // Translate enabled exits by the same delta to preserve their distances.
   useEffect(() => {
@@ -97,6 +97,20 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
     shiftLevel(stopLoss, slOn, setStopLoss);
     shiftLevel(takeProfit, tpOn, setTakeProfit);
     setEntry(nextEntryText);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setters are stable; this mirrors live market ticks only while a staged draft is editable
-  }, [orderKind, riskSide, quote, stagedOnChart, stagedDragging, ticketStage, entry, stopLoss, takeProfit, slOn, tpOn]);
+  }, [
+    orderKind,
+    riskSide,
+    quote,
+    stagedOnChart,
+    stagedDragging,
+    ticketStage,
+    entry,
+    stopLoss,
+    takeProfit,
+    slOn,
+    tpOn,
+    setEntry,
+    setStopLoss,
+    setTakeProfit,
+  ]);
 }

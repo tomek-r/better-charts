@@ -18,7 +18,7 @@ export function OrderTicketReview({
   submitStatus,
   submittingSide,
 }: {
-  account: AccountSnapshot | undefined;
+  account: Pick<AccountSnapshot, 'currency' | 'currencyDigits'> | undefined;
   canSubmitOrder: boolean;
   effectiveVolume: string;
   orderCheck: OrderCheckResult | undefined;

@@ -2,6 +2,32 @@ import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
 import type { Dispatch, SetStateAction } from 'react';
 import type { BrokerSymbol } from '../../shared/bridge/types';
 
+function SymbolResultRow({
+  item,
+  isFavorite,
+  chooseSymbol,
+  toggleFavorite,
+}: {
+  item: BrokerSymbol;
+  isFavorite: boolean;
+  chooseSymbol: (item: BrokerSymbol) => Promise<void>;
+  toggleFavorite: (item: BrokerSymbol) => void;
+}) {
+  const action = `${isFavorite ? 'Remove' : 'Add'} ${item.symbol} ${isFavorite ? 'from' : 'to'} favorites`;
+
+  return (
+    <div className="search-result-row">
+      <button onClick={() => void chooseSymbol(item)}>
+        <strong>{item.symbol}</strong>
+        <span>{item.description}</span>
+      </button>
+      <button className="favorite-toggle" aria-label={action} onClick={() => toggleFavorite(item)}>
+        {isFavorite ? '★' : '☆'}
+      </button>
+    </div>
+  );
+}
+
 export function SymbolSearchDialog({
   setSearchOpen,
   searchQuery,
@@ -27,6 +53,10 @@ export function SymbolSearchDialog({
   chooseSymbol: (item: BrokerSymbol) => Promise<void>;
   toggleFavorite: (item: BrokerSymbol) => void;
 }) {
+  const favoriteSymbols = new Set(favorites.map((item) => item.symbol));
+  const recentOnly = recent.filter((item) => !favoriteSymbols.has(item.symbol));
+  const firstResult = searchQuery.trim() ? searchResults[0] : (favorites[0] ?? recentOnly[0]);
+
   return (
     <div
       className="search-backdrop"
@@ -53,8 +83,8 @@ export function SymbolSearchDialog({
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && searchResults[0]) {
-              void chooseSymbol(searchResults[0]);
+            if (event.key === 'Enter' && firstResult) {
+              void chooseSymbol(firstResult);
             }
           }}
           placeholder="Search symbol — e.g. NAS100"
@@ -78,54 +108,34 @@ export function SymbolSearchDialog({
             <>
               <div className="search-section-label">Favorites</div>
               {favorites.map((item) => (
-                <div className="search-result-row" key={`favorite-${item.symbol}`}>
-                  <button onClick={() => void chooseSymbol(item)}>
-                    <strong>{item.symbol}</strong>
-                    <span>{item.description}</span>
-                  </button>
-                  <button
-                    className="favorite-toggle"
-                    aria-label={`Remove ${item.symbol} from favorites`}
-                    onClick={() => toggleFavorite(item)}
-                  >
-                    ★
-                  </button>
-                </div>
+                <SymbolResultRow
+                  item={item}
+                  isFavorite
+                  chooseSymbol={chooseSymbol}
+                  toggleFavorite={toggleFavorite}
+                  key={`favorite-${item.symbol}`}
+                />
               ))}
               <div className="search-section-label">Recent</div>
-              {recent
-                .filter((item) => !favorites.some((favorite) => favorite.symbol === item.symbol))
-                .map((item) => (
-                  <div className="search-result-row" key={`recent-${item.symbol}`}>
-                    <button onClick={() => void chooseSymbol(item)}>
-                      <strong>{item.symbol}</strong>
-                      <span>{item.description}</span>
-                    </button>
-                    <button
-                      className="favorite-toggle"
-                      aria-label={`Add ${item.symbol} to favorites`}
-                      onClick={() => toggleFavorite(item)}
-                    >
-                      ☆
-                    </button>
-                  </div>
-                ))}
+              {recentOnly.map((item) => (
+                <SymbolResultRow
+                  item={item}
+                  isFavorite={false}
+                  chooseSymbol={chooseSymbol}
+                  toggleFavorite={toggleFavorite}
+                  key={`recent-${item.symbol}`}
+                />
+              ))}
             </>
           ) : (
             searchResults.map((item) => (
-              <div className="search-result-row" key={item.symbol}>
-                <button onClick={() => void chooseSymbol(item)}>
-                  <strong>{item.symbol}</strong>
-                  <span>{item.description}</span>
-                </button>
-                <button
-                  className="favorite-toggle"
-                  aria-label={`${favorites.some((entry) => entry.symbol === item.symbol) ? 'Remove' : 'Add'} ${item.symbol} ${favorites.some((entry) => entry.symbol === item.symbol) ? 'from' : 'to'} favorites`}
-                  onClick={() => toggleFavorite(item)}
-                >
-                  {favorites.some((entry) => entry.symbol === item.symbol) ? '★' : '☆'}
-                </button>
-              </div>
+              <SymbolResultRow
+                item={item}
+                isFavorite={favoriteSymbols.has(item.symbol)}
+                chooseSymbol={chooseSymbol}
+                toggleFavorite={toggleFavorite}
+                key={item.symbol}
+              />
             ))
           )}
         </div>

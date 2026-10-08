@@ -1,4 +1,4 @@
-import { useOrderTicketAction } from '../OrderTicketProvider';
+import { useOrderTicketAction } from './useOrderTicketAction';
 
 export function OrderTicketReviewAction() {
   const { side: riskSide, canCheckOrder, orderCheckLoading, startOrderReview } = useOrderTicketAction();

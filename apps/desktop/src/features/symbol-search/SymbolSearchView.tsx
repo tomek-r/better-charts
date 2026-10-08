@@ -40,6 +40,9 @@ export function SymbolSearchView() {
   }, [searchQuery, searchQueryRef]);
 
   useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
     let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<SymbolSearchResult>('symbol-search-result', (event) => {
@@ -57,18 +60,17 @@ export function SymbolSearchView() {
           unlisten = stopListening;
         }
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (!disposed) {
           setSearchLoading(false);
           setSearchError('Symbol search is unavailable.');
-          console.info('Symbol search unavailable.', error);
         }
       });
     return () => {
       disposed = true;
       unlisten?.();
     };
-  }, [searchQueryRef, setSearchError, setSearchLoading, setSearchResults, setSearchSource]);
+  }, [searchOpen, searchQueryRef, setSearchError, setSearchLoading, setSearchResults, setSearchSource]);
 
   useEffect(() => {
     if (!searchOpen || !searchQuery.trim()) {
@@ -77,29 +79,25 @@ export function SymbolSearchView() {
       setSearchLoading(false);
       return;
     }
+    let active = true;
     setSearchLoading(true);
     setSearchResults([]);
     setSearchSource(undefined);
     setSearchError(undefined);
     const timer = window.setTimeout(() => {
-      void invoke('search_symbols', { query: searchQuery.trim(), limit: 20 }).catch((error) => {
+      void invoke('search_symbols', { query: searchQuery.trim(), limit: 20 }).catch(() => {
+        if (!active) {
+          return;
+        }
         setSearchLoading(false);
         setSearchError('Symbol search is unavailable.');
-        console.info('Symbol search unavailable.', error);
       });
     }, 200);
-    return () => window.clearTimeout(timer);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [searchOpen, searchQuery, setSearchError, setSearchLoading, setSearchResults, setSearchSource]);
-
-  useEffect(() => {
-    if (searchOpen && !searchQuery.trim()) {
-      const combined = [
-        ...favorites,
-        ...recent.filter((item) => !favorites.some((favorite) => favorite.symbol === item.symbol)),
-      ];
-      setSearchResults(combined);
-    }
-  }, [searchOpen, searchQuery, favorites, recent, setSearchResults]);
 
   useEffect(() => {
     saveSymbols(favoritesKey, favorites);

@@ -1,21 +1,32 @@
 import { useEffect, useLayoutEffect } from 'react';
-import type { StagedOrderLevels } from './engine/stagedOrderOverlay';
-import { quoteDigits } from '../../shared/format';
-import type { BridgeSessionState } from '../bridge/useBridgeSession';
-import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
-import type { useExecutionCommands } from '../execution/useExecutionCommands';
-import type { ChartWorkspaceState } from './useChartWorkspace';
+import type { StagedOrderLevels } from '../engine/stagedOrderOverlay';
+import { quoteDigits } from '../../../shared/format';
+import type { BridgeSessionState } from '../../bridge/useBridgeSession';
+import type { OrderTicketCoordination, OrderTicketDraftStore } from '../../order-ticket/state/orderTicketStores';
+import type { TicketDerivation } from '../../order-ticket/domain/ticketRules';
+import type { deriveStagedOrderDisplay } from '../../order-ticket/domain/stagedOrderDisplay';
+import type { useExecutionCommands } from '../../execution/useExecutionCommands';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
-/** The §12 execution actions App passes to the dispatch-ref mirror slot. */
+/** The execution actions App passes to the dispatch-ref mirror slot. */
 export type ChartWorkspaceExecutionActions = Pick<
   ReturnType<typeof useExecutionCommands>,
   'requestModifyDraft' | 'requestClosePosition' | 'requestCancelOrder'
 >;
 
+export type ChartTicketOverlayState = Pick<OrderTicketCoordination, 'submitSwapPendingRef' | 'stagedPrevPriceRef'> &
+  Pick<
+    OrderTicketDraftStore,
+    'stagedOnChart' | 'entry' | 'stopLoss' | 'takeProfit' | 'slOn' | 'tpOn' | 'riskSide' | 'orderKind'
+  > &
+  Pick<TicketDerivation, 'effectiveVolume'> & {
+    display: Pick<ReturnType<typeof deriveStagedOrderDisplay>, 'slMoney' | 'tpMoney' | 'riskRewardLabel'>;
+  };
+
 export function useChartWorkspaceMirrorRefEffect(
   workspace: ChartWorkspaceState,
-  session: BridgeSessionState,
-  ticket: OrderTicketState,
+  session: Pick<BridgeSessionState, 'instrument'>,
+  ticket: Pick<OrderTicketDraftStore, 'stagedOnChart'>,
   execution: ChartWorkspaceExecutionActions,
   dispatchEnabledNow: boolean,
 ): void {
@@ -40,11 +51,11 @@ export function useChartWorkspaceMirrorRefEffect(
 
 export function useChartWorkspaceMirrorLayoutEffect(
   workspace: ChartWorkspaceState,
-  session: BridgeSessionState,
-  ticket: OrderTicketState,
+  session: Pick<BridgeSessionState, 'instrument' | 'quote' | 'snapshot' | 'latestCandle'>,
+  ticket: ChartTicketOverlayState,
 ): void {
   const { chart, stagedOrderState, instrumentDigitsRef } = workspace;
-  const { instrument, quote, snapshot } = session;
+  const { instrument, quote, snapshot, latestCandle } = session;
   const {
     submitSwapPendingRef,
     stagedPrevPriceRef,
@@ -56,7 +67,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
     tpOn,
     riskSide,
     effectiveVolume,
-    display,
+    display: { slMoney, tpMoney, riskRewardLabel },
     orderKind,
   } = ticket;
   const stagedOrderRef = stagedOrderState;
@@ -84,7 +95,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
       return;
     }
     const entryPrice = Number(entry);
-    const last = snapshot.candles[snapshot.candles.length - 1];
+    const last = latestCandle ?? snapshot.candles[snapshot.candles.length - 1];
     let current: number | undefined;
     if (quote && Number(quote.last) > 0) {
       current = Number(quote.last);
@@ -106,7 +117,9 @@ export function useChartWorkspaceMirrorLayoutEffect(
       volume: effectiveVolume,
       orderKindLabel:
         orderKind === 'stop_limit' ? 'Stop Limit' : orderKind.charAt(0).toUpperCase() + orderKind.slice(1),
-      ...display,
+      slMoney,
+      tpMoney,
+      riskRewardLabel,
     };
     const previous = state.order;
     const changed =
@@ -123,15 +136,11 @@ export function useChartWorkspaceMirrorLayoutEffect(
     state.order = next;
     const priceMoved = stagedPrevPriceRef.current !== state.currentPrice;
     stagedPrevPriceRef.current = state.currentPrice;
-    // Levels changed → full repaint; a quote tick alone takes the LIGHT path:
-    // setCurrentPrice → scheduleRender (rAF, no container re-measure). The old
-    // resize() here re-laid-out the chart on EVERY quote tick while staged.
-    if (changed) {
+    // Level changes and current-price moves both repaint overlays without a
+    // container re-measure; the old resize() here re-laid out the chart on EVERY quote tick.
+    if (changed || (priceMoved && state.currentPrice !== undefined)) {
       chart.current?.refreshOverlays();
-    } else if (priceMoved && state.currentPrice !== undefined) {
-      chart.current?.setCurrentPrice(state.currentPrice);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     stagedOnChart,
     entry,
@@ -144,10 +153,16 @@ export function useChartWorkspaceMirrorLayoutEffect(
     orderKind,
     quote,
     snapshot.timeframe,
-    snapshot.candles.length,
+    latestCandle,
+    snapshot.candles,
     instrument?.digits,
-    display.slMoney,
-    display.tpMoney,
-    display.riskRewardLabel,
+    slMoney,
+    tpMoney,
+    riskRewardLabel,
+    chart,
+    instrumentDigitsRef,
+    stagedOrderRef,
+    stagedPrevPriceRef,
+    submitSwapPendingRef,
   ]);
 }

@@ -3,12 +3,16 @@
 Current behavior and owner decisions. See [architecture](architecture/README.md)
 and the [bridge contract](protocol/bridge-v1.md) for implementation details.
 
+React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object. The lifecycle coordinator passes non-quote props to ordered children; only quote-dependent children subscribe to live quotes.
+
 ## Available
 
 - Live candles, Bid/Ask, symbol search/metadata, configurable timeframes and
   older-history paging; Fixed Range Volume Profile with BID/ASK and POC/VAH/VAL.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
+- Chart SL/TP clear chips remove the selected live level from positions or
+  pending orders through the guarded modify pipeline.
 - Automatic sizing respects SL risk, broker lot limits and margin budget:
   `min(equity × Equity use % / 100, free margin)`. Equity use defaults to 100%
   and accepts greater than 0 through 100%; Risk % uses allocated equity,
@@ -35,8 +39,9 @@ Pine Script execution.
   Volume Profile is separate; boundaries drag, Delete/Backspace clears it,
   timeframe changes preserve selection and symbol changes clear it.
 - Price scale fits on load, then holds until rescaled; axis hover exposes `A`/`L`.
-  History paging preserves viewport; timeframe changes preserve bar spacing and
-  right-edge pixel distance. Clicking the current portfolio symbol keeps the chart.
+  History paging preserves viewport; reconnecting resets to the latest history,
+  while timeframe changes preserve bar spacing and right-edge pixel distance.
+  Clicking the current portfolio symbol keeps the chart.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
   avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
 - Live P&L right-aligns within the widest amount observed per position, expanding
@@ -87,6 +92,9 @@ load. Invalid configuration disables trading/auto-start. See [setup](../README.m
 Windows release builds use the GUI subsystem; background process checks and stop
 commands create no console window. Debug builds retain console output. macOS/Linux
 launch helpers directly without opening a terminal emulator.
+
+Production frontend console logging is removed. Actionable errors remain visible
+in the UI; backend diagnostics and the durable execution journal remain active.
 
 Earlier MVP was verified on a demo account. Current changes, packaged builds and
 native Windows/Linux behavior need manual verification; browser E2E uses a Tauri

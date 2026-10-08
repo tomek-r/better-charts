@@ -1,6 +1,6 @@
 /* Open-positions card in the trade-panel drawer. */
 
-/* §11a Reorder polish: the risk card now opens the aside, so its old top divider must not float below the panel edge, and the status hero needs air below the order panel. */
+/* Reorder polish: the risk card now opens the aside, so its old top divider must not float below the panel edge, and the status hero needs air below the order panel. */
 .portfolio-card {
   margin-top: 22px;
   padding-top: 16px;

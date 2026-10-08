@@ -25,14 +25,15 @@ required and are not bundled.
 - Live candlestick charts, Bid/Ask quotes, symbol search and six timeframes.
 - Fixed Range Volume Profile with BID/ASK tick activity and POC/VAH/VAL.
 - Market, Limit, Stop and Stop Limit orders, risk sizing, SL/TP and OrderCheck.
-- Chart and portfolio controls for modifying, closing and cancelling orders.
+- Chart and portfolio controls for modifying, closing and cancelling orders;
+  chart controls can remove live SL/TP from positions and pending orders.
 - Account/session binding, reconciliation and durable execution journals.
   Commands are never retried automatically.
 
 This is an early release tested with a demo account. Real-money trading has
 not been validated. Some chart gestures submit modifications directly when
-trading is enabled. Start with a demo account. Partial close, removing SL/TP,
-Break Even, multiple charts and Pine Script are not yet available.
+trading is enabled. Start with a demo account. Partial close, Break Even,
+multiple charts and Pine Script are not yet available.
 
 ## Build
 

@@ -126,7 +126,7 @@ export function toOrderLine(
     tpMoney: level(item.takeProfit, item.takeProfitProfit),
   };
 }
-// §13 source of truth: replace-style re-sync into OUR overlay (features/chart/engine/positionOverlay.ts). The library's built-in trading overlay is deliberately NEVER fed — chart.setPositions()/setOrders() stay empty, so it paints nothing and its drag hit-testing falls through to pan. Returns true when the painted content changed (or a drag preview was dropped) so the caller can repaint.
+// Source of truth: replace-style re-sync into OUR overlay (features/chart/engine/positionOverlay.ts). The library's built-in trading overlay is deliberately NEVER fed — chart.setPositions()/setOrders() stay empty, so it paints nothing and its drag hit-testing falls through to pan. Returns true when the painted content changed (or a drag preview was dropped) so the caller can repaint.
 export function syncPositionOverlay(
   state: PositionOverlayState,
   portfolio: PortfolioSnapshot | undefined,

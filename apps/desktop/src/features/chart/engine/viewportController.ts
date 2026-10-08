@@ -146,7 +146,7 @@ export class ViewportController {
   /** Extends the helper points when the pane needs more of them than the last rebuild left. */
   ensureFuture(width: number, barSpacing: number): void {
     if (this.futureCount < neededFutureBarCount(width, barSpacing)) {
-      this.extendFuture();
+      this.extendFuture(barSpacing);
     }
   }
 
@@ -159,9 +159,14 @@ export class ViewportController {
     this.retainedPrices = null;
   }
 
-  /** Restores the default zoom and the end anchor. */
   /** Restores the default zoom and the end anchor, and fits the price scale. */
   resetToEnd(): void {
+    // A pending helper rebuild would preserve the old visible range after this
+    // explicit reset, replacing the new end anchor with a stale one.
+    cancelAnimationFrame(this.futureFrame);
+    this.futureFrame = 0;
+    const scale = this.chart.timeScale();
+    this.ensureFuture(scale.width(), 10);
     const to = timeScaleBaseIndex(this.data.bars.length, END_MARGIN);
     this.restoreViewport(to, 10);
     this.fitPriceScale(to, 10);
@@ -175,14 +180,14 @@ export class ViewportController {
     this.chart.timeScale().applyOptions({ barSpacing, rightOffset: to - baseIndex });
   }
 
-  extendFuture(): void {
+  extendFuture(barSpacing = this.chart.timeScale().options().barSpacing): void {
     const last = this.data.lastBar();
     if (!last) {
       this.future.setData([]);
       return;
     }
     const scale = this.chart.timeScale();
-    const spacing = scale.options().barSpacing;
+    const spacing = barSpacing;
     const count = neededFutureBarCount(scale.width(), spacing);
     const range = this.visibleRange();
     // Rebuilt only on a new real bar or resize; never on an existing-bar tick.

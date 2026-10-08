@@ -192,7 +192,7 @@
   color: var(--color-danger-text);
 }
 
-/* Teal to match the buy-side elements on the chart (STAGED_COLORS.buy / ask
+/* Teal to match the buy-side elements on the chart (TRADING_COLORS.buy / ask
    profile = var(--color-buy)). */
 .ticket-quote-side.buy.active {
   border-color: var(--color-buy-border);

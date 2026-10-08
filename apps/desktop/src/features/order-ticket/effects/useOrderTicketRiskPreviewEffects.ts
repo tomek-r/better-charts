@@ -1,21 +1,20 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { RiskPreview } from '../../../shared/bridge/types';
-import type { OrderTicketState } from '../state/useOrderTicket';
+import type { OrderTicketInputs } from '../state/orderTicketInputs';
+import type { OrderTicketCoordination, OrderTicketDraftStore, OrderTicketStores } from '../state/orderTicketStores';
+import type { StopDistanceGuard } from '../domain/ticketRules';
 import { equityAllocationIssue, orderEntryPrice } from '../domain/ticketRules';
 
 const RISK_PREVIEW_DEBOUNCE_MS = 100;
 
 // Effect slot (2): the debounced risk-preview request [layout] — registered at
 // its former slot between the timeframe reset and the staged-widget mirror.
-// `riskMode`/`effectiveRiskAmount` are App's §10 risk-basis derivations (they
+// `riskMode`/`effectiveRiskAmount` are App's risk-basis derivations (they
 // feed the display too), passed in as the effect's external inputs.
-export function useOrderTicketRiskPreviewEffects(
-  ticket: Pick<
-    OrderTicketState,
-    | 'snapshot'
-    | 'status'
-    | 'account'
+export type OrderTicketRiskPreviewEffectsInput = Pick<OrderTicketInputs, 'snapshot' | 'status' | 'account'> &
+  Pick<
+    OrderTicketDraftStore,
     | 'riskSide'
     | 'entry'
     | 'orderKind'
@@ -26,22 +25,28 @@ export function useOrderTicketRiskPreviewEffects(
     | 'riskAmount'
     | 'slOn'
     | 'tpOn'
-    | 'stopGuard'
     | 'ticketStage'
     | 'unitsMode'
     | 'volumeManual'
-    | 'riskBrokerVersion'
-    | 'setRiskProjection'
-    | 'riskPreviewDisplayRef'
-    | 'setOrderVolume'
-    | 'riskVersion'
-    | 'pendingRiskRequestRef'
-    | 'setDraftVersion'
-    | 'setRiskPreview'
-    | 'setRiskError'
-    | 'setRiskLoading'
-  >,
-  { riskMode, effectiveRiskAmount }: { riskMode: 'money' | 'equity'; effectiveRiskAmount: string },
+  > &
+  Pick<
+    OrderTicketCoordination,
+    'riskBrokerVersion' | 'riskPreviewDisplayRef' | 'riskVersion' | 'pendingRiskRequestRef'
+  > & {
+    stopGuard: StopDistanceGuard | undefined;
+    setRiskProjection: OrderTicketStores['setters']['broker']['setRiskProjection'];
+    setOrderVolume: OrderTicketStores['setters']['draft']['setOrderVolume'];
+    setDraftVersion: OrderTicketStores['setters']['draft']['setDraftVersion'];
+    setRiskPreview: OrderTicketStores['setters']['broker']['setRiskPreview'];
+    setRiskError: OrderTicketStores['setters']['broker']['setRiskError'];
+    setRiskLoading: OrderTicketStores['setters']['broker']['setRiskLoading'];
+  };
+
+export type OrderTicketRiskBasis = { riskMode: 'money' | 'equity'; effectiveRiskAmount: string };
+
+export function useOrderTicketRiskPreviewEffects(
+  ticket: OrderTicketRiskPreviewEffectsInput,
+  { riskMode, effectiveRiskAmount }: OrderTicketRiskBasis,
 ): void {
   const {
     snapshot,
@@ -118,7 +123,7 @@ export function useOrderTicketRiskPreviewEffects(
       Number.isFinite(Number(sizingEntry)) &&
       Number(sizingEntry) > 0 &&
       Number.isFinite(Number(stopLoss)) &&
-      Number(effectiveRiskAmount) > 0 &&
+      (riskMode === 'equity' ? Number(riskAmount) > 0 && Number(riskAmount) <= 100 : Number(effectiveRiskAmount) > 0) &&
       !stopGuard?.slTooClose &&
       !stopGuard?.tpTooClose,
     );
@@ -133,6 +138,7 @@ export function useOrderTicketRiskPreviewEffects(
       stopLoss: slOn ? stopLoss : '',
       takeProfit: tpOn && takeProfit.trim() ? takeProfit.trim() : null,
       riskAmount: effectiveRiskAmount,
+      riskPercent: riskMode === 'equity' ? riskAmount : null,
       equityAllocationPercent,
       draftVersion: version,
     };
@@ -151,7 +157,7 @@ export function useOrderTicketRiskPreviewEffects(
             setOrderVolume(projected.volume);
           }
         })
-        .catch((error) => console.info('Local risk projection unavailable.', error));
+        .catch(() => undefined);
     }
     const request = () => {
       window.clearTimeout(pendingTimer.current);
@@ -161,7 +167,6 @@ export function useOrderTicketRiskPreviewEffects(
           setRiskLoading(false);
           setRiskError('Risk preview is unavailable.');
         }
-        console.info('Risk preview unavailable.', error);
         throw error;
       });
     };

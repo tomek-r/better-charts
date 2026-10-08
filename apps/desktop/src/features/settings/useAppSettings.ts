@@ -1,94 +1,127 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import type { DomainStore } from '../../shared/state/domainStore';
 import type { AppSettingsData } from './settingsTypes';
 
-export function useAppSettings(tauriAvailable: boolean) {
-  const [settings, setSettings] = useState<AppSettingsData>();
-  const [isOpen, setOpen] = useState(false);
-  const [closing, setClosing] = useState(false);
+export interface AppSettingsState {
+  settings: AppSettingsData | undefined;
+  isOpen: boolean;
+  closing: boolean;
+  loadError: string | undefined;
+  restartRequired: boolean;
+  restartNoticeDismissed: boolean;
+  dismissedConfigurationError: string | undefined;
+  notificationRevision: number;
+}
+
+export const initialAppSettingsState: AppSettingsState = {
+  settings: undefined,
+  isOpen: false,
+  closing: false,
+  loadError: undefined,
+  restartRequired: false,
+  restartNoticeDismissed: false,
+  dismissedConfigurationError: undefined,
+  notificationRevision: 0,
+};
+
+export type AppSettingsStore = DomainStore<AppSettingsState>;
+
+export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean) {
+  const settingsLoadGeneration = useRef(0);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(closeTimer.current), []);
-  const [loadError, setLoadError] = useState<string>();
-  const [restartRequired, setRestartRequired] = useState(false);
-  const [restartNoticeDismissed, setRestartNoticeDismissed] = useState(false);
-  const [dismissedConfigurationError, setDismissedConfigurationError] = useState<string>();
-  const [notificationRevision, setNotificationRevision] = useState(0);
+
+  const loadSettings = useCallback(
+    (errorMessage: string, onLoaded?: (next: AppSettingsData) => void) => {
+      const generation = ++settingsLoadGeneration.current;
+      void invoke<AppSettingsData>('get_app_settings')
+        .then((next) => {
+          if (generation !== settingsLoadGeneration.current) {
+            return;
+          }
+          store.setField('settings', next);
+          onLoaded?.(next);
+        })
+        .catch(() => {
+          if (generation === settingsLoadGeneration.current) {
+            store.setField('loadError', errorMessage);
+          }
+        });
+    },
+    [store],
+  );
+
+  useEffect(
+    () => () => {
+      clearTimeout(closeTimer.current);
+      settingsLoadGeneration.current += 1;
+    },
+    [],
+  );
   useEffect(() => {
     if (!tauriAvailable) {
       return;
     }
-    let active = true;
-    void invoke<AppSettingsData>('get_app_settings')
-      .then((next) => {
-        if (!active) {
-          return;
-        }
-        setSettings(next);
-        setRestartRequired(next.restartRequired);
-        if (next.firstLaunch || next.configurationError) {
-          setOpen(true);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setLoadError('Could not load app settings. Reopen settings to try again.');
-        }
-      });
+    loadSettings('Could not load app settings. Reopen settings to try again.', (next) => {
+      store.setField('restartRequired', next.restartRequired);
+      if (next.firstLaunch || next.configurationError) {
+        store.setField('isOpen', true);
+      }
+    });
     return () => {
-      active = false;
+      settingsLoadGeneration.current += 1;
     };
-  }, [tauriAvailable]);
+  }, [loadSettings, store, tauriAvailable]);
+
   const open = useCallback(() => {
     clearTimeout(closeTimer.current);
     closeTimer.current = undefined;
-    setClosing(false);
-    setOpen(true);
-    setDismissedConfigurationError(undefined);
-    setLoadError(undefined);
-    void invoke<AppSettingsData>('get_app_settings')
-      .then(setSettings)
-      .catch(() => {
-        setLoadError('Could not load app settings. Close and reopen settings to try again.');
-      });
-  }, []);
+    store.setField('closing', false);
+    store.setField('isOpen', true);
+    store.setField('dismissedConfigurationError', undefined);
+    store.setField('loadError', undefined);
+    loadSettings('Could not load app settings. Close and reopen settings to try again.');
+  }, [loadSettings, store]);
   const close = useCallback(() => {
     if (closeTimer.current !== undefined) {
       return;
     }
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setOpen(false);
-      setClosing(false);
+      store.setField('isOpen', false);
+      store.setField('closing', false);
       return;
     }
-    setClosing(true);
+    store.setField('closing', true);
     // Keep the focus trap mounted through the 180ms CSS exit animation.
     closeTimer.current = setTimeout(() => {
       closeTimer.current = undefined;
-      setOpen(false);
-      setClosing(false);
+      store.setField('isOpen', false);
+      store.setField('closing', false);
     }, 180);
-  }, []);
-  return {
-    settings,
-    isOpen,
-    closing,
-    loadError,
-    restartRequired,
-    notificationRevision,
-    restartNoticeVisible: restartRequired && !restartNoticeDismissed,
-    configurationNotice:
-      settings?.configurationError !== dismissedConfigurationError ? settings?.configurationError : undefined,
-    dismissRestartNotice: () => setRestartNoticeDismissed(true),
-    dismissConfigurationNotice: () => setDismissedConfigurationError(settings?.configurationError ?? undefined),
-    open,
-    close,
-    saved: (next: AppSettingsData) => {
-      setSettings(next);
-      setRestartRequired(next.restartRequired);
-      setRestartNoticeDismissed(false);
-      setNotificationRevision((revision) => revision + 1);
-      setDismissedConfigurationError(undefined);
+  }, [store]);
+  const dismissRestartNotice = useCallback(() => store.setField('restartNoticeDismissed', true), [store]);
+  const dismissConfigurationNotice = useCallback(
+    () => store.setField('dismissedConfigurationError', store.getState().settings?.configurationError ?? undefined),
+    [store],
+  );
+  const saved = useCallback(
+    (next: AppSettingsData) => {
+      settingsLoadGeneration.current += 1;
+      store.setField('settings', next);
+      store.setField('restartRequired', next.restartRequired);
+      store.setField('restartNoticeDismissed', false);
+      store.setField('notificationRevision', (revision) => revision + 1);
+      store.setField('dismissedConfigurationError', undefined);
       close();
     },
+    [close, store],
+  );
+
+  return {
+    open,
+    close,
+    saved,
+    dismissRestartNotice,
+    dismissConfigurationNotice,
   };
 }

@@ -11,8 +11,10 @@ import {
 import {
   useBridgeAccount,
   useBridgeMarket,
+  useBridgeQuote,
   useBridgePortfolio,
   useBridgeSessionRuntime,
+  useBridgeSessionLifecycleRuntime,
   BridgeSessionProvider,
   useTauriAvailable,
 } from '../src/features/bridge/BridgeSessionProvider';
@@ -22,12 +24,12 @@ import { ChartQuotes } from '../src/features/chart/ChartQuotes';
 import { ChartCanvas } from '../src/features/chart/ChartCanvas';
 import { ChartTimeframes } from '../src/features/chart/ChartTimeframes';
 import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
-import type { QuoteSnapshot } from '../src/shared/bridge/types';
-import {
-  OrderTicketProvider,
-  useOrderTicketPricing,
-  useOrderTicketRuntime,
-} from '../src/features/order-ticket/OrderTicketProvider';
+import type { AccountSnapshot, BrokerSymbol, QuoteSnapshot, RiskPreview } from '../src/shared/bridge/types';
+import { OrderTicketProvider } from '../src/features/order-ticket/OrderTicketProvider';
+import { useOrderTicketActions, useOrderTicketStores } from '../src/features/order-ticket/state/orderTicketContext';
+import { useOrderTicketAction } from '../src/features/order-ticket/editor/useOrderTicketAction';
+import { useOrderTicketHeader } from '../src/features/order-ticket/editor/useOrderTicketHeader';
+import { useOrderTicketPricing } from '../src/features/order-ticket/editor/useOrderTicketPricing';
 import { OrderTicketTickValue } from '../src/features/order-ticket/editor/OrderTicketTickValue';
 import { OrderTicketSizing } from '../src/features/order-ticket/editor/OrderTicketSizing';
 import { OrderTicketExits } from '../src/features/order-ticket/editor/OrderTicketExits';
@@ -59,11 +61,12 @@ function Probe({ children, id }: { children: ReactNode; id: string }) {
 }
 
 function MarketProbe() {
-  const { quote, snapshot } = useBridgeMarket();
+  const { snapshot, latestCandle } = useBridgeMarket();
+  const quote = useBridgeQuote();
   return (
     <>
       <output data-testid="probe-market">{quote?.bid ?? snapshot.symbol}</output>
-      <output data-testid="probe-candle-close">{snapshot.candles[0]?.close}</output>
+      <output data-testid="probe-candle-close">{latestCandle?.close ?? snapshot.candles[0]?.close}</output>
     </>
   );
 }
@@ -89,7 +92,35 @@ function ChartHeaderProbes() {
 
 function BridgeRuntimeProbe() {
   const session = useBridgeSessionRuntime();
-  return <output data-testid="probe-bridge-runtime">{session.status.state}</output>;
+  return (
+    <output data-testid="probe-bridge-runtime">
+      {[
+        session.status.state,
+        String(session.tauriAvailable),
+        session.snapshot.symbol ?? '',
+        session.latestCandle?.close ?? '',
+        session.quote?.bid ?? '',
+        session.account?.balance ?? '',
+        String(session.portfolio?.capturedAtMs ?? ''),
+      ].join('|')}
+    </output>
+  );
+}
+
+function BridgeLifecycleRuntimeProbe() {
+  const session = useBridgeSessionLifecycleRuntime();
+  return (
+    <output data-testid="probe-bridge-lifecycle-runtime">
+      {[
+        session.status.state,
+        String(session.tauriAvailable),
+        session.snapshot.symbol ?? '',
+        session.latestCandle?.close ?? '',
+        session.account?.balance ?? '',
+        String(session.portfolio?.capturedAtMs ?? ''),
+      ].join('|')}
+    </output>
+  );
 }
 
 function AccountProbe() {
@@ -100,6 +131,21 @@ function AccountProbe() {
 function PortfolioProbe() {
   const portfolio = useBridgePortfolio();
   return <output data-testid="probe-portfolio">{portfolio?.capturedAtMs ?? 'none'}</output>;
+}
+
+function SecondaryBridgeProbes() {
+  const quote = useBridgeQuote();
+  const account = useBridgeAccount();
+  const portfolio = useBridgePortfolio();
+  const market = useBridgeMarket();
+  return (
+    <div data-testid="secondary-bridge-probes">
+      <output data-testid="secondary-quote">{quote?.bid ?? 'none'}</output>
+      <output data-testid="secondary-account">{account?.balance ?? 'none'}</output>
+      <output data-testid="secondary-portfolio">{portfolio?.capturedAtMs ?? 'none'}</output>
+      <output data-testid="secondary-market">{market.snapshot.symbol ?? 'none'}</output>
+    </div>
+  );
 }
 
 function SettingsProbe() {
@@ -126,6 +172,15 @@ function PanelProbe() {
   return <output data-testid="probe-panel">{String(panelOpen)}</output>;
 }
 
+function TicketHeaderProbe() {
+  const { environment, symbol } = useOrderTicketHeader();
+  return (
+    <output data-testid="probe-ticket-header">
+      {symbol ?? '—'}|{environment?.label ?? 'none'}
+    </output>
+  );
+}
+
 function BridgeControls() {
   const session = useBridgeSessionRuntime();
   const updateQuote = () => {
@@ -148,35 +203,62 @@ function BridgeControls() {
         : quote,
     );
   };
+  const setAccount = (next: Partial<AccountSnapshot> = {}) => {
+    session.setAccount({
+      accountLogin: '001234',
+      brokerServer: 'Broker-Demo',
+      currency: 'USD',
+      currencyDigits: 2,
+      balance: '1000.00',
+      equity: '1000.00',
+      margin: '0.00',
+      freeMargin: '1000.00',
+      marginLevel: '0',
+      leverage: 100,
+      marginMode: 0,
+      tradeAllowed: true,
+      expertAllowed: true,
+      accountTradeMode: 0,
+      accountTradeModeName: 'demo',
+      ...next,
+    });
+  };
+  const setPortfolio = () => {
+    session.setPortfolio({ accountLogin: '001234', capturedAtMs: 1745700001000, positions: [], orders: [] });
+  };
   const updateCandle = () => {
-    session.setSnapshot((snapshot) => ({
-      ...snapshot,
-      candles: snapshot.candles.map((candle, index) => (index === 0 ? { ...candle, close: '1.0852' } : candle)),
-    }));
+    session.setLatestCandle((candle) => (candle ? { ...candle, close: '1.0852' } : candle));
+  };
+  const setBridgeStatus = () => session.setStatus({ state: 'connected', message: 'Harness bridge is connected.' });
+  const loadedCandle = {
+    timeMs: 1745700000000,
+    open: '1.0846',
+    high: '1.0860',
+    low: '1.0840',
+    close: '1.0850',
+    tickVolume: 10,
+    spread: 2,
+    realVolume: 0,
   };
   const loadCandle = () => {
     session.setSnapshot({
       symbol: 'EURUSD',
       timeframe: 'M5',
       complete: true,
-      candles: [
-        {
-          timeMs: 1745700000000,
-          open: '1.0846',
-          high: '1.0860',
-          low: '1.0840',
-          close: '1.0850',
-          tickVolume: 10,
-          spread: 2,
-          realVolume: 0,
-        },
-      ],
+      candles: [loadedCandle],
     });
+    session.setLatestCandle(loadedCandle);
   };
   return (
     <div data-testid="provider-probe-ready">
       <button type="button" onClick={updateQuote}>
         Update quote
+      </button>
+      <button type="button" onClick={setBridgeStatus}>
+        Set test bridge status
+      </button>
+      <button type="button" onClick={() => session.setTauriAvailable(false)}>
+        Mark Tauri unavailable
       </button>
       <button type="button" onClick={moveQuote}>
         Move quote
@@ -187,16 +269,179 @@ function BridgeControls() {
       <button type="button" onClick={loadCandle}>
         Load candle
       </button>
+      <button type="button" onClick={() => setAccount()}>
+        Set test account
+      </button>
+      <button
+        type="button"
+        onClick={() => session.setAccount((account) => (account ? { ...account, balance: '2000.00' } : undefined))}
+      >
+        Update balance
+      </button>
+      <button type="button" onClick={() => setAccount({ currency: 'EUR' })}>
+        Set EUR account
+      </button>
+      <button type="button" onClick={() => setAccount({ accountTradeMode: 2, accountTradeModeName: 'real' })}>
+        Set real account
+      </button>
+      <button type="button" onClick={setPortfolio}>
+        Set test portfolio
+      </button>
     </div>
   );
 }
 
 function TicketControls() {
-  const ticket = useOrderTicketRuntime();
+  const bridge = useBridgeSessionRuntime();
+  const stores = useOrderTicketStores();
+  const actions = useOrderTicketActions();
+  const ticket = stores.setters.draft;
+  const broker = stores.setters.broker;
+  const configureActionGate = () => {
+    const instrument: BrokerSymbol = {
+      symbol: 'EURUSD',
+      description: 'Euro vs US Dollar',
+      digits: 5,
+      tickSize: '0.00001',
+      pointSize: '0.00001',
+      contractSize: '100000',
+      volumeMin: '0.01',
+      volumeMax: '100',
+      volumeStep: '0.01',
+      stopsLevel: 0,
+      freezeLevel: 0,
+      fillingMode: 0,
+      orderMode: 0,
+      expirationMode: 0,
+      tradeExecution: 0,
+      tradeMode: 0,
+    };
+    bridge.setStatus({ state: 'connected', message: 'Harness bridge is connected.' });
+    bridge.setSnapshot({ symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: [] });
+    bridge.setInstrument(instrument);
+    bridge.setAccount({
+      accountLogin: '001234',
+      brokerServer: 'Broker-Demo',
+      currency: 'USD',
+      currencyDigits: 2,
+      balance: '1000.00',
+      equity: '1000.00',
+      margin: '0.00',
+      freeMargin: '1000.00',
+      marginLevel: '0',
+      leverage: 100,
+      marginMode: 0,
+      tradeAllowed: true,
+      expertAllowed: true,
+      accountTradeMode: 0,
+      accountTradeModeName: 'demo',
+    });
+    bridge.setQuote({
+      symbol: 'EURUSD',
+      timeMs: 1745700001000,
+      bid: '1.0850',
+      ask: '1.0852',
+      last: '1.0850',
+      volume: 10,
+      volumeReal: '0',
+      flags: 0,
+    });
+    ticket.setStagedOnChart(true);
+    ticket.setRiskSide('buy');
+    ticket.setEntry('1.0850');
+    ticket.setUnitsMode('units');
+    ticket.setSlOn(false);
+    ticket.setOrderVolume('1');
+  };
+  const configureExitPreview = () => {
+    configureActionGate();
+    ticket.setSlOn(true);
+    ticket.setTpOn(true);
+    ticket.setStopLoss('1.0840');
+    ticket.setTakeProfit('1.0860');
+    ticket.setUnitsMode('money');
+    ticket.setDraftVersion(7);
+    const preview: RiskPreview = {
+      symbol: 'EURUSD',
+      side: 'buy',
+      draftVersion: 7,
+      entry: '1.0850',
+      stopLoss: '1.0840',
+      takeProfit: '1.0860',
+      riskBudget: '100',
+      volume: '1',
+      estimatedRisk: '50',
+      estimatedReward: '100',
+      estimatedMargin: '100',
+      currency: 'USD',
+      quotedAtMs: 1745700001000,
+    };
+    broker.setRiskPreview(preview);
+    broker.setRiskProjection(preview);
+  };
   return (
-    <button type="button" onClick={() => ticket.setEntry('1.2345')}>
-      Edit ticket
-    </button>
+    <>
+      <button type="button" onClick={() => ticket.setEntry('1.2345')}>
+        Edit ticket
+      </button>
+      <button type="button" onClick={() => actions.applyUnitsMode('money')}>
+        Use money sizing
+      </button>
+      <button type="button" onClick={configureActionGate}>
+        Prepare action gate
+      </button>
+      <button type="button" onClick={() => ticket.setEntry('1.0851')}>
+        Change action entry
+      </button>
+      <button type="button" onClick={() => ticket.setTimeInForce('ioc')}>
+        Change action time in force
+      </button>
+      <button type="button" onClick={() => ticket.setOrderVolume('0')}>
+        Invalidate action volume
+      </button>
+      <button type="button" onClick={() => bridge.setAccount(undefined)}>
+        Remove action account
+      </button>
+      <button
+        type="button"
+        onClick={() => bridge.setStatus({ state: 'disconnected', message: 'Harness disconnected.' })}
+      >
+        Disconnect action bridge
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          bridge.setStatus({
+            state: 'connected',
+            message: 'Harness bridge is connected.',
+            marketSession: { symbol: 'EURUSD', isOpen: false, tradeMode: 0, serverTimeMs: 1745700001000 },
+          })
+        }
+      >
+        Close action market
+      </button>
+      <button type="button" onClick={() => ticket.setRiskSide('sell')}>
+        Change action side
+      </button>
+      <button type="button" onClick={() => broker.setOrderCheckLoading(true)}>
+        Load action check
+      </button>
+      <button type="button" onClick={() => ticket.setDraftVersion((version) => version + 1)}>
+        Advance ticket version
+      </button>
+      <button type="button" onClick={configureExitPreview}>
+        Prepare exit preview
+      </button>
+    </>
+  );
+}
+
+function TicketActionProbe() {
+  const action = useOrderTicketAction();
+  return (
+    <output data-testid="probe-ticket-action">
+      {String(action.canCheckOrder)}|{String(action.orderCheckLoading)}|{action.side}
+    </output>
   );
 }
 
@@ -240,61 +485,77 @@ function HeaderProbes() {
 
 function WorkspaceProbes() {
   return (
-    <ChartWorkspaceProvider>
-      <BridgeSessionProvider>
-        <SymbolSearchProvider>
-          <HeaderProbes />
-          <SymbolSearchView />
-        </SymbolSearchProvider>
-        <Probe id="bridge-runtime">
-          <BridgeRuntimeProbe />
-        </Probe>
-        <Probe id="market">
-          <MarketProbe />
-        </Probe>
-        <ChartHeaderProbes />
-        <Probe id="account">
-          <AccountProbe />
-        </Probe>
-        <Probe id="portfolio">
-          <PortfolioProbe />
-        </Probe>
-        <Probe id="chart-resources">
-          <ChartResourcesProbe />
-        </Probe>
-        <ExecutionProvider>
-          <OrderTicketProvider>
-            <Probe id="ticket-edit">
-              <TicketEditProbe />
-            </Probe>
-            <Probe id="ticket-quotes">
-              <OrderTicketQuotes />
-            </Probe>
-            <Probe id="ticket-extra-settings">
-              <OrderTicketExtraSettings />
-            </Probe>
-            <Probe id="ticket-sizing">
-              <OrderTicketSizing />
-            </Probe>
-            <Probe id="ticket-tick-value">
-              <OrderTicketTickValue />
-            </Probe>
-            <Probe id="ticket-exits">
-              <OrderTicketExits />
-            </Probe>
-            <Probe id="ticket-action">
-              <OrderTicketReviewAction />
-            </Probe>
-            <TicketControls />
-          </OrderTicketProvider>
-        </ExecutionProvider>
-        <Probe id="panel">
-          <PanelProbe />
-        </Probe>
-        <PanelControls />
-        <BridgeControls />
-      </BridgeSessionProvider>
-    </ChartWorkspaceProvider>
+    <>
+      <ChartWorkspaceProvider>
+        <BridgeSessionProvider>
+          <Probe id="secondary-market">
+            <SecondaryBridgeProbes />
+          </Probe>
+        </BridgeSessionProvider>
+      </ChartWorkspaceProvider>
+      <ChartWorkspaceProvider>
+        <BridgeSessionProvider>
+          <SymbolSearchProvider>
+            <HeaderProbes />
+            <SymbolSearchView />
+          </SymbolSearchProvider>
+          <Probe id="bridge-runtime">
+            <BridgeRuntimeProbe />
+          </Probe>
+          <Probe id="bridge-lifecycle-runtime">
+            <BridgeLifecycleRuntimeProbe />
+          </Probe>
+          <Probe id="market">
+            <MarketProbe />
+          </Probe>
+          <ChartHeaderProbes />
+          <Probe id="account">
+            <AccountProbe />
+          </Probe>
+          <Probe id="portfolio">
+            <PortfolioProbe />
+          </Probe>
+          <Probe id="chart-resources">
+            <ChartResourcesProbe />
+          </Probe>
+          <ExecutionProvider>
+            <OrderTicketProvider>
+              <Probe id="ticket-header">
+                <TicketHeaderProbe />
+              </Probe>
+              <Probe id="ticket-edit">
+                <TicketEditProbe />
+              </Probe>
+              <Probe id="ticket-quotes">
+                <OrderTicketQuotes />
+              </Probe>
+              <Probe id="ticket-extra-settings">
+                <OrderTicketExtraSettings />
+              </Probe>
+              <Probe id="ticket-sizing">
+                <OrderTicketSizing />
+              </Probe>
+              <Probe id="ticket-tick-value">
+                <OrderTicketTickValue />
+              </Probe>
+              <Probe id="ticket-exits">
+                <OrderTicketExits />
+              </Probe>
+              <Probe id="ticket-action">
+                <TicketActionProbe />
+                <OrderTicketReviewAction />
+              </Probe>
+              <TicketControls />
+            </OrderTicketProvider>
+          </ExecutionProvider>
+          <Probe id="panel">
+            <PanelProbe />
+          </Probe>
+          <PanelControls />
+          <BridgeControls />
+        </BridgeSessionProvider>
+      </ChartWorkspaceProvider>
+    </>
   );
 }
 

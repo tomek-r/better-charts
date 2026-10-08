@@ -1,185 +1,126 @@
-import { defaultStopLossPrice } from '../domain/defaultStopLoss';
 import { useCallback } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
-import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { ticketPrice } from '../../../shared/format';
-import type { OrderTicketBaseState } from './useOrderTicketState';
+import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
+import { defaultStopLossPrice } from '../domain/defaultStopLoss';
+import type { OrderTicketInputs } from './orderTicketInputs';
+import type { OrderTicketDraftStore, OrderTicketStores } from './orderTicketStores';
 
-type OrderTicketEntryDraftInput = Pick<
-  OrderTicketBaseState,
+type DraftInputs = Pick<
+  OrderTicketInputs,
   | 'chart'
   | 'stagedOrderState'
   | 'instrumentDigitsRef'
   | 'stagedActiveRef'
   | 'instrument'
   | 'snapshot'
+  | 'latestCandle'
   | 'quote'
-  | 'riskSide'
-  | 'setRiskSide'
-  | 'entry'
-  | 'setEntry'
-  | 'stopLoss'
-  | 'setStopLoss'
-  | 'takeProfit'
-  | 'setTakeProfit'
-  | 'riskAmount'
-  | 'setRiskAmount'
-  | 'orderKind'
-  | 'setOrderKind'
-  | 'timeInForce'
-  | 'setTimeInForce'
-  | 'limitPrice'
-  | 'setLimitPrice'
-  | 'unitsMode'
-  | 'setUnitsMode'
-  | 'orderVolume'
-  | 'setOrderVolume'
-  | 'volumeManual'
-  | 'setVolumeManual'
-  | 'setSlOn'
-  | 'setTpOn'
-  | 'setSlUnit'
-  | 'setTpUnit'
-  | 'setPriceMode'
-  | 'setPriceReference'
-  | 'setPriceOffset'
-  | 'setTicketStage'
-  | 'stagedOnChart'
-  | 'setStagedOnChart'
-  | 'submitSwapPendingRef'
-  | 'stagedPrevPriceRef'
 >;
 
-export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
-  const {
-    chart,
-    stagedOrderState,
-    instrumentDigitsRef,
-    stagedActiveRef,
-    instrument,
-    snapshot,
-    quote,
-    riskSide,
-    setRiskSide,
-    entry,
-    setEntry,
-    stopLoss,
-    setStopLoss,
-    setTakeProfit,
-    riskAmount,
-    setRiskAmount,
-    orderKind,
-    setOrderKind,
-    setTimeInForce,
-    setLimitPrice,
-    unitsMode,
-    setUnitsMode,
-    orderVolume,
-    setOrderVolume,
-    setVolumeManual,
-    setSlOn,
-    setTpOn,
-    setSlUnit,
-    setTpUnit,
-    setPriceMode,
-    setPriceReference,
-    setPriceOffset,
-    setTicketStage,
-    stagedOnChart,
-    setStagedOnChart,
-    submitSwapPendingRef,
-    stagedPrevPriceRef,
-  } = ticket;
-  const notifyError = useNotifyError();
+export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStores) {
+  const { chart, stagedOrderState, instrumentDigitsRef, stagedActiveRef, instrument, snapshot, latestCandle, quote } =
+    inputs;
   const stagedOrderStateRef = stagedOrderState;
+  const setters = stores.setters.draft;
+  const notifyError = useNotifyError();
+  const { submitSwapPendingRef, stagedPrevPriceRef } = stores.coordination;
+
   const resetOrderDraft = useCallback(() => {
-    setSlOn(false);
-    setTpOn(false);
-    setStopLoss('');
-    setTakeProfit('');
-    setEntry('');
-  }, [setSlOn, setTpOn, setStopLoss, setTakeProfit, setEntry]);
-  const resetTicketToDefaults = () => {
+    setters.setSlOn(false);
+    setters.setTpOn(false);
+    setters.setStopLoss('');
+    setters.setTakeProfit('');
+    setters.setEntry('');
+  }, [setters]);
+
+  const resetTicketToDefaults = useCallback(() => {
     resetOrderDraft();
-    setRiskAmount('');
-    setOrderKind('market');
-    setLimitPrice('');
-    setTimeInForce('gtc');
-    setUnitsMode('units');
-    setOrderVolume('1');
-    setVolumeManual(false);
-    setSlUnit('ticks');
-    setTpUnit('ticks');
-    setPriceMode('absolute');
-    setPriceReference('ask');
-    setPriceOffset('0');
-    setTicketStage('edit');
-  };
-  const enableRiskStopLoss = useEventCallback((side: RiskSide, entryPrice: number, overwrite = false) => {
-    if (!overwrite && stopLoss.trim()) {
-      setSlOn(true);
-      return stopLoss;
-    }
-    const defaultStop = defaultStopLossPrice(
-      entryPrice,
-      side,
-      orderKind,
-      instrument,
-      quote,
-      chart.current?.viewport().priceRange,
-    );
-    if (!defaultStop) {
-      notifyError('No valid stop loss fits in the visible chart range. Zoom out or set SL manually.');
-      return undefined;
-    }
-    setSlOn(true);
-    setStopLoss(defaultStop);
-    return defaultStop;
-  });
+    setters.setRiskAmount('');
+    setters.setOrderKind('market');
+    setters.setLimitPrice('');
+    setters.setTimeInForce('gtc');
+    setters.setUnitsMode('units');
+    setters.setOrderVolume('1');
+    setters.setVolumeManual(false);
+    setters.setSlUnit('ticks');
+    setters.setTpUnit('ticks');
+    setters.setPriceMode('absolute');
+    setters.setPriceReference('ask');
+    setters.setPriceOffset('0');
+    setters.setTicketStage('edit');
+  }, [resetOrderDraft, setters]);
+
+  const enableRiskStopLossForDraft = useCallback(
+    (draft: OrderTicketDraftStore, side: RiskSide, entryPrice: number, overwrite = false) => {
+      if (!overwrite && draft.stopLoss.trim()) {
+        setters.setSlOn(true);
+        return draft.stopLoss;
+      }
+      const defaultStop = defaultStopLossPrice(
+        entryPrice,
+        side,
+        draft.orderKind,
+        instrument,
+        quote,
+        chart.current?.viewport().priceRange,
+      );
+      if (!defaultStop) {
+        notifyError('No valid stop loss fits in the visible chart range. Zoom out or set SL manually.');
+        return undefined;
+      }
+      setters.setSlOn(true);
+      setters.setStopLoss(defaultStop);
+      return defaultStop;
+    },
+    [setters, instrument, quote, chart, notifyError],
+  );
+  const enableRiskStopLoss = useEventCallback((side: RiskSide, entryPrice: number, overwrite: boolean = false) =>
+    enableRiskStopLossForDraft(stores.draft.getState(), side, entryPrice, overwrite),
+  );
+
   const stageOrderDraft = useCallback(
     (side: RiskSide, fresh = false) => {
       submitSwapPendingRef.current = false;
-      if (snapshot.candles.length === 0) {
+      if (snapshot.candles.length === 0 && !latestCandle) {
         return;
       }
+
+      const draft = stores.draft.getState();
       const digits = instrumentDigitsRef.current;
-      let price = fresh ? NaN : Number(entry);
+      let price = fresh ? NaN : Number(draft.entry);
       if (!Number.isFinite(price) || price <= 0) {
         const fallback = quote
           ? Number(side === 'buy' ? quote.ask : quote.bid)
-          : Number(snapshot.candles[snapshot.candles.length - 1]?.close);
+          : Number(latestCandle?.close ?? snapshot.candles[snapshot.candles.length - 1]?.close);
         if (!Number.isFinite(fallback) || fallback <= 0) {
           return;
         }
         price = fallback;
-        setEntry(ticketPrice(price, digits));
+        setters.setEntry(ticketPrice(price, digits));
       }
-      if (!orderVolume.trim()) {
-        setOrderVolume('1');
+      if (!draft.orderVolume.trim()) {
+        setters.setOrderVolume('1');
       }
-      if (unitsMode !== 'units' && Number(riskAmount) > 0 && (!stagedOnChart || fresh)) {
-        enableRiskStopLoss(side, price, fresh);
+      if (draft.unitsMode !== 'units' && Number(draft.riskAmount) > 0 && (!draft.stagedOnChart || fresh)) {
+        enableRiskStopLossForDraft(draft, side, price, fresh);
       }
-      setStagedOnChart(true);
+      setters.setStagedOnChart(true);
     },
     [
       snapshot.candles,
+      latestCandle,
       instrumentDigitsRef,
-      entry,
       quote,
-      orderVolume,
-      unitsMode,
-      riskAmount,
-      stagedOnChart,
-      enableRiskStopLoss,
-      setEntry,
-      setOrderVolume,
-      setStagedOnChart,
+      stores.draft,
+      enableRiskStopLossForDraft,
+      setters,
       submitSwapPendingRef,
     ],
   );
-  const clearStagedWidget = () => {
+
+  const clearStagedWidget = useCallback(() => {
     const staged = stagedOrderStateRef.current;
     const had = staged.order !== null || staged.currentPrice !== undefined || staged.barCloseAt !== undefined;
     staged.order = null;
@@ -189,28 +130,31 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
     if (had) {
       chart.current?.refreshOverlays();
     }
-    setStagedOnChart(false);
+    setters.setStagedOnChart(false);
     return had;
-  };
-  const unstageOrderDraft = () => {
+  }, [chart, stagedOrderStateRef, stagedPrevPriceRef, setters]);
+
+  const unstageOrderDraft = useCallback(() => {
     const wasStaged = stagedActiveRef.current;
     submitSwapPendingRef.current = false;
     clearStagedWidget();
     if (wasStaged) {
       resetOrderDraft();
     }
-  };
+  }, [stagedActiveRef, submitSwapPendingRef, clearStagedWidget, resetOrderDraft]);
+
   const stageFromQuote = useCallback(
     (side: RiskSide) => {
-      const switched = riskSide !== side;
+      const switched = stores.draft.getState().riskSide !== side;
       if (switched) {
         resetOrderDraft();
       }
-      setRiskSide(side);
+      setters.setRiskSide(side);
       stageOrderDraft(side, switched);
     },
-    [riskSide, resetOrderDraft, stageOrderDraft, setRiskSide],
+    [stores.draft, resetOrderDraft, stageOrderDraft, setters],
   );
+
   return {
     resetOrderDraft,
     resetTicketToDefaults,
@@ -221,5 +165,3 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
     stageFromQuote,
   };
 }
-
-export type OrderTicketDraft = ReturnType<typeof useOrderTicketDraft>;

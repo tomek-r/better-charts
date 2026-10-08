@@ -99,6 +99,119 @@ test('saving settings shows a dark shadowed notification without moving the char
   expect(modalAboveNotice).toBe(true);
 });
 
+test('older settings reads cannot overwrite a newer result after close and reopen', async ({ page }) => {
+  await gotoWithStub(page);
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'get_app_settings').length)
+    .toBe(2);
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __TAURI_INTERNALS__: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
+      __settingsReadResolvers: Array<(value: unknown) => void>;
+    };
+    const original = w.__TAURI_INTERNALS__.invoke;
+    w.__settingsReadResolvers = [];
+    w.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd === 'get_app_settings') {
+        return new Promise((resolve) => w.__settingsReadResolvers.push(resolve));
+      }
+      return original(cmd, args);
+    };
+  });
+
+  const gear = page.getByRole('button', { name: 'App settings', exact: true });
+  const dialog = page.getByRole('dialog', { name: 'App settings' });
+  await gear.click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __settingsReadResolvers: unknown[] }).__settingsReadResolvers.length),
+    )
+    .toBe(1);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+
+  await gear.click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __settingsReadResolvers: unknown[] }).__settingsReadResolvers.length),
+    )
+    .toBe(2);
+  const newerSettings = {
+    ...firstLaunch,
+    mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'newer-token' },
+    configurationError: 'Newer settings read was accepted.',
+  };
+  await page.evaluate((settings) => {
+    (window as unknown as { __settingsReadResolvers: Array<(value: unknown) => void> }).__settingsReadResolvers[1](
+      settings,
+    );
+  }, newerSettings);
+  await expect(page.getByRole('alert')).toContainText('Newer settings read was accepted.');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+
+  const olderSettings = {
+    ...firstLaunch,
+    mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'older-token' },
+  };
+  await page.evaluate((settings) => {
+    (window as unknown as { __settingsReadResolvers: Array<(value: unknown) => void> }).__settingsReadResolvers[0](
+      settings,
+    );
+  }, olderSettings);
+  await expect(page.getByRole('alert')).toContainText('Newer settings read was accepted.');
+
+  await gear.click();
+  await expect(dialog.getByLabel('Token', { exact: true })).toHaveValue('newer-token');
+});
+
+test('a settings read started before save cannot overwrite the saved settings', async ({ page }) => {
+  await gotoWithStub(page);
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'get_app_settings').length)
+    .toBe(2);
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __TAURI_INTERNALS__: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
+      __settingsReadResolvers: Array<(value: unknown) => void>;
+    };
+    const original = w.__TAURI_INTERNALS__.invoke;
+    w.__settingsReadResolvers = [];
+    w.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd === 'get_app_settings') {
+        return new Promise((resolve) => w.__settingsReadResolvers.push(resolve));
+      }
+      return original(cmd, args);
+    };
+  });
+
+  const gear = page.getByRole('button', { name: 'App settings', exact: true });
+  const dialog = page.getByRole('dialog', { name: 'App settings' });
+  await gear.click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __settingsReadResolvers: unknown[] }).__settingsReadResolvers.length),
+    )
+    .toBe(1);
+  await dialog.getByLabel('Token', { exact: true }).fill('saved-token');
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(dialog).toBeHidden();
+
+  const olderSettings = {
+    ...firstLaunch,
+    mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'older-token' },
+  };
+  await page.evaluate((settings) => {
+    (window as unknown as { __settingsReadResolvers: Array<(value: unknown) => void> }).__settingsReadResolvers[0](
+      settings,
+    );
+  }, olderSettings);
+  await expect(page.getByRole('status').filter({ hasText: 'Restart Better Charts' })).toBeVisible();
+
+  await gear.click();
+  await expect(dialog.getByLabel('Token', { exact: true })).toHaveValue('saved-token');
+});
+
 test('notification dismiss buttons hide independently and saving or reopening restores the notice', async ({
   page,
 }) => {

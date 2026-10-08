@@ -1,28 +1,23 @@
 import type { TradingLabelTarget } from './labelLayout';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { ticketPrice } from '../../../shared/format';
-import type { ChartWorkspaceState } from '../useChartWorkspace';
-import type { OrderTicketState } from '../../order-ticket/state/useOrderTicket';
+import type { OrderTicketStores } from '../../order-ticket/state/orderTicketStores';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
 type StagedGestureWorkspace = Pick<ChartWorkspaceState, 'stagedOrderState'>;
-type StagedGestureTicket = Pick<
-  OrderTicketState,
-  | 'unstageOrderDraft'
-  | 'toggleExit'
-  | 'setEntry'
-  | 'setSlOn'
-  | 'setStopLoss'
-  | 'setTpOn'
-  | 'setTakeProfit'
-  | 'setStagedDragging'
-  | 'setDragSlMoney'
->;
+export type StagedOrderGestureTicket = Pick<
+  OrderTicketStores['setters']['draft'],
+  'setEntry' | 'setSlOn' | 'setStopLoss' | 'setTpOn' | 'setTakeProfit' | 'setStagedDragging' | 'setDragSlMoney'
+> & {
+  unstageOrderDraft: () => void;
+  toggleExit: (kind: 'sl' | 'tp', on: boolean) => void;
+};
 
 /** Owns staged-widget gestures; writes draft fields without dispatching orders. */
 export function createStagedOrderGestures(
   host: HTMLElement,
   workspace: StagedGestureWorkspace,
-  ticket: StagedGestureTicket,
+  ticket: StagedOrderGestureTicket,
 ) {
   const { stagedOrderState } = workspace;
   const {

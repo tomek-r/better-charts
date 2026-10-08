@@ -1,6 +1,6 @@
 import { useState, type RefObject } from 'react';
-import type { PendingModification } from '../../shared/bridge/types';
-import { draftLevel } from '../../shared/format';
+import type { PendingModification } from '../../../shared/bridge/types';
+import { draftLevel } from '../../../shared/format';
 
 /** Builds drag/clear drafts and dispatches only through the latest execution gate. */
 export function useChartModificationDrafts(
@@ -8,7 +8,7 @@ export function useChartModificationDrafts(
 ) {
   const [pendingModification, setPendingModification] = useState<PendingModification>();
   const [tradingSyncTick, setTradingSyncTick] = useState(0);
-  // §12 flows for real-position/order drags — hoisted so the SAME functions
+  // Flows for real-position/order drags — hoisted so the SAME functions
   // serve the chart's trading events (positionModify/orderModify) and OUR
   // capture-phase line drags on the custom overlay (features/chart/engine/positionOverlay.ts).
   // Only stable setters + dragModifyRef are touched, so mount-once effects may
@@ -63,7 +63,7 @@ export function useChartModificationDrafts(
       autoDispatch.dispatch(draft);
     }
   };
-  // Order SL/TP drag (custom overlay): same §12 semantics as a position level
+  // Order SL/TP drag (custom overlay): same semantics as a position level
   // drag — draft + auto-dispatch through the modify gate. The modify wire
   // carries stop_loss/take_profit for pending orders (absent price = unchanged).
   const applyOrderLevelModify = (payload: { orderId: string; stopLoss?: number; takeProfit?: number }) => {

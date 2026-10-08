@@ -461,8 +461,17 @@ account snapshot when the quote arrives. It applies to automatic money/% risk
 sizing. In Risk % mode the desktop derives `riskAmount` from
 `account.equity × equityAllocationPercent / 100 × riskPercent / 100`;
 therefore 50% allocation with 1% risk uses a 0.5%-of-total-equity SL budget.
-The command receives that already allocated risk amount and does not scale
-it again. Explicit money risk stays fixed; allocation caps its margin only.
+The read-only desktop commands `request_risk_preview` and `project_risk_preview`
+also accept an optional decimal-string `riskPercent` (greater than 0, at most
+100). When supplied, Rust derives the canonical risk budget from the current
+session-bound account equity and allocation using checked Decimal arithmetic;
+`riskAmount` is then a display hint and is not used for sizing. This preserves
+positive sub-cent budgets and avoids rounding sizing inputs to currency display
+precision. The ticket sends this field for Risk % mode. When `riskPercent` is
+absent/null, the command uses the supplied `riskAmount` without scaling it again,
+preserving existing callers and explicit money risk. Allocation caps money
+risk's margin only. This extension affects desktop commands only; EA wire quote
+requests/results and the mock bridge remain unchanged.
 Manual Units keeps its explicit volume and broker OrderCheck. Editing
 the allocation invalidates the preview and accepted review. The percentage
 is a maximum margin budget per order, not a promise to spend it: SL risk and
@@ -657,9 +666,19 @@ rules: missing/null SL means an order without SL.
 }
 ```
 
-`target_kind` is `position|pending_order`. Each `null` level means **unchanged**;
-SL/TP removal is unsupported. `price` is valid only for a pending order and
-must be `null` for a position. This null rule differs from check/submit.
+`target_kind` is `position|pending_order`. Each omitted or `null` level means
+**unchanged**. A positive decimal-string `stop_loss` or `take_profit` sets that
+level; the decimal string `"0"` **removes** the selected SL/TP. Removal is supported
+for both positions and pending orders through the same guarded modify pipeline.
+Negative or malformed values are rejected. For example,
+`"stop_loss":"0","take_profit":null,"price":null` removes SL while preserving TP
+and the pending-order price.
+
+`price` must be a positive decimal string when supplied, is valid only for a
+pending order, and must be omitted or `null` for a position. At least one of
+`stop_loss`, `take_profit`, or `price` must be supplied with a non-null value.
+The unchanged-level null rule differs from check/submit, where missing/null SL
+means an order without SL.
 
 **`order_close_request` payload:**
 

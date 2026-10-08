@@ -1,31 +1,37 @@
-import type { RiskPreview } from '../../../shared/bridge/types';
+import type {
+  AccountSnapshot,
+  BrokerSymbol,
+  MarketSnapshot,
+  OrderKind,
+  RiskPreview,
+  RiskSide,
+} from '../../../shared/bridge/types';
 import { formatSignedMoney } from '../../../shared/format';
 import { accountMoneyBasis, estimateLevelMoney } from '../../../shared/money';
-import type { OrderTicketBaseState } from '../state/useOrderTicketState';
 import { orderEntryPrice, riskRewardRatio } from './ticketRules';
 
-type DisplayInput = Pick<
-  OrderTicketBaseState,
-  | 'instrument'
-  | 'account'
-  | 'snapshot'
-  | 'riskSide'
-  | 'entry'
-  | 'limitPrice'
-  | 'orderKind'
-  | 'stopLoss'
-  | 'takeProfit'
-  | 'slOn'
-  | 'tpOn'
-  | 'effectiveVolume'
-  | 'unitsMode'
-  | 'riskPreview'
-  | 'draftVersion'
-> & { lastPreview?: RiskPreview };
+export interface StagedOrderDisplayInput {
+  instrument: BrokerSymbol | undefined;
+  account: Pick<AccountSnapshot, 'currency' | 'currencyDigits'> | undefined;
+  snapshot: Pick<MarketSnapshot, 'symbol'>;
+  riskSide: RiskSide;
+  entry: string;
+  limitPrice: string;
+  orderKind: OrderKind;
+  stopLoss: string;
+  takeProfit: string;
+  slOn: boolean;
+  tpOn: boolean;
+  effectiveVolume: string;
+  unitsMode: 'money' | 'equity' | 'units';
+  riskPreview: RiskPreview | undefined;
+  draftVersion: number;
+  lastPreview?: RiskPreview;
+}
 
 /** Display estimates only: the chart and ticket share these values, while
  * broker sizing and submission keep their own freshness and execution gates. */
-export function deriveStagedOrderDisplay(input: DisplayInput) {
+export function deriveStagedOrderDisplay(input: StagedOrderDisplayInput) {
   const currency = input.account?.currency;
   const entry = orderEntryPrice(input.orderKind, input.entry, input.limitPrice);
   const volume = Number(input.effectiveVolume);

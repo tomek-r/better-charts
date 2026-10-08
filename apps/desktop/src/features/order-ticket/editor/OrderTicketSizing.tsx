@@ -1,14 +1,14 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { equityAllocationIssue } from '../domain/ticketRules';
 import { UnitsSizingRow } from './UnitsSizingRow';
-import { useOrderTicketSizing } from '../OrderTicketProvider';
+import { useOrderTicketSizing } from './useOrderTicketSizing';
 
 export function OrderTicketSizing() {
   const {
     stagedOnChart,
     slOn,
     stopLoss,
-    account,
+    currency,
     unitsMode,
     orderVolume,
     setOrderVolume,
@@ -41,7 +41,7 @@ export function OrderTicketSizing() {
         setRiskAmount={setRiskAmount}
         applyUnitsMode={applyUnitsMode}
         unitsAutoMode={unitsAutoMode}
-        account={account}
+        currency={currency}
       />
       <div className="ticket-row">
         <label className="ticket-row-label" htmlFor="equity-allocation">

@@ -1,3 +1,4 @@
+import { toRenderBar } from '../chart/engine/mt5DataAdapter';
 import type {
   AccountSnapshot,
   Candle,
@@ -45,28 +46,7 @@ export function normalizeHistoryPage(
 }
 // Reject malformed rendering data before it reaches the chart or realtime state.
 export function isValidCandle(candle: Candle) {
-  const open = Number(candle.open);
-  const high = Number(candle.high);
-  const low = Number(candle.low);
-  const close = Number(candle.close);
-  const volume = Number(candle.tickVolume);
-  return (
-    Number.isFinite(open) &&
-    open >= 0 &&
-    Number.isFinite(high) &&
-    high >= 0 &&
-    Number.isFinite(low) &&
-    low >= 0 &&
-    Number.isFinite(close) &&
-    close >= 0 &&
-    high >= low &&
-    high >= Math.max(open, close) &&
-    low <= Math.min(open, close) &&
-    Number.isFinite(candle.timeMs) &&
-    candle.timeMs > 0 &&
-    Number.isFinite(volume) &&
-    volume >= 0
-  );
+  return toRenderBar(candle) !== null;
 }
 
 export type RawQuote = Partial<QuoteSnapshot> & { time_ms?: number; volume_real?: string | number };

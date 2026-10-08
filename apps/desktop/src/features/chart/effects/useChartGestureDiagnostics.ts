@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { ticketPrice } from '../../shared/format';
-import type { ChartWorkspaceState } from './useChartWorkspace';
+import { ticketPrice } from '../../../shared/format';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
 export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void {
   const { chartHost, stagedOrderState, positionOverlayState, priceLinesState, fixedRangeProfileState, chart } =
@@ -118,6 +118,5 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
     return () => {
       delete (window as unknown as { __stagedWidgetTest?: Api }).__stagedWidgetTest;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- workspace/session/ticket bindings are not provably stable in this scope; dep array frozen 1:1 with the former App effect
-  }, []);
+  }, [chartHost, positionOverlayState, stagedOrderState, chart, priceLinesState, fixedRangeProfileState]);
 }

@@ -82,7 +82,7 @@ export interface ExecutionRecoverySnapshot {
   entries: RecoveryEntry[];
 }
 
-/** §11: camelCase payload of the `execution-command-update` Tauri event. */
+/** camelCase payload of the `execution-command-update` Tauri event. */
 export interface CommandUpdate {
   commandId: string;
   status: string;
@@ -96,14 +96,14 @@ export interface CommandUpdate {
   atUpdate: number;
 }
 
-/** §11: camelCase payload of the `execution-command-error` Tauri event. */
+/** camelCase payload of the `execution-command-error` Tauri event. */
 export interface CommandError {
   commandId: string;
   code: string;
   message: string;
 }
 
-/** §11: camelCase view returned by the `get_execution_queue_status` command. */
+/** camelCase view returned by the `get_execution_queue_status` command. */
 export interface ExecutionQueueView {
   pending: number;
   inFlight: string | null;
@@ -152,7 +152,7 @@ export interface BarUpdate {
 export interface TickProfileBin {
   low: string;
   high: string;
-  /** Decimal-string weights (§8): total = 1 per valid tick, bid/ask = per-side flags. */
+  /** Decimal-string weights: total = 1 per valid tick, bid/ask = per-side flags. */
   total: string;
   bid: string;
   ask: string;

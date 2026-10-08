@@ -15,6 +15,8 @@ pub enum RiskSizingError {
     InvalidEquityAllocation,
     #[error("Positive account equity is required for margin allocation")]
     InvalidEquity,
+    #[error("Risk percent must be greater than 0 and at most 100")]
+    InvalidRiskPercent,
     #[error("Invalid quote parameters")]
     InvalidQuote,
     #[error("Risk is too low for the minimum order size at this SL distance.")]
@@ -99,6 +101,25 @@ pub fn equity_margin_budget(
         return Err(RiskSizingError::ArithmeticPrecisionLoss);
     }
     Ok(checked_mul(equity, fraction)?.min(free_margin))
+}
+
+/// Canonical risk budget; monetary display precision does not round sizing inputs.
+pub fn equity_risk_budget(
+    equity: Decimal,
+    allocation: Decimal,
+    risk_percent: Decimal,
+) -> Result<Decimal, RiskSizingError> {
+    if risk_percent <= Decimal::ZERO || risk_percent > Decimal::from(100) {
+        return Err(RiskSizingError::InvalidRiskPercent);
+    }
+    let allocated = equity_margin_budget(equity, equity, allocation)?;
+    let fraction = risk_percent
+        .checked_div(Decimal::from(100))
+        .ok_or(RiskSizingError::ArithmeticOverflow)?;
+    if fraction == Decimal::ZERO {
+        return Err(RiskSizingError::ArithmeticPrecisionLoss);
+    }
+    checked_mul(allocated, fraction)
 }
 
 /// Tentative display quote only; preserve broker conversion/margin estimates
@@ -409,6 +430,28 @@ fn is_on_volume_grid(volume: Decimal, quote: &SizingQuote) -> Result<bool, RiskS
 mod risk_tests {
     use super::*;
     use crate::protocol::{OrderSide, RiskQuoteResult};
+
+    #[test]
+    fn percent_risk_budget_preserves_sub_cent_amounts() {
+        assert_eq!(
+            equity_risk_budget(Decimal::from(100), Decimal::from(100), Decimal::new(4, 3)),
+            Ok(Decimal::new(4, 3))
+        );
+        assert_eq!(
+            equity_risk_budget(Decimal::new(12345, 1), Decimal::from(50), Decimal::ONE),
+            Ok(Decimal::new(61725, 4))
+        );
+    }
+
+    #[test]
+    fn percent_risk_budget_rejects_invalid_inputs_and_precision_loss() {
+        for invalid in [Decimal::ZERO, Decimal::NEGATIVE_ONE, Decimal::from(101)] {
+            assert!(equity_risk_budget(Decimal::ONE, Decimal::from(100), invalid).is_err());
+            assert!(equity_risk_budget(Decimal::ONE, invalid, Decimal::ONE).is_err());
+        }
+        assert!(equity_risk_budget(Decimal::ZERO, Decimal::from(100), Decimal::ONE).is_err());
+        assert!(equity_risk_budget(Decimal::new(1, 28), Decimal::ONE, Decimal::ONE).is_err());
+    }
 
     fn quote() -> RiskQuoteResult {
         RiskQuoteResult {

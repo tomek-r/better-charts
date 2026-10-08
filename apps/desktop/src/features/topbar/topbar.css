@@ -6,12 +6,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 0 32px 0 6px;
+  padding: 0 15px 0 6px;
 }
 
 .brand {
   display: flex;
-  gap: 19px;
+  gap: 7px;
   align-items: center;
   font-size: 15px;
   font-weight: 650;

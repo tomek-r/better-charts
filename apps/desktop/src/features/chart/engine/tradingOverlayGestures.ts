@@ -2,7 +2,7 @@ import type { TradingLabelHit } from './labelLayout';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlay';
 import { levelMoneyText } from './overlayLines';
-import type { ChartWorkspaceState } from '../useChartWorkspace';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
 type TradingGestureWorkspace = Pick<
   ChartWorkspaceState,
@@ -140,7 +140,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
   // pointerdown, only start tracking after LINE_DRAG_THRESHOLD vertical px
   // (3px, dragThreshold), yToPrice UNCLAMPED (a drag may set a level outside
   // the visible range — the library extrapolated the same way), live preview
-  // through state.drag, dispatch the same §12 flows on release.
+  // through state.drag, dispatch the same flows on release.
   // Live money label for the dragged level ("-$6.63") — the same
   // levelMoneyText basis the rows carry, recomputed per move.
   const dragLevelMoney = (line: 'order' | 'sl' | 'tp', id: string, price: number): string | undefined => {
@@ -270,7 +270,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
     }
   };
   // Ends an overlay line drag. Clear the preview FIRST (repaint to snapshot),
-  // then dispatch the §12 flow — same handlers the chart events used, so the
+  // then dispatch the flow — same handlers the chart events used, so the
   // draft/auto-dispatch semantics are byte-identical. `dispatch=false` on a
   // pointercancel (gesture aborted, no modify).
   const finishLineDrag = (event: { pointerId?: number }, dispatch: boolean) => {

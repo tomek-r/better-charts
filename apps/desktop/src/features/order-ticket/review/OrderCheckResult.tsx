@@ -9,7 +9,7 @@ export function OrderCheckResult({
   account,
 }: {
   orderCheck: OrderCheckResultModel;
-  account: AccountSnapshot | undefined;
+  account: Pick<AccountSnapshot, 'currency' | 'currencyDigits'> | undefined;
 }) {
   const money = (value: string) =>
     account?.currency && value.trim() && Number.isFinite(Number(value))

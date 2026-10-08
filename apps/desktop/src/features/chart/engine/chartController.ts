@@ -5,7 +5,7 @@ import type { ChartOverlayState } from './overlays';
 import type { RenderViewport } from './overlayTypes';
 import type { DrawingTool } from '../../tools/toolTypes';
 import { createChartSurface } from './chartFactory';
-import { STAGED_COLORS } from './stagedOrderOverlay';
+import { TRADING_COLORS } from './tradingOverlayDrawing';
 import { BarCountdownPrimitive, CountdownController } from './barCountdown';
 import { OhlcLegend } from './ohlcLegend';
 import { ConnectionIndicator } from './connectionIndicator';
@@ -25,6 +25,11 @@ import { installDevTestApi, removeDevTestApi } from './devTestApi';
  */
 export type { ProfileRange };
 
+export enum HistoryViewportMode {
+  Reset = 'reset',
+  BarsFromEnd = 'bars-from-end',
+}
+
 /**
  * One class owns the chart surface's lifecycle: the handles chartFactory builds,
  * the primitives attached to them, and their disposal. Everything else the chart
@@ -41,7 +46,7 @@ export class ChartController {
   private readonly observer: ResizeObserver;
   private readonly legend: OhlcLegend;
   private readonly connection: ConnectionIndicator;
-  private readonly countdownPrimitive = new BarCountdownPrimitive({ backColor: STAGED_COLORS.sell });
+  private readonly countdownPrimitive = new BarCountdownPrimitive({ backColor: TRADING_COLORS.sell });
   private readonly scaleControls: PriceScaleController;
   // Every tool shares pointer labels; Cross additionally draws the lines.
   // Attached for the chart's life, drawn only while a pointer is over the pane.
@@ -50,8 +55,8 @@ export class ChartController {
   // positioned by this primitive, because the library's own label alignment
   // restacks them around the last price on every tick (see the chart options).
   private readonly priceTags = new PriceAxisTagsPrimitive({
-    askColor: STAGED_COLORS.buy,
-    bidColor: STAGED_COLORS.sell,
+    askColor: TRADING_COLORS.buy,
+    bidColor: TRADING_COLORS.sell,
   });
   // The bar cache, its interval and the price precision are owned by
   // BarSeriesController; the `bars` accessor below is the read-only seam onto it.
@@ -152,13 +157,14 @@ export class ChartController {
   /**
    * Replaces the whole series. Returns whether a requested viewport was carried
    * over; the caller resets to the default end anchor when it was not, so the
-   * pane never keeps a range from a series of a different shape.
+   * pane never keeps a range from a series of a different shape. Timeframe
+   * changes can retain the bars-from-end position; other replacements reset.
    */
-  replaceHistory(candles: readonly Candle[], timeframe?: string, preserveViewport = false): boolean {
+  replaceHistory(candles: readonly Candle[], timeframe?: string, viewportMode = HistoryViewportMode.Reset): boolean {
     if (this.removed) {
       return false;
     }
-    const previousAnchor = preserveViewport ? this.view.visibleAnchor() : null;
+    const previousAnchor = viewportMode === HistoryViewportMode.BarsFromEnd ? this.view.visibleAnchor() : null;
     const previousSpacing = this.chart.timeScale().options().barSpacing;
     if (!this.data.replace(candles, timeframe)) {
       return false;
@@ -314,9 +320,6 @@ export class ChartController {
    */
   private syncCountdown(): void {
     this.countdown.sync();
-  }
-  setCurrentPrice(_price: number): void {
-    this.refreshOverlays();
   }
   visibleRange(): { from: number; to: number } | null {
     return this.view.visibleRange();

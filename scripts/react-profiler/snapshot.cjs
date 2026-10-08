@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { createRequire } = require("node:module");
 const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 
@@ -31,18 +32,73 @@ function sourceHash(root) {
   return hash.digest("hex");
 }
 
-function instrument(desktop, repo, tempRoot) {
+function exportedHookFile(srcRoot, hook) {
+  const roots = [
+    path.join(srcRoot, "features/order-ticket/editor"),
+    path.join(srcRoot, "features/order-ticket/state"),
+    path.join(srcRoot, "features/order-ticket/OrderTicketProvider.tsx"),
+  ];
+  // Only context hooks with no parameters are safe to call without arguments.
+  // The baseline also has parameterized `use*` helpers with these names (for
+  // example `useOrderTicketPricing(ticket)`), which are not context readers.
+  const exportPattern = new RegExp(
+    `export\\s+function\\s+${hook}\\s*\\(\\s*\\)`,
+  );
+
+  function exportedFiles(root) {
+    if (!fs.existsSync(root)) return [];
+    const stat = fs.statSync(root);
+    if (stat.isFile()) return [root];
+    return fs
+      .readdirSync(root, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .flatMap((entry) => {
+        const file = path.join(root, entry.name);
+        if (entry.isDirectory()) return exportedFiles(file);
+        return entry.isFile() && /\.tsx?$/.test(entry.name) ? [file] : [];
+      });
+  }
+
+  for (const root of roots) {
+    const matches = exportedFiles(root).filter((file) =>
+      exportPattern.test(fs.readFileSync(file, "utf8")),
+    );
+    if (matches.length > 1) {
+      throw new Error(
+        `Ambiguous ticket hook export ${hook}: ${matches.join(", ")}`,
+      );
+    }
+    if (matches.length === 1) {
+      return `./${path
+        .relative(srcRoot, matches[0])
+        .split(path.sep)
+        .join("/")
+        .replace(/\.tsx?$/, "")}`;
+    }
+  }
+  throw new Error(`Unsupported ticket source: missing exported hook ${hook}`);
+}
+
+function instrument(desktop, repo, tempRoot, mode = "development") {
   const file = (name) => path.join(desktop, name);
+  const req = createRequire(path.join(desktop, "package.json"));
   const version = JSON.parse(
     fs.readFileSync(file("package.json"), "utf8"),
   ).version;
   const config = `import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 export default defineConfig({
+  cacheDir: ${JSON.stringify(file(".profile-cache"))},
+  esbuild: { keepNames: true },
+  build: { sourcemap: true },
   plugins: [react({ babel: { plugins: ['babel-plugin-react-compiler'] } })],
   envPrefix: ['VITE_', 'TAURI_'],
   define: { __APP_VERSION__: ${JSON.stringify(JSON.stringify(version))} },
-  server: { host: '127.0.0.1', strictPort: true, fs: { allow: ${JSON.stringify([fs.realpathSync(tempRoot), repo])} } },
+  server: { host: '127.0.0.1', strictPort: true, fs: { allow: ${JSON.stringify([fs.realpathSync(tempRoot), repo])} } }${
+    mode === "production"
+      ? `,\n  preview: { host: '127.0.0.1', strictPort: true },\n  resolve: { alias: { 'react-dom/client': ${JSON.stringify(req.resolve("react-dom/profiling"))} } }`
+      : ""
+  }
 });
 `;
   fs.writeFileSync(file("profile.vite.config.ts"), config);
@@ -80,25 +136,33 @@ export const recordProfile: ProfilerOnRenderCallback = (id, phase, actualDuratio
     action: "canCheckOrder",
   };
   const groups = { quotes: "quote", settings: "extra" };
+  const resolvedHooks = {};
   if (!aggregate) {
     for (const hook of Object.values(hooks)) {
-      if (!provider.includes(`export function ${hook}(`))
-        throw new Error(`Unsupported ticket provider: missing ${hook}`);
+      resolvedHooks[hook] = exportedHookFile(file("src"), hook);
     }
   }
-  const imports = aggregate
-    ? "useOrderTicketEditProps"
-    : Object.values(hooks).join(", ");
-  let consumers = `import { Profiler } from 'react';
+  let consumers = `import { Profiler, useLayoutEffect } from 'react';
 import { recordProfile } from './reactProfile';
-import { ${imports} } from './features/order-ticket/OrderTicketProvider';
+function recordCommittedConsumerExecution(group: string) {
+  const profileWindow = window as Window & { __reactProfileConsumerCommits?: Record<string, number> };
+  const counters = profileWindow.__reactProfileConsumerCommits ??= {};
+  counters[group] = (counters[group] ?? 0) + 1;
+}
 `;
+  if (aggregate) {
+    consumers += `import { useOrderTicketEditProps } from './features/order-ticket/OrderTicketProvider';\n`;
+  } else {
+    for (const hook of Object.values(hooks)) {
+      consumers += `import { ${hook} } from '${resolvedHooks[hook]}';\n`;
+    }
+  }
   for (const [group, hook] of Object.entries(hooks)) {
     const name = group[0].toUpperCase() + group.slice(1);
     const expression = aggregate
       ? `useOrderTicketEditProps().${groups[group] ?? group}`
       : `${hook}()`;
-    consumers += `function ${name}Consumer() { const state = ${expression}; return <output>{String(state.${fields[group]})}</output>; }\n`;
+    consumers += `function ${name}Consumer() { const state = ${expression}; useLayoutEffect(() => { recordCommittedConsumerExecution('${group}'); }); return <output>{String(state.${fields[group]})}</output>; }\n`;
   }
   consumers += "export function ProfileConsumers() { return <div hidden>";
   for (const group of Object.keys(hooks)) {
@@ -123,7 +187,7 @@ import { ProfileConsumers } from '../../reactProfileConsumers';
 ${feature}`;
   feature = feature.replace(
     "<OrderTicketView />",
-    '<Profiler id="ticket-view" onRender={recordProfile}><OrderTicketView /></Profiler><ProfileConsumers />',
+    "<Profiler id=\"ticket-view\" onRender={recordProfile}><OrderTicketView /></Profiler>{'__reactFullProfile' in window ? null : <ProfileConsumers />}",
   );
   feature = feature.replace(
     "<OrderTicketProvider>",
@@ -153,7 +217,7 @@ ${feature}`;
   fs.writeFileSync(mainPath, main);
 }
 
-function prepareSnapshots(repo, tempRoot, baselineRef) {
+function prepareSnapshots(repo, tempRoot, baselineRef, mode = "development") {
   const baselineCommit = git(repo, [
     "rev-parse",
     "--verify",
@@ -206,7 +270,7 @@ function prepareSnapshots(repo, tempRoot, baselineRef) {
       );
     }
     const hash = sourceHash(path.join(desktop, "src"));
-    instrument(desktop, repo, tempRoot);
+    instrument(desktop, repo, tempRoot, mode);
     snapshots[label] = { desktop, sourceHash: hash };
   }
   const baselinePackage = JSON.parse(

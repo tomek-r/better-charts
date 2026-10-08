@@ -1,13 +1,31 @@
-import { containsLabel } from './engine/labelLayout';
+import { containsLabel } from '../engine/labelLayout';
 import { useEffect } from 'react';
-import { createStagedOrderGestures } from './engine/stagedOrderGestures';
-import { createTradingOverlayGestures } from './engine/tradingOverlayGestures';
-import type { OrderTicketState } from '../order-ticket/state/useOrderTicket';
-import type { ChartWorkspaceState } from './useChartWorkspace';
+import { useEventCallback } from '../../../shared/hooks/useEventCallback';
+import { createStagedOrderGestures, type StagedOrderGestureTicket } from '../engine/stagedOrderGestures';
+import { createTradingOverlayGestures } from '../engine/tradingOverlayGestures';
+import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 import { useChartGestureDiagnostics } from './useChartGestureDiagnostics';
 
-export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, ticket: OrderTicketState): void {
-  const { chartHost, chart } = workspace;
+export function useChartWorkspacePointerEffects(
+  workspace: ChartWorkspaceState,
+  ticket: StagedOrderGestureTicket,
+): void {
+  const { chartHost, chart, stagedOrderState, positionOverlayState, closeActionsRef, setDrawingTool } = workspace;
+  const {
+    unstageOrderDraft,
+    toggleExit,
+    setEntry,
+    setSlOn,
+    setStopLoss,
+    setTpOn,
+    setTakeProfit,
+    setStagedDragging,
+    setDragSlMoney,
+  } = ticket;
+  const applyOrderModify = useEventCallback(workspace.applyOrderModify);
+  const applyOrderLevelModify = useEventCallback(workspace.applyOrderLevelModify);
+  const applyPositionModify = useEventCallback(workspace.applyPositionModify);
+  const applyLevelClear = useEventCallback(workspace.applyLevelClear);
 
   useEffect(() => {
     const host = chartHost.current;
@@ -17,8 +35,30 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
     // Three independent grab states: staged-widget drags, custom-overlay line
     // drags (library TradingDragHandler parity), custom-overlay ✕ chip clicks.
     let profileGesture = false;
-    const staged = createStagedOrderGestures(host, workspace, ticket);
-    const trading = createTradingOverlayGestures(host, workspace);
+    const staged = createStagedOrderGestures(
+      host,
+      { stagedOrderState },
+      {
+        unstageOrderDraft,
+        toggleExit,
+        setEntry,
+        setSlOn,
+        setStopLoss,
+        setTpOn,
+        setTakeProfit,
+        setStagedDragging,
+        setDragSlMoney,
+      },
+    );
+    const trading = createTradingOverlayGestures(host, {
+      positionOverlayState,
+      chart,
+      applyOrderModify,
+      applyOrderLevelModify,
+      applyPositionModify,
+      applyLevelClear,
+      closeActionsRef,
+    });
     // Paint and pointer hit tests share the chart host CSS-pixel frame.
     const frameRect = () => host.getBoundingClientRect();
     const localPoint = (event: { clientX: number; clientY: number }) => {
@@ -27,10 +67,9 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
     };
     let labelDragOffset = 0;
     const labelAt = (x: number, y: number) =>
-      [
-        ...(workspace.positionOverlayState.current.hit.labels ?? []),
-        ...(workspace.stagedOrderState.current.hit.labels ?? []),
-      ].find((row) => containsLabel(row, x, y));
+      [...(positionOverlayState.current.hit.labels ?? []), ...(stagedOrderState.current.hit.labels ?? [])].find((row) =>
+        containsLabel(row, x, y),
+      );
     const setLabelDragOffset = (row: ReturnType<typeof labelAt>, y: number) => {
       labelDragOffset = row && Math.abs(row.y + row.h / 2 - row.lineY) > 1 ? y - row.lineY : 0;
     };
@@ -221,7 +260,7 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
         trading.finishChip({}, false);
         chart.current?.cancelProfileGesture();
         chart.current?.setDrawingTool(null);
-        workspace.setDrawingTool(null);
+        setDrawingTool(null);
         event.preventDefault();
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
         chart.current?.deleteProfile();
@@ -252,7 +291,26 @@ export function useChartWorkspacePointerEffects(workspace: ChartWorkspaceState, 
       host.removeEventListener('touchend', onTouchEnd, { capture: true });
       host.removeEventListener('touchcancel', onTouchCancel, { capture: true });
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [
+    chartHost,
+    chart,
+    stagedOrderState,
+    positionOverlayState,
+    closeActionsRef,
+    setDrawingTool,
+    unstageOrderDraft,
+    toggleExit,
+    setEntry,
+    setSlOn,
+    setStopLoss,
+    setTpOn,
+    setTakeProfit,
+    setStagedDragging,
+    setDragSlMoney,
+    applyOrderModify,
+    applyOrderLevelModify,
+    applyPositionModify,
+    applyLevelClear,
+  ]);
   useChartGestureDiagnostics(workspace);
 }
