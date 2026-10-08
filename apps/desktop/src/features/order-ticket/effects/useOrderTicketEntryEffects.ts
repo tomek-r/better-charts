@@ -48,8 +48,7 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
     if (!stagedDragging && quote && !entry && !(priceMode === 'offset' && orderKind !== 'market')) {
       setEntry(riskSide === 'buy' ? quote.ask : quote.bid);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5d: hook-provided setter, stable identity (P5a pattern); dep array frozen 1:1
-  }, [quote, riskSide, entry, priceMode, orderKind, stagedDragging]);
+  }, [quote, riskSide, entry, priceMode, orderKind, stagedDragging, setEntry]);
   // A staged market order follows quote ticks while it is being edited.
   // Translate enabled exits by the same delta to preserve their distances.
   useEffect(() => {
@@ -97,6 +96,20 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
     shiftLevel(stopLoss, slOn, setStopLoss);
     shiftLevel(takeProfit, tpOn, setTakeProfit);
     setEntry(nextEntryText);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setters are stable; this mirrors live market ticks only while a staged draft is editable
-  }, [orderKind, riskSide, quote, stagedOnChart, stagedDragging, ticketStage, entry, stopLoss, takeProfit, slOn, tpOn]);
+  }, [
+    orderKind,
+    riskSide,
+    quote,
+    stagedOnChart,
+    stagedDragging,
+    ticketStage,
+    entry,
+    stopLoss,
+    takeProfit,
+    slOn,
+    tpOn,
+    setEntry,
+    setStopLoss,
+    setTakeProfit,
+  ]);
 }

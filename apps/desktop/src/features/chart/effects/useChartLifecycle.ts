@@ -68,8 +68,21 @@ export function useChartWorkspaceInitEffects(workspace: ChartWorkspaceState, ses
         adapterRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- One renderer/coordinator per mount; callbacks read refs.
-  }, []);
+  }, [
+    adapterRef,
+    chartHost,
+    chartRef,
+    expectedProfile,
+    fixedRangeProfileState,
+    lastRequestedRangeRef,
+    positionOverlayState,
+    profileGeneration,
+    requestProfileRange,
+    setChartError,
+    setDrawingTool,
+    stagedOrderState,
+    priceLinesState,
+  ]);
   useEffect(() => {
     const cancelTool = (event: KeyboardEvent) => {
       if (
@@ -84,8 +97,7 @@ export function useChartWorkspaceInitEffects(workspace: ChartWorkspaceState, ses
     };
     window.addEventListener('keydown', cancelTool);
     return () => window.removeEventListener('keydown', cancelTool);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Chart ref and setter are stable for this mount.
-  }, []);
+  }, [chartRef, setDrawingTool]);
 }
 
 export function useChartWorkspaceChartEffects(
@@ -120,8 +132,7 @@ export function useChartWorkspaceChartEffects(
   useEffect(() => {
     setPendingModification(undefined);
     clearStagedWidget();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5d: clearStagedWidget/submitSwapPendingRef come from the hook return (stable per mount); dep array frozen 1:1 with the former inline effect
-  }, [snapshot.symbol, snapshot.timeframe]);
+  }, [clearStagedWidget, setPendingModification, snapshot.symbol, snapshot.timeframe]);
   // Live bid/ask price lines use the series' public Lightweight Charts API;
   // custom axis tags still use the overlay for spread-collision handling.
   useEffect(() => {
@@ -132,16 +143,14 @@ export function useChartWorkspaceChartEffects(
     state.bid = quote && Number(quote.bid) > 0 ? Number(quote.bid) : undefined;
     chart.current?.setBidAskPrices(state.ask, state.bid);
     chart.current?.setQuoteClock(quote);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5f: workspace/session/ticket bindings are not provably stable in this scope; dep array frozen 1:1 with the former App effect
-  }, [quote, instrument?.digits]);
+  }, [chart, instrument?.digits, priceLinesRef, quote]);
   useEffect(() => {
     chart.current?.setCountdownPending(loadingTimeframe !== undefined);
     if (loadingTimeframe && snapshot.timeframe === loadingTimeframe) {
       setLoadingTimeframe(undefined);
       setChartError(undefined);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5e: setChartError/setLoadingTimeframe come from useBridgeSession (setter identities erased by the return); dep array frozen 1:1
-  }, [loadingTimeframe, snapshot.timeframe]);
+  }, [chart, loadingTimeframe, setChartError, setLoadingTimeframe, snapshot.timeframe]);
   useEffect(() => {
     currentSymbolRef.current = snapshot.symbol;
     setQuote((previous) => (previous && previous.symbol === snapshot.symbol ? previous : undefined));
@@ -154,8 +163,7 @@ export function useChartWorkspaceChartEffects(
       }
       return undefined;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5e: `currentSymbol`/`targetSymbol` (hook-owned refs) + setQuote/setInstrument (hook-owned setters) — identities erased by the useBridgeSession return; dep array frozen 1:1
-  }, [snapshot.symbol]);
+  }, [currentSymbolRef, setInstrument, setQuote, snapshot.symbol, targetSymbol]);
   // Drawings are time/price anchored: a line drawn on one instrument is noise on
   // another (the stale-lines bug class), so a symbol change clears ALL drawings.
   // Timeframe changes keep drawings (standard chart behavior); the tracked dateRange
@@ -164,8 +172,7 @@ export function useChartWorkspaceChartEffects(
     if (chart.current?.getProfileRange()) {
       chart.current.deleteProfile();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5f: workspace/session/ticket bindings are not provably stable in this scope; dep array frozen 1:1 with the former App effect
-  }, [snapshot.symbol]);
+  }, [chart, snapshot.symbol]);
 }
 
 export function useChartWorkspaceResetEffects(
@@ -211,8 +218,23 @@ export function useChartWorkspaceResetEffects(
       setAccount(undefined);
       setPortfolio(undefined);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hook-provided setter, stable identity (P5a)
-  }, [status.state]);
+  }, [
+    chart,
+    expectedProfileRef,
+    fixedRangeProfileRef,
+    fixedRangeProfileState,
+    loadingTimeframeRef,
+    pendingMetadataRef,
+    profileGenerationRef,
+    setAccount,
+    setInstrument,
+    setLoadingTimeframe,
+    setPortfolio,
+    setQuote,
+    setSymbolLoading,
+    status.state,
+    targetSymbolRef,
+  ]);
   // SYMBOL change: the FRVP selection is instrument-specific — drop the range,
   // the drawing and the computed profile, bump the generation (the stale-event
   // guards stay armed) and reset the ticket draft.
@@ -230,8 +252,17 @@ export function useChartWorkspaceResetEffects(
     setEntry('');
     setStopLoss('');
     setTakeProfit('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5d: setters come from the hook return (stable identities); dep array frozen 1:1 with the former inline effect
-  }, [snapshot.symbol]);
+  }, [
+    chart,
+    expectedProfileRef,
+    fixedRangeProfileRef,
+    fixedRangeProfileState,
+    profileGenerationRef,
+    setEntry,
+    setStopLoss,
+    setTakeProfit,
+    snapshot.symbol,
+  ]);
   // TIMEFRAME change: the profile is tick-based over a FIXED TIME range and the
   // drawing's anchors are time-based — both survive the switch. Only the layout
   // resize (new bar spacing) and the unrelated ticket reset apply here.
@@ -240,8 +271,7 @@ export function useChartWorkspaceResetEffects(
     setEntry('');
     setStopLoss('');
     setTakeProfit('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5d: setters come from the hook return (stable identities); dep array frozen 1:1 with the former inline effect
-  }, [snapshot.timeframe]);
+  }, [chart, setEntry, setStopLoss, setTakeProfit, snapshot.timeframe]);
 }
 
 export function useChartWorkspaceHotkeyEffect(workspace: ChartWorkspaceState, ticket: OrderTicketState): void {
@@ -266,6 +296,5 @@ export function useChartWorkspaceHotkeyEffect(workspace: ChartWorkspaceState, ti
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hook-provided setter, stable identity (P5a); also covers pre-existing missing 'unstageOrderDraft'
-  }, []);
+  }, [stagedActiveRef, unstageOrderDraft]);
 }

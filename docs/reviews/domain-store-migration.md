@@ -49,6 +49,8 @@ Command rejection/error notifications, chart/search/risk errors, queue updates, 
 
 ## Review and validation
 
+The subsequent [inline ESLint suppression audit](eslint-suppression-audit.md) removes all 21 frontend directives while preserving stable listener lifetimes and intentional nonreactive volume synchronization.
+
 Implemented on `refactor/typescript-react-findings` in separate commits for the foundation, chart cleanups, context syntax, bridge domains, secondary providers, and ticket domains. Chart state hooks now live in `features/chart/state`; lifecycle, gesture, diagnostics, and overlay effects live in `features/chart/effects`. The folder move changes imports only and preserves lifecycle registration order.
 
 Review retained the existing request/session/account/draft acceptance policies and execution gates. Stable callbacks use the existing `useEventCallback` helper; ticket display calculations use pure functions with current selector inputs. No derived context snapshots are mirrored into stores.

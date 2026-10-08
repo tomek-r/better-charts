@@ -23,7 +23,8 @@ export function AppSettingsDialog({
   onClose: () => void;
   onSaved: (settings: AppSettingsData) => void;
 }) {
-  const [draft, setDraft] = useState<MT5BridgeSettings | undefined>(settings?.mt5BridgeSettings);
+  const [editedDraft, setEditedDraft] = useState<MT5BridgeSettings>();
+  const draft = editedDraft ?? settings?.mt5BridgeSettings;
   const [category, setCategory] = useState<Category>('MT5 setup');
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string>();
@@ -37,11 +38,6 @@ export function AppSettingsDialog({
   useEffect(() => {
     savingRef.current = saving || closing;
   }, [saving, closing]);
-  useEffect(() => {
-    // Settings arrive asynchronously; initialize once without replacing edits.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraft((current) => current ?? settings?.mt5BridgeSettings);
-  }, [settings]);
   useEffect(() => {
     const previous = document.activeElement;
     panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
@@ -86,7 +82,7 @@ export function AppSettingsDialog({
   }, []);
   const change = <K extends keyof MT5BridgeSettings>(key: K, value: MT5BridgeSettings[K]) => {
     if (draft) {
-      setDraft({ ...draft, [key]: value });
+      setEditedDraft({ ...draft, [key]: value });
     }
     setError(undefined);
   };

@@ -1,6 +1,5 @@
-// Effect slot (C1): the ONE bridge bootstrap (start() + the full listen(...)
-// array) — registered at its former slot between the entry-reseed effects and
-// the ⌘K handler. Listener bodies, command names and dep array frozen 1:1.
+// Owns one bootstrap/listener lifetime at its AppLifecycle slot; startup,
+// event registration and cleanup stay coordinated here.
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -59,34 +58,85 @@ export function useBridgeBootstrapEffects(
   const notifyError = useNotifyError();
   const chartRef = chart;
   const marketAdapterRef = adapterRef;
+  const stores = session.stores;
   const {
     loadingTimeframeRef,
-    setLoadingTimeframe,
-    setChartError,
-    setStatus,
-    setSnapshot,
-    setLatestCandle,
-    setQuote,
-    setAccount,
-    setPortfolio,
-    setTauriAvailable,
+    targetSymbol,
+    pendingMetadata,
     currentSymbol: currentSymbolRef,
     currentTimeframe: currentTimeframeRef,
     latestCandleRef,
     dataKeyRef,
   } = session;
+  const {
+    riskVersion,
+    riskBrokerVersion,
+    riskPreviewDisplayRef,
+    setRiskPreview,
+    setRiskLoading,
+    setRiskError,
+    orderCheckGeneration,
+    orderCheckPending,
+    setOrderCheck,
+    setOrderCheckLoading,
+    setOrderCheckError,
+  } = ticket;
   useEffect(() => {
+    const bootstrapSession = {
+      ...stores.connection.setters,
+      ...stores.market.setters,
+      ...stores.quote.setters,
+      ...stores.account.setters,
+      ...stores.portfolio.setters,
+      loadingTimeframeRef,
+      targetSymbol,
+      pendingMetadata,
+      currentSymbol: currentSymbolRef,
+      currentTimeframe: currentTimeframeRef,
+      latestCandleRef,
+      dataKeyRef,
+    };
+    const ticketPort: BridgeTicketResponsePort = {
+      riskVersion,
+      riskBrokerVersion,
+      riskPreviewDisplayRef,
+      setRiskPreview,
+      setRiskLoading,
+      setRiskError,
+      orderCheckGeneration,
+      orderCheckPending,
+      setOrderCheck,
+      setOrderCheckLoading,
+      setOrderCheckError,
+    };
+    const {
+      setStatus,
+      setTauriAvailable,
+      setAccount,
+      setPortfolio,
+      setLoadingTimeframe,
+      setChartError,
+      setSnapshot,
+      setLatestCandle,
+      setQuote,
+    } = bootstrapSession;
     const run: BridgeEffectRun = { disposed: false, bridgeState: 'disconnected' };
     const subscriptions = new SubscriptionScope();
     let runtimeAvailable = false;
     let bridgeIdentity = '';
     const marketRuntime = createBridgeMarketRuntime(
       run,
-      session,
+      bootstrapSession,
       { chart: chartRef, adapterRef: marketAdapterRef, fixedRangeProfileState, expectedProfile, profileGeneration },
       notifyError,
     );
-    const ticketHandlers = createBridgeTicketResponseHandlers(run, session, ticket, accountLoginRef, brokerServerRef);
+    const ticketHandlers = createBridgeTicketResponseHandlers(
+      run,
+      bootstrapSession,
+      ticketPort,
+      accountLoginRef,
+      brokerServerRef,
+    );
     const start = async () => {
       // Capture the adapter before any await: once this run is disposed the ref
       // may already point at the NEXT mount's adapter, which we must not touch.
@@ -249,6 +299,33 @@ export function useBridgeBootstrapEffects(
       subscriptions.dispose();
     };
     // The app-level listeners are the sole source for history and realtime chart updates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hook-provided setters/ref, stable identity (P5a)
-  }, []);
+  }, [
+    stores,
+    loadingTimeframeRef,
+    targetSymbol,
+    pendingMetadata,
+    currentSymbolRef,
+    currentTimeframeRef,
+    latestCandleRef,
+    dataKeyRef,
+    riskVersion,
+    riskBrokerVersion,
+    riskPreviewDisplayRef,
+    setRiskPreview,
+    setRiskLoading,
+    setRiskError,
+    orderCheckGeneration,
+    orderCheckPending,
+    setOrderCheck,
+    setOrderCheckLoading,
+    setOrderCheckError,
+    accountLoginRef,
+    brokerServerRef,
+    chartRef,
+    marketAdapterRef,
+    fixedRangeProfileState,
+    expectedProfile,
+    profileGeneration,
+    notifyError,
+  ]);
 }

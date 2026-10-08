@@ -56,7 +56,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
     tpOn,
     riskSide,
     effectiveVolume,
-    display,
+    display: { slMoney, tpMoney, riskRewardLabel },
     orderKind,
   } = ticket;
   const stagedOrderRef = stagedOrderState;
@@ -106,7 +106,9 @@ export function useChartWorkspaceMirrorLayoutEffect(
       volume: effectiveVolume,
       orderKindLabel:
         orderKind === 'stop_limit' ? 'Stop Limit' : orderKind.charAt(0).toUpperCase() + orderKind.slice(1),
-      ...display,
+      slMoney,
+      tpMoney,
+      riskRewardLabel,
     };
     const previous = state.order;
     const changed =
@@ -128,7 +130,6 @@ export function useChartWorkspaceMirrorLayoutEffect(
     if (changed || (priceMoved && state.currentPrice !== undefined)) {
       chart.current?.refreshOverlays();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     stagedOnChart,
     entry,
@@ -144,8 +145,13 @@ export function useChartWorkspaceMirrorLayoutEffect(
     latestCandle,
     snapshot.candles,
     instrument?.digits,
-    display.slMoney,
-    display.tpMoney,
-    display.riskRewardLabel,
+    slMoney,
+    tpMoney,
+    riskRewardLabel,
+    chart,
+    instrumentDigitsRef,
+    stagedOrderRef,
+    stagedPrevPriceRef,
+    submitSwapPendingRef,
   ]);
 }

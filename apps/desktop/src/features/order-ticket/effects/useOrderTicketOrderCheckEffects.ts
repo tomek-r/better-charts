@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect } from 'react';
+import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { OrderTicketState } from '../state/useOrderTicket';
 
 // Effect slots (1) + (3): the OrderCheck reset [layout] and the §11 volume
 // auto-fill [passive] register together at their former App slot — after the
 // account-login sync, before the favorites/recent persistence effects — so
-// both effect lists stay 1:1. Dep arrays frozen (identical expressions,
-// identical position order to the former inline effects in App).
+// effect registration order stays 1:1 with the former inline effects in App.
 export function useOrderTicketOrderCheckEffects(
   ticket: Pick<
     OrderTicketState,
@@ -116,7 +116,6 @@ export function useOrderTicketOrderCheckEffects(
     setOrderCheckLoading(false);
     setSubmitStatus(undefined);
     setTicketStage('edit');
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- P5d: refs/setters come from the hook return (stable identities); dep array frozen 1:1 with the former inline effect
   }, [
     snapshot.symbol,
     snapshot.timeframe,
@@ -137,12 +136,20 @@ export function useOrderTicketOrderCheckEffects(
     limitPrice,
     timeInForce,
     unitsMode,
+    orderCheckGenerationRef,
+    orderCheckPendingRef,
+    setOrderCheck,
+    setOrderCheckError,
+    setOrderCheckLoading,
+    setSubmitStatus,
+    setTicketStage,
   ]);
   // §11 volume auto-sync: mirror each NEW risk-sizing volume while the user has not
   // overridden the field. Drag release also applies deferred SL normalization.
   // Re-running on volumeManual would refill a just-cleared field instead of letting the
   // user type a fresh volume (clearing is what returns the field to auto mode).
-  useEffect(() => {
+  // The callback reads the latest draft, but only preview and drag changes trigger this effect.
+  const syncPreviewToDraft = useEventCallback(() => {
     if (
       riskPreview &&
       riskPreview.draftVersion === riskVersion.current &&
@@ -160,6 +167,8 @@ export function useOrderTicketOrderCheckEffects(
     if (!volumeManual && riskPreview !== undefined && riskPreview.draftVersion === riskVersion.current) {
       setOrderVolume(riskPreview.volume);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [riskPreview, stagedDragging]);
+  });
+  useEffect(() => {
+    syncPreviewToDraft();
+  }, [riskPreview, stagedDragging, syncPreviewToDraft]);
 }

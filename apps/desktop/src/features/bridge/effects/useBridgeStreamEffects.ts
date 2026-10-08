@@ -25,6 +25,9 @@ export function useBridgeStreamEffects(
   },
 ): void {
   const { snapshot, instrument, account, portfolio, quote } = session;
+  const quoteSymbol = quote?.symbol;
+  const quoteBid = quote?.bid;
+  const quoteAsk = quote?.ask;
   // Sync our position and pending-order overlays for the active symbol.
   useEffect(() => {
     const instance = chart.current;
@@ -34,7 +37,10 @@ export function useBridgeStreamEffects(
     try {
       const matchingInstrument = instrument?.symbol === snapshot.symbol ? instrument : undefined;
       const pnlCurrency = account?.currency.trim() || undefined;
-      const quotePrecision = quote && quote.symbol === snapshot.symbol ? quoteDigits(quote.bid, quote.ask) : undefined;
+      const quotePrecision =
+        quoteSymbol === snapshot.symbol && quoteBid !== undefined && quoteAsk !== undefined
+          ? quoteDigits(quoteBid, quoteAsk)
+          : undefined;
       const estimatedMoney = accountMoneyBasis(matchingInstrument, pnlCurrency, account?.currencyDigits);
       const changed = syncPositionOverlay(
         positionOverlayState.current,
@@ -60,22 +66,19 @@ export function useBridgeStreamEffects(
     } catch {
       // Keep the bridge stream alive if an overlay update cannot be applied.
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs and callbacks are stable app-owned values.
   }, [
+    chart,
+    positionOverlayState,
+    submitSwapPendingRef,
+    clearStagedWidget,
     portfolio,
+    instrument,
     snapshot.symbol,
     tradingSyncTick,
-    instrument?.symbol,
-    instrument?.digits,
-    instrument?.contractSize,
-    instrument?.tickSize,
-    instrument?.tickValueProfit,
-    instrument?.tickValueLoss,
-    instrument?.tickValueCurrency,
     account?.currency,
     account?.currencyDigits,
-    quote?.symbol,
-    quote?.bid,
-    quote?.ask,
+    quoteSymbol,
+    quoteBid,
+    quoteAsk,
   ]);
 }
