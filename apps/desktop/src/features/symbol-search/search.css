@@ -64,7 +64,8 @@
 /* Keep long result lists scrollable. */
 .search-results {
   max-height: 310px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: scroll;
   margin-top: 10px;
   padding-right: 4px;
 }
@@ -112,10 +113,12 @@
 
 .search-result-row > button:first-child {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .search-result-row .favorite-toggle {
-  width: 34px;
+  flex: 0 0 34px;
   align-items: center;
   justify-content: center;
   padding: 8px 4px;

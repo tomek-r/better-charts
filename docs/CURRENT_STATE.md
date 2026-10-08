@@ -107,6 +107,8 @@ Long symbol-search result lists expose a visible scrollbar so every result is
 reachable by scrolling or dragging the thumb. Scrollbars across the app use the
 dark border palette color for slim thumbs, with transparent tracks and a subtly
 lighter hover state.
+Search favorite stars use a fixed-width column and a shared icon outline;
+reserved scrollbar space prevents horizontal movement as rows are added or removed.
 
 ## Validation and plans
 

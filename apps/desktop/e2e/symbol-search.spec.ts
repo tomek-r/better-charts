@@ -100,6 +100,62 @@ test('long symbol results expose a scrollbar and the last result remains reachab
   expect(consoleErrors).toEqual([]);
 });
 
+test('favorite stars keep their column when toggled beside long descriptions', async ({ page }) => {
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill('TEST');
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'search_symbols'))
+    .toHaveLength(1);
+  await pushEvent(page, 'symbol-search-result', {
+    query: 'TEST',
+    source: 'live',
+    symbols: [
+      brokerSymbol('TEST', 'Short description'),
+      brokerSymbol('TEST_LONG', 'ExtremelyLongUnbrokenBrokerDescriptionThatDoesNotFitInTheAvailableSpaceAtAll'),
+    ],
+  });
+  const normal = dialog.getByRole('button', { name: 'Add TEST to favorites', exact: true });
+  const toggle = dialog.getByRole('button', { name: 'Add TEST_LONG to favorites', exact: true });
+  const before = await toggle.boundingBox();
+  const normalBox = await normal.boundingBox();
+  expect(before).not.toBeNull();
+  expect(normalBox).not.toBeNull();
+  expect(before!.x).toBeCloseTo(normalBox!.x, 0);
+  expect(before!.width).toBeCloseTo(normalBox!.width, 0);
+  await toggle.click();
+  const selected = dialog.getByRole('button', { name: 'Remove TEST_LONG from favorites', exact: true });
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  const after = await selected.boundingBox();
+  expect(after!.x).toBeCloseTo(before!.x, 0);
+  expect(after!.width).toBeCloseTo(before!.width, 0);
+  await selected.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  expect((await toggle.boundingBox())!.x).toBeCloseTo(before!.x, 0);
+});
+
+test('favorite stars do not move horizontally when removing rows ends overflow', async ({ page }) => {
+  const favorites = Array.from({ length: 8 }, (_, index) => brokerSymbol(`TEST${index}`, `Test symbol ${index}`));
+  await page.addInitScript((symbols) => {
+    localStorage.setItem('better-charts.symbol-favorites.v1', JSON.stringify(symbols));
+  }, favorites);
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
+  const results = dialog.locator('.search-results');
+  const retained = dialog.getByRole('button', { name: 'Remove TEST0 from favorites', exact: true });
+  const before = await retained.boundingBox();
+  expect(await results.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  for (let index = 7; index >= 3; index -= 1) {
+    await dialog.getByRole('button', { name: `Remove TEST${index} from favorites`, exact: true }).click();
+  }
+  expect(await results.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(false);
+  const after = await retained.boundingBox();
+  expect(after!.x).toBeCloseTo(before!.x, 0);
+  expect(after!.width).toBeCloseTo(before!.width, 0);
+});
+
 test('a delayed search failure cannot replace results from a newer query', async ({ page }) => {
   await gotoWithStub(page);
   await page.getByRole('button', { name: 'Search symbols' }).click();
