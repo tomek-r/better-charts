@@ -253,3 +253,21 @@ A lazy module-loading variant was rejected: versus main it reduced startup rende
 The runner now measures first panel open-and-close separately before the eight warm toggles, identically for both builds. Ticket instrumentation supports both main's OrderTicketFeature and the new separate provider/content composition. The ticket-scope boundary encloses more content in the candidate; only the root application durations above are compared. Every phase completed, with no browser errors, observer errors, or order submissions.
 
 Validation: `pnpm check`, `pnpm build`, `pnpm test:e2e` (270 passed), `node --check` for the three changed profiler scripts, and `git diff --check` pass. The new browser regression verifies no ticket UI before first open, current chart quotes while closed, current ticket quotes when opened, draft persistence across toggles, and no order submission. No native Tauri/MT5 session was exercised.
+
+
+## Deferred volume-profile initialization — reverted
+
+Tested synchronous first-use creation of FixedRangeProfileController when selecting the profile tool, and creation of its overlay renderer when profile state first becomes active. Static imports remained; no asynchronous tool-loading delay was introduced. Selection previews retained their original paint slot before profile data arrived. Chart/profile request handling, cancellation, generation guards, and execution behavior were unchanged.
+
+Compared with immediate predecessor `6f32ef3`, which already defers OrderTicketPanel rendering, to isolate this experiment. Command: `PROFILE_BASE_REF=6f32ef3 PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare`. Five alternating production rounds used fresh browser contexts, captured 2026-10-08 22:34 UTC. The report's baseline series named “main” refers to `6f32ef3`, not the main branch. Baseline source hash: `ef5345d058a7fe133c5acbb398811923d097a825040c5b495738481f31ca183a`; experimental source hash: `91372f69d3f820f092d051c6c508f3765b7d4ec556afb53c549a352fd7894512`.
+
+| Measurement | Previous commit median [min, max] ms | Deferred profile median [min, max] ms |
+| --- | ---: | ---: |
+| Startup cumulative React render time | 6.9 [6.7, 7.0] | 6.8 [6.3, 7.0] |
+| Startup wall time | 122 [121, 123] | 122 [121, 125] |
+| First panel open-and-close render time | 8.8 [8.6, 9.5] | 9.1 [8.4, 9.5] |
+| First panel open-and-close wall time | 154 [153, 154] | 153 [153, 154] |
+
+Verdict: reverted. Startup wall medians are identical; render ranges overlap. The controller constructor initializes a few fields and callbacks, while the renderer already skips expensive work until a range and profile result exist. Deferring these small allocations added lifecycle branches without demonstrating a startup benefit. The tool's expensive fetching/calculation already waits for a range selection. This experiment does not evaluate asynchronous module loading.
+
+Validation of the temporary implementation: desktop TypeScript typecheck, targeted ESLint/Prettier, `git diff --check`, and `pnpm --filter better-charts exec playwright test e2e/smoke.spec.ts e2e/chart-migration.spec.ts e2e/fixed-range-profile.spec.ts e2e/overlay-z-order.spec.ts` (60 passed). A temporary regression verified absent controller before tool selection, no creation from cancellation/other tools, and controller presence after selecting the profile tool. The implementation, test accessor, and its new regression were reverted together; existing tests were preserved. All profiler phases completed with no browser errors, observer errors, or submissions. Only the browser Tauri stub was exercised; native Tauri/MT5 was not tested.
