@@ -59,6 +59,8 @@ The Action hook subscribes to a read-only selector adapter over the canonical ti
 
 The Exits hook selects draft-version and broker-preview changes only while both exits are enabled, when its risk/reward label can exist. With that label absent, those changes cannot affect the returned display. A regression checks zero renders for version-only changes with exits disabled and verifies that an enabled label changes when a preview becomes stale. Chart monetary labels retain their separate lifecycle derivation.
 
+`useBridgeQuotePresentation` selects only bid, ask, and last, then formats those values outside the external-store selector. Chart and ticket quote views share it. Timestamp-only updates leave these views idle; changes to last-price precision still update formatting. The ticket supplies its instrument point size explicitly for spread points, while the chart retains its existing spread-text policy.
+
 ## Frontend console removal
 
 Subsequent owner decision: remove production frontend `console.*` calls. The frontend had no forwarding to a Tauri file logger. Logging-only execution-safety/recovery/reconciliation reads and the reconciliation log listener are removed rather than retained as unused work. The remaining listener order and mounted-session effect are preserved. Backend readers and durable execution journaling are unchanged.

@@ -60,6 +60,7 @@ test('quote updates rerender market and ticket consumers without waking unrelate
   await expect(page.getByTestId('probe-market')).toHaveText('1.0852');
   const identicalQuoteCounts = await probeCounts(page);
   expect(identicalQuoteCounts['ticket-quotes'] ?? 0).toBe(0);
+  expect(identicalQuoteCounts['chart-quotes'] ?? 0).toBe(0);
   expect(identicalQuoteCounts['ticket-edit'] ?? 0).toBe(0);
   expect(identicalQuoteCounts['ticket-extra-settings'] ?? 0).toBe(0);
 

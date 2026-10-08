@@ -1,9 +1,7 @@
-import { useBridgeQuote } from '../bridge/BridgeSessionProvider';
-import { deriveQuotePresentation } from '../../shared/format';
+import { useBridgeQuotePresentation } from '../bridge/useBridgeQuotePresentation';
 
 export function ChartQuotes() {
-  const quote = useBridgeQuote();
-  const { bidText, askText, spreadText } = deriveQuotePresentation(quote);
+  const { bidText, askText, spreadText } = useBridgeQuotePresentation();
 
   return (
     <div className="quote-cards" aria-label="Realtime quote">
