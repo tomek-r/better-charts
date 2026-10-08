@@ -16,8 +16,7 @@ Lifecycle consumers use focused interfaces for entry synchronization, check inva
 - Production React profiling build, React 19.3.0, compiler enabled, StrictMode disabled; Chromium 153.0.8010.12; viewport 1440 × 1000.
 - Five alternating rounds per build. Each run creates a fresh browser context/page: no assets, storage, or app state from the previous run. Browser process, built bundles, and local preview servers are reused. Full-app scenarios share state within each run, in a fixed sequence. Ticket-only runs have four warmup operations.
 - Command: `PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare`.
-- [Current full-app report](../../.react-profiler/2026-10-08T20-14-04-601Z/full-report.html), [capture metadata](../../.react-profiler/2026-10-08T20-14-04-601Z/metadata.json).
-- [Focused ticket report](../../.react-profiler/2026-10-08T16-48-52-448Z/report.html) is an earlier capture of the focused interfaces with lifecycle field projections, before switching them to cached canonical snapshots. It is not the retained timing capture.
+- Focused ticket report is an earlier capture of the focused interfaces with lifecycle field projections, before switching them to cached canonical snapshots. It is not the retained timing capture.
 
 The candidate includes the owner's source/style/copy edits, committed in 9b0bc7d; the direct previous-branch comparison includes them on both sides. Comparing separate captures is not a controlled estimate of one optimization's effect.
 
@@ -66,7 +65,7 @@ Artifacts are local and ignored by Git. Run `PROFILE_MODE=production PROFILE_SUI
 | Cache bridge runtime fragments | Reverted: no reliable improvement. |
 | Memoize staged chart display | Reverted: latest capture gave quotes 11.2 ms versus main 8.8 ms; no reliable gain over the retained candidate. |
 
-The [17:09 experimental capture](../../.react-profiler/2026-10-08T17-09-42-423Z/full-report.html) includes the now-reverted chart display memo. Later experiments are recorded below; the table above describes the latest lifecycle-boundary capture. The earlier retained [16:55 capture](../../.react-profiler/2026-10-08T16-55-34-307Z/full-report.html) measured 10.9 versus 9.2 ms for changing-price quotes; comparing its timing with a later capture cannot isolate the command change from run-to-run variation.
+The 17:09 experimental capture includes the now-reverted chart display memo. Later experiments are recorded below; the table above describes the latest lifecycle-boundary capture. The earlier retained 16:55 capture measured 10.9 versus 9.2 ms for changing-price quotes; comparing its timing with a later capture cannot isolate the command change from run-to-run variation.
 
 ## Validation and limits
 
@@ -86,7 +85,7 @@ Tested cloning the plain draft snapshots after `useStore` in the entry, order-ch
 
 For this experiment, the baseline is the committed **uncloned refactor**, `31b203ef166facc35547a68e2a693373932541c1`, rather than main. The report's baseline/“main” series represents that commit. The working candidate also contains the owner's previously described edits. Command: `PROFILE_BASE_REF=31b203e PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare`.
 
-[Clone experiment report](../../.react-profiler/2026-10-08T18-08-19-574Z/full-report.html) · [metadata](../../.react-profiler/2026-10-08T18-08-19-574Z/metadata.json). Candidate source hash: `18f0699acb8a58afb584d643f80cb51671401eb2aec3c53751b170729d0390ab`.
+Clone experiment candidate source hash: `18f0699acb8a58afb584d643f80cb51671401eb2aec3c53751b170729d0390ab`.
 
 | Phase | Uncloned ms | structuredClone ms |
 | --- | --- | --- |
@@ -125,7 +124,7 @@ The source-level bridge hotspot is `useBridgeSessionRuntime`: it merges 11 sourc
 
 Candidate quote presentation creates 240 three-field selector projections across the two mounted quote consumers (six evaluations per quote combined). Other grouped selectors contribute additional projections and shallow comparisons. The installed Zustand comparator uses Object.entries and Maps to compare plain objects, including equal projections that are later discarded. This can cost allocation and comparison time even when no extra render occurs. Uninstrumented profiles still identify AppLifecycle and ChartQuotes as the largest regression contributors; a focused experiment reducing repeated selector projections/comparisons is needed to establish causality.
 
-[Raw copy/selector counters](../../.react-profiler/2026-10-08T19-05-40-982Z/full-raw.json) · [capture metadata](../../.react-profiler/2026-10-08T19-05-40-982Z/metadata.json). Earlier application-only counters are in [19:03](../../.react-profiler/2026-10-08T19-03-47-974Z/full-raw.json). All scenario steps completed with no browser errors, observer errors, or order submissions. The experiment uses the browser Tauri stub and does not start MT5.
+Copy/selector counters were captured at 19:05 UTC; earlier application-only counters were captured at 19:03 UTC. All scenario steps completed with no browser errors, observer errors, or order submissions. The experiment uses the browser Tauri stub and does not start MT5.
 
 
 ## Selector-cache and native subscription experiments — 19:16–19:44 UTC
@@ -148,7 +147,7 @@ Temporary allocation diagnostics confirmed that the native cache reduced shallow
 
 The state-shape audit found 24 flat ticket-draft fields, 10 broker fields, and two editor fields. Bridge stores already separate connection (two fields), market (seven), quote, account, and portfolio. The quote payload has eight fields. Shallow equality compares top-level references; it does not recursively inspect candles, account objects, or portfolio arrays. Whole-quote subscriptions in AppLifecycle and OrderTicketProvider still receive every accepted quote. Making the payload smaller while keeping the same subscription scope would not eliminate that work. Callback-only producer subscriptions are a smaller target: they can read current draft values when commands run.
 
-Artifacts: [quote cache](../../.react-profiler/2026-10-08T19-16-06-478Z/full-report.html), [cache inside useShallow](../../.react-profiler/2026-10-08T19-24-09-852Z/full-report.html), [stable cache versus main](../../.react-profiler/2026-10-08T19-31-22-680Z/full-report.html), [native versus refactor](../../.react-profiler/2026-10-08T19-40-32-691Z/full-report.html), [native versus main](../../.react-profiler/2026-10-08T19-42-14-500Z/full-report.html), [native allocation counters](../../.react-profiler/2026-10-08T19-44-07-374Z/full-raw.json). Native source hash: 1441b7eb3627cc02f2799f7d6af8ea0b3fe9d718171b7d5493dda936a4c443af.
+Local captures cover quote cache, cache inside useShallow, stable cache versus main, native versus refactor, native versus main, and native allocation counters. Native source hash: 1441b7eb3627cc02f2799f7d6af8ea0b3fe9d718171b7d5493dda936a4c443af.
 
 For the native variant, pnpm check and pnpm build passed without lint warnings; pnpm test:e2e passed all 266 tests. Browser/profiler runs reported no errors or order submissions. All testing used the Tauri stub.
 
@@ -159,7 +158,7 @@ Draft and sizing producers no longer subscribe to state that they use only insid
 
 A regression runs multiple sizing commands in one event before React rerenders: switch to equity, enter 150, switch to money, enter 50, and switch to units. The previous implementation reads stale units mode, returning `150:units:50`; the fix returns `100:units:` (equity clamped to 100, units clears risk). The new test failed against HEAD in an isolated temporary archive and passes with the fix.
 
-The [19:51 five-round comparison](../../.react-profiler/2026-10-08T19-51-47-021Z/full-report.html) measured changing-price quotes 13.9% slower than main, with non-overlapping ranges. This is retained for the demonstrated correctness fix and removal of unnecessary subscriptions; it does not establish full performance parity. Separate earlier captures cannot establish a causal timing improvement.
+The 19:51 five-round comparison measured changing-price quotes 13.9% slower than main, with non-overlapping ranges. This is retained for the demonstrated correctness fix and removal of unnecessary subscriptions; it does not establish full performance parity. Separate earlier captures cannot establish a causal timing improvement.
 
 A two-round allocation audit found the following counts per 40 changing-price updates; counts repeated exactly in both rounds:
 
@@ -171,7 +170,7 @@ A two-round allocation audit found the following counts per 40 changing-price up
 | Entry-pair arrays | 10,400 | 8,160 |
 | Map constructions | 1,760 | 1,440 |
 
-Both command-only draft projections disappear. Spread counts remain 640 sources / 3,200 top-level properties. Main remains at zero Zustand comparisons/Map constructions in this phase. Instrumented timings are not used. [Current counters](../../.react-profiler/2026-10-08T19-53-54-124Z/full-raw.json) and [metadata](../../.react-profiler/2026-10-08T19-53-54-124Z/metadata.json).
+Both command-only draft projections disappear. Spread counts remain 640 sources / 3,200 top-level properties. Main remains at zero Zustand comparisons/Map constructions in this phase. Instrumented timings are not used. Counters were recorded in the local capture.
 
 Validation: pnpm check, pnpm build, pnpm test:e2e (266 passed), and git diff --check pass. An initial browser run hit a Vite checker warning caused by a callback's closure-based type query; using the canonical OrderTicketDraftStore type resolved it without a suppression. Browser and profiler captures report no errors or order submissions. Only the browser Tauri stub was exercised.
 
@@ -208,6 +207,6 @@ The main comparison is the table above. A second five-round alternating comparis
 
 Changing-price quote medians decrease 13.5% versus the prior branch, but ranges overlap. Timestamp-only quotes decrease 18.0%, with non-overlapping ranges. This change is retained for the demonstrated render isolation and timestamp improvement; it does not establish full parity with main. No benchmark instrumentation or thresholds changed.
 
-[Main report](../../.react-profiler/2026-10-08T20-14-04-601Z/full-report.html) · [previous-branch report](../../.react-profiler/2026-10-08T20-15-54-300Z/full-report.html) · [previous-branch metadata](../../.react-profiler/2026-10-08T20-15-54-300Z/metadata.json). Commands: PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare; PROFILE_BASE_REF=9b0bc7d PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare. Both captures use the same candidate source hash listed above.
+Commands: PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare; PROFILE_BASE_REF=9b0bc7d PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare. Both captures use the same candidate source hash listed above.
 
 Validation: pnpm check, pnpm build, pnpm test:e2e (267 passed), and git diff --check pass. New assertions guard zero quote renders in the lifecycle input projection and fresh status/account/market updates; the existing broad runtime projection remains live. Initial ref-mutation lint warnings were resolved using typed, destructured refs, without suppressions. All profiling steps completed with no browser errors, observer errors, or submissions. Real Tauri/MT5 was not exercised.
