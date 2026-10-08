@@ -22,6 +22,84 @@ const firstLaunch: AppSettingsData = {
   configurationError: null,
 };
 
+for (const outcome of ['resolve', 'reject'] as const) {
+  test(`initial settings loading keeps the modal usable when the request ${outcome}s`, async ({ page }) => {
+    await page.addInitScript(() => {
+      type Internals = { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
+      const w = window as unknown as {
+        __TAURI_INTERNALS__?: Internals;
+        __pendingSettingsReads: Array<{ resolve: (value: unknown) => void; reject: () => void }>;
+      };
+      w.__pendingSettingsReads = [];
+      const wrap = (value: Internals) => {
+        const original = value.invoke;
+        value.invoke = (cmd, args) => {
+          if (cmd === 'get_app_settings') {
+            return new Promise((resolve, reject) => {
+              w.__pendingSettingsReads.push({ resolve, reject: () => reject(new Error('test read failed')) });
+            });
+          }
+          return original(cmd, args);
+        };
+        return value;
+      };
+      let internals = w.__TAURI_INTERNALS__ ? wrap(w.__TAURI_INTERNALS__) : undefined;
+      Object.defineProperty(window, '__TAURI_INTERNALS__', {
+        configurable: true,
+        get: () => internals,
+        set: (value: Internals) => {
+          internals = wrap(value);
+        },
+      });
+    });
+    await gotoWithStub(page);
+    const gear = page.getByRole('button', { name: 'App settings', exact: true });
+    const dialog = page.getByRole('dialog', { name: 'App settings' });
+    await gear.click();
+    await expect(dialog.getByRole('status')).toHaveText('Loading settings…');
+    await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Close settings' })).toBeFocused();
+    await page.keyboard.press('Control+k');
+    await expect(page.getByRole('dialog', { name: 'Search symbols' })).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await gear.click();
+    await expect(dialog.getByRole('status')).toHaveText('Loading settings…');
+    const loaded = {
+      ...firstLaunch,
+      firstLaunch: false,
+      configured: true,
+      mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'current-settings' },
+    };
+    await page.evaluate(
+      ({ result, settings }) => {
+        const reads = (
+          window as unknown as {
+            __pendingSettingsReads: Array<{ resolve: (value: unknown) => void; reject: () => void }>;
+          }
+        ).__pendingSettingsReads;
+        const current = reads[reads.length - 1];
+        if (result === 'resolve') {
+          current.resolve(settings);
+        } else {
+          current.reject();
+        }
+      },
+      { result: outcome, settings: loaded },
+    );
+    await expect(dialog.getByRole('status')).toHaveCount(0);
+    if (outcome === 'resolve') {
+      await expect(dialog.getByLabel('Token', { exact: true })).toHaveValue('current-settings');
+      await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+    } else {
+      await expect(page.getByRole('alert')).toContainText('Could not load app settings.');
+      await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+    }
+    await dialog.getByRole('button', { name: 'Close settings' }).click();
+    await expect(dialog).toBeHidden();
+  });
+}
+
 async function expectBannerTextUncovered(banner: Locator) {
   await expect(banner).toBeVisible();
   const clearsRail = await banner.evaluate((element) => {

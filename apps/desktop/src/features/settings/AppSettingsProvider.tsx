@@ -8,6 +8,7 @@ import type { AppSettingsData } from './settingsTypes';
 
 export interface AppSettingsViewState {
   settings: AppSettingsData | undefined;
+  loadRequest: Promise<void>;
   isOpen: boolean;
   closing: boolean;
   loadError: string | undefined;
@@ -64,6 +65,7 @@ export function useAppSettingsView(): AppSettingsViewState {
     store,
     useShallow((state) => ({
       settings: state.settings,
+      loadRequest: state.loadRequest,
       isOpen: state.isOpen,
       closing: state.closing,
       loadError: state.loadError,
