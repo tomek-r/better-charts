@@ -9,7 +9,7 @@ import {
 import { deriveStagedOrderDisplay } from '../domain/stagedOrderDisplay';
 import { stopDistanceGuard } from '../domain/ticketRules';
 import { useOrderTicketActions, useOrderTicketStores } from '../state/orderTicketContext';
-import type { OrderTicketExitsProps, OrderTicketExtraSettingsProps } from './orderTicketEditorTypes';
+import type { OrderTicketExitsProps } from './orderTicketEditorTypes';
 
 export function useOrderTicketExits(): OrderTicketExitsProps {
   const stores = useOrderTicketStores();
@@ -121,17 +121,5 @@ export function useOrderTicketExits(): OrderTicketExitsProps {
     entry,
     limitPrice,
     stagedOnChart,
-  };
-}
-
-export function useOrderTicketExtraSettings(): OrderTicketExtraSettingsProps {
-  const stores = useOrderTicketStores();
-  const open = useStore(stores.editor, (state) => state.extraSettingsOpen);
-  const timeInForce = useStore(stores.draft, (state) => state.timeInForce);
-  return {
-    open,
-    setOpen: stores.setters.editor.setExtraSettingsOpen,
-    timeInForce,
-    setTimeInForce: stores.setters.draft.setTimeInForce,
   };
 }

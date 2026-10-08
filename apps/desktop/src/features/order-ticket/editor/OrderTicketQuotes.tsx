@@ -1,4 +1,4 @@
-import { useOrderTicketQuotes } from './orderTicketQuotesPricing';
+import { useOrderTicketQuotes } from './useOrderTicketQuotes';
 
 export function OrderTicketQuotes() {
   const { bidText, askText, spreadText, spreadPoints, side: riskSide, stageFromQuote } = useOrderTicketQuotes();

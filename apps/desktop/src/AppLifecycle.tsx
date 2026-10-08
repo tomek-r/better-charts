@@ -20,7 +20,7 @@ import { usePortfolioAccountResetEffect } from './features/portfolio/usePortfoli
 import { useBridgeSessionRuntime } from './features/bridge/BridgeSessionProvider';
 import { useChartWorkspaceRuntime } from './features/chart/ChartWorkspaceProvider';
 import { useExecutionRuntime } from './features/execution/ExecutionProvider';
-import { useOrderRiskBasis } from './features/order-ticket/editor/orderTicketSizingViews';
+import { useOrderRiskBasis } from './features/order-ticket/editor/useOrderTicketSizing';
 import { useOrderTicketRuntime } from './features/order-ticket/state/useOrderTicketRuntime';
 
 /**

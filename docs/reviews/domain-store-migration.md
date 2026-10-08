@@ -45,7 +45,7 @@ The extraction reduced the session file from 978 to 213 lines. Review compared t
 
 `OrderTicketProvider.tsx` now owns only scoped store creation, the ticket producer, stable action bindings, and context injection. The extraction reduces it from 680 to 98 lines without adding stores or providers.
 
-`state/orderTicketContext.ts` owns injection types and required store/action accessors. `state/useOrderTicketRuntime.ts` reconstructs the lifecycle projection from the canonical stores. Editor hooks are grouped by responsibility: gate/header/review/action views, quotes/pricing, sizing/risk basis/tick value, and exits/extra settings. Consumers import their hooks directly from these modules.
+`state/orderTicketContext.ts` owns injection types and required store/action accessors. `state/useOrderTicketRuntime.ts` reconstructs the lifecycle projection from the canonical stores. Editor hooks are grouped by purpose: `editor/useOrderTicketHeader.ts`, `editor/useOrderTicketGates.ts` (stage, action, and shared eligibility projection), `editor/useOrderTicketReviewProps.ts`, `editor/useOrderTicketQuotes.ts`, `editor/useOrderTicketPricing.ts`, `editor/useOrderTicketSizing.ts` (sizing/risk basis/tick value), `editor/useOrderTicketExits.ts`, and `editor/useOrderTicketExtraSettings.ts`. Consumers import hooks directly from these modules.
 
 Review compared all 16 moved function bodies against the previous provider and found no executable changes. Selectors, coordination refs, action identities, and trading eligibility calculations retain their existing behavior. Type checking, linting, formatting, the frontend build, and the browser regression suite verify the extraction.
 

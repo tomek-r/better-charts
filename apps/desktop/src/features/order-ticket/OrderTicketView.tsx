@@ -1,6 +1,8 @@
 import { OrderTicketEditor } from './editor/OrderTicketEditor';
 import { OrderTicketReview } from './review/OrderTicketReview';
-import { useOrderTicketHeader, useOrderTicketReviewProps, useOrderTicketStage } from './editor/orderTicketGateViews';
+import { useOrderTicketHeader } from './editor/useOrderTicketHeader';
+import { useOrderTicketReviewProps } from './editor/useOrderTicketReviewProps';
+import { useOrderTicketStage } from './editor/useOrderTicketGates';
 
 function ReviewBody() {
   return <OrderTicketReview {...useOrderTicketReviewProps()} />;

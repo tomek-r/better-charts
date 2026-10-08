@@ -1,5 +1,5 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
-import { useOrderTicketPricing } from './orderTicketQuotesPricing';
+import { useOrderTicketPricing } from './useOrderTicketPricing';
 
 export function OrderTicketPricing() {
   const {

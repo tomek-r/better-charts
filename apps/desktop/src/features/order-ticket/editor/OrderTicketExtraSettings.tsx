@@ -1,5 +1,5 @@
 import type { TimeInForce } from '../../../shared/bridge/types';
-import { useOrderTicketExtraSettings } from './orderTicketExitViews';
+import { useOrderTicketExtraSettings } from './useOrderTicketExtraSettings';
 
 export function OrderTicketExtraSettings() {
   const {
