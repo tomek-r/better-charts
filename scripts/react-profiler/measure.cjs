@@ -32,6 +32,14 @@ const median = (a) => {
     ? s[(s.length - 1) / 2]
     : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
 };
+const consumerGroups = [
+  "quotes",
+  "pricing",
+  "sizing",
+  "exits",
+  "settings",
+  "action",
+];
 async function settle(page) {
   await page.evaluate(
     () =>
@@ -45,17 +53,45 @@ async function measure(page, action, operations) {
     await action(i);
     await settle(page);
   }
-  await page.evaluate(() => {
+  const countersReady = await page.evaluate((groups) => {
+    const counters = window.__reactProfileConsumerCommits;
+    const ready = groups.every((group) =>
+      window.__reactProfileConsumerProbesValidated
+        ? Number.isFinite(counters?.[group]) && counters[group] >= 0
+        : Number.isFinite(counters?.[group]) && counters[group] > 0,
+    );
+    if (ready) window.__reactProfileConsumerProbesValidated = true;
+    return ready;
+  }, consumerGroups);
+  if (!countersReady)
+    throw new Error(
+      "Committed consumer execution probes were not mounted during warm-up.",
+    );
+  await page.evaluate((groups) => {
     window.__reactProfile = [];
-  });
+    window.__reactProfileConsumerCommits = Object.fromEntries(
+      groups.map((group) => [group, 0]),
+    );
+  }, consumerGroups);
   const started = Date.now();
   for (let i = 0; i < operations; i++) {
     await action(i + 4);
     await settle(page);
   }
   const samples = await page.evaluate(() => window.__reactProfile);
+  const committedConsumerExecutions = await page.evaluate(
+    () => window.__reactProfileConsumerCommits,
+  );
   if (!samples?.some((sample) => sample.id === "app"))
     throw new Error("React Profiler recorded no app commits.");
+  if (
+    !consumerGroups.every((group) =>
+      Number.isFinite(committedConsumerExecutions?.[group]),
+    )
+  )
+    throw new Error(
+      "Committed consumer execution counters were unavailable after measurement.",
+    );
   const metrics = {};
   for (const row of samples) {
     const group = (metrics[row.id] ??= {
@@ -73,7 +109,12 @@ async function measure(page, action, operations) {
     group.medianActualMs = median(group.durations);
     group.maxActualMs = Math.max(...group.durations);
   }
-  return { wallMs: Date.now() - started, metrics, samples };
+  return {
+    wallMs: Date.now() - started,
+    metrics,
+    samples,
+    committedConsumerExecutions,
+  };
 }
 async function runVersion(browser, label, round, { ports, operations, stub }) {
   const { installTauriStub, pushEvent, STUB_NOW } = stub;
@@ -118,10 +159,7 @@ async function runVersion(browser, label, round, { ports, operations, stub }) {
   const quoteRun = await measure(page, quote, operations);
   await ticket.locator(".ticket-quote-side.buy").click();
   await ticket.getByRole("button", { name: "Limit", exact: true }).click();
-  const price = ticket.getByRole("textbox", {
-    name: "Order price",
-    exact: true,
-  });
+  const price = ticket.getByLabel("Order price", { exact: true });
   await expect(price).toBeEnabled();
   const editRun = await measure(
     page,
@@ -181,7 +219,26 @@ function summarize(runs) {
         const values = selected.map(
           (r) => r.metrics[id] ?? { commits: 0, totalActualMs: 0 },
         );
+        const group = id.replace(/-consumer$/, "");
+        const executions = selected.map(
+          (r) => r.committedConsumerExecutions?.[group],
+        );
+        const executionsAvailable = executions.every(Number.isFinite);
         summary[scenario][label][id] = {
+          committedExecutions: {
+            counts: executions,
+            median: executionsAvailable ? median(executions) : null,
+            min: executionsAvailable ? Math.min(...executions) : null,
+            max: executionsAvailable ? Math.max(...executions) : null,
+            available: executionsAvailable,
+          },
+          boundaryCommits: {
+            counts: values.map((value) => value.commits),
+            median: median(values.map((value) => value.commits)),
+            min: Math.min(...values.map((value) => value.commits)),
+            max: Math.max(...values.map((value) => value.commits)),
+          },
+          // Retain the original boundary-commit and duration fields for existing consumers.
           commits: values.map((v) => v.commits),
           medianCommits: median(values.map((v) => v.commits)),
           medianTotalActualMs: median(values.map((v) => v.totalActualMs)),

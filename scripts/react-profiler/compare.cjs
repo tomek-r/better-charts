@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const net = require("node:net");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const { git, prepareSnapshots } = require("./snapshot.cjs");
 const { loadTools, collect } = require("./measure.cjs");
 const { renderReport } = require("./report.cjs");
@@ -66,6 +66,14 @@ async function stopServer(server) {
 async function main() {
   const repo = path.resolve(__dirname, "../..");
   const baselineRef = process.env.PROFILE_BASE_REF ?? "main";
+  const mode = process.env.PROFILE_MODE ?? "development";
+  if (!["development", "production"].includes(mode))
+    throw new Error(
+      "PROFILE_MODE must be development or production (profiling build).",
+    );
+  const suite = process.env.PROFILE_SUITE ?? "both";
+  if (!["ticket", "full", "both"].includes(suite))
+    throw new Error("PROFILE_SUITE must be ticket, full, or both.");
   const roundCount = integer("PROFILE_ROUNDS", 5, 50);
   const operations = integer("PROFILE_OPERATIONS", 40, 1000);
   const portBase = integer("PROFILE_PORT_BASE", 1431, 65534);
@@ -110,18 +118,50 @@ async function main() {
       repo,
       tempRoot,
       baselineRef,
+      mode,
     );
+    const candidateHead = git(repo, ["rev-parse", "HEAD"]).toString().trim();
+    const candidateDirty = Boolean(git(repo, ["status", "--porcelain"]).length);
+    const bundleDirectories = {
+      main: `${baselineCommit.slice(0, 7)}-bundle`,
+      branch: `${candidateHead.slice(0, 7)}${candidateDirty ? "-working" : ""}-bundle`,
+    };
     const { req, chromium, expect, stub } = loadTools(repo);
     const viteBin = path.join(
       path.dirname(req.resolve("vite/package.json")),
       "bin/vite.js",
     );
     for (const [label, snapshot] of Object.entries(snapshots)) {
-      const log = fs.openSync(path.join(output, `${label}-vite.log`), "w");
+      const log = path.join(output, `${label}-vite.log`);
+      if (mode === "production") {
+        console.log(`Building ${label} production bundle (profiling build)…`);
+        const build = spawnSync(
+          process.execPath,
+          [viteBin, "build", "--config", "profile.vite.config.ts"],
+          {
+            cwd: snapshot.desktop,
+            stdio: ["ignore", "pipe", "pipe"],
+            maxBuffer: 64 * 1024 * 1024,
+          },
+        );
+        fs.writeFileSync(
+          log,
+          (build.stdout?.toString() ?? "") + (build.stderr?.toString() ?? ""),
+        );
+        if (build.status !== 0)
+          throw new Error(`${label} vite build failed; inspect ${log}.`);
+        fs.cpSync(
+          path.join(snapshot.desktop, "dist"),
+          path.join(output, bundleDirectories[label]),
+          { recursive: true },
+        );
+      }
+      const serverHandle = fs.openSync(log, mode === "production" ? "a" : "w");
       const server = spawn(
         process.execPath,
         [
           viteBin,
+          mode === "production" ? "preview" : "dev",
           "--config",
           "profile.vite.config.ts",
           "--port",
@@ -129,10 +169,10 @@ async function main() {
         ],
         {
           cwd: snapshot.desktop,
-          stdio: ["ignore", log, log],
+          stdio: ["ignore", serverHandle, serverHandle],
         },
       );
-      fs.closeSync(log);
+      fs.closeSync(serverHandle);
       server.on("error", (error) =>
         console.error(`${label} server: ${error.message}`),
       );
@@ -152,8 +192,9 @@ async function main() {
       candidateBranch: git(repo, ["branch", "--show-current"])
         .toString()
         .trim(),
-      candidateHead: git(repo, ["rev-parse", "HEAD"]).toString().trim(),
-      candidateDirty: Boolean(git(repo, ["status", "--porcelain"]).length),
+      candidateHead,
+      candidateDirty,
+      bundleDirectories: mode === "production" ? bundleDirectories : undefined,
       sourceHashes: Object.fromEntries(
         Object.entries(snapshots).map(([label, value]) => [
           label,
@@ -164,13 +205,16 @@ async function main() {
       react: req("react/package.json").version,
       playwright: req("@playwright/test/package.json").version,
       browser: browser.version(),
-      mode: "development",
+      mode,
       reactCompiler: true,
-      strictMode: true,
+      sourceMaps: mode === "production",
+      componentNamesPreserved: true,
+      strictMode: mode === "development",
       viewport: { width: 1440, height: 1000 },
       warmupOperations: 4,
       operations,
       roundCount,
+      suite,
     };
     fs.writeFileSync(
       path.join(output, "metadata.json"),
@@ -180,7 +224,7 @@ async function main() {
       `Comparing working source against ${baselineRef} (${baselineCommit.slice(0, 7)})`,
     );
     console.log(`Output: ${output}`);
-    const result = await collect(browser, {
+    const options = {
       output,
       ports,
       operations,
@@ -188,13 +232,25 @@ async function main() {
       baselineCommit,
       expect,
       stub,
-    });
-    fs.writeFileSync(
-      path.join(output, "report.html"),
-      renderReport(result, metadata),
-    );
+    };
+    if (suite !== "full") {
+      const result = await collect(browser, options);
+      fs.writeFileSync(
+        path.join(output, "report.html"),
+        renderReport(result, metadata),
+      );
+    }
+    if (suite !== "ticket") {
+      const { collectFull } = require("./full.cjs");
+      const { renderFullReport } = require("./full-report.cjs");
+      const result = await collectFull(browser, options);
+      fs.writeFileSync(
+        path.join(output, "full-report.html"),
+        renderFullReport(result, metadata),
+      );
+    }
     console.log(
-      `Saved report.html, raw.json, summary.json, and metadata.json to ${output}`,
+      `Saved ticket report, full-app captures, summaries, and metadata to ${output}`,
     );
   } finally {
     process.removeListener("SIGINT", interrupt);
