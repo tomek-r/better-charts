@@ -308,12 +308,10 @@ function useTicketGateProjection() {
     symbol: market.snapshot.symbol,
     instrument: market.instrument,
   }));
-  const { bridgeState, marketOpen } = useBridgeConnectionSelector(
-    useShallow((connection) => ({
-      bridgeState: connection.status.state,
-      marketOpen: connection.status.marketSession?.isOpen,
-    })),
-  );
+  const { bridgeState, marketOpen } = useBridgeConnectionSelector((connection) => ({
+    bridgeState: connection.status.state,
+    marketOpen: connection.status.marketSession?.isOpen,
+  }));
   const { accountLogin, brokerServer } = useBridgeAccountSelector(
     useShallow((account) => ({ accountLogin: account?.accountLogin, brokerServer: account?.brokerServer })),
   );
