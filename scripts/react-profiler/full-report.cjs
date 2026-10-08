@@ -17,6 +17,7 @@ const phaseNames = {
   quoteTimeOnly: "Quote updates · time only",
   quotePriceChanging: "Quote updates · prices changing",
   liveCandle: "Live candles",
+  panelFirstOpen: "Trade panel first open and close",
   panelToggles: "Trade panel toggles",
   settingsEdits: "Settings edits",
   toolsCrosshair: "Crosshair tool",
