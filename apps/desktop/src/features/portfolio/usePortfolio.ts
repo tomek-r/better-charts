@@ -9,7 +9,7 @@ import type { BridgeSessionState } from '../bridge/useBridgeSession';
  * timeframe reset and the ticket entry seed), which is why this stays a single
  * effect with a frozen dependency list.
  */
-export function usePortfolioAccountResetEffect(session: BridgeSessionState): void {
+export function usePortfolioAccountResetEffect(session: Pick<BridgeSessionState, 'account' | 'setPortfolio'>): void {
   const { account, setPortfolio } = session;
   useEffect(() => {
     setPortfolio((previous) =>

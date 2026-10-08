@@ -1,6 +1,6 @@
 # React profiler comparison — 8 October 2026
 
-The ticket's broad runtime and state facades have been removed. Draft and sizing commands now read current state when invoked, removing two callback-only subscriptions and fixing sequential commands that previously read stale draft values. Performance parity with main remains unresolved: changing-price quote updates take 9.0 ms versus 7.9 ms (+13.9%) in the latest five-round full-app capture. Entry-edit medians match at 4.5 ms. These results do not justify claiming the store migration is faster overall.
+The lifecycle coordinator now passes explicit non-quote props to ordered child components. During pure changing-price quote updates, the coordinator, initialization, account/check/reset, and bootstrap/gesture children do no render work; the four quote-dependent children remain live. Against the previous branch commit, timestamp-only quotes improve from 8.9 to 7.3 ms with non-overlapping ranges. Performance parity with main remains unproven: changing-price quote medians are 8.9 versus 7.9 ms (+12.7%), with overlapping ranges.
 
 ## Retained implementation
 
@@ -11,15 +11,15 @@ Lifecycle consumers use focused interfaces for entry synchronization, check inva
 ## Reproducible comparison
 
 - Baseline: `main`, `e3ec86da4af14f1d6d3998fd9b59999fcd7af1cc`.
-- Candidate: `refactor/typescript-react-findings`, HEAD `d4ccbffb231dff285ff7632d3e4162bc095d8693` plus captured command-producer and owner working changes.
-- Candidate source hash: `75341d08a00b7f23ed0382bbb1e755305d87809b95761c3254e92e386428f7e5`.
+- Candidate: `refactor/typescript-react-findings`, HEAD `9b0bc7d` plus captured lifecycle-boundary working changes.
+- Candidate source hash: `b966e7cf7d84a533a914690cbaba67e5a2eb13167ff4eb97eca03a3173785a48`.
 - Production React profiling build, React 19.3.0, compiler enabled, StrictMode disabled; Chromium 153.0.8010.12; viewport 1440 × 1000.
 - Five alternating rounds per build. Each run creates a fresh browser context/page: no assets, storage, or app state from the previous run. Browser process, built bundles, and local preview servers are reused. Full-app scenarios share state within each run, in a fixed sequence. Ticket-only runs have four warmup operations.
 - Command: `PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare`.
-- [Current full-app report](../../.react-profiler/2026-10-08T19-51-47-021Z/full-report.html), [capture metadata](../../.react-profiler/2026-10-08T19-51-47-021Z/metadata.json).
+- [Current full-app report](../../.react-profiler/2026-10-08T20-14-04-601Z/full-report.html), [capture metadata](../../.react-profiler/2026-10-08T20-14-04-601Z/metadata.json).
 - [Focused ticket report](../../.react-profiler/2026-10-08T16-48-52-448Z/report.html) is an earlier capture of the focused interfaces with lifecycle field projections, before switching them to cached canonical snapshots. It is not the retained timing capture.
 
-Captures include the owner's working source/style/copy edits. Comparing separate captures is not a controlled estimate of one optimization's effect.
+The candidate includes the owner's source/style/copy edits, committed in 9b0bc7d; the direct previous-branch comparison includes them on both sides. Comparing separate captures is not a controlled estimate of one optimization's effect.
 
 ## Full-app results
 
@@ -27,22 +27,22 @@ Values are cumulative root React `actualDuration` milliseconds per phase, median
 
 | Phase | Main ms | Candidate ms | Commits |
 | --- | --- | --- | --- |
-| startup | 11.9 [11.6, 13.7] | 13.5 [13.1, 13.7] | 5 / 7 |
+| startup | 11.8 [11.6, 12.0] | 13.4 [13.2, 13.5] | 5 / 7 |
 | idle | 0.0 [0.0, 0.0] | 0.0 [0.0, 0.0] | 0 / 0 |
-| quoteTimeOnly | 10.2 [9.5, 10.8] | 8.8 [8.7, 9.0] | 40 / 40 |
-| quotePriceChanging | 7.9 [6.9, 8.2] | 9.0 [8.5, 10.9] | 40 / 40 |
-| liveCandle | 3.3 [3.2, 3.8] | 3.0 [2.8, 3.3] | 20 / 20 |
-| panelToggles | 0.3 [0.2, 0.4] | 0.4 [0.1, 0.7] | 8 / 8 |
-| settingsEdits | 1.5 [1.3, 1.7] | 1.5 [1.4, 1.8] | 12 / 12 |
-| toolsCrosshair | 0.4 [0.3, 0.5] | 0.6 [0.3, 0.7] | 3 / 3 |
-| ticketStage | 0.7 [0.7, 0.8] | 0.9 [0.7, 1.0] | 6 / 6 |
-| ticketEntryEdits | 4.5 [3.8, 4.6] | 4.5 [4.2, 5.4] | 40 / 40 |
-| ticketTimeInForce | 4.2 [3.6, 4.5] | 4.6 [4.1, 5.3] | 40 / 20 |
-| timeframeSwitches | 0.9 [0.5, 1.1] | 1.1 [0.8, 1.6] | 10 / 10 |
-| symbolSearch | 0.4 [0.4, 0.6] | 0.5 [0.2, 0.6] | 4 / 4 |
-| reconnect | 0.6 [0.4, 0.7] | 0.7 [0.6, 0.8] | 6 / 6 |
+| quoteTimeOnly | 10.1 [9.7, 10.4] | 7.8 [6.9, 7.9] | 40 / 40 |
+| quotePriceChanging | 7.9 [6.4, 8.8] | 8.9 [7.6, 9.1] | 40 / 40 |
+| liveCandle | 3.3 [2.7, 3.4] | 2.7 [2.2, 3.1] | 20 / 20 |
+| panelToggles | 0.4 [0.2, 0.4] | 0.5 [0.3, 0.6] | 8 / 8 |
+| settingsEdits | 1.6 [1.4, 2.1] | 1.9 [1.4, 2.0] | 12 / 12 |
+| toolsCrosshair | 0.4 [0.3, 0.6] | 0.7 [0.6, 1.0] | 3 / 3 |
+| ticketStage | 0.7 [0.4, 0.8] | 1.0 [0.9, 1.1] | 6 / 6 |
+| ticketEntryEdits | 4.3 [3.9, 5.0] | 4.1 [3.6, 4.9] | 40 / 40 |
+| ticketTimeInForce | 4.3 [3.8, 5.1] | 4.6 [4.2, 5.2] | 40 / 20 |
+| timeframeSwitches | 0.8 [0.6, 1.3] | 0.9 [0.6, 1.0] | 10 / 10 |
+| symbolSearch | 0.5 [0.3, 0.5] | 0.5 [0.3, 0.6] | 4 / 4 |
+| reconnect | 0.5 [0.3, 0.6] | 0.6 [0.6, 0.8] | 6 / 6 |
 
-All expected scenario steps completed. Captures reported no browser errors or order submissions. Changing-price quotes still spend more time in AppLifecycle: estimated self duration 2.9 ms on candidate versus 1.1 ms on main. OrderTicketProvider takes 3.4 versus 3.1 ms, ChartQuotes 1.1 versus 0.7 ms, and OrderTicketQuotes 0.8 versus 0.4 ms. All four still execute 40 times per changing-price phase. Private Fiber measurements are supporting diagnostics, not public API timing guarantees.
+All expected scenario steps completed. Captures reported no browser errors or order submissions. The previous AppLifecycle quote cost is now attributed to four quote-aware children; the coordinator and three non-quote children remain idle. These are private Fiber diagnostics supporting the unchanged root Profiler measurements. Component-count sums are not directly comparable after splitting one component into multiple boundaries.
 
 ## Pricing and Exits render counts
 
@@ -52,7 +52,7 @@ The boundary counter is retained. Eliminating it by weakening preview invalidati
 
 ## Profiling artifacts
 
-Production profiling builds preserve component names and source maps. Bundle directories use the captured commit hash, with `-working` for a dirty candidate: `e3ec86d-bundle` and `d4ccbff-working-bundle`. Metadata retains the branch name and full source hash. Maps are beside the JavaScript under each bundle's `assets` directory. Ordinary release build settings are unchanged. See [Vite source maps](https://vite.dev/config/build-options.html#build-sourcemap) and [esbuild keepNames](https://esbuild.github.io/api/#keep-names).
+Production profiling builds preserve component names and source maps. Bundle directories use the captured commit hash, with `-working` for a dirty candidate: `e3ec86d-bundle` and `9b0bc7d-working-bundle`. Metadata retains the branch name and full source hash. Maps are beside the JavaScript under each bundle's `assets` directory. Ordinary release build settings are unchanged. See [Vite source maps](https://vite.dev/config/build-options.html#build-sourcemap) and [esbuild keepNames](https://esbuild.github.io/api/#keep-names).
 
 Artifacts are local and ignored by Git. Run `PROFILE_MODE=production PROFILE_SUITE=both PROFILE_ROUNDS=5 pnpm profiler:compare` to regenerate both reports.
 
@@ -66,19 +66,19 @@ Artifacts are local and ignored by Git. Run `PROFILE_MODE=production PROFILE_SUI
 | Cache bridge runtime fragments | Reverted: no reliable improvement. |
 | Memoize staged chart display | Reverted: latest capture gave quotes 11.2 ms versus main 8.8 ms; no reliable gain over the retained candidate. |
 
-The [17:09 experimental capture](../../.react-profiler/2026-10-08T17-09-42-423Z/full-report.html) includes the now-reverted chart display memo. Later experiments are recorded below; the table above describes the latest command-producer capture. The earlier retained [16:55 capture](../../.react-profiler/2026-10-08T16-55-34-307Z/full-report.html) measured 10.9 versus 9.2 ms for changing-price quotes; comparing its timing with a later capture cannot isolate the command change from run-to-run variation.
+The [17:09 experimental capture](../../.react-profiler/2026-10-08T17-09-42-423Z/full-report.html) includes the now-reverted chart display memo. Later experiments are recorded below; the table above describes the latest lifecycle-boundary capture. The earlier retained [16:55 capture](../../.react-profiler/2026-10-08T16-55-34-307Z/full-report.html) measured 10.9 versus 9.2 ms for changing-price quotes; comparing its timing with a later capture cannot isolate the command change from run-to-run variation.
 
 ## Validation and limits
 
 - `pnpm check`: passed (TypeScript, ESLint, Prettier).
 - `pnpm build`: passed.
-- `pnpm test:e2e`: 266 passed with the focused interfaces, and again during each final experiment.
+- `pnpm test:e2e`: 267 passed with the lifecycle boundaries; earlier captures used 266 tests.
 - `git diff --check`: passed.
 - Unchanged pre-commit gate: passed (offline Rust workspace tests, 266 browser tests, tick-reader validation, Python tool self-tests).
 - `node --check` on all six profiler modules, Prettier check, and ticket/full report renderer smoke checks: passed.
 - Browser testing uses the Tauri stub; real Tauri/MT5 and live broker interaction were not exercised.
 
-The browser suite covers sizing, review, broker-response correlation, chart gestures, reconnect, scoped provider isolation, and stale previews. Five rounds and small cumulative timings warrant caution; the quote regression remains measurable and requires further investigation.
+The browser suite covers sizing, review, broker-response correlation, chart gestures, reconnect, scoped provider isolation, and stale previews. Five rounds and small cumulative timings warrant caution; quote parity remains unresolved and requires further investigation.
 
 ## structuredClone experiment — 18:08 UTC
 
@@ -159,7 +159,7 @@ Draft and sizing producers no longer subscribe to state that they use only insid
 
 A regression runs multiple sizing commands in one event before React rerenders: switch to equity, enter 150, switch to money, enter 50, and switch to units. The previous implementation reads stale units mode, returning `150:units:50`; the fix returns `100:units:` (equity clamped to 100, units clears risk). The new test failed against HEAD in an isolated temporary archive and passes with the fix.
 
-The current five-round main comparison is the table at the top of this report. Changing-price quotes remain 13.9% slower than main, with non-overlapping ranges. This is retained for the demonstrated correctness fix and removal of unnecessary subscriptions; it does not establish full performance parity. Separate earlier captures cannot establish a causal timing improvement.
+The [19:51 five-round comparison](../../.react-profiler/2026-10-08T19-51-47-021Z/full-report.html) measured changing-price quotes 13.9% slower than main, with non-overlapping ranges. This is retained for the demonstrated correctness fix and removal of unnecessary subscriptions; it does not establish full performance parity. Separate earlier captures cannot establish a causal timing improvement.
 
 A two-round allocation audit found the following counts per 40 changing-price updates; counts repeated exactly in both rounds:
 
@@ -174,3 +174,40 @@ A two-round allocation audit found the following counts per 40 changing-price up
 Both command-only draft projections disappear. Spread counts remain 640 sources / 3,200 top-level properties. Main remains at zero Zustand comparisons/Map constructions in this phase. Instrumented timings are not used. [Current counters](../../.react-profiler/2026-10-08T19-53-54-124Z/full-raw.json) and [metadata](../../.react-profiler/2026-10-08T19-53-54-124Z/metadata.json).
 
 Validation: pnpm check, pnpm build, pnpm test:e2e (266 passed), and git diff --check pass. An initial browser run hit a Vite checker warning caused by a callback's closure-based type query; using the canonical OrderTicketDraftStore type resolved it without a suppression. Browser and profiler captures report no errors or order submissions. Only the browser Tauri stub was exercised.
+
+
+## Explicit lifecycle child props — 20:14–20:15 UTC
+
+AppLifecycle now owns non-quote bridge state, execution state, stable ticket controls/actions, and shared account refs. It passes focused session projections into seven ordered sibling components in lifecycle/AppLifecycleEffects.tsx. It contains no effects itself. Only portfolio-stream, chart-market, ticket-entry, and preview/mirror children subscribe to quotes. Initialization, account/check/reset, and bootstrap/gesture children receive non-quote props. No new store, selector cache, provider, or blanket memo wrapper was introduced; React Compiler retains stable child props.
+
+Effect groups keep their original order. The first child's mounted flag updates before bootstrap; the account refs mirror before bootstrap registration. Chart initialization, OrderCheck layout reset, callback-ref layout refreshes, and chart symbol/timeframe layout resets precede the final staged-overlay mirror. Effect callbacks, listener order, cleanup functions, broker acceptance guards, and dispatch gates are unchanged. Check/reset children still respond when a quote-driven entry update changes the canonical draft.
+
+Every candidate round recorded the following executions during 40 changing-price quote updates:
+
+| Boundary | Executions |
+| --- | ---: |
+| AppLifecycle coordinator | 0 |
+| Initialization | 0 |
+| Account/check/reset | 0 |
+| Bootstrap/gestures | 0 |
+| Portfolio stream | 40 |
+| Chart market | 40 |
+| Ticket entry | 40 |
+| Ticket preview/mirror | 40 |
+
+All eight components were observed during startup. The quote phase has complete Fiber timing coverage and no observer errors; the four idle components are absent from performed work rather than unavailable timers. Both builds retain 40 root commits in the quote phase. Counts describe boundary isolation, not a claim that four child executions equal four times the old combined effect work.
+
+The main comparison is the table above. A second five-round alternating comparison used the previous branch commit, 9b0bc7d, as the baseline (the report's baseline/“main” series represents that commit):
+
+| Phase | Previous branch ms | Child boundaries ms |
+| --- | --- | --- |
+| Changing-price quotes | 9.6 [8.9, 10.2] | 8.3 [7.9, 9.2] |
+| Timestamp-only quotes | 8.9 [8.5, 9.2] | 7.3 [6.7, 7.6] |
+| Entry edits | 5.0 [4.2, 5.2] | 3.9 [3.6, 4.4] |
+| Time-in-force edits | 5.0 [4.3, 5.1] | 5.1 [3.9, 5.4] |
+
+Changing-price quote medians decrease 13.5% versus the prior branch, but ranges overlap. Timestamp-only quotes decrease 18.0%, with non-overlapping ranges. This change is retained for the demonstrated render isolation and timestamp improvement; it does not establish full parity with main. No benchmark instrumentation or thresholds changed.
+
+[Main report](../../.react-profiler/2026-10-08T20-14-04-601Z/full-report.html) · [previous-branch report](../../.react-profiler/2026-10-08T20-15-54-300Z/full-report.html) · [previous-branch metadata](../../.react-profiler/2026-10-08T20-15-54-300Z/metadata.json). Commands: PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare; PROFILE_BASE_REF=9b0bc7d PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare. Both captures use the same candidate source hash listed above.
+
+Validation: pnpm check, pnpm build, pnpm test:e2e (267 passed), and git diff --check pass. New assertions guard zero quote renders in the lifecycle input projection and fresh status/account/market updates; the existing broad runtime projection remains live. Initial ref-mutation lint warnings were resolved using typed, destructured refs, without suppressions. All profiling steps completed with no browser errors, observer errors, or submissions. Real Tauri/MT5 was not exercised.

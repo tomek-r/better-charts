@@ -139,12 +139,13 @@ export function useBridgeSessionStores(): BridgeSessionStores {
   return useStores('useBridgeSessionStores');
 }
 
-/** Full bridge state for ordered lifecycle effects and domain integration only. */
-export function useBridgeSessionRuntime(): BridgeSessionState {
-  const runtime = useRuntime('useBridgeSessionRuntime');
+/** Bridge lifecycle state without subscribing to quote changes. */
+export type BridgeSessionLifecycleState = Omit<BridgeSessionState, 'quote'>;
+
+export function useBridgeSessionLifecycleRuntime(): BridgeSessionLifecycleState {
+  const runtime = useRuntime('useBridgeSessionLifecycleRuntime');
   const connection = useStore(runtime.stores.connection);
   const market = useStore(runtime.stores.market);
-  const quote = useStore(runtime.stores.quote);
   const account = useStore(runtime.stores.account);
   const portfolio = useStore(runtime.stores.portfolio);
   return {
@@ -153,13 +154,19 @@ export function useBridgeSessionRuntime(): BridgeSessionState {
     ...runtime.stores.connection.setters,
     ...market,
     ...runtime.stores.market.setters,
-    ...quote,
     ...runtime.stores.quote.setters,
     ...account,
     ...runtime.stores.account.setters,
     ...portfolio,
     ...runtime.stores.portfolio.setters,
   };
+}
+
+/** Full bridge state for ordered lifecycle effects and domain integration only. */
+export function useBridgeSessionRuntime(): BridgeSessionState {
+  const session = useBridgeSessionLifecycleRuntime();
+  const quote = useBridgeQuote();
+  return { ...session, quote };
 }
 
 export function useBridgeConnection(): BridgeConnection {

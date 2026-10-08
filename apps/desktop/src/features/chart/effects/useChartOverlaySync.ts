@@ -25,7 +25,7 @@ export type ChartTicketOverlayState = Pick<OrderTicketCoordination, 'submitSwapP
 
 export function useChartWorkspaceMirrorRefEffect(
   workspace: ChartWorkspaceState,
-  session: BridgeSessionState,
+  session: Pick<BridgeSessionState, 'instrument'>,
   ticket: Pick<OrderTicketDraftStore, 'stagedOnChart'>,
   execution: ChartWorkspaceExecutionActions,
   dispatchEnabledNow: boolean,
@@ -51,7 +51,7 @@ export function useChartWorkspaceMirrorRefEffect(
 
 export function useChartWorkspaceMirrorLayoutEffect(
   workspace: ChartWorkspaceState,
-  session: BridgeSessionState,
+  session: Pick<BridgeSessionState, 'instrument' | 'quote' | 'snapshot' | 'latestCandle'>,
   ticket: ChartTicketOverlayState,
 ): void {
   const { chart, stagedOrderState, instrumentDigitsRef } = workspace;

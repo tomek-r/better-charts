@@ -1,124 +1,127 @@
-import { useEffect, useRef } from 'react';
-import { useExecutionCommandEffects } from './features/execution/useExecutionCommands';
-import { useBridgeBootstrapEffects } from './features/bridge/effects/useBridgeBootstrapEffects';
-import { useBridgeStreamEffects } from './features/bridge/effects/useBridgeStreamEffects';
-import {
-  useChartWorkspaceInitEffects,
-  useChartWorkspaceChartEffects,
-  useChartWorkspaceResetEffects,
-  useChartWorkspaceHotkeyEffect,
-} from './features/chart/effects/useChartLifecycle';
-import { useChartWorkspacePointerEffects } from './features/chart/effects/useChartGestures';
-import {
-  useChartWorkspaceMirrorRefEffect,
-  useChartWorkspaceMirrorLayoutEffect,
-} from './features/chart/effects/useChartOverlaySync';
-import { useOrderTicketEntryEffects } from './features/order-ticket/effects/useOrderTicketEntryEffects';
-import { useOrderTicketOrderCheckEffects } from './features/order-ticket/effects/useOrderTicketOrderCheckEffects';
-import { useOrderTicketRiskPreviewEffects } from './features/order-ticket/effects/useOrderTicketRiskPreviewEffects';
-import { usePortfolioAccountResetEffect } from './features/portfolio/usePortfolio';
-import { useBridgeSessionRuntime } from './features/bridge/BridgeSessionProvider';
+import { useRef } from 'react';
+import { useBridgeSessionLifecycleRuntime } from './features/bridge/BridgeSessionProvider';
 import { useChartWorkspaceRuntime } from './features/chart/ChartWorkspaceProvider';
 import { useExecutionRuntime } from './features/execution/ExecutionProvider';
-import type { OrderTicketInputs } from './features/order-ticket/state/orderTicketInputs';
-import { useOrderTicketEntryRuntime } from './features/order-ticket/state/useOrderTicketEntryRuntime';
-import { useOrderTicketCheckRuntime } from './features/order-ticket/state/useOrderTicketCheckRuntime';
-import { useOrderTicketPreviewRuntime } from './features/order-ticket/state/useOrderTicketPreviewRuntime';
 import {
   useOrderTicketChartActions,
   useOrderTicketChartControls,
-  useOrderTicketChartRuntime,
 } from './features/order-ticket/state/useOrderTicketChartRuntime';
 import { useOrderTicketBridgeResponsePort } from './features/order-ticket/state/useOrderTicketBridgeResponsePort';
+import {
+  LifecycleAccountAndCheck,
+  LifecycleBootstrapAndGestures,
+  LifecycleChartMarket,
+  LifecycleInitialization,
+  LifecyclePortfolioStream,
+  LifecycleTicketEntry,
+  LifecycleTicketPreviewAndMirror,
+} from './lifecycle/AppLifecycleEffects';
 
 /**
- * Registers the cross-domain effect slots in their frozen registration order.
- * Renders nothing: it exists for its tree position — inside the ticket provider
- * and after the chart host, so the host ref attaches before init layout
- * effects run. These integrations use private runtime interfaces; views consume
- * focused contexts.
+ * Keeps cross-domain lifecycle effects in their frozen registration order.
+ * Quote subscriptions live only in the children whose effects need live prices.
  */
 export function AppLifecycle() {
   const workspace = useChartWorkspaceRuntime();
-  const session = useBridgeSessionRuntime();
-  const ticketInputs: Pick<OrderTicketInputs, 'instrument' | 'account' | 'quote' | 'snapshot' | 'status'> = {
-    instrument: session.instrument,
-    account: session.account,
-    quote: session.quote,
-    snapshot: session.snapshot,
-    status: session.status,
-  };
-  const ticketEntry = useOrderTicketEntryRuntime(ticketInputs);
-  const ticketCheck = useOrderTicketCheckRuntime(ticketInputs);
-  const ticketPreview = useOrderTicketPreviewRuntime(ticketInputs);
-  const ticketChart = useOrderTicketChartRuntime(ticketInputs);
+  const session = useBridgeSessionLifecycleRuntime();
+  const execution = useExecutionRuntime();
   const ticketActions = useOrderTicketChartActions();
   const ticketControls = useOrderTicketChartControls();
   const bridgeTicket = useOrderTicketBridgeResponsePort();
-  const execution = useExecutionRuntime();
-  const { chart, adapterRef, fixedRangeProfileState, expectedProfile, profileGeneration } = workspace;
-  const { mounted: mountedRef, account } = session;
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [mountedRef]);
-  useExecutionCommandEffects(execution);
-  useChartWorkspaceInitEffects(workspace, session);
-  useBridgeStreamEffects(session, {
-    chart,
-    positionOverlayState: workspace.positionOverlayState,
-    tradingSyncTick: workspace.tradingSyncTick,
-    submitSwapPendingRef: ticketChart.submitSwapPendingRef,
-    clearStagedWidget: ticketActions.clearStagedWidget,
-  });
-  useChartWorkspaceChartEffects(workspace, session, { clearStagedWidget: ticketActions.clearStagedWidget });
-
   const accountLoginRef = useRef<string | undefined>(undefined);
   const brokerServerRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    accountLoginRef.current = account?.accountLogin;
-    brokerServerRef.current = account?.brokerServer;
-  }, [account?.accountLogin, account?.brokerServer]);
+  const accountRefs = { accountLoginRef, brokerServerRef };
 
-  useOrderTicketOrderCheckEffects(ticketCheck);
-  useChartWorkspaceResetEffects(workspace, session, {
-    setEntry: ticketControls.setEntry,
-    setStopLoss: ticketControls.setStopLoss,
-    setTakeProfit: ticketControls.setTakeProfit,
-  });
-  usePortfolioAccountResetEffect(session);
-  useOrderTicketEntryEffects(ticketEntry);
-  useBridgeBootstrapEffects(session, {
-    chart,
-    adapterRef,
-    fixedRangeProfileState,
-    expectedProfile,
-    profileGeneration,
-    accountLoginRef,
-    brokerServerRef,
-    ticket: bridgeTicket,
-  });
-  useChartWorkspaceHotkeyEffect(workspace, { unstageOrderDraft: ticketActions.unstageOrderDraft });
-  useChartWorkspacePointerEffects(workspace, {
-    unstageOrderDraft: ticketActions.unstageOrderDraft,
-    toggleExit: ticketActions.toggleExit,
-    ...ticketControls,
-  });
-  useOrderTicketRiskPreviewEffects(ticketPreview.input, ticketPreview.riskBasis);
-  useChartWorkspaceMirrorRefEffect(
-    workspace,
-    session,
-    { stagedOnChart: ticketChart.stagedOnChart },
-    {
-      requestModifyDraft: execution.requestModifyDraft,
-      requestClosePosition: execution.requestClosePosition,
-      requestCancelOrder: execution.requestCancelOrder,
-    },
-    execution.executionQueue?.dispatchEnabled === true,
+  return (
+    <>
+      <LifecycleInitialization
+        workspace={workspace}
+        session={{
+          mounted: session.mounted,
+          setChartError: session.setChartError,
+          requestProfileRange: session.requestProfileRange,
+        }}
+        execution={execution}
+      />
+      <LifecyclePortfolioStream
+        session={{
+          snapshot: session.snapshot,
+          instrument: session.instrument,
+          account: session.account,
+          portfolio: session.portfolio,
+        }}
+        workspace={workspace}
+        ticket={ticketActions}
+      />
+      <LifecycleChartMarket
+        workspace={workspace}
+        session={{
+          instrument: session.instrument,
+          loadingTimeframe: session.loadingTimeframe,
+          snapshot: session.snapshot,
+          setLoadingTimeframe: session.setLoadingTimeframe,
+          setChartError: session.setChartError,
+          currentSymbol: session.currentSymbol,
+          setQuote: session.setQuote,
+          setInstrument: session.setInstrument,
+          targetSymbol: session.targetSymbol,
+          status: session.status,
+        }}
+        ticket={ticketActions}
+      />
+      <LifecycleAccountAndCheck
+        workspace={workspace}
+        session={{
+          account: session.account,
+          status: session.status,
+          snapshot: session.snapshot,
+          loadingTimeframeRef: session.loadingTimeframeRef,
+          targetSymbol: session.targetSymbol,
+          pendingMetadata: session.pendingMetadata,
+          setLoadingTimeframe: session.setLoadingTimeframe,
+          setQuote: session.setQuote,
+          setInstrument: session.setInstrument,
+          setAccount: session.setAccount,
+          setPortfolio: session.setPortfolio,
+          setSymbolLoading: session.setSymbolLoading,
+        }}
+        controls={ticketControls}
+        accountRefs={accountRefs}
+      />
+      <LifecycleTicketEntry />
+      <LifecycleBootstrapAndGestures
+        workspace={workspace}
+        session={{
+          stores: session.stores,
+          loadingTimeframeRef: session.loadingTimeframeRef,
+          targetSymbol: session.targetSymbol,
+          pendingMetadata: session.pendingMetadata,
+          currentSymbol: session.currentSymbol,
+          currentTimeframe: session.currentTimeframe,
+          latestCandleRef: session.latestCandleRef,
+          dataKeyRef: session.dataKeyRef,
+        }}
+        accountRefs={accountRefs}
+        ticketActions={ticketActions}
+        ticketControls={ticketControls}
+        bridgeTicket={bridgeTicket}
+      />
+      <LifecycleTicketPreviewAndMirror
+        workspace={workspace}
+        session={{
+          instrument: session.instrument,
+          account: session.account,
+          snapshot: session.snapshot,
+          latestCandle: session.latestCandle,
+          status: session.status,
+        }}
+        execution={{
+          requestModifyDraft: execution.requestModifyDraft,
+          requestClosePosition: execution.requestClosePosition,
+          requestCancelOrder: execution.requestCancelOrder,
+        }}
+        dispatchEnabled={execution.executionQueue?.dispatchEnabled === true}
+      />
+    </>
   );
-  useChartWorkspaceMirrorLayoutEffect(workspace, session, ticketChart);
-  return null;
 }

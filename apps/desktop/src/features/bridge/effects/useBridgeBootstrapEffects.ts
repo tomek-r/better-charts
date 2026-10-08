@@ -34,7 +34,17 @@ import { createBridgeMarketRuntime, type BridgeEffectRun } from '../bridgeMarket
 import { createBridgeTicketResponseHandlers } from '../bridgeTicketResponseHandlers';
 
 export function useBridgeBootstrapEffects(
-  session: BridgeSessionState,
+  session: Pick<
+    BridgeSessionState,
+    | 'stores'
+    | 'loadingTimeframeRef'
+    | 'targetSymbol'
+    | 'pendingMetadata'
+    | 'currentSymbol'
+    | 'currentTimeframe'
+    | 'latestCandleRef'
+    | 'dataKeyRef'
+  >,
   {
     chart,
     adapterRef,

@@ -4,6 +4,8 @@ import { ChartController } from '../engine/chartController';
 import { Mt5DataAdapter } from '../engine/mt5DataAdapter';
 import { quoteDigits } from '../../../shared/format';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
+import type { BridgeSessionLifecycleState } from '../../bridge/BridgeSessionProvider';
+import type { QuoteSnapshot } from '../../../shared/bridge/types';
 import type { OrderTicketStores } from '../../order-ticket/state/orderTicketStores';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
@@ -15,7 +17,10 @@ import type { ChartWorkspaceState } from '../state/useChartWorkspace';
  */
 const toolFlyoutOpen = () => document.querySelector('.tool-flyout') !== null;
 
-export function useChartWorkspaceInitEffects(workspace: ChartWorkspaceState, session: BridgeSessionState): void {
+export function useChartWorkspaceInitEffects(
+  workspace: ChartWorkspaceState,
+  session: Pick<BridgeSessionState, 'setChartError' | 'requestProfileRange'>,
+): void {
   const {
     chartHost,
     chart,
@@ -102,7 +107,21 @@ export function useChartWorkspaceInitEffects(workspace: ChartWorkspaceState, ses
 
 export function useChartWorkspaceChartEffects(
   workspace: ChartWorkspaceState,
-  session: BridgeSessionState,
+  session: Pick<
+    BridgeSessionLifecycleState,
+    | 'instrument'
+    | 'loadingTimeframe'
+    | 'snapshot'
+    | 'setLoadingTimeframe'
+    | 'setChartError'
+    | 'currentSymbol'
+    | 'setQuote'
+    | 'setInstrument'
+    | 'targetSymbol'
+    | 'status'
+  > & {
+    quote: QuoteSnapshot | undefined;
+  },
   ticket: { clearStagedWidget: () => boolean },
 ): void {
   const { chart, setPendingModification, priceLinesState } = workspace;
@@ -177,7 +196,20 @@ export function useChartWorkspaceChartEffects(
 
 export function useChartWorkspaceResetEffects(
   workspace: ChartWorkspaceState,
-  session: BridgeSessionState,
+  session: Pick<
+    BridgeSessionLifecycleState,
+    | 'status'
+    | 'snapshot'
+    | 'loadingTimeframeRef'
+    | 'targetSymbol'
+    | 'pendingMetadata'
+    | 'setLoadingTimeframe'
+    | 'setQuote'
+    | 'setInstrument'
+    | 'setAccount'
+    | 'setPortfolio'
+    | 'setSymbolLoading'
+  >,
   ticket: Pick<OrderTicketStores['setters']['draft'], 'setEntry' | 'setStopLoss' | 'setTakeProfit'>,
 ): void {
   const { chart, fixedRangeProfileState, expectedProfile, profileGeneration } = workspace;

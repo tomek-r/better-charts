@@ -40,6 +40,7 @@ test('quote updates rerender market and ticket consumers without waking unrelate
   const counts = await probeCounts(page);
   expect(counts.market).toBeGreaterThan(0);
   expect(counts['bridge-runtime']).toBeGreaterThan(0);
+  expect(counts['bridge-lifecycle-runtime'] ?? 0).toBe(0);
   expect(counts['ticket-edit']).toBeGreaterThan(0);
   expect(counts['ticket-quotes']).toBeGreaterThan(0);
   expect(counts['ticket-extra-settings'] ?? 0).toBe(0);
@@ -59,6 +60,7 @@ test('quote updates rerender market and ticket consumers without waking unrelate
   await page.getByRole('button', { name: 'Update quote' }).click();
   await expect(page.getByTestId('probe-market')).toHaveText('1.0852');
   const identicalQuoteCounts = await probeCounts(page);
+  expect(identicalQuoteCounts['bridge-lifecycle-runtime'] ?? 0).toBe(0);
   expect(identicalQuoteCounts['ticket-quotes'] ?? 0).toBe(0);
   expect(identicalQuoteCounts['chart-quotes'] ?? 0).toBe(0);
   expect(identicalQuoteCounts['ticket-edit'] ?? 0).toBe(0);
@@ -70,6 +72,7 @@ test('quote updates rerender market and ticket consumers without waking unrelate
   await page.getByRole('button', { name: 'Move quote' }).click();
   await expect(page.getByTestId('probe-market')).toHaveText('1.08530');
   const changedQuoteCounts = await probeCounts(page);
+  expect(changedQuoteCounts['bridge-lifecycle-runtime'] ?? 0).toBe(0);
   expect(changedQuoteCounts['ticket-quotes']).toBeGreaterThan(0);
   expect(changedQuoteCounts['ticket-edit'] ?? 0).toBe(0);
   expect(changedQuoteCounts['ticket-extra-settings'] ?? 0).toBe(0);
@@ -104,6 +107,32 @@ test('bridge runtime projection reads current state from each canonical domain s
   await expect(page.getByTestId('probe-bridge-runtime')).toHaveText(
     'connected|false|EURUSD|1.0852|1.0852|1000.00|1745700001000',
   );
+  await expect(page.getByTestId('probe-bridge-lifecycle-runtime')).toHaveText(
+    'connected|false|EURUSD|1.0852|1000.00|1745700001000',
+  );
+});
+
+test('lifecycle runtime follows status, market and account updates without quote subscription', async ({ page }) => {
+  await mountHarness(page);
+  const lifecycle = page.getByTestId('probe-bridge-lifecycle-runtime');
+
+  await page.getByRole('button', { name: 'Set test bridge status' }).click();
+  await expect(lifecycle).toHaveText('connected|true||||');
+  expect((await probeCounts(page))['bridge-lifecycle-runtime']).toBeGreaterThan(0);
+
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Set test account' }).click();
+  await expect(lifecycle).toHaveText('connected|true|||1000.00|');
+  expect((await probeCounts(page))['bridge-lifecycle-runtime']).toBeGreaterThan(0);
+
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Load candle' }).click();
+  await expect(lifecycle).toHaveText('connected|true|EURUSD|1.0850|1000.00|');
+  expect((await probeCounts(page))['bridge-lifecycle-runtime']).toBeGreaterThan(0);
 });
 
 test('ticket edits and panel toggles update only their owning consumers', async ({ page }) => {

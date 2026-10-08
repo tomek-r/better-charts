@@ -7,8 +7,10 @@ import type { PositionOverlayState } from '../../chart/engine/positionOverlay';
 import { syncPositionOverlay } from '../../chart/engine/overlayLines';
 import type { BridgeSessionState } from '../useBridgeSession';
 
+type BridgeStreamState = Pick<BridgeSessionState, 'snapshot' | 'instrument' | 'account' | 'portfolio' | 'quote'>;
+
 export function useBridgeStreamEffects(
-  session: BridgeSessionState,
+  session: BridgeStreamState,
   {
     chart,
     positionOverlayState,

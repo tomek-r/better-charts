@@ -14,6 +14,7 @@ import {
   useBridgeQuote,
   useBridgePortfolio,
   useBridgeSessionRuntime,
+  useBridgeSessionLifecycleRuntime,
   BridgeSessionProvider,
   useTauriAvailable,
 } from '../src/features/bridge/BridgeSessionProvider';
@@ -99,6 +100,22 @@ function BridgeRuntimeProbe() {
         session.snapshot.symbol ?? '',
         session.latestCandle?.close ?? '',
         session.quote?.bid ?? '',
+        session.account?.balance ?? '',
+        String(session.portfolio?.capturedAtMs ?? ''),
+      ].join('|')}
+    </output>
+  );
+}
+
+function BridgeLifecycleRuntimeProbe() {
+  const session = useBridgeSessionLifecycleRuntime();
+  return (
+    <output data-testid="probe-bridge-lifecycle-runtime">
+      {[
+        session.status.state,
+        String(session.tauriAvailable),
+        session.snapshot.symbol ?? '',
+        session.latestCandle?.close ?? '',
         session.account?.balance ?? '',
         String(session.portfolio?.capturedAtMs ?? ''),
       ].join('|')}
@@ -484,6 +501,9 @@ function WorkspaceProbes() {
           </SymbolSearchProvider>
           <Probe id="bridge-runtime">
             <BridgeRuntimeProbe />
+          </Probe>
+          <Probe id="bridge-lifecycle-runtime">
+            <BridgeLifecycleRuntimeProbe />
           </Probe>
           <Probe id="market">
             <MarketProbe />
