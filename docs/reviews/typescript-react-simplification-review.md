@@ -377,6 +377,14 @@ measurements; development timings are not production latency evidence.
 
 ### F12 — P2: reuse money formatting and quote presentation
 
+**Implemented:** chart and ticket consume one pure quote presentation helper,
+including precision, formatted sides, spread, and optional points. Ticket view
+props contain formatted values and one spread field. A parity table covers no
+quote, last-price precision, the precision cap, malformed prices, and missing,
+zero, or invalid point size; existing quote UI tests pass. The pulled main had
+already delegated P&L formatting to the shared currency-aware formatter, so that
+part needed no additional change.
+
 **Evidence:** [P&L formatting](../../apps/desktop/src/features/chart/engine/overlayLines.ts#L40),
 [shared signed-money formatter](../../apps/desktop/src/shared/format.ts#L42),
 [chart quote derivation](../../apps/desktop/src/features/chart/ChartQuotes.tsx#L6),

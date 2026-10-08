@@ -1,11 +1,10 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
-import type { BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide, TimeInForce } from '../../../shared/bridge/types';
+import type { BrokerSymbol, OrderKind, RiskSide, TimeInForce } from '../../../shared/bridge/types';
 
 export interface OrderTicketQuoteProps {
-  value: QuoteSnapshot | undefined;
-  precision: number;
-  spread: string;
-  spreadBadge: string;
+  bidText: string;
+  askText: string;
+  spreadText: string;
   spreadPoints: number | null;
   side: RiskSide;
   stageFromQuote: (side: RiskSide) => void;

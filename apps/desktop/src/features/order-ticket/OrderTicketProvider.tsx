@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ComponentProps, type ReactNode } from 'react';
 import { useOrderTicket, type OrderTicketState } from './state/useOrderTicket';
-import { quoteDigits } from '../../shared/format';
+import { deriveQuotePresentation } from '../../shared/format';
 import { accountMoneyBasis } from '../../shared/money';
 import { OrderTicketReview } from './review/OrderTicketReview';
 import {
@@ -89,15 +89,7 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
       ticket.stagedOnChart,
     ],
   );
-  const bid = quote ? Number(quote.bid) : NaN;
-  const ask = quote ? Number(quote.ask) : NaN;
-  const quotePrecision = quote ? quoteDigits(quote.bid, quote.ask, quote.last) : 2;
-  const spread = Number.isFinite(bid) && Number.isFinite(ask) ? (ask - bid).toFixed(quotePrecision) : '—';
-  const pointSize = instrument ? Number(instrument.pointSize) : NaN;
-  const spreadPoints =
-    Number.isFinite(bid) && Number.isFinite(ask) && Number.isFinite(pointSize) && pointSize > 0
-      ? Math.round((ask - bid) / pointSize)
-      : null;
+  const { bidText, askText, spreadText, spreadPoints } = deriveQuotePresentation(quote, instrument?.pointSize);
   const tickValueRaw =
     accountMoneyBasis(instrument, account?.currency, account?.currencyDigits)?.tickValueProfit ?? NaN;
   const tickValueText =
@@ -154,15 +146,14 @@ export function OrderTicketProvider({ children }: { children: ReactNode }) {
   );
   const quoteProps = useMemo<OrderTicketQuoteProps>(
     () => ({
-      value: quote,
-      precision: quotePrecision,
-      spread,
-      spreadBadge: spread,
+      bidText,
+      askText,
+      spreadText,
       spreadPoints,
       side: ticket.riskSide,
       stageFromQuote: ticket.stageFromQuote,
     }),
-    [quote, quotePrecision, spread, spreadPoints, ticket.riskSide, ticket.stageFromQuote],
+    [bidText, askText, spreadText, spreadPoints, ticket.riskSide, ticket.stageFromQuote],
   );
   const hasQuote = quote !== undefined;
   const pricingProps = useMemo<OrderTicketPricingProps>(

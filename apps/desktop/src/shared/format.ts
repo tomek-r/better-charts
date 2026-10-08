@@ -1,4 +1,5 @@
 import { currencyFractionDigits } from './money';
+import type { QuoteSnapshot } from './bridge/types';
 
 export function quoteDigits(...values: string[]) {
   return Math.min(
@@ -16,6 +17,36 @@ export function formatQuote(value: string, digits: number) {
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(digits) : '—';
 }
+
+export interface QuotePresentation {
+  precision: number;
+  bidText: string;
+  askText: string;
+  spreadText: string;
+  spreadPoints: number | null;
+}
+
+export function deriveQuotePresentation(
+  quote: Pick<QuoteSnapshot, 'bid' | 'ask' | 'last'> | undefined,
+  pointSize?: string,
+): QuotePresentation {
+  const precision = quote ? quoteDigits(quote.bid, quote.ask, quote.last) : 2;
+  const bid = quote ? Number(quote.bid) : NaN;
+  const ask = quote ? Number(quote.ask) : NaN;
+  const pointSizeNumber = Number(pointSize);
+
+  return {
+    precision,
+    bidText: quote ? formatQuote(quote.bid, precision) : '—',
+    askText: quote ? formatQuote(quote.ask, precision) : '—',
+    spreadText: Number.isFinite(bid) && Number.isFinite(ask) ? (ask - bid).toFixed(precision) : '—',
+    spreadPoints:
+      Number.isFinite(bid) && Number.isFinite(ask) && Number.isFinite(pointSizeNumber) && pointSizeNumber > 0
+        ? Math.round((ask - bid) / pointSizeNumber)
+        : null,
+  };
+}
+
 // §12: chart drag payloads carry numbers, but the wire grammar (order_decimal) forbids exponent notation and non-positive values. Normalize before drafting; undefined reads as "leave unchanged" so a level that cannot be expressed never reaches the backend as an invalid string.
 export function draftLevel(value: number | undefined): string | undefined {
   if (value === undefined || !Number.isFinite(value) || value <= 0 || value >= 1e21) {
