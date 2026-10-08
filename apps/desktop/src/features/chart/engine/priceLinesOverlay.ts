@@ -1,5 +1,5 @@
 import type { OverlayRenderer } from './overlayTypes';
-import type { OverlayPass } from './stagedOrderOverlay';
+import type { OverlayPass } from './tradingOverlayDrawing';
 
 /**
  * LIVE bid/ask price lines (owner request: "for CFDs I also want to see bid,

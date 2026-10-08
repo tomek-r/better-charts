@@ -7,6 +7,17 @@ import {
 import type { OverlayRenderer } from './overlayTypes';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { palette } from '../../../shared/theme/palette';
+import {
+  CANCEL_CHIP_X,
+  drawCancelChip,
+  drawHandle,
+  HANDLE_X,
+  tagPath,
+  TRADING_COLORS,
+  type TradingHitCircle,
+  type TradingHitRect,
+  type OverlayPass,
+} from './tradingOverlayDrawing';
 
 /**
  * TradingView-style staged-order widget, drawn as a `ui`-layer overlay. Native
@@ -38,18 +49,6 @@ export interface StagedOrderLevels {
   riskRewardLabel?: string;
 }
 
-export interface StagedHitRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-export interface StagedHitCircle {
-  x: number;
-  y: number;
-  r: number;
-}
-
 export interface StagedOrderState {
   /** null = not staged. Written by App every render via the mirror effect. */
   order: StagedOrderLevels | null;
@@ -69,11 +68,11 @@ export interface StagedOrderState {
      *  not just the small handle box. */
     slLineY?: number;
     tpLineY?: number;
-    entryCancel?: StagedHitCircle;
-    slHandle?: StagedHitRect;
-    slCancel?: StagedHitCircle;
-    tpHandle?: StagedHitRect;
-    tpCancel?: StagedHitCircle;
+    entryCancel?: TradingHitCircle;
+    slHandle?: TradingHitRect;
+    slCancel?: TradingHitCircle;
+    tpHandle?: TradingHitRect;
+    tpCancel?: TradingHitCircle;
     /** Viewport snapshots for the dev-only test helper (pan/zoom assertions). */
     priceRange?: { min: number; max: number };
     barSpacing?: number;
@@ -84,39 +83,17 @@ export interface StagedOrderState {
   };
 }
 
-export const STAGED_COLORS = {
-  buy: palette.buy,
-  sell: palette.sell,
-  sl: palette.warn,
-  tp: palette.tp,
-  text: palette.textSecondary,
-  surface: palette.panel,
-} as const;
-
 /** ±px slop around painted geometry when hit-testing pointerdown. */
 export const STAGED_GRAB = 6;
 
-/** Corner radius of the row widgets (✕ chip, handle boxes) — one value so the
- *  ✕ and the SL/TP/Buy boxes keep the same corner language. */
-export const WIDGET_RADIUS = 4;
-
-/** Left inset of the row widgets (✕ chip, handles, tags) from chartRect's left
- *  edge — owner: the panels must not hug the left border. The row geometry is
- *  verbatim across the two overlays; only this shared inset moved. */
-export const ROW_INSET = 24;
-/** ✕ chip CENTER x offset from chartRect.x (inset + the 10px chip half-size). */
-export const CANCEL_CHIP_X = ROW_INSET + 10;
-/** Handle/tag column x offset from chartRect.x (chip right edge + 6px gap). */
-export const HANDLE_X = ROW_INSET + 26;
-
-export function hitCircle(circle: StagedHitCircle | undefined, x: number, y: number): boolean {
+export function hitCircle(circle: TradingHitCircle | undefined, x: number, y: number): boolean {
   if (!circle) {
     return false;
   }
   return Math.hypot(x - circle.x, y - circle.y) <= circle.r + STAGED_GRAB;
 }
 
-export function hitRect(rect: StagedHitRect | undefined, x: number, y: number): boolean {
+export function hitRect(rect: TradingHitRect | undefined, x: number, y: number): boolean {
   if (!rect) {
     return false;
   }
@@ -126,59 +103,6 @@ export function hitRect(rect: StagedHitRect | undefined, x: number, y: number): 
     y >= rect.y - STAGED_GRAB &&
     y <= rect.y + rect.h + STAGED_GRAB
   );
-}
-
-export function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + w - radius, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-  ctx.lineTo(x + w, y + h - radius);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-  ctx.lineTo(x + radius, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
-}
-
-/** Pointed (pentagon/arrow) outline tag: grip + segments, tip on the right. */
-export function tagPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, tip: number) {
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + w - tip, y);
-  ctx.lineTo(x + w, y + h / 2);
-  ctx.lineTo(x + w - tip, y + h);
-  ctx.lineTo(x, y + h);
-  ctx.closePath();
-}
-
-/** Draws a 20×20 rounded-square cancel chip (same corner radius as the SL/TP
- *  handle boxes) with a stroke-✕ — never the U+2715 glyph: glyph bearings drift
- *  per webview/font and left the mark visibly off-center. Returns the circle
- *  that circumscribes the square, so every painted pixel stays hittable. Shared
- *  with positionOverlay so the ✕ can never drift between the preview and the
- *  live overlay. */
-export function drawCancelChip(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): StagedHitCircle {
-  const r = 10;
-  roundedRect(ctx, cx - r, cy - r, r * 2, r * 2, WIDGET_RADIUS);
-  ctx.fillStyle = STAGED_COLORS.surface;
-  ctx.fill();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.lineCap = 'round';
-  ctx.lineWidth = 1.75;
-  const arm = 2.4;
-  ctx.beginPath();
-  ctx.moveTo(cx - arm, cy - arm);
-  ctx.lineTo(cx + arm, cy + arm);
-  ctx.moveTo(cx + arm, cy - arm);
-  ctx.lineTo(cx - arm, cy + arm);
-  ctx.stroke();
-  ctx.lineCap = 'butt';
-  return { x: cx, y: cy, r };
 }
 
 /** Draws a cancel chip and records it for the host pointer handlers. */
@@ -192,11 +116,6 @@ function cancelChip(
 ) {
   hit[key] = drawCancelChip(ctx, cx, cy, color);
 }
-
-/** Which half of the two-pass z-order a row overlay paints (chart/overlays.ts):
- *  'lines' = risk zones, 'labels' = chips/handles/tags. Native price lines
- *  render underneath the overlay primitive. */
-export type OverlayPass = 'lines' | 'labels';
 
 export function createStagedOrderOverlay(
   state: StagedOrderState,
@@ -216,7 +135,7 @@ export function createStagedOrderOverlay(
       const drawLabels = pass === 'labels';
       const { min, max } = viewport.priceRange;
       const hit: StagedOrderState['hit'] = { labels: [] };
-      const row = (level: TradingLabelTarget['level'], lineY: number, draw: (labelY: number) => StagedHitRect) =>
+      const row = (level: TradingLabelTarget['level'], lineY: number, draw: (labelY: number) => TradingHitRect) =>
         paintTradingLabel(ctx, viewport, hit.labels!, { source: 'staged', id: 'draft', level }, lineY, draw, labels);
       // Viewport snapshots for the dev test helper (pan/zoom E2E assertions).
       hit.priceRange = { min, max };
@@ -243,7 +162,7 @@ export function createStagedOrderOverlay(
         return;
       }
 
-      const sideColor = order.side === 'buy' ? STAGED_COLORS.buy : STAGED_COLORS.sell;
+      const sideColor = order.side === 'buy' ? TRADING_COLORS.buy : TRADING_COLORS.sell;
       const entryY = toY(order.entry);
       // Money at the exits (account currency) — only when the level is set.
       const slLabel = order.slMoney ? `SL ${order.slMoney}` : 'SL';
@@ -308,12 +227,12 @@ export function createStagedOrderOverlay(
             const tagText = `⋮⋮  |  ${qty}  |  ${order.orderKindLabel}${order.riskRewardLabel ? `  |  RR ${order.riskRewardLabel}` : ''}`;
             const tagW = ctx.measureText(tagText).width + 16;
             tagPath(ctx, cx, labelY - 10, tagW + 8, 20, 7);
-            ctx.fillStyle = STAGED_COLORS.surface;
+            ctx.fillStyle = TRADING_COLORS.surface;
             ctx.fill();
             ctx.strokeStyle = sideColor;
             ctx.lineWidth = 1;
             ctx.stroke();
-            ctx.fillStyle = STAGED_COLORS.text;
+            ctx.fillStyle = TRADING_COLORS.text;
             ctx.fillText(tagText, cx + 8, labelY + 0.5);
 
             return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: cx + tagW + 8 - (x + CANCEL_CHIP_X - 10), h: 20 };
@@ -334,8 +253,8 @@ export function createStagedOrderOverlay(
         if (slY >= y - 20 && slY <= y + height + 20) {
           if (drawLabels) {
             row('sl', slY, (labelY) => {
-              cancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.sl, hit, 'slCancel');
-              hit.slHandle = drawHandle(ctx, x + HANDLE_X, labelY, slLabel, STAGED_COLORS.sl, labelY < entryY);
+              cancelChip(ctx, x + CANCEL_CHIP_X, labelY, TRADING_COLORS.sl, hit, 'slCancel');
+              hit.slHandle = drawHandle(ctx, x + HANDLE_X, labelY, slLabel, TRADING_COLORS.sl, labelY < entryY);
 
               const box = hit.slHandle!;
               return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: box.x + box.w - (x + CANCEL_CHIP_X - 10), h: 20 };
@@ -348,7 +267,7 @@ export function createStagedOrderOverlay(
         const floatY = floatAbove ? entryY - 30 : entryY + 30;
         if (drawLabels && floatY >= y - 4 && floatY <= y + height + 4) {
           row('sl', floatY, (labelY) => {
-            const box = drawHandle(ctx, x + HANDLE_X, labelY, 'SL', STAGED_COLORS.sl, floatAbove);
+            const box = drawHandle(ctx, x + HANDLE_X, labelY, 'SL', TRADING_COLORS.sl, floatAbove);
             hit.slHandle = box;
             return box;
           });
@@ -361,8 +280,8 @@ export function createStagedOrderOverlay(
         if (tpY >= y - 20 && tpY <= y + height + 20) {
           if (drawLabels) {
             row('tp', tpY, (labelY) => {
-              cancelChip(ctx, x + CANCEL_CHIP_X, labelY, STAGED_COLORS.tp, hit, 'tpCancel');
-              hit.tpHandle = drawHandle(ctx, x + HANDLE_X, labelY, tpLabel, STAGED_COLORS.tp, labelY < entryY);
+              cancelChip(ctx, x + CANCEL_CHIP_X, labelY, TRADING_COLORS.tp, hit, 'tpCancel');
+              hit.tpHandle = drawHandle(ctx, x + HANDLE_X, labelY, tpLabel, TRADING_COLORS.tp, labelY < entryY);
 
               const box = hit.tpHandle!;
               return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: box.x + box.w - (x + CANCEL_CHIP_X - 10), h: 20 };
@@ -376,7 +295,7 @@ export function createStagedOrderOverlay(
         if (drawLabels && floatY >= y - 4 && floatY <= y + height + 4) {
           // tip always points AT the entry line: down when above, up when below.
           row('tp', floatY, (labelY) => {
-            const box = drawHandle(ctx, x + HANDLE_X, labelY, 'TP', STAGED_COLORS.tp, floatAbove);
+            const box = drawHandle(ctx, x + HANDLE_X, labelY, 'TP', TRADING_COLORS.tp, floatAbove);
             hit.tpHandle = box;
             return box;
           });
@@ -387,55 +306,4 @@ export function createStagedOrderOverlay(
       state.hit = hit;
     },
   };
-}
-
-/** Draggable outline handle tag ("⋮⋮ SL"/"⋮⋮ TP"); tip points at its line. */
-export function drawHandle(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  centerY: number,
-  label: string,
-  color: string,
-  tipDown: boolean,
-  /** Right-align the live amount so reserved space stays before it, not after it. */
-  trailing?: { text: string; amount: { text: string; width: number } },
-): StagedHitRect {
-  // 12px regular — same type size as the side pill (owner); no bold.
-  ctx.font = '400 12px system-ui, sans-serif';
-  ctx.textAlign = 'left';
-  const leadingWidth = ctx.measureText(`⋮⋮  ${label}`).width;
-  const trailingOffset =
-    leadingWidth + (trailing ? Math.max(trailing.amount.width, ctx.measureText(trailing.amount.text).width) : 0);
-  const w = (trailing ? trailingOffset + ctx.measureText(trailing.text).width : leadingWidth) + 14;
-  const h = 20;
-  const top = centerY - h / 2;
-  roundedRect(ctx, x, top, w, h, WIDGET_RADIUS);
-  ctx.fillStyle = STAGED_COLORS.surface;
-  ctx.fill();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  // Pointer tip toward the line the handle controls (entry line while unset).
-  ctx.beginPath();
-  if (tipDown) {
-    ctx.moveTo(x + 8, top + h);
-    ctx.lineTo(x + 16, top + h);
-    ctx.lineTo(x + 12, top + h + 5);
-  } else {
-    ctx.moveTo(x + 8, top);
-    ctx.lineTo(x + 16, top);
-    ctx.lineTo(x + 12, top - 5);
-  }
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.fillStyle = color;
-  ctx.fillText(`⋮⋮  ${label}`, x + 7, centerY + 0.5);
-  if (trailing) {
-    ctx.textAlign = 'right';
-    ctx.fillText(trailing.amount.text, x + 7 + trailingOffset, centerY + 0.5);
-    ctx.textAlign = 'left';
-    ctx.fillText(trailing.text, x + 7 + trailingOffset, centerY + 0.5);
-  }
-  return { x, y: top, w, h };
 }

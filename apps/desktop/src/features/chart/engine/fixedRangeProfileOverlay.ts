@@ -14,7 +14,7 @@ export interface FixedRangeProfileState {
   hit: { anchorX?: number; profileLeft?: number; profileRight?: number; pocY?: number; vahY?: number; valY?: number };
 }
 
-// The app's sell/buy convention (stagedOrderOverlay STAGED_COLORS): the bid is
+// The app's sell/buy convention (tradingOverlayDrawing TRADING_COLORS): the bid is
 // what you SELL at (red, mirrored LEFT), the ask what you BUY at (blue, RIGHT).
 const BID_COLOR = palette.sell;
 const ASK_COLOR = palette.buy;

@@ -5,7 +5,7 @@ import type { ChartOverlayState } from './overlays';
 import type { RenderViewport } from './overlayTypes';
 import type { DrawingTool } from '../../tools/toolTypes';
 import { createChartSurface } from './chartFactory';
-import { STAGED_COLORS } from './stagedOrderOverlay';
+import { TRADING_COLORS } from './tradingOverlayDrawing';
 import { BarCountdownPrimitive, CountdownController } from './barCountdown';
 import { OhlcLegend } from './ohlcLegend';
 import { ConnectionIndicator } from './connectionIndicator';
@@ -46,7 +46,7 @@ export class ChartController {
   private readonly observer: ResizeObserver;
   private readonly legend: OhlcLegend;
   private readonly connection: ConnectionIndicator;
-  private readonly countdownPrimitive = new BarCountdownPrimitive({ backColor: STAGED_COLORS.sell });
+  private readonly countdownPrimitive = new BarCountdownPrimitive({ backColor: TRADING_COLORS.sell });
   private readonly scaleControls: PriceScaleController;
   // Every tool shares pointer labels; Cross additionally draws the lines.
   // Attached for the chart's life, drawn only while a pointer is over the pane.
@@ -55,8 +55,8 @@ export class ChartController {
   // positioned by this primitive, because the library's own label alignment
   // restacks them around the last price on every tick (see the chart options).
   private readonly priceTags = new PriceAxisTagsPrimitive({
-    askColor: STAGED_COLORS.buy,
-    bidColor: STAGED_COLORS.sell,
+    askColor: TRADING_COLORS.buy,
+    bidColor: TRADING_COLORS.sell,
   });
   // The bar cache, its interval and the price precision are owned by
   // BarSeriesController; the `bars` accessor below is the read-only seam onto it.

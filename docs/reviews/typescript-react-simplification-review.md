@@ -407,6 +407,8 @@ behavior and account-currency regressions.
 
 ### F13 — P2: put shared overlay primitives in a neutral engine module
 
+**Implemented:** shared geometry, colors, row anchors, and drawing helpers now live in `tradingOverlayDrawing.ts`. Staged and live rendering policies remain separate. Overlay layering and gesture regressions pass.
+
 **Evidence:** [live overlay imports](../../apps/desktop/src/features/chart/engine/positionOverlay.ts#L10),
 [live quantity tag](../../apps/desktop/src/features/chart/engine/positionOverlay.ts#L229),
 and [staged quantity tag](../../apps/desktop/src/features/chart/engine/stagedOrderOverlay.ts#L306).

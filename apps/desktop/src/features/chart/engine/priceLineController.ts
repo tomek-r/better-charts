@@ -1,6 +1,6 @@
 import { LineStyle, type IPriceLine, type ISeriesApi } from 'lightweight-charts';
 import type { ChartOverlayState } from './overlays';
-import { STAGED_COLORS } from './stagedOrderOverlay';
+import { TRADING_COLORS } from './tradingOverlayDrawing';
 import type { PriceAxisTagsPrimitive } from './priceAxisTagsPrimitive';
 import { palette } from '../../../shared/theme/palette';
 
@@ -38,33 +38,33 @@ export class PriceLineController {
       }
     };
     const { priceLines, staged, positions } = this.state;
-    add('bid-ask:ask', priceLines.ask, STAGED_COLORS.buy, false);
-    add('bid-ask:bid', priceLines.bid, STAGED_COLORS.sell, false);
+    add('bid-ask:ask', priceLines.ask, TRADING_COLORS.buy, false);
+    add('bid-ask:bid', priceLines.bid, TRADING_COLORS.sell, false);
 
     const draft = staged.order;
     if (draft) {
       if (Number.isFinite(draft.entry)) {
-        add('staged:entry', draft.entry, draft.side === 'buy' ? STAGED_COLORS.buy : STAGED_COLORS.sell);
+        add('staged:entry', draft.entry, draft.side === 'buy' ? TRADING_COLORS.buy : TRADING_COLORS.sell);
       }
-      add('staged:sl', draft.stopLoss, STAGED_COLORS.sl);
-      add('staged:tp', draft.takeProfit, STAGED_COLORS.tp);
+      add('staged:sl', draft.stopLoss, TRADING_COLORS.sl);
+      add('staged:tp', draft.takeProfit, TRADING_COLORS.tp);
     }
     const drag = positions.drag;
     for (const position of positions.positions) {
       add(
         `position:${position.id}:entry`,
         position.entry,
-        position.side === 'buy' ? STAGED_COLORS.buy : STAGED_COLORS.sell,
+        position.side === 'buy' ? TRADING_COLORS.buy : TRADING_COLORS.sell,
       );
       add(
         `position:${position.id}:sl`,
         drag?.kind === 'sl' && drag.id === position.id ? drag.price : position.stopLoss,
-        STAGED_COLORS.sl,
+        TRADING_COLORS.sl,
       );
       add(
         `position:${position.id}:tp`,
         drag?.kind === 'tp' && drag.id === position.id ? drag.price : position.takeProfit,
-        STAGED_COLORS.tp,
+        TRADING_COLORS.tp,
       );
     }
     for (const order of positions.orders) {
@@ -73,7 +73,7 @@ export class PriceLineController {
       add(
         `${orderId}:entry`,
         drag?.kind === 'order' && drag.id === order.id ? drag.price : order.price,
-        order.side === 'buy' ? STAGED_COLORS.buy : STAGED_COLORS.sell,
+        order.side === 'buy' ? TRADING_COLORS.buy : TRADING_COLORS.sell,
       );
       let stopLoss = order.stopLoss;
       if (orderDrag?.exitPreview) {
@@ -82,7 +82,7 @@ export class PriceLineController {
       if (drag?.kind === 'sl' && drag.id === orderId) {
         stopLoss = drag.price;
       }
-      add(`${orderId}:sl`, stopLoss, STAGED_COLORS.sl);
+      add(`${orderId}:sl`, stopLoss, TRADING_COLORS.sl);
       let takeProfit = order.takeProfit;
       if (orderDrag?.exitPreview) {
         takeProfit = orderDrag.takeProfit;
@@ -90,7 +90,7 @@ export class PriceLineController {
       if (drag?.kind === 'tp' && drag.id === orderId) {
         takeProfit = drag.price;
       }
-      add(`${orderId}:tp`, takeProfit, STAGED_COLORS.tp);
+      add(`${orderId}:tp`, takeProfit, TRADING_COLORS.tp);
     }
 
     for (const [id, line] of this.nativePriceLines) {
