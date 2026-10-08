@@ -1,5 +1,5 @@
 import type { OrderCheckResult, OrderKind, RiskPreview, RiskSide, TimeInForce } from '../../../shared/bridge/types';
-import type { MutableRefObject } from 'react';
+import type { RefObject } from 'react';
 import { createDomainStore } from '../../../shared/state/domainStore';
 import { createTicketDerivationCache } from '../domain/ticketDerivation';
 
@@ -12,15 +12,15 @@ type OrderCheckPending = {
 };
 
 export type OrderTicketCoordination = {
-  submitSwapPendingRef: MutableRefObject<boolean>;
-  stagedPrevPriceRef: MutableRefObject<number | undefined>;
-  riskVersion: MutableRefObject<number>;
-  pendingRiskRequestRef: MutableRefObject<(() => Promise<unknown>) | undefined>;
-  orderCheckGeneration: MutableRefObject<number>;
-  orderCheckPending: MutableRefObject<OrderCheckPending | undefined>;
-  unitsAutoMode: MutableRefObject<'money' | 'equity'>;
-  riskBrokerVersion: MutableRefObject<number | undefined>;
-  riskPreviewDisplayRef: MutableRefObject<RiskPreview | undefined>;
+  submitSwapPendingRef: RefObject<boolean>;
+  stagedPrevPriceRef: RefObject<number | undefined>;
+  riskVersion: RefObject<number>;
+  pendingRiskRequestRef: RefObject<(() => Promise<unknown>) | undefined>;
+  orderCheckGeneration: RefObject<number>;
+  orderCheckPending: RefObject<OrderCheckPending | undefined>;
+  unitsAutoMode: RefObject<'money' | 'equity'>;
+  riskBrokerVersion: RefObject<number | undefined>;
+  riskPreviewDisplayRef: RefObject<RiskPreview | undefined>;
 };
 
 export type OrderTicketDraftStore = {
