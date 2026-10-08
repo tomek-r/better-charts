@@ -607,6 +607,19 @@ async function runVersion(browser, label, round, options) {
       },
     );
 
+    phases.panelFirstOpen = await measurePhase(
+      page,
+      options.expect,
+      "panelFirstOpen",
+      1,
+      async () => {
+        const toggle = page.getByRole("button", { name: "Toggle trade panel" });
+        await toggle.click();
+        await options.expect(page.locator(".order-ticket")).toBeVisible();
+        await toggle.click();
+        await options.expect(toggle).toHaveAttribute("aria-expanded", "false");
+      },
+    );
     phases.panelToggles = await measurePhase(
       page,
       options.expect,

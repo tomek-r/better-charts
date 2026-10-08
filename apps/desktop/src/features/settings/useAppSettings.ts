@@ -5,6 +5,7 @@ import type { AppSettingsData } from './settingsTypes';
 
 export interface AppSettingsState {
   settings: AppSettingsData | undefined;
+  loadRequest: Promise<void>;
   isOpen: boolean;
   closing: boolean;
   loadError: string | undefined;
@@ -16,6 +17,7 @@ export interface AppSettingsState {
 
 export const initialAppSettingsState: AppSettingsState = {
   settings: undefined,
+  loadRequest: Promise.resolve(),
   isOpen: false,
   closing: false,
   loadError: undefined,
@@ -34,7 +36,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   const loadSettings = useCallback(
     (errorMessage: string, onLoaded?: (next: AppSettingsData) => void) => {
       const generation = ++settingsLoadGeneration.current;
-      void invoke<AppSettingsData>('get_app_settings')
+      const loadRequest = invoke<AppSettingsData>('get_app_settings')
         .then((next) => {
           if (generation !== settingsLoadGeneration.current) {
             return;
@@ -47,6 +49,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
             store.setField('loadError', errorMessage);
           }
         });
+      store.setField('loadRequest', loadRequest);
     },
     [store],
   );
@@ -77,10 +80,10 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     clearTimeout(closeTimer.current);
     closeTimer.current = undefined;
     store.setField('closing', false);
-    store.setField('isOpen', true);
     store.setField('dismissedConfigurationError', undefined);
     store.setField('loadError', undefined);
     loadSettings('Could not load app settings. Close and reopen settings to try again.');
+    store.setField('isOpen', true);
   }, [loadSettings, store]);
   const close = useCallback(() => {
     if (closeTimer.current !== undefined) {

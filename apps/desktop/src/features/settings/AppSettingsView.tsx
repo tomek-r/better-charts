@@ -10,6 +10,7 @@ export function AppSettingsView() {
   return (
     <AppSettingsDialog
       settings={settings.settings}
+      loadRequest={settings.loadRequest}
       closing={settings.closing}
       loadError={settings.loadError}
       onClose={settings.close}

@@ -87,6 +87,17 @@ inspection on every platform. Settings apply after restart. Precedence:
 process environment → first applicable `.env` → saved settings; only `MT5_` keys
 load. Invalid configuration disables trading/auto-start. See [setup](../README.md#connect-to-metatrader-5).
 
+Initial settings content uses React 19 `use()` with a stable store-owned request
+promise and a narrow Suspense loading fallback. The modal shell and focus trap
+stay available during loading; cached settings remain editable during refresh.
+Request generations still reject stale results. Event-driven bridge, symbol
+search, and execution progress retain explicit pending states.
+
+The trading panel mounts its order-ticket and portfolio views on first open,
+then keeps them mounted across toggles to preserve local UI state. Its code is
+statically loaded. Ticket stores, lifecycle effects, chart gestures, and bridge
+updates remain active before the panel opens.
+
 ## Validation and plans
 
 Windows release builds use the GUI subsystem; background process checks and stop

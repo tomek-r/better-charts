@@ -172,32 +172,43 @@ function recordCommittedConsumerExecution(group: string) {
   consumers += "</div>; }\n";
   fs.writeFileSync(file("src/reactProfileConsumers.tsx"), consumers);
   const featurePath = file("src/features/order-ticket/OrderTicketFeature.tsx");
-  let feature = fs.readFileSync(featurePath, "utf8");
+  const legacyFeature = fs.existsSync(featurePath);
+  const scopePath = legacyFeature
+    ? featurePath
+    : file("src/features/app-workspace/AppWorkspaceView.tsx");
+  const viewPath = legacyFeature
+    ? featurePath
+    : file("src/features/order-ticket/OrderTicketPanelContent.tsx");
+  let scope = fs.readFileSync(scopePath, "utf8");
+  let view = scopePath === viewPath ? scope : fs.readFileSync(viewPath, "utf8");
   if (
-    !feature.includes("<OrderTicketView />") ||
-    !feature.includes("<OrderTicketProvider>")
+    !view.includes("<OrderTicketView />") ||
+    !scope.includes("<OrderTicketProvider>")
   ) {
     throw new Error(
-      "Unsupported OrderTicketFeature composition; update profiler instrumentation.",
+      "Unsupported ticket composition; update profiler instrumentation.",
     );
   }
-  feature = `import { Profiler } from 'react';
+  const profileImports = `import { Profiler } from 'react';
 import { recordProfile } from '../../reactProfile';
-import { ProfileConsumers } from '../../reactProfileConsumers';
-${feature}`;
-  feature = feature.replace(
+`;
+  view = `${profileImports}import { ProfileConsumers } from '../../reactProfileConsumers';
+${view}`;
+  view = view.replace(
     "<OrderTicketView />",
     "<Profiler id=\"ticket-view\" onRender={recordProfile}><OrderTicketView /></Profiler>{'__reactFullProfile' in window ? null : <ProfileConsumers />}",
   );
-  feature = feature.replace(
+  scope = scopePath === viewPath ? view : `${profileImports}${scope}`;
+  scope = scope.replace(
     "<OrderTicketProvider>",
     '<Profiler id="ticket-scope" onRender={recordProfile}><OrderTicketProvider>',
   );
-  feature = feature.replace(
+  scope = scope.replace(
     "</OrderTicketProvider>",
     "</OrderTicketProvider></Profiler>",
   );
-  fs.writeFileSync(featurePath, feature);
+  fs.writeFileSync(scopePath, scope);
+  if (viewPath !== scopePath) fs.writeFileSync(viewPath, view);
   const mainPath = file("src/main.tsx");
   let main = fs.readFileSync(mainPath, "utf8");
   if (!main.includes("import { StrictMode }") || !main.includes("<App />")) {

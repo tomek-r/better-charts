@@ -210,3 +210,64 @@ Changing-price quote medians decrease 13.5% versus the prior branch, but ranges 
 Commands: PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare; PROFILE_BASE_REF=9b0bc7d PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare. Both captures use the same candidate source hash listed above.
 
 Validation: pnpm check, pnpm build, pnpm test:e2e (267 passed), and git diff --check pass. New assertions guard zero quote renders in the lifecycle input projection and fresh status/account/market updates; the existing broad runtime projection remains live. Initial ref-mutation lint warnings were resolved using typed, destructured refs, without suppressions. All profiling steps completed with no browser errors, observer errors, or submissions. Real Tauri/MT5 was not exercised.
+
+## Deferred symbol-search initialization — reverted
+
+After the previous PR merged, tested deferring symbol-search query/results state, favorites/recent storage initialization, and search effects until first open. A small permanent shell retained keyboard shortcuts and recorded accepted selections before opening. The search session stayed mounted after first open to preserve query state and existing close/reopen behavior. Bridge, chart, and execution initialization remained unchanged.
+
+Baseline: merged main `8c96bea`. Command: `PROFILE_BASE_REF=main PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare`. Five alternating production rounds used fresh browser contexts. Baseline source hash: `b966e7cf7d84a533a914690cbaba67e5a2eb13167ff4eb97eca03a3173785a48`; experimental source hash: `7fe561f97b773f49df19246f6c87f52163d8eda9eeff494e86880313ffb6db95`. Captured at 2026-10-08 22:02 UTC. Capture files are local and ignored; this record contains the relevant results without links to ignored artifacts.
+
+| Measurement | Main median [min, max] ms | Deferred search median [min, max] ms |
+| --- | ---: | ---: |
+| Startup cumulative React render time | 13.4 [13.0, 13.9] | 13.4 [12.5, 13.9] |
+| Startup wall time | 138 [138, 141] | 141 [138, 156] |
+| First search scenario cumulative React render time | 0.4 [0.2, 0.5] | 0.8 [0.7, 1.0] |
+| First search scenario wall time | 67 [67, 68] | 67 [67, 68] |
+
+Both builds recorded seven root commits during startup and four in the search scenario. The first search scenario opens the dialog, enters EUR, and closes it; it is not an isolated measurement of opening latency. Startup render medians are equal and ranges overlap. Search scenario render time increases with non-overlapping ranges, although its wall time is unchanged. No measurable startup improvement justifies retaining the additional lifecycle state and component boundary, so the production experiment and its newly added regression tests were reverted together. Existing tests were not removed or weakened.
+
+The temporary regression first failed on the baseline's eager storage accesses, then passed with the experiment: startup accessed neither symbol-storage key, first open initialized both, and closing/reopening preserved the query without additional storage access. A second regression preserved deduplicated NAS100/EURUSD/NAS100 selections before first open without initializing favorites. All 26 focused search/provider tests and `pnpm check` passed for the experiment. An initial focused run was blocked by Vite's lint overlay due to two missing braces in the new test probe; fixing those conditions resolved it without suppressions. Every profiler scenario completed without browser errors, observer errors, or order submissions. Only the browser Tauri stub was exercised.
+
+Verdict: reverted. Deferring cheap state initialization moved work into the first interaction without demonstrating faster startup. Future startup work should first attribute expensive initialization or module loading rather than assuming store construction is the bottleneck.
+
+
+## Deferred trading-panel rendering — 22:21 UTC
+
+The panel shell remains mounted; OrderTicketPanelContent first mounts when opened and stays mounted after closing. OrderTicketProvider and AppLifecycle remain active from startup, so chart interactions, bridge updates, account resets, and execution guards retain their lifecycle. No module-loading boundary or extra store is introduced.
+
+Compared against merged main `8c96bea` using five alternating production rounds and fresh browser contexts. Command: `PROFILE_BASE_REF=main PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare`. Captured 2026-10-08 22:21 UTC, before the naming-only move to OrderTicketPanel/OrderTicketPanelContent. Baseline source hash: `b966e7cf7d84a533a914690cbaba67e5a2eb13167ff4eb97eca03a3173785a48`; measured candidate source hash: `58f98f2014bd9479699daa6c99be69f9df3e0492020efc750177601caf67820f`. The candidate also includes initial-settings Suspense commit `4b5bb12`.
+
+| Measurement | Main median [min, max] ms | Deferred panel median [min, max] ms |
+| --- | ---: | ---: |
+| Startup cumulative React render time | 13.5 [13.1, 14.1] | 6.8 [6.6, 6.9] |
+| Startup wall time | 139 [138, 156] | 122 [121, 123] |
+| First panel open and close, React render time | 0.1 [0, 0.2] | 9.1 [8.9, 9.4] |
+| First panel open and close, wall time | 112 [111, 115] | 154 [153, 154] |
+| Eight later panel toggles, React render time | 0.5 [0.3, 0.5] | 0.5 [0.4, 0.6] |
+| Eight later panel toggles, wall time | 537 [537, 537] | 537 [537, 537] |
+
+Startup render time falls 49.6%, and startup wall time falls 12.2%, with non-overlapping ranges. Work moves to the first panel interaction: the open-and-close scenario increases by 42 ms. This phase includes clicking both toggles and waiting for the ticket to become visible; it does not isolate opening latency. Later toggles preserve mounted state and show unchanged medians. Startup still records seven root commits in both builds. These are browser Tauri-stub measurements, not native desktop launch timings. Servers and browser processes are reused, while each measured context starts with independent cache/storage state.
+
+A lazy module-loading variant was rejected: versus main it reduced startup render time to 6.7 ms but raised first open-and-close wall time from 111 to 421 ms. A separate comparison against immediate predecessor `4b5bb12` also showed startup render time 13.5 → 6.8 ms and first interaction 113 → 421 ms, confirming the panel experiment independently of settings Suspense. Static imports retain the startup render benefit without the lazy-loading delay.
+
+The runner now measures first panel open-and-close separately before the eight warm toggles, identically for both builds. Ticket instrumentation supports both main's OrderTicketFeature and the new separate provider/content composition. The ticket-scope boundary encloses more content in the candidate; only the root application durations above are compared. Every phase completed, with no browser errors, observer errors, or order submissions.
+
+Validation: `pnpm check`, `pnpm build`, `pnpm test:e2e` (270 passed), `node --check` for the three changed profiler scripts, and `git diff --check` pass. The new browser regression verifies no ticket UI before first open, current chart quotes while closed, current ticket quotes when opened, draft persistence across toggles, and no order submission. No native Tauri/MT5 session was exercised.
+
+
+## Deferred volume-profile initialization — reverted
+
+Tested synchronous first-use creation of FixedRangeProfileController when selecting the profile tool, and creation of its overlay renderer when profile state first becomes active. Static imports remained; no asynchronous tool-loading delay was introduced. Selection previews retained their original paint slot before profile data arrived. Chart/profile request handling, cancellation, generation guards, and execution behavior were unchanged.
+
+Compared with immediate predecessor `6f32ef3`, which already defers OrderTicketPanel rendering, to isolate this experiment. Command: `PROFILE_BASE_REF=6f32ef3 PROFILE_MODE=production PROFILE_SUITE=full PROFILE_ROUNDS=5 pnpm profiler:compare`. Five alternating production rounds used fresh browser contexts, captured 2026-10-08 22:34 UTC. The report's baseline series named “main” refers to `6f32ef3`, not the main branch. Baseline source hash: `ef5345d058a7fe133c5acbb398811923d097a825040c5b495738481f31ca183a`; experimental source hash: `91372f69d3f820f092d051c6c508f3765b7d4ec556afb53c549a352fd7894512`.
+
+| Measurement | Previous commit median [min, max] ms | Deferred profile median [min, max] ms |
+| --- | ---: | ---: |
+| Startup cumulative React render time | 6.9 [6.7, 7.0] | 6.8 [6.3, 7.0] |
+| Startup wall time | 122 [121, 123] | 122 [121, 125] |
+| First panel open-and-close render time | 8.8 [8.6, 9.5] | 9.1 [8.4, 9.5] |
+| First panel open-and-close wall time | 154 [153, 154] | 153 [153, 154] |
+
+Verdict: reverted. Startup wall medians are identical; render ranges overlap. The controller constructor initializes a few fields and callbacks, while the renderer already skips expensive work until a range and profile result exist. Deferring these small allocations added lifecycle branches without demonstrating a startup benefit. The tool's expensive fetching/calculation already waits for a range selection. This experiment does not evaluate asynchronous module loading.
+
+Validation of the temporary implementation: desktop TypeScript typecheck, targeted ESLint/Prettier, `git diff --check`, and `pnpm --filter better-charts exec playwright test e2e/smoke.spec.ts e2e/chart-migration.spec.ts e2e/fixed-range-profile.spec.ts e2e/overlay-z-order.spec.ts` (60 passed). A temporary regression verified absent controller before tool selection, no creation from cancellation/other tools, and controller presence after selecting the profile tool. The implementation, test accessor, and its new regression were reverted together; existing tests were preserved. All profiler phases completed with no browser errors, observer errors, or submissions. Only the browser Tauri stub was exercised; native Tauri/MT5 was not tested.

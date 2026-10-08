@@ -1,5 +1,5 @@
 import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Suspense, use, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppSettingsData } from './settingsTypes';
 import { FRAME_BYTES } from '../../shared/bridge/limits';
@@ -12,6 +12,7 @@ const LOOPBACK_ADDRESS = /^(127(?:\.[0-9]{1,3}){3}|\[::1\]):([0-9]+)$/;
 
 export function AppSettingsDialog({
   settings,
+  loadRequest,
   closing,
   loadError,
   onClose,
@@ -19,6 +20,7 @@ export function AppSettingsDialog({
 }: {
   closing: boolean;
   settings: AppSettingsData | undefined;
+  loadRequest: Promise<void>;
   loadError: string | undefined;
   onClose: () => void;
   onSaved: (settings: AppSettingsData) => void;
@@ -168,137 +170,144 @@ export function AppSettingsDialog({
               ))}
             </nav>
             <div className="settings-content" key={category}>
-              {settings?.firstLaunch && (
-                <p className="settings-intro">Welcome to Better Charts. Set up your MT5 connection to get started.</p>
-              )}
               {loadError && <ErrorNotification message={loadError} />}
-              {!draft && !loadError && <p role="status">Loading settings…</p>}
-              {draft && category === 'MT5 setup' && (
-                <>
-                  <h3>Bridge connection</h3>
-                  <label className="settings-field">
-                    Address
-                    <input
-                      value={draft.address}
-                      autoComplete="off"
-                      spellCheck={false}
-                      onChange={(event) => change('address', event.target.value)}
-                    />
-                  </label>
-                  <p className="settings-hint">Local host and port. Use the same host and port in the EA inputs.</p>
-                  <label className="settings-field">
-                    Token
-                    <input
-                      type={showToken ? 'text' : 'password'}
-                      value={draft.token}
-                      autoComplete="off"
-                      spellCheck={false}
-                      onChange={(event) => change('token', event.target.value)}
-                    />
-                  </label>
-                  <label className="settings-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={showToken}
-                      onChange={(event) => setShowToken(event.target.checked)}
-                    />
-                    Show token
-                  </label>
-                  <p className="settings-hint">
-                    Use the identical token in the EA's InpBridgeToken. Saved locally on this device.
-                  </p>
-                  <h3>Transfer limits</h3>
-                  <label className="settings-field">
-                    Maximum frame bytes
-                    <input
-                      type="number"
-                      min={FRAME_BYTES.min}
-                      max={FRAME_BYTES.max}
-                      step="1"
-                      value={Number.isNaN(draft.maxFrameBytes) ? '' : draft.maxFrameBytes}
-                      onChange={(event) => change('maxFrameBytes', Number(event.target.value))}
-                    />
-                  </label>
-                  <p className="settings-hint">
-                    Negotiated with the EA. Default: {FRAME_BYTES.default} bytes ({FRAME_BYTES.default / (1024 * 1024)}{' '}
-                    MiB).
-                  </p>
-                </>
-              )}
-              {draft && category === 'Trading' && (
-                <>
-                  <h3>Trading permissions</h3>
-                  <label className="settings-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={draft.tradingEnabled}
-                      onChange={(event) => change('tradingEnabled', event.target.checked)}
-                    />
-                    Allow order execution
-                  </label>
-                  <p className="settings-hint">
-                    Enable to allow Better Charts to submit, modify, and close trades. MT5, the EA, and the account must
-                    also permit trading, and reconciliation must be complete.
-                  </p>
-                  <p className="settings-hint">Keep disabled for charting without order execution.</p>
-                </>
-              )}
-              {draft && category === 'MT5 setup' && (
-                <>
-                  <h3>Terminal startup</h3>
-                  <label className="settings-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={draft.autoStartMt5}
-                      onChange={(event) => change('autoStartMt5', event.target.checked)}
-                    />
-                    Start MT5 when Better Charts launches
-                  </label>
-                  <p className="settings-hint">Saving settings does not start MT5. Startup runs on the next launch.</p>
-                  <label className="settings-field">
-                    MT5 executable path
-                    <input
-                      value={draft.terminalPath}
-                      spellCheck={false}
-                      onChange={(event) => change('terminalPath', event.target.value)}
-                    />
-                  </label>
-                  {settings?.platform !== 'windows' && (
+              <Suspense fallback={<p role="status">Loading settings…</p>}>
+                <SettingsContent loadRequest={!draft && !loadError ? loadRequest : undefined}>
+                  {settings?.firstLaunch && (
+                    <p className="settings-intro">
+                      Welcome to Better Charts. Set up your MT5 connection to get started.
+                    </p>
+                  )}
+                  {draft && category === 'MT5 setup' && (
                     <>
+                      <h3>Bridge connection</h3>
                       <label className="settings-field">
-                        Wine binary path
+                        Address
                         <input
-                          value={draft.wineBinary}
+                          value={draft.address}
+                          autoComplete="off"
                           spellCheck={false}
-                          onChange={(event) => change('wineBinary', event.target.value)}
+                          onChange={(event) => change('address', event.target.value)}
                         />
                       </label>
+                      <p className="settings-hint">Local host and port. Use the same host and port in the EA inputs.</p>
                       <label className="settings-field">
-                        Wine prefix path
+                        Token
                         <input
-                          value={draft.winePrefix}
+                          type={showToken ? 'text' : 'password'}
+                          value={draft.token}
+                          autoComplete="off"
                           spellCheck={false}
-                          onChange={(event) => change('winePrefix', event.target.value)}
+                          onChange={(event) => change('token', event.target.value)}
+                        />
+                      </label>
+                      <label className="settings-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={showToken}
+                          onChange={(event) => setShowToken(event.target.checked)}
+                        />
+                        Show token
+                      </label>
+                      <p className="settings-hint">
+                        Use the identical token in the EA's InpBridgeToken. Saved locally on this device.
+                      </p>
+                      <h3>Transfer limits</h3>
+                      <label className="settings-field">
+                        Maximum frame bytes
+                        <input
+                          type="number"
+                          min={FRAME_BYTES.min}
+                          max={FRAME_BYTES.max}
+                          step="1"
+                          value={Number.isNaN(draft.maxFrameBytes) ? '' : draft.maxFrameBytes}
+                          onChange={(event) => change('maxFrameBytes', Number(event.target.value))}
+                        />
+                      </label>
+                      <p className="settings-hint">
+                        Negotiated with the EA. Default: {FRAME_BYTES.default} bytes (
+                        {FRAME_BYTES.default / (1024 * 1024)} MiB).
+                      </p>
+                    </>
+                  )}
+                  {draft && category === 'Trading' && (
+                    <>
+                      <h3>Trading permissions</h3>
+                      <label className="settings-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={draft.tradingEnabled}
+                          onChange={(event) => change('tradingEnabled', event.target.checked)}
+                        />
+                        Allow order execution
+                      </label>
+                      <p className="settings-hint">
+                        Enable to allow Better Charts to submit, modify, and close trades. MT5, the EA, and the account
+                        must also permit trading, and reconciliation must be complete.
+                      </p>
+                      <p className="settings-hint">Keep disabled for charting without order execution.</p>
+                    </>
+                  )}
+                  {draft && category === 'MT5 setup' && (
+                    <>
+                      <h3>Terminal startup</h3>
+                      <label className="settings-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={draft.autoStartMt5}
+                          onChange={(event) => change('autoStartMt5', event.target.checked)}
+                        />
+                        Start MT5 when Better Charts launches
+                      </label>
+                      <p className="settings-hint">
+                        Saving settings does not start MT5. Startup runs on the next launch.
+                      </p>
+                      <label className="settings-field">
+                        MT5 executable path
+                        <input
+                          value={draft.terminalPath}
+                          spellCheck={false}
+                          onChange={(event) => change('terminalPath', event.target.value)}
+                        />
+                      </label>
+                      {settings?.platform !== 'windows' && (
+                        <>
+                          <label className="settings-field">
+                            Wine binary path
+                            <input
+                              value={draft.wineBinary}
+                              spellCheck={false}
+                              onChange={(event) => change('wineBinary', event.target.value)}
+                            />
+                          </label>
+                          <label className="settings-field">
+                            Wine prefix path
+                            <input
+                              value={draft.winePrefix}
+                              spellCheck={false}
+                              onChange={(event) => change('winePrefix', event.target.value)}
+                            />
+                          </label>
+                        </>
+                      )}
+                      <label className="settings-field">
+                        Startup configuration path (optional)
+                        <input
+                          value={draft.configPath}
+                          spellCheck={false}
+                          onChange={(event) => change('configPath', event.target.value)}
                         />
                       </label>
                     </>
                   )}
-                  <label className="settings-field">
-                    Startup configuration path (optional)
-                    <input
-                      value={draft.configPath}
-                      spellCheck={false}
-                      onChange={(event) => change('configPath', event.target.value)}
-                    />
-                  </label>
-                </>
-              )}
-              {settings && settings.overriddenKeys.length > 0 && (
-                <p className="settings-hint">
-                  Environment or .env values override saved settings: {settings.overriddenKeys.join(', ')}.
-                </p>
-              )}
-              {error && <ErrorNotification message={error} />}
+                  {settings && settings.overriddenKeys.length > 0 && (
+                    <p className="settings-hint">
+                      Environment or .env values override saved settings: {settings.overriddenKeys.join(', ')}.
+                    </p>
+                  )}
+                  {error && <ErrorNotification message={error} />}
+                </SettingsContent>
+              </Suspense>
             </div>
           </fieldset>
           <footer className="settings-footer">
@@ -314,4 +323,11 @@ export function AppSettingsDialog({
       </div>
     </div>
   );
+}
+
+function SettingsContent({ loadRequest, children }: { loadRequest: Promise<void> | undefined; children: ReactNode }) {
+  if (loadRequest) {
+    use(loadRequest);
+  }
+  return children;
 }

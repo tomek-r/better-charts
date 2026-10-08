@@ -5,11 +5,10 @@ import { ChartWorkspaceProvider } from '../chart/ChartWorkspaceProvider';
 import { ChartWorkspaceView } from '../chart/ChartWorkspaceView';
 import { DrawingToolsView } from '../tools/DrawingToolsView';
 import { ExecutionProvider } from '../execution/ExecutionProvider';
-import { OrderTicketFeature } from '../order-ticket/OrderTicketFeature';
-import { PortfolioView } from '../portfolio/PortfolioView';
+import { OrderTicketPanel } from '../order-ticket/OrderTicketPanel';
+import { OrderTicketProvider } from '../order-ticket/OrderTicketProvider';
 import { SymbolSearchProvider } from '../symbol-search/SymbolSearchProvider';
 import { SymbolSearchView } from '../symbol-search/SymbolSearchView';
-import { TradePanelView } from '../trade-panel/TradePanelView';
 
 export function AppWorkspaceView() {
   return (
@@ -23,12 +22,10 @@ export function AppWorkspaceView() {
         <ExecutionProvider>
           <main className="dashboard">
             <ChartWorkspaceView />
-            <TradePanelView>
-              <OrderTicketFeature>
-                <AppLifecycle />
-              </OrderTicketFeature>
-              <PortfolioView />
-            </TradePanelView>
+            <OrderTicketProvider>
+              <OrderTicketPanel />
+              <AppLifecycle />
+            </OrderTicketProvider>
           </main>
         </ExecutionProvider>
       </BridgeSessionProvider>
