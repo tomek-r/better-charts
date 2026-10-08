@@ -347,6 +347,29 @@ test('ticket action follows canonical gate inputs and all displayed action field
   expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
 });
 
+test('exits ignore draft-version changes without an RR label and keep enabled RR freshness', async ({ page }) => {
+  await mountHarness(page);
+  await expect(page.getByRole('button', { name: /Exits/ })).toHaveAttribute('aria-expanded', 'true');
+  const rrLabel = page.locator('.ticket-risk-reward');
+  await expect(rrLabel).toHaveCount(0);
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+
+  await page.getByRole('button', { name: 'Advance ticket version' }).click();
+  await expect(rrLabel).toHaveCount(0);
+  expect((await probeCounts(page))['ticket-exits'] ?? 0).toBe(0);
+
+  await page.getByRole('button', { name: 'Prepare exit preview' }).click();
+  await expect(rrLabel).toHaveText('RR 2.00');
+  await page.evaluate(() =>
+    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
+  );
+  await page.getByRole('button', { name: 'Advance ticket version' }).click();
+  await expect(rrLabel).toHaveText('RR 1.00');
+  expect((await probeCounts(page))['ticket-exits']).toBeGreaterThan(0);
+});
+
 test('equity allocation scales percent risk but leaves explicit money risk unchanged', () => {
   for (const [allocation, budget] of [
     ['100', '100.00'],

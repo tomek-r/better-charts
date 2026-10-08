@@ -49,7 +49,7 @@ export function useOrderTicketExits(): OrderTicketExitsProps {
       tpOn: state.tpOn,
       unitsMode: state.unitsMode,
       orderVolume: state.orderVolume,
-      draftVersion: state.draftVersion,
+      draftVersion: state.slOn && state.tpOn ? state.draftVersion : 0,
       stagedOnChart: state.stagedOnChart,
       tpUnit: state.tpUnit,
       slUnit: state.slUnit,
@@ -57,33 +57,39 @@ export function useOrderTicketExits(): OrderTicketExitsProps {
   );
   const { riskPreview, riskProjection } = useStore(
     stores.broker,
-    useShallow((state) => ({ riskPreview: state.riskPreview, riskProjection: state.riskProjection })),
+    useShallow((state) => ({
+      riskPreview: slOn && tpOn ? state.riskPreview : undefined,
+      riskProjection: slOn && tpOn ? state.riskProjection : undefined,
+    })),
   );
   const quote = useBridgeQuoteSelector((value) => (stagedOnChart && orderKind === 'market' ? value : undefined));
   const exitsOpen = useStore(stores.editor, (state) => state.exitsOpen);
   const effectiveVolume = orderVolume.trim();
   const account = currency === undefined ? undefined : { currency, currencyDigits };
-  const display = deriveStagedOrderDisplay({
-    instrument,
-    account,
-    snapshot: { symbol },
-    riskSide,
-    entry,
-    limitPrice,
-    orderKind,
-    stopLoss,
-    takeProfit,
-    slOn,
-    tpOn,
-    effectiveVolume,
-    unitsMode,
-    riskPreview,
-    draftVersion,
-    lastPreview:
-      riskProjection?.draftVersion === draftVersion
-        ? riskProjection
-        : stores.coordination.riskPreviewDisplayRef.current,
-  });
+  const display =
+    slOn && tpOn
+      ? deriveStagedOrderDisplay({
+          instrument,
+          account,
+          snapshot: { symbol },
+          riskSide,
+          entry,
+          limitPrice,
+          orderKind,
+          stopLoss,
+          takeProfit,
+          slOn,
+          tpOn,
+          effectiveVolume,
+          unitsMode,
+          riskPreview,
+          draftVersion,
+          lastPreview:
+            riskProjection?.draftVersion === draftVersion
+              ? riskProjection
+              : stores.coordination.riskPreviewDisplayRef.current,
+        })
+      : undefined;
   const tickSize = instrument ? Number(instrument.tickSize) : NaN;
   const tickKnown = Number.isFinite(tickSize) && tickSize > 0;
   const stopGuard = stopDistanceGuard(
@@ -97,7 +103,7 @@ export function useOrderTicketExits(): OrderTicketExitsProps {
     limitPrice,
   );
   return {
-    riskRewardLabel: display.riskRewardLabel,
+    riskRewardLabel: display?.riskRewardLabel,
     open: exitsOpen,
     setOpen: stores.setters.editor.setExitsOpen,
     slTooClose: stagedOnChart && Boolean(stopGuard?.slTooClose),

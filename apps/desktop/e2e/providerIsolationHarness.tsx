@@ -23,7 +23,7 @@ import { ChartQuotes } from '../src/features/chart/ChartQuotes';
 import { ChartCanvas } from '../src/features/chart/ChartCanvas';
 import { ChartTimeframes } from '../src/features/chart/ChartTimeframes';
 import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
-import type { AccountSnapshot, BrokerSymbol, QuoteSnapshot } from '../src/shared/bridge/types';
+import type { AccountSnapshot, BrokerSymbol, QuoteSnapshot, RiskPreview } from '../src/shared/bridge/types';
 import { OrderTicketProvider } from '../src/features/order-ticket/OrderTicketProvider';
 import { useOrderTicketAction } from '../src/features/order-ticket/editor/useOrderTicketAction';
 import { useOrderTicketHeader } from '../src/features/order-ticket/editor/useOrderTicketHeader';
@@ -345,7 +345,32 @@ function TicketControls() {
     ticket.setSlOn(false);
     ticket.setOrderVolume('1');
   };
-
+  const configureExitPreview = () => {
+    configureActionGate();
+    ticket.setSlOn(true);
+    ticket.setTpOn(true);
+    ticket.setStopLoss('1.0840');
+    ticket.setTakeProfit('1.0860');
+    ticket.setUnitsMode('money');
+    ticket.setDraftVersion(7);
+    const preview: RiskPreview = {
+      symbol: 'EURUSD',
+      side: 'buy',
+      draftVersion: 7,
+      entry: '1.0850',
+      stopLoss: '1.0840',
+      takeProfit: '1.0860',
+      riskBudget: '100',
+      volume: '1',
+      estimatedRisk: '50',
+      estimatedReward: '100',
+      estimatedMargin: '100',
+      currency: 'USD',
+      quotedAtMs: 1745700001000,
+    };
+    ticket.setRiskPreview(preview);
+    ticket.setRiskProjection(preview);
+  };
   return (
     <>
       <button type="button" onClick={() => ticket.setEntry('1.2345')}>
@@ -392,6 +417,12 @@ function TicketControls() {
       </button>
       <button type="button" onClick={() => ticket.setOrderCheckLoading(true)}>
         Load action check
+      </button>
+      <button type="button" onClick={() => ticket.setDraftVersion((version) => version + 1)}>
+        Advance ticket version
+      </button>
+      <button type="button" onClick={configureExitPreview}>
+        Prepare exit preview
       </button>
     </>
   );

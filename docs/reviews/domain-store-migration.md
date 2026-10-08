@@ -57,6 +57,8 @@ The Action hook subscribes to a read-only selector adapter over the canonical ti
 
 `domain/ticketDerivation.ts` supplies the shared input mapping for producer, lifecycle, and gate selectors. Each ticket scope also owns a bounded, one-entry memo of the pure eligibility derivation. Producer and lifecycle pass their subscribed snapshots explicitly; the memo reads no stores, accepts every domain input, and recomputes on any input change. It introduces no observable derived store. The existing policy matrix verifies cached check/submit decisions and blocked reasons, including stale checks and account mismatches.
 
+The Exits hook selects draft-version and broker-preview changes only while both exits are enabled, when its risk/reward label can exist. With that label absent, those changes cannot affect the returned display. A regression checks zero renders for version-only changes with exits disabled and verifies that an enabled label changes when a preview becomes stale. Chart monetary labels retain their separate lifecycle derivation.
+
 ## Frontend console removal
 
 Subsequent owner decision: remove production frontend `console.*` calls. The frontend had no forwarding to a Tauri file logger. Logging-only execution-safety/recovery/reconciliation reads and the reconciliation log listener are removed rather than retained as unused work. The remaining listener order and mounted-session effect are preserved. Backend readers and durable execution journaling are unchanged.
