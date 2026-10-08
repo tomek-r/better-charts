@@ -88,6 +88,31 @@ export function UnitsSizingRow({
     placeholder = 'Percent';
     inputLabel = 'Risk percent';
   }
+  const menuItems: Array<{
+    mode: 'units' | 'money' | 'equity';
+    label: string;
+    infoTitle: string;
+    infoAria: string;
+  }> = [
+    {
+      mode: 'units',
+      label: 'Units',
+      infoTitle: 'Manually set volume in lots',
+      infoAria: 'About Units sizing',
+    },
+    {
+      mode: 'money',
+      label: `Risk, ${currency ?? 'CCY'}`,
+      infoTitle: 'Volume sized from the risk amount and SL distance',
+      infoAria: 'About Risk sizing',
+    },
+    {
+      mode: 'equity',
+      label: 'Risk, % equity',
+      infoTitle: 'Volume sized from a percentage of account equity',
+      infoAria: 'About percent-of-equity sizing',
+    },
+  ];
   return (
     <div className="ticket-row units-row">
       <button
@@ -175,66 +200,29 @@ export function UnitsSizingRow({
             items[next]?.focus();
           }}
         >
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={unitsMode === 'units'}
-            className={`ticket-menu-item${unitsMode === 'units' ? ' selected' : ''}`}
-            onClick={() => {
-              applyUnitsMode('units');
-              closeUnitsMenu();
-            }}
-          >
-            <span>Units</span>
-            <span
-              className="ticket-menu-info"
-              title="Manually set volume in lots"
-              aria-label="About Units sizing"
-              onClick={(event) => event.stopPropagation()}
+          {menuItems.map((item) => (
+            <button
+              key={item.mode}
+              type="button"
+              role="menuitemradio"
+              aria-checked={unitsMode === item.mode}
+              className={`ticket-menu-item${unitsMode === item.mode ? ' selected' : ''}`}
+              onClick={() => {
+                applyUnitsMode(item.mode);
+                closeUnitsMenu();
+              }}
             >
-              i
-            </span>
-          </button>
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={unitsMode === 'money'}
-            className={`ticket-menu-item${unitsMode === 'money' ? ' selected' : ''}`}
-            onClick={() => {
-              applyUnitsMode('money');
-              closeUnitsMenu();
-            }}
-          >
-            <span>Risk, {currency ?? 'CCY'}</span>
-            <span
-              className="ticket-menu-info"
-              title="Volume sized from the risk amount and SL distance"
-              aria-label="About Risk sizing"
-              onClick={(event) => event.stopPropagation()}
-            >
-              i
-            </span>
-          </button>
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={unitsMode === 'equity'}
-            className={`ticket-menu-item${unitsMode === 'equity' ? ' selected' : ''}`}
-            onClick={() => {
-              applyUnitsMode('equity');
-              closeUnitsMenu();
-            }}
-          >
-            <span>Risk, % equity</span>
-            <span
-              className="ticket-menu-info"
-              title="Volume sized from a percentage of account equity"
-              aria-label="About percent-of-equity sizing"
-              onClick={(event) => event.stopPropagation()}
-            >
-              i
-            </span>
-          </button>
+              <span>{item.label}</span>
+              <span
+                className="ticket-menu-info"
+                title={item.infoTitle}
+                aria-label={item.infoAria}
+                onClick={(event) => event.stopPropagation()}
+              >
+                i
+              </span>
+            </button>
+          ))}
         </div>
       )}
     </div>

@@ -503,6 +503,8 @@ new history. The initial-load comparison failed without key invalidation.
 
 ## Additional small cleanups
 
+**Implemented:** UnitsSizingRow shares a typed three-item menu description while preserving labels, keyboard control, and focus handling.
+
 **Implemented:** PortfolioCard redundant position checks are removed; the account guard, eight-row limit, and separate close action are preserved.
 
 - [PortfolioCard](../../apps/desktop/src/features/portfolio/PortfolioCard.tsx#L32)
