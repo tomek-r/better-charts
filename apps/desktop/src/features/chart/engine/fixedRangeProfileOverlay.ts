@@ -25,7 +25,7 @@ const POC_ROW_ALPHA = 1;
 // Level lines keep the TAP look: same alpha.
 const LEVEL_ALPHA = 0.95;
 
-// Weights arrive as decimal strings (§8) but are parsed defensively, exactly
+// Weights arrive as decimal strings but are parsed defensively, exactly
 // like tickActivityOverlay's binWeight: invalid or non-positive counts as 0.
 type WeightSide = 'bid' | 'ask' | 'total';
 

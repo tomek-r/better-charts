@@ -4,12 +4,12 @@ import { useOrderTicketHeader } from './editor/useOrderTicketHeader';
 import { useOrderTicketReviewProps } from './editor/useOrderTicketReviewProps';
 import { useOrderTicketStage } from './editor/useOrderTicketStage';
 
-function ReviewBody() {
+function OrderTicketReviewBody() {
   return <OrderTicketReview {...useOrderTicketReviewProps()} />;
 }
 
-function TicketBody() {
-  return useOrderTicketStage() === 'review' ? <ReviewBody /> : <OrderTicketEditor />;
+function OrderTicketBody() {
+  return useOrderTicketStage() === 'review' ? <OrderTicketReviewBody /> : <OrderTicketEditor />;
 }
 
 export function OrderTicketView() {
@@ -27,7 +27,7 @@ export function OrderTicketView() {
           )}
         </div>
       </div>
-      <TicketBody />
+      <OrderTicketBody />
     </section>
   );
 }

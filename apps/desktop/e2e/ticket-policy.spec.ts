@@ -206,7 +206,7 @@ const cases: PolicyCase[] = [
     check: null,
     canCheckOrder: false,
     canSubmitOrder: false,
-    blockedReason: 'stop_limit requires limit price — enter the resting limit price on the ticket.',
+    blockedReason: 'Stop limit requires limit price — enter the resting limit price on the ticket.',
   },
   {
     name: 'stale accepted check reason wins over missing required preview',

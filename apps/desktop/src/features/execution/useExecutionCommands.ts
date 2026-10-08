@@ -46,12 +46,12 @@ export function useExecutionCommands({
   // The former Order panel is gone, but its queue view still supplies the
   // authoritative dispatch gate used by the ticket and chart actions.
   const [executionQueue, setExecutionQueue] = useDomainField(store, 'executionQueue');
-  // §UX close/cancel: the single in-flight portfolio/draft target (mirrors submittingSide)
+  // UX close/cancel: the single in-flight portfolio/draft target (mirrors submittingSide)
   // and the last close/cancel outcome line — its `source` decides where it renders.
   const [closingTarget, setClosingTarget] = useDomainField(store, 'closingTarget');
   const [closeCancelStatus, setCloseCancelStatus] = useDomainField(store, 'closeCancelStatus');
   useErrorNotification(closeCancelStatus?.text);
-  // §UX close/cancel/modify actions: full-close MVP for portfolio rows plus
+  // UX close/cancel/modify actions: full-close MVP for portfolio rows plus
   // confirmed close/cancel/modify drafts. One busy target at a time (mirrors
   // submitOrder's submittingSide); success is silent (owner — no confirmation
   // copy), a dispatch-locked rejection reuses
@@ -147,7 +147,7 @@ export function useExecutionCommands({
         invoke('cancel_order', { accountLogin: account?.accountLogin, brokerServer: account?.brokerServer, orderId }),
       actedDraft,
     );
-  // §12 modify drafts: same busy/status path as close/cancel. `targetKind` uses
+  // Modify drafts: same busy/status path as close/cancel. `targetKind` uses
   // the backend's wire strings ("position"/"pending_order"); explicit nulls are
   // the backend's "leave this level unchanged" signal; the decimal string "0"
   // removes the selected SL/TP. Shared by live level-clear chips, pending-order

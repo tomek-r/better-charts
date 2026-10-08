@@ -11,7 +11,7 @@ import type {
 } from '../../../shared/bridge/types';
 import { normalizedPrice } from '../../../shared/format';
 
-// §11 editable volume: positive decimal and — when instrument metadata is known — inside [volumeMin, volumeMax] and a whole multiple of volumeStep (the 1e-8 tolerance absorbs binary-float noise such as 0.3/0.1). Unknown instrument: plain positive decimal only; the backend/EA re-validates volume on the wire.
+// Editable volume: positive decimal and — when instrument metadata is known — inside [volumeMin, volumeMax] and a whole multiple of volumeStep (the 1e-8 tolerance absorbs binary-float noise such as 0.3/0.1). Unknown instrument: plain positive decimal only; the backend/EA re-validates volume on the wire.
 export function orderVolumeIssue(value: string, instrument?: BrokerSymbol): string | undefined {
   const trimmed = value.trim();
   const volume = Number(trimmed);
@@ -36,7 +36,7 @@ export function orderVolumeIssue(value: string, instrument?: BrokerSymbol): stri
   }
   return undefined;
 }
-// §stop-distance guard: a check/submit guard that
+// stop-distance guard: a check/submit guard that
 // mirrors the EA/Rust preflight — required distance = max(stopsLevel × pointSize,
 // 20 × tickSize) in price units, rendered in points (price / pointSize).
 // Market levels are measured from live quote sides (BUY: SL vs bid, TP vs ask;
@@ -236,7 +236,7 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
   // under the user's control; the gate blocks review until a stop is enabled.
   const sizingAllowed = input.slOn || input.unitsMode === 'units';
   // The risk preview (which itself REQUIRES a risk budget) is needed only for
-  // money/% auto-sizing with a stop distance. Manual units volume runs the §11
+  // money/% auto-sizing with a stop distance. Manual units volume runs the
   // chain on the OrderCheck echo alone — the risk budget is then optional
   // (estimates only), per owner: "if I typed units it must not require risk".
   const previewRequired = input.slOn && input.unitsMode !== 'units';
@@ -317,14 +317,14 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
     previewReadyForCheck &&
     stopDistanceAllowed,
   );
-  // §11 submit gate: connected bridge + accepted current OrderCheck (draftId) +
+  // Submit gate: connected bridge + accepted current OrderCheck (draftId) +
   // current risk preview + valid effective volume echoed by that OrderCheck +
   // non-empty entry/SL (TP only when non-empty) + account. The risk preview still
   // feeds the estimate display; volume coherence comes from the order_check_result
   // `volume` echo (verbatim per protocol) matching the field — in manual mode a
   // typed volume does not bump riskVersion, so matching draftVersions alone cannot
   // prove the accepted check covered the volume being submitted.
-  // §11 freshness re-based on the OrderCheck result's own echo vs the ticket
+  // Freshness re-based on the OrderCheck result's own echo vs the ticket
   // fields (+ account/broker/orderKind/symbol/side identity): the preview chain
   // is required only when SL is on (it cannot exist with SL off). draftVersion
   // === riskVersion.current still fails after any pricing/size edit (the
@@ -375,7 +375,7 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
     } else if (!sizingAllowed) {
       ticketBlockedReason = 'Money/% sizing needs a stop distance — enable Stop loss or switch to Units mode.';
     } else if (!limitPriceValid) {
-      ticketBlockedReason = 'stop_limit requires limit price — enter the resting limit price on the ticket.';
+      ticketBlockedReason = 'Stop limit requires limit price — enter the resting limit price on the ticket.';
     } else if (!acceptedCurrentCheck) {
       ticketBlockedReason = 'Run OrderCheck in MT5 — an accepted result for the current draft is required.';
     } else if (previewRequired && !previewCurrentForSubmit) {

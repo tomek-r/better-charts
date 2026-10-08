@@ -47,7 +47,7 @@ export function deriveQuotePresentation(
   };
 }
 
-// §12: chart drag payloads carry numbers, but the wire grammar (order_decimal) forbids exponent notation and non-positive values. Normalize before drafting; undefined reads as "leave unchanged" so a level that cannot be expressed never reaches the backend as an invalid string.
+// Chart drag payloads carry numbers, but the wire grammar (order_decimal) forbids exponent notation and non-positive values. Normalize before drafting; undefined reads as "leave unchanged" so a level that cannot be expressed never reaches the backend as an invalid string.
 export function draftLevel(value: number | undefined): string | undefined {
   if (value === undefined || !Number.isFinite(value) || value <= 0 || value >= 1e21) {
     return undefined;
