@@ -429,6 +429,8 @@ Use trading gesture, z-order, and fixed-range profile regressions.
 
 ### F14 — P3: simplify the history helper's asynchronous structure carefully
 
+**Implemented:** pending creation is synchronous and the explicit microtask boundary preserves same-turn last-selection dispatch. A/B/A, duplicate, reset, and disposal regressions pass.
+
 **Evidence:** [history request](../../apps/desktop/src/features/chart/engine/mt5DataAdapter.ts#L85)
 and [ensurePending](../../apps/desktop/src/features/chart/engine/mt5DataAdapter.ts#L197).
 

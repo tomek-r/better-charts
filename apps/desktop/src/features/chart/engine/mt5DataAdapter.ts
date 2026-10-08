@@ -101,7 +101,16 @@ export class Mt5DataAdapter {
         this.settle(otherKey, other);
       }
     }
-    const pending = existing ?? (await this.ensurePending(symbol, timeframe));
+    const pending: PendingHistory = {
+      symbol,
+      timeframe,
+      dispatched: false,
+    };
+    this.pending.set(key, pending);
+    this.armTimeout(key, pending);
+
+    // Let same-turn symbol/timeframe changes settle before dispatching history.
+    await Promise.resolve();
     if (generation !== this.selectionGeneration) {
       return;
     }
@@ -192,22 +201,6 @@ export class Mt5DataAdapter {
     for (const [key, pending] of [...this.pending]) {
       this.settle(key, pending);
     }
-  }
-
-  private async ensurePending(symbol: string, timeframe: string): Promise<PendingHistory> {
-    const key = pendingKey(symbol, timeframe);
-    const existing = this.pending.get(key);
-    if (existing) {
-      return existing;
-    }
-    const pending: PendingHistory = {
-      symbol,
-      timeframe,
-      dispatched: false,
-    };
-    this.pending.set(key, pending);
-    this.armTimeout(key, pending);
-    return pending;
   }
 
   private armTimeout(key: string, pending: PendingHistory, kind: 'timeout' | 'page' = 'timeout'): void {
