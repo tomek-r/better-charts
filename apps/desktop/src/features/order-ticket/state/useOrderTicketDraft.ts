@@ -1,13 +1,11 @@
 import { useCallback } from 'react';
-import { useStore } from 'zustand';
-import { useShallow } from 'zustand/react/shallow';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { ticketPrice } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
 import { defaultStopLossPrice } from '../domain/defaultStopLoss';
 import type { OrderTicketInputs } from './orderTicketInputs';
-import type { OrderTicketStores } from './orderTicketStores';
+import type { OrderTicketDraftStore, OrderTicketStores } from './orderTicketStores';
 
 type DraftInputs = Pick<
   OrderTicketInputs,
@@ -24,19 +22,6 @@ type DraftInputs = Pick<
 export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStores) {
   const { chart, stagedOrderState, instrumentDigitsRef, stagedActiveRef, instrument, snapshot, latestCandle, quote } =
     inputs;
-  const { riskSide, entry, stopLoss, riskAmount, orderKind, unitsMode, orderVolume, stagedOnChart } = useStore(
-    stores.draft,
-    useShallow((draft) => ({
-      riskSide: draft.riskSide,
-      entry: draft.entry,
-      stopLoss: draft.stopLoss,
-      riskAmount: draft.riskAmount,
-      orderKind: draft.orderKind,
-      unitsMode: draft.unitsMode,
-      orderVolume: draft.orderVolume,
-      stagedOnChart: draft.stagedOnChart,
-    })),
-  );
   const stagedOrderStateRef = stagedOrderState;
   const setters = stores.setters.draft;
   const notifyError = useNotifyError();
@@ -67,27 +52,33 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
     setters.setTicketStage('edit');
   }, [resetOrderDraft, setters]);
 
-  const enableRiskStopLoss = useEventCallback((side: RiskSide, entryPrice: number, overwrite = false) => {
-    if (!overwrite && stopLoss.trim()) {
+  const enableRiskStopLossForDraft = useCallback(
+    (draft: OrderTicketDraftStore, side: RiskSide, entryPrice: number, overwrite = false) => {
+      if (!overwrite && draft.stopLoss.trim()) {
+        setters.setSlOn(true);
+        return draft.stopLoss;
+      }
+      const defaultStop = defaultStopLossPrice(
+        entryPrice,
+        side,
+        draft.orderKind,
+        instrument,
+        quote,
+        chart.current?.viewport().priceRange,
+      );
+      if (!defaultStop) {
+        notifyError('No valid stop loss fits in the visible chart range. Zoom out or set SL manually.');
+        return undefined;
+      }
       setters.setSlOn(true);
-      return stopLoss;
-    }
-    const defaultStop = defaultStopLossPrice(
-      entryPrice,
-      side,
-      orderKind,
-      instrument,
-      quote,
-      chart.current?.viewport().priceRange,
-    );
-    if (!defaultStop) {
-      notifyError('No valid stop loss fits in the visible chart range. Zoom out or set SL manually.');
-      return undefined;
-    }
-    setters.setSlOn(true);
-    setters.setStopLoss(defaultStop);
-    return defaultStop;
-  });
+      setters.setStopLoss(defaultStop);
+      return defaultStop;
+    },
+    [setters, instrument, quote, chart, notifyError],
+  );
+  const enableRiskStopLoss = useEventCallback((side: RiskSide, entryPrice: number, overwrite: boolean = false) =>
+    enableRiskStopLossForDraft(stores.draft.getState(), side, entryPrice, overwrite),
+  );
 
   const stageOrderDraft = useCallback(
     (side: RiskSide, fresh = false) => {
@@ -96,8 +87,9 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
         return;
       }
 
+      const draft = stores.draft.getState();
       const digits = instrumentDigitsRef.current;
-      let price = fresh ? NaN : Number(entry);
+      let price = fresh ? NaN : Number(draft.entry);
       if (!Number.isFinite(price) || price <= 0) {
         const fallback = quote
           ? Number(side === 'buy' ? quote.ask : quote.bid)
@@ -108,11 +100,11 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
         price = fallback;
         setters.setEntry(ticketPrice(price, digits));
       }
-      if (!orderVolume.trim()) {
+      if (!draft.orderVolume.trim()) {
         setters.setOrderVolume('1');
       }
-      if (unitsMode !== 'units' && Number(riskAmount) > 0 && (!stagedOnChart || fresh)) {
-        enableRiskStopLoss(side, price, fresh);
+      if (draft.unitsMode !== 'units' && Number(draft.riskAmount) > 0 && (!draft.stagedOnChart || fresh)) {
+        enableRiskStopLossForDraft(draft, side, price, fresh);
       }
       setters.setStagedOnChart(true);
     },
@@ -120,13 +112,9 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
       snapshot.candles,
       latestCandle,
       instrumentDigitsRef,
-      entry,
       quote,
-      orderVolume,
-      unitsMode,
-      riskAmount,
-      stagedOnChart,
-      enableRiskStopLoss,
+      stores.draft,
+      enableRiskStopLossForDraft,
       setters,
       submitSwapPendingRef,
     ],
@@ -157,14 +145,14 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
 
   const stageFromQuote = useCallback(
     (side: RiskSide) => {
-      const switched = riskSide !== side;
+      const switched = stores.draft.getState().riskSide !== side;
       if (switched) {
         resetOrderDraft();
       }
       setters.setRiskSide(side);
       stageOrderDraft(side, switched);
     },
-    [riskSide, resetOrderDraft, stageOrderDraft, setters],
+    [stores.draft, resetOrderDraft, stageOrderDraft, setters],
   );
 
   return {

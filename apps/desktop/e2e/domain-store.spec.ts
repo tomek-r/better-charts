@@ -15,6 +15,10 @@ test('domain stores isolate updates and skip notifications for unchanged fields'
 
   await expect(page.getByTestId('first-counter')).toHaveText('0');
   await expect(page.getByTestId('second-counter')).toHaveText('10');
+  await test.step('Sizing commands use current draft before rerender', async () => {
+    await page.getByTestId('run-sizing-commands').click();
+    await expect(page.getByTestId('sizing-command-result')).toHaveText('100:units:');
+  });
   await page.getByTestId('first-counter').click();
   await expect(page.getByTestId('first-counter')).toHaveText('1');
   await expect(page.getByTestId('second-counter')).toHaveText('10');
