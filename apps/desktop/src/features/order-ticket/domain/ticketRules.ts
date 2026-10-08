@@ -176,7 +176,7 @@ export function equityAllocationIssue(value: string): string | undefined {
 export type TicketDerivationInput = {
   symbol: string | undefined;
   bridgeState: BridgeStatus['state'];
-  account: AccountSnapshot | undefined;
+  account: Partial<Pick<AccountSnapshot, 'accountLogin' | 'brokerServer'>> | undefined;
   stagedOnChart: boolean;
   riskSide: RiskSide;
   entry: string;

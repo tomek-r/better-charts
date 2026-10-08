@@ -12,8 +12,8 @@ import { orderEntryPrice, riskRewardRatio } from './ticketRules';
 
 export interface StagedOrderDisplayInput {
   instrument: BrokerSymbol | undefined;
-  account: AccountSnapshot | undefined;
-  snapshot: MarketSnapshot;
+  account: Pick<AccountSnapshot, 'currency' | 'currencyDigits'> | undefined;
+  snapshot: Pick<MarketSnapshot, 'symbol'>;
   riskSide: RiskSide;
   entry: string;
   limitPrice: string;

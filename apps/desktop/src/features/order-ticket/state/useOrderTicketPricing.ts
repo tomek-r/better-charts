@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
+import type { OrderKind } from '../../../shared/bridge/types';
 import type { OrderTicketBaseState } from './useOrderTicketState';
 import { orderEntryPrice } from '../domain/ticketRules';
 import { quoteDigits, ticketPrice } from '../../../shared/format';
@@ -32,6 +33,25 @@ type PricingInput = Pick<
   | 'tpOn'
   | 'setTpOn'
 > & { tickSize: number; tickKnown: boolean; priceSwapDisabled: boolean };
+
+export function priceToTicks(
+  price: string,
+  tickKnown: boolean,
+  orderKind: OrderKind,
+  entry: string,
+  limitPrice: string,
+  tickSize: number,
+): string {
+  if (!tickKnown) {
+    return '';
+  }
+  const base = Number(orderEntryPrice(orderKind, entry, limitPrice));
+  const value = Number(price);
+  if (!price.trim() || !Number.isFinite(base) || base <= 0 || !Number.isFinite(value) || value <= 0) {
+    return '';
+  }
+  return String(Math.round(Math.abs(value - base) / tickSize));
+}
 
 export function useOrderTicketPricing(ticket: PricingInput) {
   const {
@@ -80,17 +100,7 @@ export function useOrderTicketPricing(ticket: PricingInput) {
     }
     setPriceMode(priceMode === 'absolute' ? 'offset' : 'absolute');
   });
-  const priceToTicks = (price: string, _kind: 'sl' | 'tp'): string => {
-    if (!tickKnown) {
-      return '';
-    }
-    const base = Number(orderEntryPrice(orderKind, entry, limitPrice));
-    const value = Number(price);
-    if (!price.trim() || !Number.isFinite(base) || base <= 0 || !Number.isFinite(value) || value <= 0) {
-      return '';
-    }
-    return String(Math.round(Math.abs(value - base) / tickSize));
-  };
+  const toTicks = (price: string) => priceToTicks(price, tickKnown, orderKind, entry, limitPrice, tickSize);
   const ticksToPrice = useCallback(
     (text: string, kind: 'sl' | 'tp'): string | null => {
       if (!tickKnown) {
@@ -159,5 +169,5 @@ export function useOrderTicketPricing(ticket: PricingInput) {
     [setSlOn, setTpOn],
   );
 
-  return { togglePriceMode, priceToTicks, ticksToPrice, applyExitTicks, swapExitUnit, toggleExit };
+  return { togglePriceMode, priceToTicks: toTicks, ticksToPrice, applyExitTicks, swapExitUnit, toggleExit };
 }

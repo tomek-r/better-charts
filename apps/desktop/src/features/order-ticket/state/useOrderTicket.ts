@@ -5,11 +5,13 @@ import { useOrderTicketPricing } from './useOrderTicketPricing';
 import { useOrderTicketSizing } from './useOrderTicketSizing';
 import { useOrderTicketState } from './useOrderTicketState';
 import { deriveStagedOrderDisplay } from '../domain/stagedOrderDisplay';
+import type { OrderTicketStores } from './orderTicketStores';
 
-export type OrderTicketParams = OrderTicketStateParams;
+export type OrderTicketParams = OrderTicketStateParams & { stores: OrderTicketStores };
 
 export function useOrderTicket(params: OrderTicketParams) {
-  const state = useOrderTicketState(params);
+  const { stores, ...stateParams } = params;
+  const state = useOrderTicketState(stateParams, stores);
   const tickSize = state.instrument ? Number(state.instrument.tickSize) : NaN;
   const tickKnown = Number.isFinite(tickSize) && tickSize > 0;
   const priceSwapDisabled =

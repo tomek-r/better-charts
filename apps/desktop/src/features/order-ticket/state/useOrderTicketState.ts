@@ -1,21 +1,17 @@
 import { useErrorNotification } from '../../../shared/ui/ErrorNotifications';
-import { useRef, useState } from 'react';
+import { useDomainField } from '../../../shared/state/domainStore';
 import type {
   AccountSnapshot,
   BridgeStatus,
   BrokerSymbol,
   Candle,
   MarketSnapshot,
-  OrderCheckResult,
-  OrderKind,
   QuoteSnapshot,
-  RiskPreview,
-  RiskSide,
-  TimeInForce,
 } from '../../../shared/bridge/types';
 import type { ChartController } from '../../chart/engine/chartController';
 import type { StagedOrderState } from '../../chart/engine/stagedOrderOverlay';
 import { deriveOrderTicket } from '../domain/ticketRules';
+import type { OrderTicketStores } from './orderTicketStores';
 
 export type OrderTicketStateParams = {
   chart: { current: ChartController | null };
@@ -30,57 +26,55 @@ export type OrderTicketStateParams = {
   status: BridgeStatus;
 };
 
-export function useOrderTicketState(params: OrderTicketStateParams) {
+export function useOrderTicketState(params: OrderTicketStateParams, stores: OrderTicketStores) {
   const { instrument, account, quote, snapshot, status } = params;
-  // Keep a sent order's staged widget frozen until portfolio sync draws the fill.
-  const submitSwapPendingRef = useRef(false);
-  // The overlay mirror uses this for its light current-price repaint path.
-  const stagedPrevPriceRef = useRef<number | undefined>(undefined);
-  const riskVersion = useRef(0);
-  const pendingRiskRequestRef = useRef<(() => Promise<unknown>) | undefined>(undefined);
-  const [draftVersion, setDraftVersion] = useState(0);
-  const orderCheckGeneration = useRef(0);
-  const orderCheckPending = useRef<
-    { generation: number; draftVersion: number; symbol: string; accountLogin: string; brokerServer: string } | undefined
-  >(undefined);
-  const unitsAutoMode = useRef<'money' | 'equity'>('money');
-  const [riskSide, setRiskSide] = useState<RiskSide>('');
-  const [entry, setEntry] = useState('');
-  const [stopLoss, setStopLoss] = useState('');
-  const [takeProfit, setTakeProfit] = useState('');
-  const [equityAllocationPercent, setEquityAllocationPercent] = useState('100');
-  const [riskAmount, setRiskAmount] = useState('');
-  const [riskPreview, setRiskPreview] = useState<RiskPreview>();
-  const [riskProjection, setRiskProjection] = useState<RiskPreview>();
-  const riskBrokerVersion = useRef<number | undefined>(undefined);
+  const {
+    submitSwapPendingRef,
+    stagedPrevPriceRef,
+    riskVersion,
+    pendingRiskRequestRef,
+    orderCheckGeneration,
+    orderCheckPending,
+    unitsAutoMode,
+    riskBrokerVersion,
+    riskPreviewDisplayRef,
+  } = stores.coordination;
+  const [draftVersion, setDraftVersion] = useDomainField(stores.draft, 'draftVersion');
+  const [riskSide, setRiskSide] = useDomainField(stores.draft, 'riskSide');
+  const [entry, setEntry] = useDomainField(stores.draft, 'entry');
+  const [stopLoss, setStopLoss] = useDomainField(stores.draft, 'stopLoss');
+  const [takeProfit, setTakeProfit] = useDomainField(stores.draft, 'takeProfit');
+  const [equityAllocationPercent, setEquityAllocationPercent] = useDomainField(stores.draft, 'equityAllocationPercent');
+  const [riskAmount, setRiskAmount] = useDomainField(stores.draft, 'riskAmount');
+  const [riskPreview, setRiskPreview] = useDomainField(stores.broker, 'riskPreview');
+  const [riskProjection, setRiskProjection] = useDomainField(stores.broker, 'riskProjection');
   // Keep the last broker quote available for chart labels while freshness clears the active preview.
-  const riskPreviewDisplayRef = useRef<RiskPreview | undefined>(undefined);
-  const [riskLoading, setRiskLoading] = useState(false);
-  const [riskError, setRiskError] = useState<string>();
-  const [orderKind, setOrderKind] = useState<OrderKind>('market');
-  const [timeInForce, setTimeInForce] = useState<TimeInForce>('gtc');
-  const [limitPrice, setLimitPrice] = useState('');
-  const [orderCheck, setOrderCheck] = useState<OrderCheckResult>();
-  const [orderCheckLoading, setOrderCheckLoading] = useState(false);
-  const [orderCheckError, setOrderCheckError] = useState<string>();
-  const [ticketStage, setTicketStage] = useState<'edit' | 'review'>('edit');
-  const [priceMode, setPriceMode] = useState<'offset' | 'absolute'>('absolute');
-  const [priceReference, setPriceReference] = useState<'ask' | 'bid'>('ask');
-  const [priceOffset, setPriceOffset] = useState('0');
-  const [unitsMode, setUnitsMode] = useState<'money' | 'equity' | 'units'>('units');
-  const [exitsOpen, setExitsOpen] = useState(true);
-  const [extraSettingsOpen, setExtraSettingsOpen] = useState(false);
-  const [tpOn, setTpOn] = useState(false);
-  const [slOn, setSlOn] = useState(false);
-  const [slUnit, setSlUnit] = useState<'ticks' | 'price'>('ticks');
-  const [tpUnit, setTpUnit] = useState<'ticks' | 'price'>('ticks');
-  const [stagedOnChart, setStagedOnChart] = useState(false);
-  const [stagedDragging, setStagedDragging] = useState(false);
-  const [dragSlMoney, setDragSlMoney] = useState<string>();
-  const [submittingSide, setSubmittingSide] = useState<RiskSide>();
-  const [submitStatus, setSubmitStatus] = useState<{ kind: 'locked' | 'error'; text: string }>();
-  const [orderVolume, setOrderVolume] = useState('1');
-  const [volumeManual, setVolumeManual] = useState(false);
+  const [riskLoading, setRiskLoading] = useDomainField(stores.broker, 'riskLoading');
+  const [riskError, setRiskError] = useDomainField(stores.broker, 'riskError');
+  const [orderKind, setOrderKind] = useDomainField(stores.draft, 'orderKind');
+  const [timeInForce, setTimeInForce] = useDomainField(stores.draft, 'timeInForce');
+  const [limitPrice, setLimitPrice] = useDomainField(stores.draft, 'limitPrice');
+  const [orderCheck, setOrderCheck] = useDomainField(stores.broker, 'orderCheck');
+  const [orderCheckLoading, setOrderCheckLoading] = useDomainField(stores.broker, 'orderCheckLoading');
+  const [orderCheckError, setOrderCheckError] = useDomainField(stores.broker, 'orderCheckError');
+  const [ticketStage, setTicketStage] = useDomainField(stores.draft, 'ticketStage');
+  const [priceMode, setPriceMode] = useDomainField(stores.draft, 'priceMode');
+  const [priceReference, setPriceReference] = useDomainField(stores.draft, 'priceReference');
+  const [priceOffset, setPriceOffset] = useDomainField(stores.draft, 'priceOffset');
+  const [unitsMode, setUnitsMode] = useDomainField(stores.draft, 'unitsMode');
+  const [exitsOpen, setExitsOpen] = useDomainField(stores.editor, 'exitsOpen');
+  const [extraSettingsOpen, setExtraSettingsOpen] = useDomainField(stores.editor, 'extraSettingsOpen');
+  const [tpOn, setTpOn] = useDomainField(stores.draft, 'tpOn');
+  const [slOn, setSlOn] = useDomainField(stores.draft, 'slOn');
+  const [slUnit, setSlUnit] = useDomainField(stores.draft, 'slUnit');
+  const [tpUnit, setTpUnit] = useDomainField(stores.draft, 'tpUnit');
+  const [stagedOnChart, setStagedOnChart] = useDomainField(stores.draft, 'stagedOnChart');
+  const [stagedDragging, setStagedDragging] = useDomainField(stores.draft, 'stagedDragging');
+  const [dragSlMoney, setDragSlMoney] = useDomainField(stores.draft, 'dragSlMoney');
+  const [submittingSide, setSubmittingSide] = useDomainField(stores.broker, 'submittingSide');
+  const [submitStatus, setSubmitStatus] = useDomainField(stores.broker, 'submitStatus');
+  const [orderVolume, setOrderVolume] = useDomainField(stores.draft, 'orderVolume');
+  const [volumeManual, setVolumeManual] = useDomainField(stores.draft, 'volumeManual');
   useErrorNotification(riskError);
   useErrorNotification(orderCheckError);
   useErrorNotification(submitStatus?.text);

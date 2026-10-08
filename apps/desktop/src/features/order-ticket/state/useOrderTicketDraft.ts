@@ -118,7 +118,7 @@ export function useOrderTicketDraft(ticket: OrderTicketEntryDraftInput) {
     setPriceOffset('0');
     setTicketStage('edit');
   };
-  const enableRiskStopLoss = useEventCallback((side: RiskSide, entryPrice: number, overwrite = false) => {
+  const enableRiskStopLoss = useEventCallback((side: RiskSide, entryPrice: number, overwrite: boolean = false) => {
     if (!overwrite && stopLoss.trim()) {
       setSlOn(true);
       return stopLoss;
