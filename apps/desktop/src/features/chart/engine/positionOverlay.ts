@@ -257,43 +257,41 @@ export function createPositionOverlay(
             zone(entryY, toY(tp), palette.accent);
           }
         }
-        if (inBand(entryY)) {
-          if (drawLabels) {
-            row(pos.id, 'entry', entryY, (labelY) => {
-              // The ✕ echoes the P&L state — red losing, green profiting — not the
-              // side: a red sell ✕ beside a green P&L read as a contradiction.
-              // Before the first P&L arrives it falls back to the side colour.
-              let pnlColor = sideColor;
-              if (pos.pnl !== undefined) {
-                pnlColor = pos.pnl.startsWith('-') ? TRADING_COLORS.sell : palette.up;
-              }
-              hit.posCloses!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, pnlColor) });
-              // Owner: a LIVE position row keeps ONLY the ✕ and the P&L box — the
-              // Buy/Sell marker and the draft grip tag are HIDDEN (they speak of the
-              // draft that made the position). The box is the SL/TP handle (same
-              // drawHandle, same palette red/teal as the other elements) and the
-              // number rides the SL/TP money format ("-$6.63").
-              let right = x + CANCEL_CHIP_X + 10;
-              if (pos.pnl !== undefined) {
-                // Tip: UP for long, DOWN for short. The trade size reads as
-                // "10 units" after the P&L ("P&L -$19.8 · 10 units").
-                // RR is recomputed from the PREVIEWED exits, so dragging SL/TP
-                // updates it live exactly like the staged tag.
-                const rrLabel =
-                  sl !== undefined && tp !== undefined ? riskRewardRatio(pos.side, pos.entry, sl, tp) : undefined;
-                ctx.font = '400 12px system-ui, sans-serif';
-                const columnWidth = Math.max(pnlColumnWidths.get(pos.id) ?? 0, ctx.measureText(pos.pnl).width);
-                pnlColumnWidths.set(pos.id, columnWidth);
-                const box = drawHandle(ctx, x + HANDLE_X, labelY, 'P&L ', pnlColor, pos.side !== 'buy', {
-                  text: ` · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`,
-                  amount: { text: pos.pnl, width: columnWidth },
-                });
-                right = box.x + box.w;
-              }
+        if (inBand(entryY) && drawLabels) {
+          row(pos.id, 'entry', entryY, (labelY) => {
+            // The ✕ echoes the P&L state — red losing, green profiting — not the
+            // side: a red sell ✕ beside a green P&L read as a contradiction.
+            // Before the first P&L arrives it falls back to the side colour.
+            let pnlColor = sideColor;
+            if (pos.pnl !== undefined) {
+              pnlColor = pos.pnl.startsWith('-') ? TRADING_COLORS.sell : palette.up;
+            }
+            hit.posCloses!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, pnlColor) });
+            // Owner: a LIVE position row keeps ONLY the ✕ and the P&L box — the
+            // Buy/Sell marker and the draft grip tag are HIDDEN (they speak of the
+            // draft that made the position). The box is the SL/TP handle (same
+            // drawHandle, same palette red/teal as the other elements) and the
+            // number rides the SL/TP money format ("-$6.63").
+            let right = x + CANCEL_CHIP_X + 10;
+            if (pos.pnl !== undefined) {
+              // Tip: UP for long, DOWN for short. The trade size reads as
+              // "10 units" after the P&L ("P&L -$19.8 · 10 units").
+              // RR is recomputed from the PREVIEWED exits, so dragging SL/TP
+              // updates it live exactly like the staged tag.
+              const rrLabel =
+                sl !== undefined && tp !== undefined ? riskRewardRatio(pos.side, pos.entry, sl, tp) : undefined;
+              ctx.font = '400 12px system-ui, sans-serif';
+              const columnWidth = Math.max(pnlColumnWidths.get(pos.id) ?? 0, ctx.measureText(pos.pnl).width);
+              pnlColumnWidths.set(pos.id, columnWidth);
+              const box = drawHandle(ctx, x + HANDLE_X, labelY, 'P&L ', pnlColor, pos.side !== 'buy', {
+                text: ` · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`,
+                amount: { text: pos.pnl, width: columnWidth },
+              });
+              right = box.x + box.w;
+            }
 
-              return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: right - (x + CANCEL_CHIP_X - 10), h: 20 };
-            });
-          }
+            return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: right - (x + CANCEL_CHIP_X - 10), h: 20 };
+          });
         }
         if (sl !== undefined) {
           const slY = toY(sl);
