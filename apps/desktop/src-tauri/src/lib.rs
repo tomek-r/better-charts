@@ -2,6 +2,7 @@
 
 mod app_settings;
 mod bridge;
+mod download_resources;
 mod execution_adapter;
 mod execution_journal;
 mod mt5_backend;
@@ -18,6 +19,7 @@ use bridge::commands::{
 };
 use bridge::connection::run_server;
 use bridge::state::BridgeState;
+use download_resources::save_bundled_resource;
 use execution_adapter::ExecutionAdapterState;
 use execution_journal::{app_data_dir, ExecutionSafetyState};
 use mt5_backend::Mt5BackendState;
@@ -32,6 +34,7 @@ pub fn run() {
     let bridge_state = BridgeState::default();
     let mt5_backend = Mt5BackendState::from_env();
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(app_settings)
         .manage(bridge_state.clone())
         .manage(mt5_backend.clone())
@@ -61,7 +64,8 @@ pub fn run() {
             search_symbols,
             get_mt5_backend_status,
             start_mt5_backend,
-            stop_mt5_backend
+            stop_mt5_backend,
+            save_bundled_resource
         ])
         .setup(move |app| {
             let safety = match app_data_dir() {

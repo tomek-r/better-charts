@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { SymbolSearchDialog } from './SymbolSearchDialog';
@@ -13,6 +13,33 @@ const toolFlyoutOpen = () => document.querySelector('.tool-flyout') !== null;
 export function SymbolSearchView() {
   const searchOpen = useSymbolSearchOpen();
   const { setSearchOpen } = useSymbolSearchControls();
+  const [searchClosing, setSearchClosing] = useState(false);
+  const searchCloseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Fade the panel out like the settings modal, then unmount (skipped under reduced motion).
+  const requestClose = useCallback(() => {
+    if (searchCloseTimer.current !== undefined) {
+      return;
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setSearchOpen(false);
+      setSearchClosing(false);
+      return;
+    }
+    setSearchClosing(true);
+    searchCloseTimer.current = setTimeout(() => {
+      searchCloseTimer.current = undefined;
+      setSearchOpen(false);
+      setSearchClosing(false);
+    }, 180);
+  }, [setSearchOpen, setSearchClosing]);
+  useEffect(
+    () => () => {
+      if (searchCloseTimer.current !== undefined) {
+        clearTimeout(searchCloseTimer.current);
+      }
+    },
+    [],
+  );
   const search = useSymbolSearch();
   const { chooseSymbol } = useBridgeActions();
   const { status } = useBridgeConnection();
@@ -135,19 +162,19 @@ export function SymbolSearchView() {
         setSearchOpen(true);
       }
       if (event.key === 'Escape') {
-        setSearchOpen(false);
+        requestClose();
       }
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [setSearchOpen]);
+  }, [requestClose, setSearchOpen]);
 
   const chooseConnectedSymbol = async (item: BrokerSymbol) => {
     if (status.state !== 'connected') {
       return;
     }
     setSearchLoading(false);
-    setSearchOpen(false);
+    requestClose();
     setSearchQuery('');
     setSearchResults([]);
     await chooseSymbol(item);
@@ -159,7 +186,8 @@ export function SymbolSearchView() {
 
   return (
     <SymbolSearchDialog
-      setSearchOpen={setSearchOpen}
+      closing={searchClosing}
+      onClose={requestClose}
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
       searchResults={searchResults}
