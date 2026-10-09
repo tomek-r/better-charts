@@ -42,7 +42,8 @@ function SymbolResultRow({
 }
 
 export function SymbolSearchDialog({
-  setSearchOpen,
+  closing,
+  onClose,
   searchQuery,
   setSearchQuery,
   searchResults,
@@ -54,7 +55,8 @@ export function SymbolSearchDialog({
   chooseSymbol,
   toggleFavorite,
 }: {
-  setSearchOpen: Dispatch<SetStateAction<boolean>>;
+  closing: boolean;
+  onClose: () => void;
   searchQuery: string;
   setSearchQuery: Dispatch<SetStateAction<string>>;
   searchResults: BrokerSymbol[];
@@ -72,18 +74,18 @@ export function SymbolSearchDialog({
 
   return (
     <div
-      className="search-backdrop"
+      className={`search-backdrop${closing ? ' is-closing' : ''}`}
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
-          setSearchOpen(false);
+          onClose();
         }
       }}
     >
       <section className="search-panel" role="dialog" aria-modal="true" aria-labelledby="search-title">
         <div className="search-title">
           <h2 id="search-title">Search symbols</h2>
-          <button onClick={() => setSearchOpen(false)} aria-label="Close search">
+          <button onClick={onClose} aria-label="Close search">
             ×
           </button>
         </div>

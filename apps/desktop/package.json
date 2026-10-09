@@ -30,7 +30,8 @@
     "profiler": "playwright test --config playwright.profiler.config.ts"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/api": "2.12.2",
+    "@tauri-apps/plugin-dialog": "^2.8.1",
     "lightweight-charts": "5.2.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",

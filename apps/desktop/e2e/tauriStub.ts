@@ -479,6 +479,19 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
         emit(args.event as string, args.payload);
         return null;
       }
+      // Native "Save As" dialog (tauri-plugin-dialog): returns a chosen path, or
+      // null if the user cancels. Deterministic so tests can assert the flow.
+      if (cmd === 'plugin:dialog|save') {
+        const options = args.options as { defaultPath?: string } | undefined;
+        return `/chosen/${options?.defaultPath ?? 'file.mq5'}`;
+      }
+      // The setup-guide save command: record the request for assertions.
+      if (cmd === 'save_bundled_resource') {
+        const saves = (w.__setupGuideSaves as Array<Record<string, unknown>> | undefined) ?? [];
+        saves.push({ resource: args.resource, destination: args.destination });
+        w.__setupGuideSaves = saves;
+        return null;
+      }
       if (Object.prototype.hasOwnProperty.call(failures, cmd)) {
         throw new Error(failures[cmd]);
       }
@@ -505,6 +518,9 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
       return json === undefined ? null : JSON.parse(json);
     }
 
+    // The real Tauri runtime sets this; @tauri-apps/api/core isTauri() reads it.
+    w.isTauri = true;
+    w.__setupGuideSaves = [];
     w.__TAURI_INTERNALS__ = {
       invoke,
       transformCallback,

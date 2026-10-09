@@ -10,6 +10,7 @@
 @import './features/portfolio/portfolio.css';
 @import './features/order-ticket/order-ticket.css';
 @import './features/settings/settings.css';
+@import './features/settings/setup-guide/setup-guide.css';
 @import './shared/ui/notification.css';
 @import './shared/ui/error-text.css';
 @import './shared/ui/command-status.css';

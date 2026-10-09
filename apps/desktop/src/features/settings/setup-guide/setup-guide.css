@@ -1,0 +1,148 @@
+/* ── Nested setup guide ───────────────────────────────────────────────── */
+
+.setup-guide-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--color-scrim);
+  animation: settings-fade-in 180ms ease-out;
+}
+
+.setup-guide {
+  width: min(560px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-dialog);
+  border-radius: var(--border-radius);
+  background: var(--color-panel);
+  color: var(--color-text-tertiary);
+  box-shadow: 0 24px 70px #000b;
+  overflow: hidden;
+  outline: none;
+  animation: settings-panel-in 180ms ease-out;
+}
+
+.setup-guide-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--color-border-dialog);
+}
+
+.setup-guide-header h2 {
+  margin: 0;
+  color: var(--color-text-bright);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.setup-guide-header button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.setup-guide-steps {
+  flex: 1;
+  margin: 0;
+  padding: 8px 22px 20px 40px;
+  overflow: auto;
+  list-style: decimal;
+}
+
+.setup-guide-steps li {
+  margin: 14px 0;
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.setup-guide-steps strong {
+  color: var(--color-text-bright);
+  font-weight: 500;
+}
+
+.setup-guide-steps code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--color-well);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.setup-guide-downloads {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Simple, link-styled downloads: an underlined filename with a download glyph. */
+.setup-guide-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 3px 8px;
+  margin: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 120ms ease;
+}
+
+.setup-guide-download svg {
+  flex: none;
+}
+
+.setup-guide-download-file {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.setup-guide-download-kind {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.setup-guide-download:hover:not(:disabled) {
+  color: var(--color-accent);
+}
+
+/* No Tauri shell (a plain dev browser): the download action is unavailable. */
+.setup-guide-download:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Exit animation, mirroring the settings modal: fade the scrim and settle the panel. */
+.setup-guide-backdrop.is-closing {
+  animation: settings-fade-out 180ms ease-in forwards;
+}
+
+.setup-guide-backdrop.is-closing .setup-guide {
+  animation: settings-panel-out 180ms ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setup-guide-backdrop,
+  .setup-guide,
+  .setup-guide-backdrop.is-closing,
+  .setup-guide-backdrop.is-closing .setup-guide {
+    animation: none;
+  }
+}

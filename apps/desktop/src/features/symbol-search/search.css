@@ -8,6 +8,7 @@
   place-items: start center;
   padding-top: 104px;
   background: var(--color-overlay);
+  animation: settings-fade-in 180ms ease-out;
 }
 
 .search-panel {
@@ -17,6 +18,45 @@
   padding: 18px;
   background: var(--color-panel);
   box-shadow: 0 20px 80px #000b;
+  animation: search-panel-in 180ms ease-out;
+}
+
+/* Exit animation, mirroring the settings modal: fade the scrim and settle the panel. */
+.search-backdrop.is-closing {
+  animation: settings-fade-out 180ms ease-in forwards;
+}
+
+.search-backdrop.is-closing .search-panel {
+  animation: search-panel-out 180ms ease-in forwards;
+}
+
+/* Slide-only panel motion (no scale): keeps result geometry stable for layout tests
+   and is the natural motion for a top-anchored panel. Same 180ms cadence as settings. */
+@keyframes search-panel-in {
+  from {
+    transform: translateY(8px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes search-panel-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-backdrop,
+  .search-panel,
+  .search-backdrop.is-closing,
+  .search-backdrop.is-closing .search-panel {
+    animation: none;
+  }
 }
 
 .search-title {

@@ -1,6 +1,7 @@
 import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
-import { Suspense, use, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { SetupGuideModal } from './setup-guide/SetupGuideModal';
 import type { AppSettingsData } from './settingsTypes';
 import { FRAME_BYTES } from '../../shared/bridge/limits';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';
@@ -31,6 +32,7 @@ export function AppSettingsDialog({
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useEffect(() => {
@@ -44,6 +46,11 @@ export function AppSettingsDialog({
     const previous = document.activeElement;
     panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
     const handler = (event: KeyboardEvent) => {
+      // A nested setup guide on top of the content owns the key (the chart
+      // already yields to [data-app-settings-dialog]); let it handle Escape/Tab.
+      if (document.querySelector('[data-setup-guide]')) {
+        return;
+      }
       // Keep modal keystrokes away from the chart's global drawing/order shortcuts.
       event.stopImmediatePropagation();
       if (event.key === 'Escape') {
@@ -88,7 +95,7 @@ export function AppSettingsDialog({
     }
     setError(undefined);
   };
-  async function save(event: FormEvent) {
+  async function save(event: SubmitEvent) {
     event.preventDefault();
     if (!draft || saving || closing) {
       return;
@@ -180,7 +187,24 @@ export function AppSettingsDialog({
                   )}
                   {draft && category === 'MT5 setup' && (
                     <>
-                      <h3>Bridge connection</h3>
+                      <h3 className="settings-section-title">
+                        Bridge connection
+                        <button
+                          type="button"
+                          className="section-info-trigger"
+                          aria-label="How to set up the bridge connection"
+                          aria-haspopup="dialog"
+                          aria-expanded={guideOpen}
+                          disabled={saving || closing}
+                          onClick={() => setGuideOpen(true)}
+                        >
+                          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+                            <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.3" />
+                            <circle cx="8" cy="4.6" r="1" fill="currentColor" />
+                            <path d="M8 7.2v4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      </h3>
                       <label className="settings-field">
                         Address
                         <input
@@ -320,6 +344,7 @@ export function AppSettingsDialog({
             </button>
           </footer>
         </form>
+        {guideOpen && <SetupGuideModal onClose={() => setGuideOpen(false)} />}
       </div>
     </div>
   );
