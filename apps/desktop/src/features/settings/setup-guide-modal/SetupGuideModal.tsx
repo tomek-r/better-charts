@@ -1,6 +1,7 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { isTauri, invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { DownloadIcon } from '../../../shared/ui/DownloadIcon';
 
 // The EA and tick-history reader already ship with the app as Tauri resources
 // (see tauri.conf.json). The guide downloads them to a folder the user picks:
@@ -30,53 +31,27 @@ async function downloadResource(resourcePath: string, fileName: string): Promise
   }
 }
 
-function DownloadIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path
-        d="M8 2v8m0 0 3.2-3.2M8 10 4.8 6.8M3 13.5h10"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </svg>
-  );
-}
-
-// Matches the settings modal exit animation.
-const CLOSE_DURATION_MS = 180;
-
 /** A simple overlay that sits on top of the open settings content. */
 export function SetupGuideModal({ onClose }: { onClose: () => void }) {
   const closeButton = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
+  const backdrop = useRef<HTMLDivElement>(null);
   const closingRef = useRef(false);
   const [closing, setClosing] = useState(false);
   const shellAvailable = isTauri();
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  // Fade out like the settings modal (skipped under reduced motion), then unmount.
   const requestClose = useCallback(() => {
     if (closingRef.current) {
       return;
     }
     closingRef.current = true;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      onCloseRef.current();
+      onClose();
       return;
     }
     setClosing(true);
-    window.setTimeout(() => onCloseRef.current(), CLOSE_DURATION_MS);
-  }, []);
+    backdrop.current?.addEventListener('animationend', () => onClose(), { once: true });
+  }, [onClose]);
 
-  // Take focus on open, close on Escape, return focus to the trigger when dismissed.
   useEffect(() => {
-    const previous = document.activeElement;
     closeButton.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -88,14 +63,11 @@ export function SetupGuideModal({ onClose }: { onClose: () => void }) {
     window.addEventListener('keydown', onKey, true);
     return () => {
       window.removeEventListener('keydown', onKey, true);
-      if (previous instanceof HTMLElement && previous.isConnected) {
-        previous.focus();
-      }
     };
   }, [requestClose]);
 
   return (
-    <div className={`setup-guide-backdrop${closing ? ' is-closing' : ''}`}>
+    <div ref={backdrop} className={`setup-guide-backdrop${closing ? ' is-closing' : ''}`}>
       <div className="setup-guide" role="dialog" aria-modal="true" aria-labelledby="setup-guide-title" data-setup-guide>
         <div className="setup-guide-header">
           <h2 id="setup-guide-title">Set up the MT5 bridge</h2>

@@ -1,7 +1,7 @@
 import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
-import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
+import { Suspense, use, useCallback, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { SetupGuideModal } from './setup-guide/SetupGuideModal';
+import { SetupGuideModal } from './setup-guide-modal/SetupGuideModal';
 import type { AppSettingsData } from './settingsTypes';
 import { FRAME_BYTES } from '../../shared/bridge/limits';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';
@@ -33,6 +33,8 @@ export function AppSettingsDialog({
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const guideTrigger = useRef<HTMLElement | null>(null);
+  const closeGuide = useCallback(() => setGuideOpen(false), []);
   const panel = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useEffect(() => {
@@ -42,6 +44,12 @@ export function AppSettingsDialog({
   useEffect(() => {
     savingRef.current = saving || closing;
   }, [saving, closing]);
+  // When the guide closes, return focus to the element that opened it.
+  useEffect(() => {
+    if (!guideOpen && guideTrigger.current?.isConnected) {
+      guideTrigger.current.focus();
+    }
+  }, [guideOpen]);
   useEffect(() => {
     const previous = document.activeElement;
     panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
@@ -196,7 +204,10 @@ export function AppSettingsDialog({
                           aria-haspopup="dialog"
                           aria-expanded={guideOpen}
                           disabled={saving || closing}
-                          onClick={() => setGuideOpen(true)}
+                          onClick={(event) => {
+                            guideTrigger.current = event.currentTarget;
+                            setGuideOpen(true);
+                          }}
                         >
                           <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
                             <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.3" />
@@ -344,7 +355,7 @@ export function AppSettingsDialog({
             </button>
           </footer>
         </form>
-        {guideOpen && <SetupGuideModal onClose={() => setGuideOpen(false)} />}
+        {guideOpen && <SetupGuideModal onClose={closeGuide} />}
       </div>
     </div>
   );
