@@ -2,10 +2,19 @@ import { defineConfig } from 'vite';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import babel from '@rolldown/plugin-babel';
 import { checker } from 'vite-plugin-checker';
-import pkg from './package.json';
+import pkg from './package.json' with { type: 'json' };
+
+// Cross-language pair: `window_title` in `src-tauri/src/lib.rs` formats the
+// native window title the same way.
+const appTitle = (version: string) => `Better Charts v${version}`;
 
 export default defineConfig({
   plugins: [
+    // Writes the versioned title into the built HTML so it is right before any JS runs.
+    {
+      name: 'app-title',
+      transformIndexHtml: (html) => html.replace(/<title>[^<]*<\/title>/, `<title>${appTitle(pkg.version)}</title>`),
+    },
     react(),
     // React Compiler: auto-memoise components and hooks so a re-render can
     // skip a subtree whose inputs are unchanged. React 19 needs no runtime
