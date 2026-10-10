@@ -157,7 +157,18 @@ export function useOrderTicketRiskPreviewEffects(
             setOrderVolume(projected.volume);
           }
         })
-        .catch(() => undefined);
+        .catch((error: unknown) => {
+          // Native sizing rejections (e.g. risk below the minimum volume) are
+          // user-facing sizing messages; surface them without waiting for MT5.
+          if (
+            typeof error === 'string' &&
+            version === riskVersionRef.current &&
+            currentStage.current === 'edit' &&
+            riskBrokerVersion.current !== version
+          ) {
+            setRiskError(error);
+          }
+        });
     }
     const request = () => {
       window.clearTimeout(pendingTimer.current);

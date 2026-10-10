@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { levelMoneyText, toPositionLine, toOrderLine } from '../src/features/chart/engine/overlayLines';
 import { formatSignedMoney } from '../src/shared/format';
 import { accountMoneyBasis } from '../src/shared/money';
+import { deriveStagedOrderDisplay } from '../src/features/order-ticket/domain/stagedOrderDisplay';
 import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
 import { gotoWithStub, stubInvocations } from './tauriStub';
 import { openTradePanel } from './panel';
@@ -157,4 +158,100 @@ test('money labels follow the currency fractional precision', () => {
   expect(formatSignedMoney(12.345, 'KWD', 3)).toContain('12.345');
   expect(formatSignedMoney(123.45, 'JPY', 0)).not.toContain('.');
   expect(formatSignedMoney(12.34, 'USD')).toBe('+12.34 USD');
+});
+
+test.describe('staged order money labels follow the sized volume', () => {
+  const instrument = {
+    symbol: 'GOLD.pro',
+    description: 'Gold',
+    digits: 2,
+    tickSize: '0.01',
+    pointSize: '0.01',
+    contractSize: '100',
+    volumeMin: '0.01',
+    volumeMax: '100',
+    volumeStep: '0.01',
+    tradeMode: 4,
+    stopsLevel: 0,
+    freezeLevel: 0,
+    fillingMode: 1,
+    orderMode: 127,
+    expirationMode: 15,
+    tradeExecution: 2,
+    tickValueCurrency: 'PLN',
+    tickValueProfit: '3.88',
+    tickValueLoss: '3.88',
+  };
+  const base = {
+    instrument,
+    account: { currency: 'PLN', currencyDigits: 2 },
+    snapshot: { symbol: 'GOLD.pro' },
+    riskSide: 'buy' as const,
+    entry: '100',
+    limitPrice: '',
+    orderKind: 'market' as const,
+    stopLoss: '98.92',
+    takeProfit: '101.40',
+    slOn: true,
+    tpOn: true,
+    effectiveVolume: '1',
+    draftVersion: 3,
+    riskPreview: undefined,
+  };
+  const preview = {
+    symbol: 'GOLD.pro',
+    side: 'buy' as const,
+    draftVersion: 3,
+    entry: '100',
+    stopLoss: '98.92',
+    takeProfit: '101.40',
+    riskBudget: '5',
+    volume: '0.05',
+    estimatedRisk: '21.38',
+    estimatedReward: '27.16',
+    estimatedMargin: '1',
+    currency: 'PLN',
+    quotedAtMs: 0,
+  };
+
+  test('risk mode without a sizing result shows no money from the default volume', () => {
+    const display = deriveStagedOrderDisplay({ ...base, unitsMode: 'equity' });
+    expect(display.slMoney).toBeUndefined();
+    expect(display.tpMoney).toBeUndefined();
+    expect(display.riskRewardLabel).toBeDefined();
+  });
+
+  test('risk mode after a sizing failure ignores an older draft volume', () => {
+    const display = deriveStagedOrderDisplay({
+      ...base,
+      unitsMode: 'equity',
+      effectiveVolume: '0.05',
+      sizingFailed: true,
+      lastPreview: preview,
+    });
+    expect(display.slMoney).toBeUndefined();
+    expect(display.tpMoney).toBeUndefined();
+  });
+
+  test('units mode still prices the typed volume', () => {
+    const display = deriveStagedOrderDisplay({ ...base, unitsMode: 'units' });
+    expect(display.tpMoney).toBe(formatSignedMoney(543.2, 'PLN'));
+    expect(display.slMoney).toBe(formatSignedMoney(-419.04, 'PLN'));
+  });
+
+  test('risk mode with a manual volume still prices the typed volume', () => {
+    const display = deriveStagedOrderDisplay({ ...base, unitsMode: 'equity', volumeManual: true });
+    expect(display.tpMoney).toBe(formatSignedMoney(543.2, 'PLN'));
+  });
+
+  test('risk mode with a matching sizing result keeps the sized amounts', () => {
+    const display = deriveStagedOrderDisplay({
+      ...base,
+      unitsMode: 'equity',
+      effectiveVolume: '0.05',
+      riskPreview: preview,
+    });
+    expect(display.slMoney).toBe(formatSignedMoney(-21.38, 'PLN'));
+    expect(display.tpMoney).toBe(formatSignedMoney(27.16, 'PLN'));
+  });
 });

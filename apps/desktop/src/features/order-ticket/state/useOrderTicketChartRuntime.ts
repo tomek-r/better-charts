@@ -26,6 +26,8 @@ export function useOrderTicketChartRuntime(
     tpOn: draft.tpOn,
     effectiveVolume,
     unitsMode: draft.unitsMode,
+    volumeManual: draft.volumeManual,
+    sizingFailed: broker.riskError !== undefined,
     riskPreview: broker.riskPreview,
     draftVersion: draft.draftVersion,
     lastPreview:

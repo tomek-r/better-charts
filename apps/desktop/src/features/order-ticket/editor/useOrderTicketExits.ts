@@ -32,6 +32,7 @@ export function useOrderTicketExits(): OrderTicketExitsProps {
     tpOn,
     unitsMode,
     orderVolume,
+    volumeManual,
     draftVersion,
     stagedOnChart,
     tpUnit,
@@ -49,17 +50,19 @@ export function useOrderTicketExits(): OrderTicketExitsProps {
       tpOn: state.tpOn,
       unitsMode: state.unitsMode,
       orderVolume: state.orderVolume,
+      volumeManual: state.volumeManual,
       draftVersion: state.slOn && state.tpOn ? state.draftVersion : 0,
       stagedOnChart: state.stagedOnChart,
       tpUnit: state.tpUnit,
       slUnit: state.slUnit,
     })),
   );
-  const { riskPreview, riskProjection } = useStore(
+  const { riskPreview, riskProjection, riskError } = useStore(
     stores.broker,
     useShallow((state) => ({
       riskPreview: slOn && tpOn ? state.riskPreview : undefined,
       riskProjection: slOn && tpOn ? state.riskProjection : undefined,
+      riskError: state.riskError,
     })),
   );
   const quote = useBridgeQuoteSelector((value) => (stagedOnChart && orderKind === 'market' ? value : undefined));
@@ -82,6 +85,8 @@ export function useOrderTicketExits(): OrderTicketExitsProps {
           tpOn,
           effectiveVolume,
           unitsMode,
+          volumeManual,
+          sizingFailed: riskError !== undefined,
           riskPreview,
           draftVersion,
           lastPreview:

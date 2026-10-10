@@ -27,6 +27,10 @@ export interface StagedOrderDisplayInput {
   riskPreview: RiskPreview | undefined;
   draftVersion: number;
   lastPreview?: RiskPreview;
+  /** Auto-sized (risk) volume only: a typed volume is the user's own. */
+  volumeManual?: boolean;
+  /** Sizing rejected the current draft (e.g. risk below the minimum volume). */
+  sizingFailed?: boolean;
 }
 
 /** Display estimates only: the chart and ticket share these values, while
@@ -79,6 +83,14 @@ export function deriveStagedOrderDisplay(input: StagedOrderDisplayInput) {
     return Number.isFinite(projected) ? projected : undefined;
   };
 
+  // In risk modes the volume field only mirrors a successful sizing; after a
+  // failure it keeps the default or an older draft's volume, so money priced
+  // from it would be unrelated to the user's risk. Show prices only then.
+  const sizedVolumeTrusted =
+    input.unitsMode === 'units' ||
+    input.volumeManual === true ||
+    (input.sizingFailed !== true && Boolean(previewMatches && preview && preview.volume === input.effectiveVolume));
+
   const levelAmount = (price: string, enabled: boolean): number | undefined => {
     if (!enabled || !price.trim() || !money) {
       return undefined;
@@ -93,7 +105,7 @@ export function deriveStagedOrderDisplay(input: StagedOrderDisplayInput) {
     Number(input.takeProfit) > 0 &&
     Number.isFinite(Number(input.takeProfit));
   let loss: number | undefined;
-  if (stopSet) {
+  if (stopSet && sizedVolumeTrusted) {
     const projected = previewAmount('sl');
     if (projected !== undefined) {
       loss = projected;
@@ -102,7 +114,7 @@ export function deriveStagedOrderDisplay(input: StagedOrderDisplayInput) {
     }
   }
   let reward: number | undefined;
-  if (targetSet) {
+  if (targetSet && sizedVolumeTrusted) {
     reward = previewAmount('tp') ?? levelAmount(input.takeProfit, input.tpOn);
   }
   // Risk budget is a ceiling, not the loss for the effective volume. Margin
