@@ -6,7 +6,16 @@ import { useRequiredContext } from '../../shared/state/useRequiredContext';
 import { useAppSettings, initialAppSettingsState, type AppSettingsStore } from './useAppSettings';
 import type { AppSettingsData } from './settingsTypes';
 
-export interface AppSettingsViewState {
+/** The handlers the settings dialog and header notices call; stable across state changes. */
+interface AppSettingsHandlers {
+  dismissRestartNotice: () => void;
+  dismissConfigurationNotice: () => void;
+  close: () => void;
+  exited: () => void;
+  saved: (settings: AppSettingsData) => void;
+}
+
+export interface AppSettingsViewState extends AppSettingsHandlers {
   settings: AppSettingsData | undefined;
   loadRequest: Promise<void>;
   isOpen: boolean;
@@ -15,10 +24,6 @@ export interface AppSettingsViewState {
   notificationRevision: number;
   restartNoticeVisible: boolean;
   configurationNotice: string | null | undefined;
-  dismissRestartNotice: () => void;
-  dismissConfigurationNotice: () => void;
-  close: () => void;
-  saved: (settings: AppSettingsData) => void;
 }
 
 export interface AppSettingsActions {
@@ -27,13 +32,7 @@ export interface AppSettingsActions {
 
 interface AppSettingsContextValue {
   store: AppSettingsStore;
-  actions: {
-    openSettings: () => void;
-    dismissRestartNotice: () => void;
-    dismissConfigurationNotice: () => void;
-    close: () => void;
-    saved: (settings: AppSettingsData) => void;
-  };
+  actions: AppSettingsActions & AppSettingsHandlers;
 }
 
 const AppSettingsContext = createContext<AppSettingsContextValue | null>(null);
@@ -47,9 +46,17 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
       dismissRestartNotice: settings.dismissRestartNotice,
       dismissConfigurationNotice: settings.dismissConfigurationNotice,
       close: settings.close,
+      exited: settings.exited,
       saved: settings.saved,
     }),
-    [settings.close, settings.dismissConfigurationNotice, settings.dismissRestartNotice, settings.open, settings.saved],
+    [
+      settings.close,
+      settings.exited,
+      settings.dismissConfigurationNotice,
+      settings.dismissRestartNotice,
+      settings.open,
+      settings.saved,
+    ],
   );
   const contextValue = useMemo(() => ({ store, actions }), [actions, store]);
 

@@ -5,9 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
 import { SubscriptionScope } from '../../../shared/bridge/subscriptionScope';
-import { toRenderBar, type Mt5DataAdapter } from '../../chart/engine/mt5DataAdapter';
-import type { ChartController } from '../../chart/engine/chartController';
-import type { FixedRangeProfileState } from '../../chart/engine/fixedRangeProfileOverlay';
+import { toRenderBar } from '../../chart/engine/mt5DataAdapter';
 import type {
   BridgeStatus,
   AccountSnapshot,
@@ -27,10 +25,10 @@ import type {
   RiskPreviewError,
 } from '../../../shared/bridge/types';
 import { normalizeAccount, normalizePortfolio, normalizeQuote, normalizeSnapshot } from '../normalizers';
-import { HISTORY_BARS } from '../../../shared/bridge/limits';
+import { initialHistoryBarsFor } from '../../chart/engine/initialHistoryWindow';
 import type { BridgeSessionState } from '../useBridgeSession';
 import type { BridgeTicketResponsePort } from '../bridgeTicketResponseHandlers';
-import { createBridgeMarketRuntime, type BridgeEffectRun } from '../bridgeMarketRuntime';
+import { createBridgeMarketRuntime, type BridgeEffectRun, type BridgeMarketResources } from '../bridgeMarketRuntime';
 import { createBridgeTicketResponseHandlers } from '../bridgeTicketResponseHandlers';
 
 export function useBridgeBootstrapEffects(
@@ -54,12 +52,7 @@ export function useBridgeBootstrapEffects(
     accountLoginRef,
     brokerServerRef,
     ticket,
-  }: {
-    chart: { current: ChartController | null };
-    adapterRef: { current: Mt5DataAdapter | null };
-    fixedRangeProfileState: { current: FixedRangeProfileState };
-    expectedProfile: { current: { symbol: string; fromMs: number; endMs: number; generation: number } | undefined };
-    profileGeneration: { current: number };
+  }: BridgeMarketResources & {
     accountLoginRef: { current: string | undefined };
     brokerServerRef: { current: string | undefined };
     ticket: BridgeTicketResponsePort;
@@ -218,6 +211,7 @@ export function useBridgeBootstrapEffects(
                 (bridgeIdentity && identity !== bridgeIdentity)
               ) {
                 marketRuntime.cancelCandles();
+                marketRuntime.cancelPrefetch();
                 marketAdapterRef.current?.resetRequests();
                 marketRuntime.resetPageState();
                 loadingTimeframeRef.current = undefined;
@@ -286,7 +280,11 @@ export function useBridgeBootstrapEffects(
           // listeners are ready so a reopened workspace restores SL/TP amounts.
           if (run.bridgeState === 'connected' && acceptedInitial.symbol && acceptedInitial.timeframe) {
             void adapter
-              .requestHistory(acceptedInitial.symbol, acceptedInitial.timeframe, HISTORY_BARS)
+              .requestHistory(
+                acceptedInitial.symbol,
+                acceptedInitial.timeframe,
+                initialHistoryBarsFor(chartRef.current),
+              )
               .catch(() => undefined);
           }
         }
@@ -306,6 +304,7 @@ export function useBridgeBootstrapEffects(
     return () => {
       run.disposed = true;
       marketRuntime.cancelCandles();
+      marketRuntime.cancelPrefetch();
       subscriptions.dispose();
     };
     // The app-level listeners are the sole source for history and realtime chart updates.

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { gotoWithStub } from './tauriStub';
+import { gotoWithStub } from './helpers/tauriStub';
 
 test('domain stores isolate updates and skip notifications for unchanged fields', async ({ page }) => {
   await gotoWithStub(page);
@@ -8,7 +8,7 @@ test('domain stores isolate updates and skip notifications for unchanged fields'
     if (appRoot) {
       appRoot.style.display = 'none';
     }
-    const harnessPath = '/e2e/domainStoreHarness.tsx';
+    const harnessPath = '/e2e/helpers/domainStoreHarness.tsx';
     const harness = await import(/* @vite-ignore */ harnessPath);
     harness.mountDomainStoreHarness();
   });
@@ -64,7 +64,7 @@ test('domain stores isolate updates and skip notifications for unchanged fields'
     ),
   ).toBe(1);
   await page.evaluate(async () => {
-    const harnessPath = '/e2e/domainStoreHarness.tsx';
+    const harnessPath = '/e2e/helpers/domainStoreHarness.tsx';
     const harness = await import(/* @vite-ignore */ harnessPath);
     harness.unmountDomainStoreHarness();
   });

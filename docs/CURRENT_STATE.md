@@ -39,7 +39,9 @@ Pine Script execution.
   Volume Profile is separate; boundaries drag, Delete/Backspace clears it,
   timeframe changes preserve selection and symbol changes clear it.
 - Price scale fits on load, then holds until rescaled; axis hover exposes `A`/`L`.
-  History paging preserves viewport; reconnecting resets to the latest history,
+  The first history request covers only the visible pane (`initialHistoryBars`
+  in `config/bridge.json`; the UI measures the pane), then one older page is
+  prefetched when idle. History paging preserves viewport; reconnecting resets to the latest history,
   while timeframe changes preserve bar spacing and right-edge pixel distance.
   Clicking the current portfolio symbol keeps the chart.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels

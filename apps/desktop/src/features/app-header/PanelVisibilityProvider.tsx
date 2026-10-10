@@ -1,13 +1,5 @@
-import {
-  createContext,
-  useCallback,
-  useMemo,
-  useState,
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-} from 'react';
-import { createDomainStore, useDomainField, type DomainStore } from '../../shared/state/domainStore';
+import { createContext, useMemo, useState, type ReactNode } from 'react';
+import { createDomainStore, useDomainField, type DomainStore, type FieldSetters } from '../../shared/state/domainStore';
 import { useRequiredContext } from '../../shared/state/useRequiredContext';
 
 interface PanelState {
@@ -15,9 +7,7 @@ interface PanelState {
 }
 
 type PanelStore = DomainStore<PanelState>;
-interface PanelActions {
-  setPanelOpen: Dispatch<SetStateAction<boolean>>;
-}
+type PanelActions = Pick<FieldSetters<PanelState>, 'setPanelOpen'>;
 
 const PanelStoreContext = createContext<PanelStore | null>(null);
 
@@ -39,9 +29,5 @@ export function usePanelOpen(): boolean {
 
 export function usePanelActions(): PanelActions {
   const store = useRequiredContext(PanelStoreContext, 'usePanelActions must be used within PanelVisibilityProvider.');
-  const setPanelOpen = useCallback<PanelActions['setPanelOpen']>(
-    (action) => store.setField('panelOpen', action),
-    [store],
-  );
-  return useMemo(() => ({ setPanelOpen }), [setPanelOpen]);
+  return useMemo(() => ({ setPanelOpen: store.setters.setPanelOpen }), [store]);
 }

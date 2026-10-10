@@ -1,18 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { escapeHtml: escape } = require("./shared.cjs");
 
-const escape = (value) =>
-  String(value).replace(
-    /[&<>"']/g,
-    (char) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-      })[char],
-  );
 const ms = (value) => value.toFixed(1);
 const scenarioNames = {
   quotes: "Live quotes",

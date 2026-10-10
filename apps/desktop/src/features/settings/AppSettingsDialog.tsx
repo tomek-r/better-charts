@@ -1,4 +1,5 @@
 import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
+import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
 import { Suspense, use, useCallback, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { SetupGuideModal } from './setup-guide-modal/SetupGuideModal';
@@ -17,6 +18,7 @@ export function AppSettingsDialog({
   closing,
   loadError,
   onClose,
+  onExited,
   onSaved,
 }: {
   closing: boolean;
@@ -24,6 +26,7 @@ export function AppSettingsDialog({
   loadRequest: Promise<void>;
   loadError: string | undefined;
   onClose: () => void;
+  onExited: () => void;
   onSaved: (settings: AppSettingsData) => void;
 }) {
   const [editedDraft, setEditedDraft] = useState<MT5BridgeSettings>();
@@ -36,6 +39,14 @@ export function AppSettingsDialog({
   const guideTrigger = useRef<HTMLElement | null>(null);
   const closeGuide = useCallback(() => setGuideOpen(false), []);
   const panel = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
+  // Unmounting happens when the backdrop's own exit animation ends; reopening
+  // (closing back to false) cancels a pending exit through this cleanup.
+  useEffect(() => {
+    if (closing) {
+      return afterExitAnimation(backdrop.current, onExited);
+    }
+  }, [closing, onExited]);
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -153,7 +164,7 @@ export function AppSettingsDialog({
     }
   }
   return (
-    <div className={`settings-backdrop${closing ? ' is-closing' : ''}`}>
+    <div ref={backdrop} className={`settings-backdrop${closing ? ' is-closing' : ''}`}>
       <div
         ref={panel}
         className="settings-dialog"

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { gotoWithStub, stubInvocations } from './tauriStub';
+import { gotoWithStub, stubInvocations } from './helpers/tauriStub';
 import { SubscriptionScope } from '../src/shared/bridge/subscriptionScope';
 
 async function listenerCount(page: Page, event: string) {

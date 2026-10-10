@@ -16,6 +16,7 @@
     "format": "pnpm --filter better-charts format",
     "format:check": "pnpm --filter better-charts format:check",
     "prepare": "husky",
+    "lighthouse": "pnpm --filter better-charts lighthouse",
     "profiler:compare": "node scripts/react-profiler/compare.cjs"
   },
   "lint-staged": {

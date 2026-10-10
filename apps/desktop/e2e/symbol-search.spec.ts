@@ -1,30 +1,56 @@
-import { expect, test } from '@playwright/test';
-import { gotoWithStub, pushEvent, stubInvocations } from './tauriStub';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { answerSymbolSearch, chooseSearchResult, openSymbolSearch } from './helpers/panel';
+import { brokerSymbolFixture, gotoWithStub, pushEvent, stubInvocations, type StubInternals } from './helpers/tauriStub';
 
 // Headless Chromium hides scrollbars by default; keep them visible for layout checks and screenshots.
 test.use({ launchOptions: { ignoreDefaultArgs: ['--hide-scrollbars'] } });
 
-const brokerSymbol = (symbol: string, description: string) => ({
-  symbol,
-  description,
-  digits: 5,
-  tickSize: '0.00001',
-  pointSize: '0.00001',
-  contractSize: '100000',
-  tickValueProfit: '1.00000',
-  tickValueLoss: '1.00000',
-  tickValueCurrency: 'USD',
-  volumeMin: '0.01',
-  volumeMax: '100',
-  volumeStep: '0.01',
-  stopsLevel: 0,
-  freezeLevel: 0,
-  fillingMode: 0,
-  orderMode: 0,
-  expirationMode: 0,
-  tradeExecution: 0,
-  tradeMode: 0,
-});
+/** The stub's Tauri global plus the hooks the delayed-search specs install in the page. */
+type SearchInternals = StubInternals & {
+  __rejectFirstSearch?: () => void;
+  __searchCalls?: string[];
+};
+
+/**
+ * Records every `search_symbols` query in `__searchCalls`, leaves the first one
+ * pending until `__rejectFirstSearch()` fails it, and answers later ones with null.
+ */
+async function hangFirstSearch(page: Page) {
+  await page.evaluate(() => {
+    const internals = window as unknown as SearchInternals;
+    const invoke = internals.__TAURI_INTERNALS__.invoke;
+    internals.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd !== 'search_symbols') {
+        return invoke(cmd, args);
+      }
+      const calls = (internals.__searchCalls ??= []);
+      calls.push(String(args?.query));
+      if (calls.length === 1) {
+        return new Promise((_, reject) => {
+          internals.__rejectFirstSearch = () => reject(new Error('delayed failure'));
+        });
+      }
+      return Promise.resolve(null);
+    };
+  });
+}
+
+async function expectSearchCalls(page: Page, calls: string[]) {
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __searchCalls: string[] }).__searchCalls))
+    .toEqual(calls);
+}
+
+/** Fails the held first search late, then checks the newer result stays and no error appears. */
+async function expectLateFailureIgnored(page: Page, dialog: Locator, resultText: string) {
+  await page.evaluate(() => {
+    const internals = window as unknown as { __rejectFirstSearch?: () => void };
+    internals.__rejectFirstSearch?.();
+  });
+  await page.waitForTimeout(25);
+  await expect(dialog.getByText(resultText)).toBeVisible();
+  await expect(page.getByText('Symbol search is unavailable.')).toHaveCount(0);
+}
 
 test('header and keyboard shortcut open search; debounced results reject stale responses', async ({ page }) => {
   await gotoWithStub(page);
@@ -50,8 +76,8 @@ test('header and keyboard shortcut open search; debounced results reject stale r
   await expect
     .poll(async () => (await stubInvocations(page)).filter((entry) => entry.cmd === 'search_symbols'))
     .toHaveLength(2);
-  const eur = brokerSymbol('EURUSD', 'Euro vs US Dollar');
-  const usd = brokerSymbol('USDJPY', 'US Dollar vs Japanese Yen');
+  const eur = brokerSymbolFixture('EURUSD', 'Euro vs US Dollar');
+  const usd = brokerSymbolFixture('USDJPY', 'US Dollar vs Japanese Yen');
   await pushEvent(page, 'symbol-search-result', { query: 'EUR', source: 'live', symbols: [eur] });
   await expect(dialog.getByText('Euro vs US Dollar')).toHaveCount(0);
   await pushEvent(page, 'symbol-search-result', { query: 'USD', source: 'live', symbols: [usd] });
@@ -65,17 +91,13 @@ test('header and keyboard shortcut open search; debounced results reject stale r
 
 test('long symbol results expose a scrollbar and the last result remains reachable', async ({ page }, testInfo) => {
   const { pageErrors, consoleErrors } = await gotoWithStub(page);
-  await page.getByRole('button', { name: 'Search symbols' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
-  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill('TEST');
-  await expect
-    .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'search_symbols'))
-    .toHaveLength(1);
-  await pushEvent(page, 'symbol-search-result', {
-    query: 'TEST',
-    source: 'live',
-    symbols: Array.from({ length: 20 }, (_, index) => brokerSymbol(`TEST${index}`, `Test symbol ${index}`)),
-  });
+  const { dialog, input } = await openSymbolSearch(page);
+  await answerSymbolSearch(
+    page,
+    input,
+    'TEST',
+    Array.from({ length: 20 }, (_, index) => brokerSymbolFixture(`TEST${index}`, `Test symbol ${index}`)),
+  );
   const results = dialog.locator('.search-results');
   await expect(results.locator('.search-result-row')).toHaveCount(20);
   const scrolling = await results.evaluate((element) => ({
@@ -102,20 +124,11 @@ test('long symbol results expose a scrollbar and the last result remains reachab
 
 test('favorite stars keep their column when toggled beside long descriptions', async ({ page }) => {
   await gotoWithStub(page);
-  await page.getByRole('button', { name: 'Search symbols' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
-  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill('TEST');
-  await expect
-    .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'search_symbols'))
-    .toHaveLength(1);
-  await pushEvent(page, 'symbol-search-result', {
-    query: 'TEST',
-    source: 'live',
-    symbols: [
-      brokerSymbol('TEST', 'Short description'),
-      brokerSymbol('TEST_LONG', 'ExtremelyLongUnbrokenBrokerDescriptionThatDoesNotFitInTheAvailableSpaceAtAll'),
-    ],
-  });
+  const { dialog, input } = await openSymbolSearch(page);
+  await answerSymbolSearch(page, input, 'TEST', [
+    brokerSymbolFixture('TEST', 'Short description'),
+    brokerSymbolFixture('TEST_LONG', 'ExtremelyLongUnbrokenBrokerDescriptionThatDoesNotFitInTheAvailableSpaceAtAll'),
+  ]);
   const normal = dialog.getByRole('button', { name: 'Add TEST to favorites', exact: true });
   const toggle = dialog.getByRole('button', { name: 'Add TEST_LONG to favorites', exact: true });
   const before = await toggle.boundingBox();
@@ -136,7 +149,9 @@ test('favorite stars keep their column when toggled beside long descriptions', a
 });
 
 test('favorite stars do not move horizontally when removing rows ends overflow', async ({ page }) => {
-  const favorites = Array.from({ length: 8 }, (_, index) => brokerSymbol(`TEST${index}`, `Test symbol ${index}`));
+  const favorites = Array.from({ length: 8 }, (_, index) =>
+    brokerSymbolFixture(`TEST${index}`, `Test symbol ${index}`),
+  );
   await page.addInitScript((symbols) => {
     localStorage.setItem('better-charts.symbol-favorites.v1', JSON.stringify(symbols));
   }, favorites);
@@ -158,158 +173,65 @@ test('favorite stars do not move horizontally when removing rows ends overflow',
 
 test('a delayed search failure cannot replace results from a newer query', async ({ page }) => {
   await gotoWithStub(page);
-  await page.getByRole('button', { name: 'Search symbols' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
-  const input = dialog.getByPlaceholder('Search symbol — e.g. NAS100');
+  const { dialog, input } = await openSymbolSearch(page);
 
-  await page.evaluate(() => {
-    const internals = window as unknown as {
-      __TAURI_INTERNALS__: {
-        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
-      };
-      __rejectFirstSearch?: () => void;
-      __searchCalls?: string[];
-    };
-    const invoke = internals.__TAURI_INTERNALS__.invoke;
-    internals.__TAURI_INTERNALS__.invoke = (cmd, args) => {
-      if (cmd === 'search_symbols') {
-        (internals.__searchCalls ??= []).push(String(args?.query));
-      }
-      if (cmd === 'search_symbols' && args?.query === 'FIRST') {
-        return new Promise((_, reject) => {
-          internals.__rejectFirstSearch = () => reject(new Error('delayed failure'));
-        });
-      }
-      if (cmd === 'search_symbols') {
-        return Promise.resolve(null);
-      }
-      return invoke(cmd, args);
-    };
-  });
+  await hangFirstSearch(page);
 
   await input.fill('FIRST');
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __searchCalls: string[] }).__searchCalls))
-    .toEqual(['FIRST']);
+  await expectSearchCalls(page, ['FIRST']);
   await input.fill('SECOND');
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __searchCalls: string[] }).__searchCalls))
-    .toEqual(['FIRST', 'SECOND']);
+  await expectSearchCalls(page, ['FIRST', 'SECOND']);
 
   await pushEvent(page, 'symbol-search-result', {
     query: 'SECOND',
     source: 'live',
-    symbols: [brokerSymbol('SECOND', 'Newer query result')],
+    symbols: [brokerSymbolFixture('SECOND', 'Newer query result')],
   });
   await expect(dialog.getByText('Newer query result')).toBeVisible();
 
-  await page.evaluate(() => {
-    const internals = window as unknown as { __rejectFirstSearch?: () => void };
-    internals.__rejectFirstSearch?.();
-  });
-
-  await page.waitForTimeout(25);
-  await expect(dialog.getByText('Newer query result')).toBeVisible();
-  await expect(page.getByText('Symbol search is unavailable.')).toHaveCount(0);
+  await expectLateFailureIgnored(page, dialog, 'Newer query result');
 });
 
 test('a search failure from before close cannot affect the same query after reopening', async ({ page }) => {
   await gotoWithStub(page);
-  await page.getByRole('button', { name: 'Search symbols' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
-  const input = dialog.getByPlaceholder('Search symbol — e.g. NAS100');
+  const { dialog, input } = await openSymbolSearch(page);
 
-  await page.evaluate(() => {
-    const internals = window as unknown as {
-      __TAURI_INTERNALS__: {
-        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
-      };
-      __rejectOldSearch?: () => void;
-      __searchCalls?: string[];
-    };
-    const invoke = internals.__TAURI_INTERNALS__.invoke;
-    internals.__TAURI_INTERNALS__.invoke = (cmd, args) => {
-      if (cmd !== 'search_symbols') {
-        return invoke(cmd, args);
-      }
-      const calls = (internals.__searchCalls ??= []);
-      calls.push(String(args?.query));
-      if (calls.length === 1) {
-        return new Promise((_, reject) => {
-          internals.__rejectOldSearch = () => reject(new Error('delayed failure'));
-        });
-      }
-      return Promise.resolve(null);
-    };
-  });
+  await hangFirstSearch(page);
 
   await input.fill('SAME');
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __searchCalls: string[] }).__searchCalls))
-    .toEqual(['SAME']);
+  await expectSearchCalls(page, ['SAME']);
   await dialog.getByRole('button', { name: 'Close search' }).click();
   await page.getByRole('button', { name: 'Search symbols' }).click();
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __searchCalls: string[] }).__searchCalls))
-    .toEqual(['SAME', 'SAME']);
+  await expectSearchCalls(page, ['SAME', 'SAME']);
 
   await pushEvent(page, 'symbol-search-result', {
     query: 'SAME',
     source: 'live',
-    symbols: [brokerSymbol('SAME', 'Reopened query result')],
+    symbols: [brokerSymbolFixture('SAME', 'Reopened query result')],
   });
   await expect(dialog.getByText('Reopened query result')).toBeVisible();
 
-  await page.evaluate(() => {
-    const internals = window as unknown as { __rejectOldSearch?: () => void };
-    internals.__rejectOldSearch?.();
-  });
-
-  await page.waitForTimeout(25);
-  await expect(dialog.getByText('Reopened query result')).toBeVisible();
-  await expect(page.getByText('Symbol search is unavailable.')).toHaveCount(0);
+  await expectLateFailureIgnored(page, dialog, 'Reopened query result');
 });
 
 test('favorites persist and recents are recorded only after history accepts a selection', async ({ page }) => {
-  await page.addInitScript(() => {
-    const favorite = {
-      symbol: 'EURUSD',
-      description: 'Euro vs US Dollar',
-      digits: 5,
-      tickSize: '0.00001',
-      pointSize: '0.00001',
-      contractSize: '1',
-      tickValueProfit: '0.00001',
-      tickValueLoss: '0.00001',
-      tickValueCurrency: 'USD',
-      volumeMin: '0.01',
-      volumeMax: '100',
-      volumeStep: '0.01',
-      stopsLevel: 0,
-      freezeLevel: 0,
-      fillingMode: 0,
-      orderMode: 0,
-      expirationMode: 0,
-      tradeExecution: 0,
-      tradeMode: 0,
-    };
-    localStorage.setItem('better-charts.symbol-favorites.v1', JSON.stringify([favorite]));
+  const favorite = brokerSymbolFixture('EURUSD', 'Euro vs US Dollar', {
+    contractSize: '1',
+    tickValueProfit: '0.00001',
+    tickValueLoss: '0.00001',
   });
+  await page.addInitScript((saved) => {
+    localStorage.setItem('better-charts.symbol-favorites.v1', JSON.stringify([saved]));
+  }, favorite);
   await gotoWithStub(page, { historyDelayMs: 900 });
-  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
-  await page.getByRole('button', { name: 'Search symbols' }).click();
+  const { dialog, input } = await openSymbolSearch(page);
   await expect(dialog.getByText('Euro vs US Dollar')).toBeVisible();
   await dialog.getByRole('button', { name: 'Close search' }).click();
-  await page.getByRole('button', { name: 'Search symbols' }).click();
+  await openSymbolSearch(page);
   await expect(dialog.getByText('Euro vs US Dollar')).toBeVisible();
 
-  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill('NAS100');
-  await expect
-    .poll(async () => (await stubInvocations(page)).filter((entry) => entry.cmd === 'search_symbols'))
-    .toHaveLength(1);
-  const nasdaq = brokerSymbol('NAS100', 'US Tech 100');
-  await pushEvent(page, 'symbol-search-result', { query: 'NAS100', source: 'live', symbols: [nasdaq] });
-  await dialog.locator('.search-result-row').filter({ hasText: 'NAS100' }).getByRole('button').first().click();
+  await answerSymbolSearch(page, input, 'NAS100', [brokerSymbolFixture('NAS100', 'US Tech 100')]);
+  await chooseSearchResult(dialog, 'NAS100');
   await expect(dialog).toBeHidden();
   await page.getByRole('button', { name: 'Search symbols' }).click();
   await expect(dialog.getByRole('button', { name: 'Add NAS100 to favorites' })).toHaveCount(0);
@@ -325,9 +247,9 @@ test('favorites persist and recents are recorded only after history accepts a se
 });
 
 test('empty-query Enter chooses the first favorite and hides it from Recent', async ({ page }) => {
-  const favorite = brokerSymbol('EURUSD', 'Saved favorite');
-  const recentDuplicate = brokerSymbol('EURUSD', 'Older Euro entry');
-  const recent = [recentDuplicate, brokerSymbol('NAS100', 'US Tech 100')];
+  const favorite = brokerSymbolFixture('EURUSD', 'Saved favorite');
+  const recentDuplicate = brokerSymbolFixture('EURUSD', 'Older Euro entry');
+  const recent = [recentDuplicate, brokerSymbolFixture('NAS100', 'US Tech 100')];
   await page.addInitScript(
     ({ favoriteSymbol, recentSymbols }) => {
       localStorage.setItem('better-charts.symbol-favorites.v1', JSON.stringify([favoriteSymbol]));
@@ -360,11 +282,7 @@ test('empty-query Enter chooses the first favorite and hides it from Recent', as
 test('failed symbol history clears loading and does not record a recent selection', async ({ page }) => {
   await gotoWithStub(page);
   await page.evaluate(() => {
-    const internals = window as unknown as {
-      __TAURI_INTERNALS__: {
-        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
-      };
-    };
+    const internals = window as unknown as StubInternals;
     const invoke = internals.__TAURI_INTERNALS__.invoke;
     internals.__TAURI_INTERNALS__.invoke = (cmd, args) =>
       cmd === 'request_history' && args?.symbol === 'NAS100'
@@ -372,18 +290,9 @@ test('failed symbol history clears loading and does not record a recent selectio
         : invoke(cmd, args);
   });
 
-  await page.getByRole('button', { name: 'Search symbols' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Search symbols' });
-  await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill('NAS100');
-  await expect
-    .poll(async () => (await stubInvocations(page)).filter((entry) => entry.cmd === 'search_symbols'))
-    .toHaveLength(1);
-  await pushEvent(page, 'symbol-search-result', {
-    query: 'NAS100',
-    source: 'live',
-    symbols: [brokerSymbol('NAS100', 'US Tech 100')],
-  });
-  await dialog.locator('.search-result-row').filter({ hasText: 'NAS100' }).getByRole('button').first().click();
+  const { dialog, input } = await openSymbolSearch(page);
+  await answerSymbolSearch(page, input, 'NAS100', [brokerSymbolFixture('NAS100', 'US Tech 100')]);
+  await chooseSearchResult(dialog, 'NAS100');
 
   await expect(page.getByText('History request could not be sent.')).toBeVisible();
   await expect(page.locator('.chart-heading h1')).toHaveText('EURUSD');
@@ -396,10 +305,7 @@ test('failed symbol history clears loading and does not record a recent selectio
 test('a stale symbol history failure cannot affect a newer accepted selection', async ({ page }) => {
   await gotoWithStub(page);
   await page.evaluate(() => {
-    const internals = window as unknown as {
-      __TAURI_INTERNALS__: {
-        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
-      };
+    const internals = window as unknown as StubInternals & {
       __rejectOldHistory?: () => void;
     };
     const invoke = internals.__TAURI_INTERNALS__.invoke;
@@ -414,18 +320,15 @@ test('a stale symbol history failure cannot affect a newer accepted selection', 
   });
 
   const selectSearchResult = async (symbol: string) => {
-    await page.getByRole('button', { name: 'Search symbols' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Search symbols' });
-    await dialog.getByPlaceholder('Search symbol — e.g. NAS100').fill(symbol);
-    await expect
-      .poll(async () => (await stubInvocations(page)).filter((entry) => entry.cmd === 'search_symbols'))
-      .toHaveLength(symbol === 'OLD' ? 1 : 2);
-    await pushEvent(page, 'symbol-search-result', {
-      query: symbol,
-      source: 'live',
-      symbols: [brokerSymbol(symbol, `${symbol} description`)],
-    });
-    await dialog.locator('.search-result-row').filter({ hasText: symbol }).getByRole('button').first().click();
+    const { dialog, input } = await openSymbolSearch(page);
+    await answerSymbolSearch(
+      page,
+      input,
+      symbol,
+      [brokerSymbolFixture(symbol, `${symbol} description`)],
+      symbol === 'OLD' ? 1 : 2,
+    );
+    await chooseSearchResult(dialog, symbol);
   };
 
   await selectSearchResult('OLD');

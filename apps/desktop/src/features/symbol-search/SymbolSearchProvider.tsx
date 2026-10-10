@@ -1,22 +1,12 @@
-import {
-  createContext,
-  useCallback,
-  useMemo,
-  useState,
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-} from 'react';
-import { createDomainStore, useDomainField, type DomainStore } from '../../shared/state/domainStore';
+import { createContext, useMemo, useState, type ReactNode } from 'react';
+import { createDomainStore, useDomainField, type DomainStore, type FieldSetters } from '../../shared/state/domainStore';
 import { useRequiredContext } from '../../shared/state/useRequiredContext';
-
-export interface SymbolSearchControls {
-  setSearchOpen: Dispatch<SetStateAction<boolean>>;
-}
 
 interface SymbolSearchState {
   searchOpen: boolean;
 }
+
+export type SymbolSearchControls = Pick<FieldSetters<SymbolSearchState>, 'setSearchOpen'>;
 
 const SearchStoreContext = createContext<DomainStore<SymbolSearchState> | null>(null);
 
@@ -31,11 +21,7 @@ export function useSymbolSearchControls(): SymbolSearchControls {
     SearchStoreContext,
     'useSymbolSearchControls must be used inside SymbolSearchProvider.',
   );
-  const setSearchOpen = useCallback<Dispatch<SetStateAction<boolean>>>(
-    (action) => store.setField('searchOpen', action),
-    [store],
-  );
-  return useMemo(() => ({ setSearchOpen }), [setSearchOpen]);
+  return useMemo(() => ({ setSearchOpen: store.setters.setSearchOpen }), [store]);
 }
 
 /** Open state for views that need to share visibility without owning search data. */

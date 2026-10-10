@@ -1,27 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
-import { gotoWithStub, pushEvent, STUB_NOW } from './tauriStub';
+import { observeFillText } from './helpers/canvasText';
+import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 
-const quote = (timeMs: number, bid: string, ask: string) => ({
-  symbol: 'EURUSD',
-  timeMs,
-  bid,
-  ask,
-  last: bid,
-  volume: 10,
-  volumeReal: '0',
-  flags: 0,
-});
-const candle = {
-  timeMs: STUB_NOW,
-  open: '1.0854',
-  high: '1.0858',
-  low: '1.0848',
-  close: '1.0852',
-  tickVolume: 130,
-  spread: 2,
-  realVolume: 130,
-};
+const quote = eurusdQuote;
+const candle = eurusdFormingBar;
 
 interface Bands {
   ask?: [number, number];
@@ -118,15 +101,12 @@ async function openChart(page: Page) {
       }
       return roundRect.call(this, x, y, w, h, radii);
     };
-    const fillText = CanvasRenderingContext2D.prototype.fillText;
-    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
-      if (onAxis(this)) {
+  });
+  await observeFillText(page, () => {
+    const ops = (window as unknown as { __tagOps: Array<{ kind: string; width: number; text: string }> }).__tagOps;
+    return (context, text) => {
+      if (context.canvas.width <= 120 && context.canvas.height > 120) {
         ops.push({ kind: 'text', width: 0, text: String(text) });
-      }
-      if (maxWidth === undefined) {
-        fillText.call(this, text, x, y);
-      } else {
-        fillText.call(this, text, x, y, maxWidth);
       }
     };
   });
@@ -134,11 +114,7 @@ async function openChart(page: Page) {
   await page.clock.pauseAt(new Date('2026-09-30T12:01:00Z'));
   await gotoWithStub(page, {});
   await page.clock.runFor(100);
-  await page.evaluate(() =>
-    (
-      window as unknown as { __chartTest: { scrollToRange(range: { from: number; to: number }): void } }
-    ).__chartTest.scrollToRange({ from: -2, to: 14 }),
-  );
+  await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 14 }));
   await page.clock.runFor(50);
 }
 

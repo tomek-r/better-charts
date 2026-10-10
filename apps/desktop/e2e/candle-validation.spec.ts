@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { gotoWithStub } from './tauriStub';
+import { gotoWithStub } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 
 const validCandle: Candle = {

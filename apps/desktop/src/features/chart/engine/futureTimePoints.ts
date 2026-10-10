@@ -12,6 +12,9 @@ export const MARGIN_BARS = 100;
 /** Empty bars kept to the right of the last real bar, matching the follow anchor. */
 export const END_MARGIN = 5;
 
+/** Default zoom, in pixels per bar: the chart's initial spacing and what `resetToEnd` restores. */
+export const DEFAULT_BAR_SPACING = 10;
+
 /**
  * Points the pane needs past the last real bar: the visible bar count at the
  * current spacing plus a screen of headroom. The `+ 100` headroom already

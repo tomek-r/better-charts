@@ -10,7 +10,9 @@ import type { AccountMoneyBasis } from '../../../shared/money';
 import { riskRewardRatio } from '../../order-ticket/domain/ticketRules';
 import {
   CANCEL_CHIP_X,
+  bindViewportHit,
   drawCancelChip,
+  fillRiskZone,
   drawHandle,
   HANDLE_X,
   tagPath,
@@ -151,7 +153,6 @@ export function createPositionOverlay(
       const { x, y, width, height } = viewport.chartRect;
       const drawLines = pass === 'lines';
       const drawLabels = pass === 'labels';
-      const { min, max } = viewport.priceRange;
       const hit: PositionOverlayState['hit'] = { labels: [] };
       const row = (
         id: string,
@@ -167,14 +168,11 @@ export function createPositionOverlay(
         h: 20,
       });
 
-      if (width <= 0 || height <= 0 || !(max > min)) {
+      if (!bindViewportHit(hit, viewport)) {
         state.hit = hit;
         return;
       }
       const toY = viewport.priceToY;
-      const toPrice = viewport.yToPrice;
-      hit.chartRect = { x, y, width, height };
-      hit.toPrice = toPrice;
       hit.orderLines = [];
       hit.slLines = [];
       hit.tpLines = [];
@@ -226,15 +224,8 @@ export function createPositionOverlay(
         return entryY + (aboveEntry ? -1 : 1) * 32;
       };
       // 12% risk zone between the entry row and an exit (staged palette).
-      const zone = (entryY: number, levelY: number, color: string) => {
-        if (levelY < y - height || levelY > y + height * 2) {
-          return;
-        }
-        ctx.globalAlpha = 0.12;
-        ctx.fillStyle = color;
-        ctx.fillRect(x, Math.min(entryY, levelY), width, Math.abs(levelY - entryY));
-        ctx.globalAlpha = 1;
-      };
+      const zone = (entryY: number, levelY: number, color: string) =>
+        fillRiskZone(ctx, viewport.chartRect, entryY, levelY, color);
 
       ctx.save();
       ctx.beginPath();

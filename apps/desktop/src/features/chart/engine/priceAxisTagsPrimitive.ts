@@ -1,14 +1,7 @@
-import type {
-  IChartApi,
-  IPaneApi,
-  ISeriesApi,
-  ISeriesPrimitive,
-  ISeriesPrimitiveAxisView,
-  SeriesAttachedParameter,
-  SeriesType,
-  Time,
-} from 'lightweight-charts';
+import type { IPaneApi, ISeriesPrimitiveAxisView, SeriesAttachedParameter, Time } from 'lightweight-charts';
 import { palette } from '../../../shared/theme/palette';
+import { AttachedSeriesPrimitive } from './attachedPrimitive';
+import { measureTextWidth } from './textMeasure';
 
 /**
  * Bid/Ask price-axis labels.
@@ -53,14 +46,8 @@ export interface PriceAxisTagsState {
 const CACHE_NORMALISATION = /[2-9]/g;
 const HAIR_SPACE = '\u200a';
 
-let measurer: CanvasRenderingContext2D | null = null;
 function textWidth(text: string, font: string): number {
-  measurer ??= document.createElement('canvas').getContext('2d');
-  if (measurer === null) {
-    return 0;
-  }
-  measurer.font = font;
-  return measurer.measureText(text.replace(CACHE_NORMALISATION, '0')).width;
+  return measureTextWidth(text.replace(CACHE_NORMALISATION, '0'), font);
 }
 
 export interface PriceAxisTagsOptions {
@@ -68,14 +55,11 @@ export interface PriceAxisTagsOptions {
   bidColor: string;
 }
 
-export class PriceAxisTagsPrimitive implements ISeriesPrimitive<Time> {
+export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
   private readonly axisViews: readonly ISeriesPrimitiveAxisView[];
   private options: PriceAxisTagsOptions;
   private readonly state: PriceAxisTagsState = {};
-  private series: ISeriesApi<SeriesType, Time> | null = null;
-  private chart: IChartApi | null = null;
   private pane: IPaneApi<Time> | null = null;
-  private requestUpdate: (() => void) | null = null;
   private paneHeight = 0;
   /** Pending post-paint width read, so a burst of quotes schedules one. */
   private widthFrame = 0;
@@ -87,6 +71,7 @@ export class PriceAxisTagsPrimitive implements ISeriesPrimitive<Time> {
   private texts: { key: string; ask: string; bid: string } = { key: '', ask: '', bid: '' };
 
   constructor(options: PriceAxisTagsOptions) {
+    super();
     this.options = { ...options };
     const tags: Array<{ price: () => number | undefined; side: 'ask' | 'bid' }> = [
       { price: () => this.state.ask, side: 'ask' },
@@ -113,10 +98,9 @@ export class PriceAxisTagsPrimitive implements ISeriesPrimitive<Time> {
     }
   }
 
-  attached({ chart, series, requestUpdate }: SeriesAttachedParameter<Time>): void {
-    this.chart = chart;
-    this.series = series;
-    this.requestUpdate = requestUpdate;
+  attached(params: SeriesAttachedParameter<Time>): void {
+    super.attached(params);
+    const { chart, series } = params;
     // The pane height bounds the tags. Resolved once here; `updateAllViews`
     // re-reads it, so nothing walks the pane list on the per-frame path.
     this.pane = chart.panes().find((candidate) => candidate.getSeries().includes(series)) ?? null;
@@ -126,10 +110,8 @@ export class PriceAxisTagsPrimitive implements ISeriesPrimitive<Time> {
   }
 
   detached(): void {
-    this.chart = null;
-    this.series = null;
+    super.detached();
     this.pane = null;
-    this.requestUpdate = null;
     this.paneHeight = 0;
     cancelAnimationFrame(this.widthFrame);
     this.widthFrame = 0;

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { gotoWithStub, stubInvocations, pushEvent } from './tauriStub';
+import { gotoWithStub, stubInvocations, pushEvent } from './helpers/tauriStub';
 import { timeframeBarTime, timeframeBarOffset, timeframeLabel } from '../src/shared/bridge/timeframes';
 import { futurePoints } from '../src/features/chart/engine/futureTimePoints';
 import { BrokerClock } from '../src/features/chart/engine/barCountdown/clock';

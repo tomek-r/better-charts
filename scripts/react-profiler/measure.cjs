@@ -1,13 +1,14 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
+const { settle } = require("./shared.cjs");
 
 function loadTools(repo) {
   const req = createRequire(path.join(repo, "apps/desktop/package.json"));
   const { chromium, expect } = req("@playwright/test");
   const ts = req("typescript");
   const source = fs.readFileSync(
-    path.join(repo, "apps/desktop/e2e/tauriStub.ts"),
+    path.join(repo, "apps/desktop/e2e/helpers/tauriStub.ts"),
     "utf8",
   );
   const compiled = ts.transpileModule(source, {
@@ -40,14 +41,6 @@ const consumerGroups = [
   "settings",
   "action",
 ];
-async function settle(page) {
-  await page.evaluate(
-    () =>
-      new Promise((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      ),
-  );
-}
 async function measure(page, action, operations) {
   for (let i = 0; i < 4; i++) {
     await action(i);

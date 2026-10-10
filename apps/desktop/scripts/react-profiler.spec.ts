@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
-import { installTauriStub, pushEvent } from '../e2e/tauriStub';
+import { installTauriStub, pushEvent } from '../e2e/helpers/tauriStub';
 
 /**
  * React profiler scenario. Drives a fixed interaction sequence and records what

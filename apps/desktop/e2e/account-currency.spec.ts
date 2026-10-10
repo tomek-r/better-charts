@@ -4,8 +4,8 @@ import { formatSignedMoney } from '../src/shared/format';
 import { accountMoneyBasis } from '../src/shared/money';
 import { deriveStagedOrderDisplay } from '../src/features/order-ticket/domain/stagedOrderDisplay';
 import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
-import { gotoWithStub, stubInvocations } from './tauriStub';
-import { openTradePanel } from './panel';
+import { gotoWithStub, stubInvocations } from './helpers/tauriStub';
+import { openTradePanel } from './helpers/panel';
 
 test('a percentage budget below currency precision still requests native sizing', async ({ page }) => {
   await gotoWithStub(page);

@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import type { BrokerSymbol, Candle } from '../src/shared/bridge/types';
+import type { BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridge/types';
 
 /**
  * Deterministic in-page Tauri v2 stub for execution-flow E2E tests.
@@ -69,6 +69,26 @@ export interface TauriStubOptions {
    * test make a page land strictly after a selection change.
    */
   olderHistoryDelayMs?: number;
+  /**
+   * Recorded history per symbol+timeframe (ascending, full depth). A matching
+   * request is served the way the bridge does: `request_history` answers the
+   * latest `bars` candles, `request_history_page` the `bars` candles strictly
+   * older than `beforeMs`, ending with `complete: false` and no candles once
+   * the recording is exhausted. Unmatched requests keep the deterministic
+   * synthetic behaviour. The FIRST entry is primary: it seeds the default
+   * snapshot, the market session symbol/clock and the quote.
+   */
+  recordedHistory?: RecordedHistory[];
+  /** Bars of the primary recording seeding `get_market_snapshot` (the configured history depth). */
+  recordedSnapshotBars?: number;
+}
+
+export interface RecordedHistory {
+  symbol: string;
+  timeframe: string;
+  candles: Candle[];
+  /** Delivered as `symbol-info` with this symbol's history (price digits etc.). */
+  symbolInfo?: BrokerSymbol;
 }
 
 export interface RecordedInvoke {
@@ -79,19 +99,94 @@ export interface RecordedInvoke {
 /** Fixed clock for deterministic stub payloads (rendered times are never asserted). */
 export const STUB_NOW = 1745700000000;
 
-/** camelCase payload of `execution-command-update` (mirror of shared/bridge/types.ts). */
-export interface CommandUpdateInput {
-  commandId?: string;
-  status: string;
-  retcode?: number | null;
-  brokerOrderId?: string | null;
-  dealId?: string | null;
-  positionId?: string | null;
-  filledVolume?: string | null;
-  message?: string | null;
-  updatedAtMs?: number;
-  atUpdate?: number;
+/** Five-minute bar length in milliseconds, the interval `windowCandles` uses. */
+export const STUB_M5_INTERVAL_MS = 300_000;
+
+/**
+ * Deterministic window candles ending `endOffsetBars` intervals before the fixed
+ * stub clock. `base` marks a timeframe's series, so a page wrongly merged into
+ * the wrong selection shows up in the oldest bar's price.
+ */
+export function windowCandles(count: number, base = 1.085, endOffsetBars = 0): Candle[] {
+  const lastOpen =
+    Math.floor(STUB_NOW / STUB_M5_INTERVAL_MS) * STUB_M5_INTERVAL_MS - endOffsetBars * STUB_M5_INTERVAL_MS;
+  return Array.from({ length: count }, (_, index) => ({
+    timeMs: lastOpen - (count - 1 - index) * STUB_M5_INTERVAL_MS,
+    open: base.toFixed(4),
+    high: (base + 0.001).toFixed(4),
+    low: (base - 0.001).toFixed(4),
+    close: (base + 0.0005).toFixed(4),
+    tickVolume: 120,
+    spread: 2,
+    realVolume: 120,
+  }));
 }
+
+/** A live EURUSD quote at `timeMs`; `last` follows the bid. */
+export const eurusdQuote = (timeMs: number, bid = '1.0852', ask = '1.0854') => ({
+  symbol: 'EURUSD',
+  timeMs,
+  bid,
+  ask,
+  last: bid,
+  volume: 10,
+  volumeReal: '0',
+  flags: 0,
+});
+
+/** The forming M5 bar the price-axis specs push, anchored at STUB_NOW. */
+export const eurusdFormingBar = {
+  timeMs: STUB_NOW,
+  open: '1.0854',
+  high: '1.0858',
+  low: '1.0848',
+  close: '1.0852',
+  tickVolume: 130,
+  spread: 2,
+  realVolume: 130,
+};
+
+/**
+ * Type-only view of the stub's Tauri global for `page.evaluate` callbacks that wrap
+ * `invoke` (erased at compile time, so it is safe inside serialised page code).
+ */
+export type StubInternals = {
+  __TAURI_INTERNALS__: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
+};
+
+/** A standard 5-digit FX instrument; `overrides` adjusts only what a spec cares about. */
+export function brokerSymbolFixture(
+  symbol: string,
+  description: string,
+  overrides: Partial<BrokerSymbol> = {},
+): BrokerSymbol {
+  return {
+    symbol,
+    description,
+    digits: 5,
+    tickSize: '0.00001',
+    pointSize: '0.00001',
+    contractSize: '100000',
+    tickValueProfit: '1.00000',
+    tickValueLoss: '1.00000',
+    tickValueCurrency: 'USD',
+    volumeMin: '0.01',
+    volumeMax: '100',
+    volumeStep: '0.01',
+    stopsLevel: 0,
+    freezeLevel: 0,
+    fillingMode: 0,
+    orderMode: 0,
+    expirationMode: 0,
+    tradeExecution: 0,
+    tradeMode: 0,
+    ...overrides,
+  };
+}
+
+/** camelCase payload of `execution-command-update` (shared/bridge/types.ts with the ids/timestamps optional). */
+export type CommandUpdateInput = Omit<CommandUpdate, 'commandId' | 'updatedAtMs' | 'atUpdate'> &
+  Partial<Pick<CommandUpdate, 'commandId' | 'updatedAtMs' | 'atUpdate'>>;
 
 /** camelCase payload of `execution-command-error` (mirror of shared/bridge/types.ts). */
 export interface CommandErrorInput {
@@ -100,7 +195,10 @@ export interface CommandErrorInput {
   message: string;
 }
 
-export async function installTauriStub(page: Page, options: TauriStubOptions = {}): Promise<void> {
+export async function installTauriStub(
+  page: Pick<Page, 'addInitScript'>,
+  options: TauriStubOptions = {},
+): Promise<void> {
   await page.addInitScript((opts: TauriStubOptions) => {
     const w = window as unknown as Record<string, unknown>;
     const NOW = 1745700000000;
@@ -116,24 +214,27 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
     // Base price PER SYMBOL so tests can see stale data/scales after a symbol
     // switch — EURUSD keeps the exact 1.085 series every existing assertion
     // is pinned to.
-    const candlesFor = (symbol: unknown): Array<Record<string, unknown>> => {
+    const candleAt = (symbol: unknown, i: number, timeMs: number): Record<string, unknown> => {
       const nasdaq = symbol === 'NAS100';
       const base = nasdaq ? 30432 : 1.085;
       const amplitude = nasdaq ? 4 : 0.0004;
       const digits = nasdaq ? 2 : 4;
+      const open = base + Math.sin(i) * amplitude;
+      return {
+        timeMs,
+        open: open.toFixed(digits),
+        high: (open + amplitude * 1.75).toFixed(digits),
+        low: (open - amplitude * 1.75).toFixed(digits),
+        close: (open + amplitude * 0.5).toFixed(digits),
+        tickVolume: 120 + i,
+        spread: 8,
+        realVolume: 120 + i,
+      };
+    };
+    const candlesFor = (symbol: unknown): Array<Record<string, unknown>> => {
       const out: Array<Record<string, unknown>> = [];
       for (let i = 0; i < 10; i += 1) {
-        const open = base + Math.sin(i) * amplitude;
-        out.push({
-          timeMs: NOW - (10 - i) * 300_000,
-          open: open.toFixed(digits),
-          high: (open + amplitude * 1.75).toFixed(digits),
-          low: (open - amplitude * 1.75).toFixed(digits),
-          close: (open + amplitude * 0.5).toFixed(digits),
-          tickVolume: 120 + i,
-          spread: 8,
-          realVolume: 120 + i,
-        });
+        out.push(candleAt(symbol, i, NOW - (10 - i) * 300_000));
       }
       return out;
     };
@@ -145,28 +246,19 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
      * window by its timestamps alone.
      */
     const olderCandlesFor = (symbol: unknown, beforeMs: number, count: number): unknown[] => {
-      const nasdaq = symbol === 'NAS100';
-      const base = nasdaq ? 30432 : 1.085;
-      const amplitude = nasdaq ? 4 : 0.0004;
-      const digits = nasdaq ? 2 : 4;
       const out: Array<Record<string, unknown>> = [];
       for (let i = count; i >= 1; i -= 1) {
-        const open = base + Math.sin(i) * amplitude;
-        out.push({
-          timeMs: beforeMs - i * 300_000,
-          open: open.toFixed(digits),
-          high: (open + amplitude * 1.75).toFixed(digits),
-          low: (open - amplitude * 1.75).toFixed(digits),
-          close: (open + amplitude * 0.5).toFixed(digits),
-          tickVolume: 120 + i,
-          spread: 8,
-          realVolume: 120 + i,
-        });
+        out.push(candleAt(symbol, i, beforeMs - i * 300_000));
       }
       return out;
     };
     /** Pages already served, per symbol+timeframe, so exhaustion is reachable. */
     const pagesServed = new Map<string, number>();
+
+    const recorded = (symbol: unknown, timeframe: unknown) =>
+      opts.recordedHistory?.find((r) => r.symbol === symbol && r.timeframe === timeframe);
+    const primary = opts.recordedHistory?.[0];
+    const primaryLast = primary?.candles.at(-1);
 
     const responses: Record<string, unknown> = {
       get_app_settings: {
@@ -295,6 +387,25 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
       request_history_page: 'reactive',
       ...opts.responses,
     };
+    if (primary && primaryLast) {
+      // Recorded data is far from the fixed stub clock; align session and quote with it.
+      const status = responses.get_bridge_status as { marketSession: Record<string, unknown> };
+      status.marketSession = { ...status.marketSession, symbol: primary.symbol, serverTimeMs: primaryLast.timeMs };
+      responses.get_market_snapshot = {
+        symbol: primary.symbol,
+        timeframe: primary.timeframe,
+        complete: true,
+        candles: primary.candles.slice(-(opts.recordedSnapshotBars ?? primary.candles.length)),
+      };
+      responses.get_quote_snapshot = {
+        ...(responses.get_quote_snapshot as Record<string, unknown>),
+        symbol: primary.symbol,
+        timeMs: primaryLast.timeMs,
+        bid: primaryLast.close,
+        ask: primaryLast.close,
+        last: primaryLast.close,
+      };
+    }
     const failures: Record<string, string> = { ...opts.failures };
 
     const callbacks = new Map<number, (data: unknown) => unknown>();
@@ -302,7 +413,14 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
     const invocations: Array<{ cmd: string; args: Record<string, unknown> }> = [];
     let nextCallbackId = 1;
 
+    /** Candle deliveries (snapshots and older pages), for harnesses that verify data volume. */
+    const deliveries: Array<{ event: string; symbol: unknown; timeframe: unknown; candles: number }> = [];
+
     function emit(event: string, payload: unknown): void {
+      if (event === 'market-snapshot' || event === 'history-page') {
+        const p = payload as { symbol?: unknown; timeframe?: unknown; candles?: unknown[] };
+        deliveries.push({ event, symbol: p.symbol, timeframe: p.timeframe, candles: p.candles?.length ?? 0 });
+      }
       for (const id of [...(listeners.get(event) ?? [])]) {
         const handler = callbacks.get(id);
         // Tauri delivers Event<T> = { event, id, payload }; the app reads payload.
@@ -415,22 +533,43 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
         // while the history coordinator is still waiting. Each selection
         // should issue exactly one request_history.
         setTimeout(() => {
+          const rec = recorded(args.symbol ?? market.symbol, args.timeframe ?? market.timeframe);
           emit('market-snapshot', {
             symbol: args.symbol ?? market.symbol,
             timeframe: args.timeframe ?? market.timeframe,
             complete: true,
-            candles:
-              opts.historyByTimeframe?.[String(args.timeframe ?? market.timeframe)] ??
-              candlesFor(args.symbol ?? market.symbol),
+            candles: rec
+              ? rec.candles.slice(-Math.max(1, Math.floor(Number(args.bars)) || opts.recordedSnapshotBars || 1))
+              : (opts.historyByTimeframe?.[String(args.timeframe ?? market.timeframe)] ??
+                candlesFor(args.symbol ?? market.symbol)),
           });
-          if (opts.symbolInfo?.symbol === (args.symbol ?? market.symbol)) {
-            emit('symbol-info', opts.symbolInfo);
+          const info = rec?.symbolInfo ?? opts.symbolInfo;
+          if (info?.symbol === (args.symbol ?? market.symbol)) {
+            emit('symbol-info', info);
           }
         }, opts.historyDelayMs ?? 0);
         return null;
       }
       if (cmd === 'request_history_page') {
         const beforeMs = Number(args.beforeMs ?? 0);
+        const rec = recorded(args.symbol, args.timeframe);
+        if (rec) {
+          const want = Math.max(1, Math.floor(Number(args.bars)) || opts.recordedSnapshotBars || 1);
+          const older = rec.candles.filter((c) => c.timeMs < beforeMs).slice(-want);
+          setTimeout(
+            () => {
+              emit('history-page', {
+                symbol: args.symbol,
+                timeframe: args.timeframe,
+                complete: older.length > 0,
+                beforeMs,
+                candles: older,
+              });
+            },
+            opts.olderHistoryDelayMs ?? opts.historyDelayMs ?? 0,
+          );
+          return null;
+        }
         const key = `${String(args.symbol)}|${String(args.timeframe)}`;
         const served = pagesServed.get(key) ?? 0;
         const limit = opts.olderHistoryPages ?? 0;
@@ -536,18 +675,18 @@ export async function installTauriStub(page: Page, options: TauriStubOptions = {
     };
     w.__E2E_TAURI_STUB__ = {
       invocations,
+      deliveries,
       emit,
       listenerCount: (event: string) => (listeners.get(event) ?? []).filter((id) => callbacks.has(id)).length,
     };
   }, options);
 }
 
-/** Installs the stub, navigates, and waits for the mounted app. */
-export async function gotoWithStub(
-  page: Page,
-  options: TauriStubOptions = {},
-): Promise<{ pageErrors: string[]; consoleErrors: string[] }> {
-  await installTauriStub(page, options);
+/**
+ * Attaches error collectors before navigating, then waits for the mounted app so
+ * assertions run against a live UI. Returns the collected errors.
+ */
+export async function gotoCollectingErrors(page: Page): Promise<{ pageErrors: string[]; consoleErrors: string[] }> {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -559,6 +698,53 @@ export async function gotoWithStub(
   await page.goto('/');
   await expect(page.locator('main.dashboard')).toBeVisible();
   return { pageErrors, consoleErrors };
+}
+
+/** Installs the stub, navigates, and waits for the mounted app. */
+export async function gotoWithStub(
+  page: Page,
+  options: TauriStubOptions = {},
+): Promise<{ pageErrors: string[]; consoleErrors: string[] }> {
+  await installTauriStub(page, options);
+  return gotoCollectingErrors(page);
+}
+
+/** Asserts the page raised no uncaught errors and logged nothing to the console as an error. */
+export function expectNoErrors(collected: { pageErrors: string[]; consoleErrors: string[] }): void {
+  expect(collected.pageErrors).toEqual([]);
+  expect(collected.consoleErrors).toEqual([]);
+}
+
+type IdleHold = { __idleHeld: () => number; __idleRunAll: () => void };
+
+/**
+ * Takes over `requestIdleCallback` so a test decides when "idle" happens: callbacks
+ * are held (and dropped on `cancelIdleCallback`) until `runAll()`. Call before
+ * navigating. A spec that never calls `runAll()` simply never sees an idle task run.
+ */
+export async function holdIdleCallbacks(
+  page: Page,
+): Promise<{ held: () => Promise<number>; runAll: () => Promise<void> }> {
+  await page.addInitScript(() => {
+    const pending = new Map<number, () => void>();
+    let next = 1;
+    window.requestIdleCallback = (callback) => {
+      pending.set(next, () => callback({ didTimeout: false, timeRemaining: () => 50 }));
+      return next++;
+    };
+    window.cancelIdleCallback = (id) => void pending.delete(id);
+    const hold = window as unknown as IdleHold;
+    hold.__idleHeld = () => pending.size;
+    hold.__idleRunAll = () => {
+      const callbacks = [...pending.values()];
+      pending.clear();
+      callbacks.forEach((callback) => callback());
+    };
+  });
+  return {
+    held: () => page.evaluate(() => (window as unknown as IdleHold).__idleHeld()),
+    runAll: () => page.evaluate(() => (window as unknown as IdleHold).__idleRunAll()),
+  };
 }
 
 /** Every recorded `invoke()` (including event-plugin plumbing), oldest first. */

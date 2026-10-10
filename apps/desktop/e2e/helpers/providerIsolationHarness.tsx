@@ -1,13 +1,13 @@
 import { Profiler, type ProfilerOnRenderCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ErrorNotificationsProvider } from '../src/shared/ui/ErrorNotifications';
+import { ErrorNotificationsProvider } from '../../src/shared/ui/ErrorNotifications';
 import type { ReactNode } from 'react';
-import { AppHeaderView } from '../src/features/app-header/AppHeaderView';
+import { AppHeaderView } from '../../src/features/app-header/AppHeaderView';
 import {
   PanelVisibilityProvider,
   usePanelActions,
   usePanelOpen,
-} from '../src/features/app-header/PanelVisibilityProvider';
+} from '../../src/features/app-header/PanelVisibilityProvider';
 import {
   useBridgeAccount,
   useBridgeMarket,
@@ -17,28 +17,47 @@ import {
   useBridgeSessionLifecycleRuntime,
   BridgeSessionProvider,
   useTauriAvailable,
-} from '../src/features/bridge/BridgeSessionProvider';
-import { ChartWorkspaceProvider, useChartResources } from '../src/features/chart/ChartWorkspaceProvider';
-import { ChartTitle } from '../src/features/chart/ChartTitle';
-import { ChartQuotes } from '../src/features/chart/ChartQuotes';
-import { ChartCanvas } from '../src/features/chart/ChartCanvas';
-import { ChartTimeframes } from '../src/features/chart/ChartTimeframes';
-import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
-import type { AccountSnapshot, BrokerSymbol, QuoteSnapshot, RiskPreview } from '../src/shared/bridge/types';
-import { OrderTicketProvider } from '../src/features/order-ticket/OrderTicketProvider';
-import { useOrderTicketActions, useOrderTicketStores } from '../src/features/order-ticket/state/orderTicketContext';
-import { useOrderTicketAction } from '../src/features/order-ticket/editor/useOrderTicketAction';
-import { useOrderTicketHeader } from '../src/features/order-ticket/editor/useOrderTicketHeader';
-import { useOrderTicketPricing } from '../src/features/order-ticket/editor/useOrderTicketPricing';
-import { OrderTicketTickValue } from '../src/features/order-ticket/editor/OrderTicketTickValue';
-import { OrderTicketSizing } from '../src/features/order-ticket/editor/OrderTicketSizing';
-import { OrderTicketExits } from '../src/features/order-ticket/editor/OrderTicketExits';
-import { OrderTicketReviewAction } from '../src/features/order-ticket/editor/OrderTicketReviewAction';
-import { OrderTicketQuotes } from '../src/features/order-ticket/editor/OrderTicketQuotes';
-import { OrderTicketExtraSettings } from '../src/features/order-ticket/editor/OrderTicketExtraSettings';
-import { SymbolSearchView } from '../src/features/symbol-search/SymbolSearchView';
-import { SymbolSearchProvider } from '../src/features/symbol-search/SymbolSearchProvider';
-import { AppSettingsProvider, useAppSettingsView } from '../src/features/settings/AppSettingsProvider';
+} from '../../src/features/bridge/BridgeSessionProvider';
+import { ChartWorkspaceProvider, useChartResources } from '../../src/features/chart/ChartWorkspaceProvider';
+import { ChartTitle } from '../../src/features/chart/ChartTitle';
+import { ChartQuotes } from '../../src/features/chart/ChartQuotes';
+import { ChartCanvas } from '../../src/features/chart/ChartCanvas';
+import { ChartTimeframes } from '../../src/features/chart/ChartTimeframes';
+import { ExecutionProvider } from '../../src/features/execution/ExecutionProvider';
+import type { AccountSnapshot, BrokerSymbol, QuoteSnapshot, RiskPreview } from '../../src/shared/bridge/types';
+import { OrderTicketProvider } from '../../src/features/order-ticket/OrderTicketProvider';
+import { useOrderTicketActions, useOrderTicketStores } from '../../src/features/order-ticket/state/orderTicketContext';
+import { useOrderTicketAction } from '../../src/features/order-ticket/editor/useOrderTicketAction';
+import { useOrderTicketHeader } from '../../src/features/order-ticket/editor/useOrderTicketHeader';
+import { useOrderTicketPricing } from '../../src/features/order-ticket/editor/useOrderTicketPricing';
+import { OrderTicketTickValue } from '../../src/features/order-ticket/editor/OrderTicketTickValue';
+import { OrderTicketSizing } from '../../src/features/order-ticket/editor/OrderTicketSizing';
+import { OrderTicketExits } from '../../src/features/order-ticket/editor/OrderTicketExits';
+import { OrderTicketReviewAction } from '../../src/features/order-ticket/editor/OrderTicketReviewAction';
+import { OrderTicketQuotes } from '../../src/features/order-ticket/editor/OrderTicketQuotes';
+import { OrderTicketExtraSettings } from '../../src/features/order-ticket/editor/OrderTicketExtraSettings';
+import { SymbolSearchView } from '../../src/features/symbol-search/SymbolSearchView';
+import { SymbolSearchProvider } from '../../src/features/symbol-search/SymbolSearchProvider';
+import { AppSettingsProvider, useAppSettingsView } from '../../src/features/settings/AppSettingsProvider';
+
+/** The account every harness scenario starts from. */
+const DEMO_ACCOUNT: AccountSnapshot = {
+  accountLogin: '001234',
+  brokerServer: 'Broker-Demo',
+  currency: 'USD',
+  currencyDigits: 2,
+  balance: '1000.00',
+  equity: '1000.00',
+  margin: '0.00',
+  freeMargin: '1000.00',
+  marginLevel: '0',
+  leverage: 100,
+  marginMode: 0,
+  tradeAllowed: true,
+  expertAllowed: true,
+  accountTradeMode: 0,
+  accountTradeModeName: 'demo',
+};
 
 interface ProviderHarnessWindow extends Window {
   __providerProbeCounts: Record<string, number>;
@@ -90,37 +109,31 @@ function ChartHeaderProbes() {
   );
 }
 
+type SessionSummaryInput = Pick<
+  ReturnType<typeof useBridgeSessionRuntime>,
+  'status' | 'tauriAvailable' | 'snapshot' | 'latestCandle' | 'account' | 'portfolio'
+>;
+
+/** The session fields both bridge probes expose, joined for text assertions; `bid` sits after the candle when given. */
+const summarizeSession = (session: SessionSummaryInput, bid?: string) =>
+  [
+    session.status.state,
+    String(session.tauriAvailable),
+    session.snapshot.symbol ?? '',
+    session.latestCandle?.close ?? '',
+    ...(bid === undefined ? [] : [bid]),
+    session.account?.balance ?? '',
+    String(session.portfolio?.capturedAtMs ?? ''),
+  ].join('|');
+
 function BridgeRuntimeProbe() {
   const session = useBridgeSessionRuntime();
-  return (
-    <output data-testid="probe-bridge-runtime">
-      {[
-        session.status.state,
-        String(session.tauriAvailable),
-        session.snapshot.symbol ?? '',
-        session.latestCandle?.close ?? '',
-        session.quote?.bid ?? '',
-        session.account?.balance ?? '',
-        String(session.portfolio?.capturedAtMs ?? ''),
-      ].join('|')}
-    </output>
-  );
+  return <output data-testid="probe-bridge-runtime">{summarizeSession(session, session.quote?.bid ?? '')}</output>;
 }
 
 function BridgeLifecycleRuntimeProbe() {
   const session = useBridgeSessionLifecycleRuntime();
-  return (
-    <output data-testid="probe-bridge-lifecycle-runtime">
-      {[
-        session.status.state,
-        String(session.tauriAvailable),
-        session.snapshot.symbol ?? '',
-        session.latestCandle?.close ?? '',
-        session.account?.balance ?? '',
-        String(session.portfolio?.capturedAtMs ?? ''),
-      ].join('|')}
-    </output>
-  );
+  return <output data-testid="probe-bridge-lifecycle-runtime">{summarizeSession(session)}</output>;
 }
 
 function AccountProbe() {
@@ -204,24 +217,7 @@ function BridgeControls() {
     );
   };
   const setAccount = (next: Partial<AccountSnapshot> = {}) => {
-    session.setAccount({
-      accountLogin: '001234',
-      brokerServer: 'Broker-Demo',
-      currency: 'USD',
-      currencyDigits: 2,
-      balance: '1000.00',
-      equity: '1000.00',
-      margin: '0.00',
-      freeMargin: '1000.00',
-      marginLevel: '0',
-      leverage: 100,
-      marginMode: 0,
-      tradeAllowed: true,
-      expertAllowed: true,
-      accountTradeMode: 0,
-      accountTradeModeName: 'demo',
-      ...next,
-    });
+    session.setAccount({ ...DEMO_ACCOUNT, ...next });
   };
   const setPortfolio = () => {
     session.setPortfolio({ accountLogin: '001234', capturedAtMs: 1745700001000, positions: [], orders: [] });
@@ -319,23 +315,7 @@ function TicketControls() {
     bridge.setStatus({ state: 'connected', message: 'Harness bridge is connected.' });
     bridge.setSnapshot({ symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: [] });
     bridge.setInstrument(instrument);
-    bridge.setAccount({
-      accountLogin: '001234',
-      brokerServer: 'Broker-Demo',
-      currency: 'USD',
-      currencyDigits: 2,
-      balance: '1000.00',
-      equity: '1000.00',
-      margin: '0.00',
-      freeMargin: '1000.00',
-      marginLevel: '0',
-      leverage: 100,
-      marginMode: 0,
-      tradeAllowed: true,
-      expertAllowed: true,
-      accountTradeMode: 0,
-      accountTradeModeName: 'demo',
-    });
+    bridge.setAccount(DEMO_ACCOUNT);
     bridge.setQuote({
       symbol: 'EURUSD',
       timeMs: 1745700001000,

@@ -80,7 +80,7 @@ export function useOrderTicketRiskPreviewEffects(
   const riskVersionRef = riskVersion;
   const sizingEntry = orderEntryPrice(orderKind, entry, limitPrice);
   const equity = account?.equity;
-  const pendingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(pendingTimer.current), []);
   const currentStage = useRef(ticketStage);
   useLayoutEffect(() => {

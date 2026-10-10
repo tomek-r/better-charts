@@ -1,26 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
-import { gotoWithStub, pushEvent, STUB_NOW } from './tauriStub';
+import { observeFillText } from './helpers/canvasText';
+import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
 
-const quote = (timeMs: number) => ({
-  symbol: 'EURUSD',
-  timeMs,
-  bid: '1.0852',
-  ask: '1.0854',
-  last: '1.0852',
-  volume: 10,
-  volumeReal: '0',
-  flags: 0,
-});
-const candle = {
-  timeMs: STUB_NOW,
-  open: '1.0854',
-  high: '1.0858',
-  low: '1.0848',
-  close: '1.0852',
-  tickVolume: 130,
-  spread: 2,
-  realVolume: 130,
-};
+const quote = (timeMs: number) => eurusdQuote(timeMs);
+const candle = eurusdFormingBar;
 
 interface Paint {
   text: string;
@@ -34,19 +17,13 @@ interface Paint {
  * different canvas, so a `mm:ss` draw can only be the countdown.
  */
 async function recordAxisText(page: Page) {
-  await page.addInitScript(() => {
+  await observeFillText(page, () => {
     const paints: Paint[] = [];
     (window as unknown as { __axisText: Paint[] }).__axisText = paints;
-    const fillText = CanvasRenderingContext2D.prototype.fillText;
-    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+    return (context, text) => {
       // The price axis is the narrow, tall column right of the pane.
-      if (this.canvas.width <= 100 && this.canvas.height > 100) {
+      if (context.canvas.width <= 100 && context.canvas.height > 100) {
         paints.push({ text: String(text), at: performance.now() });
-      }
-      if (maxWidth === undefined) {
-        fillText.call(this, text, x, y);
-      } else {
-        fillText.call(this, text, x, y, maxWidth);
       }
     };
   });
@@ -96,11 +73,7 @@ async function start(page: Page, historyDelayMs = 0) {
   const errors = await gotoWithStub(page, { historyDelayMs });
   await page.clock.runFor(historyDelayMs + 100);
   await expect(page.getByLabel('Candle OHLC')).toContainText('EURUSD');
-  await page.evaluate(() =>
-    (
-      window as unknown as { __chartTest: { scrollToRange(range: { from: number; to: number }): void } }
-    ).__chartTest.scrollToRange({ from: -2, to: 14 }),
-  );
+  await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 14 }));
   await page.clock.runFor(50);
   return errors;
 }
@@ -109,11 +82,7 @@ async function activate(page: Page, timeframe = 'M5', offset = 15_500) {
   await pushEvent(page, 'quote-update', quote(STUB_NOW + offset - 1000));
   await pushEvent(page, 'quote-update', quote(STUB_NOW + offset));
   await page.clock.runFor(50);
-  await page.evaluate(() =>
-    (
-      window as unknown as { __chartTest: { scrollToRange(range: { from: number; to: number }): void } }
-    ).__chartTest.scrollToRange({ from: -2, to: 14 }),
-  );
+  await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 14 }));
   await page.clock.runFor(16);
 }
 

@@ -14,7 +14,8 @@
       {
         "title": "Better Charts",
         "backgroundColor": "#0b0e14",
-        "maximized": true
+        "maximized": true,
+        "visible": false
       }
     ],
     "security": {

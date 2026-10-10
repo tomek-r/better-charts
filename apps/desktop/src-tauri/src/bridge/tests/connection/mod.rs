@@ -201,6 +201,8 @@ async fn complete_handshake_with_hello(client: &mut BridgeClient, hello: Envelop
     let history_id = history.id.clone();
     let history =
         serde_json::from_value::<HistoryRequest>(history.payload).expect("history payload");
+    // Only the first view is needed at connect; older pages are fetched on demand.
+    assert_eq!(history.bars, trading_core::protocol::initial_history_bars());
     // ...and, on the first outbound flush, for symbol info and reconciliation.
     let symbol_info = client
         .recv(Duration::from_secs(2))

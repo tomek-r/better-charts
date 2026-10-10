@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { openTradePanel } from './panel';
+import { openTradePanel } from './helpers/panel';
 import type { RenderBar } from '../src/features/chart/engine/mt5DataAdapter';
 import {
   gotoWithStub,
@@ -9,11 +9,11 @@ import {
   STUB_NOW,
   stubInvocations,
   wasInvoked,
-} from './tauriStub';
+} from './helpers/tauriStub';
 
 // Execution-flow coverage: the Order panel checklist, the outcome banner, the
 // command-status list and the close/cancel dispatch path, driven end-to-end in
-// the browser against the stubbed `window.__TAURI_INTERNALS__` (see tauriStub.ts).
+// the browser against the stubbed `window.__TAURI_INTERNALS__` (see helpers/tauriStub.ts).
 // Unlike smoke.spec.ts there is NO tauri/invoke console tolerance here: with the
 // stub installed every invoke resolves or rejects in-page, so any console error
 // is a real regression.
@@ -1931,9 +1931,11 @@ test('halving equity allocation halves the percent risk budget and updates check
   await page.getByLabel('Stop loss price').fill('1.0800');
   const latest = async () =>
     (await stubInvocations(page)).filter((item) => item.cmd === 'request_risk_preview').at(-1)!;
+  // Wait for the request carrying the typed stop: the app first requests with the
+  // seeded stop, and a reply to that superseded draftVersion is (correctly) ignored.
   await expect
     .poll(async () => (await latest())?.args)
-    .toMatchObject({ riskAmount: '100.00', equityAllocationPercent: '100' });
+    .toMatchObject({ stopLoss: '1.0800', riskAmount: '100.00', equityAllocationPercent: '100' });
   const full = await latest();
   const preview = (args: Record<string, unknown>, volume: string, budget: string) => ({
     ...args,

@@ -71,6 +71,14 @@ export function useChartWorkspacePointerEffects(
       const rect = frameRect();
       return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     };
+    /** Pane-local point of a one-finger touch; multi-touch is left to the library's pinch handling. */
+    const singleTouchPoint = (event: TouchEvent) =>
+      event.touches.length === 1 ? localPoint(event.touches[0]) : undefined;
+    /** A custom gesture owns this event: the chart's own handlers must not also act on it. */
+    const claimEvent = (event: Event) => {
+      event.stopPropagation();
+      event.preventDefault();
+    };
     let labelDragOffset = 0;
     const labelAt = (x: number, y: number) =>
       [...(positionOverlayState.current.hit.labels ?? []), ...(stagedOrderState.current.hit.labels ?? [])].find((row) =>
@@ -79,22 +87,36 @@ export function useChartWorkspacePointerEffects(
     const setLabelDragOffset = (row: ReturnType<typeof labelAt>, y: number) => {
       labelDragOffset = row && Math.abs(row.y + row.h / 2 - row.lineY) > 1 ? y - row.lineY : 0;
     };
-    const onPointerDown = (event: PointerEvent) => {
-      const { x, y } = localPoint(event);
-      host.focus({ preventScroll: true });
-      if (chart.current?.isProfileToolActive() && chart.current.profilePointerDown(x, y)) {
-        profileGesture = true;
-        event.stopPropagation();
-        event.preventDefault();
-        host.setPointerCapture(event.pointerId);
-        return;
-      }
+    /**
+     * Hit-tests the label under the pointer and what it grabs: a staged-order
+     * target first, otherwise (only then) a live trading overlay.
+     */
+    const locateGrab = (x: number, y: number) => {
       const row = labelAt(x, y);
       setLabelDragOffset(row, y);
       let target = row ? null : staged.resolveGrab(x, y);
       if (row?.source === 'staged') {
         target = staged.resolveLabelGrab(row.level, x, y);
       }
+      if (target) {
+        return { target, overlay: null };
+      }
+      let overlay = row ? null : trading.resolveGrab(x, y);
+      if (row?.source === 'trading') {
+        overlay = trading.resolveLabelGrab(row, x, y);
+      }
+      return { target: null, overlay };
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const { x, y } = localPoint(event);
+      host.focus({ preventScroll: true });
+      if (chart.current?.isProfileToolActive() && chart.current.profilePointerDown(x, y)) {
+        profileGesture = true;
+        claimEvent(event);
+        host.setPointerCapture(event.pointerId);
+        return;
+      }
+      const { target, overlay } = locateGrab(x, y);
       if (target) {
         if (staged.applyGrab(target, event)) {
           try {
@@ -105,15 +127,10 @@ export function useChartWorkspacePointerEffects(
         }
         return;
       }
-      let overlay = row ? null : trading.resolveGrab(x, y);
-      if (row?.source === 'trading') {
-        overlay = trading.resolveLabelGrab(row, x, y);
-      }
       if (!overlay) {
         if (chart.current?.profilePointerDown(x, y)) {
           profileGesture = true;
-          event.stopPropagation();
-          event.preventDefault();
+          claimEvent(event);
           host.setPointerCapture(event.pointerId);
         }
         return;
@@ -181,62 +198,49 @@ export function useChartWorkspacePointerEffects(
     // capture; otherwise the library handles native touch pan and pinch.
     const onTouchStart = (event: TouchEvent) => {
       if (profileGesture || staged.active || trading.lineActive || trading.chipActive) {
-        event.stopPropagation();
-        event.preventDefault();
+        claimEvent(event);
         return;
       }
-      if (event.touches.length !== 1) {
+      const point = singleTouchPoint(event);
+      if (!point) {
         return;
       }
-      const { x, y } = localPoint(event.touches[0]);
-      const row = labelAt(x, y);
-      setLabelDragOffset(row, y);
-      let target = row ? null : staged.resolveGrab(x, y);
-      if (row?.source === 'staged') {
-        target = staged.resolveLabelGrab(row.level, x, y);
-      }
+      const { x, y } = point;
+      const { target, overlay } = locateGrab(x, y);
       if (target) {
         staged.applyGrab(target, event);
         return;
       }
-      let overlay = row ? null : trading.resolveGrab(x, y);
-      if (row?.source === 'trading') {
-        overlay = trading.resolveLabelGrab(row, x, y);
-      }
       if (!overlay) {
         return;
       }
-      event.stopPropagation();
-      event.preventDefault();
+      claimEvent(event);
       trading.startTouch(overlay, x, overlay.kind === 'line' ? y - labelDragOffset : y);
     };
     const onTouchMove = (event: TouchEvent) => {
       if (profileGesture) {
-        event.stopPropagation();
-        event.preventDefault();
+        claimEvent(event);
         return;
       }
-      if (event.touches.length !== 1) {
+      const point = singleTouchPoint(event);
+      if (!point) {
         return;
       }
-      const { x, y } = localPoint(event.touches[0]);
+      const { x, y } = point;
       if (trading.chipActive) {
         trading.trackChip(x, y);
-        event.stopPropagation();
-        event.preventDefault();
+        claimEvent(event);
         return;
       }
       if (staged.active) {
-        event.stopPropagation();
-        event.preventDefault();
+        claimEvent(event);
         staged.applyDrag(y - labelDragOffset);
         return;
       }
       if (!trading.lineActive) {
         return;
       }
-      event.stopPropagation();
-      event.preventDefault();
+      claimEvent(event);
       trading.applyLineDrag(y - labelDragOffset);
     };
     const onTouchCancel = () => {
@@ -249,8 +253,7 @@ export function useChartWorkspacePointerEffects(
       if (!staged.active && !trading.lineActive && !trading.chipActive) {
         return;
       }
-      event.stopPropagation();
-      event.preventDefault();
+      claimEvent(event);
       staged.reset(); // staged widget writes ticket fields live — nothing to dispatch
       trading.finishLineDrag({}, true);
       trading.finishChip({}, true);

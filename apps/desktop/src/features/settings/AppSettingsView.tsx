@@ -14,6 +14,7 @@ export function AppSettingsView() {
       closing={settings.closing}
       loadError={settings.loadError}
       onClose={settings.close}
+      onExited={settings.exited}
       onSaved={settings.saved}
     />
   );

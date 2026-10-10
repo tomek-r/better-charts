@@ -158,6 +158,12 @@
   margin-bottom: 12px;
 }
 
+/* Pre-handshake stand-in: same buttons, same wrapping, so the chart frame
+   below never moves when the real ones mount. Invisible and unfocusable. */
+.timeframe-tabs.placeholder {
+  visibility: hidden;
+}
+
 .timeframe-tabs button {
   width: 44px;
   flex: 0 0 44px;

@@ -2,22 +2,15 @@
 // Selection refs reject stale events; the coordinator owns request dedupe and timeout.
 import { useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { ChartController } from '../chart/engine/chartController';
-import type { Mt5DataAdapter } from '../chart/engine/mt5DataAdapter';
-import type { FixedRangeProfileState } from '../chart/engine/fixedRangeProfileOverlay';
 import type { Candle, BrokerSymbol } from '../../shared/bridge/types';
-import { HISTORY_BARS } from '../../shared/bridge/limits';
+import { initialHistoryBarsFor } from '../chart/engine/initialHistoryWindow';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
 import { useFieldSetterSelector } from '../../shared/state/domainStore';
 import type { BridgeSessionStores } from './bridgeSessionStores';
+import type { BridgeMarketResources } from './bridgeMarketRuntime';
 
-type BridgeSessionParams = {
+type BridgeSessionParams = BridgeMarketResources & {
   stores: BridgeSessionStores;
-  chart: { current: ChartController | null };
-  adapterRef: { current: Mt5DataAdapter | null };
-  fixedRangeProfileState: { current: FixedRangeProfileState };
-  expectedProfile: { current: { symbol: string; fromMs: number; endMs: number; generation: number } | undefined };
-  profileGeneration: { current: number };
   lastRequestedRangeRef: { current: { fromMs: number; endMs: number } | undefined };
 };
 export function useBridgeSession({
@@ -92,7 +85,7 @@ export function useBridgeSession({
         if (!adapter) {
           throw new Error('chart adapter unavailable');
         }
-        await adapter.requestHistory(symbol, wire, HISTORY_BARS);
+        await adapter.requestHistory(symbol, wire, initialHistoryBarsFor(chart.current));
       } catch {
         if (generation === requestGeneration.current) {
           loadingTimeframeRef.current = undefined;
@@ -101,7 +94,7 @@ export function useBridgeSession({
         }
       }
     },
-    [adapterRef, setChartError, setLoadingTimeframe, stores],
+    [adapterRef, chart, setChartError, setLoadingTimeframe, stores],
   );
   const requestSymbolSelection = useCallback(
     async (symbol: string, metadata?: BrokerSymbol) => {
@@ -123,7 +116,7 @@ export function useBridgeSession({
         await adapter.requestHistory(
           symbol,
           loadingTimeframeRef.current ?? stores.market.getState().snapshot.timeframe ?? DEFAULT_TIMEFRAME,
-          HISTORY_BARS,
+          initialHistoryBarsFor(chart.current),
         );
       } catch {
         if (generation !== requestGeneration.current) {
@@ -138,7 +131,7 @@ export function useBridgeSession({
         setChartError('History request could not be sent.');
       }
     },
-    [adapterRef, setChartError, setInstrument, setQuote, setSymbolLoading, stores],
+    [adapterRef, chart, setChartError, setInstrument, setQuote, setSymbolLoading, stores],
   );
   const chooseSymbol = useCallback(
     (item: BrokerSymbol) => requestSymbolSelection(item.symbol, item),

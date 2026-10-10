@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './tauriStub';
+import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations, type StubInternals } from './helpers/tauriStub';
 
 const interval = 300_000;
 const history = Array.from({ length: 300 }, (_, index) => ({
@@ -19,10 +19,7 @@ const gappedHistory = history.map((candle, index) => ({
 
 async function interceptHistoryPages(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const w = window as unknown as {
-      __TAURI_INTERNALS__: {
-        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
-      };
+    const w = window as unknown as StubInternals & {
       __E2E_TAURI_STUB__: {
         invocations: Array<{ cmd: string; args: Record<string, unknown> }>;
       };
@@ -38,6 +35,28 @@ async function interceptHistoryPages(page: Page): Promise<void> {
   });
 }
 
+/** Loads `candles` as the EURUSD M5 snapshot and waits until all 300 bars are charted. */
+async function loadHistory(page: Page, candles: unknown[]): Promise<void> {
+  await gotoWithStub(page, {
+    responses: {
+      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles },
+      request_history: null,
+    },
+  });
+  await expect.poll(() => page.evaluate(() => window.__chartTest?.data().length)).toBe(300);
+}
+
+/** Drops and restores the bridge, then answers the resync with `candles` as the fresh snapshot. */
+async function reconnectWithSnapshot(page: Page, candles: unknown[]): Promise<void> {
+  await pushEvent(page, 'bridge-status', { state: 'disconnected', message: 'MT5 exited' });
+  await pushEvent(page, 'bridge-status', { state: 'connected', message: 'MT5 relaunched' });
+  await pushEvent(page, 'market-snapshot', { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles });
+}
+
+async function pushHistoryPage(page: Page, beforeMs: number, candles: unknown[]): Promise<void> {
+  await pushEvent(page, 'history-page', { symbol: 'EURUSD', timeframe: 'M5', complete: true, beforeMs, candles });
+}
+
 async function pageRequests(page: Page) {
   return (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history_page');
 }
@@ -49,25 +68,12 @@ async function waitTwoFrames(page: Page): Promise<void> {
 }
 
 test('reconnecting with a shorter same-selection history matches initial-load framing', async ({ page, browser }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: history },
-      request_history: null,
-    },
-  });
-  await expect.poll(() => page.evaluate(() => window.__chartTest?.data().length)).toBe(300);
+  await loadHistory(page, history);
   await page.evaluate(() => window.__chartTest!.scrollToRange({ from: 125, to: 155 }));
   await expect.poll(() => page.evaluate(() => window.__chartTest!.visibleRange()?.to)).toBe(155);
 
-  await pushEvent(page, 'bridge-status', { state: 'disconnected', message: 'MT5 exited' });
-  await pushEvent(page, 'bridge-status', { state: 'connected', message: 'MT5 relaunched' });
   const refreshed = history.slice(-10).map((candle) => ({ ...candle, timeMs: candle.timeMs + 8 * interval }));
-  await pushEvent(page, 'market-snapshot', {
-    symbol: 'EURUSD',
-    timeframe: 'M5',
-    complete: true,
-    candles: refreshed,
-  });
+  await reconnectWithSnapshot(page, refreshed);
 
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data().length)).toBe(10);
   await expect
@@ -95,25 +101,12 @@ test('reconnecting with a shorter same-selection history matches initial-load fr
 });
 
 test('reconnect history keeps real market gaps without synthesizing candles', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: gappedHistory },
-      request_history: null,
-    },
-  });
-  await expect.poll(() => page.evaluate(() => window.__chartTest?.data().length)).toBe(300);
+  await loadHistory(page, gappedHistory);
   await page.evaluate(() => window.__chartTest!.scrollToRange({ from: 125, to: 155 }));
   await expect.poll(() => page.evaluate(() => window.__chartTest!.visibleRange()?.to)).toBe(155);
 
-  await pushEvent(page, 'bridge-status', { state: 'disconnected', message: 'MT5 exited' });
-  await pushEvent(page, 'bridge-status', { state: 'connected', message: 'MT5 relaunched' });
   const refreshed = gappedHistory.map((candle) => ({ ...candle, close: '1.0855' }));
-  await pushEvent(page, 'market-snapshot', {
-    symbol: 'EURUSD',
-    timeframe: 'M5',
-    complete: true,
-    candles: refreshed,
-  });
+  await reconnectWithSnapshot(page, refreshed);
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data().length)).toBe(300);
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data()[250]?.close)).toBe(1.0855);
   await waitTwoFrames(page);
@@ -125,38 +118,19 @@ test('reconnect history keeps real market gaps without synthesizing candles', as
 });
 
 test('disconnect clears an older-page request and rejects its stale response', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: history },
-      request_history: null,
-    },
-  });
-  await expect.poll(() => page.evaluate(() => window.__chartTest?.data().length)).toBe(300);
+  await loadHistory(page, history);
   await interceptHistoryPages(page);
   await page.evaluate(() => window.__chartTest!.scrollToRange({ from: -10, to: 20 }));
   await expect.poll(async () => (await pageRequests(page)).length).toBe(1);
   const oldRequest = (await pageRequests(page))[0];
   const oldBeforeMs = Number(oldRequest.args.beforeMs);
 
-  await pushEvent(page, 'bridge-status', { state: 'disconnected', message: 'MT5 exited' });
-  await pushEvent(page, 'bridge-status', { state: 'connected', message: 'MT5 relaunched' });
   const refreshed = history.slice(-10).map((candle) => ({ ...candle, timeMs: candle.timeMs + 8 * interval }));
-  await pushEvent(page, 'market-snapshot', {
-    symbol: 'EURUSD',
-    timeframe: 'M5',
-    complete: true,
-    candles: refreshed,
-  });
+  await reconnectWithSnapshot(page, refreshed);
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data().length)).toBe(10);
   await waitTwoFrames(page);
 
-  await pushEvent(page, 'history-page', {
-    symbol: 'EURUSD',
-    timeframe: 'M5',
-    complete: true,
-    beforeMs: oldBeforeMs,
-    candles: history.slice(0, 290),
-  });
+  await pushHistoryPage(page, oldBeforeMs, history.slice(0, 290));
   expect(await page.evaluate(() => window.__chartTest!.data().length)).toBe(10);
 
   await page.evaluate(() => window.__chartTest!.scrollToRange({ from: -10, to: 20 }));
@@ -165,21 +139,9 @@ test('disconnect clears an older-page request and rejects its stale response', a
   const freshBeforeMs = Number(freshRequest.args.beforeMs);
   expect(freshBeforeMs).not.toBe(oldBeforeMs);
 
-  await pushEvent(page, 'history-page', {
-    symbol: 'EURUSD',
-    timeframe: 'M5',
-    complete: true,
-    beforeMs: oldBeforeMs,
-    candles: history.slice(0, 290),
-  });
+  await pushHistoryPage(page, oldBeforeMs, history.slice(0, 290));
   expect(await page.evaluate(() => window.__chartTest!.data().length)).toBe(10);
 
-  await pushEvent(page, 'history-page', {
-    symbol: 'EURUSD',
-    timeframe: 'M5',
-    complete: true,
-    beforeMs: freshBeforeMs,
-    candles: history.slice(-20, -10),
-  });
+  await pushHistoryPage(page, freshBeforeMs, history.slice(-20, -10));
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data().length)).toBe(20);
 });

@@ -397,6 +397,14 @@ def handle_reconcile(reader: FrameReader, conn: socket.socket, session_id: str |
     return True
 
 
+# Three fixed M1 candles every mock history reply serves.
+MOCK_CANDLES = [
+    {"time_ms": 1700000000000, "open": "100.0", "high": "101.0", "low": "99.0", "close": "100.5", "tick_volume": 10, "spread": 2, "real_volume": 0},
+    {"time_ms": 1700000060000, "open": "100.5", "high": "102.0", "low": "100.0", "close": "101.5", "tick_volume": 12, "spread": 2, "real_volume": 0},
+    {"time_ms": 1700000120000, "open": "101.5", "high": "103.0", "low": "101.0", "close": "102.5", "tick_volume": 14, "spread": 2, "real_volume": 0},
+]
+
+
 def main() -> int:
     host = os.environ.get("MT5_BRIDGE_HOST", "127.0.0.1")
     port = env_int("MT5_BRIDGE_PORT", 8877)
@@ -434,11 +442,7 @@ def main() -> int:
         assert initial.get("symbol") == "TEST.INIT" and initial.get("timeframe") == "M1"
         send_frame(conn, envelope("history_snapshot", "ea-history-init", session_id, {
             "request_id": initial_request.get("id"), "symbol": "TEST.INIT", "timeframe": "M1", "complete": True,
-            "candles": [
-                {"time_ms": 1700000000000, "open": "100.0", "high": "101.0", "low": "99.0", "close": "100.5", "tick_volume": 10, "spread": 2, "real_volume": 0},
-                {"time_ms": 1700000060000, "open": "100.5", "high": "102.0", "low": "100.0", "close": "101.5", "tick_volume": 12, "spread": 2, "real_volume": 0},
-                {"time_ms": 1700000120000, "open": "101.5", "high": "103.0", "low": "101.0", "close": "102.5", "tick_volume": 14, "spread": 2, "real_volume": 0},
-            ],
+            "candles": MOCK_CANDLES,
         }))
         print("initial history snapshot sent", flush=True)
 
@@ -471,11 +475,7 @@ def main() -> int:
                     send_frame(conn, envelope("history_snapshot", "ea-history-reconcile", session_id, {
                         "request_id": message.get("id"), "symbol": history_payload.get("symbol"),
                         "timeframe": history_payload.get("timeframe"), "complete": True,
-                        "candles": [
-                            {"time_ms": 1700000000000, "open": "100.0", "high": "101.0", "low": "99.0", "close": "100.5", "tick_volume": 10, "spread": 2, "real_volume": 0},
-                            {"time_ms": 1700000060000, "open": "100.5", "high": "102.0", "low": "100.0", "close": "101.5", "tick_volume": 12, "spread": 2, "real_volume": 0},
-                            {"time_ms": 1700000120000, "open": "101.5", "high": "103.0", "low": "101.0", "close": "102.5", "tick_volume": 14, "spread": 2, "real_volume": 0},
-                        ],
+                        "candles": MOCK_CANDLES,
                     }))
                 else:
                     raise AssertionError(f"unexpected {message_type!r} in reconcile mode")

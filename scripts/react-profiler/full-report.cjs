@@ -1,15 +1,6 @@
-const escape = (value) =>
-  String(value ?? "—").replace(
-    /[&<>"']/g,
-    (char) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-      })[char],
-  );
+const { escapeHtml } = require("./shared.cjs");
+
+const escape = (value) => escapeHtml(value ?? "—");
 
 const phaseNames = {
   startup: "Startup",

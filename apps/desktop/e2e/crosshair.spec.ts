@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { gotoWithStub, STUB_NOW } from './tauriStub';
+import { gotoWithStub, STUB_NOW } from './helpers/tauriStub';
 import type { CrosshairReadout } from '../src/features/chart/engine/crosshairPrimitive';
 
 /**

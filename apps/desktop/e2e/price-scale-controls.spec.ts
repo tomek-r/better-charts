@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { gotoWithStub, pushEvent, STUB_NOW } from './tauriStub';
+import { observeFillText } from './helpers/canvasText';
+import { brokerSymbolFixture, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 
 /**
@@ -143,17 +144,11 @@ for (const { gesture, symbol, base, digits } of [
   { gesture: 'none', symbol: 'NAS100', base: 31000, digits: 2 },
 ] as const) {
   test(`${symbol}: switching to log after ${gesture} gesture preserves actual prices`, async ({ page }) => {
-    await page.addInitScript(() => {
+    await observeFillText(page, () => {
       const drawn: string[] = [];
       Object.assign(window, { __drawnPrices: drawn });
-      const fillText = CanvasRenderingContext2D.prototype.fillText;
-      CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+      return (_context, text) => {
         drawn.push(text);
-        if (maxWidth === undefined) {
-          fillText.call(this, text, x, y);
-        } else {
-          fillText.call(this, text, x, y, maxWidth);
-        }
       };
     });
     const oil = shiftedCandles(1000, base).map((bar) => ({
@@ -176,24 +171,15 @@ for (const { gesture, symbol, base, digits } of [
           flags: 0,
         },
       },
-      symbolInfo: {
-        symbol,
-        description: 'Oil price fixture',
+      symbolInfo: brokerSymbolFixture(symbol, 'Oil price fixture', {
         digits,
         tickSize: (10 ** -digits).toFixed(digits),
         pointSize: (10 ** -digits).toFixed(digits),
         contractSize: '1',
-        volumeMin: '0.01',
-        volumeMax: '100',
-        volumeStep: '0.01',
-        stopsLevel: 0,
-        freezeLevel: 0,
-        fillingMode: 0,
-        orderMode: 0,
-        expirationMode: 0,
-        tradeExecution: 0,
-        tradeMode: 0,
-      },
+        tickValueProfit: undefined,
+        tickValueLoss: undefined,
+        tickValueCurrency: undefined,
+      }),
     });
     await expect.poll(async () => (await chartData(page)).length).toBe(1000);
     await page.getByRole('button', { name: '1m', exact: true }).click();
