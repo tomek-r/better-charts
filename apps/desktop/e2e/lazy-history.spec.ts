@@ -1,30 +1,22 @@
 import { test, expect, type Page } from '@playwright/test';
-import { gotoWithStub, stubInvocations, STUB_NOW } from './tauriStub';
-import type { Candle } from '../src/shared/bridge/types';
+import {
+  gotoWithStub,
+  holdIdleCallbacks,
+  stubInvocations,
+  windowCandles,
+  STUB_M5_INTERVAL_MS as INTERVAL_MS,
+} from './helpers/tauriStub';
 
-const INTERVAL_MS = 300_000;
 /** A window wide enough that the default view shows no space before it. */
 const WINDOW_BARS = 400;
 const PAGE_BARS = 5;
 
-/**
- * Deterministic window candles ending `endOffsetBars` intervals before the fixed
- * stub clock. `base` marks a timeframe's series, so a page wrongly merged into
- * the wrong selection shows up in the oldest bar's price.
- */
-function windowCandles(count: number, base = 1.085, endOffsetBars = 0): Candle[] {
-  const lastOpen = Math.floor(STUB_NOW / INTERVAL_MS) * INTERVAL_MS - endOffsetBars * INTERVAL_MS;
-  return Array.from({ length: count }, (_, index) => ({
-    timeMs: lastOpen - (count - 1 - index) * INTERVAL_MS,
-    open: base.toFixed(4),
-    high: (base + 0.001).toFixed(4),
-    low: (base - 0.001).toFixed(4),
-    close: (base + 0.0005).toFixed(4),
-    tickVolume: 120,
-    spread: 2,
-    realVolume: 120,
-  }));
-}
+// These specs drive the scroll-triggered path with exact page counts. The idle
+// prefetch (covered in initial-history.spec.ts) would add a page of its own, so
+// held idle callbacks are never run here.
+test.beforeEach(async ({ page }) => {
+  await holdIdleCallbacks(page);
+});
 
 async function data(page: Page) {
   return page.evaluate(() => window.__chartTest?.data() ?? []);
@@ -91,15 +83,24 @@ async function ready(page: Page) {
   await expect.poll(async () => (await pages(page)).length).toBe(0);
 }
 
-test('revealing space before the oldest bar prepends a page and keeps the view anchored', async ({ page }) => {
+/** EURUSD M5 window of WINDOW_BARS bars with `pages` older pages of `pageBars` bars behind it. */
+async function gotoPaged(
+  page: Page,
+  options: { pages: number; pageBars?: number; m1?: ReturnType<typeof windowCandles>; delayMs?: number },
+) {
   await gotoWithStub(page, {
     responses: {
       get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: windowCandles(WINDOW_BARS) },
     },
-    historyByTimeframe: { M5: windowCandles(WINDOW_BARS) },
-    olderHistoryPages: 2,
-    olderHistoryBars: PAGE_BARS,
+    historyByTimeframe: { M5: windowCandles(WINDOW_BARS), ...(options.m1 ? { M1: options.m1 } : {}) },
+    olderHistoryPages: options.pages,
+    ...(options.pageBars === undefined ? {} : { olderHistoryBars: options.pageBars }),
+    ...(options.delayMs === undefined ? {} : { olderHistoryDelayMs: options.delayMs }),
   });
+}
+
+test('revealing space before the oldest bar prepends a page and keeps the view anchored', async ({ page }) => {
+  await gotoPaged(page, { pages: 2, pageBars: PAGE_BARS });
   await ready(page);
 
   const before = await data(page);
@@ -134,14 +135,7 @@ test('revealing space before the oldest bar prepends a page and keeps the view a
 });
 
 test('paging stops when the broker reports the end of history', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: windowCandles(WINDOW_BARS) },
-    },
-    historyByTimeframe: { M5: windowCandles(WINDOW_BARS) },
-    olderHistoryPages: 1,
-    olderHistoryBars: PAGE_BARS,
-  });
+  await gotoPaged(page, { pages: 1, pageBars: PAGE_BARS });
   await ready(page);
 
   await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 8 }));
@@ -162,14 +156,7 @@ test('paging stops when the broker reports the end of history', async ({ page })
 });
 
 test('switching timeframe after paging keeps candles on screen', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: windowCandles(WINDOW_BARS) },
-    },
-    historyByTimeframe: { M5: windowCandles(WINDOW_BARS), M1: windowCandles(60, 1.2, 12) },
-    olderHistoryPages: 1,
-    olderHistoryBars: 400,
-  });
+  await gotoPaged(page, { pages: 1, pageBars: 400, m1: windowCandles(60, 1.2, 12) });
   await ready(page);
 
   // Page once, then park the view 40% deep into the longer series, which the 1m
@@ -190,15 +177,8 @@ test('switching timeframe after paging keeps candles on screen', async ({ page }
 });
 
 test('switching timeframe keeps the view where it was left, not at the right edge', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: windowCandles(WINDOW_BARS) },
-    },
-    // 1m is long enough to hold the parked offset: 400 bars ending an hour ago.
-    historyByTimeframe: { M5: windowCandles(WINDOW_BARS), M1: windowCandles(400, 1.2, 12) },
-    olderHistoryPages: 1,
-    olderHistoryBars: 400,
-  });
+  // 1m is long enough to hold the parked offset: 400 bars ending an hour ago.
+  await gotoPaged(page, { pages: 1, pageBars: 400, m1: windowCandles(400, 1.2, 12) });
   await ready(page);
 
   await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 8 }));
@@ -224,16 +204,8 @@ test('switching timeframe keeps the view where it was left, not at the right edg
 });
 
 test('switching timeframe from a deep position keeps the view instead of sliding right', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: windowCandles(WINDOW_BARS) },
-    },
-    historyByTimeframe: { M5: windowCandles(WINDOW_BARS), M1: windowCandles(400, 1.2) },
-    olderHistoryPages: 1,
-    olderHistoryBars: 400,
-    // Hold the page open, so the position the view lands in is observable.
-    olderHistoryDelayMs: 800,
-  });
+  // Hold the page open, so the position the view lands in is observable.
+  await gotoPaged(page, { pages: 1, pageBars: 400, m1: windowCandles(400, 1.2), delayMs: 800 });
   await ready(page);
 
   // Page once, then sit at the oldest bars: the second request is answered with
@@ -261,13 +233,7 @@ test('switching timeframe from a deep position keeps the view instead of sliding
 });
 
 test('switching timeframe keeps a view scrolled into the right margin', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: windowCandles(WINDOW_BARS) },
-    },
-    historyByTimeframe: { M5: windowCandles(WINDOW_BARS), M1: windowCandles(WINDOW_BARS, 1.2) },
-    olderHistoryPages: 0,
-  });
+  await gotoPaged(page, { pages: 0, m1: windowCandles(WINDOW_BARS, 1.2) });
   await ready(page);
 
   // Drag the chart left, so empty space opens up to the right of the newest
@@ -287,16 +253,8 @@ test('switching timeframe keeps a view scrolled into the right margin', async ({
 });
 
 test('a page in flight for the previous timeframe is not prepended after a switch', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles: windowCandles(WINDOW_BARS) },
-    },
-    historyByTimeframe: { M5: windowCandles(WINDOW_BARS), M1: windowCandles(WINDOW_BARS, 1.2) },
-    olderHistoryPages: 1,
-    olderHistoryBars: PAGE_BARS,
-    // The page lands well after the timeframe switch it raced.
-    olderHistoryDelayMs: 400,
-  });
+  // The page lands well after the timeframe switch it raced.
+  await gotoPaged(page, { pages: 1, pageBars: PAGE_BARS, m1: windowCandles(WINDOW_BARS, 1.2), delayMs: 400 });
   await ready(page);
 
   // Reveal the gap, then park the view back on real bars before switching: the

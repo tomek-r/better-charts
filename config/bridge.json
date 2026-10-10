@@ -4,5 +4,6 @@
     "min": 1024,
     "max": 2147483643
   },
-  "historyBars": 1000
+  "historyBars": 1000,
+  "initialHistoryBars": 300
 }

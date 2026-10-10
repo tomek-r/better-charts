@@ -3,7 +3,13 @@ import type { IChartApi, ISeriesApi, Logical, UTCTimestamp } from 'lightweight-c
 import { setPriceScaleRange } from './priceScaleRange';
 import type { RenderBar } from './mt5DataAdapter';
 import type { RenderViewport } from './overlayTypes';
-import { END_MARGIN, futurePoints, neededFutureBarCount, timeScaleBaseIndex } from './futureTimePoints';
+import {
+  DEFAULT_BAR_SPACING,
+  END_MARGIN,
+  futurePoints,
+  neededFutureBarCount,
+  timeScaleBaseIndex,
+} from './futureTimePoints';
 
 /** Follow only near the real last candle's five-bar end anchor. */
 const AT_END_TOLERANCE_BARS = 5;
@@ -166,10 +172,10 @@ export class ViewportController {
     cancelAnimationFrame(this.futureFrame);
     this.futureFrame = 0;
     const scale = this.chart.timeScale();
-    this.ensureFuture(scale.width(), 10);
+    this.ensureFuture(scale.width(), DEFAULT_BAR_SPACING);
     const to = timeScaleBaseIndex(this.data.bars.length, END_MARGIN);
-    this.restoreViewport(to, 10);
-    this.fitPriceScale(to, 10);
+    this.restoreViewport(to, DEFAULT_BAR_SPACING);
+    this.fitPriceScale(to, DEFAULT_BAR_SPACING);
   }
 
   restoreViewport(to: number, barSpacing: number): void {

@@ -8,7 +8,7 @@ import {
   type IChartApi,
   type ISeriesApi,
 } from 'lightweight-charts';
-import { END_MARGIN } from './futureTimePoints';
+import { DEFAULT_BAR_SPACING, END_MARGIN } from './futureTimePoints';
 import { palette } from '../../../shared/theme/palette';
 
 export interface ChartSurface {
@@ -67,7 +67,7 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
       borderColor: palette.border,
       timeVisible: true,
       secondsVisible: false,
-      barSpacing: 10,
+      barSpacing: DEFAULT_BAR_SPACING,
       rightOffset: END_MARGIN,
       lockVisibleTimeRangeOnResize: false,
       shiftVisibleRangeOnNewBar: false,

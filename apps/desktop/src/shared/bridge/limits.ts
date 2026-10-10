@@ -5,10 +5,16 @@
  * the same bounds, so a drifting copy here would accept (or advertise) a value
  * the handshake rejects.
  */
-import config from '../../../../../config/bridge.json';
+import config from '../../../../../config/bridge.json' with { type: 'json' };
 
 /** Frame bytes: what the settings offer and what the handshake negotiates. */
 export const FRAME_BYTES = config.frameBytes;
 
 /** Bars per history request; the backend bounds `bars` by the same value. */
 export const HISTORY_BARS = config.historyBars;
+
+/**
+ * Bars the handshake requests before a pane is measured, and the fallback while
+ * the pane width is unknown. Never above `HISTORY_BARS` (the backend rejects it).
+ */
+export const INITIAL_HISTORY_BARS = config.initialHistoryBars;

@@ -42,13 +42,18 @@ type BridgeMarketSession = Pick<
   | 'dataKeyRef'
 >;
 
-type BridgeMarketResources = {
+export type BridgeMarketResources = {
   chart: { current: ChartController | null };
   adapterRef: { current: Mt5DataAdapter | null };
   fixedRangeProfileState: { current: FixedRangeProfileState };
   expectedProfile: { current: { symbol: string; fromMs: number; endMs: number; generation: number } | undefined };
   profileGeneration: { current: number };
 };
+
+/** Longest the prefetch waits for an idle period before running anyway. */
+const PREFETCH_IDLE_TIMEOUT_MS = 2000;
+/** Stand-in for `requestIdleCallback` where it is missing. */
+const PREFETCH_FALLBACK_DELAY_MS = 200;
 
 type PayloadEvent<T> = { payload: T };
 
@@ -138,6 +143,54 @@ export function createBridgeMarketRuntime(
     pageState.inFlight = true;
     pageState.anchorMs = beforeMs;
     void adapter.requestHistoryPage(symbol, timeframe, HISTORY_BARS, beforeMs).catch(() => undefined);
+  };
+  // One idle prefetch per accepted snapshot: it runs after the first view has
+  // painted, so the page that fills the history never competes with first
+  // render. A newer snapshot, a pending selection change or teardown cancels it.
+  let prefetchCancel: (() => void) | undefined;
+  const cancelPrefetch = () => {
+    prefetchCancel?.();
+    prefetchCancel = undefined;
+  };
+  const schedulePrefetch = (dataKey: string) => {
+    cancelPrefetch();
+    let cancelled = false;
+    let frame: number | undefined;
+    let idle: number | undefined;
+    let timer: number | undefined;
+    const fire = () => {
+      prefetchCancel = undefined;
+      if (
+        cancelled ||
+        run.disposed ||
+        dataKeyRef.current !== dataKey ||
+        loadingTimeframeRef.current !== undefined ||
+        targetSymbol.current !== undefined
+      ) {
+        return;
+      }
+      chartRef.current?.prefetchOlderHistory();
+    };
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      if (typeof requestIdleCallback === 'function') {
+        idle = requestIdleCallback(fire, { timeout: PREFETCH_IDLE_TIMEOUT_MS });
+      } else {
+        timer = window.setTimeout(fire, PREFETCH_FALLBACK_DELAY_MS);
+      }
+    });
+    prefetchCancel = () => {
+      cancelled = true;
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
+      }
+      if (idle !== undefined && typeof cancelIdleCallback === 'function') {
+        cancelIdleCallback(idle);
+      }
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
   };
   const resetPageState = () => {
     pageState.key = '';
@@ -243,6 +296,7 @@ export function createBridgeMarketRuntime(
       if (replaced && !preserved) {
         chartRef.current?.resetView();
       }
+      schedulePrefetch(dataKey);
       setChartError(
         next.candles.length > 0 && accepted.candles.length === 0
           ? 'MT5 returned candles, but none of them contain valid OHLC values.'
@@ -284,17 +338,24 @@ export function createBridgeMarketRuntime(
     chartRef.current?.appendOlderHistory(candles, page.complete);
   };
 
-  const onTickProfile = (event: PayloadEvent<ProfileResult>) => {
+  /** The event belongs to the profile request still awaited, in the current generation. */
+  const matchesExpectedProfile = (payload: { symbol: string; fromMs: number; endMs: number }) => {
     const expected = expectedProfile.current;
-    if (
+    return (
       !run.disposed &&
-      expected &&
-      event.payload.symbol === expected.symbol &&
-      event.payload.fromMs === expected.fromMs &&
-      event.payload.endMs === expected.endMs &&
-      event.payload.symbol === currentSymbolRef.current &&
-      event.payload.complete !== undefined &&
+      expected !== undefined &&
+      payload.symbol === expected.symbol &&
+      payload.fromMs === expected.fromMs &&
+      payload.endMs === expected.endMs &&
       expected.generation === profileGeneration.current
+    );
+  };
+
+  const onTickProfile = (event: PayloadEvent<ProfileResult>) => {
+    if (
+      matchesExpectedProfile(event.payload) &&
+      event.payload.symbol === currentSymbolRef.current &&
+      event.payload.complete !== undefined
     ) {
       fixedRangeProfileState.current.profile = event.payload;
       chartRef.current?.refreshOverlays();
@@ -302,30 +363,14 @@ export function createBridgeMarketRuntime(
   };
 
   const onTickProfileCancelled = (event: PayloadEvent<ProfileCancelled>) => {
-    const expected = expectedProfile.current;
-    if (
-      !run.disposed &&
-      expected &&
-      event.payload.symbol === expected.symbol &&
-      event.payload.fromMs === expected.fromMs &&
-      event.payload.endMs === expected.endMs &&
-      expected.generation === profileGeneration.current
-    ) {
+    if (matchesExpectedProfile(event.payload)) {
       expectedProfile.current = undefined;
       profileGeneration.current += 1;
     }
   };
 
   const onTickProfileError = (event: PayloadEvent<ProfileError>) => {
-    const expected = expectedProfile.current;
-    if (
-      !run.disposed &&
-      expected &&
-      event.payload.symbol === expected.symbol &&
-      event.payload.fromMs === expected.fromMs &&
-      event.payload.endMs === expected.endMs &&
-      expected.generation === profileGeneration.current
-    ) {
+    if (matchesExpectedProfile(event.payload)) {
       notifyError(event.payload.message);
       expectedProfile.current = undefined;
       profileGeneration.current += 1;
@@ -374,6 +419,7 @@ export function createBridgeMarketRuntime(
 
   return {
     cancelCandles,
+    cancelPrefetch,
     resetPageState,
     requestOlderHistory,
     onAdapterHistoryError,

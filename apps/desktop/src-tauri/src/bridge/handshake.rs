@@ -8,8 +8,9 @@ use super::{
 use std::{sync::atomic::Ordering, sync::Arc};
 use tokio::net::TcpStream;
 use trading_core::protocol::{
-    default_timeframe, history_bars, ErrorCode, HelloAckPayload, HelloPayload, HistoryRequest,
-    MessageType, ReconcileRequest, SymbolInfoRequest, TransferLimits, PROTOCOL_VERSION,
+    default_timeframe, initial_history_bars, ErrorCode, HelloAckPayload, HelloPayload,
+    HistoryRequest, MessageType, ReconcileRequest, SymbolInfoRequest, TransferLimits,
+    PROTOCOL_VERSION,
 };
 
 /// A component version string from `hello`, or `None` when absent, not a
@@ -192,7 +193,7 @@ pub(crate) async fn run_handshake(
     let requested_history = HistoryRequest {
         symbol: hello_payload.chart_symbol.clone(),
         timeframe: default_timeframe().into(),
-        bars: history_bars(),
+        bars: initial_history_bars(),
         before_ms: None,
     };
     if requested_history.validate().is_err() {

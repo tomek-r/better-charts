@@ -18,6 +18,7 @@ import { isOutsidePane, ViewportController } from './viewportController';
 import { FixedRangeProfileController, type ProfileRange } from './fixedRangeProfileController';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installDevTestApi, removeDevTestApi } from './devTestApi';
+import { initialHistoryWindow } from './initialHistoryWindow';
 
 /**
  * Re-exported because it names a parameter of this class's public callbacks; the
@@ -239,14 +240,30 @@ export class ChartController {
    * loaded history, not of the request in flight.
    */
   private requestOlderHistory(): void {
+    if (this.view.isBeforeHistory()) {
+      this.prefetchOlderHistory();
+    }
+  }
+
+  /**
+   * Asks for one older page. The scroll path gates it on a revealed gap; the
+   * idle prefetch calls it directly. Both share the exhaustion latch and the
+   * callback's in-flight guard, so they can never double-request.
+   */
+  prefetchOlderHistory(): void {
     if (this.removed || this.olderHistoryExhausted) {
       return;
     }
     const oldest = this.bars[0];
-    if (!oldest || !this.view.isBeforeHistory()) {
-      return;
+    if (oldest) {
+      this.onOlderHistoryNeeded?.(oldest.time * 1000);
     }
-    this.onOlderHistoryNeeded?.(oldest.time * 1000);
+  }
+
+  /** Bars the first history request should ask for, given the pane as measured now. */
+  initialHistoryBars(): number {
+    const scale = this.chart.timeScale();
+    return initialHistoryWindow(scale.width(), scale.options().barSpacing);
   }
 
   /**

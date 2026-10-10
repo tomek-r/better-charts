@@ -108,7 +108,7 @@ Other malformed handshakes include recompile/reattach instructions.
 | `transfer_limits` | Negotiate each limit as the minimum of both peers' values; apply only after `hello_ack`. |
 | Missing `transfer_limits` | Use 1 MiB / 5,000 ticks per page. |
 | Current defaults | 8 MiB / 65,535 ticks per page. |
-| Valid limits | Rust frame bytes: `1024..=2147483643`; EA frame MiB: `1..=2047`; ticks: `1..=65535`. Invalid limits reject the handshake. The frame bounds, the 8 MiB default and the `1..=1000` history page live once in `config/bridge.json`, embedded by `crates/trading-core/src/protocol/limits.rs` and imported by `apps/desktop/src/shared/bridge/limits.ts`. |
+| Valid limits | Rust frame bytes: `1024..=2147483643`; EA frame MiB: `1..=2047`; ticks: `1..=65535`. Invalid limits reject the handshake. The frame bounds, the 8 MiB default and the `1..=1000` history page and the `initialHistoryBars` handshake window (`1..=historyBars`, currently 300) live once in `config/bridge.json`, embedded by `crates/trading-core/src/protocol/limits.rs` and imported by `apps/desktop/src/shared/bridge/limits.ts`. |
 | `tick_price_counts` | Defaults to `false`; exact price summaries require support from both peers. Raw tick pages remain supported. |
 | `hello.supported_timeframes` | Required list of the EA's supported MT5 period codes. Must be a nonempty, unique subset of the standard periods and include `M1`. Missing, `null` or invalid advertisements reject the handshake. Published as `supportedTimeframes` on the Tauri bridge status; history commands reject periods the connected EA did not advertise. |
 
@@ -157,7 +157,11 @@ responses for stale request IDs, sessions, symbols, timeframes, or generations.
 
 ### Candles and quotes
 
-After the handshake, Rust requests M1 history for `chart_symbol`. Supported
+After the handshake, Rust requests M1 history for `chart_symbol`, asking for
+`initialHistoryBars` candles (`config/bridge.json`; enough for the first view)
+rather than the full `1..=1000` bound. The desktop UI sizes its own requests
+the same way from the measured pane width and then prefetches one older page
+when idle; the EA honours any `bars` in `1..=1000`, so this is not a wire change. Supported
 timeframes are the 21 standard [MT5 periods](https://www.mql5.com/en/docs/constants/chartconstants/enum_timeframes):
 `M1`, `M2`, `M3`, `M4`, `M5`, `M6`, `M10`, `M12`, `M15`, `M20`, `M30`,
 `H1`, `H2`, `H3`, `H4`, `H6`, `H8`, `H12`, `D1`, `W1`, `MN1`. The codes, their nominal bar lengths
