@@ -17,24 +17,43 @@ export function useChartModificationDrafts(
     setPendingModification(draft);
     setTradingSyncTick((value) => value + 1);
   };
-  const applyPositionModify = (payload: { positionId: string; stopLoss?: number; takeProfit?: number }) => {
+  /** Records the draft, then sends it only when the latest execution gate is open and `allowed`. */
+  const recordAndDispatch = (draft: PendingModification, allowed: boolean) => {
+    recordDraft(draft);
+    const autoDispatch = dragModifyRef.current;
+    if (allowed && autoDispatch?.enabled) {
+      autoDispatch.dispatch(draft);
+    }
+  };
+  /** Shared SL/TP part of a drag draft: draft levels plus the " SL → x · TP → y" summary text. */
+  const levelDraft = (payload: { stopLoss?: number; takeProfit?: number }) => {
     const stopLoss = draftLevel(payload.stopLoss);
     const takeProfit = draftLevel(payload.takeProfit);
     const levels = [stopLoss ? `SL → ${stopLoss}` : '', takeProfit ? `TP → ${takeProfit}` : '']
       .filter(Boolean)
       .join(' · ');
+    return { stopLoss, takeProfit, levels, hasLevel: stopLoss !== undefined || takeProfit !== undefined };
+  };
+  // A level-only drag (position SL/TP, or order SL/TP from the custom overlay)
+  // is the same draft + auto-dispatch through the modify gate. The modify wire
+  // carries stop_loss/take_profit for pending orders (absent price = unchanged).
+  const applyLevelDrag = (
+    kind: 'positionModify' | 'orderModify',
+    id: string,
+    payload: { stopLoss?: number; takeProfit?: number },
+  ) => {
+    const { stopLoss, takeProfit, levels, hasLevel } = levelDraft(payload);
     const draft: PendingModification = {
-      kind: 'positionModify',
-      summary: `position ${payload.positionId}${levels ? ` ${levels}` : ''}`,
-      targetId: String(payload.positionId),
+      kind,
+      summary: `${kind === 'positionModify' ? 'position' : 'order'} ${id}${levels ? ` ${levels}` : ''}`,
+      targetId: String(id),
       stopLoss,
       takeProfit,
     };
-    recordDraft(draft);
-    const autoDispatch = dragModifyRef.current;
-    if (autoDispatch?.enabled && (stopLoss !== undefined || takeProfit !== undefined)) {
-      autoDispatch.dispatch(draft);
-    }
+    recordAndDispatch(draft, hasLevel);
+  };
+  const applyPositionModify = (payload: { positionId: string; stopLoss?: number; takeProfit?: number }) => {
+    applyLevelDrag('positionModify', payload.positionId, payload);
   };
   const applyOrderModify = (payload: {
     orderId: string;
@@ -44,11 +63,7 @@ export function useChartModificationDrafts(
     autoDispatch: boolean;
   }) => {
     const price = draftLevel(payload.newPrice);
-    const stopLoss = draftLevel(payload.stopLoss);
-    const takeProfit = draftLevel(payload.takeProfit);
-    const levels = [stopLoss ? `SL → ${stopLoss}` : '', takeProfit ? `TP → ${takeProfit}` : '']
-      .filter(Boolean)
-      .join(' · ');
+    const { stopLoss, takeProfit, levels } = levelDraft(payload);
     const draft: PendingModification = {
       kind: 'orderModify',
       summary: `order ${payload.orderId} price → ${price ?? payload.newPrice}${levels ? ` · ${levels}` : ''}`,
@@ -57,33 +72,10 @@ export function useChartModificationDrafts(
       stopLoss,
       takeProfit,
     };
-    recordDraft(draft);
-    const autoDispatch = dragModifyRef.current;
-    if (payload.autoDispatch && autoDispatch?.enabled) {
-      autoDispatch.dispatch(draft);
-    }
+    recordAndDispatch(draft, payload.autoDispatch);
   };
-  // Order SL/TP drag (custom overlay): same semantics as a position level
-  // drag — draft + auto-dispatch through the modify gate. The modify wire
-  // carries stop_loss/take_profit for pending orders (absent price = unchanged).
   const applyOrderLevelModify = (payload: { orderId: string; stopLoss?: number; takeProfit?: number }) => {
-    const stopLoss = draftLevel(payload.stopLoss);
-    const takeProfit = draftLevel(payload.takeProfit);
-    const levels = [stopLoss ? `SL → ${stopLoss}` : '', takeProfit ? `TP → ${takeProfit}` : '']
-      .filter(Boolean)
-      .join(' · ');
-    const draft: PendingModification = {
-      kind: 'orderModify',
-      summary: `order ${payload.orderId}${levels ? ` ${levels}` : ''}`,
-      targetId: String(payload.orderId),
-      stopLoss,
-      takeProfit,
-    };
-    recordDraft(draft);
-    const autoDispatch = dragModifyRef.current;
-    if (autoDispatch?.enabled && (stopLoss !== undefined || takeProfit !== undefined)) {
-      autoDispatch.dispatch(draft);
-    }
+    applyLevelDrag('orderModify', payload.orderId, payload);
   };
   // ✕ on a live SL/TP row: REMOVE that level — modify_order with the "0"
   // sentinel (MT5 clears a stop at price 0; `null` would mean "unchanged").
@@ -96,11 +88,7 @@ export function useChartModificationDrafts(
       targetId,
       ...(level === 'sl' ? { stopLoss: '0' } : { takeProfit: '0' }),
     };
-    recordDraft(draft);
-    const autoDispatch = dragModifyRef.current;
-    if (autoDispatch?.enabled) {
-      autoDispatch.dispatch(draft);
-    }
+    recordAndDispatch(draft, true);
   };
   return {
     pendingModification,

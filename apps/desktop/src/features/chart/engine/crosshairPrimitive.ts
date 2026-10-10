@@ -1,14 +1,7 @@
-import type {
-  IChartApi,
-  IPrimitivePaneRenderer,
-  IPrimitivePaneView,
-  ISeriesApi,
-  ISeriesPrimitive,
-  SeriesAttachedParameter,
-  SeriesType,
-  Time,
-} from 'lightweight-charts';
+import type { IPrimitivePaneRenderer, IPrimitivePaneView } from 'lightweight-charts';
 import { palette } from '../../../shared/theme/palette';
+import { AttachedSeriesPrimitive } from './attachedPrimitive';
+import { measureTextWidth } from './textMeasure';
 
 /**
  * Pointer price/time labels for every tool, with crosshair lines only for Cross.
@@ -108,7 +101,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 
 /** The price label: right-aligned in the pane, vertically centred, clamped inside it. */
 function priceLabelBox(text: string, y: number, pane: PaneRect, font: string, fontSize: number): LabelBox {
-  const width = Math.max(MIN_LABEL_WIDTH, Math.ceil(textWidth(text, font)) + LABEL_PADDING * 2 + ACCENT_WIDTH);
+  const width = Math.max(MIN_LABEL_WIDTH, Math.ceil(measureTextWidth(text, font)) + LABEL_PADDING * 2 + ACCENT_WIDTH);
   const height = labelHeight(fontSize);
   return {
     x: Math.max(0, pane.width - width),
@@ -120,7 +113,7 @@ function priceLabelBox(text: string, y: number, pane: PaneRect, font: string, fo
 
 /** The time label: centred on pointer x, along the pane bottom above the axis. */
 function timeLabelBox(text: string, x: number, pane: PaneRect, font: string, fontSize: number): LabelBox {
-  const width = Math.max(MIN_LABEL_WIDTH, Math.ceil(textWidth(text, font)) + LABEL_PADDING * 2);
+  const width = Math.max(MIN_LABEL_WIDTH, Math.ceil(measureTextWidth(text, font)) + LABEL_PADDING * 2);
   const height = labelHeight(fontSize);
   return {
     x: clamp(x - width / 2, 0, pane.width - width),
@@ -130,20 +123,7 @@ function timeLabelBox(text: string, x: number, pane: PaneRect, font: string, fon
   };
 }
 
-let measurer: CanvasRenderingContext2D | null = null;
-function textWidth(text: string, font: string): number {
-  measurer ??= document.createElement('canvas').getContext('2d');
-  if (measurer === null) {
-    return 0;
-  }
-  measurer.font = font;
-  return measurer.measureText(text).width;
-}
-
-export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
-  private chart: IChartApi | null = null;
-  private series: ISeriesApi<SeriesType, Time> | null = null;
-  private requestUpdate: (() => void) | null = null;
+export class CrosshairPrimitive extends AttachedSeriesPrimitive {
   /** Pointer position in pane CSS px; null outside the pane. */
   private point: { x: number; y: number } | null = null;
   private linesVisible = false;
@@ -152,6 +132,7 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
   private readonly priceAxis: readonly IPrimitivePaneView[];
 
   constructor() {
+    super();
     // One renderer per canvas; each draws only once a position exists, so the
     // views are stable references and the hidden state costs nothing.
     this.pane = [this.view({ draw: (target) => this.drawPane(target) })];
@@ -192,16 +173,8 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate?.();
   }
 
-  attached({ chart, series, requestUpdate }: SeriesAttachedParameter<Time>): void {
-    this.chart = chart;
-    this.series = series;
-    this.requestUpdate = requestUpdate;
-  }
-
   detached(): void {
-    this.chart = null;
-    this.series = null;
-    this.requestUpdate = null;
+    super.detached();
     this.point = null;
   }
 

@@ -1,13 +1,5 @@
-import type {
-  IChartApi,
-  IPaneApi,
-  ISeriesApi,
-  ISeriesPrimitive,
-  ISeriesPrimitiveAxisView,
-  SeriesAttachedParameter,
-  SeriesType,
-  Time,
-} from 'lightweight-charts';
+import type { IPaneApi, ISeriesPrimitiveAxisView, SeriesAttachedParameter, Time } from 'lightweight-charts';
+import { AttachedSeriesPrimitive } from '../attachedPrimitive';
 import { BrokerClock } from './clock';
 import { priceTagHeight, priceTagOffset } from '../priceAxisTagsPrimitive';
 import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './types';
@@ -28,7 +20,7 @@ import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
  * wake-up and calls `requestUpdate` when the broker second turns over, which is
  * the supported way to repaint content whose source is wall-clock time.
  */
-export class BarCountdownPrimitive implements ISeriesPrimitive<Time> {
+export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
   private readonly clock = new BrokerClock();
   private readonly axisViews: readonly ISeriesPrimitiveAxisView[];
   private options: BarCountdownOptions;
@@ -39,9 +31,6 @@ export class BarCountdownPrimitive implements ISeriesPrimitive<Time> {
     suspended: false,
     connectionIdentity: '',
   };
-  private series: ISeriesApi<SeriesType, Time> | null = null;
-  private chart: IChartApi | null = null;
-  private requestUpdate: (() => void) | null = null;
   private pane: IPaneApi<Time> | null = null;
   /** Pane height the label must stay inside, re-read on every chart update. */
   private paneHeight = 0;
@@ -51,6 +40,7 @@ export class BarCountdownPrimitive implements ISeriesPrimitive<Time> {
   private dueMs = 0;
 
   constructor(options: Partial<BarCountdownOptions> = {}) {
+    super();
     this.options = { ...barCountdownDefaultOptions, ...options };
     // The view list is stable: the library caches views by array identity and
     // reads the current state through these callbacks.
@@ -100,10 +90,9 @@ export class BarCountdownPrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate?.();
   }
 
-  attached({ chart, series, requestUpdate }: SeriesAttachedParameter<Time>): void {
-    this.chart = chart;
-    this.series = series;
-    this.requestUpdate = requestUpdate;
+  attached(params: SeriesAttachedParameter<Time>): void {
+    super.attached(params);
+    const { chart, series } = params;
     // The pane is only needed for the height the label must stay inside. It is
     // resolved once here and re-read in `updateAllViews`, so nothing walks the
     // pane list on the per-frame or per-tick paths.
@@ -116,9 +105,7 @@ export class BarCountdownPrimitive implements ISeriesPrimitive<Time> {
   detached(): void {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.stopTimer();
-    this.chart = null;
-    this.series = null;
-    this.requestUpdate = null;
+    super.detached();
     this.pane = null;
     this.paneHeight = 0;
     this.shownText = '';

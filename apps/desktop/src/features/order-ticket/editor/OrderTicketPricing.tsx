@@ -1,6 +1,38 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { useOrderTicketPricing } from './useOrderTicketPricing';
 
+/** The ticket's decimal text-number input; autofill and spellcheck stay off so prices are never rewritten. */
+function PriceInput({
+  value,
+  onChange,
+  placeholder,
+  label,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <input
+      autoComplete="one-time-code"
+      autoCorrect="off"
+      autoCapitalize="off"
+      spellCheck={false}
+      className="ticket-value"
+      inputMode="decimal"
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      type="number"
+      aria-label={label}
+    />
+  );
+}
+
 export function OrderTicketPricing() {
   const {
     instrument,
@@ -83,33 +115,19 @@ export function OrderTicketPricing() {
             ⇄
           </button>
           {absolutePrice ? (
-            <input
-              autoComplete="one-time-code"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              className="ticket-value"
-              inputMode="decimal"
+            <PriceInput
               value={entry}
-              disabled={orderKind === 'market'}
-              onChange={(event) => setEntry(event.target.value)}
+              onChange={setEntry}
               placeholder="Price"
-              type="number"
-              aria-label="Order price"
+              label="Order price"
+              disabled={orderKind === 'market'}
             />
           ) : (
-            <input
-              autoComplete="one-time-code"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              className="ticket-value"
-              inputMode="decimal"
+            <PriceInput
               value={priceOffset}
-              onChange={(event) => setPriceOffset(event.target.value)}
+              onChange={setPriceOffset}
               placeholder="Ticks"
-              type="number"
-              aria-label="Price offset in ticks"
+              label="Price offset in ticks"
             />
           )}
           <span className="ticket-unit">{absolutePrice ? 'price' : 'ticks'}</span>
@@ -119,19 +137,7 @@ export function OrderTicketPricing() {
         <div className="ticket-row">
           <span className="ticket-row-label">Limit price</span>
           <div className="ticket-field">
-            <input
-              autoComplete="one-time-code"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              className="ticket-value"
-              inputMode="decimal"
-              value={limitPrice}
-              onChange={(event) => setLimitPrice(event.target.value)}
-              placeholder="Price"
-              type="number"
-              aria-label="Limit price"
-            />
+            <PriceInput value={limitPrice} onChange={setLimitPrice} placeholder="Price" label="Limit price" />
             <span className="ticket-unit">price</span>
           </div>
         </div>

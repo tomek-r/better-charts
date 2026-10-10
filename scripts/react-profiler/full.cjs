@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { settle } = require("./shared.cjs");
 
 // PerformedWork, Fiber.actualStartTime, and Fiber.actualDuration are private React implementation details.
 // Bit 0 is PerformedWork in the pinned React used by this comparison; revisit this
@@ -268,15 +269,6 @@ const range = (values) => {
       }
     : { median: null, min: null, max: null, available: false };
 };
-
-async function settle(page) {
-  await page.evaluate(
-    () =>
-      new Promise((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      ),
-  );
-}
 
 async function getTrackerErrors(page) {
   return page.evaluate(() => window.__reactFullProfileApi.errors());

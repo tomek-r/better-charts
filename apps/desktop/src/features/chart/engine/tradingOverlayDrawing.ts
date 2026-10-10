@@ -1,4 +1,5 @@
 import { palette } from '../../../shared/theme/palette';
+import type { RenderViewport } from './overlayTypes';
 
 export interface TradingHitRect {
   x: number;
@@ -127,4 +128,40 @@ export function drawHandle(
     ctx.fillText(trailing.text, x + 7 + trailingOffset, centerY + 0.5);
   }
   return { x, y: top, w, h };
+}
+
+/**
+ * Records the pane geometry the host pointer handlers hit-test against.
+ * Returns false (recording nothing) when the viewport cannot be drawn.
+ */
+export function bindViewportHit(
+  hit: { chartRect?: { x: number; y: number; width: number; height: number }; toPrice?: (y: number) => number },
+  viewport: RenderViewport,
+): boolean {
+  const { x, y, width, height } = viewport.chartRect;
+  const { min, max } = viewport.priceRange;
+  if (width <= 0 || height <= 0 || !(max > min)) {
+    return false;
+  }
+  hit.chartRect = { x, y, width, height };
+  hit.toPrice = viewport.yToPrice;
+  return true;
+}
+
+/** Translucent risk zone between the entry row and an exit level; skipped when far off-pane. */
+export function fillRiskZone(
+  ctx: CanvasRenderingContext2D,
+  chartRect: { x: number; y: number; width: number; height: number },
+  entryY: number,
+  levelY: number,
+  color: string,
+) {
+  const { x, y, width, height } = chartRect;
+  if (levelY < y - height || levelY > y + height * 2) {
+    return;
+  }
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = color;
+  ctx.fillRect(x, Math.min(entryY, levelY), width, Math.abs(levelY - entryY));
+  ctx.globalAlpha = 1;
 }

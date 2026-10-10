@@ -9,7 +9,9 @@ import type { RiskSide } from '../../../shared/bridge/types';
 import { palette } from '../../../shared/theme/palette';
 import {
   CANCEL_CHIP_X,
+  bindViewportHit,
   drawCancelChip,
+  fillRiskZone,
   drawHandle,
   HANDLE_X,
   tagPath,
@@ -144,14 +146,11 @@ export function createStagedOrderOverlay(
       hit.offset = viewport.offset;
       hit.visibleRange = { from: viewport.visibleRange.from, to: viewport.visibleRange.to };
 
-      if (width <= 0 || height <= 0 || !(max > min)) {
+      if (!bindViewportHit(hit, viewport)) {
         state.hit = hit;
         return;
       }
       const toY = viewport.priceToY;
-      const toPrice = viewport.yToPrice;
-      hit.chartRect = { x, y, width, height };
-      hit.toPrice = toPrice;
 
       const order = state.order;
       const entryValid = order !== null && Number.isFinite(order.entry) && order.entry > 0;
@@ -184,14 +183,7 @@ export function createStagedOrderOverlay(
         if (level === null || !Number.isFinite(level)) {
           return;
         }
-        const levelY = toY(level);
-        if (levelY < y - height || levelY > y + height * 2) {
-          return;
-        }
-        ctx.globalAlpha = 0.12;
-        ctx.fillStyle = color;
-        ctx.fillRect(x, Math.min(entryY, levelY), width, Math.abs(levelY - entryY));
-        ctx.globalAlpha = 1;
+        fillRiskZone(ctx, viewport.chartRect, entryY, toY(level), color);
       };
       if (drawLines) {
         zone(order.stopLoss, palette.sellSoft);
