@@ -151,6 +151,10 @@ lint-staged) formats and lints staged files, then runs the full typecheck,
 offline Rust workspace tests, browser E2E suite, tick-reader check, and Python
 tool self-tests. Any failure aborts the commit.
 
+Python is pinned to 3.12 in `.python-version`. When uv is installed, run the
+Python commands as `uv run --no-project python …` (the hook does this and falls
+back to `python3`); on Windows `python3` may resolve to the Microsoft Store stub.
+
 Choose the minimum checks appropriate to the change:
 
 - Documentation only: inspect the diff, links, filenames, and consistency with

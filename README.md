@@ -120,7 +120,11 @@ MT5_CAPTURE_SELFTEST=1 python3 scripts/capture_reconcile_snapshot.py
 ```
 
 Offline Rust checks require previously fetched dependencies. Python 3 is needed
-for the mock and diagnostics; on Windows use `python` if necessary. Install
+for the mock and diagnostics (standard library only). The project pins Python
+3.12 in `.python-version`; with [uv](https://docs.astral.sh/uv/) installed,
+`uv python install` provides it and `uv run --no-project python` replaces
+`python3` above on Windows, macOS and Linux. The pre-commit hook uses uv when
+available and falls back to `python3`. Install
 Chromium once with `pnpm --filter better-charts exec playwright install chromium`.
 [Browser tests](apps/desktop/e2e/README.md) use a Tauri stub, not MT5.
 Pre-commit hooks enforce validation; do not bypass failing checks.
