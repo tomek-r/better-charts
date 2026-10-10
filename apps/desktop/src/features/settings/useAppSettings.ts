@@ -31,7 +31,6 @@ export type AppSettingsStore = DomainStore<AppSettingsState>;
 
 export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean) {
   const settingsLoadGeneration = useRef(0);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const loadSettings = useCallback(
     (errorMessage: string, onLoaded?: (next: AppSettingsData) => void) => {
@@ -56,7 +55,6 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
 
   useEffect(
     () => () => {
-      clearTimeout(closeTimer.current);
       settingsLoadGeneration.current += 1;
     },
     [],
@@ -77,30 +75,22 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   }, [loadSettings, store, tauriAvailable]);
 
   const open = useCallback(() => {
-    clearTimeout(closeTimer.current);
-    closeTimer.current = undefined;
     store.setField('closing', false);
     store.setField('dismissedConfigurationError', undefined);
     store.setField('loadError', undefined);
     loadSettings('Could not load app settings. Close and reopen settings to try again.');
     store.setField('isOpen', true);
   }, [loadSettings, store]);
+  // The dialog keeps its focus trap mounted while the exit animation plays and
+  // calls `exited` when it ends (AppSettingsDialog), which finishes the close.
   const close = useCallback(() => {
-    if (closeTimer.current !== undefined) {
-      return;
+    if (!store.getState().closing) {
+      store.setField('closing', true);
     }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      store.setField('isOpen', false);
-      store.setField('closing', false);
-      return;
-    }
-    store.setField('closing', true);
-    // Keep the focus trap mounted through the 180ms CSS exit animation.
-    closeTimer.current = setTimeout(() => {
-      closeTimer.current = undefined;
-      store.setField('isOpen', false);
-      store.setField('closing', false);
-    }, 180);
+  }, [store]);
+  const exited = useCallback(() => {
+    store.setField('isOpen', false);
+    store.setField('closing', false);
   }, [store]);
   const dismissRestartNotice = useCallback(() => store.setField('restartNoticeDismissed', true), [store]);
   const dismissConfigurationNotice = useCallback(
@@ -123,6 +113,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   return {
     open,
     close,
+    exited,
     saved,
     dismissRestartNotice,
     dismissConfigurationNotice,

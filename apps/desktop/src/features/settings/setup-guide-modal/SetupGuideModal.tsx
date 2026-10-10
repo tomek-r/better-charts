@@ -1,6 +1,7 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { isTauri, invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { afterExitAnimation } from '../../../shared/ui/afterExitAnimation';
 import { DownloadIcon } from '../../../shared/ui/DownloadIcon';
 
 // The EA and tick-history reader already ship with the app as Tauri resources
@@ -43,12 +44,8 @@ export function SetupGuideModal({ onClose }: { onClose: () => void }) {
       return;
     }
     closingRef.current = true;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      onClose();
-      return;
-    }
     setClosing(true);
-    backdrop.current?.addEventListener('animationend', () => onClose(), { once: true });
+    afterExitAnimation(backdrop.current, onClose);
   }, [onClose]);
 
   useEffect(() => {

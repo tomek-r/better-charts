@@ -1,5 +1,5 @@
-import { test, expect, type Locator } from '@playwright/test';
-import { gotoWithStub, stubInvocations } from './tauriStub';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+import { gotoWithStub, stubInvocations, type StubInternals } from './helpers/tauriStub';
 import type { AppSettingsData } from '../src/features/settings/settingsTypes';
 
 const firstLaunch: AppSettingsData = {
@@ -120,16 +120,14 @@ async function expectBannerTextUncovered(banner: Locator) {
 test('settings notifications stack in the bottom right and clear drawing tools at small viewports', async ({
   page,
 }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_app_settings: {
-        ...firstLaunch,
-        firstLaunch: false,
-        restartRequired: true,
-        configurationError: 'Invalid environment configuration. Fix the override and restart.',
-      },
-    },
-  });
+  await gotoWithStub(
+    page,
+    settingsResponse({
+      firstLaunch: false,
+      restartRequired: true,
+      configurationError: 'Invalid environment configuration. Fix the override and restart.',
+    }),
+  );
   await page.getByRole('dialog', { name: 'App settings' }).getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
   for (const width of [390, 1280]) {
@@ -194,16 +192,31 @@ test('saving settings shows a dark shadowed notification without moving the char
   expect(modalAboveNotice).toBe(true);
 });
 
-test('older settings reads cannot overwrite a newer result after close and reopen', async ({ page }) => {
-  await gotoWithStub(page);
+/** A settings read that was already in flight when newer state was accepted. */
+const staleSettings: AppSettingsData = {
+  ...firstLaunch,
+  mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'older-token' },
+};
+
+/** Stub options whose `get_app_settings` answers `firstLaunch` with `overrides` applied. */
+const settingsResponse = (overrides: Partial<AppSettingsData>) => ({
+  responses: { get_app_settings: { ...firstLaunch, ...overrides } },
+});
+
+/** Dismisses the restart notice and opens settings in the same task, so the notice's exit overlaps the dialog. */
+const dismissRestartNoticeThenOpenSettings = (page: Page) =>
+  page.evaluate(() => {
+    document.querySelector<HTMLButtonElement>('[aria-label="Dismiss settings saved notification"]')!.click();
+    document.querySelector<HTMLButtonElement>('[aria-label="App settings"]')!.click();
+  });
+
+/** Waits for startup to finish its two reads, then parks every later `get_app_settings` until a test resolves it. */
+async function holdSettingsReads(page: Page) {
   await expect
     .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'get_app_settings').length)
     .toBe(2);
   await page.evaluate(() => {
-    const w = window as unknown as {
-      __TAURI_INTERNALS__: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
-      __settingsReadResolvers: Array<(value: unknown) => void>;
-    };
+    const w = window as unknown as StubInternals & { __settingsReadResolvers: Array<(value: unknown) => void> };
     const original = w.__TAURI_INTERNALS__.invoke;
     w.__settingsReadResolvers = [];
     w.__TAURI_INTERNALS__.invoke = (cmd, args) => {
@@ -213,47 +226,49 @@ test('older settings reads cannot overwrite a newer result after close and reope
       return original(cmd, args);
     };
   });
+}
 
+const heldSettingsReads = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __settingsReadResolvers: unknown[] }).__settingsReadResolvers.length);
+
+const resolveHeldSettingsRead = (page: Page, index: number, settings: unknown) =>
+  page.evaluate(
+    ([at, value]) =>
+      (window as unknown as { __settingsReadResolvers: Array<(value: unknown) => void> }).__settingsReadResolvers[
+        at as number
+      ](value),
+    [index, settings],
+  );
+
+/** Loads the app, parks later settings reads, and opens settings so exactly one read is held. */
+async function openSettingsWithHeldRead(page: Page) {
+  await gotoWithStub(page);
+  await holdSettingsReads(page);
   const gear = page.getByRole('button', { name: 'App settings', exact: true });
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await gear.click();
-  await expect
-    .poll(() =>
-      page.evaluate(() => (window as unknown as { __settingsReadResolvers: unknown[] }).__settingsReadResolvers.length),
-    )
-    .toBe(1);
+  await expect.poll(() => heldSettingsReads(page)).toBe(1);
+  return { gear, dialog };
+}
+
+test('older settings reads cannot overwrite a newer result after close and reopen', async ({ page }) => {
+  const { gear, dialog } = await openSettingsWithHeldRead(page);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toBeHidden();
 
   await gear.click();
-  await expect
-    .poll(() =>
-      page.evaluate(() => (window as unknown as { __settingsReadResolvers: unknown[] }).__settingsReadResolvers.length),
-    )
-    .toBe(2);
+  await expect.poll(() => heldSettingsReads(page)).toBe(2);
   const newerSettings = {
     ...firstLaunch,
     mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'newer-token' },
     configurationError: 'Newer settings read was accepted.',
   };
-  await page.evaluate((settings) => {
-    (window as unknown as { __settingsReadResolvers: Array<(value: unknown) => void> }).__settingsReadResolvers[1](
-      settings,
-    );
-  }, newerSettings);
+  await resolveHeldSettingsRead(page, 1, newerSettings);
   await expect(page.getByRole('alert')).toContainText('Newer settings read was accepted.');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  const olderSettings = {
-    ...firstLaunch,
-    mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'older-token' },
-  };
-  await page.evaluate((settings) => {
-    (window as unknown as { __settingsReadResolvers: Array<(value: unknown) => void> }).__settingsReadResolvers[0](
-      settings,
-    );
-  }, olderSettings);
+  await resolveHeldSettingsRead(page, 0, staleSettings);
   await expect(page.getByRole('alert')).toContainText('Newer settings read was accepted.');
 
   await gear.click();
@@ -261,46 +276,12 @@ test('older settings reads cannot overwrite a newer result after close and reope
 });
 
 test('a settings read started before save cannot overwrite the saved settings', async ({ page }) => {
-  await gotoWithStub(page);
-  await expect
-    .poll(async () => (await stubInvocations(page)).filter(({ cmd }) => cmd === 'get_app_settings').length)
-    .toBe(2);
-  await page.evaluate(() => {
-    const w = window as unknown as {
-      __TAURI_INTERNALS__: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
-      __settingsReadResolvers: Array<(value: unknown) => void>;
-    };
-    const original = w.__TAURI_INTERNALS__.invoke;
-    w.__settingsReadResolvers = [];
-    w.__TAURI_INTERNALS__.invoke = (cmd, args) => {
-      if (cmd === 'get_app_settings') {
-        return new Promise((resolve) => w.__settingsReadResolvers.push(resolve));
-      }
-      return original(cmd, args);
-    };
-  });
-
-  const gear = page.getByRole('button', { name: 'App settings', exact: true });
-  const dialog = page.getByRole('dialog', { name: 'App settings' });
-  await gear.click();
-  await expect
-    .poll(() =>
-      page.evaluate(() => (window as unknown as { __settingsReadResolvers: unknown[] }).__settingsReadResolvers.length),
-    )
-    .toBe(1);
+  const { gear, dialog } = await openSettingsWithHeldRead(page);
   await dialog.getByLabel('Token', { exact: true }).fill('saved-token');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  const olderSettings = {
-    ...firstLaunch,
-    mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'older-token' },
-  };
-  await page.evaluate((settings) => {
-    (window as unknown as { __settingsReadResolvers: Array<(value: unknown) => void> }).__settingsReadResolvers[0](
-      settings,
-    );
-  }, olderSettings);
+  await resolveHeldSettingsRead(page, 0, staleSettings);
   await expect(page.getByRole('status').filter({ hasText: 'Restart Better Charts' })).toBeVisible();
 
   await gear.click();
@@ -310,17 +291,15 @@ test('a settings read started before save cannot overwrite the saved settings', 
 test('notification dismiss buttons hide independently and saving or reopening restores the notice', async ({
   page,
 }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_app_settings: {
-        ...firstLaunch,
-        mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'demo-token' },
-        firstLaunch: false,
-        restartRequired: true,
-        configurationError: 'Invalid environment configuration. Fix the override and restart.',
-      },
-    },
-  });
+  await gotoWithStub(
+    page,
+    settingsResponse({
+      mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'demo-token' },
+      firstLaunch: false,
+      restartRequired: true,
+      configurationError: 'Invalid environment configuration. Fix the override and restart.',
+    }),
+  );
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -346,9 +325,7 @@ test('notification dismiss buttons hide independently and saving or reopening re
 });
 
 test('notification enters and exits with fade and slide while dismissal waits for the exit', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: { get_app_settings: { ...firstLaunch, firstLaunch: false, restartRequired: true } },
-  });
+  await gotoWithStub(page, settingsResponse({ firstLaunch: false, restartRequired: true }));
   const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
   await expect(notice).toHaveCSS('animation-name', 'notification-in');
   await expect(notice).toHaveCSS('animation-duration', '0.18s');
@@ -401,10 +378,7 @@ test('opening Settings lets an existing notification finish its dismissal', asyn
   });
   const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
   await expect(notice).toBeVisible();
-  await page.evaluate(() => {
-    document.querySelector<HTMLButtonElement>('[aria-label="Dismiss settings saved notification"]')!.click();
-    document.querySelector<HTMLButtonElement>('[aria-label="App settings"]')!.click();
-  });
+  await dismissRestartNoticeThenOpenSettings(page);
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await expect(dialog).toBeVisible();
   await expect(notice).toHaveClass(/is-closing/);
@@ -415,22 +389,17 @@ test('opening Settings lets an existing notification finish its dismissal', asyn
 });
 
 test('saving during a notification exit prevents the old dismissal from hiding the new reminder', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_app_settings: {
-        ...firstLaunch,
-        mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'demo-token' },
-        firstLaunch: false,
-        restartRequired: true,
-      },
-    },
-  });
+  await gotoWithStub(
+    page,
+    settingsResponse({
+      mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'demo-token' },
+      firstLaunch: false,
+      restartRequired: true,
+    }),
+  );
   const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
   await expect(notice).toBeVisible();
-  await page.evaluate(() => {
-    document.querySelector<HTMLButtonElement>('[aria-label="Dismiss settings saved notification"]')!.click();
-    document.querySelector<HTMLButtonElement>('[aria-label="App settings"]')!.click();
-  });
+  await dismissRestartNoticeThenOpenSettings(page);
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   // Submit before the old notification's 180ms exit has finished.
   await dialog
@@ -648,4 +617,34 @@ test('settings respects reduced motion and repeated close/reopen stays usable', 
     await expect(dialog).toBeHidden();
     await expect(gear).toBeFocused();
   }
+});
+
+test('settings and the setup guide close on their backdrop animationend, not on an inner panel animationend', async ({
+  page,
+}) => {
+  await gotoWithStub(page);
+  // Stretch the exit animations so the test, not the clock, decides when they end.
+  await page.addStyleTag({
+    content: '.is-closing, .is-closing * { animation-duration: 3600s !important; animation-delay: 0s !important; }',
+  });
+  await page.getByRole('button', { name: 'App settings', exact: true }).click();
+  const settingsBackdrop = page.locator('.settings-backdrop');
+  await expect(settingsBackdrop).toBeVisible();
+
+  await settingsBackdrop.getByRole('button', { name: 'How to set up the bridge connection' }).click();
+  const guideBackdrop = page.locator('.setup-guide-backdrop');
+  await expect(guideBackdrop).toBeVisible();
+  await guideBackdrop.getByRole('button', { name: 'Close setup guide' }).click();
+  await expect(guideBackdrop).toHaveClass(/is-closing/);
+  await guideBackdrop.locator('.setup-guide').dispatchEvent('animationend');
+  await expect(guideBackdrop).toBeVisible();
+  await guideBackdrop.dispatchEvent('animationend');
+  await expect(guideBackdrop).toBeHidden();
+
+  await settingsBackdrop.getByRole('button', { name: 'Close settings' }).click();
+  await expect(settingsBackdrop).toHaveClass(/is-closing/);
+  await settingsBackdrop.locator('.settings-dialog').dispatchEvent('animationend');
+  await expect(settingsBackdrop).toBeVisible();
+  await settingsBackdrop.dispatchEvent('animationend');
+  await expect(settingsBackdrop).toBeHidden();
 });
