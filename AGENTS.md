@@ -37,8 +37,9 @@ handler.
 1. Current scope and feature state: `docs/CURRENT_STATE.md`.
 2. Intended protocol format and semantics: `docs/protocol/bridge-v1.md`.
    Shared configuration both languages read at compile time — currently the
-   timeframes in `config/timeframes.json` and the transfer limits in
-   `config/bridge.json` — is contract, not a copy.
+   timeframes in `config/timeframes.json`, the transfer limits in
+   `config/bridge.json`, and the required MQL5 component versions in
+   `config/mq5-versions.json` — is contract, not a copy.
 3. Current runtime behavior: production code and regression tests.
 4. Other architecture and performance notes provide supporting context; check
    their dates and scope before treating them as descriptions of current

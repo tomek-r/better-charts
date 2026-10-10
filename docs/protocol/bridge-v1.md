@@ -54,7 +54,7 @@ token is required outside development builds.
 {
   "token": "example-token", "terminal_id": "installation-instance-id", "terminal_build": 5000,
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
-  "expert_version": "1.002", "trading_enabled": false,
+  "expert_version": "1.003", "tick_reader_version": "1.000", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 65535},
   "tick_price_counts": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
@@ -81,13 +81,23 @@ the server's permission; the app's local Settings permission is an additional
 startup restriction, optionally overridden with `MT5_BRIDGE_TRADING_ENABLED`.
 Neither flag submits a command or bypasses execution gates.
 
-The app requires an exact EA `expert_version` match (`1.002` for this build).
-The expected version lives in `config/bridge.json`; a regression guard checks
-that the EA's `BRIDGE_EXPERT_VERSION` matches it. The EA uses that same macro
+The app requires an exact EA `expert_version` match (`1.003` for this build)
+and an exact `tick_reader_version` match (`1.000`), the version of the
+`BetterChartsTickHistoryReader` indicator. Both expected versions live in
+`config/mq5-versions.json`; regression guards check that the EA's
+`BRIDGE_EXPERT_VERSION` and the indicator's `BRIDGE_TICK_READER_VERSION` match
+it. The EA uses that same macro
 for its MT5 display version (`#property version`) and the handshake. Versions use
 MT5's two-part numeric format (for example, `1.001`); this is independent of the
 desktop app version. The version is checked before the full handshake schema so an older EA missing new fields
 still reports the required and installed versions, with update instructions.
+The EA is checked first, then the tick reader. `tick_reader_version` is a
+string or `null`: before each connect the EA runs a bounded (3 s), nonblocking
+probe of the reader through the tick-page result file and reports `null` when
+the reader is not installed, predates versioning, returns a malformed page, or
+does not answer in time. A `null`, missing, malformed or different value is
+rejected with `UNSUPPORTED_VERSION` and a user-facing message asking to install
+or update the indicator and reattach the EA; invalid values are never echoed.
 Missing or malformed versions are rejected without echoing arbitrary values.
 Other malformed handshakes include recompile/reattach instructions.
 
@@ -811,6 +821,12 @@ For an incomplete raw page, retain only ticks before its final timestamp and
 request that final millisecond again. Do not append both copies of that
 millisecond. If no complete prefix exists, split the range. A 1 ms range that
 still exceeds capacity remains an incomplete fragment; never sample it.
+
+The reader writes each result file as little-endian binary: `int32` magic
+`0x54435032`, a 16-byte NUL-padded ASCII version (`BRIDGE_TICK_READER_VERSION`),
+`int32` error, `int32` count, then `count` `MqlTick` records (28-byte header).
+The earlier magic `0x54435031` (no version field) is an outdated reader and the
+EA rejects it fail-closed.
 
 The hidden `BetterChartsTickHistoryReader` performs synchronized reads, and
 the EA chunks serialization so heartbeats remain responsive. A failed reader

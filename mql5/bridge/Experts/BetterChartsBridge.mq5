@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.002"
+#define BRIDGE_EXPERT_VERSION "1.003"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -31,6 +31,18 @@ input uint InpBridgeMaxTicksPerPage = 65535;
 #define BRIDGE_CONNECT_TIMEOUT  500
 #define BRIDGE_HEARTBEAT_MS     2000
 #define BRIDGE_HANDSHAKE_TIMEOUT_MS 3000
+// Tick reader result files: page magic, then a fixed 16-byte NUL-padded ASCII
+// version, then int error, int count and the ticks. Magic 0x54435031 was the
+// unversioned layout and is rejected as an outdated reader.
+#define BRIDGE_READER_MAGIC         0x54435032
+#define BRIDGE_READER_MAGIC_LEGACY  0x54435031
+#define BRIDGE_READER_VERSION_BYTES 16
+#define BRIDGE_READER_HEADER_BYTES  28
+// The probe resolves on the first timer turns after iCustom initializes the
+// reader, so a healthy reader answers within milliseconds. 3 s tolerates a
+// slow terminal without delaying the connect noticeably; on expiry the hello
+// carries a null version and the app reports the reader as missing.
+#define BRIDGE_READER_PROBE_TIMEOUT_MS 3000
 #define BRIDGE_IDLE_TIMEOUT_MS  6000
 
 enum BridgeState { BRIDGE_DISCONNECTED=0, BRIDGE_CONNECTING=1, BRIDGE_HELLO_SENT=2, BRIDGE_READY=3 };
@@ -69,6 +81,12 @@ uint g_tick_rejected=0;
 double g_tick_min_quote=0,g_tick_max_quote=0;
 ulong g_tick_reader_ready_ms=0;
 ulong g_trade_sequence=0;
+// One-shot reader version probe run before each connect. Empty = unknown.
+int g_probe_reader=INVALID_HANDLE;
+string g_probe_file="";
+ulong g_probe_started_ms=0;
+bool g_probe_active=false,g_probe_done=false;
+string g_reader_version="";
 string g_session_id="";
 bool g_history_ready=false;
 MqlRates g_last_bar;
@@ -451,7 +469,7 @@ bool SendHello()
    const string broker_server=JsonEscape(AccountInfoString(ACCOUNT_SERVER));
    g_identity_login=account_login;
    g_identity_server=AccountInfoString(ACCOUNT_SERVER);
-   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_price_counts\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,SupportedTimeframesJson(),(TradingEnabled() ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
+   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_reader_version\":%s,\"tick_price_counts\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,(g_reader_version=="" ? "null" : "\""+g_reader_version+"\""),SupportedTimeframesJson(),(TradingEnabled() ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
    return SendFrame(hello);
   }
 
@@ -1400,6 +1418,97 @@ bool StartTickReaderAttempt()
    return true;
   }
 
+void ReleaseReaderProbe()
+  {
+   if(g_probe_reader!=INVALID_HANDLE) IndicatorRelease(g_probe_reader);
+   g_probe_reader=INVALID_HANDLE;
+   if(g_probe_file!="")
+     {
+      FileDelete(g_probe_file);
+      FileDelete(g_probe_file+".tmp");
+     }
+   g_probe_file="";
+   g_probe_active=false;
+  }
+
+// Accepts only "<digits>.<digits>" (the MT5 #property version format).
+bool ValidReaderVersion(const string version)
+  {
+   const int length=StringLen(version);
+   if(length<3 || length>=BRIDGE_READER_VERSION_BYTES) return false;
+   int dot=-1;
+   for(int i=0;i<length;i++)
+     {
+      const ushort ch=StringGetCharacter(version,i);
+      if(ch=='.')
+        {
+         if(dot>=0 || i==0 || i==length-1) return false;
+         dot=i;
+        }
+      else if(ch<'0' || ch>'9') return false;
+     }
+   return dot>0;
+  }
+
+// Parses the probe page header. Returns false for anything but a current
+// versioned page, so an unversioned or malformed reader reports a null version.
+bool ParseReaderVersion(const int file,string &version)
+  {
+   version="";
+   if(FileSize(file)<BRIDGE_READER_HEADER_BYTES) return false;
+   if(FileReadInteger(file,INT_VALUE)!=BRIDGE_READER_MAGIC) return false;
+   uchar raw[BRIDGE_READER_VERSION_BYTES];
+   if(FileReadArray(file,raw,0,BRIDGE_READER_VERSION_BYTES)!=(uint)BRIDGE_READER_VERSION_BYTES) return false;
+   string parsed="";
+   int end=0;
+   while(end<BRIDGE_READER_VERSION_BYTES && raw[end]!=0)
+     {
+      parsed+=CharToString(raw[end]);
+      end++;
+     }
+   for(int i=end;i<BRIDGE_READER_VERSION_BYTES;i++)
+      if(raw[i]!=0) return false;
+   if(!ValidReaderVersion(parsed)) return false;
+   version=parsed;
+   return true;
+  }
+
+void FinishReaderProbe(const string version)
+  {
+   g_reader_version=version;
+   ReleaseReaderProbe();
+   g_probe_done=true;
+   PrintFormat("BetterChartsBridge tick reader version: %s",(version=="" ? "unavailable" : version));
+  }
+
+// Nonblocking: each call does a bounded amount of work and returns false while
+// the probe is pending, so the timer keeps running. Returns true when settled.
+bool RunReaderProbe()
+  {
+   if(g_probe_done) return true;
+   const ulong now=GetTickCount64();
+   if(!g_probe_active)
+     {
+      g_probe_file=StringFormat("TradeCanvasTicks\\probe-%I64d-%I64u.bin",ChartID(),now);
+      FileDelete(g_probe_file);
+      FileDelete(g_probe_file+".tmp");
+      g_probe_started_ms=now;
+      g_probe_active=true;
+      g_probe_reader=iCustom(_Symbol,PERIOD_M1,"BetterChartsTickHistoryReader",(long)TimeCurrent()*1000,(uint)2,g_probe_file);
+      if(g_probe_reader==INVALID_HANDLE) { FinishReaderProbe(""); return true; }
+      return false;
+     }
+   if(now-g_probe_started_ms>=BRIDGE_READER_PROBE_TIMEOUT_MS) { FinishReaderProbe(""); return true; }
+   if(!FileIsExist(g_probe_file)) return false;
+   const int file=FileOpen(g_probe_file,FILE_READ|FILE_BIN);
+   if(file==INVALID_HANDLE) return false;
+   string version;
+   const bool ok=ParseReaderVersion(file,version);
+   FileClose(file);
+   FinishReaderProbe(ok ? version : "");
+   return true;
+  }
+
 bool QueueTickHistory(const string request_id,const string symbol,const long from_ms,const long to_ms,const long max_ticks,const bool price_counts=false)
   {
    if((price_counts && !g_price_counts_enabled) || !EnsureSymbol(symbol) || from_ms<0 || to_ms<=from_ms || max_ticks<1 || max_ticks>(long)g_max_ticks_per_page)
@@ -1588,10 +1697,15 @@ void PollTickHistory()
       const int file=FileOpen(g_tick_file,FILE_READ|FILE_BIN);
       if(file==INVALID_HANDLE) return;
       const int magic=FileReadInteger(file,INT_VALUE);
-      const int error=FileReadInteger(file,INT_VALUE);
-      const int copied=FileReadInteger(file,INT_VALUE);
-      bool valid=(magic==0x54435031 && error==0 && copied>=0 && copied<=g_tick_max+1 &&
-                  FileSize(file)==12+(ulong)copied*sizeof(MqlTick));
+      uchar reader_version[BRIDGE_READER_VERSION_BYTES];
+      // The connect-time probe validated the version; the page parser only
+      // skips those bytes and fails closed on any other magic.
+      const bool versioned=(magic==BRIDGE_READER_MAGIC &&
+                            FileReadArray(file,reader_version,0,BRIDGE_READER_VERSION_BYTES)==(uint)BRIDGE_READER_VERSION_BYTES);
+      const int error=(versioned ? FileReadInteger(file,INT_VALUE) : -1);
+      const int copied=(versioned ? FileReadInteger(file,INT_VALUE) : -1);
+      bool valid=(versioned && error==0 && copied>=0 && copied<=g_tick_max+1 &&
+                  FileSize(file)==BRIDGE_READER_HEADER_BYTES+(ulong)copied*sizeof(MqlTick));
       if(valid && copied>0)
         {
          ArrayResize(g_tick_page,copied);
@@ -1599,7 +1713,8 @@ void PollTickHistory()
         }
       FileClose(file);
       ReleaseTickReader();
-      if(magic==0x54435031 && copied==0 && (error==4401 || error==4403)) return;
+      if(magic==BRIDGE_READER_MAGIC_LEGACY) { FailTickHistory("tick history reader is outdated; update BetterChartsTickHistoryReader"); return; }
+      if(versioned && copied==0 && (error==4401 || error==4403)) return;
       if(!valid) { FailTickHistory("tick history reader failed"); return; }
       for(int i=0;i<copied;i++)
         {
@@ -2639,6 +2754,8 @@ void TryConnect()
   {
    const ulong now=GetTickCount64();
    if(now<g_next_connect_ms) return;
+   // The reader version goes into hello; settle the probe first, without blocking.
+   if(!RunReaderProbe()) return;
    g_state=BRIDGE_CONNECTING;
    ResetLastError();
    g_socket=SocketCreate(SOCKET_DEFAULT);
@@ -2673,7 +2790,10 @@ void TryConnect()
    g_last_rx_ms=now;
    g_last_heartbeat_ms=now;
    g_warned_oversize=false;
-   if(!SendHello()) { DisconnectAndRetry("hello send failed"); return; }
+   const bool hello_sent=SendHello();
+   // Probe again on the next connect: the reader may be updated meanwhile.
+   g_probe_done=false;
+   if(!hello_sent) { DisconnectAndRetry("hello send failed"); return; }
    g_state=BRIDGE_HELLO_SENT;
    Print("BetterChartsBridge connected; awaiting handshake");
   }
@@ -2739,6 +2859,7 @@ int OnInit()
 void OnDeinit(const int reason)
   {
    EventKillTimer();
+   ReleaseReaderProbe();
    CloseConnection();
    PrintFormat("BetterChartsBridge stopped (reason=%d)",reason);
   }

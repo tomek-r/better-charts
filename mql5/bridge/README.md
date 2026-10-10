@@ -27,9 +27,17 @@ submit/modify/close/cancel can execute trades. Commands are session-bound,
 journaled and sequential, with no automatic retries. See the
 [protocol contract](../../docs/protocol/bridge-v1.md).
 
-EA version `1.002` includes account-currency TP/SL amounts in live portfolio
-snapshots, calculated with read-only `OrderCalcProfit` at actual entry and volume.
+EA version `1.003` includes account-currency TP/SL amounts in live portfolio
+snapshots, calculated with read-only `OrderCalcProfit` at actual entry and volume,
+and reports the installed tick reader version in the handshake.
 Recompile and reattach the EA after updating both the app and bridge.
+
+The EA (`BetterChartsBridge`) and the indicator (`BetterChartsTickHistoryReader`,
+version `1.000`) are versioned independently; the app requires the exact
+versions listed in `config/mq5-versions.json` and refuses to connect otherwise.
+Compile both from `MQL5/Experts` and `MQL5/Indicators`, then reattach the EA.
+Before each connect the EA briefly probes the reader (up to 3 s); a missing or
+outdated indicator is reported in the app.
 
 The legacy EA journal filename `TradeCanvasBridge.commands.log` is retained
 for recovery compatibility. Preserve it when upgrading and replace the old EA

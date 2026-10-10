@@ -12,6 +12,18 @@ use trading_core::protocol::{
     MessageType, ReconcileRequest, SymbolInfoRequest, TransferLimits, PROTOCOL_VERSION,
 };
 
+/// A component version string from `hello`, or `None` when absent, not a
+/// string, or not `<digits>.<digits>[.<digits>]` within 32 bytes.
+fn reported_component_version(value: Option<&serde_json::Value>) -> Option<&str> {
+    value.and_then(|value| value.as_str()).filter(|value| {
+        value.len() <= 32
+            && matches!(value.split('.').count(), 2 | 3)
+            && value
+                .split('.')
+                .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+    })
+}
+
 pub(crate) fn configured_transfer_limits(
     frame_bytes: Option<&str>,
 ) -> Result<TransferLimits, &'static str> {
@@ -74,21 +86,32 @@ pub(crate) async fn run_handshake(
         return None;
     }
     let expected_version = trading_core::protocol::expert_adviser_version();
-    let reported_version = hello
-        .payload
-        .get("expert_version")
-        .and_then(|value| value.as_str())
-        .filter(|value| {
-            value.len() <= 32
-                && matches!(value.split('.').count(), 2 | 3)
-                && value
-                    .split('.')
-                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
-        });
+    let reported_version = reported_component_version(hello.payload.get("expert_version"));
     if reported_version != Some(expected_version) {
         let message = match reported_version {
             Some(version) => format!("App requires MT5 bridge version {expected_version}, but installed bridge version is {version}. Update and reattach BetterChartsBridge in MT5."),
             None => format!("App requires MT5 bridge version {expected_version}, but the bridge did not report a valid version. Update and reattach BetterChartsBridge in MT5."),
+        };
+        send_error(
+            stream,
+            "rust-error".into(),
+            None,
+            ErrorCode::UnsupportedVersion,
+            &message,
+        )
+        .await;
+        protocol_error(events, state, message);
+        return None;
+    }
+    // Same reasoning as the EA check: validate before the schema parse, so an
+    // outdated or missing reader gets a clear message. Invalid values are
+    // never echoed back.
+    let expected_reader = trading_core::protocol::tick_reader_version();
+    let reported_reader = reported_component_version(hello.payload.get("tick_reader_version"));
+    if reported_reader != Some(expected_reader) {
+        let message = match reported_reader {
+            Some(version) => format!("App requires MT5 tick reader version {expected_reader}, but installed tick reader version is {version}. Update BetterChartsTickHistoryReader in MQL5/Indicators, then reattach BetterChartsBridge in MT5."),
+            None => format!("App requires MT5 tick reader version {expected_reader}, but the tick reader did not report a valid version. Install or update BetterChartsTickHistoryReader in MQL5/Indicators, then reattach BetterChartsBridge in MT5."),
         };
         send_error(
             stream,

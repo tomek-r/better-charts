@@ -9,6 +9,7 @@ import struct
 import time
 
 BRIDGE_CONFIG = json.loads((Path(__file__).resolve().parent.parent / "config/bridge.json").read_text())
+MQ5_VERSIONS = json.loads((Path(__file__).resolve().parent.parent / "config/mq5-versions.json").read_text())
 TIMEFRAMES = json.loads((Path(__file__).resolve().parent.parent / "config/timeframes.json").read_text())
 SUPPORTED_TIMEFRAMES = [entry["code"] for entry in TIMEFRAMES["timeframes"]]
 
@@ -409,7 +410,8 @@ def main() -> int:
         send_frame(conn, envelope("hello", "ea-test-1", None, {
             "token": token, "terminal_id": "mock-terminal", "terminal_build": 5000,
             "account_login": "12345678", "broker_server": "mock", "chart_symbol": "TEST.INIT",
-            "expert_version": BRIDGE_CONFIG["expertAdviserVersion"], "trading_enabled": False,
+            "expert_version": MQ5_VERSIONS["expertAdviserVersion"],
+            "tick_reader_version": MQ5_VERSIONS["tickReaderVersion"], "trading_enabled": False,
             "supported_timeframes": SUPPORTED_TIMEFRAMES,
             "transfer_limits": TRANSFER_LIMITS,
             "tick_price_counts": True,
