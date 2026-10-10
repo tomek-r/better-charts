@@ -6,6 +6,7 @@ node_modules/
 dist/
 .vite/
 .pnpm-store/
+bun.lock
 
 # Playwright artifacts
 apps/desktop/test-results/
@@ -47,6 +48,7 @@ settings.dat
 .pi/
 .agents/
 .codex/
+.claude/
 skills-lock.json
 
 # Local execution journals and startup configuration

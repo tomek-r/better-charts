@@ -35,5 +35,8 @@
       "esbuild"
     ]
   },
-  "license": "MIT"
+  "license": "MIT",
+  "workspaces": [
+    "apps/*"
+  ]
 }
