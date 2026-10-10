@@ -1,17 +1,17 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
 import { checker } from 'vite-plugin-checker';
 import pkg from './package.json';
 
 export default defineConfig({
   plugins: [
-    react({
-      // React Compiler: auto-memoise components and hooks so a re-render can
-      // skip a subtree whose inputs are unchanged. React 19 needs no runtime
-      // shim (the compiler uses the built-in memo cache). The bundle grows by
-      // ~35 kB raw, which is a disk cost here, not a network one.
-      babel: { plugins: ['babel-plugin-react-compiler'] },
-    }),
+    react(),
+    // React Compiler: auto-memoise components and hooks so a re-render can
+    // skip a subtree whose inputs are unchanged. React 19 needs no runtime
+    // shim (the compiler uses the built-in memo cache). The bundle grows by
+    // ~35 kB raw, which is a disk cost here, not a network one.
+    babel({ presets: [reactCompilerPreset()] }),
     // Fail fast on code changes: TS + ESLint diagnostics as a dev overlay.
     // enableBuild is off because `pnpm build` already runs `tsc --noEmit`
     // and `pnpm check` gates ESLint/Prettier.

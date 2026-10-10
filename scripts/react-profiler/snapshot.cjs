@@ -86,12 +86,12 @@ function instrument(desktop, repo, tempRoot, mode = "development") {
     fs.readFileSync(file("package.json"), "utf8"),
   ).version;
   const config = `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
 export default defineConfig({
   cacheDir: ${JSON.stringify(file(".profile-cache"))},
-  esbuild: { keepNames: true },
-  build: { sourcemap: true },
-  plugins: [react({ babel: { plugins: ['babel-plugin-react-compiler'] } })],
+  build: { sourcemap: true, rolldownOptions: { output: { keepNames: true } } },
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
   envPrefix: ['VITE_', 'TAURI_'],
   define: { __APP_VERSION__: ${JSON.stringify(JSON.stringify(version))} },
   server: { host: '127.0.0.1', strictPort: true, fs: { allow: ${JSON.stringify([fs.realpathSync(tempRoot), repo])} } }${
