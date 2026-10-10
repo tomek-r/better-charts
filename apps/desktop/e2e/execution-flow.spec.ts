@@ -62,6 +62,7 @@ interface StagedGeom {
   staged: boolean;
   container: { left: number; top: number; width: number; height: number };
   entryLineY: number | null;
+  labels: Array<{ id: string; level: 'entry' | 'sl' | 'tp'; lineY: number }>;
   entryCancel: { x: number; y: number; r: number } | null;
   slCancel: { x: number; y: number; r: number } | null;
   tpCancel: { x: number; y: number; r: number } | null;
@@ -837,8 +838,14 @@ test('canvas gesture: dragging the staged SL handle flips the SL toggle on and w
   const handle = (await stagedGeom(page))!.slHandle!;
   const start = { x: handle.x + handle.w / 2, y: handle.y + handle.h / 2 };
   const dropY = start.y + 60;
+  // A grab off the handle's bound line (the floating handle's tip sits a couple
+  // of px off its centre) keeps that offset for the whole drag, so the written
+  // price follows the line position, not the raw cursor.
+  const slLabel = (await stagedGeom(page))!.labels.find((row) => row.level === 'sl');
+  expect(slLabel).toBeDefined();
+  const grabOffset = Math.abs(handle.y + handle.h / 2 - slLabel!.lineY) > 1 ? start.y - slLabel!.lineY : 0;
   // Exact ticket value the drop must produce (same clamp/transform/round chain).
-  const expected = await stagedExpectedPrice(page, dropY);
+  const expected = await stagedExpectedPrice(page, dropY - grabOffset);
   expect(expected).toBeTruthy();
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
@@ -2134,7 +2141,15 @@ for (const mode of ['equity', 'money'] as const) {
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
     await page.mouse.move(start.x, start.y + 24, { steps: 8 });
-    await expect.poll(async () => (await latest())?.args.stopLoss).not.toBe('1.0840');
+    // The debounced request can fire mid-drag under load; a reply echoing that
+    // stale draftVersion is (correctly) ignored. Reply only to the request that
+    // carries the final dragged stop, i.e. the one for the current draft.
+    await expect
+      .poll(async () => {
+        const stop = await page.getByLabel('Stop loss price').inputValue();
+        return stop !== '1.0840' && (await latest())?.args.stopLoss === stop;
+      })
+      .toBe(true);
     const moved = await latest();
     // A fresh broker result may refine volume while the display is held.
     await pushEvent(page, 'risk-preview', reply(moved.args, '0.40', '80'));
