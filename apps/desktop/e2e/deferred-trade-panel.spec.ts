@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { gotoWithStub, pushEvent, stubInvocations } from './tauriStub';
+import { gotoWithStub, pushEvent, stubInvocations } from './helpers/tauriStub';
 
 test('closed panel defers ticket UI while chart updates stay active and drafts survive toggles', async ({ page }) => {
   const { pageErrors, consoleErrors } = await gotoWithStub(page);

@@ -1,4 +1,4 @@
-import type { DevTestApi } from '../src/features/chart/engine/devTestApi';
+import type { DevTestApi } from '../../src/features/chart/engine/devTestApi';
 
 /**
  * The DEV-only chart hook, declared once from its own source of truth.

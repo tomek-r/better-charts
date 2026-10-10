@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { openTradePanel } from './panel';
-import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './tauriStub';
+import { openTradePanel } from './helpers/panel';
+import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 
 const INTERVAL = 300_000;
@@ -70,6 +70,21 @@ async function respond(page: Page, requestIndex = 0, complete = true) {
       { low: '1.0850', high: '1.0855', total: '2', bid: '1', ask: '1' },
     ],
   });
+}
+
+/** Loads the app, draws the default FRVP range and waits until its profile request left the app. */
+async function requestProfile(page: Page) {
+  await gotoWithStub(page);
+  await ready(page);
+  await select(page);
+  await expect.poll(async () => (await requests(page)).length).toBe(1);
+}
+
+/** As `requestProfile`, then answers it so the profile is committed. */
+async function commitProfile(page: Page) {
+  await requestProfile(page);
+  await respond(page);
+  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
 }
 
 for (const higher of [
@@ -191,12 +206,7 @@ test('switching tools mid-gesture cancels the pending profile selection', async 
 });
 
 test('FRVP Escape cancels a new preview while preserving the previous committed profile', async ({ page }) => {
-  await gotoWithStub(page);
-  await ready(page);
-  await select(page);
-  await expect.poll(async () => (await requests(page)).length).toBe(1);
-  await respond(page);
-  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+  await commitProfile(page);
   const committed = await profileState(page);
   await page.getByRole('button', { name: 'Fixed range volume profile', exact: true }).click();
   const first = await position(page, 0);
@@ -208,12 +218,7 @@ test('FRVP Escape cancels a new preview while preserving the previous committed 
 });
 
 test('FRVP boundary click without movement keeps the committed profile visible', async ({ page }) => {
-  await gotoWithStub(page);
-  await ready(page);
-  await select(page);
-  await expect.poll(async () => (await requests(page)).length).toBe(1);
-  await respond(page);
-  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+  await commitProfile(page);
 
   const edge = (await boundaries(page))!;
   const host = (await page.locator('.chart-host').boundingBox())!;
@@ -229,12 +234,7 @@ test('FRVP boundary click without movement keeps the committed profile visible',
 
 for (const boundary of ['fromX', 'toX'] as const) {
   test(`FRVP ${boundary} drag requests only once after release and rejects the old result`, async ({ page }) => {
-    await gotoWithStub(page);
-    await ready(page);
-    await select(page);
-    await expect.poll(async () => (await requests(page)).length).toBe(1);
-    await respond(page);
-    await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+    await commitProfile(page);
     const before = (await boundaries(page))!;
     const host = (await page.locator('.chart-host').boundingBox())!;
     const target = await position(page, boundary === 'fromX' ? 1 : 8);
@@ -256,12 +256,7 @@ for (const boundary of ['fromX', 'toX'] as const) {
 test('FRVP cancelled drag restores range and result without requesting; Delete cancels the profile', async ({
   page,
 }) => {
-  await gotoWithStub(page);
-  await ready(page);
-  await select(page);
-  await expect.poll(async () => (await requests(page)).length).toBe(1);
-  await respond(page);
-  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+  await commitProfile(page);
   const before = await profileState(page);
   const edge = (await boundaries(page))!;
   const host = (await page.locator('.chart-host').boundingBox())!;
@@ -392,10 +387,7 @@ test('history timeout releases loading after ten seconds without retrying automa
 test('editing ticket fields keeps the profile, while chart Backspace cancels an outstanding result', async ({
   page,
 }) => {
-  await gotoWithStub(page);
-  await ready(page);
-  await select(page);
-  await expect.poll(async () => (await requests(page)).length).toBe(1);
+  await requestProfile(page);
   const committed = (await profileState(page)).range;
   await openTradePanel(page);
   const input = page.getByLabel('Units', { exact: true });
@@ -490,10 +482,7 @@ test('drawer resize preserves a panned logical right edge and candle distance fr
 
 for (const event of ['tick-profile-error', 'tick-profile-cancelled']) {
   test(`${event} invalidates the outstanding result while retaining its committed selection`, async ({ page }) => {
-    await gotoWithStub(page);
-    await ready(page);
-    await select(page);
-    await expect.poll(async () => (await requests(page)).length).toBe(1);
+    await requestProfile(page);
     const request = (await requests(page))[0];
     const range = (await profileState(page)).range;
     await pushEvent(page, event, {
@@ -509,10 +498,7 @@ for (const event of ['tick-profile-error', 'tick-profile-cancelled']) {
 }
 
 test('an incomplete-history profile result can still render its available bins', async ({ page }) => {
-  await gotoWithStub(page);
-  await ready(page);
-  await select(page);
-  await expect.poll(async () => (await requests(page)).length).toBe(1);
+  await requestProfile(page);
   await respond(page, 0, false);
   await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
 });
@@ -545,10 +531,7 @@ test('the first realtime bar can seed an accepted empty history', async ({ page 
 
 for (const boundary of ['fromX', 'toX'] as const) {
   test(`FRVP crossing ${boundary} clamps to one real candle and commits one request`, async ({ page }) => {
-    await gotoWithStub(page);
-    await ready(page);
-    await select(page);
-    await expect.poll(async () => (await requests(page)).length).toBe(1);
+    await requestProfile(page);
     const edge = (await boundaries(page))!;
     const host = (await page.locator('.chart-host').boundingBox())!;
     const target = await position(page, boundary === 'fromX' ? 9 : 0);

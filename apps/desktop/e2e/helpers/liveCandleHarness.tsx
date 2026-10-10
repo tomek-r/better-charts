@@ -1,14 +1,14 @@
 import { useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AppLifecycle } from '../src/AppLifecycle';
-import { BridgeSessionProvider, useBridgeSessionRuntime } from '../src/features/bridge/BridgeSessionProvider';
-import { ChartWorkspaceProvider, useChartWorkspaceRuntime } from '../src/features/chart/ChartWorkspaceProvider';
-import { ChartCanvas } from '../src/features/chart/ChartCanvas';
-import { ExecutionProvider } from '../src/features/execution/ExecutionProvider';
-import { OrderTicketProvider } from '../src/features/order-ticket/OrderTicketProvider';
-import { useOrderTicketActions, useOrderTicketStores } from '../src/features/order-ticket/state/orderTicketContext';
-import { ErrorNotificationsProvider } from '../src/shared/ui/ErrorNotifications';
-import type { Candle } from '../src/shared/bridge/types';
+import { AppLifecycle } from '../../src/AppLifecycle';
+import { BridgeSessionProvider, useBridgeSessionRuntime } from '../../src/features/bridge/BridgeSessionProvider';
+import { ChartWorkspaceProvider, useChartWorkspaceRuntime } from '../../src/features/chart/ChartWorkspaceProvider';
+import { ChartCanvas } from '../../src/features/chart/ChartCanvas';
+import { ExecutionProvider } from '../../src/features/execution/ExecutionProvider';
+import { OrderTicketProvider } from '../../src/features/order-ticket/OrderTicketProvider';
+import { useOrderTicketActions, useOrderTicketStores } from '../../src/features/order-ticket/state/orderTicketContext';
+import { ErrorNotificationsProvider } from '../../src/shared/ui/ErrorNotifications';
+import type { Candle } from '../../src/shared/bridge/types';
 import { useStore } from 'zustand';
 
 function LiveProbe() {

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { gotoWithStub, pushEvent, STUB_NOW } from './tauriStub';
+import { gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
 
 for (const empty of [false, true]) {
   test(`live raw tail preserves history and staged fallback (${empty ? 'empty' : 'loaded'} history)`, async ({
@@ -14,7 +14,7 @@ for (const empty of [false, true]) {
     });
     await page.evaluate(async () => {
       document.getElementById('root')!.style.display = 'none';
-      const path = '/e2e/liveCandleHarness.tsx';
+      const path = '/e2e/helpers/liveCandleHarness.tsx';
       const { mountLiveCandleHarness } = await import(/* @vite-ignore */ path);
       const container = document.createElement('div');
       container.style.height = '600px';

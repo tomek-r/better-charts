@@ -1,29 +1,8 @@
 import { expect, test } from '@playwright/test';
-import type { BrokerSymbol } from '../src/shared/bridge/types';
-import { openTradePanel } from './panel';
-import { gotoWithStub } from './tauriStub';
+import { openTradePanel } from './helpers/panel';
+import { brokerSymbolFixture, gotoWithStub } from './helpers/tauriStub';
 
-const instrument: BrokerSymbol = {
-  symbol: 'EURUSD',
-  description: 'Euro / US Dollar',
-  digits: 5,
-  tickSize: '0.00001',
-  pointSize: '0.00001',
-  contractSize: '100000',
-  tickValueProfit: '1.00000',
-  tickValueLoss: '1.00000',
-  tickValueCurrency: 'USD',
-  volumeMin: '0.01',
-  volumeMax: '100',
-  volumeStep: '0.01',
-  stopsLevel: 10,
-  freezeLevel: 0,
-  fillingMode: 0,
-  orderMode: 0,
-  expirationMode: 0,
-  tradeExecution: 0,
-  tradeMode: 0,
-};
+const instrument = brokerSymbolFixture('EURUSD', 'Euro / US Dollar', { stopsLevel: 10 });
 
 test('exit tick display follows the current pending entry in the same rendered state', async ({ page }) => {
   await gotoWithStub(page, { symbolInfo: instrument });

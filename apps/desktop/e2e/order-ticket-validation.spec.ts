@@ -1,36 +1,23 @@
 import { defaultStopLossPrice } from '../src/features/order-ticket/domain/defaultStopLoss';
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   deriveOrderTicket,
   orderEntryPrice,
   riskRewardRatio,
   stopDistanceGuard,
 } from '../src/features/order-ticket/domain/ticketRules';
-import type { BrokerSymbol, QuoteSnapshot } from '../src/shared/bridge/types';
-import { openTradePanel } from './panel';
-import { gotoWithStub, pushEvent, stubInvocations, wasInvoked } from './tauriStub';
+import type { QuoteSnapshot } from '../src/shared/bridge/types';
+import { fillExitPrice, openTradePanel } from './helpers/panel';
+import { brokerSymbolFixture, gotoWithStub, pushEvent, stubInvocations, wasInvoked } from './helpers/tauriStub';
 
-const instrument: BrokerSymbol = {
-  symbol: 'TEST',
-  description: 'Test instrument',
+const instrument = brokerSymbolFixture('TEST', 'Test instrument', {
   digits: 2,
   tickSize: '0.01',
   pointSize: '0.01',
   contractSize: '1',
   tickValueProfit: '0.01',
   tickValueLoss: '0.01',
-  tickValueCurrency: 'USD',
-  volumeMin: '0.01',
-  volumeMax: '100',
-  volumeStep: '0.01',
-  stopsLevel: 0,
-  freezeLevel: 0,
-  fillingMode: 0,
-  orderMode: 0,
-  expirationMode: 0,
-  tradeExecution: 0,
-  tradeMode: 0,
-};
+});
 
 const quote: QuoteSnapshot = {
   symbol: 'TEST',
@@ -43,22 +30,7 @@ const quote: QuoteSnapshot = {
   flags: 0,
 };
 
-const eurusd: BrokerSymbol = {
-  ...instrument,
-  symbol: 'EURUSD',
-  description: 'Euro / US Dollar',
-  digits: 5,
-  tickSize: '0.00001',
-  pointSize: '0.00001',
-  contractSize: '100000',
-  tickValueProfit: '1.00000',
-  tickValueLoss: '1.00000',
-  tickValueCurrency: 'USD',
-  volumeMin: '0.01',
-  volumeMax: '100',
-  volumeStep: '0.01',
-  stopsLevel: 10,
-};
+const eurusd = brokerSymbolFixture('EURUSD', 'Euro / US Dollar', { stopsLevel: 10 });
 
 async function openTicket(page: Parameters<typeof gotoWithStub>[0]) {
   const collected = await gotoWithStub(page, { symbolInfo: eurusd });
@@ -74,15 +46,26 @@ async function latestInvoke(page: Parameters<typeof stubInvocations>[0], command
   return invokes.filter((invoke) => invoke.cmd === command).at(-1);
 }
 
-async function fillExitPrice(
-  page: Parameters<typeof gotoWithStub>[0],
-  label: 'Take profit' | 'Stop loss',
-  price: string,
-) {
-  await page.getByLabel(`${label} enabled`).check();
-  await page.getByLabel(`Swap ${label} input to price`).click();
-  await page.getByLabel(`${label} price`).fill(price);
+/** Sends the ticket to OrderCheck once enabled and returns the request arguments the stub saw. */
+async function sendOrderCheck(page: Page, ticket: Locator) {
+  const cta = ticket.locator('.ticket-cta');
+  await expect(cta).toBeEnabled();
+  await cta.click();
+  await expect(page.locator('.order-check-result')).toBeVisible();
+  return (await wasInvoked(page, 'request_order_check'))?.args;
 }
+
+/** NAS100 quote with a 0.50 spread, shared by the default-SL scenarios. */
+const nasdaqQuote: QuoteSnapshot = {
+  symbol: 'NAS100',
+  bid: '30431.74',
+  ask: '30432.24',
+  last: '30432',
+  timeMs: 0,
+  volume: 0,
+  volumeReal: '0',
+  flags: 3,
+};
 
 test('pending order TP distances use the executable entry reference', () => {
   const buyLimit = stopDistanceGuard(instrument, 'buy', '98', '', '98.50', quote, 'limit');
@@ -147,11 +130,7 @@ test('Buy Limit accepts a TP between its entry and the live ask and sends the dr
   await page.getByLabel('Order price').fill('1.08000');
   await fillExitPrice(page, 'Take profit', '1.08200');
 
-  const cta = ticket.locator('.ticket-cta');
-  await expect(cta).toBeEnabled();
-  await cta.click();
-  await expect(page.locator('.order-check-result')).toBeVisible();
-  expect((await wasInvoked(page, 'request_order_check'))?.args).toMatchObject({
+  expect(await sendOrderCheck(page, ticket)).toMatchObject({
     side: 'buy',
     orderKind: 'limit',
     entry: '1.08000',
@@ -182,11 +161,7 @@ test('Buy Stop Limit uses its resting price for risk sizing and TP ticks, then c
     .poll(async () => (await latestInvoke(page, 'request_risk_preview'))?.args)
     .toMatchObject({ entry: '1.08000', stopLoss: '1.07800', takeProfit: '1.08200' });
 
-  const cta = ticket.locator('.ticket-cta');
-  await expect(cta).toBeEnabled();
-  await cta.click();
-  await expect(page.locator('.order-check-result')).toBeVisible();
-  expect((await wasInvoked(page, 'request_order_check'))?.args).toMatchObject({
+  expect(await sendOrderCheck(page, ticket)).toMatchObject({
     side: 'buy',
     orderKind: 'stop_limit',
     entry: '1.09000',
@@ -205,11 +180,7 @@ test('Sell Limit accepts the mirrored TP above the live bid', async ({ page }) =
   await page.getByLabel('Order price').fill('1.09000');
   await fillExitPrice(page, 'Take profit', '1.08800');
 
-  const cta = ticket.locator('.ticket-cta');
-  await expect(cta).toBeEnabled();
-  await cta.click();
-  await expect(page.locator('.order-check-result')).toBeVisible();
-  expect((await wasInvoked(page, 'request_order_check'))?.args).toMatchObject({
+  expect(await sendOrderCheck(page, ticket)).toMatchObject({
     side: 'sell',
     orderKind: 'limit',
     entry: '1.09000',
@@ -433,23 +404,10 @@ for (const side of ['buy', 'sell'] as const) {
     expect(side === 'buy' ? stop < 100 : stop > 100).toBe(true);
   });
   test(`${side} default SL respects spread and broker minimum without changing chart range`, () => {
-    const result = defaultStopLossPrice(
-      side === 'buy' ? 30432.24 : 30431.74,
-      side,
-      'market',
-      instrument,
-      {
-        symbol: 'NAS100',
-        bid: '30431.74',
-        ask: '30432.24',
-        last: '30432',
-        timeMs: 0,
-        volume: 0,
-        volumeReal: '0',
-        flags: 3,
-      },
-      { min: 30400, max: 30460 },
-    );
+    const result = defaultStopLossPrice(side === 'buy' ? 30432.24 : 30431.74, side, 'market', instrument, nasdaqQuote, {
+      min: 30400,
+      max: 30460,
+    });
     const stop = Number(result);
     expect(stop).toBeGreaterThan(30400);
     expect(stop).toBeLessThan(30460);
@@ -460,23 +418,7 @@ for (const side of ['buy', 'sell'] as const) {
 
 test('default SL declines when the visible range has no room for the broker minimum', () => {
   expect(
-    defaultStopLossPrice(
-      30432.24,
-      'buy',
-      'market',
-      instrument,
-      {
-        symbol: 'NAS100',
-        bid: '30431.74',
-        ask: '30432.24',
-        last: '30432',
-        timeMs: 0,
-        volume: 0,
-        volumeReal: '0',
-        flags: 3,
-      },
-      { min: 30431.7, max: 30432.5 },
-    ),
+    defaultStopLossPrice(30432.24, 'buy', 'market', instrument, nasdaqQuote, { min: 30431.7, max: 30432.5 }),
   ).toBeUndefined();
 });
 

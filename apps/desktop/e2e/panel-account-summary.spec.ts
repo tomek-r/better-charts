@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { gotoWithStub, pushEvent, stubInvocations } from './tauriStub';
-import { openTradePanel } from './panel';
+import { gotoWithStub, pushEvent, stubInvocations } from './helpers/tauriStub';
+import { openTradePanel } from './helpers/panel';
 
 const account = {
   accountLogin: '50123456',

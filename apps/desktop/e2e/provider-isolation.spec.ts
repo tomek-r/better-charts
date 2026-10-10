@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
-import { gotoWithStub } from './tauriStub';
+import { gotoWithStub } from './helpers/tauriStub';
 
 interface ProbeCounts {
   [name: string]: number;
@@ -14,7 +14,7 @@ async function mountHarness(page: Page) {
     if (appRoot) {
       appRoot.style.display = 'none';
     }
-    const harnessPath = '/e2e/providerIsolationHarness.tsx';
+    const harnessPath = '/e2e/helpers/providerIsolationHarness.tsx';
     const harness = await import(/* @vite-ignore */ harnessPath);
     const container = document.createElement('div');
     container.id = 'provider-isolation-harness';
@@ -23,9 +23,23 @@ async function mountHarness(page: Page) {
   });
   await expect(page.getByTestId('provider-probe-ready')).toBeVisible();
   await expect(page.getByTestId('probe-settings')).toContainText('127.0.0.1:8765');
+  await resetProbeCounts(page);
+}
+
+async function resetProbeCounts(page: Page): Promise<void> {
   await page.evaluate(() =>
     (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
   );
+}
+
+/** Re-arms the action gate, then checks that `button` moves the action consumer to `text` and rerenders it. */
+async function expectActionRerender(page: Page, action: Locator, button: string, text: string): Promise<void> {
+  await page.getByRole('button', { name: 'Prepare action gate' }).click();
+  await expect(action).toHaveText('true|false|buy');
+  await resetProbeCounts(page);
+  await page.getByRole('button', { name: button }).click();
+  await expect(action).toHaveText(text);
+  expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
 }
 
 async function probeCounts(page: Page): Promise<ProbeCounts> {
@@ -54,9 +68,7 @@ test('quote updates rerender market and ticket consumers without waking unrelate
   expect(counts['chart-title'] ?? 0).toBe(0);
   expect(counts['chart-timeframes'] ?? 0).toBe(0);
   expect(counts['chart-canvas'] ?? 0).toBe(0);
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Update quote' }).click();
   await expect(page.getByTestId('probe-market')).toHaveText('1.0852');
   const identicalQuoteCounts = await probeCounts(page);
@@ -66,9 +78,7 @@ test('quote updates rerender market and ticket consumers without waking unrelate
   expect(identicalQuoteCounts['ticket-edit'] ?? 0).toBe(0);
   expect(identicalQuoteCounts['ticket-extra-settings'] ?? 0).toBe(0);
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Move quote' }).click();
   await expect(page.getByTestId('probe-market')).toHaveText('1.08530');
   const changedQuoteCounts = await probeCounts(page);
@@ -120,16 +130,12 @@ test('lifecycle runtime follows status, market and account updates without quote
   await expect(lifecycle).toHaveText('connected|true||||');
   expect((await probeCounts(page))['bridge-lifecycle-runtime']).toBeGreaterThan(0);
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Set test account' }).click();
   await expect(lifecycle).toHaveText('connected|true|||1000.00|');
   expect((await probeCounts(page))['bridge-lifecycle-runtime']).toBeGreaterThan(0);
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Load candle' }).click();
   await expect(lifecycle).toHaveText('connected|true|EURUSD|1.0850|1000.00|');
   expect((await probeCounts(page))['bridge-lifecycle-runtime']).toBeGreaterThan(0);
@@ -150,9 +156,7 @@ test('ticket edits and panel toggles update only their owning consumers', async 
   expect(ticketCounts.header ?? 0).toBe(0);
   expect(ticketCounts['chart-resources'] ?? 0).toBe(0);
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Toggle panel' }).click();
   await expect(page.getByTestId('probe-panel')).toHaveText('true');
   const panelCounts = await probeCounts(page);
@@ -167,9 +171,7 @@ test('candle updates keep quote and unchanged chart-identity consumers idle', as
   await mountHarness(page);
   await page.getByRole('button', { name: 'Load candle' }).click();
   await expect(page.getByTestId('probe-candle-close')).toHaveText('1.0850');
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Update candle' }).click();
   await expect(page.getByTestId('probe-candle-close')).toHaveText('1.0852');
 
@@ -188,9 +190,7 @@ test('irrelevant account fields stay out of ticket views while currency changes 
   await page.getByRole('button', { name: 'Use money sizing' }).click();
   const sizingMode = page.getByRole('button', { name: 'Sizing mode' });
   await expect(sizingMode).toContainText('Risk, USD');
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
 
   await page.getByRole('button', { name: 'Update balance' }).click();
   await expect(page.getByTestId('probe-account')).toHaveText('2000.00');
@@ -199,18 +199,14 @@ test('irrelevant account fields stay out of ticket views while currency changes 
   expect(balanceCounts['ticket-header'] ?? 0).toBe(0);
   expect(balanceCounts['ticket-sizing'] ?? 0).toBe(0);
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Set EUR account' }).click();
   await expect(sizingMode).toContainText('Risk, EUR');
   const currencyCounts = await probeCounts(page);
   expect(currencyCounts['ticket-sizing']).toBeGreaterThan(0);
   expect(currencyCounts['ticket-header'] ?? 0).toBe(0);
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Set real account' }).click();
   await expect(page.getByTestId('probe-ticket-header')).toContainText('REAL · 001234');
   const environmentCounts = await probeCounts(page);
@@ -294,9 +290,7 @@ test('moving quotes keep unchanged sizing, exits and review action consumers idl
   await mountHarness(page);
   await page.getByRole('button', { name: 'Update quote' }).click();
   await expect(page.getByTestId('probe-market')).toHaveText('1.0852');
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Move quote' }).click();
   await expect(page.getByTestId('probe-market')).toHaveText('1.08530');
   const counts = await probeCounts(page);
@@ -313,17 +307,13 @@ test('ticket action updates only when its derived eligibility output changes', a
   await expect(page.getByTestId('probe-ticket-action')).toHaveText('true|false|buy');
   await expect(page.getByRole('button', { name: 'Start creating order' })).toBeEnabled();
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Change action entry' }).click();
   await page.getByRole('button', { name: 'Change action time in force' }).click();
   await expect(page.getByTestId('probe-ticket-action')).toHaveText('true|false|buy');
   expect((await probeCounts(page))['ticket-action'] ?? 0).toBe(0);
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Invalidate action volume' }).click();
   await expect(page.getByTestId('probe-ticket-action')).toHaveText('false|false|buy');
   await expect(page.getByRole('button', { name: 'Start creating order' })).toBeDisabled();
@@ -338,9 +328,7 @@ test('ticket action follows canonical gate inputs and all displayed action field
   await expect(action).toHaveText('true|false|buy');
   await expect(review).toBeEnabled();
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Close action market' }).click();
   await expect(action).toHaveText('true|false|buy');
   await expect(review).toBeEnabled();
@@ -351,27 +339,11 @@ test('ticket action follows canonical gate inputs and all displayed action field
   await expect(review).toBeDisabled();
   expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
 
-  await page.getByRole('button', { name: 'Prepare action gate' }).click();
-  await expect(action).toHaveText('true|false|buy');
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
-  await page.getByRole('button', { name: 'Disconnect action bridge' }).click();
-  await expect(action).toHaveText('false|false|buy');
-  expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
+  await expectActionRerender(page, action, 'Disconnect action bridge', 'false|false|buy');
 
-  await page.getByRole('button', { name: 'Prepare action gate' }).click();
-  await expect(action).toHaveText('true|false|buy');
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
-  await page.getByRole('button', { name: 'Change action side' }).click();
-  await expect(action).toHaveText('true|false|sell');
-  expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
+  await expectActionRerender(page, action, 'Change action side', 'true|false|sell');
 
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Load action check' }).click();
   await expect(action).toHaveText('true|true|sell');
   expect((await probeCounts(page))['ticket-action']).toBeGreaterThan(0);
@@ -382,9 +354,7 @@ test('exits ignore draft-version changes without an RR label and keep enabled RR
   await expect(page.getByRole('button', { name: /Exits/ })).toHaveAttribute('aria-expanded', 'true');
   const rrLabel = page.locator('.ticket-risk-reward');
   await expect(rrLabel).toHaveCount(0);
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
 
   await page.getByRole('button', { name: 'Advance ticket version' }).click();
   await expect(rrLabel).toHaveCount(0);
@@ -392,9 +362,7 @@ test('exits ignore draft-version changes without an RR label and keep enabled RR
 
   await page.getByRole('button', { name: 'Prepare exit preview' }).click();
   await expect(rrLabel).toHaveText('RR 2.00');
-  await page.evaluate(() =>
-    (window as unknown as { __resetProviderProbeCounts: () => void }).__resetProviderProbeCounts(),
-  );
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Advance ticket version' }).click();
   await expect(rrLabel).toHaveText('RR 1.00');
   expect((await probeCounts(page))['ticket-exits']).toBeGreaterThan(0);

@@ -26,9 +26,17 @@ pnpm --filter better-charts exec playwright install webkit
 pnpm --filter better-charts exec playwright test --config playwright.webkit.config.ts
 ```
 
+## Helpers
+
+`helpers/` holds shared non-test code: the Tauri stub (`tauriStub.ts`), page
+objects (`panel.ts`), canvas and overlay utilities (`canvasText.ts`,
+`overlayHarness.ts`), the dev chart hook typings (`chartTest.ts`), and the
+React harnesses that specs load by URL as `/e2e/helpers/*Harness.tsx`. Files
+there are not tests and must not end in `.spec.ts`.
+
 ## Test boundaries
 
-- `tauriStub.ts` installs before app load. Commands have scripted responses,
+- `helpers/tauriStub.ts` installs before app load. Commands have scripted responses,
   invocation logs and deterministic failures; unscripted commands reject.
 - Events use the production TypeScript contracts and listener registry. Stub
   risk values test UI flow, not the Rust risk calculations.

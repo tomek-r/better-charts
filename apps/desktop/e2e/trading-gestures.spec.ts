@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './tauriStub';
+import { brokerSymbolFixture, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import type { PortfolioSnapshot } from '../src/shared/bridge/types';
-import { openTradePanel } from './panel';
+import { observeFillText } from './helpers/canvasText';
+import { fillExitPrice, openTradePanel } from './helpers/panel';
 
 interface TradingGeometry {
   labels: Array<{
@@ -57,27 +58,13 @@ const portfolio: PortfolioSnapshot = {
     },
   ],
 };
-const instrument = {
-  symbol: 'EURUSD',
-  description: 'Euro vs US Dollar',
+const instrument = brokerSymbolFixture('EURUSD', 'Euro vs US Dollar', {
   digits: 4,
   tickSize: '0.0001',
   pointSize: '0.0001',
-  contractSize: '100000',
   tickValueProfit: '10.0000',
   tickValueLoss: '10.0000',
-  tickValueCurrency: 'USD',
-  volumeMin: '0.01',
-  volumeMax: '100',
-  volumeStep: '0.01',
-  stopsLevel: 0,
-  freezeLevel: 0,
-  fillingMode: 0,
-  orderMode: 0,
-  expirationMode: 0,
-  tradeExecution: 0,
-  tradeMode: 0,
-};
+});
 async function geometry(page: Page): Promise<TradingGeometry> {
   return page.evaluate(() => {
     const w = window as unknown as { __stagedWidgetTest: { realTrading(): TradingGeometry } };
@@ -131,24 +118,18 @@ async function drag(page: Page, line: 'slLines' | 'tpLines' | 'orderLines', rele
 
 // Observe the text painted on the actual canvas without exposing chart objects.
 async function recordCanvasText(page: Page) {
-  await page.addInitScript(() => {
+  await observeFillText(page, () => {
     const texts = new Set<string>();
     const prefixes = new WeakMap<CanvasRenderingContext2D, string>();
     const w = window as unknown as { __paintedTradingText: Set<string> };
     w.__paintedTradingText = texts;
-    const fillText = CanvasRenderingContext2D.prototype.fillText;
-    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+    return (context, text) => {
       texts.add(text);
       if (text.endsWith('P&L ')) {
-        prefixes.set(this, text);
-      } else if (prefixes.has(this)) {
-        texts.add(prefixes.get(this) + text);
-        prefixes.delete(this);
-      }
-      if (maxWidth === undefined) {
-        fillText.call(this, text, x, y);
-      } else {
-        fillText.call(this, text, x, y, maxWidth);
+        prefixes.set(context, text);
+      } else if (prefixes.has(context)) {
+        texts.add(prefixes.get(context) + text);
+        prefixes.delete(context);
       }
     };
   });
@@ -174,29 +155,23 @@ test('live position paints broker P&L before symbol metadata is available', asyn
 
 test('live P&L column grows to the widest observed amount and never shrinks', async ({ page }) => {
   await recordCanvasText(page);
-  await page.addInitScript(() => {
+  await observeFillText(page, () => {
     const w = window as unknown as {
       __positionSuffixX: number;
       __positionAmountRightX: number;
       __positionAmountStartX: number;
       __positionAmountWidth: number;
     };
-    const fillText = CanvasRenderingContext2D.prototype.fillText;
-    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+    return (context, text, x) => {
       if (text.endsWith('P&L ')) {
-        w.__positionAmountStartX = x + this.measureText(text).width;
+        w.__positionAmountStartX = x + context.measureText(text).width;
       }
-      if (this.textAlign === 'right' && /^[+-]/.test(text)) {
+      if (context.textAlign === 'right' && /^[+-]/.test(text)) {
         w.__positionAmountRightX = x;
-        w.__positionAmountWidth = this.measureText(text).width;
+        w.__positionAmountWidth = context.measureText(text).width;
       }
       if (text.includes(' units')) {
-        w.__positionSuffixX = x + this.measureText(text.slice(0, text.indexOf(' · '))).width;
-      }
-      if (maxWidth === undefined) {
-        fillText.call(this, text, x, y);
-      } else {
-        fillText.call(this, text, x, y, maxWidth);
+        w.__positionSuffixX = x + context.measureText(text.slice(0, text.indexOf(' · '))).width;
       }
     };
   });
@@ -265,14 +240,8 @@ test('placing a manual order retains SL and TP account amounts on the live posit
   });
   await openTradePanel(page);
   await page.locator('.ticket-quote-side.buy').click();
-  for (const [label, price] of [
-    ['Stop loss', '1.0840'],
-    ['Take profit', '1.0860'],
-  ]) {
-    await page.getByLabel(`${label} enabled`).check();
-    await page.getByLabel(`Swap ${label} input to price`).click();
-    await page.getByLabel(`${label} price`).fill(price);
-  }
+  await fillExitPrice(page, 'Stop loss', '1.0840');
+  await fillExitPrice(page, 'Take profit', '1.0860');
   await expect.poll(() => paintedText(page)).toContain('SL -100.00 USD');
   await expect.poll(() => paintedText(page)).toContain('TP +100.00 USD');
   await page.getByRole('button', { name: 'Start creating order', exact: true }).click();
@@ -468,7 +437,8 @@ test('locked execution gate prevents trading-line dispatch after a completed dra
   expect(await invocations(page, 'modify_order')).toHaveLength(0);
 });
 
-test('overlapping P&L and SL stay separated while crossing to the position close button', async ({ page }) => {
+/** Moves the position's SL next to its entry so the SL label has to be displaced from its line. */
+async function readyWithCrowdedSl(page: Page) {
   const collected = await ready(page);
   await pushEvent(page, 'portfolio-snapshot', {
     ...portfolio,
@@ -477,6 +447,11 @@ test('overlapping P&L and SL stay separated while crossing to the position close
   });
   await expect.poll(async () => (await geometry(page)).orderLines.length).toBe(0);
   const before = await geometry(page);
+  return { collected, before };
+}
+
+test('overlapping P&L and SL stay separated while crossing to the position close button', async ({ page }) => {
+  const { collected, before } = await readyWithCrowdedSl(page);
   const entry = before.labels.find((row) => row.id === '885001' && row.level === 'entry')!;
   const sl = before.labels.find((row) => row.id === '885001' && row.level === 'sl')!;
   expect(Math.abs(entry.lineY - sl.lineY)).toBeLessThan(20);
@@ -496,14 +471,7 @@ test('overlapping P&L and SL stay separated while crossing to the position close
 });
 
 test('dragging a displaced SL moves from its actual price instead of jumping to the label', async ({ page }) => {
-  await ready(page);
-  await pushEvent(page, 'portfolio-snapshot', {
-    ...portfolio,
-    orders: [],
-    positions: portfolio.positions.map((pos) => ({ ...pos, stopLoss: '1.08501', takeProfit: null })),
-  });
-  await expect.poll(async () => (await geometry(page)).orderLines.length).toBe(0);
-  const before = await geometry(page);
+  const { before } = await readyWithCrowdedSl(page);
   const sl = before.labels.find((row) => row.id === '885001' && row.level === 'sl')!;
   expect(Math.abs(sl.y + sl.h / 2 - sl.lineY)).toBeGreaterThan(1);
   const expected = await page.evaluate((y) => {

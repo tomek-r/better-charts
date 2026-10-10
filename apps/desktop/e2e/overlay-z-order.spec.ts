@@ -1,5 +1,6 @@
 import { layoutLabelCenters } from '../src/features/chart/engine/labelLayout';
 import { test, expect } from '@playwright/test';
+import { createRecordingCtx, createTestViewport, renderArgsFor, type PaintOp } from './helpers/overlayHarness';
 import type { OverlayRenderer as OverlayPlugin } from '../src/features/chart/engine/overlayTypes';
 import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart/engine/overlays';
 
@@ -21,19 +22,7 @@ import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart
  * sequence, exactly what the pixels would show.
  */
 
-type OpKind = 'stroke' | 'fill' | 'fillText' | 'fillRect';
-interface Op {
-  plugin: string;
-  kind: OpKind;
-  style: string;
-  alpha: number;
-  dashed: boolean;
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-  text?: string;
-}
+type Op = PaintOp & { plugin: string };
 
 /** Level/reference line ops (dotted strokes + 12% risk-zone fills). */
 function isLineOp(op: Op) {
@@ -50,132 +39,14 @@ function isLabelOp(op: Op) {
   );
 }
 
-function createRecordingCtx(ops: Op[], plugin: string): CanvasRenderingContext2D {
-  let pathXs: number[] = [];
-  let pathYs: number[] = [];
-  let dashed = false;
-  const extent = () => ({
-    minX: Math.min(...pathXs),
-    maxX: Math.max(...pathXs),
-    minY: Math.min(...pathYs),
-    maxY: Math.max(...pathYs),
-  });
-  const ctx = {
-    fillStyle: '#000000',
-    strokeStyle: '#000000',
-    lineWidth: 1,
-    lineCap: 'butt',
-    globalAlpha: 1,
-    font: '',
-    textAlign: 'left',
-    textBaseline: 'alphabetic',
-    save() {},
-    restore() {},
-    closePath() {},
-    clip() {},
-    beginPath() {
-      pathXs = [];
-      pathYs = [];
-    },
-    rect(px: number, py: number, w: number, h: number) {
-      pathXs.push(px, px + w);
-      pathYs.push(py, py + h);
-    },
-    moveTo(px: number, py: number) {
-      pathXs.push(px);
-      pathYs.push(py);
-    },
-    lineTo(px: number, py: number) {
-      pathXs.push(px);
-      pathYs.push(py);
-    },
-    quadraticCurveTo(cx: number, cy: number, px: number, py: number) {
-      pathXs.push(cx, px);
-      pathYs.push(cy, py);
-    },
-    arc(cx: number, cy: number, r: number) {
-      pathXs.push(cx - r, cx + r);
-      pathYs.push(cy - r, cy + r);
-    },
-    setLineDash(dash: number[]) {
-      dashed = dash.length > 0;
-    },
-    measureText(text: string) {
-      return { width: text.length * 7 };
-    },
-    stroke() {
-      ops.push({ plugin, kind: 'stroke', style: ctx.strokeStyle, alpha: ctx.globalAlpha, dashed, ...extent() });
-    },
-    fill() {
-      ops.push({ plugin, kind: 'fill', style: ctx.fillStyle, alpha: ctx.globalAlpha, dashed: false, ...extent() });
-    },
-    fillRect(px: number, py: number, w: number, h: number) {
-      ops.push({
-        plugin,
-        kind: 'fillRect',
-        style: ctx.fillStyle,
-        alpha: ctx.globalAlpha,
-        dashed: false,
-        minX: px,
-        maxX: px + w,
-        minY: py,
-        maxY: py + h,
-      });
-    },
-    fillText(text: string, px: number, py: number) {
-      ops.push({
-        plugin,
-        kind: 'fillText',
-        style: ctx.fillStyle,
-        alpha: ctx.globalAlpha,
-        dashed: false,
-        minX: px,
-        maxX: px + 30,
-        minY: py - 8,
-        maxY: py + 8,
-        text,
-      });
-    },
-  };
-  return ctx as unknown as CanvasRenderingContext2D;
-}
-
-// 4px per price unit — every row below lands within y 242–248, the maximal
+// 4px per price unit: every row below lands within y 242-248, the maximal
 // collision stress (zoomed-out chart with tight SL/TP).
-const viewport = {
-  chartRect: { x: 41, y: 45, width: 600, height: 400 },
-  priceRange: { min: 100, max: 200 },
-  barSpacing: 2,
-  barWidth: 8,
-  offset: -50,
-  visibleRange: { from: 5, to: 20 },
-  scaleMode: 'linear',
-  logScale: false,
-  priceToY(price: number): number {
-    return (
-      this.chartRect.y +
-      ((this.priceRange.max - price) / (this.priceRange.max - this.priceRange.min)) * this.chartRect.height
-    );
-  },
-  yToPrice(y: number): number {
-    return (
-      this.priceRange.max -
-      ((y - this.chartRect.y) / this.chartRect.height) * (this.priceRange.max - this.priceRange.min)
-    );
-  },
-  timeToX(timeMs: number): number {
-    const index = Math.max(0, Math.min(9, (timeMs - 1_000) / 60_000));
-    return this.chartRect.x + index * (this.barWidth + this.barSpacing) - this.offset + this.barWidth / 2;
-  },
-};
-const renderArgs = {
-  viewport: {
-    ...viewport,
-    priceToY: viewport.priceToY.bind(viewport),
-    yToPrice: viewport.yToPrice.bind(viewport),
-    timeToX: viewport.timeToX.bind(viewport),
-  },
-} as Parameters<OverlayPlugin['render']>[1];
+const viewport = createTestViewport({ offset: -50, visibleRange: { from: 5, to: 20 }, scaleMode: 'linear' });
+const renderArgs = renderArgsFor(viewport);
+
+/** Recording context that tags every op with the plugin that painted it. */
+const recordFor = (ops: Op[], plugin: string) =>
+  createRecordingCtx((op) => ops.push({ ...op, plugin }), { textBox: 'label' });
 
 function collidingStates(): ChartOverlayState {
   return {
@@ -217,7 +88,7 @@ function renderAll(ops: Op[], filter: (id: string) => boolean) {
     if (!filter(overlay.descriptor.id)) {
       continue;
     }
-    overlay.render(createRecordingCtx(ops, overlay.descriptor.id), renderArgs);
+    overlay.render(recordFor(ops, overlay.descriptor.id), renderArgs);
   }
 }
 
@@ -282,7 +153,7 @@ test('colliding trading and staged rows spread apart without moving their price 
   const state = collidingStates();
   const ops: Op[] = [];
   for (const { plugin } of buildChartPlugins(state)) {
-    plugin.render(createRecordingCtx(ops, plugin.descriptor.id), renderArgs);
+    plugin.render(recordFor(ops, plugin.descriptor.id), renderArgs);
   }
   const rows = [...(state.positions.hit.labels ?? []), ...(state.staged.hit.labels ?? [])].sort((a, b) => a.y - b.y);
   expect(rows).toHaveLength(9);

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { gotoWithStub } from './tauriStub';
+import { gotoWithStub } from './helpers/tauriStub';
 
 test('coalesces same-turn history selections and suppresses requests invalidated before dispatch', async ({ page }) => {
   await gotoWithStub(page);

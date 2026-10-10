@@ -1,4 +1,11 @@
 import { test, expect } from '@playwright/test';
+import {
+  createRecordingCtx,
+  createTestViewport,
+  renderArgsFor,
+  type PaintOp,
+  type TestViewport,
+} from './helpers/overlayHarness';
 import type { OverlayRenderer as OverlayPlugin } from '../src/features/chart/engine/overlayTypes';
 import {
   createFixedRangeProfileOverlay,
@@ -22,152 +29,13 @@ import type { ProfileResult, TickProfileBin } from '../src/shared/bridge/types';
  *  - null range / missing profile / empty bins → zero paint ops and an empty `hit`.
  */
 
-type OpKind = 'clip' | 'fillRect' | 'stroke' | 'fillText';
-
-interface Op {
-  kind: OpKind;
-  style: string;
-  alpha: number;
-  dashed: boolean;
-  dash: number[];
-  font: string;
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-  /** Exact fillText anchor (min/max above mirror it for extent-style checks). */
-  x?: number;
-  y?: number;
-  text?: string;
-}
-
-/** Recording ctx — adapted from overlay-z-order.spec.ts, plus clip/dash and exact text anchors. */
-function createRecordingCtx(ops: Op[]): CanvasRenderingContext2D {
-  let pathXs: number[] = [];
-  let pathYs: number[] = [];
-  let dash: number[] = [];
-  const extent = () => ({
-    minX: Math.min(...pathXs),
-    maxX: Math.max(...pathXs),
-    minY: Math.min(...pathYs),
-    maxY: Math.max(...pathYs),
-  });
-  const ctx = {
-    fillStyle: '#000000',
-    strokeStyle: '#000000',
-    lineWidth: 1,
-    lineCap: 'butt',
-    globalAlpha: 1,
-    font: '',
-    textAlign: 'left',
-    textBaseline: 'alphabetic',
-    save() {},
-    restore() {},
-    closePath() {},
-    beginPath() {
-      pathXs = [];
-      pathYs = [];
-    },
-    rect(px: number, py: number, w: number, h: number) {
-      pathXs.push(px, px + w);
-      pathYs.push(py, py + h);
-    },
-    clip() {
-      ops.push({ kind: 'clip', style: '', alpha: ctx.globalAlpha, dashed: false, dash: [], font: '', ...extent() });
-    },
-    moveTo(px: number, py: number) {
-      pathXs.push(px);
-      pathYs.push(py);
-    },
-    lineTo(px: number, py: number) {
-      pathXs.push(px);
-      pathYs.push(py);
-    },
-    setLineDash(d: number[]) {
-      dash = [...d];
-    },
-    measureText(text: string) {
-      return { width: text.length * 7 };
-    },
-    stroke() {
-      ops.push({
-        kind: 'stroke',
-        style: ctx.strokeStyle,
-        alpha: ctx.globalAlpha,
-        dashed: dash.length > 0,
-        dash: [...dash],
-        font: ctx.font,
-        ...extent(),
-      });
-    },
-    fillRect(px: number, py: number, w: number, h: number) {
-      ops.push({
-        kind: 'fillRect',
-        style: ctx.fillStyle,
-        alpha: ctx.globalAlpha,
-        dashed: false,
-        dash: [],
-        font: ctx.font,
-        minX: px,
-        maxX: px + w,
-        minY: py,
-        maxY: py + h,
-      });
-    },
-    fillText(text: string, px: number, py: number) {
-      ops.push({
-        kind: 'fillText',
-        style: ctx.fillStyle,
-        alpha: ctx.globalAlpha,
-        dashed: false,
-        dash: [],
-        font: ctx.font,
-        minX: px,
-        maxX: px,
-        minY: py,
-        maxY: py,
-        x: px,
-        y: py,
-        text,
-      });
-    },
-    fill() {
-      /* not used by this overlay */
-    },
-  };
-  return ctx as unknown as CanvasRenderingContext2D;
-}
+type Op = PaintOp;
 
 // ---------------------------------------------------------------------------
 // Fixture: 10 bars 60s apart, linear price scale 100–200 → priceY(p) = 45 + (200-p)*4.
 // ---------------------------------------------------------------------------
-const chartRect = { x: 41, y: 45, width: 600, height: 400 };
-const viewport = {
-  chartRect,
-  priceRange: { min: 100, max: 200 },
-  barSpacing: 2,
-  barWidth: 8,
-  offset: 7,
-  visibleRange: { from: 0, to: 9 },
-  scaleMode: 'regular',
-  logScale: false,
-  priceToY(price: number): number {
-    return (
-      this.chartRect.y +
-      ((this.priceRange.max - price) / (this.priceRange.max - this.priceRange.min)) * this.chartRect.height
-    );
-  },
-  yToPrice(y: number): number {
-    return (
-      this.priceRange.max -
-      ((y - this.chartRect.y) / this.chartRect.height) * (this.priceRange.max - this.priceRange.min)
-    );
-  },
-  timeToX(timeMs: number): number {
-    const index = Math.max(0, Math.min(9, (timeMs - 1_000) / 60_000));
-    return this.chartRect.x + index * (this.barWidth + this.barSpacing) - this.offset + this.barWidth / 2;
-  },
-};
+const viewport = createTestViewport({ offset: 7, visibleRange: { from: 0, to: 9 }, scaleMode: 'regular' });
+const { chartRect } = viewport;
 const BAR_INTERVAL = 60_000;
 const bars = Array.from({ length: 10 }, (_, i) => ({
   time: 1_000 + i * BAR_INTERVAL,
@@ -213,29 +81,24 @@ function makeProfile(bins: TickProfileBin[]): ProfileResult {
   };
 }
 
+const recordInto = (ops: Op[]) => createRecordingCtx((op) => ops.push(op), { recordClip: true });
+
 function makeState(profile?: ProfileResult): FixedRangeProfileState {
   return { range: { fromMs: RANGE_FROM, toMs: RANGE_FROM + 5 * BAR_INTERVAL }, profile, hit: {} };
 }
 
 function paint(
   profile?: ProfileResult,
-  vp: typeof viewport = viewport,
+  vp: TestViewport = viewport,
   range?: FixedRangeProfileState['range'],
 ): { ops: Op[]; state: FixedRangeProfileState } {
   const state = makeState(profile);
   if (range !== undefined) {
     state.range = range;
   }
-  const args: Parameters<OverlayPlugin['render']>[1] = {
-    viewport: {
-      ...vp,
-      priceToY: vp.priceToY.bind(vp),
-      yToPrice: vp.yToPrice.bind(vp),
-      timeToX: vp.timeToX.bind(vp),
-    },
-  };
+  const args = renderArgsFor(vp);
   const ops: Op[] = [];
-  createFixedRangeProfileOverlay(state).render(createRecordingCtx(ops), args);
+  createFixedRangeProfileOverlay(state).render(recordInto(ops), args);
   return { ops, state };
 }
 
@@ -425,7 +288,7 @@ test('null range, missing profile or empty bins → zero paint ops and an empty 
   for (const state of cases) {
     const ops: Op[] = [];
     const args = { viewport, data: bars, theme: {} } as unknown as Parameters<OverlayPlugin['render']>[1];
-    createFixedRangeProfileOverlay(state).render(createRecordingCtx(ops), args);
+    createFixedRangeProfileOverlay(state).render(recordInto(ops), args);
     expect(ops).toHaveLength(0);
     expect(state.hit).toEqual({});
   }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { gotoWithStub, pushCommandError, pushEvent } from './tauriStub';
+import { expectNoErrors, gotoWithStub, pushCommandError, pushEvent } from './helpers/tauriStub';
 
 test('bridge errors appear at bottom right and remain dismissible after recovery', async ({ page }) => {
   const errors = await gotoWithStub(page);
@@ -14,8 +14,7 @@ test('bridge errors appear at bottom right and remain dismissible after recovery
   await expect(notice).toBeVisible();
   await notice.getByRole('button', { name: 'Dismiss error notification' }).click();
   await expect(notice).toBeHidden();
-  expect(errors.pageErrors).toEqual([]);
-  expect(errors.consoleErrors).toEqual([]);
+  expectNoErrors(errors);
 });
 
 test('broker errors are capitalized, prominent and keyboard dismissible at desktop and narrow widths', async ({
@@ -40,8 +39,7 @@ test('broker errors are capitalized, prominent and keyboard dismissible at deskt
   await notice.getByRole('button', { name: 'Dismiss error notification' }).focus();
   await page.keyboard.press('Enter');
   await expect(notice).toBeHidden();
-  expect(errors.pageErrors).toEqual([]);
-  expect(errors.consoleErrors).toEqual([]);
+  expectNoErrors(errors);
 });
 
 test('duplicate errors share one notification and the stack stays bounded', async ({ page }) => {
@@ -56,6 +54,5 @@ test('duplicate errors share one notification and the stack stays bounded', asyn
   }
   await expect(notices).toHaveCount(5);
   await expect(notices.filter({ hasText: 'Broker error 5.' })).toBeVisible();
-  expect(errors.pageErrors).toEqual([]);
-  expect(errors.consoleErrors).toEqual([]);
+  expectNoErrors(errors);
 });

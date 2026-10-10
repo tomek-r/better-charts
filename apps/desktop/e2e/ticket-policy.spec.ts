@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { brokerSymbolFixture } from './helpers/tauriStub';
 import { deriveOrderTicket, type TicketDerivationInput } from '../src/features/order-ticket/domain/ticketRules';
 import { createOrderTicketStores } from '../src/features/order-ticket/state/orderTicketStores';
 import type { AccountSnapshot, BrokerSymbol, OrderCheckResult, RiskPreview } from '../src/shared/bridge/types';
@@ -18,24 +19,15 @@ const account: AccountSnapshot = {
   expertAllowed: true,
 };
 
-const instrument: BrokerSymbol = {
-  symbol: 'TEST',
-  description: 'Test instrument',
+const instrument: BrokerSymbol = brokerSymbolFixture('TEST', 'Test instrument', {
   digits: 2,
   tickSize: '0.01',
   pointSize: '0.01',
   contractSize: '1',
-  volumeMin: '0.01',
-  volumeMax: '100',
-  volumeStep: '0.01',
-  stopsLevel: 0,
-  freezeLevel: 0,
-  fillingMode: 0,
-  orderMode: 0,
-  expirationMode: 0,
-  tradeExecution: 0,
-  tradeMode: 0,
-};
+  tickValueProfit: undefined,
+  tickValueLoss: undefined,
+  tickValueCurrency: undefined,
+});
 
 const acceptedCheck: OrderCheckResult = {
   draftVersion: 3,
