@@ -84,7 +84,7 @@ async function main() {
   await checkPort(ports.branch);
   const output = path.join(
     repo,
-    ".react-profiler",
+    "apps/desktop/.react-profiler",
     new Date().toISOString().replace(/[:.]/g, "-"),
   );
   fs.mkdirSync(output, { recursive: true });

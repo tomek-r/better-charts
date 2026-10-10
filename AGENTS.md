@@ -25,7 +25,7 @@ safety and contract compatibility take priority over implementation convenience.
   only layer that calls the MT5 trading API.
 - `docs/protocol/bridge-v1.md` — EA ↔ Rust contract specification.
 - `apps/desktop/e2e/` — Playwright tests run in a browser with the Tauri v2
-  stub in `tauriStub.ts`.
+  stub in `e2e/helpers/tauriStub.ts`.
 - `scripts/` — bridge mock, diagnostic tools, and startup scripts.
 
 Do not bypass these boundaries for convenience. Domain logic shared by
@@ -144,12 +144,21 @@ pnpm test:e2e
 python3 -m py_compile scripts/mock_mt5_bridge.py scripts/capture_reconcile_snapshot.py
 ```
 
-Frontend tooling is enforced with `pnpm check` (typecheck + ESLint + Prettier)
-from both workspace levels. During `pnpm dev`, vite-plugin-checker shows
+Frontend tooling is enforced with `pnpm check` (typecheck + ESLint + Prettier +
+jscpd duplicate detection) from both workspace levels. During `pnpm dev`, vite-plugin-checker shows
 TypeScript and ESLint errors in an overlay. The pre-commit hook (husky +
-lint-staged) formats and lints staged files, then runs the full typecheck,
-offline Rust workspace tests, browser E2E suite, tick-reader check, and Python
+lint-staged) formats and lints staged files, then runs the full typecheck, the
+duplicate check, offline Rust workspace tests, browser E2E suite, tick-reader check, and Python
 tool self-tests. Any failure aborts the commit.
+
+The duplicate gate is `pnpm --filter better-charts dup` (config:
+`apps/desktop/.jscpd.json`; scans `apps/desktop/src`, `e2e`, `scripts` and the
+root `scripts/`). It allows zero clones: any block of 6+ lines and 50+ tokens
+repeated anywhere fails the run. Fix a clone by extracting a helper or shared
+fixture; only a deliberately independent copy may be wrapped in
+`// jscpd:ignore-start` / `// jscpd:ignore-end` with a one-line reason. Never
+raise `threshold`, `minLines` or `minTokens`, and never add path ignores to get
+green.
 
 Python is pinned to 3.12 in `.python-version`. When uv is installed, run the
 Python commands as `uv run --no-project python …` (the hook does this and falls

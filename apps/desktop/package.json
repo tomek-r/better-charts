@@ -26,8 +26,10 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check",
-    "profiler": "playwright test --config playwright.profiler.config.ts"
+    "dup": "jscpd --config .jscpd.json src e2e scripts ../../scripts",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm dup",
+    "profiler": "playwright test --config playwright.profiler.config.ts",
+    "lighthouse": "playwright test --config playwright.lighthouse.config.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.2",
@@ -52,6 +54,8 @@
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
+    "jscpd": "4.3.0",
+    "lighthouse": "13.5.0",
     "prettier": "3.9.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.1",

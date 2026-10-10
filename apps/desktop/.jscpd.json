@@ -1,0 +1,19 @@
+{
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.lighthouse/**",
+    "**/.react-profiler/**",
+    "**/test-results/**",
+    "**/playwright-report/**",
+    "**/src-tauri/gen/**",
+    "**/coverage/**"
+  ],
+  "minLines": 6,
+  "minTokens": 40,
+  "threshold": 0,
+  "reporters": ["console"],
+  "gitignore": false,
+  "exitCode": 1,
+  "silent": false
+}

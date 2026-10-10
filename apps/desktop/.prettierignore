@@ -7,3 +7,5 @@ src-tauri
 mql5
 *.md
 pnpm-lock.yaml
+.lighthouse
+.react-profiler

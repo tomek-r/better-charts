@@ -8,6 +8,7 @@ else
 fi
 pnpm exec lint-staged
 pnpm --filter better-charts typecheck
+pnpm --filter better-charts dup
 cargo test --workspace --offline
 pnpm test:e2e
 $PY scripts/check_tick_reader.py
