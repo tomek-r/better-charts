@@ -431,6 +431,96 @@ async fn malformed_handshake_has_actionable_copy_without_echoing_payload_values(
     assert!(harness.state.current_session.lock().unwrap().is_none());
 }
 
+/// Sends a hello whose `tick_reader_version` is set by `mutate`, plus a
+/// dropped `supported_timeframes` to prove the check precedes schema parsing.
+async fn tick_reader_rejection(
+    mutate: impl FnOnce(&mut serde_json::Map<String, serde_json::Value>),
+) -> (String, serde_json::Value, BridgeHarness) {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let mut hello = valid_hello(None);
+    let payload = hello.payload.as_object_mut().unwrap();
+    payload.remove("supported_timeframes");
+    mutate(payload);
+    client.send(hello).await.unwrap();
+    let reply = client.recv(Duration::from_secs(2)).await.unwrap();
+    assert_eq!(reply.message_type, MessageType::Error);
+    assert_eq!(reply.payload["code"], "UNSUPPORTED_VERSION");
+    let message = reply.payload["message"].as_str().unwrap().to_owned();
+    assert!(
+        wait_until(Duration::from_secs(1), || {
+            harness.state.status.lock().unwrap().message.as_deref() == Some(message.as_str())
+        })
+        .await
+    );
+    assert!(harness.state.current_session.lock().unwrap().is_none());
+    (message, reply.payload, harness)
+}
+
+#[tokio::test]
+async fn older_tick_reader_reports_required_and_installed_versions() {
+    let (message, _, _harness) = tick_reader_rejection(|payload| {
+        payload.insert("tick_reader_version".into(), serde_json::json!("0.9"));
+    })
+    .await;
+    assert_eq!(message, format!("App requires MT5 tick reader version {}, but installed tick reader version is 0.9. Update BetterChartsTickHistoryReader in MQL5/Indicators, then reattach BetterChartsBridge in MT5.", trading_core::protocol::tick_reader_version()));
+}
+
+#[tokio::test]
+async fn missing_null_or_malformed_tick_reader_version_is_reported_without_echo() {
+    let expected = format!("App requires MT5 tick reader version {}, but the tick reader did not report a valid version. Install or update BetterChartsTickHistoryReader in MQL5/Indicators, then reattach BetterChartsBridge in MT5.", trading_core::protocol::tick_reader_version());
+    let (missing, _, _h1) = tick_reader_rejection(|payload| {
+        payload.remove("tick_reader_version");
+    })
+    .await;
+    assert_eq!(missing, expected);
+    let (null, _, _h2) = tick_reader_rejection(|payload| {
+        payload.insert("tick_reader_version".into(), serde_json::Value::Null);
+    })
+    .await;
+    assert_eq!(null, expected);
+    let (malformed, _, _h3) = tick_reader_rejection(|payload| {
+        payload.insert(
+            "tick_reader_version".into(),
+            serde_json::json!("secret-<script>"),
+        );
+    })
+    .await;
+    assert_eq!(malformed, expected);
+    assert!(!malformed.contains("secret"));
+}
+
+#[tokio::test]
+async fn ea_version_is_checked_before_tick_reader_version() {
+    let (message, _, _harness) = {
+        let harness = default_harness().await;
+        let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+        let mut hello = valid_hello(None);
+        hello.payload["expert_version"] = serde_json::json!("0.6.0");
+        hello
+            .payload
+            .as_object_mut()
+            .unwrap()
+            .remove("tick_reader_version");
+        client.send(hello).await.unwrap();
+        let reply = client.recv(Duration::from_secs(2)).await.unwrap();
+        (
+            reply.payload["message"].as_str().unwrap().to_owned(),
+            reply.payload,
+            harness,
+        )
+    };
+    assert!(message.starts_with("App requires MT5 bridge version"));
+}
+
+#[tokio::test]
+async fn matching_tick_reader_version_completes_the_handshake() {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let handshake = complete_handshake(&mut client, &harness).await;
+    assert!(!handshake.session.is_empty());
+}
+
 #[tokio::test]
 async fn older_ea_reports_required_and_installed_versions_before_schema_validation() {
     let harness = default_harness().await;

@@ -21,14 +21,15 @@
   display: flex;
   align-items: start;
   gap: 12px;
-  color: var(--color-text-tertiary);
-  padding: 14px 18px;
+  color: var(--color-text-bright);
+  padding: 16px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   background: var(--color-panel);
   box-shadow: 0 8px 28px #0008;
-  font-size: 12px;
-  line-height: 1.7;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
   overflow-wrap: anywhere;
   pointer-events: auto;
   animation: notification-in 180ms ease-out;
@@ -40,23 +41,24 @@
 }
 
 .notification-alert {
-  padding: 16px;
   border-color: var(--color-sell);
-  border-left-width: 4px;
   background: var(--color-sell-fill);
-  color: var(--color-text-bright);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.6;
 }
 
-.notification-error-icon {
+.notification-icon {
   flex: none;
   margin-top: 2px;
   fill: none;
-  stroke: var(--color-danger-text);
   stroke-width: 1.75;
   stroke-linecap: round;
+}
+
+.notification-icon-error {
+  stroke: var(--color-danger-text);
+}
+
+.notification-icon-info {
+  stroke: var(--color-info);
 }
 
 @keyframes notification-in {
@@ -99,6 +101,7 @@
   place-items: center;
   width: 24px;
   height: 24px;
+  margin-block: -2px;
   padding: 0;
   border: 0;
   border-radius: 4px;

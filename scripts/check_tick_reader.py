@@ -30,6 +30,29 @@ class TickReaderSourceGuards(unittest.TestCase):
     def test_ea_loads_the_renamed_tick_reader(self):
         self.assertRegex(EA, r'\biCustom\([^;]*"BetterChartsTickHistoryReader"')
 
+    def test_reader_and_ea_agree_on_the_versioned_page_header(self):
+        for source in (READER, EA):
+            self.assertIn("#define BRIDGE_READER_MAGIC         0x54435032", source)
+            self.assertIn("#define BRIDGE_READER_VERSION_BYTES 16", source)
+        self.assertIn("#define BRIDGE_READER_HEADER_BYTES  28", EA)
+        self.assertIn("#property version BRIDGE_TICK_READER_VERSION", READER)
+        self.assertNotIn("0x54435031,INT_VALUE", READER)
+        # magic + 16 version bytes + error + count
+        self.assertEqual(4 + 16 + 4 + 4, 28)
+        # The EA rejects the unversioned layout instead of misparsing it.
+        self.assertIn("BRIDGE_READER_MAGIC_LEGACY", EA)
+
+    def test_version_probe_is_bounded_and_never_sleeps(self):
+        probe = EA.split("bool RunReaderProbe()", 1)[1].split("bool QueueTickHistory(", 1)[0]
+        self.assertIn("BRIDGE_READER_PROBE_TIMEOUT_MS", probe)
+        self.assertNotIn("Sleep(", EA)
+        self.assertIn("if(!RunReaderProbe()) return;", EA.split("void TryConnect()", 1)[1])
+        self.assertRegex(EA, r"#define BRIDGE_READER_PROBE_TIMEOUT_MS 3000\b")
+        # The probe handle and file are always released when it settles.
+        finish = EA.split("void FinishReaderProbe(", 1)[1].split("bool RunReaderProbe()", 1)[0]
+        self.assertIn("ReleaseReaderProbe();", finish)
+        self.assertIn("tick_reader_version", EA)
+
     def test_dependent_indicator_reads_during_initialization(self):
         init = READER.split("int OnInit()", 1)[1].split("void ReadTickPage()", 1)[0]
         self.assertIn("ReadTickPage();", init)

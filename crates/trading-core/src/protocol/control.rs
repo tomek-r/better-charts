@@ -22,6 +22,10 @@ pub struct HelloPayload {
     pub broker_server: String,
     pub chart_symbol: String,
     pub expert_version: String,
+    /// Version of the `BetterChartsTickHistoryReader` indicator the EA probed
+    /// at connect; `null` or absent when it is missing, unversioned or invalid.
+    #[serde(default)]
+    pub tick_reader_version: Option<String>,
     pub trading_enabled: bool,
     #[serde(default)]
     pub transfer_limits: TransferLimits,

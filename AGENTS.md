@@ -37,8 +37,9 @@ handler.
 1. Current scope and feature state: `docs/CURRENT_STATE.md`.
 2. Intended protocol format and semantics: `docs/protocol/bridge-v1.md`.
    Shared configuration both languages read at compile time — currently the
-   timeframes in `config/timeframes.json` and the transfer limits in
-   `config/bridge.json` — is contract, not a copy.
+   timeframes in `config/timeframes.json`, the transfer limits in
+   `config/bridge.json`, and the required MQL5 component versions in
+   `config/mq5-versions.json` — is contract, not a copy.
 3. Current runtime behavior: production code and regression tests.
 4. Other architecture and performance notes provide supporting context; check
    their dates and scope before treating them as descriptions of current
@@ -149,6 +150,10 @@ TypeScript and ESLint errors in an overlay. The pre-commit hook (husky +
 lint-staged) formats and lints staged files, then runs the full typecheck,
 offline Rust workspace tests, browser E2E suite, tick-reader check, and Python
 tool self-tests. Any failure aborts the commit.
+
+Python is pinned to 3.12 in `.python-version`. When uv is installed, run the
+Python commands as `uv run --no-project python …` (the hook does this and falls
+back to `python3`); on Windows `python3` may resolve to the Microsoft Store stub.
 
 Choose the minimum checks appropriate to the change:
 

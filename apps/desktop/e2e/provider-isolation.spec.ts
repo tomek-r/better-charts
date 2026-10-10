@@ -90,7 +90,7 @@ test('bridge domain stores remain isolated across provider instances', async ({ 
 
   const counts = await probeCounts(page);
   expect(counts['secondary-market'] ?? 0).toBe(0);
-  expect(await page.getByTestId('secondary-market')).toHaveText('none');
+  await expect(page.getByTestId('secondary-market')).toHaveText('none');
 });
 
 test('bridge runtime projection reads current state from each canonical domain store', async ({ page }) => {

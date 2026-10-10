@@ -6,6 +6,12 @@ import { createTradingOverlayGestures } from '../engine/tradingOverlayGestures';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 import { useChartGestureDiagnostics } from './useChartGestureDiagnostics';
 
+// Test-only hook: `import.meta.env.DEV` is a build-time constant, so production
+// builds drop the diagnostics module and this stays a stable per-build hook.
+const useDiagnostics: (workspace: ChartWorkspaceState) => void = import.meta.env.DEV
+  ? useChartGestureDiagnostics
+  : () => undefined;
+
 export function useChartWorkspacePointerEffects(
   workspace: ChartWorkspaceState,
   ticket: StagedOrderGestureTicket,
@@ -312,5 +318,5 @@ export function useChartWorkspacePointerEffects(
     applyPositionModify,
     applyLevelClear,
   ]);
-  useChartGestureDiagnostics(workspace);
+  useDiagnostics(workspace);
 }
