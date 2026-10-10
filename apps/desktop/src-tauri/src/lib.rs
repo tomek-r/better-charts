@@ -25,7 +25,7 @@ use execution_journal::{app_data_dir, ExecutionSafetyState};
 use mt5_backend::Mt5BackendState;
 use std::time::Duration;
 use tauri::webview::PageLoadEvent;
-use tauri::{Manager, PhysicalPosition, PhysicalSize, Runtime, WebviewWindow};
+use tauri::{Manager, Runtime, WebviewWindow};
 
 /// Label of the window declared in `tauri.conf.json`; the config creates it hidden.
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -45,6 +45,7 @@ fn window_title(version: impl std::fmt::Display) -> String {
 /// outside the work area, so the outer rect is the work area grown by `border` on
 /// every side, and the client area is that minus the decoration (frame + caption).
 /// `decoration` is `outer - inner` of the current window.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn maximized_bounds(
     work_position: (i32, i32),
     work_size: (u32, u32),
@@ -74,6 +75,12 @@ fn maximized_bounds(
 /// size; `show()` then maximizes to the same bounds. Physical pixels throughout,
 /// so DPI scaling needs no conversion. Any missing information leaves the window
 /// as configured.
+///
+/// Windows only. On macOS tao maximizes a hidden window by queueing a native
+/// `zoom:`, which is a toggle: pre-sizing the frame to the work area first makes
+/// that zoom restore the default 800x600 frame instead, so macOS keeps the
+/// config's plain `maximized` behaviour.
+#[cfg(windows)]
 fn size_hidden_window_to_work_area<R: Runtime>(window: &WebviewWindow<R>) {
     let Ok(Some(monitor)) = window.current_monitor() else {
         return;
@@ -90,8 +97,8 @@ fn size_hidden_window_to_work_area<R: Runtime>(window: &WebviewWindow<R>) {
             outer.height.saturating_sub(inner.height),
         ),
     );
-    let _ = window.set_position(PhysicalPosition::new(position.0, position.1));
-    let _ = window.set_size(PhysicalSize::new(size.0, size.1));
+    let _ = window.set_position(tauri::PhysicalPosition::new(position.0, position.1));
+    let _ = window.set_size(tauri::PhysicalSize::new(size.0, size.1));
     // tao clears the maximized flag on any position or size change; restore it so
     // `show()` still maximizes (to these same bounds) instead of showing a normal
     // window placed partly off-screen.
@@ -109,6 +116,12 @@ fn reveal_window<R: Runtime>(window: &WebviewWindow<R>) {
     // the first visible frame already carries it.
     let _ = window.set_title(&window_title(&window.package_info().version));
     let _ = window.show();
+    // The config's `maximized` flag is applied while hidden and each platform
+    // honours it differently (Windows defers it, macOS queues a toggling zoom),
+    // so re-assert it once visible. A no-op where it already took effect.
+    if !window.is_maximized().unwrap_or(true) {
+        let _ = window.maximize();
+    }
     let _ = window.set_focus();
 }
 
@@ -166,6 +179,7 @@ pub fn run() {
             // size or before content; this timer keeps a lost page-load event
             // from leaving it hidden forever.
             if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                #[cfg(windows)]
                 size_hidden_window_to_work_area(&window);
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(WINDOW_REVEAL_FALLBACK).await;
