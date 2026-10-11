@@ -372,14 +372,10 @@ export class ViewportController {
     return index;
   }
 
-  /** Bar index under a pane x, or null when the pointer is not over a real bar. */
-  barIndexAt(x: number): number | null {
+  /** Whole logical slot under a pane x; past the newest bar it counts the empty future slots. */
+  slotAt(x: number): number | null {
     const logical = this.chart.timeScale().coordinateToLogical(x);
-    if (logical === null) {
-      return null;
-    }
-    const index = Math.round(logical);
-    return index >= 0 && index < this.data.bars.length ? index : null;
+    return logical === null ? null : Math.round(logical);
   }
 
   private readonly onRangeChange = (): void => {

@@ -40,6 +40,7 @@ export function AppLifecycle() {
           mounted: session.mounted,
           setChartError: session.setChartError,
           requestProfileRange: session.requestProfileRange,
+          refreshLiveProfile: session.refreshLiveProfile,
         }}
         execution={execution}
       />

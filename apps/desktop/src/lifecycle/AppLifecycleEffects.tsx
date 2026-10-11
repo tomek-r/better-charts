@@ -33,7 +33,10 @@ import {
 } from '../features/order-ticket/state/useOrderTicketChartRuntime';
 import type { BridgeTicketResponsePort } from '../features/bridge/bridgeTicketResponseHandlers';
 
-type InitializationSession = Pick<BridgeSessionLifecycleState, 'mounted' | 'setChartError' | 'requestProfileRange'>;
+type InitializationSession = Pick<
+  BridgeSessionLifecycleState,
+  'mounted' | 'setChartError' | 'requestProfileRange' | 'refreshLiveProfile'
+>;
 type StreamSession = Pick<BridgeSessionLifecycleState, 'snapshot' | 'instrument' | 'account' | 'portfolio'>;
 type ChartSession = Pick<
   BridgeSessionLifecycleState,
@@ -94,7 +97,7 @@ export function LifecycleInitialization({
   session: InitializationSession;
   execution: ExecutionCommandState;
 }) {
-  const { mounted: mountedRef, setChartError, requestProfileRange } = session;
+  const { mounted: mountedRef, setChartError, requestProfileRange, refreshLiveProfile } = session;
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -102,7 +105,7 @@ export function LifecycleInitialization({
     };
   }, [mountedRef]);
   useExecutionCommandEffects(execution);
-  useChartWorkspaceInitEffects(workspace, { setChartError, requestProfileRange });
+  useChartWorkspaceInitEffects(workspace, { setChartError, requestProfileRange, refreshLiveProfile });
   return null;
 }
 
@@ -221,14 +224,15 @@ export function LifecycleBootstrapAndGestures({
   ticketControls: TicketControls;
   bridgeTicket: BridgeTicketResponsePort;
 }) {
-  const { chart, adapterRef, fixedRangeProfileState, expectedProfile, profileGeneration } = workspace;
+  const { chart, adapterRef, fixedRangeProfileState, expectedFixedRangeProfile, fixedRangeProfileGeneration } =
+    workspace;
   const { accountLoginRef, brokerServerRef } = accountRefs;
   useBridgeBootstrapEffects(session, {
     chart,
     adapterRef,
     fixedRangeProfileState,
-    expectedProfile,
-    profileGeneration,
+    expectedFixedRangeProfile,
+    fixedRangeProfileGeneration,
     accountLoginRef,
     brokerServerRef,
     ticket: bridgeTicket,

@@ -15,16 +15,11 @@ import { PriceScaleController } from './priceScaleController';
 import { BarSeriesController } from './barSeriesController';
 import { PriceLineController } from './priceLineController';
 import { isOutsidePane, ViewportController } from './viewportController';
-import { FixedRangeProfileController, type ProfileRange } from './fixedRangeProfileController';
+import { FixedRangeProfileTool, type FixedRangeProfileRange } from './fixedRangeProfileTool';
+import type { ChartTool } from './chartTool';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installDevTestApi, removeDevTestApi } from './devTestApi';
 import { initialHistoryWindow } from './initialHistoryWindow';
-
-/**
- * Re-exported because it names a parameter of this class's public callbacks; the
- * type itself belongs to the profile tool, which is where it is defined.
- */
-export type { ProfileRange };
 
 export enum HistoryViewportMode {
   Reset = 'reset',
@@ -67,11 +62,14 @@ export class ChartController {
   private tool: DrawingTool = null;
   private removed = false;
   private readonly view: ViewportController;
-  private readonly profile: FixedRangeProfileController;
+  private readonly profile: FixedRangeProfileTool;
+  /** Every drawing tool, in pointer-routing order after the armed one. */
+  private readonly tools: readonly ChartTool[];
   // Set once the broker's page came back short, or a page held nothing older
   // than the cache. Cleared by a new window, which is a new history.
   private olderHistoryExhausted = false;
-  onProfileCommit?: (range: ProfileRange) => void;
+  onProfileCommit?: (range: FixedRangeProfileRange) => void;
+  onProfileRefresh?: (range: FixedRangeProfileRange) => void;
   onProfileDelete?: () => void;
   onToolRelease?: () => void;
   /**
@@ -93,20 +91,24 @@ export class ChartController {
     this.data = new BarSeriesController(this.candles, this.volume);
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
     this.view = new ViewportController(this.chart, this.candles, this.future, this.data, () => this.removed);
-    this.profile = new FixedRangeProfileController({
+    const toolContext = {
       data: this.data,
       geometry: this.view,
-      state: this.state.fixedRangeProfile,
-      isToolActive: () => this.tool === 'fixedRangeProfile',
       requestRepaint: () => this.refreshOverlays(),
-      onCommit: (range) => this.onProfileCommit?.(range),
-      onToolRelease: () => {
+      releaseTool: () => {
         this.tool = null;
         this.host.style.cursor = '';
         this.onToolRelease?.();
       },
+    };
+    this.profile = new FixedRangeProfileTool({
+      ...toolContext,
+      state: this.state.fixedRangeProfile,
+      onCommit: (range) => this.onProfileCommit?.(range),
+      onRefresh: (range) => this.onProfileRefresh?.(range),
       onDelete: () => this.onProfileDelete?.(),
     });
+    this.tools = [this.profile];
     this.countdown = new CountdownController(this.countdownPrimitive, {
       symbol: () => this.symbol,
       timeframe: () => this.data.timeframe,
@@ -182,6 +184,7 @@ export class ChartController {
     this.updateLegend();
     this.refreshOverlays();
     this.syncCountdown();
+    this.notifyBarsChanged();
     // The carried-over position can sit deeper than this window reaches, which
     // leaves space before the oldest bar. Filling it is a page request, not a
     // nudge of the viewport: the range subscription may not fire for a restored
@@ -219,6 +222,13 @@ export class ChartController {
     this.updateLegend();
     this.refreshOverlays();
     this.syncCountdown();
+    this.notifyBarsChanged();
+  }
+
+  private notifyBarsChanged(): void {
+    for (const tool of this.tools) {
+      tool.barsChanged();
+    }
   }
 
   resetView(): void {
@@ -370,8 +380,12 @@ export class ChartController {
   timeToX(timeMs: number): number {
     return this.view.timeToX(timeMs);
   }
-  isProfileToolActive(): boolean {
-    return this.tool === 'fixedRangeProfile';
+  /** Whether a tool that places drawings (not the Cross pointer) is armed. */
+  isDrawingToolArmed(): boolean {
+    return this.armedTool() !== undefined;
+  }
+  private armedTool(): ChartTool | undefined {
+    return this.tools.find((tool) => tool.id === this.tool);
   }
   /**
    * Every pointer shows axis labels (host CSS px). Outside the pane the
@@ -390,43 +404,67 @@ export class ChartController {
     this.crosshair.hide();
   }
   setDrawingTool(tool: DrawingTool): void {
-    const hasGesture = this.profile.hasGesture();
-    if (tool === this.tool && !hasGesture) {
+    const gestures = this.tools.filter((item) => item.hasGesture());
+    if (tool === this.tool && gestures.length === 0) {
       return;
     }
-    if (hasGesture) {
-      this.profile.cancelGesture();
+    for (const item of gestures) {
+      item.cancelGesture();
     }
     this.tool = tool;
     this.crosshair.setLinesVisible(tool === 'crosshair');
     this.host.style.cursor = tool ? 'crosshair' : '';
   }
-  getProfileRange(): ProfileRange | null {
+  /**
+   * Routes a press to the armed tool first, which may start a new drawing, then
+   * to every tool so an existing drawing stays editable with no tool armed.
+   */
+  toolPointerDown(x: number, y: number): boolean {
+    const armed = this.armedTool();
+    if (armed?.pointerDown(x, y, true)) {
+      return true;
+    }
+    return this.tools.some((tool) => tool !== armed && tool.pointerDown(x, y, false));
+  }
+  toolPointerMove(x: number, y: number): boolean {
+    return this.tools.some((tool) => tool.pointerMove(x, y));
+  }
+  toolPointerUp(commit: boolean): boolean {
+    let consumed = false;
+    for (const tool of this.tools) {
+      consumed = tool.pointerUp(commit) || consumed;
+    }
+    return consumed;
+  }
+  cancelToolGestures(): void {
+    for (const tool of this.tools) {
+      tool.cancelGesture();
+    }
+  }
+  /** The Delete key: removes every tool's drawing. */
+  deleteDrawings(): boolean {
+    let deleted = false;
+    for (const tool of this.tools) {
+      deleted = tool.deleteDrawing() || deleted;
+    }
+    return deleted;
+  }
+  drawSelection(ctx: CanvasRenderingContext2D): void {
+    for (const tool of this.tools) {
+      tool.draw(ctx);
+    }
+  }
+  getProfileRange(): FixedRangeProfileRange | null {
     return this.profile.getRange();
   }
   profileBoundaries() {
     return this.profile.boundaries();
-  }
-  profilePointerDown(x: number, y: number): boolean {
-    return this.profile.pointerDown(x, y);
-  }
-  profilePointerMove(x: number): boolean {
-    return this.profile.pointerMove(x);
-  }
-  profilePointerUp(commit: boolean): boolean {
-    return this.profile.pointerUp(commit);
-  }
-  cancelProfileGesture(): void {
-    this.profile.cancelGesture();
   }
   clearProfileSelection(): void {
     this.profile.clearSelection();
   }
   deleteProfile(): void {
     this.profile.deleteProfile();
-  }
-  drawSelection(ctx: CanvasRenderingContext2D): void {
-    this.profile.drawSelection(ctx);
   }
   private updateLegend(): void {
     const format = this.candles.options().priceFormat;

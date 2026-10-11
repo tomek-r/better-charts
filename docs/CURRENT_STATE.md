@@ -3,7 +3,7 @@
 Current behavior and owner decisions. See [architecture](architecture/README.md)
 and the [bridge contract](protocol/bridge-v1.md) for implementation details.
 
-React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object. The lifecycle coordinator passes non-quote props to ordered children; only quote-dependent children subscribe to live quotes.
+React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object. The lifecycle coordinator passes non-quote props to ordered children; only quote-dependent children subscribe to live quotes. Drawing tools implement the `ChartTool` contract (`features/chart/engine/chartTool.ts`) and register in `CHART_TOOLS` (`features/tools/toolTypes.ts`).
 
 ## Available
 
@@ -41,7 +41,14 @@ Not implemented: break even, multiple charts or Pine Script execution.
   rejection notice, without a separate last-error-code notice. Negative free margin preserves charts.
 - Arrow/Crosshair share a toolbar group; Escape closes the menu without disarming.
   Volume Profile is separate; boundaries drag, Delete/Backspace clears it,
-  timeframe changes preserve selection and symbol changes clear it.
+  timeframe changes preserve selection and symbol changes clear it. The two
+  clicks may come in either order (earlier time = start); the end may be dropped
+  in the empty area right of the newest bar and stays on that future slot
+  (`endMs` = slot open + one bar). The start is always a real bar, and a dragged
+  handle never crosses the other. While the newest bar opens before `endMs` the
+  profile refreshes with ticks (at most every 2 s, old histogram kept until the
+  new one arrives); when a bar opens at or after `endMs` it refreshes once more
+  and the range is fixed. A range ended on an older bar never refreshes.
 - Price scale fits on load, then holds until rescaled; axis hover exposes `A`/`L`.
   The first history request covers only the visible pane (`initialHistoryBars`
   in `config/bridge.json`; the UI measures the pane), then one older page is

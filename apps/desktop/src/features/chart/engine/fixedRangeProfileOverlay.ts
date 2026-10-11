@@ -14,6 +14,16 @@ export interface FixedRangeProfileState {
   hit: { anchorX?: number; profileLeft?: number; profileRight?: number; pocY?: number; vahY?: number; valY?: number };
 }
 
+/** The profile request the app is waiting for; results that do not match it (or its generation) are stale and ignored. */
+export type ExpectedFixedRangeProfile = {
+  symbol: string;
+  fromMs: number;
+  endMs: number;
+  generation: number;
+  sentAt: number;
+  settled: boolean;
+};
+
 // The app's sell/buy convention (tradingOverlayDrawing TRADING_COLORS): the bid is
 // what you SELL at (red, mirrored LEFT), the ask what you BUY at (blue, RIGHT).
 const BID_COLOR = palette.sell;

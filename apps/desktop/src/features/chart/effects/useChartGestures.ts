@@ -48,7 +48,7 @@ export function useChartWorkspacePointerEffects(
     }
     // Three independent grab states: staged-widget drags, custom-overlay line
     // drags (library TradingDragHandler parity), custom-overlay ✕ chip clicks.
-    let profileGesture = false;
+    let toolGesture = false;
     const staged = createStagedOrderGestures(
       host,
       { stagedOrderState },
@@ -119,8 +119,8 @@ export function useChartWorkspacePointerEffects(
     const onPointerDown = (event: PointerEvent) => {
       const { x, y } = localPoint(event);
       host.focus({ preventScroll: true });
-      if (chart.current?.isProfileToolActive() && chart.current.profilePointerDown(x, y)) {
-        profileGesture = true;
+      if (chart.current?.isDrawingToolArmed() && chart.current.toolPointerDown(x, y)) {
+        toolGesture = true;
         claimEvent(event);
         host.setPointerCapture(event.pointerId);
         return;
@@ -137,8 +137,8 @@ export function useChartWorkspacePointerEffects(
         return;
       }
       if (!overlay) {
-        if (chart.current?.profilePointerDown(x, y)) {
-          profileGesture = true;
+        if (chart.current?.toolPointerDown(x, y)) {
+          toolGesture = true;
           claimEvent(event);
           host.setPointerCapture(event.pointerId);
         }
@@ -167,7 +167,7 @@ export function useChartWorkspacePointerEffects(
       // Pointer labels follow every tool without consuming events or taking
       // ownership from the gesture paths below.
       chart.current?.moveCrosshair(x, y);
-      if (chart.current?.profilePointerMove(x)) {
+      if (chart.current?.toolPointerMove(x, y)) {
         event.stopPropagation();
         return;
       }
@@ -199,15 +199,15 @@ export function useChartWorkspacePointerEffects(
       chart.current?.hideCrosshair();
     };
     const onPointerUp = (event: PointerEvent) => {
-      chart.current?.profilePointerUp(true);
-      profileGesture = false;
+      chart.current?.toolPointerUp(true);
+      toolGesture = false;
       staged.endDrag(event);
       trading.finishLineDrag(event, true);
       trading.finishChip(event, true);
     };
     const onPointerCancel = (event: PointerEvent) => {
-      chart.current?.profilePointerUp(false);
-      profileGesture = false;
+      chart.current?.toolPointerUp(false);
+      toolGesture = false;
       staged.endDrag(event);
       trading.finishLineDrag(event, false);
       trading.finishChip(event, false);
@@ -215,7 +215,7 @@ export function useChartWorkspacePointerEffects(
     // Suppress compatibility TouchEvents only while a custom gesture owns
     // capture; otherwise the library handles native touch pan and pinch.
     const onTouchStart = (event: TouchEvent) => {
-      if (profileGesture || staged.active || trading.lineActive || trading.chipActive) {
+      if (toolGesture || staged.active || trading.lineActive || trading.chipActive) {
         claimEvent(event);
         return;
       }
@@ -236,7 +236,7 @@ export function useChartWorkspacePointerEffects(
       trading.startTouch(overlay, x, overlay.kind === 'line' ? y - labelDragOffset : y);
     };
     const onTouchMove = (event: TouchEvent) => {
-      if (profileGesture) {
+      if (toolGesture) {
         claimEvent(event);
         return;
       }
@@ -265,7 +265,7 @@ export function useChartWorkspacePointerEffects(
       staged.reset();
       trading.finishLineDrag({}, false);
       trading.finishChip({}, false);
-      chart.current?.profilePointerUp(false);
+      chart.current?.toolPointerUp(false);
     };
     const onTouchEnd = (event: TouchEvent) => {
       if (!staged.active && !trading.lineActive && !trading.chipActive) {
@@ -281,16 +281,16 @@ export function useChartWorkspacePointerEffects(
         return;
       }
       if (event.key === 'Escape') {
-        profileGesture = false;
+        toolGesture = false;
         staged.reset();
         trading.finishLineDrag({}, false);
         trading.finishChip({}, false);
-        chart.current?.cancelProfileGesture();
+        chart.current?.cancelToolGestures();
         chart.current?.setDrawingTool(null);
         setDrawingTool(null);
         event.preventDefault();
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
-        chart.current?.deleteProfile();
+        chart.current?.deleteDrawings();
         event.preventDefault();
       }
     };

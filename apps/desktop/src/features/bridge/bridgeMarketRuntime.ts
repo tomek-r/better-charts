@@ -1,6 +1,6 @@
 import { HistoryViewportMode, type ChartController } from '../chart/engine/chartController';
 import { toRenderBar, type Mt5DataAdapter, type Mt5HistoryError } from '../chart/engine/mt5DataAdapter';
-import type { FixedRangeProfileState } from '../chart/engine/fixedRangeProfileOverlay';
+import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from '../chart/engine/fixedRangeProfileOverlay';
 import type {
   BridgeStatus,
   BarUpdate,
@@ -46,8 +46,8 @@ export type BridgeMarketResources = {
   chart: { current: ChartController | null };
   adapterRef: { current: Mt5DataAdapter | null };
   fixedRangeProfileState: { current: FixedRangeProfileState };
-  expectedProfile: { current: { symbol: string; fromMs: number; endMs: number; generation: number } | undefined };
-  profileGeneration: { current: number };
+  expectedFixedRangeProfile: { current: ExpectedFixedRangeProfile | undefined };
+  fixedRangeProfileGeneration: { current: number };
 };
 
 /** Longest the prefetch waits for an idle period before running anyway. */
@@ -66,7 +66,7 @@ export function createBridgeMarketRuntime(
 ) {
   const chartRef = resources.chart;
   const marketAdapterRef = resources.adapterRef;
-  const { fixedRangeProfileState, expectedProfile, profileGeneration } = resources;
+  const { fixedRangeProfileState, expectedFixedRangeProfile, fixedRangeProfileGeneration } = resources;
   const {
     loadingTimeframeRef,
     setLoadingTimeframe,
@@ -340,14 +340,14 @@ export function createBridgeMarketRuntime(
 
   /** The event belongs to the profile request still awaited, in the current generation. */
   const matchesExpectedProfile = (payload: { symbol: string; fromMs: number; endMs: number }) => {
-    const expected = expectedProfile.current;
+    const expected = expectedFixedRangeProfile.current;
     return (
       !run.disposed &&
       expected !== undefined &&
       payload.symbol === expected.symbol &&
       payload.fromMs === expected.fromMs &&
       payload.endMs === expected.endMs &&
-      expected.generation === profileGeneration.current
+      expected.generation === fixedRangeProfileGeneration.current
     );
   };
 
@@ -358,22 +358,25 @@ export function createBridgeMarketRuntime(
       event.payload.complete !== undefined
     ) {
       fixedRangeProfileState.current.profile = event.payload;
+      if (expectedFixedRangeProfile.current) {
+        expectedFixedRangeProfile.current.settled = true;
+      }
       chartRef.current?.refreshOverlays();
     }
   };
 
   const onTickProfileCancelled = (event: PayloadEvent<ProfileCancelled>) => {
     if (matchesExpectedProfile(event.payload)) {
-      expectedProfile.current = undefined;
-      profileGeneration.current += 1;
+      expectedFixedRangeProfile.current = undefined;
+      fixedRangeProfileGeneration.current += 1;
     }
   };
 
   const onTickProfileError = (event: PayloadEvent<ProfileError>) => {
     if (matchesExpectedProfile(event.payload)) {
       notifyError(event.payload.message);
-      expectedProfile.current = undefined;
-      profileGeneration.current += 1;
+      expectedFixedRangeProfile.current = undefined;
+      fixedRangeProfileGeneration.current += 1;
     }
   };
 

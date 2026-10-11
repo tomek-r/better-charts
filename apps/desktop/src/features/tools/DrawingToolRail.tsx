@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DrawingTool } from './toolTypes';
+import { CHART_TOOLS, type DrawingTool } from './toolTypes';
 import { DrawingToolIcon } from './DrawingToolIcon';
 
 /**
@@ -14,7 +14,7 @@ const POINTER_TOOLS: ReadonlyArray<{ tool: DrawingTool; label: string }> = [
 
 /**
  * Compact tool rail: pointer tools (arrow / crosshair) grouped behind the first
- * entry, then the fixed-range volume profile as a direct button.
+ * entry, then one direct button per drawing tool in `CHART_TOOLS`.
  *
  * The group's icon and the arrow tab beside it both open the group's menu, and
  * the chevron points at that menu while it is closed and back at the rail while
@@ -149,16 +149,19 @@ export function DrawingToolRail({
         )}
       </div>
       <span className="tool-rail-sep" aria-hidden="true" />
-      <button
-        type="button"
-        className={`tool-rail-btn${drawingTool === 'fixedRangeProfile' ? ' active' : ''}`}
-        aria-label="Fixed range volume profile"
-        title="Fixed range volume profile"
-        aria-pressed={drawingTool === 'fixedRangeProfile'}
-        onClick={() => pick('fixedRangeProfile')}
-      >
-        <DrawingToolIcon name="fixedRangeProfile" size={26} />
-      </button>
+      {CHART_TOOLS.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          className={`tool-rail-btn${drawingTool === id ? ' active' : ''}`}
+          aria-label={label}
+          title={label}
+          aria-pressed={drawingTool === id}
+          onClick={() => pick(id)}
+        >
+          <DrawingToolIcon name={id} size={26} />
+        </button>
+      ))}
     </nav>
   );
 }

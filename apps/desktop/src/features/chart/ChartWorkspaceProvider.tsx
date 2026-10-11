@@ -9,8 +9,8 @@ export type ChartWorkspaceResources = Pick<
   | 'chart'
   | 'adapterRef'
   | 'fixedRangeProfileState'
-  | 'expectedProfile'
-  | 'profileGeneration'
+  | 'expectedFixedRangeProfile'
+  | 'fixedRangeProfileGeneration'
   | 'lastRequestedRangeRef'
   | 'stagedOrderState'
   | 'positionOverlayState'
@@ -34,8 +34,8 @@ export function ChartWorkspaceProvider({ children }: { children: ReactNode }) {
       chart: workspace.chart,
       adapterRef: workspace.adapterRef,
       fixedRangeProfileState: workspace.fixedRangeProfileState,
-      expectedProfile: workspace.expectedProfile,
-      profileGeneration: workspace.profileGeneration,
+      expectedFixedRangeProfile: workspace.expectedFixedRangeProfile,
+      fixedRangeProfileGeneration: workspace.fixedRangeProfileGeneration,
       lastRequestedRangeRef: workspace.lastRequestedRangeRef,
       stagedOrderState: workspace.stagedOrderState,
       positionOverlayState: workspace.positionOverlayState,
@@ -52,8 +52,8 @@ export function ChartWorkspaceProvider({ children }: { children: ReactNode }) {
       workspace.chart,
       workspace.adapterRef,
       workspace.fixedRangeProfileState,
-      workspace.expectedProfile,
-      workspace.profileGeneration,
+      workspace.expectedFixedRangeProfile,
+      workspace.fixedRangeProfileGeneration,
       workspace.lastRequestedRangeRef,
       workspace.stagedOrderState,
       workspace.positionOverlayState,

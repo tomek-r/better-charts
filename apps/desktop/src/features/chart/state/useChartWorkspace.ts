@@ -8,6 +8,7 @@ import type { PositionOverlayState } from '../engine/positionOverlay';
 import type { PartialCloseChipPort } from '../engine/partialCloseChipPort';
 import type { PriceLinesState } from '../engine/priceLinesOverlay';
 import type { PendingModification } from '../../../shared/bridge/types';
+import type { ExpectedFixedRangeProfile } from '../engine/fixedRangeProfileOverlay';
 import { useChartModificationDrafts } from './useChartModificationDrafts';
 
 export function useChartWorkspace() {
@@ -53,10 +54,8 @@ export function useChartWorkspace() {
   const instrumentDigitsRef = useRef<number | undefined>(undefined);
   // Fresh staged flag for the []-dep Escape handler (unstage only when staged).
   const stagedActiveRef = useRef(false);
-  const expectedProfile = useRef<{ symbol: string; fromMs: number; endMs: number; generation: number } | undefined>(
-    undefined,
-  );
-  const profileGeneration = useRef(0);
+  const expectedFixedRangeProfile = useRef<ExpectedFixedRangeProfile | undefined>(undefined);
+  const fixedRangeProfileGeneration = useRef(0);
   const lastRequestedRangeRef = useRef<{ fromMs: number; endMs: number } | undefined>(undefined);
   const chartHost = useRef<HTMLDivElement>(null);
   const chart = useRef<ChartController | null>(null);
@@ -74,8 +73,8 @@ export function useChartWorkspace() {
     partialCloseChipPortRef,
     instrumentDigitsRef,
     stagedActiveRef,
-    expectedProfile,
-    profileGeneration,
+    expectedFixedRangeProfile,
+    fixedRangeProfileGeneration,
     lastRequestedRangeRef,
     chartHost,
     chart,

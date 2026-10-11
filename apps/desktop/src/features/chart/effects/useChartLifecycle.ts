@@ -19,7 +19,7 @@ const toolFlyoutOpen = () => document.querySelector('.tool-flyout') !== null;
 
 export function useChartWorkspaceInitEffects(
   workspace: ChartWorkspaceState,
-  session: Pick<BridgeSessionState, 'setChartError' | 'requestProfileRange'>,
+  session: Pick<BridgeSessionState, 'setChartError' | 'requestProfileRange' | 'refreshLiveProfile'>,
 ): void {
   const {
     chartHost,
@@ -30,11 +30,11 @@ export function useChartWorkspaceInitEffects(
     stagedOrderState,
     priceLinesState,
     setDrawingTool,
-    expectedProfile,
-    profileGeneration,
+    expectedFixedRangeProfile,
+    fixedRangeProfileGeneration,
     lastRequestedRangeRef,
   } = workspace;
-  const { setChartError, requestProfileRange } = session;
+  const { setChartError, requestProfileRange, refreshLiveProfile } = session;
   const chartRef = chart;
   useLayoutEffect(() => {
     const host = chartHost.current;
@@ -53,10 +53,11 @@ export function useChartWorkspaceInitEffects(
       });
       chartRef.current = instance;
       instance.onProfileCommit = requestProfileRange;
+      instance.onProfileRefresh = (range) => refreshLiveProfile(range);
       instance.onToolRelease = () => setDrawingTool(null);
       instance.onProfileDelete = () => {
-        expectedProfile.current = undefined;
-        profileGeneration.current += 1;
+        expectedFixedRangeProfile.current = undefined;
+        fixedRangeProfileGeneration.current += 1;
         lastRequestedRangeRef.current = undefined;
         void invoke('cancel_tick_profile').catch(() => undefined);
       };
@@ -77,11 +78,12 @@ export function useChartWorkspaceInitEffects(
     adapterRef,
     chartHost,
     chartRef,
-    expectedProfile,
+    expectedFixedRangeProfile,
     fixedRangeProfileState,
     lastRequestedRangeRef,
     positionOverlayState,
-    profileGeneration,
+    fixedRangeProfileGeneration,
+    refreshLiveProfile,
     requestProfileRange,
     setChartError,
     setDrawingTool,
@@ -212,7 +214,7 @@ export function useChartWorkspaceResetEffects(
   >,
   ticket: Pick<OrderTicketStores['setters']['draft'], 'setEntry' | 'setStopLoss' | 'setTakeProfit'>,
 ): void {
-  const { chart, fixedRangeProfileState, expectedProfile, profileGeneration } = workspace;
+  const { chart, fixedRangeProfileState, expectedFixedRangeProfile, fixedRangeProfileGeneration } = workspace;
   const {
     status,
     snapshot,
@@ -228,8 +230,8 @@ export function useChartWorkspaceResetEffects(
   } = session;
   const { setEntry, setStopLoss, setTakeProfit } = ticket;
   const fixedRangeProfileRef = fixedRangeProfileState;
-  const expectedProfileRef = expectedProfile;
-  const profileGenerationRef = profileGeneration;
+  const expectedFixedRangeProfileRef = expectedFixedRangeProfile;
+  const fixedRangeProfileGenerationRef = fixedRangeProfileGeneration;
   const targetSymbolRef = targetSymbol;
   const pendingMetadataRef = pendingMetadata;
   useEffect(() => {
@@ -238,8 +240,8 @@ export function useChartWorkspaceResetEffects(
       loadingTimeframeRef.current = undefined;
       fixedRangeProfileRef.current.range = null;
       fixedRangeProfileState.current.profile = undefined;
-      expectedProfileRef.current = undefined;
-      profileGenerationRef.current += 1;
+      expectedFixedRangeProfileRef.current = undefined;
+      fixedRangeProfileGenerationRef.current += 1;
       chart.current?.clearProfileSelection();
       chart.current?.refreshOverlays();
       setSymbolLoading(false);
@@ -252,12 +254,12 @@ export function useChartWorkspaceResetEffects(
     }
   }, [
     chart,
-    expectedProfileRef,
+    expectedFixedRangeProfileRef,
     fixedRangeProfileRef,
     fixedRangeProfileState,
     loadingTimeframeRef,
     pendingMetadataRef,
-    profileGenerationRef,
+    fixedRangeProfileGenerationRef,
     setAccount,
     setInstrument,
     setLoadingTimeframe,
@@ -273,8 +275,8 @@ export function useChartWorkspaceResetEffects(
   useLayoutEffect(() => {
     fixedRangeProfileRef.current.range = null;
     fixedRangeProfileState.current.profile = undefined;
-    expectedProfileRef.current = undefined;
-    profileGenerationRef.current += 1;
+    expectedFixedRangeProfileRef.current = undefined;
+    fixedRangeProfileGenerationRef.current += 1;
     if (chart.current?.getProfileRange()) {
       chart.current.deleteProfile();
     } else {
@@ -286,10 +288,10 @@ export function useChartWorkspaceResetEffects(
     setTakeProfit('');
   }, [
     chart,
-    expectedProfileRef,
+    expectedFixedRangeProfileRef,
     fixedRangeProfileRef,
     fixedRangeProfileState,
-    profileGenerationRef,
+    fixedRangeProfileGenerationRef,
     setEntry,
     setStopLoss,
     setTakeProfit,

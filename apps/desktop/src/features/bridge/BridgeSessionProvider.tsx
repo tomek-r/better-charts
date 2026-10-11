@@ -63,6 +63,7 @@ type BridgeRuntimeInjection = Pick<
   | 'chooseSymbol'
   | 'chooseSymbolByName'
   | 'requestProfileRange'
+  | 'refreshLiveProfile'
 > & { actions: BridgeActions };
 const RuntimeContext = createContext<BridgeRuntimeInjection | null>(null);
 
@@ -74,8 +75,8 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
     chart: resources.chart,
     adapterRef: resources.adapterRef,
     fixedRangeProfileState: resources.fixedRangeProfileState,
-    expectedProfile: resources.expectedProfile,
-    profileGeneration: resources.profileGeneration,
+    expectedFixedRangeProfile: resources.expectedFixedRangeProfile,
+    fixedRangeProfileGeneration: resources.fixedRangeProfileGeneration,
     lastRequestedRangeRef: resources.lastRequestedRangeRef,
   });
   const actions = useMemo<BridgeActions>(
@@ -102,6 +103,7 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
       chooseSymbol: session.chooseSymbol,
       chooseSymbolByName: session.chooseSymbolByName,
       requestProfileRange: session.requestProfileRange,
+      refreshLiveProfile: session.refreshLiveProfile,
       actions,
     }),
     [
@@ -119,6 +121,7 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
       session.chooseSymbol,
       session.chooseSymbolByName,
       session.requestProfileRange,
+      session.refreshLiveProfile,
       stores,
     ],
   );

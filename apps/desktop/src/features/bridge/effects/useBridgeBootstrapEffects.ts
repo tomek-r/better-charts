@@ -47,8 +47,8 @@ export function useBridgeBootstrapEffects(
     chart,
     adapterRef,
     fixedRangeProfileState,
-    expectedProfile,
-    profileGeneration,
+    expectedFixedRangeProfile,
+    fixedRangeProfileGeneration,
     accountLoginRef,
     brokerServerRef,
     ticket,
@@ -130,7 +130,13 @@ export function useBridgeBootstrapEffects(
     const marketRuntime = createBridgeMarketRuntime(
       run,
       bootstrapSession,
-      { chart: chartRef, adapterRef: marketAdapterRef, fixedRangeProfileState, expectedProfile, profileGeneration },
+      {
+        chart: chartRef,
+        adapterRef: marketAdapterRef,
+        fixedRangeProfileState,
+        expectedFixedRangeProfile,
+        fixedRangeProfileGeneration,
+      },
       notifyError,
     );
     const ticketHandlers = createBridgeTicketResponseHandlers(
@@ -216,8 +222,8 @@ export function useBridgeBootstrapEffects(
                 marketRuntime.resetPageState();
                 loadingTimeframeRef.current = undefined;
                 setLoadingTimeframe(undefined);
-                expectedProfile.current = undefined;
-                profileGeneration.current += 1;
+                expectedFixedRangeProfile.current = undefined;
+                fixedRangeProfileGeneration.current += 1;
                 chartRef.current?.clearProfileSelection();
                 currentSymbolRef.current = undefined;
                 currentTimeframeRef.current = undefined;
@@ -333,8 +339,8 @@ export function useBridgeBootstrapEffects(
     chartRef,
     marketAdapterRef,
     fixedRangeProfileState,
-    expectedProfile,
-    profileGeneration,
+    expectedFixedRangeProfile,
+    fixedRangeProfileGeneration,
     notifyError,
   ]);
 }
