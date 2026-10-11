@@ -1,6 +1,6 @@
 use super::super::{
-    BridgeState, CompactTickProfile, TickHistoryRequest, TickHistorySnapshot, TickProfileBin,
-    TickProfileLevels, TickProfileRequest, TickProfileResult,
+    BridgeState, CompactTickProfile, ProfileSource, TickHistoryRequest, TickHistorySnapshot,
+    TickProfileBin, TickProfileLevels, TickProfileRequest, TickProfileResult,
 };
 use trading_core::volume_profile::{
     calculate_fixed_range_profile, FixedRangeProfile, FixedRangeProfileConfig, Tick as ProfileTick,
@@ -18,7 +18,7 @@ pub(crate) fn resolve_tick_size(
     cached_tick_size(state, symbol).unwrap_or_else(|| fallback_tick_size(ticks))
 }
 
-fn cached_tick_size(state: &BridgeState, symbol: &str) -> Option<rust_decimal::Decimal> {
+pub(crate) fn cached_tick_size(state: &BridgeState, symbol: &str) -> Option<rust_decimal::Decimal> {
     let guard = state
         .symbol_cache
         .lock()
@@ -141,7 +141,7 @@ pub(crate) fn build_streamed_tick_profile(
     ))
 }
 
-fn profile_result(
+pub(crate) fn profile_result(
     symbol: String,
     from_ms: i64,
     end_ms: i64,
@@ -149,6 +149,9 @@ fn profile_result(
     calculated: FixedRangeProfile,
 ) -> TickProfileResult {
     TickProfileResult {
+        source: ProfileSource::Ticks,
+        bar_timeframe: None,
+        covered_from_ms: None,
         symbol,
         from_ms,
         end_ms,

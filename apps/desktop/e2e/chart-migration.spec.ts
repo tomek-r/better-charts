@@ -1,10 +1,20 @@
 import { test, expect, type Page } from '@playwright/test';
 import { profileBoundaries as boundaries, profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
+import { SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeProfile/loader';
 import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
+import {
+  LOADER_MAX_WIDTH,
+  LOADER_ROW_COUNT,
+  LOADER_ROW_HEIGHT,
+  LOADING_WASH_ALPHA,
+} from '../src/features/tools/fixedRangeProfile/overlay';
+import { palette } from '../src/shared/theme/palette';
 
 const INTERVAL = 300_000;
+/** The loader paints one red and one teal bar per row in every frame. */
+const BARS_PER_LOADER = LOADER_ROW_COUNT * 2;
 async function data(page: Page) {
   return page.evaluate(() => window.__chartTest?.data() ?? []);
 }
@@ -44,6 +54,9 @@ async function select(page: Page, first = 2, second = 6) {
 async function respond(page: Page, requestIndex = 0, complete = true) {
   const request = (await requests(page))[requestIndex];
   await pushEvent(page, 'tick-profile', {
+    source: 'ticks',
+    barTimeframe: null,
+    coveredFromMs: null,
     symbol: request.args.symbol,
     fromMs: request.args.fromMs,
     endMs: request.args.endMs,
@@ -504,6 +517,122 @@ test('a rejected request_tick_profile surfaces an error and leaves no profile pe
   await respond(page);
   expect((await profileState(page)).range).toEqual(range);
   expect((await profileState(page)).hasProfile).toBe(false);
+});
+
+test('a profile request pending for 6 seconds shows an animated profile loader that disappears once the result arrives', async ({
+  page,
+}) => {
+  // The loader is the only full-alpha red/teal fillRect of its row height and width range; record those draws.
+  await page.addInitScript(
+    ({ bidColor, askColor, rowHeight, maxWidth, washColor, washAlpha, barsPerLoader }) => {
+      const probe = { bars: 0, washes: 0, washBeforeBars: true, bidWidths: [] as number[] };
+      (window as unknown as { loaderProbe: typeof probe }).loaderProbe = probe;
+      const fillRect = CanvasRenderingContext2D.prototype.fillRect;
+      CanvasRenderingContext2D.prototype.fillRect = function (
+        this: CanvasRenderingContext2D,
+        ...args: Parameters<typeof fillRect>
+      ) {
+        // The wash is the only fillRect in the loading-wash colour and alpha.
+        if (this.fillStyle === washColor && Math.abs(this.globalAlpha - washAlpha) < 1e-6) {
+          probe.washes += 1;
+        }
+        const isLoaderBar =
+          (this.fillStyle === bidColor || this.fillStyle === askColor) &&
+          this.globalAlpha === 1 &&
+          args[3] === rowHeight &&
+          args[2] <= maxWidth;
+        if (isLoaderBar) {
+          probe.bars += 1;
+          if (this.fillStyle === bidColor) {
+            probe.bidWidths.push(args[2]);
+          }
+          // Each loader frame must follow a wash draw of that frame.
+          probe.washBeforeBars &&= probe.washes * barsPerLoader >= probe.bars;
+        }
+        return fillRect.apply(this, args);
+      };
+    },
+    {
+      bidColor: palette.sell,
+      askColor: palette.buy,
+      rowHeight: LOADER_ROW_HEIGHT,
+      maxWidth: LOADER_MAX_WIDTH,
+      washColor: palette.raised,
+      washAlpha: LOADING_WASH_ALPHA,
+      barsPerLoader: BARS_PER_LOADER,
+    },
+  );
+  const probe = () =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            loaderProbe: { bars: number; washes: number; washBeforeBars: boolean; bidWidths: number[] };
+          }
+        ).loaderProbe,
+    );
+  await page.clock.install();
+  await requestProfile(page);
+  await page.clock.runFor(SLOW_PROFILE_SPINNER_DELAY_MS - 1000);
+  expect((await probe()).bars).toBe(0);
+  expect((await probe()).washes).toBe(0);
+  await page.clock.runFor(2000);
+  const shown = await probe();
+  expect(shown.bars).toBeGreaterThan(0);
+  // The veil appears with the loader and is painted before it in every frame.
+  expect(shown.washes * BARS_PER_LOADER).toBe(shown.bars);
+  expect(shown.washBeforeBars).toBe(true);
+  await page.clock.runFor(300);
+  const animating = await probe();
+  expect(animating.bars).toBeGreaterThan(shown.bars);
+  // The bars grow and shrink: the widths drawn across frames are not all the same.
+  expect(new Set(animating.bidWidths.map((width) => width.toFixed(3))).size).toBeGreaterThan(1);
+
+  await respond(page);
+  await page.clock.runFor(100);
+  expect((await profileState(page)).hasProfile).toBe(true);
+  const stopped = (await probe()).bars;
+  const washesStopped = (await probe()).washes;
+  await page.clock.runFor(1000);
+  expect((await probe()).bars).toBe(stopped);
+  expect((await probe()).washes).toBe(washesStopped);
+});
+
+test('the loading wash of a range ending in the empty area reaches the right handle, not the newest bar', async ({
+  page,
+}) => {
+  await page.addInitScript(
+    ({ washColor, washAlpha }) => {
+      const washes: Array<{ x: number; width: number }> = [];
+      (window as unknown as { lastWashes: typeof washes }).lastWashes = washes;
+      const fillRect = CanvasRenderingContext2D.prototype.fillRect;
+      CanvasRenderingContext2D.prototype.fillRect = function (
+        this: CanvasRenderingContext2D,
+        ...args: Parameters<typeof fillRect>
+      ) {
+        if (this.fillStyle === washColor && Math.abs(this.globalAlpha - washAlpha) < 1e-6) {
+          washes.push({ x: args[0], width: args[2] });
+        }
+        return fillRect.apply(this, args);
+      };
+    },
+    { washColor: palette.raised, washAlpha: LOADING_WASH_ALPHA },
+  );
+  await page.clock.install();
+  await commitFutureRange(page);
+  await page.clock.runFor(9000);
+  const { washes, handles, newestBarX } = await page.evaluate((newestBarMs) => {
+    const washes = (window as unknown as { lastWashes: Array<{ x: number; width: number }> }).lastWashes;
+    return {
+      washes: washes.slice(-1),
+      handles: window.__chartTest!.tool('fixedRangeProfile')!.boundaries()!,
+      newestBarX: window.__chartTest!.timeToX(newestBarMs),
+    };
+  }, NEWEST_BAR_MS);
+  expect(washes).toHaveLength(1);
+  expect(washes[0].x).toBeCloseTo(handles.fromX, 3);
+  expect(washes[0].x + washes[0].width).toBeCloseTo(handles.toX, 3);
+  expect(handles.toX).toBeGreaterThan(newestBarX + 20);
 });
 
 test('an incomplete-history profile result can still render its available bins', async ({ page }) => {

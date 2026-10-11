@@ -8,7 +8,17 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
 ## Available
 
 - Live candles, Bid/Ask, symbol search/metadata, configurable timeframes and
-  older-history paging; Fixed Range Volume Profile with BID/ASK and POC/VAH/VAL.
+  older-history paging; Fixed Range Volume Profile with BID/ASK and POC/VAH/VAL. The profile is
+  tick-exact when the range is affordable; otherwise (estimated from bars, or
+  when a tick load hits the page/price limit) it is an APPROXIMATE bar profile
+  (UP/DOWN volume in the ask/bid series, bar timeframe shown in the range band);
+  fetched bars are cached in memory so refreshing an open range only fetches the
+  newest (and, if extended, older) bars. When the broker's history for the bar
+  timeframe ends inside the range, coarser timeframes (up to D1) are tried for
+  the whole range; if none reaches the range start, the furthest-reaching one is
+  used and the band label turns amber (`M2 · from 20 Mar`, `coveredFromMs`) so a
+  partial profile is never shown as complete. Each profile logs its tick/bar
+  choice, retries and reason to the `pnpm dev` terminal.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
 - Chart SL/TP clear chips remove the selected live level from positions or

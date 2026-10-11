@@ -2,12 +2,17 @@ import type { RenderViewport } from '../../chart/engine/toolContract';
 import type { ProfileResult, TickProfileBin } from '../../../shared/bridge/types';
 import { palette } from '../../../shared/theme/palette';
 
-/** Mirrored BID/ASK profile, below trading labels; levels carry no labels. */
+/**
+ * Mirrored BID/ASK profile, below trading labels; levels carry no labels. A `bars` profile is an approximation
+ * (bid series = DOWN volume, ask = UP volume) and is the only one that carries text: its bar timeframe code.
+ */
 export interface FixedRangeProfileState {
   /** null/undefined = no active selection — the overlay renders nothing. */
   range?: { fromMs: number; toMs: number } | null;
   /** Profile computed for exactly `range` (Rust side, wire types). */
   profile?: ProfileResult;
+  /** The awaited profile request is slow: the overlay veils the range and draws a spinner. Written only by the loader. */
+  loadingIndicator?: boolean;
   /** A boundary preview hides the result until release or cancellation. */
   previewing?: boolean;
   /** Painted geometry from the last frame (dev hook / tests). */
@@ -33,6 +38,13 @@ const ROW_ALPHA = 0.75;
 const POC_ROW_ALPHA = 1;
 // Level lines keep the TAP look: same alpha.
 const LEVEL_ALPHA = 0.95;
+
+const BAR_LABEL_COLOR = palette.muted;
+/** A profile whose history starts inside the range must not look complete. */
+const BAR_LABEL_PARTIAL_COLOR = palette.warnText;
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const BAR_LABEL_FONT = '400 11px system-ui, sans-serif';
+const BAR_LABEL_INSET = 6;
 
 // Weights arrive as decimal strings but are parsed defensively, exactly
 // like tickActivityOverlay's binWeight: invalid or non-positive counts as 0.
@@ -180,6 +192,183 @@ export function drawFixedRangeProfile(
     ctx.setLineDash([]);
     hit[`${def.key}Y`] = lineY;
   }
+  if (profile.source === 'bars' && profile.barTimeframe) {
+    drawBarTimeframeLabel(ctx, viewport, anchorX, profile.barTimeframe, profile.coveredFromMs);
+  }
   ctx.restore();
   state.hit = hit;
+}
+
+/**
+ * Top-left corner of the range band, kept inside the pane when the band starts off screen. Canvas units are CSS
+ * pixels (the context is already scaled by the device pixel ratio), so the inset and font size need no DPR factor.
+ */
+function drawBarTimeframeLabel(
+  ctx: CanvasRenderingContext2D,
+  viewport: RenderViewport,
+  bandLeft: number,
+  timeframe: string,
+  coveredFromMs: number | null,
+): void {
+  const { x, y } = viewport.chartRect;
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = coveredFromMs === null ? BAR_LABEL_COLOR : BAR_LABEL_PARTIAL_COLOR;
+  ctx.font = BAR_LABEL_FONT;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  const text = coveredFromMs === null ? timeframe : `${timeframe} · from ${formatUtcDayMonth(coveredFromMs)}`;
+  ctx.fillText(text, Math.max(x, bandLeft) + BAR_LABEL_INSET, y + BAR_LABEL_INSET);
+}
+
+/** `20 Mar`: UTC day and short English month, independent of the browser locale. */
+function formatUtcDayMonth(ms: number): string {
+  const date = new Date(ms);
+  return `${date.getUTCDate()} ${SHORT_MONTHS[date.getUTCMonth()]}`;
+}
+
+export const LOADER_ROW_COUNT = 5;
+export const LOADER_ROW_HEIGHT = 4;
+export const LOADER_ROW_GAP = 2;
+export const LOADER_MIN_WIDTH = 3;
+export const LOADER_MAX_WIDTH = 18;
+/** Vertical overhang of the dashed centre line beyond the first and last row. */
+export const LOADER_LINE_MARGIN = 3;
+/** Each bar holds a step for its own duration, `BASE` plus 0..4 increments of `SPREAD`, so bars never change in sync. */
+const LOADER_STEP_BASE_MS = 350;
+const LOADER_STEP_SPREAD_MS = 50;
+const LOADER_STEP_SPREAD_COUNT = 5;
+const LOADER_LINE_DASH = [4, 3];
+const LOADING_WASH_COLOR = palette.raised;
+/** Translucent enough that candles under the wash stay faintly readable. */
+export const LOADING_WASH_ALPHA = 0.45;
+
+/**
+ * The pane x of the two selection handles. The loading band spans exactly these: `state.range.toMs`
+ * is the request end clipped to the live edge, so it stops at the newest bar when the handle sits
+ * on a future slot.
+ */
+export interface HandleEdges {
+  fromX: number;
+  toX: number;
+}
+
+/**
+ * The band between the handles, clamped to the pane, or null when nothing should be drawn
+ * for the loading indication: no slow load flagged, no range, a boundary preview, or a band
+ * wholly off screen. Shared by the wash and the spinner so they always cover the same band.
+ * Without `handles` the band falls back to the requested range.
+ */
+function loadingBand(
+  viewport: RenderViewport,
+  state: FixedRangeProfileState,
+  handles?: HandleEdges,
+): { left: number; right: number } | null {
+  const range = state.range;
+  if (!range || !state.loadingIndicator || state.previewing) {
+    return null;
+  }
+  const { x, width } = viewport.chartRect;
+  const startX = handles?.fromX ?? viewport.timeToX(range.fromMs);
+  const endX = handles?.toX ?? viewport.timeToX(range.toMs);
+  if (!Number.isFinite(startX) || !Number.isFinite(endX)) {
+    return null;
+  }
+  const left = Math.max(x, Math.min(startX, endX));
+  const right = Math.min(x + width, Math.max(startX, endX));
+  return left > right ? null : { left, right };
+}
+
+/**
+ * Loading wash: a semi-transparent veil over the range band (clamped to the pane, full pane
+ * height) painted while the slow-load spinner shows. The tool draws it after the histogram, so
+ * a profile kept during a refresh is veiled and reads as updating, and before the spinner,
+ * which stays on top. Same skip rules as the spinner.
+ */
+export function drawFixedRangeProfileLoadingWash(
+  ctx: CanvasRenderingContext2D,
+  viewport: RenderViewport,
+  state: FixedRangeProfileState,
+  handles?: HandleEdges,
+): void {
+  const band = loadingBand(viewport, state, handles);
+  if (!band || band.right === band.left) {
+    return;
+  }
+  const { y, height } = viewport.chartRect;
+  ctx.save();
+  ctx.globalAlpha = LOADING_WASH_ALPHA;
+  ctx.fillStyle = LOADING_WASH_COLOR;
+  ctx.fillRect(band.left, y, band.right - band.left, height);
+  ctx.restore();
+}
+
+/** Deterministic integer hash of (bar, step) to [0, 1): a murmur-style finaliser, so targets look random. */
+function hashUnit(bar: number, step: number): number {
+  let h = Math.imul(bar + 1, 0x9e3779b1) ^ Math.imul(step | 0, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+  return ((h ^ (h >>> 16)) >>> 0) / 0x100000000;
+}
+
+function loaderBarWidth(bar: number, nowMs: number): number {
+  const stepMs = LOADER_STEP_BASE_MS + ((bar * 3) % LOADER_STEP_SPREAD_COUNT) * LOADER_STEP_SPREAD_MS;
+  const step = Math.floor(nowMs / stepMs);
+  const progress = nowMs / stepMs - step;
+  const eased = progress * progress * (3 - 2 * progress);
+  const from = hashUnit(bar, step - 1);
+  const to = hashUnit(bar, step);
+  return LOADER_MIN_WIDTH + (LOADER_MAX_WIDTH - LOADER_MIN_WIDTH) * (from + (to - from) * eased);
+}
+
+/**
+ * Bar half-widths of the loader's rows at `nowMs`: every bar (row and side) eases with a smoothstep from its
+ * previous pseudo-random target to the next one, each on its own step length, so the bars shrink and grow
+ * independently. Pure: the targets come from an integer hash, not from `Math.random`.
+ */
+export function loaderRowWidths(nowMs: number): Array<{ bid: number; ask: number }> {
+  return Array.from({ length: LOADER_ROW_COUNT }, (_, row) => ({
+    bid: loaderBarWidth(row * 2, nowMs),
+    ask: loaderBarWidth(row * 2 + 1, nowMs),
+  }));
+}
+
+/**
+ * Slow-load profile loader: a tiny mirrored BID/ASK profile (dashed centre line, red bars growing left,
+ * teal bars right) centred horizontally in the range band (clamped to the visible pane) and vertically in
+ * the pane. Nothing is drawn while the band is wholly off screen, the loader reports no slow load, or a
+ * boundary preview is active. `nowMs` only sets the bar widths.
+ */
+export function drawFixedRangeProfileSpinner(
+  ctx: CanvasRenderingContext2D,
+  viewport: RenderViewport,
+  state: FixedRangeProfileState,
+  nowMs: number,
+  handles?: HandleEdges,
+): void {
+  const band = loadingBand(viewport, state, handles);
+  if (!band) {
+    return;
+  }
+  const { y, height } = viewport.chartRect;
+  const centerX = (band.left + band.right) / 2;
+  const totalHeight = LOADER_ROW_COUNT * LOADER_ROW_HEIGHT + (LOADER_ROW_COUNT - 1) * LOADER_ROW_GAP;
+  const top = y + height / 2 - totalHeight / 2;
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = VA_COLOR;
+  ctx.setLineDash(LOADER_LINE_DASH);
+  ctx.beginPath();
+  ctx.moveTo(centerX, top - LOADER_LINE_MARGIN);
+  ctx.lineTo(centerX, top + totalHeight + LOADER_LINE_MARGIN);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  loaderRowWidths(nowMs).forEach((row, index) => {
+    const rowTop = top + index * (LOADER_ROW_HEIGHT + LOADER_ROW_GAP);
+    ctx.fillStyle = BID_COLOR;
+    ctx.fillRect(centerX - row.bid, rowTop, row.bid, LOADER_ROW_HEIGHT);
+    ctx.fillStyle = ASK_COLOR;
+    ctx.fillRect(centerX, rowTop, row.ask, LOADER_ROW_HEIGHT);
+  });
+  ctx.restore();
 }

@@ -16,7 +16,7 @@ TIMEFRAMES = json.loads((Path(__file__).resolve().parent.parent / "config/timefr
 SUPPORTED_TIMEFRAMES = [entry["code"] for entry in TIMEFRAMES["timeframes"]]
 
 LEGACY_TRANSFER_LIMITS = {"max_frame_bytes": 1024 * 1024, "max_ticks_per_page": 5000}
-TRANSFER_LIMITS = {"max_frame_bytes": 8 * 1024 * 1024, "max_ticks_per_page": 65535}
+TRANSFER_LIMITS = {"max_frame_bytes": 8 * 1024 * 1024, "max_ticks_per_page": 262144}
 MAX_FRAME = TRANSFER_LIMITS["max_frame_bytes"]
 TIMEOUT_SECONDS = 20.0
 HEARTBEAT_SECONDS = 2.0
@@ -129,6 +129,13 @@ def tick_price_summary(message: dict) -> dict:
 # filled reports complete=False, which is how a client learns it reached the end.
 HISTORY_FLOOR_MS = 1_699_992_800_000
 HISTORY_INTERVAL_MS = 60_000
+# Mirrors the EA: older pages are served for any supported timeframe of the
+# active symbol only (the symbol of the last window snapshot).
+ACTIVE_FEED = {"symbol": "TEST.INIT"}
+# The EA waits at most this long for a series that is still synchronizing
+# (BRIDGE_HISTORY_PAGE_DEADLINE_MS), then answers a correlated INTERNAL_ERROR.
+PAGE_SYNC_DEADLINE_SECONDS = 10.0
+PAGE_SYNC_TIMEOUT_MESSAGE = "history page synchronization timed out"
 
 
 def synthetic_history_page(request: dict, session_id: str, max_frame: int) -> dict:
@@ -139,6 +146,9 @@ def synthetic_history_page(request: dict, session_id: str, max_frame: int) -> di
     assert isinstance(bars, int) and 1 <= bars <= 1000, request
     candles = []
     time_ms = before_ms - HISTORY_INTERVAL_MS
+    # Another symbol is refused like the EA does: an empty, incomplete page.
+    if request["symbol"] != ACTIVE_FEED["symbol"]:
+        time_ms = HISTORY_FLOOR_MS - HISTORY_INTERVAL_MS
     while len(candles) < bars and time_ms >= HISTORY_FLOOR_MS:
         candles.append({"time_ms": time_ms, "open": "99.0", "high": "100.0", "low": "98.0", "close": "99.5",
                         "tick_volume": 5, "spread": 2, "real_volume": 0})
@@ -152,9 +162,24 @@ def synthetic_history_page(request: dict, session_id: str, max_frame: int) -> di
     return message
 
 
+def history_page_reply(request: dict, session_id: str, max_frame: int, sync_delay_seconds: float) -> tuple[float, dict]:
+    """Returns (seconds to wait, frame). A series that synchronizes within the
+    deadline is answered after that delay; a slower one never is, and the EA
+    answers an error whose envelope id is the page's own request id (an
+    uncorrelated error would tear the Rust session down)."""
+    if sync_delay_seconds >= PAGE_SYNC_DEADLINE_SECONDS:
+        error = envelope("error", request["_request_id"], session_id,
+                         {"code": "INTERNAL_ERROR", "message": PAGE_SYNC_TIMEOUT_MESSAGE, "retryable": False})
+        return PAGE_SYNC_DEADLINE_SECONDS, error
+    return sync_delay_seconds, synthetic_history_page(request, session_id, max_frame)
+
+
 def handle_history_page(reader: FrameReader, conn: socket.socket, session_id: str | None, message: dict) -> bool:
     """Answers an older-history page. A page is identified by its anchor rather
-    than by its message type, so this is tested before the window branch."""
+    than by its message type, so this is tested before the window branch. The
+    desktop's tick-profile bar estimate and approximate-profile pages are the
+    same wire request (their ids start with `rust-profile-bars-`), so this
+    handler answers them too."""
     if message.get("type") != "history_request":
         return False
     payload = message.get("payload")
@@ -162,8 +187,12 @@ def handle_history_page(reader: FrameReader, conn: socket.socket, session_id: st
         return False
     assert session_id is not None and message.get("session_id") == session_id
     request = {**payload, "_request_id": message.get("id")}
-    send_frame(conn, synthetic_history_page(request, session_id, reader.transfer_limits["max_frame_bytes"]),
-               reader.transfer_limits["max_frame_bytes"])
+    # Manual option for the not-yet-synchronized case; it blocks this
+    # single-threaded mock, so keep it below the bridge idle timeout.
+    sync_delay = float(os.environ.get("MT5_MOCK_PAGE_SYNC_DELAY_MS", "0")) / 1000.0
+    wait_seconds, frame = history_page_reply(request, session_id, reader.transfer_limits["max_frame_bytes"], sync_delay)
+    time.sleep(wait_seconds)
+    send_frame(conn, frame, reader.transfer_limits["max_frame_bytes"])
     return True
 
 
@@ -179,11 +208,31 @@ def self_test_history_page() -> int:
     assert times == sorted(times) and len(set(times)) == len(times)
     assert times[-1] < request["before_ms"], "a page must be strictly older than its anchor"
     assert times[0] == HISTORY_FLOOR_MS
+    # The tick-profile load estimate sums these.
+    assert all(candle["tick_volume"] > 0 for candle in payload["candles"])
     # A page that exactly fits the remaining history reports complete=True.
     small = synthetic_history_page({**request, "bars": len(times)}, "synthetic-session",
                                    TRANSFER_LIMITS["max_frame_bytes"])["payload"]
     assert small["complete"] is True and len(small["candles"]) == len(times)
-    print("mock older-history page self-test passed: strictly-older pages, ordered candles, end of history reported")
+    # Any supported timeframe of the active symbol is served, not only the chart's.
+    for timeframe in SUPPORTED_TIMEFRAMES:
+        other = synthetic_history_page({**request, "timeframe": timeframe}, "synthetic-session",
+                                       TRANSFER_LIMITS["max_frame_bytes"])["payload"]
+        assert other["timeframe"] == timeframe and other["candles"], timeframe
+    # Another symbol is refused with an empty, incomplete page.
+    refused = synthetic_history_page({**request, "symbol": "OTHER"}, "synthetic-session",
+                                     TRANSFER_LIMITS["max_frame_bytes"])["payload"]
+    assert refused["candles"] == [] and refused["complete"] is False
+    # A series that synchronizes in time is answered after the delay.
+    wait, frame = history_page_reply(request, "synthetic-session", TRANSFER_LIMITS["max_frame_bytes"], 0.25)
+    assert wait == 0.25 and frame["type"] == "history_snapshot" and frame["payload"]["candles"]
+    # One that does not gets an error whose envelope id is the request id.
+    wait, frame = history_page_reply(request, "synthetic-session", TRANSFER_LIMITS["max_frame_bytes"],
+                                     PAGE_SYNC_DEADLINE_SECONDS + 1)
+    assert wait == PAGE_SYNC_DEADLINE_SECONDS and frame["type"] == "error"
+    assert frame["id"] == request["_request_id"]
+    assert frame["payload"] == {"code": "INTERNAL_ERROR", "message": PAGE_SYNC_TIMEOUT_MESSAGE, "retryable": False}
+    print("mock older-history page self-test passed: strictly-older pages, any timeframe, other symbol refused, sync delay and correlated timeout error")
     return 0
 
 
@@ -199,13 +248,14 @@ def self_test_tick_history() -> int:
         assert payload["ticks"][0]["time_ms"] == request["from_ms"]
         if limits == TRANSFER_LIMITS:
             assert size > LEGACY_TRANSFER_LIMITS["max_frame_bytes"]
-            assert len(payload["ticks"]) == request["max_ticks"]
+            # 262,144 ticks exceed the 8 MiB frame, so the page is byte-bounded.
+            assert LEGACY_TRANSFER_LIMITS["max_ticks_per_page"] < len(payload["ticks"]) <= request["max_ticks"]
         summary = tick_price_summary(message)["payload"]
         assert summary["loaded_ticks"] == len(payload["ticks"]) - 1
         assert summary["through_ms"] == payload["ticks"][-1]["time_ms"]
         assert sum(price["total"] for price in summary["prices"]) == summary["loaded_ticks"]
         assert len(json.dumps(summary).encode()) < 1024
-        if limits["max_frame_bytes"] == 1024 * 1024 and request["max_ticks"] == 65535:
+        if limits["max_frame_bytes"] == 1024 * 1024 and request["max_ticks"] == TRANSFER_LIMITS["max_ticks_per_page"]:
             assert len(payload["ticks"]) < request["max_ticks"]
     request = {"symbol": "TEST.SYNTHETIC", "from_ms": 101, "to_ms": 111, "max_ticks": 5000, "_request_id": "boundary-page"}
     payload = synthetic_tick_history(request, "synthetic-session", LEGACY_TRANSFER_LIMITS)["payload"]
@@ -655,6 +705,7 @@ def main() -> int:
         assert history_request.get("symbol") == "US100.TEST"
         timeframe = history_request.get("timeframe")
         assert timeframe in SUPPORTED_TIMEFRAMES
+        ACTIVE_FEED["symbol"] = "US100.TEST"
         send_frame(conn, envelope("history_snapshot", "ea-history-us100", session_id, {
             "request_id": history_request.get("_request_id"), "symbol": "US100.TEST", "timeframe": timeframe, "complete": True,
             "candles": [

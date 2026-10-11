@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         symbol: raw.symbol.clone(),
         from_ms: raw.from_ms,
         to_ms: raw.to_ms,
-        max_ticks: 65535,
+        max_ticks: 262_144,
     };
     raw.validate(&request)?;
     summary.validate(&request)?;

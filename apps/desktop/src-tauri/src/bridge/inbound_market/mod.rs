@@ -8,8 +8,11 @@
 //! error frame itself, keeping the send ordering identical to the original
 //! if-chain.
 
+mod profile_bars;
 mod tick_profile;
 
+#[cfg(test)]
+pub(crate) use tick_profile::finish_tick_page;
 pub(crate) use tick_profile::{tick_history, tick_history_error, tick_price_history};
 
 use super::{
@@ -36,6 +39,11 @@ pub(crate) async fn history_snapshot(inbound: &Inbound<'_>, message: Envelope) -
         }
     };
     match claim_for_session(inbound.state, inbound.session_id, || {
+        // The tick profile's own bar requests are claimed first; they carry
+        // their own ids and never touch the chart's slots.
+        if let Some(outcome) = profile_bars::profile_bar_snapshot(inbound, &snapshot) {
+            return outcome;
+        }
         // A page is claimed before the window and never replaces the market
         // snapshot, so lazy loading cannot re-point the order ticket's last
         // price or the `bar_update` staleness bound at an old bar.

@@ -112,6 +112,8 @@ impl BridgeState {
             pending_tick_profile: Arc::new(Mutex::new(None)),
             expected_tick_profile: Arc::new(Mutex::new(None)),
             tick_controller: Arc::new(Mutex::new(TickCacheController::default())),
+            pending_profile_bars: Arc::new(Mutex::new(None)),
+            expected_profile_bars: Arc::new(Mutex::new(None)),
             pending_symbol_search: Arc::new(Mutex::new(None)),
             expected_symbol_search: Arc::new(Mutex::new(None)),
             pending_symbol_info: Arc::new(Mutex::new(None)),

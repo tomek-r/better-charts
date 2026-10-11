@@ -44,6 +44,10 @@ pub struct FixedRangeBin {
 /// Fixed Range Volume Profile over ticks already filtered to the range by
 /// the caller. See [`calculate_fixed_range_profile`] for the weighting,
 /// binning, and level rules. Prices are normalized decimal strings.
+///
+/// When built by [`calculate_bar_profile`](super::calculate_bar_profile) the
+/// profile is approximate and the split series change meaning: for bar
+/// profiles bid = down volume and ask = up volume.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FixedRangeProfile {
     pub bins: Vec<FixedRangeBin>,
@@ -64,7 +68,7 @@ pub struct FixedRangeProfile {
 impl FixedRangeProfile {
     /// Deterministic shape for an empty range or unusable configuration:
     /// empty histogram, zero counters, and every level `None`.
-    fn empty(rejected_ticks: u64) -> Self {
+    pub(super) fn empty(rejected_ticks: u64) -> Self {
         Self {
             bins: Vec::new(),
             actual_rows: 0,
@@ -255,10 +259,6 @@ fn calculate_fixed_range_contributions(
     if config.tick_size <= Decimal::ZERO || config.rows == 0 {
         return FixedRangeProfile::empty(0);
     }
-    let value_area_percent = config
-        .value_area_percent
-        .max(Decimal::ZERO)
-        .min(Decimal::ONE);
     if contributions.is_empty() {
         return FixedRangeProfile::empty(rejected_ticks);
     }
@@ -270,45 +270,97 @@ fn calculate_fixed_range_contributions(
         max_price = max_price.max(price);
     }
 
-    // Deterministic width rule: tick-grid anchor, whole-tick width,
-    // actual_rows = ceil(span_ticks / width_ticks) <= rows.
-    let min_aligned = (min_price / config.tick_size).floor() * config.tick_size;
-    let span_ticks =
-        (((max_price - min_aligned) / config.tick_size).floor() + Decimal::ONE).max(Decimal::ONE);
-    let target_rows = Decimal::from(config.rows as u64);
-    let width_ticks = (span_ticks / target_rows).ceil().max(Decimal::ONE);
-    let width = width_ticks * config.tick_size;
-    let actual_rows = (span_ticks / width_ticks)
-        .ceil()
-        .to_usize()
-        .unwrap_or(1)
-        .max(1);
-    let mut bins = (0..actual_rows)
-        .map(|index| {
-            let low = min_aligned + width * Decimal::from(index as u64);
-            FixedRangeBin {
-                low: price_string(low),
-                high: price_string(low + width),
-                center: price_string(low + width / Decimal::from(2u64)),
-                total: 0,
-                bid: 0,
-                ask: 0,
-            }
-        })
-        .collect::<Vec<_>>();
+    let grid = RowGrid::new(min_price, max_price, config);
+    let mut bins = grid.bins();
     for (price, mode, weight) in contributions {
-        let index = (((price - min_aligned) / width)
-            .floor()
-            .to_usize()
-            .unwrap_or(0))
-        .min(actual_rows - 1);
+        let bin = &mut bins[grid.row_of(price)];
         match mode {
-            FixedRangeMode::Total => bins[index].total += weight,
-            FixedRangeMode::Bid => bins[index].bid += weight,
-            FixedRangeMode::Ask => bins[index].ask += weight,
+            FixedRangeMode::Total => bin.total += weight,
+            FixedRangeMode::Bid => bin.bid += weight,
+            FixedRangeMode::Ask => bin.ask += weight,
+        }
+    }
+    finish_profile(bins, config.value_area_percent, rejected_ticks)
+}
+
+/// The deterministic row grid shared by the tick and bar profiles; the width
+/// rule is documented on [`calculate_fixed_range_profile`] (section "Bins").
+pub(super) struct RowGrid {
+    min_aligned: Decimal,
+    width: Decimal,
+    actual_rows: usize,
+}
+
+impl RowGrid {
+    /// Grid covering `[min_price, max_price]`. The caller guarantees
+    /// `tick_size > 0`, `rows > 0` and `min_price <= max_price`.
+    pub(super) fn new(
+        min_price: Decimal,
+        max_price: Decimal,
+        config: &FixedRangeProfileConfig,
+    ) -> Self {
+        // Deterministic width rule: tick-grid anchor, whole-tick width,
+        // actual_rows = ceil(span_ticks / width_ticks) <= rows.
+        let min_aligned = (min_price / config.tick_size).floor() * config.tick_size;
+        let span_ticks = (((max_price - min_aligned) / config.tick_size).floor() + Decimal::ONE)
+            .max(Decimal::ONE);
+        let target_rows = Decimal::from(config.rows as u64);
+        let width_ticks = (span_ticks / target_rows).ceil().max(Decimal::ONE);
+        let actual_rows = (span_ticks / width_ticks)
+            .ceil()
+            .to_usize()
+            .unwrap_or(1)
+            .max(1);
+        Self {
+            min_aligned,
+            width: width_ticks * config.tick_size,
+            actual_rows,
         }
     }
 
+    /// Inclusive lower edge of row `index`.
+    pub(super) fn row_low(&self, index: usize) -> Decimal {
+        self.min_aligned + self.width * Decimal::from(index as u64)
+    }
+
+    pub(super) fn row_width(&self) -> Decimal {
+        self.width
+    }
+
+    pub(super) fn bins(&self) -> Vec<FixedRangeBin> {
+        (0..self.actual_rows)
+            .map(|index| {
+                let low = self.row_low(index);
+                FixedRangeBin {
+                    low: price_string(low),
+                    high: price_string(low + self.width),
+                    center: price_string(low + self.width / Decimal::from(2u64)),
+                    total: 0,
+                    bid: 0,
+                    ask: 0,
+                }
+            })
+            .collect()
+    }
+
+    /// Row holding `price`, clamped into the grid.
+    pub(super) fn row_of(&self, price: Decimal) -> usize {
+        (((price - self.min_aligned) / self.width)
+            .floor()
+            .to_usize()
+            .unwrap_or(0))
+        .min(self.actual_rows - 1)
+    }
+}
+
+/// Derives totals and the POC/VAH/VAL levels of the three histograms from
+/// filled bins. `value_area_percent` is clamped to `[0, 1]`.
+pub(super) fn finish_profile(
+    bins: Vec<FixedRangeBin>,
+    value_area_percent: Decimal,
+    rejected_ticks: u64,
+) -> FixedRangeProfile {
+    let value_area_percent = value_area_percent.max(Decimal::ZERO).min(Decimal::ONE);
     let total_weights = bins.iter().map(|bin| bin.total).collect::<Vec<_>>();
     let total_weight: u64 = total_weights.iter().sum();
     let bid_weights = bins.iter().map(|bin| bin.bid).collect::<Vec<_>>();

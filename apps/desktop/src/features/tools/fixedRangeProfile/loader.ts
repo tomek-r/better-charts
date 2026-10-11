@@ -4,8 +4,18 @@ import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from './overla
 import type { FixedRangeProfileRange } from './range';
 
 const LIVE_PROFILE_REFRESH_MS = 2000;
-const LIVE_PROFILE_PENDING_MAX_MS = 30_000;
+/**
+ * Safety net only. Every awaited request ends with a result, a correlated error (EA page read timeout 120 s), a
+ * cancellation or a rejected invoke, and a session change or disconnect resets the tool, so a refresh must never
+ * replace a request still loading: the backend would drop the load in flight and restart a load that already takes
+ * 30-90 s on a busy feed. The cutoff only recovers from a lost terminal event, so it is well beyond a legitimate load.
+ */
+const LIVE_PROFILE_PENDING_MAX_MS = 300_000;
 const PROFILE_ROWS = 128;
+/** How long the awaited request may stay unanswered before the chart shows a loading spinner. */
+export const SLOW_PROFILE_SPINNER_DELAY_MS = 6000;
+/** Repaint period of the visible spinner (about 30 fps); no repaints are scheduled while it is hidden. */
+const SPINNER_REPAINT_MS = 33;
 
 /**
  * The request side of the profile: it asks the market-data port for the ticks
@@ -18,6 +28,8 @@ export class FixedRangeProfileLoader {
   private lastSentAt = 0;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private refreshRange: FixedRangeProfileRange | undefined;
+  /** Counts down the slow-load delay of the awaited request, then drives the spinner's repaints. */
+  private spinnerTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly unsubscribe: Array<() => void>;
 
   constructor(
@@ -45,6 +57,7 @@ export class FixedRangeProfileLoader {
   /** Abandons the request in flight: a late result for it is stale from here on. */
   abandonPendingRequest(): void {
     this.expected = undefined;
+    this.hideSpinner();
   }
 
   /** The range was deleted: abandon the request and stop the backend work behind it. */
@@ -56,6 +69,7 @@ export class FixedRangeProfileLoader {
   dispose(): void {
     clearTimeout(this.refreshTimer);
     this.refreshTimer = undefined;
+    this.hideSpinner();
     for (const release of this.unsubscribe) {
       release();
     }
@@ -82,7 +96,13 @@ export class FixedRangeProfileLoader {
     } else {
       const sentAt = Date.now();
       this.lastSentAt = sentAt;
+      const previous = this.expected;
+      const continuesUnsettledLoad =
+        previous !== undefined && !previous.settled && previous.symbol === symbol && previous.fromMs === fromMs;
       this.expected = { symbol, fromMs, endMs: requestEnd, sentAt, settled: false };
+      if (!continuesUnsettledLoad) {
+        this.startSpinnerCountdown();
+      }
     }
     this.state.range = { fromMs, toMs: nothingToRequest ? range.endMs : requestEnd };
     if (!options.keepProfile) {
@@ -121,6 +141,34 @@ export class FixedRangeProfileLoader {
     scheduleRefresh(Math.max(0, this.lastSentAt + LIVE_PROFILE_REFRESH_MS - Date.now()));
   }
 
+  // A request for another range replaces the awaited one, so its countdown starts from zero. A request for the same
+  // placed range (the live edge advanced) continues the unsettled load and keeps the original countdown or spinner.
+  private startSpinnerCountdown(): void {
+    this.hideSpinner();
+    this.spinnerTimer = setTimeout(() => {
+      if (!this.expected || this.expected.settled) {
+        return;
+      }
+      this.state.loadingIndicator = true;
+      this.repaintSpinner();
+    }, SLOW_PROFILE_SPINNER_DELAY_MS);
+  }
+
+  private repaintSpinner(): void {
+    this.host.requestRepaint();
+    this.spinnerTimer = setTimeout(() => this.repaintSpinner(), SPINNER_REPAINT_MS);
+  }
+
+  /** Stops the countdown and the repaint loop, and repaints once if the spinner was showing. */
+  private hideSpinner(): void {
+    clearTimeout(this.spinnerTimer);
+    this.spinnerTimer = undefined;
+    if (this.state.loadingIndicator) {
+      this.state.loadingIndicator = false;
+      this.host.requestRepaint();
+    }
+  }
+
   /** The event belongs to the profile request still awaited. */
   private isAwaitedRequest(payload: { symbol: string; fromMs: number; endMs: number }): boolean {
     const expected = this.expected;
@@ -142,6 +190,7 @@ export class FixedRangeProfileLoader {
       if (this.expected) {
         this.expected.settled = true;
       }
+      this.hideSpinner();
       this.host.requestRepaint();
     }
   }

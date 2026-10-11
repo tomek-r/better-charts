@@ -1,7 +1,7 @@
 // Historical tick synchronization runs in an indicator: CopyTicks returns
 // immediately here, whereas an EA can block for 45 seconds and miss heartbeats.
 #property strict
-#define BRIDGE_TICK_READER_VERSION "1.000"
+#define BRIDGE_TICK_READER_VERSION "1.001"
 #property version BRIDGE_TICK_READER_VERSION
 // Result page: int magic, 16-byte NUL-padded ASCII version, int error, int count, ticks.
 #define BRIDGE_READER_MAGIC         0x54435032
@@ -16,7 +16,7 @@ input string InpResultFile = "";
 
 int OnInit()
   {
-   if(InpFromMs<0 || InpCount<2 || InpCount>65536 ||
+   if(InpFromMs<0 || InpCount<2 || InpCount>262145 ||
       StringFind(InpResultFile,"TradeCanvasTicks\\")!=0 || StringFind(InpResultFile,"..")>=0)
       return INIT_PARAMETERS_INCORRECT;
    // Dependent iCustom indicators do not receive OnTimer. One bounded

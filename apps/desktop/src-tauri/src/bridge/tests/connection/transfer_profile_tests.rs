@@ -328,7 +328,7 @@ async fn pending_h1_tick_history_keeps_heartbeats_alive_and_failure_preserves_se
 }
 
 #[tokio::test]
-async fn profile_page_limit_reports_error_without_painting_prefix_or_resetting_session() {
+async fn profile_page_limit_switches_to_bars_without_painting_prefix_or_resetting_session() {
     let harness = default_harness().await;
     let mut client = BridgeClient::connect(harness.addr).await.unwrap();
     let handshake = complete_handshake(&mut client, &harness).await;
@@ -361,13 +361,13 @@ async fn profile_page_limit_reports_error_without_painting_prefix_or_resetting_s
         ))
         .await
         .unwrap();
-    assert!(
-        wait_until(Duration::from_secs(2), || harness
-            .events
-            .has_event("tick-profile-error"))
-        .await
-    );
+    // The page limit is not an error any more: the range is approximated from
+    // bars, and none of the collected tick data is painted.
+    let bars = client.recv(Duration::from_secs(2)).await.unwrap();
+    assert_eq!(bars.message_type, MessageType::HistoryRequest);
+    assert!(bars.id.starts_with("rust-profile-bars-"));
     assert!(!harness.events.has_event("tick-profile"));
+    assert!(!harness.events.has_event("tick-profile-error"));
     assert!(harness
         .state
         .tick_controller
@@ -397,7 +397,12 @@ async fn streamed_multi_day_profile_reaches_ui_without_truncation_or_session_res
     use trading_core::protocol::{encode_frame_with_limit, MarketTick, TransferLimits};
     let harness = default_harness().await;
     let mut client = BridgeClient::connect(harness.addr).await.unwrap();
-    let limits = TransferLimits::measured_default();
+    // A 65,535-tick peer keeps this transfer at five pages, long enough to
+    // span several heartbeat deadlines; the negotiated minimum applies.
+    let limits = TransferLimits {
+        max_ticks_per_page: 65_535,
+        ..TransferLimits::measured_default()
+    };
     let mut hello = valid_hello(None);
     hello.payload["transfer_limits"] = serde_json::to_value(limits).unwrap();
     let handshake = complete_handshake_with_hello(&mut client, hello).await;

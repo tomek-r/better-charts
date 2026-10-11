@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { withFakeClock } from './helpers/fakeClock';
+import { withFakeClock, type FakeClock } from './helpers/fakeClock';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
 import type { ChartToolHost } from '../src/features/chart/engine/toolContract';
-import { FixedRangeProfileLoader } from '../src/features/tools/fixedRangeProfile/loader';
+import { FixedRangeProfileLoader, SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeProfile/loader';
 import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/overlay';
 import type { FixedRangeProfileRange } from '../src/features/tools/fixedRangeProfile/range';
 
@@ -14,7 +14,8 @@ import type { FixedRangeProfileRange } from '../src/features/tools/fixedRangePro
 
 const SYMBOL = 'DEMO.TEST';
 const THROTTLE_MS = 2000;
-const PENDING_MAX_MS = 30_000;
+const PENDING_MAX_MS = 300_000;
+const SPINNER_DELAY_MS = SLOW_PROFILE_SPINNER_DELAY_MS;
 const RANGE: FixedRangeProfileRange = { fromMs: 1_000_000, endMs: 9_000_000 };
 const QUOTE_TIME_MS = 5_000_000;
 
@@ -129,7 +130,23 @@ test('many refreshes within the throttle window coalesce into one request', () =
     expect(market.requests).toHaveLength(2);
   }));
 
-test('a refresh waits while the previous request is pending and gives up after 30 seconds', () =>
+test('a refresh never replaces a request still loading after a minute and resumes at the normal cadence after the result', () =>
+  withFakeClock((clock) => {
+    const { loader, market } = createLoader();
+    loader.requestProfile(RANGE);
+    loader.requestThrottledRefresh(RANGE);
+    clock.advance(60_000);
+    expect(market.requests).toHaveLength(1);
+    market.publisher.publishTickProfile(resultFor(market.requests[0]));
+    clock.advance(THROTTLE_MS);
+    expect(market.requests).toHaveLength(2);
+    market.publisher.publishTickProfile(resultFor(market.requests[1]));
+    loader.requestThrottledRefresh(RANGE);
+    clock.advance(THROTTLE_MS);
+    expect(market.requests).toHaveLength(3);
+  }));
+
+test('a refresh recovers from a lost terminal event only after the five minute safety net', () =>
   withFakeClock((clock) => {
     const { loader, market } = createLoader();
     loader.requestProfile(RANGE);
@@ -155,11 +172,151 @@ test('dispose clears the refresh timer and unsubscribes from the port', () =>
     const { loader, market, state } = createLoader();
     loader.requestProfile(RANGE);
     loader.requestThrottledRefresh(RANGE);
-    expect(clock.pendingTimerCount()).toBe(1);
+    // The refresh timer and the slow-load spinner countdown.
+    expect(clock.pendingTimerCount()).toBe(2);
     loader.dispose();
     expect(clock.pendingTimerCount()).toBe(0);
     clock.advance(PENDING_MAX_MS * 2);
     expect(market.requests).toHaveLength(1);
     market.publisher.publishTickProfile(resultFor(market.requests[0]));
     expect(state.profile).toBeUndefined();
+  }));
+
+type Created = ReturnType<typeof createLoader>;
+
+/** Long past the delay, the indicator never showed and nothing is scheduled. */
+function expectNeverShown(state: FixedRangeProfileState, clock: FakeClock): void {
+  clock.advance(SPINNER_DELAY_MS * 2);
+  expect(state.loadingIndicator).toBeFalsy();
+  expect(clock.pendingTimerCount()).toBe(0);
+}
+
+/** The indicator stays hidden for the delay minus 1 ms, then shows. */
+function expectIndicatorAtDelay({ state }: Created, clock: FakeClock): void {
+  clock.advance(SPINNER_DELAY_MS - 1);
+  expect(state.loadingIndicator).toBeFalsy();
+  clock.advance(1);
+  expect(state.loadingIndicator).toBe(true);
+}
+
+test('the loading indicator shows once the awaited request has been pending for 6 seconds', () =>
+  withFakeClock((clock) => {
+    const created = createLoader();
+    created.loader.requestProfile(RANGE);
+    expectIndicatorAtDelay(created, clock);
+    created.loader.dispose();
+  }));
+
+for (const [name, settle] of [
+  ['a result', ({ market }: Created) => market.publisher.publishTickProfile(resultFor(market.requests[0]))],
+  [
+    'an error',
+    ({ market }: Created) => market.publisher.publishTickProfileError({ ...market.requests[0], message: 'boom' }),
+  ],
+  ['a cancellation', ({ market }: Created) => market.publisher.publishTickProfileCancelled(market.requests[0])],
+  ['an abandon', ({ loader }: Created) => loader.abandonPendingRequest()],
+  ['a range delete', ({ loader }: Created) => loader.cancelRequest()],
+] as const) {
+  test(`${name} hides the loading indicator and stops its repaint loop`, () =>
+    withFakeClock((clock) => {
+      const created = createLoader();
+      created.loader.requestProfile(RANGE);
+      clock.advance(SPINNER_DELAY_MS);
+      expect(created.state.loadingIndicator).toBe(true);
+      expect(clock.pendingTimerCount()).toBeGreaterThan(0);
+      settle(created);
+      expect(created.state.loadingIndicator).toBeFalsy();
+      expect(clock.pendingTimerCount()).toBe(0);
+      created.loader.dispose();
+    }));
+}
+
+test('a result before 6 seconds never shows the loading indicator', () =>
+  withFakeClock((clock) => {
+    const { loader, market, state } = createLoader();
+    loader.requestProfile(RANGE);
+    clock.advance(SPINNER_DELAY_MS - 1);
+    market.publisher.publishTickProfile(resultFor(market.requests[0]));
+    expectNeverShown(state, clock);
+  }));
+
+/** Replaces the request once the indicator is visible and reports whether it is still visible. */
+function indicatorVisibleAfterReplacing(replacement: FixedRangeProfileRange): boolean | undefined {
+  let visible: boolean | undefined;
+  withFakeClock((clock) => {
+    const { loader, state } = createLoader();
+    loader.requestProfile(RANGE);
+    clock.advance(SPINNER_DELAY_MS);
+    expect(state.loadingIndicator).toBe(true);
+    loader.requestProfile(replacement, { keepProfile: true });
+    visible = state.loadingIndicator;
+    loader.dispose();
+  });
+  return visible;
+}
+
+test('a request for another range hides the indicator, a same-range replacement keeps it', () => {
+  expect(indicatorVisibleAfterReplacing({ fromMs: RANGE.fromMs + 1000, endMs: RANGE.endMs })).toBeFalsy();
+  expect(indicatorVisibleAfterReplacing(RANGE)).toBe(true);
+});
+
+/** Replaces the request 5 s into the countdown and returns how long after the original send the indicator shows. */
+function indicatorShowsAfterReplacement(replacement: FixedRangeProfileRange): number {
+  let elapsed = 5000;
+  withFakeClock((clock) => {
+    const { loader, state } = createLoader();
+    loader.requestProfile(RANGE);
+    clock.advance(5000);
+    loader.requestProfile(replacement, { keepProfile: true });
+    while (!state.loadingIndicator && elapsed < SPINNER_DELAY_MS * 3) {
+      clock.advance(1);
+      elapsed += 1;
+    }
+    loader.dispose();
+  });
+  return elapsed;
+}
+
+test('a same-range replacement keeps the original countdown, another range restarts it', () => {
+  expect(indicatorShowsAfterReplacement({ ...RANGE, endMs: RANGE.endMs - 1 })).toBe(SPINNER_DELAY_MS);
+  expect(indicatorShowsAfterReplacement({ fromMs: RANGE.fromMs + 1000, endMs: RANGE.endMs })).toBe(
+    5000 + SPINNER_DELAY_MS,
+  );
+});
+
+test('a kept-profile refresh follows the same 6 second rule', () =>
+  withFakeClock((clock) => {
+    const { loader, market, state } = createLoader();
+    loader.requestProfile(RANGE);
+    market.publisher.publishTickProfile(resultFor(market.requests[0]));
+    loader.requestProfile(RANGE, { keepProfile: true });
+    expectIndicatorAtDelay({ state } as Created, clock);
+    expect(state.profile).toBeDefined();
+    loader.dispose();
+  }));
+
+test('a window with nothing to request shows no indicator and leaves no timer', () =>
+  withFakeClock((clock) => {
+    const { loader, state } = createLoader();
+    loader.requestProfile(RANGE);
+    loader.requestProfile({ fromMs: QUOTE_TIME_MS + 1, endMs: RANGE.endMs });
+    expectNeverShown(state, clock);
+  }));
+
+test('dispose clears the countdown and the visible indicator repaint loop', () =>
+  withFakeClock((clock) => {
+    const { loader, state } = createLoader();
+    loader.requestProfile(RANGE);
+    expect(clock.pendingTimerCount()).toBe(1);
+    loader.dispose();
+    expect(clock.pendingTimerCount()).toBe(0);
+
+    const shown = createLoader();
+    shown.loader.requestProfile(RANGE);
+    clock.advance(SPINNER_DELAY_MS);
+    expect(shown.state.loadingIndicator).toBe(true);
+    shown.loader.dispose();
+    expect(shown.state.loadingIndicator).toBeFalsy();
+    expect(clock.pendingTimerCount()).toBe(0);
+    expect(state.loadingIndicator).toBeFalsy();
   }));

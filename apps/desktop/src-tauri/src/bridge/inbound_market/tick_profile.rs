@@ -1,6 +1,7 @@
 use super::super::{
-    bridge_emit, build_streamed_tick_profile, build_tick_profile, TickPageResult, TickProfileError,
-    TickProfileProgress,
+    bridge_emit, build_streamed_tick_profile, build_tick_profile, collect_timeframe,
+    completion_line, log_info, log_warn, safety_net_line, start_bar_collect, ProfileSource,
+    TickPageResult, TickProfileError, TickProfileLimit, TickProfileProgress, TickProfileRequest,
 };
 use super::{Inbound, InboundOutcome};
 use trading_core::protocol::{Envelope, ErrorCode, ErrorPayload, TickHistorySnapshot};
@@ -124,7 +125,7 @@ pub(crate) async fn tick_price_history(inbound: &Inbound<'_>, message: Envelope)
     finish_tick_page(inbound, page_result, progress)
 }
 
-fn finish_tick_page(
+pub(crate) fn finish_tick_page(
     inbound: &Inbound<'_>,
     page_result: TickPageResult,
     progress: Option<TickProfileProgress>,
@@ -152,14 +153,21 @@ fn finish_tick_page(
             if let Some(progress) = progress {
                 bridge_emit(inbound.events, "tick-profile-progress", progress);
             }
-            inbound
-                .state
-                .tick_controller
-                .lock()
-                .expect("tick controller mutex poisoned")
-                .finish();
+            let (elapsed_ms, pages) = {
+                let mut controller = inbound
+                    .state
+                    .tick_controller
+                    .lock()
+                    .expect("tick controller mutex poisoned");
+                let stats = controller.profile_stats();
+                controller.finish();
+                stats
+            };
             match build_streamed_tick_profile(inbound.state, compact, &request) {
-                Ok(result) => bridge_emit(inbound.events, "tick-profile", result),
+                Ok(result) => {
+                    bridge_emit(inbound.events, "tick-profile", result);
+                    log_tick_completion(&request, elapsed_ms, pages);
+                }
                 Err(error) => bridge_emit(
                     inbound.events,
                     "tick-profile-error",
@@ -173,7 +181,28 @@ fn finish_tick_page(
             }
             return InboundOutcome::Continue;
         }
-        TickPageResult::Limit(request) => {
+        TickPageResult::Limit(
+            request,
+            limit @ (TickProfileLimit::Pages | TickProfileLimit::DistinctPrices),
+        ) => {
+            log_info(&safety_net_line(
+                &request,
+                limit,
+                collect_timeframe(inbound.state, &request).as_deref(),
+            ));
+            // Safety net: the estimate under-called this range's cost. Drop every
+            // tick collected (a profile never mixes sources) and approximate the
+            // whole range from bars instead of reporting the limit.
+            inbound
+                .state
+                .tick_controller
+                .lock()
+                .expect("tick controller mutex poisoned")
+                .finish();
+            start_bar_collect(inbound.events, inbound.state, request);
+            return InboundOutcome::Continue;
+        }
+        TickPageResult::Limit(request, limit) => {
             if let Some(progress) = progress {
                 bridge_emit(inbound.events, "tick-profile-progress", progress);
             }
@@ -191,9 +220,7 @@ fn finish_tick_page(
                     symbol: request.wire.symbol,
                     from_ms: request.wire.from_ms,
                     end_ms: request.wire.to_ms,
-                    message:
-                        "Full profile exceeds page or distinct-price limits; select a shorter range"
-                            .to_owned(),
+                    message: limit.message(),
                 },
             );
             return InboundOutcome::Continue;
@@ -206,13 +233,92 @@ fn finish_tick_page(
             return InboundOutcome::ErrorFrame(ErrorCode::InvalidMessage, error);
         }
     };
-    inbound
-        .state
-        .tick_controller
-        .lock()
-        .expect("tick controller mutex poisoned")
-        .finish();
+    let (elapsed_ms, pages) = {
+        let mut controller = inbound
+            .state
+            .tick_controller
+            .lock()
+            .expect("tick controller mutex poisoned");
+        let stats = controller.profile_stats();
+        controller.finish();
+        stats
+    };
     bridge_emit(inbound.events, "tick-profile", result);
+    log_tick_completion(&final_request, elapsed_ms, pages);
+    InboundOutcome::Continue
+}
+
+fn log_tick_completion(request: &TickProfileRequest, elapsed_ms: u64, pages: usize) {
+    log_info(&completion_line(
+        request,
+        ProfileSource::Ticks,
+        elapsed_ms,
+        pages,
+        None,
+    ));
+}
+
+/// A correlated profile bar-page failure is handled like a stale tick page
+/// failure: only the awaited request is acted on, under the session gate.
+fn profile_bars_error(
+    inbound: &Inbound<'_>,
+    request_id: String,
+    code: ErrorCode,
+    message: String,
+) -> InboundOutcome {
+    let _session_work = match inbound.state.session_work.lock() {
+        Ok(guard) => guard,
+        Err(_) => return InboundOutcome::Continue,
+    };
+    if inbound
+        .state
+        .current_session
+        .lock()
+        .ok()
+        .and_then(|session| session.clone())
+        .as_deref()
+        != Some(inbound.session_id)
+    {
+        return InboundOutcome::Continue;
+    }
+    super::profile_bars::profile_bar_error(inbound, &request_id, code, message)
+        .unwrap_or(InboundOutcome::Continue)
+}
+
+/// A correlated failure of the chart's older-history page (the EA could not
+/// synchronize it in time). It ends only that page request: the slot is
+/// cleared so the next page can be asked for, the session and every other
+/// stream stay up, and the frontend's own page timeout releases its pending
+/// request without surfacing a chart error. A stale id (the page was already
+/// answered or replaced) is ignored.
+fn history_page_error(inbound: &Inbound<'_>, request_id: &str, code: ErrorCode) -> InboundOutcome {
+    let _session_work = match inbound.state.session_work.lock() {
+        Ok(guard) => guard,
+        Err(_) => return InboundOutcome::Continue,
+    };
+    if inbound
+        .state
+        .current_session
+        .lock()
+        .ok()
+        .and_then(|session| session.clone())
+        .as_deref()
+        != Some(inbound.session_id)
+    {
+        return InboundOutcome::Continue;
+    }
+    let mut slot = inbound
+        .state
+        .expected_history_page
+        .lock()
+        .expect("history page mutex poisoned");
+    if slot.as_ref().is_some_and(|(id, _)| id == request_id) {
+        let (_, request) = slot.take().expect("checked above");
+        log_warn(&format!(
+            "history page {} {} before_ms={:?} failed: {code:?}",
+            request.symbol, request.timeframe, request.before_ms
+        ));
+    }
     InboundOutcome::Continue
 }
 
@@ -234,8 +340,15 @@ pub(crate) async fn tick_history_error(inbound: &Inbound<'_>, message: Envelope)
             )
         }
     };
-    // Recognize only IDs issued for tick pages. Unrelated protocol errors retain
-    // the existing fail-closed handling; stale page failures are ignored.
+    // Recognize only IDs issued for tick pages and profile bar pages. Unrelated
+    // protocol errors retain the existing fail-closed handling; stale page
+    // failures are ignored.
+    if message.id.starts_with("rust-profile-bars-") {
+        return profile_bars_error(inbound, message.id, error.code, error.message);
+    }
+    if message.id.starts_with("rust-history-page-") {
+        return history_page_error(inbound, &message.id, error.code);
+    }
     if !message.id.starts_with("rust-ticks-") {
         return InboundOutcome::ErrorFrame(
             ErrorCode::InvalidMessage,

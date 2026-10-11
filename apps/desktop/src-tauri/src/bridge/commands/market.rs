@@ -3,11 +3,13 @@
 //! status reader.
 
 use super::super::{
-    build_streamed_tick_profile, build_tick_profile, invalidate_validated_order_check, AccountView,
+    build_streamed_tick_profile, build_tick_profile, cache_line, can_estimate,
+    clear_profile_bar_slots, invalidate_validated_order_check, log_decision, log_info, AccountView,
     BridgeState, BridgeStatus, HistoryRequest, MarketSnapshot, Mt5BackendState, Mt5BackendStatus,
-    PortfolioView, QuoteView, ReconciliationStatus, State, SymbolInfoRequest, SymbolSearchRequest,
-    SymbolSearchResultView, TickHistoryRequest, TickPageResult, TickProfileCancelledView,
-    TickProfileRequest,
+    PortfolioView, ProfileSource, QuoteView, ReconciliationStatus, SourceDecision, SourceReason,
+    State, SymbolInfoRequest, SymbolSearchRequest, SymbolSearchResultView, TickHistoryRequest,
+    TickPageResult, TickProfileCancelledView, TickProfileProgress, TickProfileRequest,
+    TickProfileResult,
 };
 use tauri::Emitter;
 
@@ -142,6 +144,7 @@ pub(crate) fn request_history(
         .lock()
         .expect("tick controller mutex poisoned")
         .cancel();
+    clear_profile_bar_slots(&state);
     state.wake_outbound();
     Ok(())
 }
@@ -209,10 +212,38 @@ pub(crate) fn request_tick_profile(
     end_ms: i64,
     rows: u16,
 ) -> Result<(), String> {
+    match request_tick_profile_inner(&state, symbol, from_ms, end_ms, rows)? {
+        ProfileStart::Ready(result) => {
+            let _ = app.emit("tick-profile", *result);
+        }
+        ProfileStart::Loading(Some(progress)) => {
+            let _ = app.emit("tick-profile-progress", progress);
+        }
+        ProfileStart::Loading(None) => {}
+    }
+    Ok(())
+}
+
+/// How a profile request started.
+pub(crate) enum ProfileStart {
+    /// The tick cache already covered the range.
+    Ready(Box<TickProfileResult>),
+    /// Work was queued: a bar estimate first when the symbol metadata and a
+    /// bar timeframe allow one, otherwise the tick load directly.
+    Loading(Option<TickProfileProgress>),
+}
+
+pub(crate) fn request_tick_profile_inner(
+    state: &BridgeState,
+    symbol: String,
+    from_ms: i64,
+    end_ms: i64,
+    rows: u16,
+) -> Result<ProfileStart, String> {
     if !(1..=128).contains(&rows) {
         return Err("rows must be between 1 and 128".into());
     }
-    let _session_work = state
+    let session_work = state
         .session_work
         .lock()
         .map_err(|_| "bridge session unavailable".to_string())?;
@@ -259,6 +290,13 @@ pub(crate) fn request_tick_profile(
         .expected_tick_profile
         .lock()
         .expect("tick profile mutex poisoned") = None;
+    clear_profile_bar_slots(state);
+    let supported_timeframes = state
+        .status
+        .lock()
+        .expect("bridge status mutex poisoned")
+        .supported_timeframes
+        .clone();
     let (cached, progress) = {
         let mut controller = state
             .tick_controller
@@ -281,30 +319,59 @@ pub(crate) fn request_tick_profile(
         }
     };
     if let Some(snapshot) = cached {
-        drop(_session_work);
+        drop(session_work);
         let result = match snapshot.map_err(str::to_owned)? {
             TickPageResult::Final(snapshot, request) => {
-                build_tick_profile(&state, snapshot, &request)
+                build_tick_profile(state, snapshot, &request)
             }
             TickPageResult::Streamed(compact, request) => {
-                build_streamed_tick_profile(&state, compact, &request)
+                build_streamed_tick_profile(state, compact, &request)
             }
             _ => return Err("invalid cached profile result".into()),
         }
         .map_err(str::to_owned)?;
-        let _ = app.emit("tick-profile", result);
+        log_info(&cache_line(&profile, ProfileSource::Ticks));
+        return Ok(ProfileStart::Ready(Box::new(result)));
+    }
+    // The load is not cached: ask the bars what it would cost before choosing
+    // between the exact tick load and the approximate bar profile. Without the
+    // metadata the estimate needs, the tick load starts directly.
+    let estimate = if can_estimate(state, &symbol) {
+        let first_page = state
+            .tick_controller
+            .lock()
+            .expect("tick controller mutex poisoned")
+            .begin_estimate(&supported_timeframes);
+        if first_page.is_none() {
+            log_decision(
+                state,
+                &profile,
+                &SourceDecision::ticks(SourceReason::NoTimeframeFits),
+            );
+        }
+        first_page
+    } else {
+        log_decision(
+            state,
+            &profile,
+            &SourceDecision::ticks(SourceReason::NoSymbolMetadata),
+        );
+        None
+    };
+    if let Some(first_page) = estimate {
+        *state
+            .pending_profile_bars
+            .lock()
+            .expect("profile bars mutex poisoned") = Some(first_page);
     } else {
         *state
             .pending_tick_profile
             .lock()
             .expect("tick profile mutex poisoned") = Some(profile);
-        state.wake_outbound();
-        drop(_session_work);
-        if let Some(progress) = progress {
-            let _ = app.emit("tick-profile-progress", progress);
-        }
     }
-    Ok(())
+    state.wake_outbound();
+    drop(session_work);
+    Ok(ProfileStart::Loading(progress))
 }
 
 #[tauri::command]
@@ -331,6 +398,7 @@ pub(crate) fn cancel_active_tick_profile(state: &BridgeState) -> Option<TickProf
         .expected_tick_profile
         .lock()
         .expect("tick profile mutex poisoned") = None;
+    clear_profile_bar_slots(state);
     let mut controller = state
         .tick_controller
         .lock()

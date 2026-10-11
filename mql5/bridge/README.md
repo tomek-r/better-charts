@@ -15,7 +15,7 @@ in MetaEditor with 0 errors and 0 warnings. Follow the
 | `InpBridgePort` | `8765` | Listener port |
 | `InpBridgeToken` | Empty | Must match the app's private token |
 | `InpBridgeMaxFrameMiB` | `8` | Negotiated frame budget |
-| `InpBridgeMaxTicksPerPage` | `65535` | Negotiated tick-page limit |
+| `InpBridgeMaxTicksPerPage` | `262144` | Negotiated tick-page limit |
 
 Allow only the local endpoint in MT5's Expert Advisor settings. DLL imports
 are unnecessary. Start the desktop listener before attaching the EA; attach
@@ -27,14 +27,14 @@ submit/modify/close/cancel can execute trades. Commands are session-bound,
 journaled and sequential, with no automatic retries. See the
 [protocol contract](../../docs/protocol/bridge-v1.md).
 
-EA version `1.004` adds partial close (negotiated `partial_close` capability) and
+EA version `1.005` speeds up exact tick price aggregation (integer price keys). `1.004` added partial close (negotiated `partial_close` capability) and
 per-position `volume_min`/`volume_step`. It also includes account-currency TP/SL amounts in live portfolio
 snapshots, calculated with read-only `OrderCalcProfit` at actual entry and volume,
 and reports the installed tick reader version in the handshake.
 Recompile and reattach the EA after updating both the app and bridge.
 
 The EA (`BetterChartsBridge`) and the indicator (`BetterChartsTickHistoryReader`,
-version `1.000`) are versioned independently; the app requires the exact
+version `1.001`) are versioned independently; the app requires the exact
 versions listed in `config/mq5-versions.json` and refuses to connect otherwise.
 Compile both from `MQL5/Experts` and `MQL5/Indicators`, then reattach the EA.
 Before each connect the EA briefly probes the reader (up to 3 s); a missing or
@@ -44,6 +44,12 @@ The legacy EA journal filename `TradeCanvasBridge.commands.log` is retained
 for recovery compatibility. Preserve it when upgrading and replace the old EA
 rather than running two bridges. Temporary tick-reader files under
 `MQL5/Files/TradeCanvasTicks` are removed after use.
+
+While the EA aggregates a price-count tick page that is not the last one, it
+starts one prefetch reader for the next page (`from = through_ms`, same count).
+A matching next request adopts it (logged as `prefetch=hit`); any other
+request, a disconnect, a failure or 30 s without a request discards it and
+deletes its files.
 
 ## Optional MT5 startup
 

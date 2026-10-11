@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.004"
+#define BRIDGE_EXPERT_VERSION "1.005"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -14,7 +14,7 @@ input string InpBridgeHost  = "127.0.0.1";
 input ushort InpBridgePort  = 8765;
 input string InpBridgeToken = "";
 input uint InpBridgeMaxFrameMiB = 8;
-input uint InpBridgeMaxTicksPerPage = 65535;
+input uint InpBridgeMaxTicksPerPage = 262144;
 
 #define BRIDGE_PROTOCOL_VERSION 1
 #define BRIDGE_MAX_FRAME        1048576
@@ -25,6 +25,9 @@ input uint InpBridgeMaxTicksPerPage = 65535;
 // 20 ms avoids asking Wine for an unattainable cadence while cutting the old
 // worst-case polling delay from 100 ms to about 20 ms.
 #define BRIDGE_TIMER_MS         20
+// Tick-history work per timer turn. It must leave room in each turn for the
+// heartbeat, quotes and order commands, which run every turn.
+#define BRIDGE_TICK_WORK_SLICE_MS 12
 #define BRIDGE_BAR_FALLBACK_MS  1000
 #define BRIDGE_ACCOUNT_POLL_MS  500
 #define BRIDGE_PORTFOLIO_POLL_MS 250
@@ -43,6 +46,7 @@ input uint InpBridgeMaxTicksPerPage = 65535;
 // slow terminal without delaying the connect noticeably; on expiry the hello
 // carries a null version and the app reports the reader as missing.
 #define BRIDGE_READER_PROBE_TIMEOUT_MS 3000
+#define BRIDGE_PREFETCH_TTL_MS 30000
 #define BRIDGE_IDLE_TIMEOUT_MS  6000
 
 enum BridgeState { BRIDGE_DISCONNECTED=0, BRIDGE_CONNECTING=1, BRIDGE_HELLO_SENT=2, BRIDGE_READY=3 };
@@ -74,14 +78,21 @@ bool g_tick_complete=false;
 bool g_price_counts_enabled=false,g_tick_aggregate=false;
 // Negotiated per session in hello_ack; a partial close is refused unless true.
 bool g_partial_close_enabled=false;
-struct TickPriceCounter { string price; uint total,bid,ask; bool bid_seen; };
-CHashMap<string,int> g_price_index;
+struct TickPriceCounter { double price; uint total,bid,ask; bool bid_seen; };
+CHashMap<long,int> g_price_index;
 TickPriceCounter g_prices[];
 int g_price_count=0,g_price_cursor=0,g_tick_accepted=0;
 long g_tick_through=0;
 uint g_tick_rejected=0;
 double g_tick_min_quote=0,g_tick_max_quote=0;
 ulong g_tick_reader_ready_ms=0;
+// Prefetch of the next price-count page. Holds at most one reader; it is only
+// adopted by a request for the same session, symbol, from and count.
+int g_prefetch_reader=INVALID_HANDLE;
+string g_prefetch_file="",g_prefetch_symbol="",g_prefetch_session="";
+long g_prefetch_from=0,g_prefetch_max=0,g_prefetch_source_to=0;
+ulong g_prefetch_started_ms=0;
+bool g_tick_prefetch_hit=false;
 ulong g_trade_sequence=0;
 // One-shot reader version probe run before each connect. Empty = unknown.
 int g_probe_reader=INVALID_HANDLE;
@@ -187,6 +198,7 @@ void ScheduleReconnect()
 void CloseConnection()
   {
    CancelTickHistory();
+   ClearPendingHistoryPages();
    if(g_socket!=INVALID_HANDLE)
      {
       SocketClose(g_socket);
@@ -1330,8 +1342,100 @@ bool SendHistorySnapshot(const string request_id,const string symbol,const strin
    return true;
   }
 
+// Older-history pages that wait for MT5 to build or synchronize their series.
+// The desktop profile asks for timeframes no chart has open; MT5 builds those
+// on demand, so the first read can fail while the series synchronizes. At most
+// 4 pages wait (a profile needs one estimate page plus a few M1 pages), each
+// for at most 10 s, retried on the timer without ever blocking it.
+#define BRIDGE_HISTORY_PAGE_PENDING_MAX 4
+#define BRIDGE_HISTORY_PAGE_DEADLINE_MS 10000
+#define BRIDGE_HISTORY_PAGE_RETRY_MS    100
+
+struct PendingHistoryPage
+  {
+   string          request_id;
+   string          symbol;
+   string          timeframe_name;
+   ENUM_TIMEFRAMES timeframe;
+   long            bars;
+   long            before_ms;
+   ulong           deadline_ms;
+  };
+
+PendingHistoryPage g_pending_pages[BRIDGE_HISTORY_PAGE_PENDING_MAX];
+int g_pending_page_count=0;
+ulong g_pending_page_poll_ms=0;
+
+void ClearPendingHistoryPages()
+  {
+   g_pending_page_count=0;
+  }
+
+void RemovePendingHistoryPage(const int index)
+  {
+   for(int i=index;i<g_pending_page_count-1;i++)
+      g_pending_pages[i]=g_pending_pages[i+1];
+   if(g_pending_page_count>0) g_pending_page_count--;
+  }
+
 /**
- * One page of candles strictly older than `before_ms`, for lazy loading.
+ * Reads one page of candles strictly older than `before_ms`.
+ *
+ * Returns false while the series is not ready, so the caller keeps waiting
+ * instead of reporting a false end of history. Returns true when `rates` and
+ * `copied` are final: a full page, or a genuinely exhausted history (series
+ * synchronized, fewer or no older bars).
+ *
+ * MQL5 semantics relied on: SeriesInfoInteger(SERIES_SYNCHRONIZED) is the
+ * terminal's flag that the series for this symbol/period is built and matches
+ * the server; Bars()==0 means the series is not built yet; CopyRates returns -1
+ * when data is not ready (e.g. ERR_HISTORY_WILL_UPDATED 4066) and the first
+ * call for an unopened timeframe is what makes MT5 start building it. A full
+ * page is valid whatever the flag says; a short page is only an end of history
+ * once the series is synchronized.
+ */
+bool ReadHistoryPage(const string symbol,const ENUM_TIMEFRAMES timeframe,const long bars,const long before_ms,MqlRates &rates[],int &copied)
+  {
+   copied=0;
+   ArrayResize(rates,0);
+   long synchronized_flag=0;
+   const bool synchronized=(SeriesInfoInteger(symbol,timeframe,SERIES_SYNCHRONIZED,synchronized_flag) && synchronized_flag!=0);
+   // The anchor is the open time of the oldest candle the client holds, so
+   // the page starts at the bar immediately older than it.
+   const int shift=iBarShift(symbol,timeframe,(datetime)(before_ms/1000),false);
+   if(shift<0)
+      // Without a synchronized, non-empty series there is nothing to place the
+      // anchor against yet; with one, the anchor lies before the first bar.
+      return (synchronized && Bars(symbol,timeframe)>0);
+   ArraySetAsSeries(rates,false);
+   const int result=CopyRates(symbol,timeframe,shift+1,(int)bars,rates);
+   ArraySetAsSeries(rates,false);
+   if(result<0) return false;
+   copied=result;
+   return (copied==(int)bars || synchronized);
+  }
+
+bool SendHistoryPageFrame(const string request_id,const string symbol,const string timeframe_name,const MqlRates &rates[],const int copied,const long bars,const long before_ms)
+  {
+   const bool complete=(copied==(int)bars);
+   const int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
+   string snapshot=StringFormat("{\"v\":1,\"type\":\"history_snapshot\",\"id\":\"ea-history-%I64u\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"request_id\":\"%s\",\"symbol\":\"%s\",\"timeframe\":\"%s\",\"complete\":%s,\"before_ms\":%I64d,\"candles\":[",++g_message_id,JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(request_id),JsonEscape(symbol),JsonEscape(timeframe_name),(complete?"true":"false"),before_ms);
+   for(int i=0;i<copied;i++)
+     {
+      if(i>0) snapshot+=",";
+      snapshot+=CandleJson(rates[i],digits);
+     }
+   snapshot+="]}}";
+   const bool sent=SendFrame(snapshot);
+   if(sent)
+      PrintFormat("BetterChartsBridge history page delivered: source=bars id=%s symbol=%s tf=%s bars=%d before_ms=%I64d complete=%s",request_id,symbol,timeframe_name,copied,before_ms,(complete ? "yes" : "no"));
+   return sent;
+  }
+
+/**
+ * One page of candles strictly older than `before_ms`, for lazy loading, for
+ * any supported timeframe of the active symbol (the hybrid volume profile
+ * reads timeframes no chart has open).
  *
  * This deliberately never writes the live-feed state SendHistorySnapshot
  * establishes (`g_last_bar`, `g_have_last_bar`, `g_history_ready`,
@@ -1340,38 +1444,85 @@ bool SendHistorySnapshot(const string request_id,const string symbol,const strin
  * countdown, the quote feed and the bar_update staleness check at an old
  * candle.
  *
- * Every failure answers an empty, incomplete page rather than a protocol error.
- * A peer error frame must not appear here: the bridge recognizes tick-page error
- * ids only, so anything else tears the session down, while an empty page is
- * already the "no older candles" answer the client acts on.
+ * A request that cannot be served (other symbol, bad arguments) answers an
+ * empty, incomplete page. A series that is still synchronizing waits in the
+ * pending list (see PollPendingHistoryPages) rather than answering "no older
+ * candles". The only error frame allowed here carries the page's own request
+ * id as its envelope id: the bridge recognizes correlated ids and fails just
+ * that request, while any other error id tears the session down.
  */
-bool SendHistoryPage(const string request_id,const string symbol,const string timeframe_name,const ENUM_TIMEFRAMES timeframe,const long bars,const long before_ms)
+void HandleHistoryPageRequest(const string request_id,const string symbol,const string timeframe_name,const ENUM_TIMEFRAMES timeframe,const long bars,const long before_ms)
   {
    MqlRates rates[];
    int copied=0;
    if(EnsureSymbol(symbol) && timeframe!=PERIOD_CURRENT && bars>=1 && bars<=1000 && before_ms>0 &&
-      g_history_ready && symbol==g_active_symbol && timeframe_name==g_active_timeframe_name)
+      g_history_ready && symbol==g_active_symbol)
      {
-      // The anchor is the open time of the oldest candle the client holds, so
-      // the page starts at the bar immediately older than it.
-      const int shift=iBarShift(symbol,timeframe,(datetime)(before_ms/1000),false);
-      if(shift>=0)
+      if(!ReadHistoryPage(symbol,timeframe,bars,before_ms,rates,copied))
         {
-         ArraySetAsSeries(rates,false);
-         copied=CopyRates(symbol,timeframe,shift+1,(int)bars,rates);
-         ArraySetAsSeries(rates,false);
-         if(copied<0) copied=0;
+         if(g_pending_page_count>=BRIDGE_HISTORY_PAGE_PENDING_MAX)
+           {
+            SendHistoryPageError(request_id,"history page queue is full");
+            return;
+           }
+         PendingHistoryPage page;
+         page.request_id=request_id;
+         page.symbol=symbol;
+         page.timeframe_name=timeframe_name;
+         page.timeframe=timeframe;
+         page.bars=bars;
+         page.before_ms=before_ms;
+         page.deadline_ms=GetTickCount64()+BRIDGE_HISTORY_PAGE_DEADLINE_MS;
+         g_pending_pages[g_pending_page_count]=page;
+         g_pending_page_count++;
+         return;
         }
      }
-   const int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
-   string snapshot=StringFormat("{\"v\":1,\"type\":\"history_snapshot\",\"id\":\"ea-history-%I64u\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"request_id\":\"%s\",\"symbol\":\"%s\",\"timeframe\":\"%s\",\"complete\":%s,\"before_ms\":%I64d,\"candles\":[",++g_message_id,JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(request_id),JsonEscape(symbol),JsonEscape(timeframe_name),(copied==(int)bars?"true":"false"),before_ms);
-   for(int i=0;i<copied;i++)
+   SendHistoryPageFrame(request_id,symbol,timeframe_name,rates,copied,bars,before_ms);
+  }
+
+void SendHistoryPageError(const string request_id,const string reason)
+  {
+   PrintFormat("BetterChartsBridge history page failed: id=%s reason=%s",request_id,reason);
+   const string error=StringFormat("{\"v\":1,\"type\":\"error\",\"id\":\"%s\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"%s\",\"retryable\":false}}",JsonEscape(request_id),JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(reason));
+   if(!SendFrame(error)) DisconnectAndRetry("history page error send failed");
+  }
+
+// Retries waiting pages on the timer. A page whose symbol is no longer the
+// active one is stale and dropped without an answer; the client discards
+// responses from an old symbol anyway.
+void PollPendingHistoryPages()
+  {
+   if(g_pending_page_count==0 || g_state!=BRIDGE_READY) return;
+   const ulong now=GetTickCount64();
+   if(now-g_pending_page_poll_ms<BRIDGE_HISTORY_PAGE_RETRY_MS) return;
+   g_pending_page_poll_ms=now;
+   int index=0;
+   while(index<g_pending_page_count && g_state==BRIDGE_READY)
      {
-      if(i>0) snapshot+=",";
-      snapshot+=CandleJson(rates[i],digits);
+      const PendingHistoryPage page=g_pending_pages[index];
+      if(g_active_symbol!="" && page.symbol!=g_active_symbol)
+        {
+         PrintFormat("BetterChartsBridge history page dropped: id=%s symbol changed",page.request_id);
+         RemovePendingHistoryPage(index);
+         continue;
+        }
+      MqlRates rates[];
+      int copied=0;
+      if(g_history_ready && ReadHistoryPage(page.symbol,page.timeframe,page.bars,page.before_ms,rates,copied))
+        {
+         RemovePendingHistoryPage(index);
+         SendHistoryPageFrame(page.request_id,page.symbol,page.timeframe_name,rates,copied,page.bars,page.before_ms);
+         continue;
+        }
+      if(now>=page.deadline_ms)
+        {
+         RemovePendingHistoryPage(index);
+         SendHistoryPageError(page.request_id,"history page synchronization timed out");
+         continue;
+        }
+      index++;
      }
-   snapshot+="]}}";
-   return SendFrame(snapshot);
   }
 
 string TickJson(const MqlTick &tick,const int digits)
@@ -1397,7 +1548,24 @@ void ReleaseTickReader()
    g_tick_file="";
   }
 
-void CancelTickHistory()
+void ReleaseTickPrefetch()
+  {
+   if(g_prefetch_reader!=INVALID_HANDLE) IndicatorRelease(g_prefetch_reader);
+   g_prefetch_reader=INVALID_HANDLE;
+   if(g_prefetch_file!="")
+     {
+      FileDelete(g_prefetch_file);
+      FileDelete(g_prefetch_file+".tmp");
+     }
+   g_prefetch_file="";
+   g_prefetch_symbol="";
+   g_prefetch_session="";
+  }
+
+// Clears the active request but keeps a pending prefetch: the next request in
+// the same profile is expected to adopt it. Every other exit uses
+// CancelTickHistory, which also discards the prefetch.
+void ResetActiveTickHistory()
   {
    ReleaseTickReader();
    g_tick_request="";
@@ -1412,6 +1580,12 @@ void CancelTickHistory()
    ArrayResize(g_tick_page,0);
   }
 
+void CancelTickHistory()
+  {
+   ReleaseTickPrefetch();
+   ResetActiveTickHistory();
+  }
+
 void FailTickHistory(const string reason)
   {
    const string request_id=g_tick_request;
@@ -1420,6 +1594,33 @@ void FailTickHistory(const string reason)
    // A correlated market-data failure ends this profile, not the session.
    const string error=StringFormat("{\"v\":1,\"type\":\"error\",\"id\":\"%s\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"%s\",\"retryable\":false}}",JsonEscape(request_id),JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(reason));
    if(!SendFrame(error)) DisconnectAndRetry("tick history error send failed");
+  }
+
+// Starts the reader for the page after the one just parsed. Best effort: a
+// failure only means the next request reads on demand.
+void StartTickPrefetch()
+  {
+   ReleaseTickPrefetch();
+   const ulong now=GetTickCount64();
+   g_prefetch_file=StringFormat("TradeCanvasTicks\\%I64d-%I64u-%I64u.bin",ChartID(),now,++g_tick_job_sequence);
+   g_prefetch_reader=iCustom(g_tick_symbol,PERIOD_M1,"BetterChartsTickHistoryReader",g_tick_through,(uint)g_tick_max+1,g_prefetch_file);
+   if(g_prefetch_reader==INVALID_HANDLE) { ReleaseTickPrefetch(); return; }
+   g_prefetch_symbol=g_tick_symbol;
+   g_prefetch_session=g_session_id;
+   g_prefetch_from=g_tick_through;
+   g_prefetch_max=g_tick_max;
+   g_prefetch_source_to=g_tick_to;
+   g_prefetch_started_ms=now;
+  }
+
+// The reader result depends only on (symbol, from, count). A short page was cut
+// by the end of the data known when it was read, so reuse is limited to
+// requests whose to_ms does not exceed the originating one.
+bool PrefetchMatches(const string symbol,const long from_ms,const long to_ms,const long max_ticks)
+  {
+   return g_prefetch_reader!=INVALID_HANDLE && g_prefetch_file!="" &&
+          g_prefetch_session==g_session_id && g_prefetch_symbol==symbol &&
+          g_prefetch_from==from_ms && g_prefetch_max==max_ticks && to_ms<=g_prefetch_source_to;
   }
 
 bool StartTickReaderAttempt()
@@ -1529,7 +1730,10 @@ bool QueueTickHistory(const string request_id,const string symbol,const long fro
       SendProtocolError("INVALID_MESSAGE","unsupported tick history request");
       return false;
      }
-   CancelTickHistory();
+   const bool adopt=(price_counts && PrefetchMatches(symbol,from_ms,to_ms,max_ticks));
+   if(adopt) ResetActiveTickHistory();
+   else CancelTickHistory();
+   g_tick_prefetch_hit=adopt;
    g_tick_request=request_id;
    g_tick_aggregate=price_counts;
    g_tick_symbol=symbol;
@@ -1540,6 +1744,16 @@ bool QueueTickHistory(const string request_id,const string symbol,const long fro
    // CopyTicks is nonblocking in the indicator. Recreate a fresh one-shot
    // instance for each synchronization attempt; it has no dependent timer.
    Print("BetterChartsBridge tick history queued");
+   if(adopt)
+     {
+      g_tick_reader=g_prefetch_reader;
+      g_tick_file=g_prefetch_file;
+      g_tick_attempt_ms=g_prefetch_started_ms;
+      g_prefetch_reader=INVALID_HANDLE;
+      g_prefetch_file="";
+      ReleaseTickPrefetch();
+      return true;
+     }
    return StartTickReaderAttempt();
   }
 
@@ -1575,18 +1789,21 @@ bool PreparePriceTickPayload()
    if(ArrayResize(g_prices,g_tick_accepted*2)!=g_tick_accepted*2)
      { FailTickHistory("price counter allocation failed"); return false; }
    g_tick_header="price-counts";
+   if(!g_tick_complete && g_tick_through>g_tick_from) StartTickPrefetch();
    return true;
   }
 
-bool AddPriceCount(const double value,const int digits,const uint total,const uint bid,const uint ask,const bool bid_seen)
+// Buckets by the integer tick-of-precision (value*10^digits) instead of a
+// formatted string; the price is formatted once per distinct bucket on output.
+bool AddPriceCount(const double value,const double scale,const uint total,const uint bid,const uint ask,const bool bid_seen)
   {
-   const string price=DoubleToString(value,digits);
+   const long price=(long)MathRound(value*scale);
    int index=0;
    if(!g_price_index.TryGetValue(price,index))
      {
       index=g_price_count;
       if(index>=ArraySize(g_prices) || !g_price_index.Add(price,index)) return false;
-      g_prices[index].price=price;
+      g_prices[index].price=value;
       g_prices[index].total=0;
       g_prices[index].bid=0;
       g_prices[index].ask=0;
@@ -1627,6 +1844,7 @@ bool AppendPricePayload(const string entry)
 void PollPriceTickPayload()
   {
    const int digits=(int)SymbolInfoInteger(g_tick_symbol,SYMBOL_DIGITS);
+   const double scale=MathPow(10.0,digits);
    const ulong started=GetTickCount64();
    while(g_tick_cursor<g_tick_accepted)
      {
@@ -1639,10 +1857,10 @@ void PollPriceTickPayload()
       const bool bid_changed=((g_tick_page[index].flags&TICK_FLAG_BID)!=0);
       const bool ask_changed=((g_tick_page[index].flags&TICK_FLAG_ASK)!=0);
       if(!valid) g_tick_rejected++;
-      if(!AddPriceCount(bid,digits,(valid && (bid_changed || ask_changed) ? 1 : 0),(valid && bid_changed ? 1 : 0),0,true) ||
-         (valid && ask_changed && !AddPriceCount(ask,digits,0,0,1,false)))
+      if(!AddPriceCount(bid,scale,(valid && (bid_changed || ask_changed) ? 1 : 0),(valid && bid_changed ? 1 : 0),0,true) ||
+         (valid && ask_changed && !AddPriceCount(ask,scale,0,0,1,false)))
         { FailTickHistory("price counter allocation failed"); return; }
-      if(GetTickCount64()-started>=5) return;
+      if(GetTickCount64()-started>=BRIDGE_TICK_WORK_SLICE_MS) return;
      }
    if(g_tick_payload_size==0)
      {
@@ -1653,26 +1871,27 @@ void PollPriceTickPayload()
    while(g_price_cursor<g_price_count)
      {
       const int index=g_price_cursor++;
-      const string entry=StringFormat("%s{\"price\":\"%s\",\"total\":%u,\"bid\":%u,\"ask\":%u,\"bid_seen\":%s}",(index>0 ? "," : ""),g_prices[index].price,g_prices[index].total,g_prices[index].bid,g_prices[index].ask,(g_prices[index].bid_seen ? "true" : "false"));
+      const string entry=StringFormat("%s{\"price\":\"%s\",\"total\":%u,\"bid\":%u,\"ask\":%u,\"bid_seen\":%s}",(index>0 ? "," : ""),DoubleToString(g_prices[index].price,digits),g_prices[index].total,g_prices[index].bid,g_prices[index].ask,(g_prices[index].bid_seen ? "true" : "false"));
       // An unusually broad price set can exceed the frame budget. Reuse the
       // already-read page through the raw path without sampling or another read.
       if(StringLen(entry)+512>(int)g_max_frame_bytes-g_tick_payload_size || !AppendPricePayload(entry))
         {
          g_tick_aggregate=false;
+         ReleaseTickPrefetch();
          g_price_index.Clear();
          ArrayResize(g_prices,0);
          PrepareRawTickPayload();
          return;
         }
-      if(GetTickCount64()-started>=5) return;
+      if(GetTickCount64()-started>=BRIDGE_TICK_WORK_SLICE_MS) return;
      }
    const string low=(g_tick_accepted>0 ? "\""+DoubleToString(g_tick_min_quote,digits)+"\"" : "null");
    const string high=(g_tick_accepted>0 ? "\""+DoubleToString(g_tick_max_quote,digits)+"\"" : "null");
    const string suffix=StringFormat("],\"complete\":%s,\"through_ms\":%I64d,\"loaded_ticks\":%d,\"rejected_ticks\":%u,\"min_quote\":%s,\"max_quote\":%s}}",(g_tick_complete ? "true" : "false"),g_tick_through,g_tick_accepted,g_tick_rejected,low,high);
    if(!AppendPricePayload(suffix)) { FailTickHistory("price envelope exceeds frame limit"); return; }
    if(!SendPayloadBytes(g_tick_payload,g_tick_payload_size)) { DisconnectAndRetry("tick price snapshot send failed"); return; }
-   PrintFormat("BetterChartsBridge tick page delivered: mode=prices records=%d prices=%d bytes=%d read_ms=%I64u work_ms=%I64u complete=%s",g_tick_accepted,g_price_count,g_tick_payload_size,g_tick_reader_ready_ms-g_tick_started_ms,GetTickCount64()-g_tick_reader_ready_ms,(g_tick_complete ? "yes" : "no"));
-   CancelTickHistory();
+   PrintFormat("BetterChartsBridge tick page delivered: source=ticks mode=prices records=%d prices=%d bytes=%d read_ms=%I64u work_ms=%I64u complete=%s prefetch=%s",g_tick_accepted,g_price_count,g_tick_payload_size,g_tick_reader_ready_ms-g_tick_started_ms,GetTickCount64()-g_tick_reader_ready_ms,(g_tick_complete ? "yes" : "no"),(g_tick_prefetch_hit ? "hit" : "miss"));
+   ResetActiveTickHistory();
   }
 
 bool PrepareRawTickPayload()
@@ -1697,6 +1916,9 @@ bool PrepareRawTickPayload()
 
 void PollTickHistory()
   {
+   // An unclaimed prefetch (profile cancelled or abandoned) must not hold a reader.
+   if(g_prefetch_reader!=INVALID_HANDLE && g_tick_request=="" && GetTickCount64()-g_prefetch_started_ms>BRIDGE_PREFETCH_TTL_MS)
+      ReleaseTickPrefetch();
    if(g_tick_request=="" || g_state!=BRIDGE_READY) return;
    if(g_tick_header=="")
      {
@@ -1770,7 +1992,7 @@ void PollTickHistory()
       g_tick_payload_size+=ArraySize(entry_bytes);
       g_tick_bytes+=bytes;
       g_tick_emitted++;
-      if(GetTickCount64()-started>=5) return;
+      if(GetTickCount64()-started>=BRIDGE_TICK_WORK_SLICE_MS) return;
      }
    const string suffix=(g_tick_complete ? "],\"complete\":true}}" : "],\"complete\":false}}");
    uchar suffix_bytes[];
@@ -1778,7 +2000,7 @@ void PollTickHistory()
    ArrayCopy(g_tick_payload,suffix_bytes,g_tick_payload_size,0,ArraySize(suffix_bytes));
    g_tick_payload_size+=ArraySize(suffix_bytes);
    if(!SendPayloadBytes(g_tick_payload,g_tick_payload_size)) { DisconnectAndRetry("tick history snapshot send failed"); return; }
-   PrintFormat("BetterChartsBridge tick page delivered: mode=raw records=%d bytes=%d read_ms=%I64u work_ms=%I64u complete=%s",g_tick_emitted,g_tick_payload_size,g_tick_reader_ready_ms-g_tick_started_ms,GetTickCount64()-g_tick_reader_ready_ms,(g_tick_complete ? "yes" : "no"));
+   PrintFormat("BetterChartsBridge tick page delivered: source=ticks mode=raw records=%d bytes=%d read_ms=%I64u work_ms=%I64u complete=%s",g_tick_emitted,g_tick_payload_size,g_tick_reader_ready_ms-g_tick_started_ms,GetTickCount64()-g_tick_reader_ready_ms,(g_tick_complete ? "yes" : "no"));
    CancelTickHistory();
   }
 
@@ -2752,7 +2974,7 @@ void HandleFrame(const string json)
          // window established stays exactly as it was.
          ENUM_TIMEFRAMES page_timeframe=PERIOD_CURRENT;
          ParseTimeframe(timeframe,page_timeframe);
-         SendHistoryPage(request_id,symbol,timeframe,page_timeframe,bars,before_ms);
+         HandleHistoryPageRequest(request_id,symbol,timeframe,page_timeframe,bars,before_ms);
         }
       else
         {
@@ -2887,6 +3109,7 @@ void TryConnect()
    g_max_ticks_per_page=5000;
    g_session_id="";
    g_partial_close_enabled=false;
+   ClearPendingHistoryPages();
    g_history_ready=false;
    g_have_last_bar=false;
    g_have_last_quote=false;
@@ -2954,13 +3177,14 @@ void OnTimer()
          g_last_portfolio_poll_ms=now;
         }
      }
+   PollPendingHistoryPages();
    PollTickHistory();
   }
 
 int OnInit()
   {
    if(InpBridgeMaxFrameMiB<1 || InpBridgeMaxFrameMiB>2047 ||
-      InpBridgeMaxTicksPerPage<1 || InpBridgeMaxTicksPerPage>65535)
+      InpBridgeMaxTicksPerPage<1 || InpBridgeMaxTicksPerPage>262144)
       return INIT_PARAMETERS_INCORRECT;
    PrintFormat("BetterChartsBridge control client: host=%s port=%u trading_enabled=%s",InpBridgeHost,InpBridgePort,(TradingEnabled() ? "yes" : "no"));
    g_next_connect_ms=0;
