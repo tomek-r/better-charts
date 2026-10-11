@@ -15,12 +15,14 @@ export function useBridgeStreamEffects(
     chart,
     positionOverlayState,
     tradingSyncTick,
+    partialCloseAvailable,
     submitSwapPendingRef,
     clearStagedWidget,
   }: {
     chart: { current: ChartController | null };
     positionOverlayState: { current: PositionOverlayState };
     tradingSyncTick: number;
+    partialCloseAvailable: boolean;
     submitSwapPendingRef: { current: boolean };
     clearStagedWidget: () => boolean;
   },
@@ -51,6 +53,7 @@ export function useBridgeStreamEffects(
         estimatedMoney,
         pnlCurrency,
         account?.currencyDigits,
+        partialCloseAvailable,
       );
       // Repaint so the ui-layer overlay re-renders (the sync previously piggy-backed on setPositions' requestRender).
       if (submitSwapPendingRef.current) {
@@ -76,6 +79,7 @@ export function useBridgeStreamEffects(
     instrument,
     snapshot.symbol,
     tradingSyncTick,
+    partialCloseAvailable,
     account?.currency,
     account?.currencyDigits,
     quoteSymbol,

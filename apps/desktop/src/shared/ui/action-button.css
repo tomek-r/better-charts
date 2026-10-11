@@ -1,0 +1,21 @@
+/* Compact neutral button shared by the portfolio card and the partial-close controls. */
+
+.action-button {
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  padding: 5px 8px;
+  color: var(--color-text-label);
+  background: var(--color-raised);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.action-button:hover:not(:disabled) {
+  color: var(--color-text-secondary);
+  border-color: var(--color-muted);
+}
+
+.action-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}

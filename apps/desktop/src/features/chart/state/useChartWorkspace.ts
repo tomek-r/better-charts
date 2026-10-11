@@ -5,6 +5,7 @@ import type { Mt5DataAdapter } from '../engine/mt5DataAdapter';
 import type { FixedRangeProfileState } from '../engine/fixedRangeProfileOverlay';
 import type { StagedOrderState } from '../engine/stagedOrderOverlay';
 import type { PositionOverlayState } from '../engine/positionOverlay';
+import type { PartialCloseChipPort } from '../engine/partialCloseChipPort';
 import type { PriceLinesState } from '../engine/priceLinesOverlay';
 import type { PendingModification } from '../../../shared/bridge/types';
 import { useChartModificationDrafts } from './useChartModificationDrafts';
@@ -45,6 +46,9 @@ export function useChartWorkspace() {
   const closeActionsRef = useRef<
     { close: (positionId: string) => void; cancel: (orderId: string) => void } | undefined
   >(undefined);
+  // The DOM host of the partial-close menu registers itself here so the painted
+  // ▾ chip (engine) can open it without importing React.
+  const partialCloseChipPortRef = useRef<PartialCloseChipPort | undefined>(undefined);
   // Instrument digits for price normalization inside []-dep chart handlers.
   const instrumentDigitsRef = useRef<number | undefined>(undefined);
   // Fresh staged flag for the []-dep Escape handler (unstage only when staged).
@@ -67,6 +71,7 @@ export function useChartWorkspace() {
     priceLinesState,
     dragModifyRef,
     closeActionsRef,
+    partialCloseChipPortRef,
     instrumentDigitsRef,
     stagedActiveRef,
     expectedProfile,

@@ -1067,6 +1067,8 @@ fn validates_portfolio_limits_and_unique_ids() {
         swap: "0".into(),
         time_ms: 1,
         magic: "m".into(),
+        volume_min: Some("0.01".into()),
+        volume_step: Some("0.01".into()),
     };
     let snapshot = PortfolioSnapshot {
         account_login: "a".into(),
@@ -1075,12 +1077,32 @@ fn validates_portfolio_limits_and_unique_ids() {
         orders: vec![],
     };
     let mut legacy = serde_json::to_value(&position).unwrap();
-    for field in ["stop_loss_profit", "take_profit_profit"] {
+    for field in [
+        "stop_loss_profit",
+        "take_profit_profit",
+        "volume_min",
+        "volume_step",
+    ] {
         legacy.as_object_mut().unwrap().remove(field);
     }
     let legacy: OpenPosition = serde_json::from_value(legacy).unwrap();
     legacy.validate().unwrap();
     assert_eq!(legacy.take_profit_profit, None);
+    assert_eq!((legacy.volume_min, legacy.volume_step), (None, None));
+    for malformed in [Some("0".to_string()), Some("abc".to_string())] {
+        assert!(OpenPosition {
+            volume_min: malformed.clone(),
+            ..position.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(OpenPosition {
+            volume_step: malformed,
+            ..position.clone()
+        }
+        .validate()
+        .is_err());
+    }
     assert!(OpenPosition {
         stop_loss_profit: Some("NaN".into()),
         ..position.clone()
@@ -1987,4 +2009,35 @@ fn heartbeat_market_session_is_optional_and_validated() {
     let mut negative_time = session;
     negative_time.server_time_ms = -1;
     assert!(negative_time.validate().is_err());
+}
+
+#[test]
+fn partial_close_capability_defaults_to_false_and_round_trips() {
+    let ack: HelloAckPayload = serde_json::from_value(serde_json::json!({
+        "heartbeat_interval_ms": 2000,
+        "heartbeat_timeout_ms": 6000,
+        "trading_enabled": true,
+    }))
+    .unwrap();
+    assert!(!ack.partial_close);
+    let ack: HelloAckPayload = serde_json::from_value(serde_json::json!({
+        "heartbeat_interval_ms": 2000,
+        "heartbeat_timeout_ms": 6000,
+        "trading_enabled": true,
+        "partial_close": true,
+    }))
+    .unwrap();
+    assert!(ack.partial_close);
+    let hello = serde_json::json!({
+        "token": "t", "terminal_id": "x", "terminal_build": 1,
+        "account_login": "1", "broker_server": "s", "chart_symbol": "A",
+        "expert_version": "1", "trading_enabled": true,
+        "supported_timeframes": ["M1"],
+    });
+    let legacy: HelloPayload = serde_json::from_value(hello.clone()).unwrap();
+    assert!(!legacy.partial_close);
+    let mut capable = hello;
+    capable["partial_close"] = true.into();
+    let capable: HelloPayload = serde_json::from_value(capable).unwrap();
+    assert!(capable.partial_close);
 }

@@ -27,7 +27,8 @@ submit/modify/close/cancel can execute trades. Commands are session-bound,
 journaled and sequential, with no automatic retries. See the
 [protocol contract](../../docs/protocol/bridge-v1.md).
 
-EA version `1.003` includes account-currency TP/SL amounts in live portfolio
+EA version `1.004` adds partial close (negotiated `partial_close` capability) and
+per-position `volume_min`/`volume_step`. It also includes account-currency TP/SL amounts in live portfolio
 snapshots, calculated with read-only `OrderCalcProfit` at actual entry and volume,
 and reports the installed tick reader version in the handshake.
 Recompile and reattach the EA after updating both the app and bridge.

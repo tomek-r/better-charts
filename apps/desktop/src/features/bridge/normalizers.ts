@@ -95,7 +95,8 @@ export function normalizeAccount(raw: RawAccount): AccountSnapshot {
   };
 }
 
-export function normalizePosition(raw: Partial<OpenPosition>): OpenPosition {
+export type RawPosition = Partial<OpenPosition> & { volume_min?: string | null; volume_step?: string | null };
+export function normalizePosition(raw: RawPosition): OpenPosition {
   return {
     ticket: String(raw.ticket ?? ''),
     positionId: String(raw.positionId ?? ''),
@@ -110,6 +111,8 @@ export function normalizePosition(raw: Partial<OpenPosition>): OpenPosition {
     swap: String(raw.swap ?? ''),
     stopLoss: raw.stopLoss,
     takeProfit: raw.takeProfit,
+    volumeMin: raw.volumeMin ?? raw.volume_min,
+    volumeStep: raw.volumeStep ?? raw.volume_step,
   };
 }
 export function normalizeOrder(raw: Partial<PendingOrder>): PendingOrder {

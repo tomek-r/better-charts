@@ -17,6 +17,7 @@ export type ChartWorkspaceResources = Pick<
   | 'priceLinesState'
   | 'dragModifyRef'
   | 'closeActionsRef'
+  | 'partialCloseChipPortRef'
   | 'instrumentDigitsRef'
   | 'stagedActiveRef'
   | 'setPendingModification'
@@ -41,6 +42,7 @@ export function ChartWorkspaceProvider({ children }: { children: ReactNode }) {
       priceLinesState: workspace.priceLinesState,
       dragModifyRef: workspace.dragModifyRef,
       closeActionsRef: workspace.closeActionsRef,
+      partialCloseChipPortRef: workspace.partialCloseChipPortRef,
       instrumentDigitsRef: workspace.instrumentDigitsRef,
       stagedActiveRef: workspace.stagedActiveRef,
       setPendingModification: workspace.setPendingModification,
@@ -58,6 +60,7 @@ export function ChartWorkspaceProvider({ children }: { children: ReactNode }) {
       workspace.priceLinesState,
       workspace.dragModifyRef,
       workspace.closeActionsRef,
+      workspace.partialCloseChipPortRef,
       workspace.instrumentDigitsRef,
       workspace.stagedActiveRef,
       workspace.setPendingModification,

@@ -308,6 +308,7 @@ pub(crate) async fn run_handshake(
         status.server = Some(hello_payload.broker_server.clone());
         status.message = None;
         status.market_session = None;
+        status.partial_close = hello_payload.partial_close;
     });
     drop(session_work);
     publish_market(events, state, &session_id, MarketSnapshot::default());
@@ -322,6 +323,7 @@ pub(crate) async fn run_handshake(
             trading_enabled: true,
             transfer_limits,
             tick_price_counts: hello_payload.tick_price_counts,
+            partial_close: hello_payload.partial_close,
         },
     )
     .await

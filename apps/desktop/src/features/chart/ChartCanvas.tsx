@@ -1,8 +1,10 @@
 import { useBridgeChartState, useBridgeConnection } from '../bridge/BridgeSessionProvider';
 import { useChartResources } from './ChartWorkspaceProvider';
+import type { ReactNode } from 'react';
 import { useErrorNotification } from '../../shared/ui/ErrorNotifications';
 
-export function ChartCanvas() {
+/** `children` are DOM overlays hung over the canvas (positioned against the chart frame). */
+export function ChartCanvas({ children }: { children?: ReactNode }) {
   const { chartHost } = useChartResources();
   const { status, tauriAvailable } = useBridgeConnection();
   const { hasCandles, symbolLoading, chartError } = useBridgeChartState();
@@ -13,6 +15,7 @@ export function ChartCanvas() {
   return (
     <div className="chart-frame">
       <div ref={chartHost} className="chart-host" aria-label="Market chart" tabIndex={0} />
+      {children}
       {(waiting || symbolLoading) && (
         <div className="chart-overlay">
           <span className="overlay-glyph">◒</span>

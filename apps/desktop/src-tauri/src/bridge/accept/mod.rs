@@ -260,6 +260,7 @@ pub(crate) fn protocol_error(
         status.state = BridgeConnectionState::ProtocolError;
         status.message = Some(message.into());
         status.market_session = None;
+        status.partial_close = false;
     });
     reset_reconciliation(
         events,
@@ -288,6 +289,7 @@ pub(crate) fn disconnect(
             status.state = BridgeConnectionState::Disconnected;
             status.message = None;
             status.market_session = None;
+            status.partial_close = false;
         });
         *state
             .current_session
@@ -378,6 +380,7 @@ pub(crate) fn protocol_error_session(
             status.state = BridgeConnectionState::ProtocolError;
             status.message = Some(message.to_string());
             status.market_session = None;
+            status.partial_close = false;
         });
         *state
             .current_session

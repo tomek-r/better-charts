@@ -3,6 +3,7 @@ import { useExecutionCommandEffects } from '../features/execution/useExecutionCo
 import type { ExecutionCommandState } from '../features/execution/useExecutionCommands';
 import { useBridgeBootstrapEffects } from '../features/bridge/effects/useBridgeBootstrapEffects';
 import { useBridgeStreamEffects } from '../features/bridge/effects/useBridgeStreamEffects';
+import { usePartialCloseAvailable } from '../features/partial-close/usePartialCloseAvailable';
 import { useBridgeQuote } from '../features/bridge/BridgeSessionProvider';
 import { useOrderTicketStores } from '../features/order-ticket/state/orderTicketContext';
 import type { BridgeSessionLifecycleState } from '../features/bridge/BridgeSessionProvider';
@@ -115,6 +116,7 @@ export function LifecyclePortfolioStream({
   ticket: Pick<TicketActions, 'clearStagedWidget'>;
 }) {
   const quote = useBridgeQuote();
+  const partialCloseAvailable = usePartialCloseAvailable();
   const submitSwapPendingRef = useOrderTicketStores().coordination.submitSwapPendingRef;
   useBridgeStreamEffects(
     {
@@ -128,6 +130,7 @@ export function LifecyclePortfolioStream({
       chart: workspace.chart,
       positionOverlayState: workspace.positionOverlayState,
       tradingSyncTick: workspace.tradingSyncTick,
+      partialCloseAvailable,
       submitSwapPendingRef,
       clearStagedWidget: ticket.clearStagedWidget,
     },

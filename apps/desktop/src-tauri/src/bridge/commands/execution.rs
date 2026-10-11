@@ -10,6 +10,7 @@ use super::super::{
     State,
 };
 use super::parse_time_in_force;
+use super::partial_close_gate::require_partial_close_allowed;
 
 #[tauri::command]
 pub(crate) fn get_execution_safety_status(
@@ -487,6 +488,9 @@ pub(crate) fn queue_close_position(
         .lock()
         .map_err(|_| "bridge session unavailable".to_string())?;
     let session_id = require_active_session_account(bridge, &account_login, &broker_server)?;
+    if let Some(volume) = volume.as_deref() {
+        require_partial_close_allowed(bridge, &position_id, volume)?;
+    }
     // F-7: one clock sample per enqueue (id and durable registration time).
     let now = now_ms();
     let command_id = adapter.next_command_id(now);

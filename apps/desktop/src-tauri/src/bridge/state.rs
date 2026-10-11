@@ -125,6 +125,10 @@ pub(crate) struct BridgeStatus {
     pub market_session: Option<MarketSessionView>,
     #[serde(rename = "supportedTimeframes")]
     pub supported_timeframes: Vec<String>,
+    /// Whether the connected EA negotiated partial close for this session;
+    /// the single source the close gate reads. False whenever no session is live.
+    #[serde(rename = "partialClose", default)]
+    pub partial_close: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -148,6 +152,7 @@ impl Default for BridgeStatus {
             message: None,
             market_session: None,
             supported_timeframes: Vec::new(),
+            partial_close: false,
         }
     }
 }

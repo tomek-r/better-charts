@@ -2,6 +2,7 @@ import { ChartTitle } from './ChartTitle';
 import { ChartQuotes } from './ChartQuotes';
 import { ChartTimeframes } from './ChartTimeframes';
 import { ChartCanvas } from './ChartCanvas';
+import { ChartPartialClose } from './ChartPartialClose';
 
 export function ChartWorkspaceView() {
   return (
@@ -11,7 +12,9 @@ export function ChartWorkspaceView() {
         <ChartQuotes />
       </div>
       <ChartTimeframes />
-      <ChartCanvas />
+      <ChartCanvas>
+        <ChartPartialClose />
+      </ChartCanvas>
     </section>
   );
 }

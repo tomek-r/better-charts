@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.003"
+#define BRIDGE_EXPERT_VERSION "1.004"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -72,6 +72,8 @@ int g_tick_payload_size=0;
 int g_tick_cursor=0,g_tick_emitted=0,g_tick_bytes=0,g_tick_budget=0;
 bool g_tick_complete=false;
 bool g_price_counts_enabled=false,g_tick_aggregate=false;
+// Negotiated per session in hello_ack; a partial close is refused unless true.
+bool g_partial_close_enabled=false;
 struct TickPriceCounter { string price; uint total,bid,ask; bool bid_seen; };
 CHashMap<string,int> g_price_index;
 TickPriceCounter g_prices[];
@@ -469,7 +471,7 @@ bool SendHello()
    const string broker_server=JsonEscape(AccountInfoString(ACCOUNT_SERVER));
    g_identity_login=account_login;
    g_identity_server=AccountInfoString(ACCOUNT_SERVER);
-   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_reader_version\":%s,\"tick_price_counts\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,(g_reader_version=="" ? "null" : "\""+g_reader_version+"\""),SupportedTimeframesJson(),(TradingEnabled() ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
+   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_reader_version\":%s,\"tick_price_counts\":true,\"partial_close\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,(g_reader_version=="" ? "null" : "\""+g_reader_version+"\""),SupportedTimeframesJson(),(TradingEnabled() ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
    return SendFrame(hello);
   }
 
@@ -530,6 +532,15 @@ string ExitProfitJson(const string symbol,const ENUM_ORDER_TYPE side,const doubl
    return "\""+DoubleToString(profit,8)+"\"";
   }
 
+// Lets the UI offer only splits the broker accepts; null when the symbol rule
+// cannot be read, so the app treats partial close as unavailable.
+string SymbolVolumeLimitJson(const string symbol,const ENUM_SYMBOL_INFO_DOUBLE property)
+  {
+   double limit=0.0;
+   if(!SymbolInfoDouble(symbol,property,limit) || !MathIsValidNumber(limit) || limit<=0.0) return "null";
+   return "\""+DoubleToString(limit,8)+"\"";
+  }
+
 string PositionJson()
   {
    const string symbol=PositionGetString(POSITION_SYMBOL);
@@ -545,7 +556,9 @@ string PositionJson()
    const double entry=PositionGetDouble(POSITION_PRICE_OPEN);
    return StringSubstr(metadata,0,StringLen(metadata)-1)+",\"stop_loss_profit\":"+
           ExitProfitJson(symbol,side,volume,entry,PositionGetDouble(POSITION_SL))+",\"take_profit_profit\":"+
-          ExitProfitJson(symbol,side,volume,entry,PositionGetDouble(POSITION_TP))+"}";
+          ExitProfitJson(symbol,side,volume,entry,PositionGetDouble(POSITION_TP))+",\"volume_min\":"+
+          SymbolVolumeLimitJson(symbol,SYMBOL_VOLUME_MIN)+",\"volume_step\":"+
+          SymbolVolumeLimitJson(symbol,SYMBOL_VOLUME_STEP)+"}";
   }
 
 string OrderTypeName(const long type)
@@ -1530,7 +1543,7 @@ bool QueueTickHistory(const string request_id,const string symbol,const long fro
    return StartTickReaderAttempt();
   }
 
-bool PriceCountsRequested(const string json,const string name)
+bool JsonBooleanIsTrue(const string json,const string name)
   {
    const string marker="\""+name+"\"";
    int index=StringFind(json,marker);
@@ -2187,20 +2200,26 @@ string TradeRetcodeText(const uint retcode)
    return "unknown retcode";
   }
 
+// Rust-side message contract: no control characters (char::is_control).
+string StripControlCharacters(const string text)
+  {
+   string clean="";
+   const int length=StringLen(text);
+   for(int i=0;i<length;i++)
+     {
+      const ushort code=StringGetCharacter(text,i);
+      if(code>=0x20 && code!=0x7F && (code<0x80 || code>0x9F)) clean=clean+ShortToString(code);
+     }
+   return clean;
+  }
+
 // Full diagnosis for a failed OrderSend, journaled as the command update's
 // message: "OrderSend failed: retcode=<n> last_error=<n> [<trade-description>]"
 // plus the server comment. Control characters are stripped and the result is
 // capped at 256 chars per the wire message contract.
 string SendFailureDiagnosis(const bool ok,const MqlTradeResult &result,const int last_error)
   {
-   string clean_comment="";
-   const int comment_length=StringLen(result.comment);
-   for(int i=0;i<comment_length;i++)
-     {
-      const ushort code=StringGetCharacter(result.comment,i);
-      // Rust-side message contract: no control characters (char::is_control).
-      if(code>=0x20 && code!=0x7F && (code<0x80 || code>0x9F)) clean_comment=clean_comment+ShortToString(code);
-     }
+   const string clean_comment=StripControlCharacters(result.comment);
    string note=StringFormat("%s: retcode=%u last_error=%d [%s]",(ok ? "broker rejected the request" : "OrderSend failed"),result.retcode,last_error,TradeRetcodeText(result.retcode));
    if(clean_comment!="") note=note+" - "+clean_comment;
    if(StringLen(note)>256) note=StringSubstr(note,0,256);
@@ -2356,6 +2375,32 @@ void DispatchSubmit(const BridgeCommandRequest &req)
      }
   }
 
+// Journaled retcode for a CTrade wrapper call: the broker's own code, or -1
+// when the call failed before any server result existed (retcode 0).
+long TradeResultRetcode()
+  {
+   const long retcode=(long)g_trade.ResultRetcode();
+   return (retcode==0 ? -1 : retcode);
+  }
+
+// Operator-facing sentence for a rejected CTrade call, e.g.
+// "Modify SL/TP rejected: Invalid stops (10016)". The server comment is appended
+// only when it adds information. Capped at 256 chars per the wire message contract.
+string TradeResultMessage(const string action,const int last_error)
+  {
+   const long retcode=TradeResultRetcode();
+   string message=StringFormat("%s failed (error %d)",action,last_error);
+   if(retcode!=-1)
+     {
+      const string description=StripControlCharacters(g_trade.ResultRetcodeDescription());
+      const string comment=StripControlCharacters(g_trade.ResultComment());
+      message=StringFormat("%s rejected: %s (%I64d)",action,description,retcode);
+      if(comment!="" && comment!=description) message=message+" - "+comment;
+     }
+   if(StringLen(message)>256) message=StringSubstr(message,0,256);
+   return message;
+  }
+
 void DispatchModify(const BridgeCommandRequest &req)
   {
    const long ticket=StringToInteger(req.target_id);
@@ -2375,8 +2420,8 @@ void DispatchModify(const BridgeCommandRequest &req)
       const bool ok=g_trade.PositionModify((ulong)ticket,sl,tp);
       const int modify_error=GetLastError();
       const string modify_status=(ok?"server_accepted":"rejected");
-      RecordTradeCallResult(req.command_id,modify_status,-1,modify_error,0,0,(ulong)ticket,
-                            (ok ? "position modification accepted" : "PositionModify failed"));
+      RecordTradeCallResult(req.command_id,modify_status,TradeResultRetcode(),modify_error,0,0,(ulong)ticket,
+                            (ok ? "position modification accepted" : TradeResultMessage("Modify SL/TP",modify_error)));
       return;
      }
    if(!OrderSelect((ulong)ticket))
@@ -2394,8 +2439,60 @@ void DispatchModify(const BridgeCommandRequest &req)
    const bool ok=g_trade.OrderModify((ulong)ticket,pending_price,pending_sl,pending_tp,ORDER_TIME_GTC,0);
    const int modify_error=GetLastError();
    const string modify_status=(ok?"server_accepted":"rejected");
-   RecordTradeCallResult(req.command_id,modify_status,-1,modify_error,(ok?(ulong)ticket:(ulong)0),0,0,
-                         (ok ? "pending order modification accepted" : "OrderModify failed"));
+   RecordTradeCallResult(req.command_id,modify_status,TradeResultRetcode(),modify_error,(ok?(ulong)ticket:(ulong)0),0,0,
+                         (ok ? "pending order modification accepted" : TradeResultMessage("Modify order",modify_error)));
+  }
+
+// The one place that defines and reports a malformed close volume.
+bool ParseCloseVolumeOrReject(const BridgeCommandRequest &req,double &volume)
+  {
+   if(StringLen(req.volume)<=32 && ParsePositiveDecimal(req.volume,volume)) return true;
+   SendOrderCommandError(req.command_id,"INVALID_REQUEST","close volume must be a positive decimal");
+   return false;
+  }
+
+// Volumes are binary doubles, so equality and step alignment use a tolerance of
+// one millionth of a lot step: far below any real step yet above decimal noise.
+bool SameVolume(const double left,const double right,const double step)
+  { return MathAbs(left-right)<=step*1e-6; }
+
+bool IsWholeNumberOfSteps(const double volume,const double step)
+  {
+   const double steps=volume/step;
+   return MathAbs(steps-MathRound(steps))<=1e-6;
+  }
+
+// Returns "" when the volume may be closed, else the rejection reason.
+string PartialCloseVolumeFailure(const string symbol,const double position_volume,const double volume)
+  {
+   const double minimum=SymbolInfoDouble(symbol,SYMBOL_VOLUME_MIN);
+   const double step=SymbolInfoDouble(symbol,SYMBOL_VOLUME_STEP);
+   if(minimum<=0.0 || step<=0.0) return "symbol volume rules are unavailable";
+   if(volume>position_volume && !SameVolume(volume,position_volume,step)) return "close volume exceeds the position volume";
+   if(volume<minimum && !SameVolume(volume,minimum,step)) return "close volume is below the symbol minimum";
+   if(!IsWholeNumberOfSteps(volume,step)) return "close volume is not a multiple of the volume step";
+   const double remainder=position_volume-volume;
+   if(!SameVolume(remainder,0.0,step) && remainder<minimum && !SameVolume(remainder,minimum,step))
+      return "remaining volume would be below the symbol minimum";
+   return "";
+  }
+
+// A null volume or one equal to the whole position keeps the unchanged
+// full-close path; close_volume is what the watch must see filled. The caller
+// pre-sets the outputs to a full close; they change only for a partial volume.
+bool ResolveCloseVolume(const BridgeCommandRequest &req,const string symbol,const double position_volume,double &close_volume,bool &is_partial)
+  {
+   if(req.volume=="") return true;
+   double requested=0.0;
+   if(!ParseCloseVolumeOrReject(req,requested)) return false;
+   const string failure=PartialCloseVolumeFailure(symbol,position_volume,requested);
+   if(failure!="")
+     { SendOrderCommandError(req.command_id,"INVALID_REQUEST",failure); return false; }
+   const double step=SymbolInfoDouble(symbol,SYMBOL_VOLUME_STEP);
+   if(SameVolume(requested,position_volume,step)) return true;
+   close_volume=requested;
+   is_partial=true;
+   return true;
   }
 
 void DispatchClose(const BridgeCommandRequest &req)
@@ -2405,15 +2502,20 @@ void DispatchClose(const BridgeCommandRequest &req)
      { SendOrderCommandError(req.command_id,"INVALID_REQUEST","target position does not exist"); return; }
    const double position_volume=PositionGetDouble(POSITION_VOLUME);
    const string position_symbol=PositionGetString(POSITION_SYMBOL);
+   double close_volume=position_volume;
+   bool is_partial=false;
+   if(!ResolveCloseVolume(req,position_symbol,position_volume,close_volume,is_partial)) return;
    if(!BeginCommandDispatch(req.command_id)) return;
-   ArmCommandWatch(req.command_id,"close",position_symbol,0,(ulong)ticket,position_volume);
+   // The watch completes when the filled volume reaches what was requested, so a
+   // partial close (the position survives) is reported filled, not stuck partial.
+   ArmCommandWatch(req.command_id,"close",position_symbol,0,(ulong)ticket,close_volume);
    ArmCommandInFlight(req.command_id);
    ResetLastError();
-   const bool ok=g_trade.PositionClose((ulong)ticket);
+   const bool ok=(is_partial ? g_trade.PositionClosePartial((ulong)ticket,close_volume) : g_trade.PositionClose((ulong)ticket));
    const int close_error=GetLastError();
    const string close_status=(ok?"server_accepted":"rejected");
-   RecordTradeCallResult(req.command_id,close_status,-1,close_error,0,0,(ulong)ticket,
-                         (ok ? "close order submitted; awaiting fill confirmation" : "PositionClose failed"));
+   RecordTradeCallResult(req.command_id,close_status,TradeResultRetcode(),close_error,0,0,(ulong)ticket,
+                         (ok ? "close order submitted; awaiting fill confirmation" : TradeResultMessage((is_partial ? "Partial close" : "Close position"),close_error)));
    if(!ok)
      {
       ReleaseCommandInFlight();
@@ -2433,8 +2535,8 @@ void DispatchCancel(const BridgeCommandRequest &req)
    const bool ok=g_trade.OrderDelete((ulong)ticket);
    const int cancel_error=GetLastError();
    const string cancel_status=(ok?"server_accepted":"rejected");
-   RecordTradeCallResult(req.command_id,cancel_status,-1,cancel_error,(ok?(ulong)ticket:(ulong)0),0,0,
-                         (ok ? "pending order cancelled" : "OrderDelete failed"));
+   RecordTradeCallResult(req.command_id,cancel_status,TradeResultRetcode(),cancel_error,(ok?(ulong)ticket:(ulong)0),0,0,
+                         (ok ? "pending order cancelled" : TradeResultMessage("Cancel order",cancel_error)));
   }
 
 void ExecuteCommand(const BridgeCommandRequest &req)
@@ -2470,6 +2572,17 @@ void ProcessCommandQueue()
       g_queue_count--;
       ExecuteCommand(req);
      }
+  }
+
+// Shape-only checks that need no market state; position-dependent rules run at
+// dispatch in ResolveCloseVolume. Fail-closed when the app did not negotiate it.
+bool ValidatePartialCloseIntake(const BridgeCommandRequest &req)
+  {
+   if(req.volume=="") return true;
+   if(!g_partial_close_enabled)
+     { SendOrderCommandError(req.command_id,"INVALID_REQUEST","partial close not negotiated"); return false; }
+   double volume=0.0;
+   return ParseCloseVolumeOrReject(req,volume);
   }
 
 bool ValidateCommandFields(const BridgeCommandRequest &req)
@@ -2513,9 +2626,7 @@ bool ValidateCommandFields(const BridgeCommandRequest &req)
      {
       if(req.position_id=="" || StringLen(req.position_id)>32 || StringToInteger(req.position_id)<=0)
         { SendOrderCommandError(req.command_id,"INVALID_REQUEST","position_id is required"); return false; }
-      if(req.volume!="")
-        { SendOrderCommandError(req.command_id,"INVALID_REQUEST","partial close is not supported; volume must be null"); return false; }
-      return true;
+      return ValidatePartialCloseIntake(req);
      }
    if(req.kind=="order_cancel_request")
      {
@@ -2615,7 +2726,8 @@ void HandleFrame(const string json)
         }
       g_max_frame_bytes=(uint)frame_bytes;
       g_max_ticks_per_page=(uint)page_ticks;
-      g_price_counts_enabled=PriceCountsRequested(json,"tick_price_counts");
+      g_price_counts_enabled=JsonBooleanIsTrue(json,"tick_price_counts");
+      g_partial_close_enabled=JsonBooleanIsTrue(json,"partial_close");
       g_session_id=session_id;
       g_state=BRIDGE_READY;
       g_backoff_index=0;
@@ -2661,7 +2773,7 @@ void HandleFrame(const string json)
       const long from_ms=JsonIntegerField(json,"from_ms",-1);
       const long to_ms=JsonIntegerField(json,"to_ms",-1);
       const long max_ticks=JsonIntegerField(json,"max_ticks",0);
-      QueueTickHistory(request_id,symbol,from_ms,to_ms,max_ticks,PriceCountsRequested(json,"price_counts"));
+      QueueTickHistory(request_id,symbol,from_ms,to_ms,max_ticks,JsonBooleanIsTrue(json,"price_counts"));
      }
    else if(type=="symbol_search_request")
      {
@@ -2774,6 +2886,7 @@ void TryConnect()
    g_max_frame_bytes=BRIDGE_MAX_FRAME;
    g_max_ticks_per_page=5000;
    g_session_id="";
+   g_partial_close_enabled=false;
    g_history_ready=false;
    g_have_last_bar=false;
    g_have_last_quote=false;

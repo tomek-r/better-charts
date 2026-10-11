@@ -14,7 +14,7 @@ fn temp_safety_journal() -> (std::path::PathBuf, ExecutionSafetyState) {
     (path, safety)
 }
 
-fn temp_adapter_state() -> (std::path::PathBuf, ExecutionAdapterState) {
+pub(super) fn temp_adapter_state() -> (std::path::PathBuf, ExecutionAdapterState) {
     let (path, safety) = temp_safety_journal();
     let adapter = ExecutionAdapterState::new(safety);
     adapter.session_started_for_session("session-1", true, "123", "Demo");

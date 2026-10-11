@@ -15,6 +15,7 @@ import type {
 } from '../../shared/bridge/types';
 import type { PositionOverlayState } from '../chart/engine/positionOverlay';
 import { useErrorNotification, useNotifyError } from '../../shared/ui/ErrorNotifications';
+import { describeRejection } from './tradeRejection';
 import { useDomainField, type DomainStore } from '../../shared/state/domainStore';
 
 export interface ExecutionStoreState {
@@ -124,7 +125,13 @@ export function useExecutionCommands({
       setClosingTarget(undefined);
     }
   };
-  const requestClosePosition = (source: 'portfolio' | 'draft', positionId: string, actedDraft?: PendingModification) =>
+  // `volume` null = full close; a decimal string closes only that part.
+  const requestClosePosition = (
+    source: 'portfolio' | 'draft',
+    positionId: string,
+    actedDraft?: PendingModification,
+    volume: string | null = null,
+  ) =>
     runCloseCancel(
       source,
       `Close:position:${positionId}`,
@@ -134,7 +141,7 @@ export function useExecutionCommands({
           accountLogin: account?.accountLogin,
           brokerServer: account?.brokerServer,
           positionId,
-          volume: null,
+          volume,
         }),
       actedDraft,
     );
@@ -202,7 +209,7 @@ export function useExecutionCommandEffects(execution: ExecutionCommandState): vo
       .register([
         listen<CommandUpdate>('execution-command-update', (event) => {
           if (!disposed && event.payload.status === 'rejected') {
-            notifyError(event.payload.message || `Order rejected by MT5 (code ${event.payload.retcode ?? 'unknown'}).`);
+            notifyError(describeRejection(event.payload));
           }
         }),
         listen<CommandError>('execution-command-error', (event) => {

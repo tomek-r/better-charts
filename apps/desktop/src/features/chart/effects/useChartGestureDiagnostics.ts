@@ -35,6 +35,7 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
             lineY: row.lineY + rect.top,
           })),
           posCloses: chips(hit.posCloses),
+          posPartials: chips(hit.posPartials),
           orderCancels: chips(hit.orderCancels),
           slLines: lines(hit.slLines),
           tpLines: lines(hit.tpLines),

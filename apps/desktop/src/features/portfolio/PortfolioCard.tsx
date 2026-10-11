@@ -1,21 +1,24 @@
 import type { AccountSnapshot, PendingModification, PortfolioSnapshot } from '../../shared/bridge/types';
-import { accountAmount } from './accountAmount';
+import { PortfolioRow } from './PortfolioRow';
 
 export function PortfolioCard({
   portfolio,
   account,
   onOpenSymbol,
+  partialCloseAvailable,
   closingTarget,
   requestClosePosition,
 }: {
   portfolio: PortfolioSnapshot;
   account: AccountSnapshot | undefined;
   onOpenSymbol: (symbol: string) => Promise<void>;
+  partialCloseAvailable: boolean;
   closingTarget: string | undefined;
   requestClosePosition: (
     source: 'portfolio' | 'draft',
     positionId: string,
     actedDraft?: PendingModification,
+    volume?: string | null,
   ) => Promise<void>;
 }) {
   if (portfolio.positions.length === 0) {
@@ -29,47 +32,18 @@ export function PortfolioCard({
         <span>{portfolio.positions.length} positions</span>
       </div>
       <div className="portfolio-list">
-        {portfolio.positions.slice(0, 8).map((item) => {
-          const actionKey = `Close:position:${item.positionId}`;
-          const actionBusy = closingTarget === actionKey;
-          return (
-            <div className="portfolio-row" key={item.positionId}>
-              {/* Row body is ONE button that opens the symbol on the chart;
-                  Close stays a sibling action, never a button inside one. */}
-              <button
-                className="portfolio-open"
-                aria-label={`Open ${item.symbol} chart`}
-                onClick={() => void onOpenSymbol(item.symbol)}
-              >
-                <div>
-                  <strong>{item.symbol}</strong>
-                  <span>
-                    Position · {item.side} · {item.volume}
-                  </span>
-                </div>
-                <div>
-                  <span>
-                    {item.priceCurrent} · P/L {accountAmount(item.profit, account?.currency, account?.currencyDigits)}
-                    {item.swap ? ` · Swap ${accountAmount(item.swap, account?.currency, account?.currencyDigits)}` : ''}
-                  </span>
-                  <small>
-                    SL {item.stopLoss ?? '—'} · TP {item.takeProfit ?? '—'}
-                  </small>
-                </div>
-              </button>
-              <div className="portfolio-actions">
-                <button
-                  className="portfolio-action"
-                  disabled={!account?.accountLogin || !account?.brokerServer || closingTarget !== undefined}
-                  aria-busy={actionBusy}
-                  onClick={() => void requestClosePosition('portfolio', item.positionId)}
-                >
-                  {actionBusy ? 'Closing…' : 'Close'}
-                </button>
-              </div>
-            </div>
-          );
-        })}
+        {portfolio.positions.slice(0, 8).map((item) => (
+          <PortfolioRow
+            key={item.positionId}
+            position={item}
+            account={account}
+            partialCloseAvailable={partialCloseAvailable}
+            closing={closingTarget === `Close:position:${item.positionId}`}
+            commandInFlight={closingTarget !== undefined}
+            onOpenSymbol={onOpenSymbol}
+            onClose={(volume) => requestClosePosition('portfolio', item.positionId, undefined, volume)}
+          />
+        ))}
       </div>
       {portfolio.positions.length > 8 && <p className="portfolio-more">{portfolio.positions.length - 8} more hidden</p>}
     </section>

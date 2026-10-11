@@ -1,6 +1,7 @@
-import { formatSignedMoney, normalizedPrice } from '../../../shared/format';
+import { formatSignedMoney, formatVolume, normalizedPrice } from '../../../shared/format';
 import { estimateLevelMoney, type AccountMoneyBasis } from '../../../shared/money';
 import type { OpenPosition, PendingOrder, PortfolioSnapshot, RiskSide } from '../../../shared/bridge/types';
+import { partialCloseLimits } from '../../partial-close/partialCloseVolume';
 import type { OrderLine, PositionLine, PositionOverlayState } from './positionOverlay';
 
 /** `buy_limit`, `sell_stop_limit`, … — compiled once, not per order line. */
@@ -70,7 +71,7 @@ export function toPositionLine(
   return {
     id: item.positionId || item.ticket,
     side,
-    volume: String(quantity),
+    volume: formatVolume(item.volume),
     entry,
     stopLoss: chartPrice(item.stopLoss),
     takeProfit: chartPrice(item.takeProfit),
@@ -118,13 +119,17 @@ export function toOrderLine(
     id: item.orderId,
     side,
     price,
-    quantity: String(volume),
+    quantity: formatVolume(quantity),
     label: type,
     stopLoss: chartPrice(item.stopLoss),
     takeProfit: chartPrice(item.takeProfit),
     slMoney: level(item.stopLoss, item.stopLossProfit),
     tpMoney: level(item.takeProfit, item.takeProfitProfit),
   };
+}
+/** Marks the line whose chip offers ▾ — the same capability + limits rule as the portfolio row. */
+function withPartialClose(item: OpenPosition, line: PositionLine | null, available: boolean): PositionLine | null {
+  return line && partialCloseLimits(item, available) ? { ...line, partialClose: true } : line;
 }
 // Source of truth: replace-style re-sync into OUR overlay (features/chart/engine/positionOverlay.ts). The library's built-in trading overlay is deliberately NEVER fed — chart.setPositions()/setOrders() stay empty, so it paints nothing and its drag hit-testing falls through to pan. Returns true when the painted content changed (or a drag preview was dropped) so the caller can repaint.
 export function syncPositionOverlay(
@@ -135,13 +140,16 @@ export function syncPositionOverlay(
   money?: AccountMoneyBasis,
   accountCurrency = money?.currency,
   currencyDigits = money?.currencyDigits,
+  partialCloseAvailable = false,
 ): boolean {
   const positions =
     !portfolio || !symbol
       ? []
       : portfolio.positions
           .filter((item) => item.symbol === symbol)
-          .map((item) => toPositionLine(item, money, accountCurrency, currencyDigits))
+          .map((item) =>
+            withPartialClose(item, toPositionLine(item, money, accountCurrency, currencyDigits), partialCloseAvailable),
+          )
           .filter((item): item is PositionLine => item !== null);
   const orders =
     !portfolio || !symbol

@@ -25,8 +25,12 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   `100.00 USD`, `100.00 EUR` or `100.00 PLN`. Chart estimates use broker tick
   values converted to account currency; unavailable or mismatched values are omitted.
 
-Not implemented: partial close, break even, multiple charts or
-Pine Script execution.
+- Partial close from the portfolio card (Close ▾) and the chart chip (✕ ▾):
+  25/50/75% presets and a custom volume popover, validated against the
+  symbol's min volume and volume step. Offered only when the EA negotiates the
+  `partial_close` capability (EA 1.004); spec in `docs/specs/partial-close.md`.
+
+Not implemented: break even, multiple charts or Pine Script execution.
 
 ## Interface decisions
 

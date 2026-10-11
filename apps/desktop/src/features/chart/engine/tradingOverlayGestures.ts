@@ -13,11 +13,13 @@ type TradingGestureWorkspace = Pick<
   | 'applyPositionModify'
   | 'applyLevelClear'
   | 'closeActionsRef'
+  | 'partialCloseChipPortRef'
 >;
 
 /** Grab targets of OUR position/order overlay (capture-phase handlers here). */
 type OverlayGrab =
   | { kind: 'posClose'; id: string }
+  | { kind: 'posPartial'; id: string }
   | { kind: 'orderCancel'; id: string }
   | { kind: 'slClear'; id: string }
   | { kind: 'tpClear'; id: string }
@@ -33,6 +35,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
     applyPositionModify,
     applyLevelClear,
     closeActionsRef,
+    partialCloseChipPortRef,
   } = workspace;
   let lineDrag: {
     line: 'order' | 'sl' | 'tp';
@@ -48,7 +51,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
     preserveExits?: boolean;
   } | null = null;
   let chipPress: {
-    kind: 'posClose' | 'orderCancel' | 'slClear' | 'tpClear';
+    kind: 'posClose' | 'posPartial' | 'orderCancel' | 'slClear' | 'tpClear';
     id: string;
     startX: number;
     startY: number;
@@ -61,6 +64,20 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
   // SL, position TP — with its ±8px y tolerance; lines bounded to chartRect so
   // the axis strip keeps its native scale-drag (the library's axis check ran
   // before its trading hit-test too).
+  // The ✕ and ▾ hit circles overlap (22px apart, grab slop on top): the nearer centre wins.
+  const resolvePositionChip = (id: string, x: number, y: number): OverlayGrab | null => {
+    const { hit } = positionOverlayState.current;
+    const close = hit.posCloses?.find((item) => item.id === id);
+    const partial = hit.posPartials?.find((item) => item.id === id);
+    const closeHit = hitCircle(close, x, y);
+    if (
+      hitCircle(partial, x, y) &&
+      (!closeHit || Math.hypot(x - partial!.x, y - partial!.y) < Math.hypot(x - close!.x, y - close!.y))
+    ) {
+      return { kind: 'posPartial', id };
+    }
+    return closeHit ? { kind: 'posClose', id } : null;
+  };
   const resolveOverlayGrab = (x: number, y: number): OverlayGrab | null => {
     const { hit } = positionOverlayState.current;
     const bounds = hit.chartRect;
@@ -71,8 +88,9 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
       return null;
     }
     for (const chip of hit.posCloses ?? []) {
-      if (hitCircle(chip, x, y)) {
-        return { kind: 'posClose', id: chip.id };
+      const grab = resolvePositionChip(chip.id, x, y);
+      if (grab) {
+        return grab;
       }
     }
     for (const chip of hit.orderCancels ?? []) {
@@ -126,8 +144,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
         const chip = hit.orderCancels?.find((item) => item.id === id);
         return hitCircle(chip, x, y) ? { kind: 'orderCancel', id } : { kind: 'line', line: 'order', id };
       }
-      const chip = hit.posCloses?.find((item) => item.id === row.id);
-      return hitCircle(chip, x, y) ? { kind: 'posClose', id: row.id } : null;
+      return resolvePositionChip(row.id, x, y);
     }
     const chips = row.level === 'sl' ? hit.slClears : hit.tpClears;
     const chip = chips?.find((item) => item.id === row.id);
@@ -332,6 +349,23 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
       applyPositionModify({ positionId: current.id, takeProfit: current.price });
     }
   };
+  const openPartialMenu = (positionId: string) => {
+    const chip = positionOverlayState.current.hit.posPartials?.find((item) => item.id === positionId);
+    if (chip) {
+      partialCloseChipPortRef.current?.openMenu({ positionId, x: chip.x - chip.r, y: chip.y + chip.r });
+    }
+  };
+  /** Right-click on a position's ✕ or ▾ opens the same menu; false when that position offers no partial close. */
+  const openPartialMenuFor = (grab: OverlayGrab | null): boolean => {
+    const position = grab?.kind === 'posClose' || grab?.kind === 'posPartial' ? grab.id : undefined;
+    const available =
+      position !== undefined && positionOverlayState.current.hit.posPartials?.some((chip) => chip.id === position);
+    if (position === undefined || !available) {
+      return false;
+    }
+    openPartialMenu(position);
+    return true;
+  };
   // ✕ chip = click semantics: dispatch only on release of a still press
   // (within CHIP_CLICK_SLOP). A press-drag starting on the chip abandons —
   // closing a position is too destructive to fire from a pan attempt.
@@ -351,7 +385,14 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
     if (!dispatch || current.moved) {
       return;
     }
-    if (current.kind === 'posClose') {
+    if (current.kind === 'posPartial') {
+      openPartialMenu(current.id);
+    } else if (current.kind === 'posClose') {
+      const port = partialCloseChipPortRef.current;
+      if (port?.isFullCloseBlocked(current.id)) {
+        return;
+      }
+      port?.dismiss();
       closeActionsRef.current?.close(current.id);
     } else if (current.kind === 'orderCancel') {
       closeActionsRef.current?.cancel(current.id);
@@ -383,5 +424,6 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
     finishLineDrag,
     finishChip,
     trackChip,
+    openPartialMenuFor,
   };
 }

@@ -10,6 +10,7 @@ mod dispatch;
 mod frontend_views;
 mod market_data;
 mod order_check;
+mod partial_close;
 mod reconciliation;
 mod risk_sizing;
 mod symbol_cache;
