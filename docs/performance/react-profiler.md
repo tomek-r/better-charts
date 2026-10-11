@@ -30,6 +30,11 @@ The profiler loads the browser Tauri stub from the working tree
 snapshot's older `e2e` layout (before the helpers folder existed) does not
 matter.
 
+Both snapshots are fed `initialHistoryBars` (300, from `config/bridge.json`)
+synthetic candles through the stub's `syntheticBars` option instead of its
+default 10; the count is recorded as `syntheticBars` in `metadata.json` and the
+summaries.
+
 The default run uses five alternating rounds and 40 measured interactions per
 scenario, after four warm-up interactions. It profiles quote updates with an
 idle ticket, staged Buy Limit entry edits, and GTC/Day settings toggles. The
@@ -107,7 +112,7 @@ unrealistically light. To replay real candles:
 1. In MetaTrader 5 open View -> Symbols (Ctrl+U) -> Bars tab, pick the symbol,
    timeframe and date range, press Request, then Export.
 2. Save as `<SYMBOL>_<TIMEFRAME>.csv` (for example `GOLD_M1.csv`; timeframe codes
-   as in `config/timeframes.json`) in `captures/lighthouse/` (gitignored), or in
+   as in `config/timeframes.json`) in `captures/` (gitignored; the React profiler replays the same files via `PROFILER_DATA`), or in
    the directory named by `LIGHTHOUSE_DATA`. Tab or comma separated, UTF-8 or
    UTF-16LE; MT5 server time is read as UTC; OHLC stay exact decimal strings.
    Bad rows abort the run with `file:line`.

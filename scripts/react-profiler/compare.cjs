@@ -6,6 +6,10 @@ const { spawn, spawnSync } = require("node:child_process");
 const { git, prepareSnapshots } = require("./snapshot.cjs");
 const { loadTools, collect } = require("./measure.cjs");
 const { renderReport } = require("./report.cjs");
+const bridgeConfig = require("../../config/bridge.json");
+
+// Same bar count the app requests at startup, so both versions chart real-sized data.
+const syntheticBars = bridgeConfig.initialHistoryBars;
 
 function integer(name, fallback, max) {
   const text = process.env[name] ?? String(fallback);
@@ -214,6 +218,7 @@ async function main() {
       warmupOperations: 4,
       operations,
       roundCount,
+      syntheticBars,
       suite,
     };
     fs.writeFileSync(
@@ -229,6 +234,7 @@ async function main() {
       ports,
       operations,
       roundCount,
+      syntheticBars,
       baselineCommit,
       expect,
       stub,
