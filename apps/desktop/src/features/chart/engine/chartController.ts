@@ -3,23 +3,35 @@ import type { BridgeState, Candle, QuoteSnapshot } from '../../../shared/bridge/
 import { toRenderBar, type RenderBar } from './mt5DataAdapter';
 import type { ChartOverlayState } from './overlays';
 import type { RenderViewport } from './overlayTypes';
-import type { DrawingTool } from '../../tools/toolTypes';
 import { createChartSurface } from './chartFactory';
 import { TRADING_COLORS } from './tradingOverlayDrawing';
 import { BarCountdownPrimitive, CountdownController } from './barCountdown';
 import { OhlcLegend } from './ohlcLegend';
 import { ConnectionIndicator } from './connectionIndicator';
-import { CrosshairPrimitive } from './crosshairPrimitive';
+import { PointerReadoutPrimitive } from './pointerReadoutPrimitive';
 import { PriceAxisTagsPrimitive } from './priceAxisTagsPrimitive';
 import { PriceScaleController } from './priceScaleController';
 import { BarSeriesController } from './barSeriesController';
 import { PriceLineController } from './priceLineController';
 import { isOutsidePane, ViewportController } from './viewportController';
-import { FixedRangeProfileTool, type FixedRangeProfileRange } from './fixedRangeProfileTool';
-import type { ChartTool } from './chartTool';
+import type {
+  ChartDrawTarget,
+  ChartPointerUpOutcome,
+  ChartToolDefinition,
+  ChartToolHost,
+  ChartToolResetReason,
+} from './toolContract';
+import { ChartToolSet } from './toolSet';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installDevTestApi, removeDevTestApi } from './devTestApi';
 import { initialHistoryWindow } from './initialHistoryWindow';
+
+/** What the app gives the chart for its tools; a tool sees it only through its `ChartToolHost`. */
+export type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
+  toolDefinitions: readonly ChartToolDefinition[];
+  /** The tool active at start and made active again after a placement; one of `toolDefinitions`. */
+  defaultToolId: string;
+};
 
 export enum HistoryViewportMode {
   Reset = 'reset',
@@ -44,9 +56,13 @@ export class ChartController {
   private readonly connection: ConnectionIndicator;
   private readonly countdownPrimitive = new BarCountdownPrimitive({ backColor: TRADING_COLORS.sell });
   private readonly scaleControls: PriceScaleController;
-  // Every tool shares pointer labels; Cross additionally draws the lines.
-  // Attached for the chart's life, drawn only while a pointer is over the pane.
-  private readonly crosshair = new CrosshairPrimitive();
+  // Every tool shares the pointer's time/price labels, and the tools' above-trading-overlays layer
+  // is painted by it just before them. Attached for the chart's life, drawn only while
+  // a pointer is over the pane.
+  private readonly pointerReadout = new PointerReadoutPrimitive(
+    () => this.view.viewport(),
+    (target) => this.tools.draw(target),
+  );
   // The Bid/Ask lines are native price lines; their tags are price-axis labels
   // positioned by this primitive, because the library's own label alignment
   // restacks them around the last price on every tick (see the chart options).
@@ -59,18 +75,12 @@ export class ChartController {
   private readonly data: BarSeriesController;
   private readonly countdown: CountdownController;
   private symbol = '';
-  private tool: DrawingTool = null;
   private removed = false;
   private readonly view: ViewportController;
-  private readonly profile: FixedRangeProfileTool;
-  /** Every drawing tool, in pointer-routing order after the armed one. */
-  private readonly tools: readonly ChartTool[];
+  private readonly tools: ChartToolSet;
   // Set once the broker's page came back short, or a page held nothing older
   // than the cache. Cleared by a new window, which is a new history.
   private olderHistoryExhausted = false;
-  onProfileCommit?: (range: FixedRangeProfileRange) => void;
-  onProfileRefresh?: (range: FixedRangeProfileRange) => void;
-  onProfileDelete?: () => void;
   onToolRelease?: () => void;
   /**
    * Set by the session hook: request a page of bars strictly older than this
@@ -82,6 +92,7 @@ export class ChartController {
   constructor(
     private readonly host: HTMLDivElement,
     private readonly state: ChartOverlayState,
+    options: ChartControllerOptions,
   ) {
     const { chart, candles, volume, future } = createChartSurface(host);
     this.chart = chart;
@@ -91,24 +102,20 @@ export class ChartController {
     this.data = new BarSeriesController(this.candles, this.volume);
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
     this.view = new ViewportController(this.chart, this.candles, this.future, this.data, () => this.removed);
-    const toolContext = {
-      data: this.data,
+    const { toolDefinitions, defaultToolId, ...hostOptions } = options;
+    const toolHost: ChartToolHost = {
+      ...hostOptions,
+      barSeries: this.data,
       geometry: this.view,
       requestRepaint: () => this.refreshOverlays(),
-      releaseTool: () => {
-        this.tool = null;
-        this.host.style.cursor = '';
+      returnToDefaultTool: () => {
+        this.tools.returnToDefaultTool();
         this.onToolRelease?.();
       },
     };
-    this.profile = new FixedRangeProfileTool({
-      ...toolContext,
-      state: this.state.fixedRangeProfile,
-      onCommit: (range) => this.onProfileCommit?.(range),
-      onRefresh: (range) => this.onProfileRefresh?.(range),
-      onDelete: () => this.onProfileDelete?.(),
+    this.tools = new ChartToolSet(toolDefinitions, defaultToolId, toolHost, (cursor) => {
+      this.host.style.cursor = cursor ?? '';
     });
-    this.tools = [this.profile];
     this.countdown = new CountdownController(this.countdownPrimitive, {
       symbol: () => this.symbol,
       timeframe: () => this.data.timeframe,
@@ -122,7 +129,7 @@ export class ChartController {
     // owns the broker-clock timer that repaints it.
     this.candles.attachPrimitive(this.countdownPrimitive);
     this.candles.attachPrimitive(this.priceTags);
-    this.candles.attachPrimitive(this.crosshair);
+    this.candles.attachPrimitive(this.pointerReadout);
     this.legend = new OhlcLegend(host);
     this.connection = new ConnectionIndicator(this.legend.container());
     // The price scale is painted on the library's own canvas, so its toggles
@@ -133,14 +140,17 @@ export class ChartController {
     this.resize();
     this.view.onViewportChanged = () => this.requestOlderHistory();
     this.view.start();
+    // Last of the construction: a tool's `activate` may repaint, which reaches the
+    // primitives and controllers built above.
+    this.tools.activateDefaultTool();
     if (import.meta.env.DEV) {
       installDevTestApi({
         data: () => this.bars.map((bar) => ({ ...bar })),
         visibleRange: () => this.visibleRange(),
         scrollToRange: (range) => this.chart.timeScale().setVisibleLogicalRange(range),
         timeToX: (timeMs) => this.timeToX(timeMs),
-        profileBoundaries: () => this.profileBoundaries(),
-        crosshair: () => this.crosshair.readout(),
+        tool: (id) => this.toolTestApi(id),
+        pointerReadout: () => this.pointerReadout.readout(),
         priceScale: () => {
           const scale = this.chart.priceScale('right');
           const options = scale.options();
@@ -226,9 +236,7 @@ export class ChartController {
   }
 
   private notifyBarsChanged(): void {
-    for (const tool of this.tools) {
-      tool.barsChanged();
-    }
+    this.tools.barsChanged();
   }
 
   resetView(): void {
@@ -366,7 +374,7 @@ export class ChartController {
     // The native resize retains bar spacing and right offset. Forcing a paint
     // updates pane dimensions before extending the helper time series.
     this.chart.resize(Math.max(1, Math.floor(width)), Math.max(1, Math.floor(height)), true);
-    // The Cross tool rejects pointer positions outside the pane, so its bounds
+    // The crosshair tool rejects pointer positions outside the pane, so its bounds
     // are re-measured here rather than waiting for the next overlay paint.
     this.view.measurePane();
     this.view.ensureFuture(width, spacing);
@@ -380,91 +388,54 @@ export class ChartController {
   timeToX(timeMs: number): number {
     return this.view.timeToX(timeMs);
   }
-  /** Whether a tool that places drawings (not the Cross pointer) is armed. */
-  isDrawingToolArmed(): boolean {
-    return this.armedTool() !== undefined;
-  }
-  private armedTool(): ChartTool | undefined {
-    return this.tools.find((tool) => tool.id === this.tool);
+  /** Whether a tool that places drawings (not a pointer tool) is active. */
+  isPlacementToolActive(): boolean {
+    return this.tools.isPlacementToolActive();
   }
   /**
-   * Every pointer shows axis labels (host CSS px). Outside the pane the
-   * readout hides rather than clamping, because a clamped readout would
+   * Every pointer shows axis labels (host CSS px), and the active tool hears the move.
+   * Outside the pane both hide rather than clamp, because a clamped readout would
    * print a time or price the pointer is not over.
    */
-  moveCrosshair(x: number, y: number): void {
+  movePointerReadout(x: number, y: number): void {
     const { width, height } = this.view.paneSize();
     if (isOutsidePane(x, y, width, height)) {
-      this.crosshair.hide();
+      this.hidePointerReadout();
       return;
     }
-    this.crosshair.move(x, y);
+    this.pointerReadout.move(x, y);
+    this.tools.pointerHover(x, y);
   }
-  hideCrosshair(): void {
-    this.crosshair.hide();
+  hidePointerReadout(): void {
+    this.pointerReadout.hide();
+    this.tools.pointerLeave();
   }
-  setDrawingTool(tool: DrawingTool): void {
-    const gestures = this.tools.filter((item) => item.hasGesture());
-    if (tool === this.tool && gestures.length === 0) {
-      return;
-    }
-    for (const item of gestures) {
-      item.cancelGesture();
-    }
-    this.tool = tool;
-    this.crosshair.setLinesVisible(tool === 'crosshair');
-    this.host.style.cursor = tool ? 'crosshair' : '';
+  selectChartTool(toolId: string): void {
+    this.tools.selectTool(toolId);
   }
-  /**
-   * Routes a press to the armed tool first, which may start a new drawing, then
-   * to every tool so an existing drawing stays editable with no tool armed.
-   */
   toolPointerDown(x: number, y: number): boolean {
-    const armed = this.armedTool();
-    if (armed?.pointerDown(x, y, true)) {
-      return true;
-    }
-    return this.tools.some((tool) => tool !== armed && tool.pointerDown(x, y, false));
+    return this.tools.pointerDown(x, y);
   }
   toolPointerMove(x: number, y: number): boolean {
-    return this.tools.some((tool) => tool.pointerMove(x, y));
+    return this.tools.pointerMove(x, y);
   }
-  toolPointerUp(commit: boolean): boolean {
-    let consumed = false;
-    for (const tool of this.tools) {
-      consumed = tool.pointerUp(commit) || consumed;
-    }
-    return consumed;
+  toolPointerUp(outcome: ChartPointerUpOutcome): boolean {
+    return this.tools.pointerUp(outcome);
   }
   cancelToolGestures(): void {
-    for (const tool of this.tools) {
-      tool.cancelGesture();
-    }
+    this.tools.cancelGestures();
   }
-  /** The Delete key: removes every tool's drawing. */
   deleteDrawings(): boolean {
-    let deleted = false;
-    for (const tool of this.tools) {
-      deleted = tool.deleteDrawing() || deleted;
-    }
-    return deleted;
+    return this.tools.deleteDrawings();
   }
-  drawSelection(ctx: CanvasRenderingContext2D): void {
-    for (const tool of this.tools) {
-      tool.draw(ctx);
-    }
+  drawTools(target: ChartDrawTarget): void {
+    this.tools.draw(target);
   }
-  getProfileRange(): FixedRangeProfileRange | null {
-    return this.profile.getRange();
+  resetTools(reason: ChartToolResetReason): void {
+    this.tools.resetTools(reason);
   }
-  profileBoundaries() {
-    return this.profile.boundaries();
-  }
-  clearProfileSelection(): void {
-    this.profile.clearSelection();
-  }
-  deleteProfile(): void {
-    this.profile.deleteProfile();
+  private toolTestApi(id: string): unknown {
+    return this.tools.toolTestApi(id);
   }
   private updateLegend(): void {
     const format = this.candles.options().priceFormat;
@@ -482,12 +453,13 @@ export class ChartController {
       return;
     }
     this.removed = true;
+    this.tools.disposeTools();
     this.view.destroy();
     this.observer.disconnect();
     this.connection.destroy();
     this.legend.destroy();
     this.scaleControls.destroy();
-    this.candles.detachPrimitive(this.crosshair);
+    this.candles.detachPrimitive(this.pointerReadout);
     this.candles.detachPrimitive(this.countdownPrimitive);
     this.candles.detachPrimitive(this.priceTags);
     this.candles.detachPrimitive(this.primitive);

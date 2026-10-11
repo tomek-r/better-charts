@@ -3,8 +3,7 @@ import { ticketPrice } from '../../../shared/format';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
 export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void {
-  const { chartHost, stagedOrderState, positionOverlayState, priceLinesState, fixedRangeProfileState, chart } =
-    workspace;
+  const { chartHost, stagedOrderState, positionOverlayState, priceLinesState, chart } = workspace;
 
   useEffect(() => {
     if (!import.meta.env.DEV) {
@@ -13,7 +12,6 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
     type Api = {
       geometry: () => Record<string, unknown> | null;
       expectedPrice: (clientY: number) => string | null;
-      fixedRangeProfile: () => { range: { fromMs: number; toMs: number } | null; hasProfile: boolean };
       realTrading: () => Record<string, unknown> | null;
     };
     const api: Api = {
@@ -85,7 +83,7 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
           barWidth: hit.barWidth ?? null,
           digits: state.digits,
           // Panning geometry (for E2E gestures): where the viewport is, where
-          // scrollToEnd would land it, and whether follow-on-new-bar is armed.
+          // scrollToEnd would land it, and whether follow-on-new-bar is switched on.
           offset: viewport?.offset ?? null,
           endAnchor: viewport?.endAnchor ?? null,
           followArmed: viewport?.followArmed ?? null,
@@ -106,21 +104,10 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
         const price = hit.toPrice(y);
         return Number.isFinite(price) && price > 0 ? ticketPrice(price, stagedOrderState.current.digits) : null;
       },
-      // FRVP lifecycle surface for the E2E: the active fixed-range selection
-      // (null = cleared) plus whether its computed profile is loaded — proves
-      // the selection survives a timeframe switch and dies on a symbol switch.
-      fixedRangeProfile: () => {
-        const range = fixedRangeProfileState.current.range;
-        return {
-          range: range ? { fromMs: range.fromMs, toMs: range.toMs } : null,
-          hasProfile:
-            fixedRangeProfileState.current.profile !== undefined && !fixedRangeProfileState.current.previewing,
-        };
-      },
     };
     (window as unknown as { __stagedWidgetTest?: Api }).__stagedWidgetTest = api;
     return () => {
       delete (window as unknown as { __stagedWidgetTest?: Api }).__stagedWidgetTest;
     };
-  }, [chartHost, positionOverlayState, stagedOrderState, chart, priceLinesState, fixedRangeProfileState]);
+  }, [chartHost, positionOverlayState, stagedOrderState, chart, priceLinesState]);
 }

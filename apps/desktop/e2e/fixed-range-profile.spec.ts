@@ -6,11 +6,7 @@ import {
   type PaintOp,
   type TestViewport,
 } from './helpers/overlayHarness';
-import type { OverlayRenderer as OverlayPlugin } from '../src/features/chart/engine/overlayTypes';
-import {
-  createFixedRangeProfileOverlay,
-  type FixedRangeProfileState,
-} from '../src/features/chart/engine/fixedRangeProfileOverlay';
+import { drawFixedRangeProfile, type FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/overlay';
 import type { ProfileResult, TickProfileBin } from '../src/shared/bridge/types';
 
 /**
@@ -20,7 +16,7 @@ import type { ProfileResult, TickProfileBin } from '../src/shared/bridge/types';
  * so the assertions run on the recorded op sequence — exactly what the pixels
  * would show.
  *
- * Contract locked down here (see fixedRangeProfileOverlay.ts):
+ * Contract locked down here (see tools/fixedRangeProfile/overlay.ts):
  *  - time→x anchor = the public viewport mapping (bar center): chartRect.x + i*(barWidth+barSpacing) - offset + barWidth/2,
  *    with i located by binary search over bar times (interpolate inside, clamp outside);
  *  - mirrored rows around the anchor (BID left / ASK right), ONE common weight denominator;
@@ -98,7 +94,7 @@ function paint(
   }
   const args = renderArgsFor(vp);
   const ops: Op[] = [];
-  createFixedRangeProfileOverlay(state).render(recordInto(ops), args);
+  drawFixedRangeProfile(recordInto(ops), args.viewport, state);
   return { ops, state };
 }
 
@@ -107,17 +103,8 @@ const linesOf = (ops: Op[]) => ops.filter((op) => op.kind === 'stroke');
 const labelsOf = (ops: Op[]) => ops.filter((op) => op.kind === 'fillText');
 
 // ---------------------------------------------------------------------------
-// Descriptor + (a) mirrored geometry + verified time→x anchor.
+// (a) Mirrored geometry + verified time→x anchor.
 // ---------------------------------------------------------------------------
-test('descriptor is the overlay-layer fixed-range profile plugin', () => {
-  const plugin = createFixedRangeProfileOverlay(makeState(makeProfile(DEFAULT_BINS)));
-  expect(plugin.descriptor).toEqual({
-    id: 'fixed-range-profile',
-    name: 'Fixed Range Volume Profile',
-    layer: 'overlay',
-  });
-});
-
 test('anchor maps range.fromMs through the public time-to-coordinate mapping', () => {
   // Mid-bar interpolation: index 3.5 → 41 + 35 - 7 + 4 = 73; the formula
   // carries `- offset + barWidth/2` (library bar CENTER, not the bar's left edge).
@@ -287,8 +274,7 @@ test('null range, missing profile or empty bins → zero paint ops and an empty 
   ];
   for (const state of cases) {
     const ops: Op[] = [];
-    const args = { viewport, data: bars, theme: {} } as unknown as Parameters<OverlayPlugin['render']>[1];
-    createFixedRangeProfileOverlay(state).render(recordInto(ops), args);
+    drawFixedRangeProfile(recordInto(ops), renderArgsFor(viewport).viewport, state);
     expect(ops).toHaveLength(0);
     expect(state.hit).toEqual({});
   }

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
 import type { RenderBar } from '../src/features/chart/engine/mt5DataAdapter';
 import {
@@ -1145,15 +1146,7 @@ test('fixed range volume profile survives a timeframe switch and clears on a sym
   });
   const collected = await gotoWithStub(page);
   type FrvpState = { range: { fromMs: number; toMs: number } | null; hasProfile: boolean };
-  const profileState = async () =>
-    page.evaluate(() => {
-      const w = window as unknown as {
-        __stagedWidgetTest?: {
-          fixedRangeProfile(): { range: { fromMs: number; toMs: number } | null; hasProfile: boolean };
-        };
-      };
-      return w.__stagedWidgetTest?.fixedRangeProfile() ?? null;
-    });
+  const profileState = () => profileSelection(page);
   // The stub ships no profile backend — deliver each observed request_tick_profile
   // as the matching `tick-profile` event (echoed args, like the reactive stubs),
   // so a profile exists to lose. One delivery per invocation, oldest first.
@@ -1196,9 +1189,9 @@ test('fixed range volume profile survives a timeframe switch and clears on a sym
       .toBe(true);
     return (await profileState())!;
   };
-  // Stub series ON the chart before arming the drawing tool.
+  // Stub series ON the chart before selecting the drawing tool.
   await expect.poll(async () => (await chartData(page)).length, { timeout: 10_000 }).toBe(10);
-  // Arm FRVP and select two real candle centers.
+  // Select FRVP and select two real candle centers.
   const frvpButton = page.locator('.tool-rail button[aria-label="Fixed range volume profile"]');
   await frvpButton.click();
   await expect(frvpButton).toHaveClass(/active/);

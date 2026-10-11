@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import { createStagedOrderGestures, type StagedOrderGestureTicket } from '../engine/stagedOrderGestures';
 import { createTradingOverlayGestures } from '../engine/tradingOverlayGestures';
+import { DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 import { useChartGestureDiagnostics } from './useChartGestureDiagnostics';
 
@@ -23,7 +24,7 @@ export function useChartWorkspacePointerEffects(
     positionOverlayState,
     closeActionsRef,
     partialCloseChipPortRef,
-    setDrawingTool,
+    selectChartTool,
   } = workspace;
   const {
     unstageOrderDraft,
@@ -119,7 +120,7 @@ export function useChartWorkspacePointerEffects(
     const onPointerDown = (event: PointerEvent) => {
       const { x, y } = localPoint(event);
       host.focus({ preventScroll: true });
-      if (chart.current?.isDrawingToolArmed() && chart.current.toolPointerDown(x, y)) {
+      if (chart.current?.isPlacementToolActive() && chart.current.toolPointerDown(x, y)) {
         toolGesture = true;
         claimEvent(event);
         host.setPointerCapture(event.pointerId);
@@ -166,7 +167,7 @@ export function useChartWorkspacePointerEffects(
       const { x, y } = localPoint(event);
       // Pointer labels follow every tool without consuming events or taking
       // ownership from the gesture paths below.
-      chart.current?.moveCrosshair(x, y);
+      chart.current?.movePointerReadout(x, y);
       if (chart.current?.toolPointerMove(x, y)) {
         event.stopPropagation();
         return;
@@ -193,20 +194,20 @@ export function useChartWorkspacePointerEffects(
         trading.applyLineDrag(y - labelDragOffset, event.shiftKey);
       }
     };
-    // Leaving the chart drops the crosshair: it is a pointer indicator, so it
-    // has no meaning once there is no pointer over the pane to point at.
+    // Leaving the chart drops the pointer readout (and the active tool's hover): they
+    // have no meaning once there is no pointer over the pane to point at.
     const onPointerLeave = () => {
-      chart.current?.hideCrosshair();
+      chart.current?.hidePointerReadout();
     };
     const onPointerUp = (event: PointerEvent) => {
-      chart.current?.toolPointerUp(true);
+      chart.current?.toolPointerUp('released');
       toolGesture = false;
       staged.endDrag(event);
       trading.finishLineDrag(event, true);
       trading.finishChip(event, true);
     };
     const onPointerCancel = (event: PointerEvent) => {
-      chart.current?.toolPointerUp(false);
+      chart.current?.toolPointerUp('cancelled');
       toolGesture = false;
       staged.endDrag(event);
       trading.finishLineDrag(event, false);
@@ -265,7 +266,7 @@ export function useChartWorkspacePointerEffects(
       staged.reset();
       trading.finishLineDrag({}, false);
       trading.finishChip({}, false);
-      chart.current?.toolPointerUp(false);
+      chart.current?.toolPointerUp('cancelled');
     };
     const onTouchEnd = (event: TouchEvent) => {
       if (!staged.active && !trading.lineActive && !trading.chipActive) {
@@ -286,8 +287,8 @@ export function useChartWorkspacePointerEffects(
         trading.finishLineDrag({}, false);
         trading.finishChip({}, false);
         chart.current?.cancelToolGestures();
-        chart.current?.setDrawingTool(null);
-        setDrawingTool(null);
+        chart.current?.selectChartTool(DEFAULT_CHART_TOOL_ID);
+        selectChartTool(DEFAULT_CHART_TOOL_ID);
         event.preventDefault();
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
         chart.current?.deleteDrawings();
@@ -327,7 +328,7 @@ export function useChartWorkspacePointerEffects(
     positionOverlayState,
     closeActionsRef,
     partialCloseChipPortRef,
-    setDrawingTool,
+    selectChartTool,
     unstageOrderDraft,
     toggleExit,
     setEntry,

@@ -258,9 +258,9 @@ test.describe('tool rail', () => {
     await expect(buttons).toHaveCount(2);
     await expect(buttons.nth(0)).toHaveAttribute('aria-label', 'Pointer tools');
     await expect(buttons.nth(1)).toHaveAttribute('aria-label', 'Fixed range volume profile');
-    // The pointer group's head shows the armed tool — the arrow pointer here.
+    // The pointer group's head shows the active tool — the arrow pointer here.
     await expect(buttons.nth(0)).toHaveClass(/active/);
-    await expect(buttons.nth(0).locator('.drawing-tool-icon')).toHaveAttribute('data-icon', 'cursor');
+    await expect(buttons.nth(0).locator('.drawing-tool-icon')).toHaveAttribute('data-icon', 'arrow');
     const arrow = page.locator('.tool-rail-arrow');
     await expect(arrow).toHaveAttribute('aria-expanded', 'false');
     await expect(buttons.nth(0)).toHaveAttribute('aria-expanded', 'false');
@@ -269,7 +269,7 @@ test.describe('tool rail', () => {
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
-  test('Escape cancels the armed profile tool and keyboard focus stays accessible', async ({ page }) => {
+  test('Escape cancels the active profile tool and keyboard focus stays accessible', async ({ page }) => {
     const { pageErrors } = await gotoCollectingErrors(page);
     const profile = page.getByRole('button', { name: 'Fixed range volume profile', exact: true });
     const pointer = page.getByRole('button', { name: 'Pointer tools', exact: true });

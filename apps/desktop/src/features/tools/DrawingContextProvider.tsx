@@ -1,10 +1,10 @@
 import { createContext, useMemo, type ReactNode } from 'react';
 import { useRequiredContext } from '../../shared/state/useRequiredContext';
-import type { DrawingTool } from './toolTypes';
+import type { ChartToolId } from './registry';
 
 export interface DrawingState {
-  drawingTool: DrawingTool;
-  setDrawingTool: (tool: DrawingTool) => void;
+  activeChartToolId: ChartToolId;
+  selectChartTool: (tool: ChartToolId) => void;
 }
 
 const DrawingContext = createContext<DrawingState | null>(null);
@@ -13,15 +13,18 @@ const DrawingContext = createContext<DrawingState | null>(null);
  * Drawing toolbar state and setter, isolated from the chart's other state.
  *
  * The chart workspace owns the state and injects it here, so the toolbar and
- * its consumers re-render only when the armed tool changes — not on every
+ * its consumers re-render only when the active tool changes — not on every
  * chart tick that updates the workspace.
  */
 export function DrawingContextProvider({
-  drawingTool,
-  setDrawingTool,
+  activeChartToolId,
+  selectChartTool,
   children,
 }: DrawingState & { children: ReactNode }) {
-  const value = useMemo<DrawingState>(() => ({ drawingTool, setDrawingTool }), [drawingTool, setDrawingTool]);
+  const value = useMemo<DrawingState>(
+    () => ({ activeChartToolId, selectChartTool }),
+    [activeChartToolId, selectChartTool],
+  );
 
   return <DrawingContext value={value}>{children}</DrawingContext>;
 }

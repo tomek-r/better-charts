@@ -35,7 +35,7 @@ import type { BridgeTicketResponsePort } from '../features/bridge/bridgeTicketRe
 
 type InitializationSession = Pick<
   BridgeSessionLifecycleState,
-  'mounted' | 'setChartError' | 'requestProfileRange' | 'refreshLiveProfile'
+  'mounted' | 'setChartError' | 'currentSymbol' | 'stores' | 'marketData'
 >;
 type StreamSession = Pick<BridgeSessionLifecycleState, 'snapshot' | 'instrument' | 'account' | 'portfolio'>;
 type ChartSession = Pick<
@@ -76,6 +76,7 @@ type BootstrapSession = Pick<
   | 'currentTimeframe'
   | 'latestCandleRef'
   | 'dataKeyRef'
+  | 'marketData'
 >;
 type PreviewSession = Pick<
   BridgeSessionLifecycleState,
@@ -97,7 +98,7 @@ export function LifecycleInitialization({
   session: InitializationSession;
   execution: ExecutionCommandState;
 }) {
-  const { mounted: mountedRef, setChartError, requestProfileRange, refreshLiveProfile } = session;
+  const { mounted: mountedRef, setChartError, currentSymbol, stores, marketData } = session;
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -105,7 +106,7 @@ export function LifecycleInitialization({
     };
   }, [mountedRef]);
   useExecutionCommandEffects(execution);
-  useChartWorkspaceInitEffects(workspace, { setChartError, requestProfileRange, refreshLiveProfile });
+  useChartWorkspaceInitEffects(workspace, { setChartError, currentSymbol, stores, marketData });
   return null;
 }
 
@@ -224,15 +225,11 @@ export function LifecycleBootstrapAndGestures({
   ticketControls: TicketControls;
   bridgeTicket: BridgeTicketResponsePort;
 }) {
-  const { chart, adapterRef, fixedRangeProfileState, expectedFixedRangeProfile, fixedRangeProfileGeneration } =
-    workspace;
+  const { chart, adapterRef } = workspace;
   const { accountLoginRef, brokerServerRef } = accountRefs;
   useBridgeBootstrapEffects(session, {
     chart,
     adapterRef,
-    fixedRangeProfileState,
-    expectedFixedRangeProfile,
-    fixedRangeProfileGeneration,
     accountLoginRef,
     brokerServerRef,
     ticket: bridgeTicket,

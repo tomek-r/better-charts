@@ -1,4 +1,17 @@
+import type { Page } from '@playwright/test';
 import type { DevTestApi } from '../../src/features/chart/engine/devTestApi';
+import type { CrosshairTestApi } from '../../src/features/tools/crosshair/tool';
+import type { FixedRangeProfileTestApi } from '../../src/features/tools/fixedRangeProfile/tool';
+
+/** Each tool's dev test API, keyed by tool id: the one place a spec learns what `tool(id)` returns. */
+interface ToolTestApis {
+  crosshair: CrosshairTestApi;
+  fixedRangeProfile: FixedRangeProfileTestApi;
+}
+
+type ChartTestHook = Omit<DevTestApi, 'tool'> & {
+  tool<Id extends keyof ToolTestApis>(id: Id): ToolTestApis[Id] | undefined;
+};
 
 /**
  * The DEV-only chart hook, declared once from its own source of truth.
@@ -15,6 +28,16 @@ import type { DevTestApi } from '../../src/features/chart/engine/devTestApi';
  */
 declare global {
   interface Window {
-    __chartTest?: DevTestApi;
+    __chartTest?: ChartTestHook;
   }
+}
+
+/** The Fixed Range Volume Profile tool's dev test surface, or null before the chart mounted. */
+export async function profileBoundaries(page: Page) {
+  return page.evaluate(() => window.__chartTest?.tool('fixedRangeProfile')?.boundaries() ?? null);
+}
+
+/** The profile tool's selection, or null before the chart mounted. */
+export async function profileSelection(page: Page) {
+  return page.evaluate(() => window.__chartTest?.tool('fixedRangeProfile')?.selection() ?? null);
 }

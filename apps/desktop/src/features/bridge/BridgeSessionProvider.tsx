@@ -13,6 +13,7 @@ import type {
 import { useRequiredContext } from '../../shared/state/useRequiredContext';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 import { createBridgeSessionStores, type BridgeSessionStores } from './bridgeSessionStores';
+import { createMarketDataConnection } from './marketDataPort';
 import { useBridgeSession, type BridgeSessionState } from './useBridgeSession';
 
 export interface BridgeConnection {
@@ -50,6 +51,7 @@ export interface BridgeActions {
 type BridgeRuntimeInjection = Pick<
   BridgeSessionState,
   | 'stores'
+  | 'marketData'
   | 'loadingTimeframeRef'
   | 'pendingMetadata'
   | 'targetSymbol'
@@ -62,22 +64,18 @@ type BridgeRuntimeInjection = Pick<
   | 'requestHistory'
   | 'chooseSymbol'
   | 'chooseSymbolByName'
-  | 'requestProfileRange'
-  | 'refreshLiveProfile'
 > & { actions: BridgeActions };
 const RuntimeContext = createContext<BridgeRuntimeInjection | null>(null);
 
 export function BridgeSessionProvider({ children }: { children: ReactNode }) {
   const resources = useChartResources();
   const [stores] = useState(createBridgeSessionStores);
+  const [marketData] = useState(createMarketDataConnection);
   const session = useBridgeSession({
     stores,
+    marketData,
     chart: resources.chart,
     adapterRef: resources.adapterRef,
-    fixedRangeProfileState: resources.fixedRangeProfileState,
-    expectedFixedRangeProfile: resources.expectedFixedRangeProfile,
-    fixedRangeProfileGeneration: resources.fixedRangeProfileGeneration,
-    lastRequestedRangeRef: resources.lastRequestedRangeRef,
   });
   const actions = useMemo<BridgeActions>(
     () => ({
@@ -90,6 +88,7 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
   const runtime = useMemo<BridgeRuntimeInjection>(
     () => ({
       stores,
+      marketData,
       loadingTimeframeRef: session.loadingTimeframeRef,
       pendingMetadata: session.pendingMetadata,
       targetSymbol: session.targetSymbol,
@@ -102,8 +101,6 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
       requestHistory: session.requestHistory,
       chooseSymbol: session.chooseSymbol,
       chooseSymbolByName: session.chooseSymbolByName,
-      requestProfileRange: session.requestProfileRange,
-      refreshLiveProfile: session.refreshLiveProfile,
       actions,
     }),
     [
@@ -120,9 +117,8 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
       session.requestHistory,
       session.chooseSymbol,
       session.chooseSymbolByName,
-      session.requestProfileRange,
-      session.refreshLiveProfile,
       stores,
+      marketData,
     ],
   );
 

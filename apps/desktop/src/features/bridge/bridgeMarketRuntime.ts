@@ -1,6 +1,6 @@
 import { HistoryViewportMode, type ChartController } from '../chart/engine/chartController';
 import { toRenderBar, type Mt5DataAdapter, type Mt5HistoryError } from '../chart/engine/mt5DataAdapter';
-import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from '../chart/engine/fixedRangeProfileOverlay';
+import { listen } from '@tauri-apps/api/event';
 import type {
   BridgeStatus,
   BarUpdate,
@@ -40,14 +40,12 @@ type BridgeMarketSession = Pick<
   | 'currentTimeframe'
   | 'latestCandleRef'
   | 'dataKeyRef'
+  | 'marketData'
 >;
 
 export type BridgeMarketResources = {
   chart: { current: ChartController | null };
   adapterRef: { current: Mt5DataAdapter | null };
-  fixedRangeProfileState: { current: FixedRangeProfileState };
-  expectedFixedRangeProfile: { current: ExpectedFixedRangeProfile | undefined };
-  fixedRangeProfileGeneration: { current: number };
 };
 
 /** Longest the prefetch waits for an idle period before running anyway. */
@@ -62,11 +60,9 @@ export function createBridgeMarketRuntime(
   run: BridgeEffectRun,
   session: BridgeMarketSession,
   resources: BridgeMarketResources,
-  notifyError: (message: string) => void,
 ) {
   const chartRef = resources.chart;
   const marketAdapterRef = resources.adapterRef;
-  const { fixedRangeProfileState, expectedFixedRangeProfile, fixedRangeProfileGeneration } = resources;
   const {
     loadingTimeframeRef,
     setLoadingTimeframe,
@@ -83,6 +79,7 @@ export function createBridgeMarketRuntime(
     currentTimeframe: currentTimeframeRef,
     latestCandleRef,
     dataKeyRef,
+    marketData: { publisher },
   } = session;
   const pendingCandles = new Map<number, Candle>();
   let candleFrame: number | undefined;
@@ -338,47 +335,28 @@ export function createBridgeMarketRuntime(
     chartRef.current?.appendOlderHistory(candles, page.complete);
   };
 
-  /** The event belongs to the profile request still awaited, in the current generation. */
-  const matchesExpectedProfile = (payload: { symbol: string; fromMs: number; endMs: number }) => {
-    const expected = expectedFixedRangeProfile.current;
-    return (
-      !run.disposed &&
-      expected !== undefined &&
-      payload.symbol === expected.symbol &&
-      payload.fromMs === expected.fromMs &&
-      payload.endMs === expected.endMs &&
-      expected.generation === fixedRangeProfileGeneration.current
-    );
-  };
-
-  const onTickProfile = (event: PayloadEvent<ProfileResult>) => {
-    if (
-      matchesExpectedProfile(event.payload) &&
-      event.payload.symbol === currentSymbolRef.current &&
-      event.payload.complete !== undefined
-    ) {
-      fixedRangeProfileState.current.profile = event.payload;
-      if (expectedFixedRangeProfile.current) {
-        expectedFixedRangeProfile.current.settled = true;
+  /**
+   * Chart tools read market data through the narrow `MarketDataPort`, never through
+   * Tauri. This runtime keeps the single `listen` per event and forwards what its
+   * run accepts into the port's feed; a disposed run forwards nothing.
+   */
+  const forwardMarketDataEvents = () => [
+    listen<ProfileResult>('tick-profile', (event) => {
+      if (!run.disposed) {
+        publisher.publishTickProfile(event.payload);
       }
-      chartRef.current?.refreshOverlays();
-    }
-  };
-
-  const onTickProfileCancelled = (event: PayloadEvent<ProfileCancelled>) => {
-    if (matchesExpectedProfile(event.payload)) {
-      expectedFixedRangeProfile.current = undefined;
-      fixedRangeProfileGeneration.current += 1;
-    }
-  };
-
-  const onTickProfileError = (event: PayloadEvent<ProfileError>) => {
-    if (matchesExpectedProfile(event.payload)) {
-      notifyError(event.payload.message);
-      expectedFixedRangeProfile.current = undefined;
-      fixedRangeProfileGeneration.current += 1;
-    }
-  };
+    }),
+    listen<ProfileCancelled>('tick-profile-cancelled', (event) => {
+      if (!run.disposed) {
+        publisher.publishTickProfileCancelled(event.payload);
+      }
+    }),
+    listen<ProfileError>('tick-profile-error', (event) => {
+      if (!run.disposed) {
+        publisher.publishTickProfileError(event.payload);
+      }
+    }),
+  ];
 
   const onSymbolInfo = (event: PayloadEvent<BrokerSymbol>) => {
     const expected = targetSymbol.current ?? currentSymbolRef.current;
@@ -428,9 +406,7 @@ export function createBridgeMarketRuntime(
     onAdapterHistoryError,
     onMarketSnapshot,
     onHistoryPage,
-    onTickProfile,
-    onTickProfileCancelled,
-    onTickProfileError,
+    forwardMarketDataEvents,
     onSymbolInfo,
     onQuoteUpdate,
     onBarUpdate,

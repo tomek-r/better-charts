@@ -37,7 +37,7 @@ export interface TimeModel {
 }
 
 /**
- * True when a pointer lies outside a pane of this size. The Cross tool hides
+ * True when a pointer lies outside a pane of this size. The crosshair tool hides
  * rather than clamping, because a clamped crosshair would print a time or price
  * the pointer is not over.
  *
@@ -228,10 +228,20 @@ export class ViewportController {
       barWidth,
       barSpacing: 0,
       offset: range.from * barWidth,
-      priceToY: (price) => this.candles.priceToCoordinate(price) ?? NaN,
-      yToPrice: (y) => this.candles.coordinateToPrice(y) ?? NaN,
+      priceToY: (price) => this.priceToY(price),
+      yToPrice: (y) => this.yToPrice(y),
       timeToX: (timeMs) => this.timeToX(timeMs),
     };
+  }
+
+  /** Pane y of a price, or NaN while the price is off the scale. */
+  priceToY(price: number): number {
+    return this.candles.priceToCoordinate(price) ?? NaN;
+  }
+
+  /** Price under a pane y, or NaN while the scale has no range. */
+  yToPrice(y: number): number {
+    return this.candles.coordinateToPrice(y) ?? NaN;
   }
 
   timeToX(timeMs: number): number {

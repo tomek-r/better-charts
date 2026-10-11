@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { isOutsidePane } from '../src/features/chart/engine/viewportController';
 
-/** Pure pane-bounds predicate behind the Cross tool's hide-rather-than-clamp rule. */
+/** Pure pane-bounds predicate behind the crosshair tool's hide-rather-than-clamp rule. */
 
 test('accepts a pointer inside the pane, including its edges', () => {
   expect(isOutsidePane(0, 0, 800, 600)).toBe(false);

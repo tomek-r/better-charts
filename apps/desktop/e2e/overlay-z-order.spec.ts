@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { createRecordingCtx, createTestViewport, renderArgsFor, type PaintOp } from './helpers/overlayHarness';
 import type { OverlayRenderer as OverlayPlugin } from '../src/features/chart/engine/overlayTypes';
 import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart/engine/overlays';
+import { WorkspacePrimitive } from '../src/features/chart/engine/workspacePrimitive';
 
 /**
  * Paint-order (z-index) and row-inset regression for the chart overlays.
@@ -50,7 +51,6 @@ const recordFor = (ops: Op[], plugin: string) =>
 
 function collidingStates(): ChartOverlayState {
   return {
-    fixedRangeProfile: { range: null, hit: {} },
     // ASK = the staged buy entry (the reported artifact: ASK line over "Buy").
     priceLines: { ask: 150, bid: 149.9, digits: 2, hit: {} },
     staged: {
@@ -96,9 +96,9 @@ test('chart plugin registration is the overlay z-index contract', () => {
   const ids = buildChartPlugins(collidingStates()).map(
     (entry) => (entry.plugin as unknown as OverlayPlugin).descriptor.id,
   );
+  // Drawing tools paint before this list (WorkspacePrimitive), so they are not in it.
   // ALL lines passes first, then ALL labels passes (see features/chart/engine/overlays.ts).
   expect(ids).toEqual([
-    'fixed-range-profile',
     'price-lines-lines',
     'position-overlay-lines',
     'staged-order-lines',
@@ -109,9 +109,43 @@ test('chart plugin registration is the overlay z-index contract', () => {
   ]);
 });
 
+test('drawing tools paint before every trading overlay', () => {
+  const ops: Op[] = [];
+  const TOOL_FILL = '#123456';
+  const primitive = new WorkspacePrimitive(
+    {
+      viewport: () => renderArgs.viewport,
+      drawTools: ({ context }) => {
+        context.fillStyle = TOOL_FILL;
+        context.fillRect(0, 0, 1, 1);
+      },
+    },
+    collidingStates(),
+  );
+  const context = recordFor(ops, 'workspace');
+  const renderTarget = {
+    useMediaCoordinateSpace: (paint: (scope: { context: CanvasRenderingContext2D }) => void) => paint({ context }),
+    useBitmapCoordinateSpace: <T>(
+      read: (scope: {
+        horizontalPixelRatio: number;
+        verticalPixelRatio: number;
+        bitmapSize: { width: number; height: number };
+      }) => T,
+    ) => read({ horizontalPixelRatio: 1, verticalPixelRatio: 1, bitmapSize: { width: 600, height: 400 } }),
+  };
+  primitive
+    .paneViews()[0]
+    .renderer()!
+    .draw(renderTarget as never);
+  const toolOpIndexes = ops.flatMap((op, index) => (op.style === TOOL_FILL ? [index] : []));
+  expect(toolOpIndexes).toEqual([0]);
+  // The overlays must really have painted after it, or the order proves nothing.
+  expect(ops.length).toBeGreaterThan(1);
+});
+
 test('every level/reference line paints under every row label', () => {
   const ops: Op[] = [];
-  renderAll(ops, (id) => id !== 'fixed-range-profile');
+  renderAll(ops, () => true);
   const lineOps = ops.filter(isLineOp);
   const labelOps = ops.filter(isLabelOp);
   // The collision scenario must actually exercise both classes.

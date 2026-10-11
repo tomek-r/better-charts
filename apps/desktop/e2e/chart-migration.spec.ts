@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { profileBoundaries as boundaries, profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
 import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
@@ -7,18 +8,8 @@ const INTERVAL = 300_000;
 async function data(page: Page) {
   return page.evaluate(() => window.__chartTest?.data() ?? []);
 }
-async function boundaries(page: Page) {
-  return page.evaluate(() => window.__chartTest?.profileBoundaries() ?? null);
-}
 async function profileState(page: Page) {
-  return page.evaluate(() => {
-    const w = window as unknown as {
-      __stagedWidgetTest: {
-        fixedRangeProfile(): { range: { fromMs: number; toMs: number } | null; hasProfile: boolean };
-      };
-    };
-    return w.__stagedWidgetTest.fixedRangeProfile();
-  });
+  return (await profileSelection(page))!;
 }
 async function requests(page: Page) {
   return (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_tick_profile');
@@ -497,6 +488,24 @@ for (const event of ['tick-profile-error', 'tick-profile-cancelled']) {
   });
 }
 
+test('a rejected request_tick_profile surfaces an error and leaves no profile pending', async ({ page }) => {
+  await gotoWithStub(page, { failures: { request_tick_profile: 'Tick service unavailable' } });
+  await ready(page);
+  await select(page);
+  await expect.poll(async () => (await requests(page)).length).toBe(1);
+  await expect(
+    page
+      .locator('.notification-region [role=alert]')
+      .filter({ hasText: 'Volume profile request failed: Tick service unavailable' }),
+  ).toBeVisible();
+  const range = (await profileState(page)).range;
+  expect(range).not.toBeNull();
+  // The failed request was abandoned: a result arriving for it later is stale and is not painted.
+  await respond(page);
+  expect((await profileState(page)).range).toEqual(range);
+  expect((await profileState(page)).hasProfile).toBe(false);
+});
+
 test('an incomplete-history profile result can still render its available bins', async ({ page }) => {
   await requestProfile(page);
   await respond(page, 0, false);
@@ -537,7 +546,7 @@ const FUTURE_SLOT = 12;
 const FUTURE_LINE_MS = STUB_NOW + (FUTURE_SLOT - 10) * INTERVAL;
 const FUTURE_END_MS = FUTURE_LINE_MS + INTERVAL;
 
-/** Arms the tool and drags a range from bar 2 into empty space right of the newest bar. */
+/** Selects the tool and drags a range from bar 2 into empty space right of the newest bar. */
 async function commitFutureRange(page: Page) {
   await gotoWithStub(page);
   await ready(page);
@@ -557,10 +566,10 @@ async function pushLiveTick(page: Page, quoteMs: number, barMs: number) {
 
 /** Distance between the end line and a time, both measured in the same frame (the pane may scroll on a new bar). */
 async function endLineGap(page: Page, timeMs: number) {
-  return page.evaluate(
-    (time) => Math.abs((window.__chartTest!.profileBoundaries()?.toX ?? Infinity) - window.__chartTest!.timeToX(time)),
-    timeMs,
-  );
+  return page.evaluate((time) => {
+    const tool = window.__chartTest!.tool('fixedRangeProfile')!;
+    return Math.abs((tool.boundaries()?.toX ?? Infinity) - window.__chartTest!.timeToX(time));
+  }, timeMs);
 }
 
 /** Drags the end handle onto a bar slot with a real pointer. */
@@ -862,6 +871,11 @@ test('FRVP keeps a pending first click and a future end on their times when a ne
   await pushLiveTick(page, STUB_NOW, STUB_NOW);
   await expect.poll(async () => (await data(page)).length).toBe(11);
   await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 15 }));
+  // The range change rebuilds the empty future slots on the next animation frame; a click before
+  // that lands on a slot that has no time yet and is ignored (the rare flake this wait removes).
+  await page.evaluate(
+    () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
 
   // Two empty slots right of the newest bar as it is now, not as it was at the first click.
   const futureOpenMs = STUB_NOW + 2 * INTERVAL;

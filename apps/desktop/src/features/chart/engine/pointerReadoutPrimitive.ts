@@ -2,18 +2,26 @@ import type { IPrimitivePaneRenderer, IPrimitivePaneView } from 'lightweight-cha
 import { palette } from '../../../shared/theme/palette';
 import { AttachedSeriesPrimitive } from './attachedPrimitive';
 import { measureTextWidth } from './textMeasure';
+import {
+  createDrawTarget,
+  PANE_ABOVE_TRADING_OVERLAYS,
+  PRICE_AXIS_ABOVE_TRADING_OVERLAYS,
+  TIME_AXIS_ABOVE_TRADING_OVERLAYS,
+  type RenderTarget,
+} from './drawTarget';
+import type { ChartDrawLayer, ChartDrawTarget, RenderViewport } from './toolContract';
 
 /**
- * Pointer price/time labels for every tool, with crosshair lines only for Cross.
+ * Pointer price/time labels shown for every tool, plus the tools' layer above the trading overlays.
  *
  * The library's own crosshair is off on this chart (`CrosshairMode.Hidden`):
  * its price label fills the price axis and its time label prints the axis tick
  * formatter's text, neither of which is the shape this chart wants, and the
  * overlay stack below the pointer is ours anyway. Both labels are therefore
- * painted here, from the same coordinates the chart uses:
+ * painted here, from the same coordinates the chart uses. Each canvas first
+ * runs the tools' above-trading-overlays layer (`drawToolLayer`, e.g. the crosshair
+ * lines), then the labels over it:
  *
- *  - Cross lines are 1 CSS px solid and continue over both axes, so the two
- *    readouts are visibly attached to them;
  *  - the time label is centred on the pointer x just above the time axis,
  *    leaving the axis tick labels visible;
  *  - the price label is a box hugged against the pane's right edge — just
@@ -25,11 +33,7 @@ import { measureTextWidth } from './textMeasure';
  * with the data instead of leaving a stale readout behind.
  */
 
-/** The canvas target a renderer draws on (fancy-canvas' `CanvasRenderingTarget2D`). */
-type RenderTarget = Parameters<IPrimitivePaneRenderer['draw']>[0];
-
 /** Palette mirrored from styles/tokens.css — a canvas renderer cannot read CSS variables. */
-const LINE_COLOR = palette.textLabel;
 const LABEL_BACKGROUND = palette.border;
 const LABEL_TEXT_COLOR = palette.text;
 const LABEL_ACCENT_COLOR = palette.accent;
@@ -61,7 +65,7 @@ const CLOCK_FORMAT = new Intl.DateTimeFormat('en-GB', {
  * formatting in the host's zone would print a time the axis next to it
  * contradicts. The two spaces before the clock are the reference's gap.
  */
-function formatCrosshairTime(seconds: number): string {
+function formatPointerTime(seconds: number): string {
   const at = new Date(seconds * 1000);
   const part = (type: 'day' | 'month' | 'year') =>
     DATE_FORMAT.formatToParts(at).find((entry) => entry.type === type)?.value ?? '';
@@ -82,10 +86,9 @@ interface PaneRect {
 }
 
 /** Everything the dev-only test hook reports about one pointer position. */
-export interface CrosshairReadout {
+export interface PointerReadout {
   x: number;
   y: number;
-  linesVisible: boolean;
   timeSeconds: number | null;
   timeLabel: string | null;
   timeLabelBox: LabelBox | null;
@@ -123,15 +126,21 @@ function timeLabelBox(text: string, x: number, pane: PaneRect, font: string, fon
   };
 }
 
-export class CrosshairPrimitive extends AttachedSeriesPrimitive {
+export class PointerReadoutPrimitive extends AttachedSeriesPrimitive {
   /** Pointer position in pane CSS px; null outside the pane. */
   private point: { x: number; y: number } | null = null;
-  private linesVisible = false;
   private readonly pane: readonly IPrimitivePaneView[];
   private readonly timeAxis: readonly IPrimitivePaneView[];
   private readonly priceAxis: readonly IPrimitivePaneView[];
 
-  constructor() {
+  /**
+   * @param viewport the pane geometry handed to the tools.
+   * @param drawToolLayer paints the tools' above-trading-overlays layer onto one canvas, under the labels.
+   */
+  constructor(
+    private readonly viewport: () => RenderViewport,
+    private readonly drawToolLayer: (target: ChartDrawTarget) => void,
+  ) {
     super();
     // One renderer per canvas; each draws only once a position exists, so the
     // views are stable references and the hidden state costs nothing.
@@ -152,17 +161,6 @@ export class CrosshairPrimitive extends AttachedSeriesPrimitive {
     }
     this.point = { x, y };
     this.requestUpdate?.();
-  }
-
-  /** Tool changes affect the lines without dropping the pointer's axis labels. */
-  setLinesVisible(visible: boolean): void {
-    if (this.linesVisible === visible) {
-      return;
-    }
-    this.linesVisible = visible;
-    if (this.point !== null) {
-      this.requestUpdate?.();
-    }
   }
 
   hide(): void {
@@ -191,7 +189,7 @@ export class CrosshairPrimitive extends AttachedSeriesPrimitive {
   }
 
   /** Test-hook surface: the labels and boxes for the current position. */
-  readout(): CrosshairReadout | null {
+  readout(): PointerReadout | null {
     const point = this.point;
     const chart = this.chart;
     if (point === null || chart === null) {
@@ -205,7 +203,6 @@ export class CrosshairPrimitive extends AttachedSeriesPrimitive {
     return {
       x: point.x,
       y: point.y,
-      linesVisible: this.linesVisible,
       timeSeconds: time?.seconds ?? null,
       timeLabel: time?.text ?? null,
       timeLabelBox: time === null ? null : timeLabelBox(time.text, point.x, pane, font, fontSize),
@@ -220,7 +217,7 @@ export class CrosshairPrimitive extends AttachedSeriesPrimitive {
     if (point === null) {
       return;
     }
-    this.drawLines(target, [point.x], [point.y]);
+    this.paintTopLayer(target, PANE_ABOVE_TRADING_OVERLAYS);
     const price = this.priceAt(point.y);
     const time = this.timeAt(point.x);
     if (price === null && time === null) {
@@ -243,48 +240,18 @@ export class CrosshairPrimitive extends AttachedSeriesPrimitive {
   }
 
   private drawTimeAxis(target: RenderTarget): void {
-    const point = this.point;
-    if (point !== null) {
-      this.drawLines(target, [point.x], []);
-    }
+    this.paintTopLayer(target, TIME_AXIS_ABOVE_TRADING_OVERLAYS);
   }
 
   private drawPriceAxis(target: RenderTarget): void {
-    const point = this.point;
-    if (point === null) {
-      return;
-    }
-    this.drawLines(target, [], [point.y]);
+    this.paintTopLayer(target, PRICE_AXIS_ABOVE_TRADING_OVERLAYS);
   }
 
-  /**
-   * The crosshair lines, snapped to the device pixel grid in bitmap space so a
-   * 1px line stays 1px (and stays sharp) at every device pixel ratio.
-   */
-  private drawLines(target: RenderTarget, columns: number[], rows: number[]): void {
-    if (!this.linesVisible) {
-      return;
-    }
-    target.useBitmapCoordinateSpace(({ context, horizontalPixelRatio, verticalPixelRatio }) => {
-      const { width, height } = context.canvas;
+  /** Hands the active tool this canvas. Only called while a pointer is over the pane. */
+  private paintTopLayer(target: RenderTarget, layer: ChartDrawLayer): void {
+    target.useMediaCoordinateSpace(({ context }) => {
       context.save();
-      context.strokeStyle = LINE_COLOR;
-      for (const column of columns) {
-        const x = Math.round(column * horizontalPixelRatio);
-        context.lineWidth = horizontalPixelRatio;
-        context.beginPath();
-        context.moveTo(x, 0);
-        context.lineTo(x, height);
-        context.stroke();
-      }
-      for (const row of rows) {
-        const y = Math.round(row * verticalPixelRatio);
-        context.lineWidth = verticalPixelRatio;
-        context.beginPath();
-        context.moveTo(0, y);
-        context.lineTo(width, y);
-        context.stroke();
-      }
+      this.drawToolLayer(createDrawTarget(target, context, this.viewport(), layer));
       context.restore();
     });
   }
@@ -317,7 +284,7 @@ export class CrosshairPrimitive extends AttachedSeriesPrimitive {
     if (typeof time !== 'number') {
       return null;
     }
-    return { seconds: time, text: formatCrosshairTime(time) };
+    return { seconds: time, text: formatPointerTime(time) };
   }
 
   private priceAt(y: number): { price: number; text: string } | null {

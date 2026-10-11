@@ -1,22 +1,15 @@
 import { useRef, useState } from 'react';
 import type { ChartController } from '../engine/chartController';
-import type { DrawingTool } from '../../tools/toolTypes';
+import { DEFAULT_CHART_TOOL_ID, type ChartToolId } from '../../tools/registry';
 import type { Mt5DataAdapter } from '../engine/mt5DataAdapter';
-import type { FixedRangeProfileState } from '../engine/fixedRangeProfileOverlay';
 import type { StagedOrderState } from '../engine/stagedOrderOverlay';
 import type { PositionOverlayState } from '../engine/positionOverlay';
 import type { PartialCloseChipPort } from '../engine/partialCloseChipPort';
 import type { PriceLinesState } from '../engine/priceLinesOverlay';
 import type { PendingModification } from '../../../shared/bridge/types';
-import type { ExpectedFixedRangeProfile } from '../engine/fixedRangeProfileOverlay';
 import { useChartModificationDrafts } from './useChartModificationDrafts';
 
 export function useChartWorkspace() {
-  // Shared (never re-created) state for the FIXED RANGE VOLUME PROFILE: the
-  // gesture commits write the fixed range and profile; the painter writes hit
-  // geometry (see features/chart/engine/fixedRangeProfileOverlay.ts). Mutate fields only — the
-  // plugin captures this object at mount.
-  const fixedRangeProfileState = useRef<FixedRangeProfileState>({ range: null, hit: {} });
   // Shared (never re-created) state for the staged-order widget overlay: the
   // renderer writes hit geometry every frame; App's mirror effect writes the
   // ticket values; the host pointer handlers read both. No polling, no chart
@@ -54,17 +47,13 @@ export function useChartWorkspace() {
   const instrumentDigitsRef = useRef<number | undefined>(undefined);
   // Fresh staged flag for the []-dep Escape handler (unstage only when staged).
   const stagedActiveRef = useRef(false);
-  const expectedFixedRangeProfile = useRef<ExpectedFixedRangeProfile | undefined>(undefined);
-  const fixedRangeProfileGeneration = useRef(0);
-  const lastRequestedRangeRef = useRef<{ fromMs: number; endMs: number } | undefined>(undefined);
   const chartHost = useRef<HTMLDivElement>(null);
   const chart = useRef<ChartController | null>(null);
   const adapterRef = useRef<Mt5DataAdapter | null>(null);
   const modifications = useChartModificationDrafts(dragModifyRef);
-  const [drawingTool, setDrawingTool] = useState<DrawingTool>(null);
+  const [activeChartToolId, selectChartTool] = useState<ChartToolId>(DEFAULT_CHART_TOOL_ID);
   return {
     ...modifications,
-    fixedRangeProfileState,
     stagedOrderState,
     positionOverlayState,
     priceLinesState,
@@ -73,14 +62,11 @@ export function useChartWorkspace() {
     partialCloseChipPortRef,
     instrumentDigitsRef,
     stagedActiveRef,
-    expectedFixedRangeProfile,
-    fixedRangeProfileGeneration,
-    lastRequestedRangeRef,
     chartHost,
     chart,
     adapterRef,
-    drawingTool,
-    setDrawingTool,
+    activeChartToolId,
+    selectChartTool,
   };
 }
 
