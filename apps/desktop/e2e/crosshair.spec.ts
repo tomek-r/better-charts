@@ -1,16 +1,17 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gotoWithStub, STUB_NOW } from './helpers/tauriStub';
-import type { CrosshairReadout } from '../src/features/chart/engine/crosshairPrimitive';
+import type { PointerReadout } from '../src/features/chart/engine/pointerReadoutPrimitive';
 
 /**
- * The Cross tool: the rail's arrow reveals the tool menu (Escape closes it and
- * only it), the Cross row arms crosshair lines, and every pointer reports
+ * The crosshair tool: the rail's arrow reveals the tool menu (Escape closes it and
+ * only it), the Crosshair row activates the crosshair lines, and every pointer reports
  * the bar time and price under the pointer together with the two axis labels it
  * paints.
  *
  * Assertions run against the controller's DEV test hook
- * (`__chartTest.crosshair()`), which returns the resolved readout and the
- * geometry of both label boxes — no pixel sampling. The expected time label is
+ * (`__chartTest.pointerReadout()` for the resolved readout and the geometry of both
+ * label boxes, `__chartTest.tool('crosshair')` for whether the lines are drawn) —
+ * no pixel sampling. The expected time label is
  * rebuilt here from `STUB_NOW` with the platform's own UTC date parts, so the
  * production formatter is checked against an independent construction.
  */
@@ -27,8 +28,13 @@ function expectedLabel(seconds: number): string {
   return `${WEEKDAYS[at.getUTCDay()]} ${Number(day)} ${MONTHS[Number(month) - 1]} '${year.slice(2)}  ${clock.slice(0, 5)}`;
 }
 
-async function crosshair(page: Page): Promise<CrosshairReadout | null> {
-  return page.evaluate(() => window.__chartTest?.crosshair() ?? null);
+async function pointerReadout(page: Page): Promise<PointerReadout | null> {
+  return page.evaluate(() => window.__chartTest?.pointerReadout() ?? null);
+}
+
+/** Whether the crosshair tool is drawing its lines (active, pointer over the pane). */
+async function linesVisible(page: Page): Promise<boolean | undefined> {
+  return page.evaluate(() => window.__chartTest?.tool('crosshair')?.linesVisible());
 }
 
 async function chartBars(page: Page): Promise<number> {
@@ -57,8 +63,8 @@ async function chartGeometry(page: Page): Promise<{ paneWidth: number; paneHeigh
   return { paneWidth: host.width - axis.axisWidth, paneHeight: axis.paneHeight };
 }
 
-/** Arms the Cross tool the way the owner does: rail arrow → Cross row. */
-async function armCrosshair(page: Page): Promise<void> {
+/** Selects the crosshair tool the way the owner does: rail arrow → Crosshair row. */
+async function selectCrosshair(page: Page): Promise<void> {
   await openToolMenu(page);
   const menu = page.locator('.tool-flyout');
   await menu.getByRole('menuitemradio', { name: 'Crosshair pointer' }).click();
@@ -66,12 +72,12 @@ async function armCrosshair(page: Page): Promise<void> {
   await expect(menu).toHaveCount(0);
 }
 
-/** The pointer group's head button — it shows the group's armed tool. */
+/** The pointer group's head button — it shows the group's active tool. */
 const pointerHead = (page: Page) => page.locator('.tool-rail button[aria-label="Pointer tools"]');
 const pointerHeadIcon = (page: Page) => pointerHead(page).locator('.drawing-tool-icon');
 
 /**
- * The arrow tab and the Cross icon both open the tool menu, so the pointer has
+ * The arrow tab and the crosshair icon both open the tool menu, so the pointer has
  * to be on the split button first — the tab is revealed on hover/focus
  * (TV-style) and is not clickable while it is hidden.
  */
@@ -97,7 +103,9 @@ async function arrowApexOffset(page: Page): Promise<number> {
 }
 
 test.describe('crosshair', () => {
-  test('the rail arrow opens the tool menu, Escape closes only the menu, and Cross arms the tool', async ({ page }) => {
+  test('the rail arrow opens the tool menu, Escape closes only the menu, and the crosshair becomes the active tool', async ({
+    page,
+  }) => {
     const { pageErrors } = await gotoWithStub(page);
     const arrow = page.locator('.tool-rail-arrow');
     const head = pointerHead(page);
@@ -115,7 +123,7 @@ test.describe('crosshair', () => {
     await expect(menu.getByRole('menuitemradio')).toHaveCount(2);
     await expect(menu).not.toContainText('★');
     await expect(menu.getByRole('menuitemradio', { name: 'Fixed range volume profile' })).toHaveCount(0);
-    // Focus lands on the checked row — the arrow pointer, while no tool is armed.
+    // Focus lands on the checked row — the arrow pointer, while no tool is active.
     await expect(menu.getByRole('menuitemradio', { name: 'Arrow pointer' })).toBeFocused();
     // Escape closes the menu, hands focus to the group's icon and takes the
     // pointer-only chevron away again.
@@ -138,18 +146,18 @@ test.describe('crosshair', () => {
     await expect(menu).toHaveCount(0);
     await expect(arrow).toBeHidden();
     await expect(head).toBeFocused();
-    // Arming the crosshair pointer swaps the group head's icon to the crosshair.
-    await armCrosshair(page);
+    // Selecting the crosshair pointer swaps the group head's icon to the crosshair.
+    await selectCrosshair(page);
     await expect(head).toHaveClass(/active/);
     // Reopening the menu now focuses the crosshair row, the checked one.
     await openToolMenu(page);
     await expect(menu.getByRole('menuitemradio', { name: 'Crosshair pointer' })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
-    // With the menu closed, Escape still cancels the armed tool (unchanged rule).
+    // With the menu closed, Escape still cancels the active tool (unchanged rule).
     await page.keyboard.press('Escape');
     await expect(head).toHaveClass(/active/);
-    await expect(pointerHeadIcon(page)).toHaveAttribute('data-icon', 'cursor');
+    await expect(pointerHeadIcon(page)).toHaveAttribute('data-icon', 'arrow');
     expect(pageErrors).toEqual([]);
   });
 
@@ -158,7 +166,7 @@ test.describe('crosshair', () => {
       const { pageErrors } = await gotoWithStub(page);
       await expect.poll(async () => chartBars(page), { timeout: 10_000 }).toBe(10);
       if (pointer === 'crosshair') {
-        await armCrosshair(page);
+        await selectCrosshair(page);
       } else if (pointer === 'profile') {
         await page.locator('.tool-rail button[aria-label="Fixed range volume profile"]').click();
       }
@@ -169,9 +177,9 @@ test.describe('crosshair', () => {
       const timeMs = STUB_NOW - 9 * BAR_MS;
       const local = { x: await candleX(page, timeMs), y: Math.round(pane.paneHeight * 0.4) };
       await page.mouse.move(host.x + local.x, host.y + local.y);
-      await expect.poll(async () => (await crosshair(page)) !== null, { timeout: 5_000 }).toBe(true);
-      const state = (await crosshair(page))!;
-      expect(state.linesVisible).toBe(pointer === 'crosshair');
+      await expect.poll(async () => (await pointerReadout(page)) !== null, { timeout: 5_000 }).toBe(true);
+      const state = (await pointerReadout(page))!;
+      expect(await linesVisible(page)).toBe(pointer === 'crosshair');
       // The crosshair sits exactly under the pointer, in pane coordinates.
       expect(state.x).toBeCloseTo(local.x, 0);
       expect(state.y).toBeCloseTo(local.y, 0);
@@ -197,15 +205,15 @@ test.describe('crosshair', () => {
       // Horizontal moves keep the price, vertical moves change it — the readout
       // tracks the pointer rather than the last resolved value.
       await page.mouse.move(host.x + local.x - 40, host.y + local.y);
-      await expect.poll(async () => (await crosshair(page))?.price).toBe(state.price);
+      await expect.poll(async () => (await pointerReadout(page))?.price).toBe(state.price);
       await page.mouse.move(host.x + local.x - 40, host.y + local.y - 60);
-      await expect.poll(async () => (await crosshair(page))?.price).not.toBe(state.price);
+      await expect.poll(async () => (await pointerReadout(page))?.price).not.toBe(state.price);
       // Near the pane's right edge the time label is pushed back inside the pane
       // instead of overflowing it.
       const last = { x: await candleX(page, STUB_NOW - BAR_MS), y: local.y };
       await page.mouse.move(host.x + last.x, host.y + last.y);
-      await expect.poll(async () => (await crosshair(page))?.x).toBeCloseTo(last.x, 0);
-      const edge = (await crosshair(page))!.timeLabelBox!;
+      await expect.poll(async () => (await pointerReadout(page))?.x).toBeCloseTo(last.x, 0);
+      const edge = (await pointerReadout(page))!.timeLabelBox!;
       expect(edge.x + edge.width).toBeLessThanOrEqual(pane.paneWidth + 1);
       expect(edge.x + edge.width / 2).toBeCloseTo(Math.min(last.x, pane.paneWidth - edge.width / 2), 0);
       expect(pageErrors).toEqual([]);
@@ -221,31 +229,31 @@ test.describe('crosshair', () => {
     const point = { x: await candleX(page, STUB_NOW - 5 * BAR_MS), y: Math.round(pane.paneHeight / 2) };
     // Arrow is the default pointer: it shows labels without crosshair lines.
     await page.mouse.move(host.x + point.x, host.y + point.y);
-    await expect.poll(async () => (await crosshair(page))?.priceLabel).not.toBeNull();
-    expect((await crosshair(page))?.linesVisible).toBe(false);
-    await armCrosshair(page);
+    await expect.poll(async () => (await pointerReadout(page))?.priceLabel).not.toBeNull();
+    expect(await linesVisible(page)).toBe(false);
+    await selectCrosshair(page);
     await page.mouse.move(host.x + point.x, host.y + point.y);
-    await expect.poll(async () => (await crosshair(page)) !== null).toBe(true);
+    await expect.poll(async () => (await pointerReadout(page)) !== null).toBe(true);
     // Over the price axis the crosshair has no time/price to report: it hides.
     await page.mouse.move(host.x + pane.paneWidth + 20, host.y + point.y);
-    await expect.poll(async () => await crosshair(page)).toBeNull();
+    await expect.poll(async () => await pointerReadout(page)).toBeNull();
     // Leaving the chart hides it too.
     await page.mouse.move(host.x + point.x, host.y + point.y);
-    await expect.poll(async () => (await crosshair(page)) !== null).toBe(true);
+    await expect.poll(async () => (await pointerReadout(page)) !== null).toBe(true);
     await page.mouse.move(host.x + point.x, host.y - 40);
-    await expect.poll(async () => await crosshair(page)).toBeNull();
+    await expect.poll(async () => await pointerReadout(page)).toBeNull();
     // Escape changes Crosshair to Arrow while the pointer stays in the pane.
     await page.mouse.move(host.x + point.x, host.y + point.y);
-    await expect.poll(async () => (await crosshair(page)) !== null).toBe(true);
+    await expect.poll(async () => (await pointerReadout(page)) !== null).toBe(true);
     await page.locator('.chart-host').focus();
     await page.keyboard.press('Escape');
-    await expect.poll(async () => (await crosshair(page))?.linesVisible).toBe(false);
-    expect((await crosshair(page))?.priceLabel).not.toBeNull();
-    expect((await crosshair(page))?.timeLabel).not.toBeNull();
+    await expect.poll(async () => linesVisible(page)).toBe(false);
+    expect((await pointerReadout(page))?.priceLabel).not.toBeNull();
+    expect((await pointerReadout(page))?.timeLabel).not.toBeNull();
     await page.locator('.tool-rail button[aria-label="Fixed range volume profile"]').click();
     await page.mouse.move(host.x + point.x, host.y + point.y);
-    await expect.poll(async () => (await crosshair(page))?.priceLabel).not.toBeNull();
-    expect((await crosshair(page))?.linesVisible).toBe(false);
+    await expect.poll(async () => (await pointerReadout(page))?.priceLabel).not.toBeNull();
+    expect(await linesVisible(page)).toBe(false);
     expect(pageErrors).toEqual([]);
   });
 });

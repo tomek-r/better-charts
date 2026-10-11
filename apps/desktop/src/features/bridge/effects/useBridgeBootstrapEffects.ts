@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
 import { SubscriptionScope } from '../../../shared/bridge/subscriptionScope';
 import { toRenderBar } from '../../chart/engine/mt5DataAdapter';
 import type {
@@ -17,9 +16,6 @@ import type {
   OrderCheckError,
   OrderCheckResult,
   PortfolioSnapshot,
-  ProfileCancelled,
-  ProfileError,
-  ProfileResult,
   QuoteSnapshot,
   RiskPreview,
   RiskPreviewError,
@@ -42,13 +38,11 @@ export function useBridgeBootstrapEffects(
     | 'currentTimeframe'
     | 'latestCandleRef'
     | 'dataKeyRef'
+    | 'marketData'
   >,
   {
     chart,
     adapterRef,
-    fixedRangeProfileState,
-    expectedProfile,
-    profileGeneration,
     accountLoginRef,
     brokerServerRef,
     ticket,
@@ -58,7 +52,6 @@ export function useBridgeBootstrapEffects(
     ticket: BridgeTicketResponsePort;
   },
 ): void {
-  const notifyError = useNotifyError();
   const chartRef = chart;
   const marketAdapterRef = adapterRef;
   const stores = session.stores;
@@ -70,6 +63,7 @@ export function useBridgeBootstrapEffects(
     currentTimeframe: currentTimeframeRef,
     latestCandleRef,
     dataKeyRef,
+    marketData,
   } = session;
   const {
     riskVersion,
@@ -98,6 +92,7 @@ export function useBridgeBootstrapEffects(
       currentTimeframe: currentTimeframeRef,
       latestCandleRef,
       dataKeyRef,
+      marketData,
     };
     const ticketPort: BridgeTicketResponsePort = {
       riskVersion,
@@ -127,12 +122,10 @@ export function useBridgeBootstrapEffects(
     const subscriptions = new SubscriptionScope();
     let runtimeAvailable = false;
     let bridgeIdentity = '';
-    const marketRuntime = createBridgeMarketRuntime(
-      run,
-      bootstrapSession,
-      { chart: chartRef, adapterRef: marketAdapterRef, fixedRangeProfileState, expectedProfile, profileGeneration },
-      notifyError,
-    );
+    const marketRuntime = createBridgeMarketRuntime(run, bootstrapSession, {
+      chart: chartRef,
+      adapterRef: marketAdapterRef,
+    });
     const ticketHandlers = createBridgeTicketResponseHandlers(
       run,
       bootstrapSession,
@@ -216,9 +209,7 @@ export function useBridgeBootstrapEffects(
                 marketRuntime.resetPageState();
                 loadingTimeframeRef.current = undefined;
                 setLoadingTimeframe(undefined);
-                expectedProfile.current = undefined;
-                profileGeneration.current += 1;
-                chartRef.current?.clearProfileSelection();
+                chartRef.current?.resetTools('session');
                 currentSymbolRef.current = undefined;
                 currentTimeframeRef.current = undefined;
                 dataKeyRef.current = '';
@@ -232,9 +223,7 @@ export function useBridgeBootstrapEffects(
           }),
           listen<MarketSnapshot>('market-snapshot', marketRuntime.onMarketSnapshot),
           listen<HistoryPage>('history-page', marketRuntime.onHistoryPage),
-          listen<ProfileResult>('tick-profile', marketRuntime.onTickProfile),
-          listen<ProfileCancelled>('tick-profile-cancelled', marketRuntime.onTickProfileCancelled),
-          listen<ProfileError>('tick-profile-error', marketRuntime.onTickProfileError),
+          ...marketRuntime.forwardMarketDataEvents(),
           listen<BrokerSymbol>('symbol-info', marketRuntime.onSymbolInfo),
           listen<QuoteSnapshot>('quote-update', marketRuntime.onQuoteUpdate),
           listen<AccountSnapshot>('account-snapshot', (event) => {
@@ -332,9 +321,6 @@ export function useBridgeBootstrapEffects(
     brokerServerRef,
     chartRef,
     marketAdapterRef,
-    fixedRangeProfileState,
-    expectedProfile,
-    profileGeneration,
-    notifyError,
+    marketData,
   ]);
 }

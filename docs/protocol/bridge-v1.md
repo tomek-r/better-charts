@@ -887,6 +887,14 @@ Summaries are not interpolated or trimmed; overlapping cache entries are
 replaced and future data is not cached. Terminal incomplete fragments yield
 `complete=false` after the full range is processed.
 
+Desktop behavior, no wire change: every profile request's `endMs` is clipped
+to the newest quote time (`quote_update.time_ms`; fallback: newest bar open
+time), because ticks before the newest quote are final while a completed raw
+page is cached by its requested end. A range refreshes with ticks at most once per 2 s,
+never while a request is pending, while the newest bar opens before its `endMs`
+(the end may be an empty future slot); when a bar opens at or after `endMs` it
+refreshes once more, then never. A range ended on an older bar never refreshes.
+
 `cancel_tick_profile` invalidates the active generation and emits:
 
 **`tick-profile-cancelled` payload:**

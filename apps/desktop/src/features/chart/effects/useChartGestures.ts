@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import { createStagedOrderGestures, type StagedOrderGestureTicket } from '../engine/stagedOrderGestures';
 import { createTradingOverlayGestures } from '../engine/tradingOverlayGestures';
+import { DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 import { useChartGestureDiagnostics } from './useChartGestureDiagnostics';
 
@@ -23,7 +24,7 @@ export function useChartWorkspacePointerEffects(
     positionOverlayState,
     closeActionsRef,
     partialCloseChipPortRef,
-    setDrawingTool,
+    selectChartTool,
   } = workspace;
   const {
     unstageOrderDraft,
@@ -48,7 +49,7 @@ export function useChartWorkspacePointerEffects(
     }
     // Three independent grab states: staged-widget drags, custom-overlay line
     // drags (library TradingDragHandler parity), custom-overlay ✕ chip clicks.
-    let profileGesture = false;
+    let toolGesture = false;
     const staged = createStagedOrderGestures(
       host,
       { stagedOrderState },
@@ -119,8 +120,8 @@ export function useChartWorkspacePointerEffects(
     const onPointerDown = (event: PointerEvent) => {
       const { x, y } = localPoint(event);
       host.focus({ preventScroll: true });
-      if (chart.current?.isProfileToolActive() && chart.current.profilePointerDown(x, y)) {
-        profileGesture = true;
+      if (chart.current?.isPlacementToolActive() && chart.current.toolPointerDown(x, y)) {
+        toolGesture = true;
         claimEvent(event);
         host.setPointerCapture(event.pointerId);
         return;
@@ -137,8 +138,8 @@ export function useChartWorkspacePointerEffects(
         return;
       }
       if (!overlay) {
-        if (chart.current?.profilePointerDown(x, y)) {
-          profileGesture = true;
+        if (chart.current?.toolPointerDown(x, y)) {
+          toolGesture = true;
           claimEvent(event);
           host.setPointerCapture(event.pointerId);
         }
@@ -166,8 +167,8 @@ export function useChartWorkspacePointerEffects(
       const { x, y } = localPoint(event);
       // Pointer labels follow every tool without consuming events or taking
       // ownership from the gesture paths below.
-      chart.current?.moveCrosshair(x, y);
-      if (chart.current?.profilePointerMove(x)) {
+      chart.current?.movePointerReadout(x, y);
+      if (chart.current?.toolPointerMove(x, y)) {
         event.stopPropagation();
         return;
       }
@@ -193,21 +194,21 @@ export function useChartWorkspacePointerEffects(
         trading.applyLineDrag(y - labelDragOffset, event.shiftKey);
       }
     };
-    // Leaving the chart drops the crosshair: it is a pointer indicator, so it
-    // has no meaning once there is no pointer over the pane to point at.
+    // Leaving the chart drops the pointer readout (and the active tool's hover): they
+    // have no meaning once there is no pointer over the pane to point at.
     const onPointerLeave = () => {
-      chart.current?.hideCrosshair();
+      chart.current?.hidePointerReadout();
     };
     const onPointerUp = (event: PointerEvent) => {
-      chart.current?.profilePointerUp(true);
-      profileGesture = false;
+      chart.current?.toolPointerUp('released');
+      toolGesture = false;
       staged.endDrag(event);
       trading.finishLineDrag(event, true);
       trading.finishChip(event, true);
     };
     const onPointerCancel = (event: PointerEvent) => {
-      chart.current?.profilePointerUp(false);
-      profileGesture = false;
+      chart.current?.toolPointerUp('cancelled');
+      toolGesture = false;
       staged.endDrag(event);
       trading.finishLineDrag(event, false);
       trading.finishChip(event, false);
@@ -215,7 +216,7 @@ export function useChartWorkspacePointerEffects(
     // Suppress compatibility TouchEvents only while a custom gesture owns
     // capture; otherwise the library handles native touch pan and pinch.
     const onTouchStart = (event: TouchEvent) => {
-      if (profileGesture || staged.active || trading.lineActive || trading.chipActive) {
+      if (toolGesture || staged.active || trading.lineActive || trading.chipActive) {
         claimEvent(event);
         return;
       }
@@ -236,7 +237,7 @@ export function useChartWorkspacePointerEffects(
       trading.startTouch(overlay, x, overlay.kind === 'line' ? y - labelDragOffset : y);
     };
     const onTouchMove = (event: TouchEvent) => {
-      if (profileGesture) {
+      if (toolGesture) {
         claimEvent(event);
         return;
       }
@@ -265,7 +266,7 @@ export function useChartWorkspacePointerEffects(
       staged.reset();
       trading.finishLineDrag({}, false);
       trading.finishChip({}, false);
-      chart.current?.profilePointerUp(false);
+      chart.current?.toolPointerUp('cancelled');
     };
     const onTouchEnd = (event: TouchEvent) => {
       if (!staged.active && !trading.lineActive && !trading.chipActive) {
@@ -281,16 +282,16 @@ export function useChartWorkspacePointerEffects(
         return;
       }
       if (event.key === 'Escape') {
-        profileGesture = false;
+        toolGesture = false;
         staged.reset();
         trading.finishLineDrag({}, false);
         trading.finishChip({}, false);
-        chart.current?.cancelProfileGesture();
-        chart.current?.setDrawingTool(null);
-        setDrawingTool(null);
+        chart.current?.cancelToolGestures();
+        chart.current?.selectChartTool(DEFAULT_CHART_TOOL_ID);
+        selectChartTool(DEFAULT_CHART_TOOL_ID);
         event.preventDefault();
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
-        chart.current?.deleteProfile();
+        chart.current?.deleteDrawings();
         event.preventDefault();
       }
     };
@@ -327,7 +328,7 @@ export function useChartWorkspacePointerEffects(
     positionOverlayState,
     closeActionsRef,
     partialCloseChipPortRef,
-    setDrawingTool,
+    selectChartTool,
     unstageOrderDraft,
     toggleExit,
     setEntry,

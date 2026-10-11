@@ -39,7 +39,9 @@ export function AppLifecycle() {
         session={{
           mounted: session.mounted,
           setChartError: session.setChartError,
-          requestProfileRange: session.requestProfileRange,
+          currentSymbol: session.currentSymbol,
+          stores: session.stores,
+          marketData: session.marketData,
         }}
         execution={execution}
       />
@@ -100,6 +102,7 @@ export function AppLifecycle() {
           currentTimeframe: session.currentTimeframe,
           latestCandleRef: session.latestCandleRef,
           dataKeyRef: session.dataKeyRef,
+          marketData: session.marketData,
         }}
         accountRefs={accountRefs}
         ticketActions={ticketActions}

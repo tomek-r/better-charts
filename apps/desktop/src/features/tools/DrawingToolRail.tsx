@@ -1,65 +1,86 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DrawingTool } from './toolTypes';
+import type { ChartToolPlugin } from './chartToolPlugin';
+import { CHART_TOOL_PLUGINS, type ChartToolId } from './registry';
 import { DrawingToolIcon } from './DrawingToolIcon';
 
-/**
- * The pointer group: the rail's first entry and the only grouped one. Its
- * button shows whichever tool of the group is armed (the arrow pointer while
- * no tool is active), and its menu lists exactly these two rows.
- */
-const POINTER_TOOLS: ReadonlyArray<{ tool: DrawingTool; label: string }> = [
-  { tool: null, label: 'Arrow pointer' },
-  { tool: 'crosshair', label: 'Crosshair pointer' },
-];
+/** A registered plugin, with its id narrowed to the known tool ids. */
+type RegisteredToolPlugin = ChartToolPlugin<ChartToolId>;
+
+interface RailGroup {
+  id: string;
+  label: string;
+  members: RegisteredToolPlugin[];
+}
+
+/** Splits the registry into flyout groups and direct buttons, both in registry order. */
+function railLayout(plugins: readonly RegisteredToolPlugin[]): { groups: RailGroup[]; direct: RegisteredToolPlugin[] } {
+  const groups: RailGroup[] = [];
+  const direct: RegisteredToolPlugin[] = [];
+  for (const plugin of plugins) {
+    if (!plugin.railGroup) {
+      direct.push(plugin);
+      continue;
+    }
+    const { id, label } = plugin.railGroup;
+    const group = groups.find((candidate) => candidate.id === id);
+    if (group) {
+      group.members.push(plugin);
+    } else {
+      groups.push({ id, label, members: [plugin] });
+    }
+  }
+  return { groups, direct };
+}
+
+const RAIL_LAYOUT = railLayout(CHART_TOOL_PLUGINS);
 
 /**
- * Compact tool rail: pointer tools (arrow / crosshair) grouped behind the first
- * entry, then the fixed-range volume profile as a direct button.
+ * Compact tool rail built from the tool registry (`CHART_TOOL_PLUGINS`): plugins
+ * sharing a `railGroup` (the arrow / crosshair pointers) sit behind one button
+ * with a flyout; every other plugin gets a direct button after a separator.
+ * The group button shows whichever member is active (the first member, the arrow
+ * pointer, while none is).
  *
  * The group's icon and the arrow tab beside it both open the group's menu, and
  * the chevron points at that menu while it is closed and back at the rail while
- * it is open. Picking a row arms that tool. Escape closes the menu — and only
+ * it is open. Picking a row makes that tool active. Escape closes the menu — and only
  * the menu — returning focus to the group's icon and taking the chevron away
  * with it; a click outside closes it too. The tab is revealed by the pointer,
  * so it reappears on the next hover.
  */
 export function DrawingToolRail({
-  drawingTool,
+  activeChartToolId,
   onPick,
 }: {
-  drawingTool: DrawingTool;
-  onPick: (tool: DrawingTool) => void;
+  activeChartToolId: ChartToolId;
+  onPick: (tool: ChartToolId) => void;
 }) {
-  const [flyoutOpen, setFlyoutOpen] = useState(false);
+  /** The group whose flyout is open, if any. */
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   /**
    * Whether the arrow tab is showing. The pointer reveals it and takes it away
    * again on leave; Escape clears it explicitly, because the pointer is usually
    * still resting on the tab it just clicked and CSS :hover would keep the
    * chevron on screen after the menu it belongs to is gone.
    */
-  const [revealed, setRevealed] = useState(false);
+  const [revealedGroupId, setRevealedGroupId] = useState<string | null>(null);
   const railRef = useRef<HTMLElement>(null);
-  /** The group's icon button: Escape hands focus back to it. */
-  const headRef = useRef<HTMLButtonElement | null>(null);
-  // The row the group's button represents: the armed pointer tool, else the
-  // group's primary (arrow pointer) — so the icon always names what it is while
-  // the group owns the active tool, and what it would arm when it does not.
-  const armed = POINTER_TOOLS.find((row) => row.tool === drawingTool);
-  const head = armed ?? POINTER_TOOLS[0];
-  const pick = (tool: DrawingTool) => {
-    setFlyoutOpen(false);
+  /** Each group's icon button: Escape hands focus back to the open group's. */
+  const headRefs = useRef(new Map<string, HTMLButtonElement | null>());
+  const pick = (tool: ChartToolId) => {
+    setOpenGroupId(null);
     onPick(tool);
   };
-  const toggleFlyout = () => {
-    setFlyoutOpen((open) => !open);
+  const toggleFlyout = (groupId: string) => {
+    setOpenGroupId((open) => (open === groupId ? null : groupId));
   };
   useEffect(() => {
-    if (!flyoutOpen) {
+    if (openGroupId === null) {
       return;
     }
     const onPointerDownOutside = (event: MouseEvent) => {
       if (!railRef.current?.contains(event.target as Node)) {
-        setFlyoutOpen(false);
+        setOpenGroupId(null);
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -67,11 +88,11 @@ export function DrawingToolRail({
         return;
       }
       // The menu owns this Escape: stopping propagation keeps the chart's own
-      // Escape (disarm the active tool / unstage a draft) from firing as well.
+      // Escape (deselect the active tool / unstage a draft) from firing as well.
       event.stopPropagation();
-      setFlyoutOpen(false);
-      setRevealed(false);
-      headRef.current?.focus();
+      setOpenGroupId(null);
+      setRevealedGroupId(null);
+      headRefs.current.get(openGroupId)?.focus();
     };
     document.addEventListener('mousedown', onPointerDownOutside);
     document.addEventListener('keydown', onKeyDown);
@@ -83,82 +104,97 @@ export function DrawingToolRail({
       document.removeEventListener('mousedown', onPointerDownOutside);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [flyoutOpen]);
+  }, [openGroupId]);
   return (
     <nav className="tool-rail" aria-label="Drawing tools" ref={railRef}>
-      <div className="tool-rail-group">
-        <div
-          className={`tool-rail-split${revealed || flyoutOpen ? ' open' : ''}`}
-          onPointerEnter={() => setRevealed(true)}
-          onPointerLeave={() => setRevealed(false)}
-        >
-          <button
-            type="button"
-            className={`tool-rail-btn${armed ? ' active' : ''}`}
-            aria-label="Pointer tools"
-            title={head.label}
-            aria-haspopup="menu"
-            aria-expanded={flyoutOpen}
-            ref={headRef}
-            onClick={toggleFlyout}
-          >
-            <DrawingToolIcon name={head.tool ?? 'cursor'} size={22} />
-          </button>
-          <button
-            type="button"
-            className="tool-rail-arrow"
-            aria-haspopup="menu"
-            aria-expanded={flyoutOpen}
-            aria-label="Open pointer tools"
-            onClick={toggleFlyout}
-          >
-            <svg
-              className="tool-rail-arrow-glyph"
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              focusable="false"
+      {RAIL_LAYOUT.groups.map((group) => {
+        // The member the group's button represents: the active one, else the
+        // group's first — so the icon always names what it is while the group
+        // owns the active tool, and what it would activate when it does not.
+        const activeMember = group.members.find((member) => member.id === activeChartToolId);
+        const groupHead = activeMember ?? group.members[0];
+        const flyoutOpen = openGroupId === group.id;
+        return (
+          <div className="tool-rail-group" key={group.id}>
+            <div
+              className={`tool-rail-split${revealedGroupId === group.id || flyoutOpen ? ' open' : ''}`}
+              onPointerEnter={() => setRevealedGroupId(group.id)}
+              onPointerLeave={() => setRevealedGroupId(null)}
             >
-              {/* Closed: points at the menu it opens. Open: points back at the rail. */}
-              <path d={flyoutOpen ? 'M8.5 3.5 5 7l3.5 3.5' : 'M5.5 3.5 9 7l-3.5 3.5'} />
-            </svg>
-          </button>
-        </div>
-        {flyoutOpen && (
-          <div className="tool-flyout" role="menu" aria-label="Pointer tools">
-            {POINTER_TOOLS.map((row) => (
               <button
-                key={row.label}
                 type="button"
-                role="menuitemradio"
-                aria-checked={drawingTool === row.tool}
-                className={`tool-flyout-row${drawingTool === row.tool ? ' selected' : ''}`}
-                onClick={() => pick(row.tool)}
+                className={`tool-rail-btn${activeMember ? ' active' : ''}`}
+                aria-label={group.label}
+                title={groupHead.label}
+                aria-haspopup="menu"
+                aria-expanded={flyoutOpen}
+                ref={(element) => {
+                  headRefs.current.set(group.id, element);
+                }}
+                onClick={() => toggleFlyout(group.id)}
               >
-                <DrawingToolIcon name={row.tool ?? 'cursor'} size={18} />
-                <span className="tool-flyout-label">{row.label}</span>
+                <DrawingToolIcon name={groupHead.id} size={22} />
               </button>
-            ))}
+              <button
+                type="button"
+                className="tool-rail-arrow"
+                aria-haspopup="menu"
+                aria-expanded={flyoutOpen}
+                aria-label={`Open ${group.label.toLowerCase()}`}
+                onClick={() => toggleFlyout(group.id)}
+              >
+                <svg
+                  className="tool-rail-arrow-glyph"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  {/* Closed: points at the menu it opens. Open: points back at the rail. */}
+                  <path d={flyoutOpen ? 'M8.5 3.5 5 7l3.5 3.5' : 'M5.5 3.5 9 7l-3.5 3.5'} />
+                </svg>
+              </button>
+            </div>
+            {flyoutOpen && (
+              <div className="tool-flyout" role="menu" aria-label={group.label}>
+                {group.members.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={activeChartToolId === id}
+                    className={`tool-flyout-row${activeChartToolId === id ? ' selected' : ''}`}
+                    onClick={() => pick(id)}
+                  >
+                    <DrawingToolIcon name={id} size={18} />
+                    <span className="tool-flyout-label">{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        );
+      })}
       <span className="tool-rail-sep" aria-hidden="true" />
-      <button
-        type="button"
-        className={`tool-rail-btn${drawingTool === 'fixedRangeProfile' ? ' active' : ''}`}
-        aria-label="Fixed range volume profile"
-        title="Fixed range volume profile"
-        aria-pressed={drawingTool === 'fixedRangeProfile'}
-        onClick={() => pick('fixedRangeProfile')}
-      >
-        <DrawingToolIcon name="fixedRangeProfile" size={26} />
-      </button>
+      {RAIL_LAYOUT.direct.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          className={`tool-rail-btn${activeChartToolId === id ? ' active' : ''}`}
+          aria-label={label}
+          title={label}
+          aria-pressed={activeChartToolId === id}
+          onClick={() => pick(id)}
+        >
+          <DrawingToolIcon name={id} size={26} />
+        </button>
+      ))}
     </nav>
   );
 }

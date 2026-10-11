@@ -33,7 +33,10 @@ import {
 } from '../features/order-ticket/state/useOrderTicketChartRuntime';
 import type { BridgeTicketResponsePort } from '../features/bridge/bridgeTicketResponseHandlers';
 
-type InitializationSession = Pick<BridgeSessionLifecycleState, 'mounted' | 'setChartError' | 'requestProfileRange'>;
+type InitializationSession = Pick<
+  BridgeSessionLifecycleState,
+  'mounted' | 'setChartError' | 'currentSymbol' | 'stores' | 'marketData'
+>;
 type StreamSession = Pick<BridgeSessionLifecycleState, 'snapshot' | 'instrument' | 'account' | 'portfolio'>;
 type ChartSession = Pick<
   BridgeSessionLifecycleState,
@@ -73,6 +76,7 @@ type BootstrapSession = Pick<
   | 'currentTimeframe'
   | 'latestCandleRef'
   | 'dataKeyRef'
+  | 'marketData'
 >;
 type PreviewSession = Pick<
   BridgeSessionLifecycleState,
@@ -94,7 +98,7 @@ export function LifecycleInitialization({
   session: InitializationSession;
   execution: ExecutionCommandState;
 }) {
-  const { mounted: mountedRef, setChartError, requestProfileRange } = session;
+  const { mounted: mountedRef, setChartError, currentSymbol, stores, marketData } = session;
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -102,7 +106,7 @@ export function LifecycleInitialization({
     };
   }, [mountedRef]);
   useExecutionCommandEffects(execution);
-  useChartWorkspaceInitEffects(workspace, { setChartError, requestProfileRange });
+  useChartWorkspaceInitEffects(workspace, { setChartError, currentSymbol, stores, marketData });
   return null;
 }
 
@@ -221,14 +225,11 @@ export function LifecycleBootstrapAndGestures({
   ticketControls: TicketControls;
   bridgeTicket: BridgeTicketResponsePort;
 }) {
-  const { chart, adapterRef, fixedRangeProfileState, expectedProfile, profileGeneration } = workspace;
+  const { chart, adapterRef } = workspace;
   const { accountLoginRef, brokerServerRef } = accountRefs;
   useBridgeBootstrapEffects(session, {
     chart,
     adapterRef,
-    fixedRangeProfileState,
-    expectedProfile,
-    profileGeneration,
     accountLoginRef,
     brokerServerRef,
     ticket: bridgeTicket,

@@ -8,10 +8,6 @@ export type ChartWorkspaceResources = Pick<
   | 'chartHost'
   | 'chart'
   | 'adapterRef'
-  | 'fixedRangeProfileState'
-  | 'expectedProfile'
-  | 'profileGeneration'
-  | 'lastRequestedRangeRef'
   | 'stagedOrderState'
   | 'positionOverlayState'
   | 'priceLinesState'
@@ -33,10 +29,6 @@ export function ChartWorkspaceProvider({ children }: { children: ReactNode }) {
       chartHost: workspace.chartHost,
       chart: workspace.chart,
       adapterRef: workspace.adapterRef,
-      fixedRangeProfileState: workspace.fixedRangeProfileState,
-      expectedProfile: workspace.expectedProfile,
-      profileGeneration: workspace.profileGeneration,
-      lastRequestedRangeRef: workspace.lastRequestedRangeRef,
       stagedOrderState: workspace.stagedOrderState,
       positionOverlayState: workspace.positionOverlayState,
       priceLinesState: workspace.priceLinesState,
@@ -51,10 +43,6 @@ export function ChartWorkspaceProvider({ children }: { children: ReactNode }) {
       workspace.chartHost,
       workspace.chart,
       workspace.adapterRef,
-      workspace.fixedRangeProfileState,
-      workspace.expectedProfile,
-      workspace.profileGeneration,
-      workspace.lastRequestedRangeRef,
       workspace.stagedOrderState,
       workspace.positionOverlayState,
       workspace.priceLinesState,
@@ -70,7 +58,10 @@ export function ChartWorkspaceProvider({ children }: { children: ReactNode }) {
   return (
     <RuntimeContext value={workspace}>
       <ResourcesContext value={resources}>
-        <DrawingContextProvider drawingTool={workspace.drawingTool} setDrawingTool={workspace.setDrawingTool}>
+        <DrawingContextProvider
+          activeChartToolId={workspace.activeChartToolId}
+          selectChartTool={workspace.selectChartTool}
+        >
           {children}
         </DrawingContextProvider>
       </ResourcesContext>

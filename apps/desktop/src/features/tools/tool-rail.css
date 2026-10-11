@@ -68,7 +68,7 @@
   background: var(--color-border);
 }
 
-/* Pointer group: a TV-style split button — the icon shows the group's armed
+/* Pointer group: a TV-style split button — the icon shows the group's active
    tool, the arrow tab on its right edge opens the same menu. The tab is
    absolutely positioned so revealing it never shifts the rail. */
 .tool-rail-group {

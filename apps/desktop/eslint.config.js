@@ -48,6 +48,36 @@ export default tseslint.config(
       'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
     },
   },
+  // Chart tools are plugins that run inside the chart: they may read market data only
+  // through the host's `MarketDataPort`. A tool that could import Tauri or a bridge
+  // module could reach the execution commands (orders, dispatch, modify, close).
+  {
+    files: ['src/features/tools/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@tauri-apps/*'],
+              message: 'chart tools must not reach Tauri or execution commands; use MarketDataPort',
+            },
+            {
+              // Any features/bridge module reached by a relative path, except the port itself.
+              regex: '^(\\.\\./)+bridge/(?!marketDataPort$)|(^|/)features/bridge/(?!marketDataPort$)',
+              message: 'chart tools must not reach Tauri or execution commands; use MarketDataPort',
+            },
+            {
+              regex: '^(\\.\\./)+bridge/marketDataPort$|(^|/)features/bridge/marketDataPort$',
+              allowTypeImports: true,
+              message:
+                'chart tools must not reach Tauri or execution commands; use MarketDataPort (import its types only)',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Plain CSS linting via the official @eslint/css language plugin. The
   // recommended preset validates at-rules/properties, duplicate imports,
   // empty blocks and Baseline feature support.

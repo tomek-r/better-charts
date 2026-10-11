@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { ChartController } from '../engine/chartController';
+import { CHART_TOOL_PLUGINS, DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
 import { Mt5DataAdapter } from '../engine/mt5DataAdapter';
 import { quoteDigits } from '../../../shared/format';
+import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { BridgeSessionLifecycleState } from '../../bridge/BridgeSessionProvider';
 import type { QuoteSnapshot } from '../../../shared/bridge/types';
@@ -19,22 +20,12 @@ const toolFlyoutOpen = () => document.querySelector('.tool-flyout') !== null;
 
 export function useChartWorkspaceInitEffects(
   workspace: ChartWorkspaceState,
-  session: Pick<BridgeSessionState, 'setChartError' | 'requestProfileRange'>,
+  session: Pick<BridgeSessionState, 'setChartError' | 'currentSymbol' | 'stores' | 'marketData'>,
 ): void {
-  const {
-    chartHost,
-    chart,
-    adapterRef,
-    fixedRangeProfileState,
-    positionOverlayState,
-    stagedOrderState,
-    priceLinesState,
-    setDrawingTool,
-    expectedProfile,
-    profileGeneration,
-    lastRequestedRangeRef,
-  } = workspace;
-  const { setChartError, requestProfileRange } = session;
+  const notifyError = useNotifyError();
+  const { chartHost, chart, adapterRef, positionOverlayState, stagedOrderState, priceLinesState, selectChartTool } =
+    workspace;
+  const { setChartError, currentSymbol, stores, marketData } = session;
   const chartRef = chart;
   useLayoutEffect(() => {
     const host = chartHost.current;
@@ -45,21 +36,24 @@ export function useChartWorkspaceInitEffects(
     adapterRef.current = adapter;
     let instance: ChartController | undefined;
     try {
-      instance = new ChartController(host, {
-        fixedRangeProfile: fixedRangeProfileState.current,
-        positions: positionOverlayState.current,
-        staged: stagedOrderState.current,
-        priceLines: priceLinesState.current,
-      });
+      instance = new ChartController(
+        host,
+        {
+          positions: positionOverlayState.current,
+          staged: stagedOrderState.current,
+          priceLines: priceLinesState.current,
+        },
+        {
+          // Tools read the app's accepted selection and talk to market data only through this port.
+          currentMarket: { symbol: () => currentSymbol.current, quote: () => stores.quote.getState().quote },
+          marketDataPort: marketData.port,
+          notifyError,
+          toolDefinitions: CHART_TOOL_PLUGINS,
+          defaultToolId: DEFAULT_CHART_TOOL_ID,
+        },
+      );
       chartRef.current = instance;
-      instance.onProfileCommit = requestProfileRange;
-      instance.onToolRelease = () => setDrawingTool(null);
-      instance.onProfileDelete = () => {
-        expectedProfile.current = undefined;
-        profileGeneration.current += 1;
-        lastRequestedRangeRef.current = undefined;
-        void invoke('cancel_tick_profile').catch(() => undefined);
-      };
+      instance.onToolRelease = () => selectChartTool(DEFAULT_CHART_TOOL_ID);
     } catch {
       setChartError('Chart renderer could not be initialized.');
     }
@@ -77,16 +71,15 @@ export function useChartWorkspaceInitEffects(
     adapterRef,
     chartHost,
     chartRef,
-    expectedProfile,
-    fixedRangeProfileState,
-    lastRequestedRangeRef,
+    currentSymbol,
+    marketData,
+    notifyError,
     positionOverlayState,
-    profileGeneration,
-    requestProfileRange,
     setChartError,
-    setDrawingTool,
+    selectChartTool,
     stagedOrderState,
     priceLinesState,
+    stores,
   ]);
   useEffect(() => {
     const cancelTool = (event: KeyboardEvent) => {
@@ -97,12 +90,12 @@ export function useChartWorkspaceInitEffects(
       ) {
         return;
       }
-      chartRef.current?.setDrawingTool(null);
-      setDrawingTool(null);
+      chartRef.current?.selectChartTool(DEFAULT_CHART_TOOL_ID);
+      selectChartTool(DEFAULT_CHART_TOOL_ID);
     };
     window.addEventListener('keydown', cancelTool);
     return () => window.removeEventListener('keydown', cancelTool);
-  }, [chartRef, setDrawingTool]);
+  }, [chartRef, selectChartTool]);
 }
 
 export function useChartWorkspaceChartEffects(
@@ -183,15 +176,6 @@ export function useChartWorkspaceChartEffects(
       return undefined;
     });
   }, [currentSymbolRef, setInstrument, setQuote, snapshot.symbol, targetSymbol]);
-  // Drawings are time/price anchored: a line drawn on one instrument is noise on
-  // another (the stale-lines bug class), so a symbol change clears ALL drawings.
-  // Timeframe changes keep drawings (standard chart behavior); the tracked dateRange
-  // is evicted separately in the symbol/timeframe reset below.
-  useEffect(() => {
-    if (chart.current?.getProfileRange()) {
-      chart.current.deleteProfile();
-    }
-  }, [chart, snapshot.symbol]);
 }
 
 export function useChartWorkspaceResetEffects(
@@ -212,7 +196,7 @@ export function useChartWorkspaceResetEffects(
   >,
   ticket: Pick<OrderTicketStores['setters']['draft'], 'setEntry' | 'setStopLoss' | 'setTakeProfit'>,
 ): void {
-  const { chart, fixedRangeProfileState, expectedProfile, profileGeneration } = workspace;
+  const { chart } = workspace;
   const {
     status,
     snapshot,
@@ -227,20 +211,13 @@ export function useChartWorkspaceResetEffects(
     setSymbolLoading,
   } = session;
   const { setEntry, setStopLoss, setTakeProfit } = ticket;
-  const fixedRangeProfileRef = fixedRangeProfileState;
-  const expectedProfileRef = expectedProfile;
-  const profileGenerationRef = profileGeneration;
   const targetSymbolRef = targetSymbol;
   const pendingMetadataRef = pendingMetadata;
   useEffect(() => {
     if (status.state !== 'connected') {
       setLoadingTimeframe(undefined);
       loadingTimeframeRef.current = undefined;
-      fixedRangeProfileRef.current.range = null;
-      fixedRangeProfileState.current.profile = undefined;
-      expectedProfileRef.current = undefined;
-      profileGenerationRef.current += 1;
-      chart.current?.clearProfileSelection();
+      chart.current?.resetTools('disconnect');
       chart.current?.refreshOverlays();
       setSymbolLoading(false);
       targetSymbolRef.current = undefined;
@@ -252,12 +229,8 @@ export function useChartWorkspaceResetEffects(
     }
   }, [
     chart,
-    expectedProfileRef,
-    fixedRangeProfileRef,
-    fixedRangeProfileState,
     loadingTimeframeRef,
     pendingMetadataRef,
-    profileGenerationRef,
     setAccount,
     setInstrument,
     setLoadingTimeframe,
@@ -267,34 +240,18 @@ export function useChartWorkspaceResetEffects(
     status.state,
     targetSymbolRef,
   ]);
-  // SYMBOL change: the FRVP selection is instrument-specific — drop the range,
-  // the drawing and the computed profile, bump the generation (the stale-event
-  // guards stay armed) and reset the ticket draft.
+  // SYMBOL change. Drawings are time/price anchored: a line drawn on one instrument
+  // is noise on another (the stale-lines bug class), so every tool drops its drawing
+  // and anything computed for it (their stale-event guards stay in place), and the
+  // ticket draft resets. Timeframe changes keep drawings (standard chart behavior);
+  // the tracked dateRange is evicted separately in the symbol/timeframe reset below.
   useLayoutEffect(() => {
-    fixedRangeProfileRef.current.range = null;
-    fixedRangeProfileState.current.profile = undefined;
-    expectedProfileRef.current = undefined;
-    profileGenerationRef.current += 1;
-    if (chart.current?.getProfileRange()) {
-      chart.current.deleteProfile();
-    } else {
-      chart.current?.clearProfileSelection();
-    }
+    chart.current?.resetTools('symbol');
     chart.current?.refreshOverlays();
     setEntry('');
     setStopLoss('');
     setTakeProfit('');
-  }, [
-    chart,
-    expectedProfileRef,
-    fixedRangeProfileRef,
-    fixedRangeProfileState,
-    profileGenerationRef,
-    setEntry,
-    setStopLoss,
-    setTakeProfit,
-    snapshot.symbol,
-  ]);
+  }, [chart, setEntry, setStopLoss, setTakeProfit, snapshot.symbol]);
   // TIMEFRAME change: the profile is tick-based over a FIXED TIME range and the
   // drawing's anchors are time-based — both survive the switch. Only the layout
   // resize (new bar spacing) and the unrelated ticket reset apply here.

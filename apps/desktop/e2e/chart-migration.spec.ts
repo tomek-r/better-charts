@@ -1,24 +1,15 @@
 import { test, expect, type Page } from '@playwright/test';
+import { profileBoundaries as boundaries, profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
-import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
+import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 
 const INTERVAL = 300_000;
 async function data(page: Page) {
   return page.evaluate(() => window.__chartTest?.data() ?? []);
 }
-async function boundaries(page: Page) {
-  return page.evaluate(() => window.__chartTest?.profileBoundaries() ?? null);
-}
 async function profileState(page: Page) {
-  return page.evaluate(() => {
-    const w = window as unknown as {
-      __stagedWidgetTest: {
-        fixedRangeProfile(): { range: { fromMs: number; toMs: number } | null; hasProfile: boolean };
-      };
-    };
-    return w.__stagedWidgetTest.fixedRangeProfile();
-  });
+  return (await profileSelection(page))!;
 }
 async function requests(page: Page) {
   return (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_tick_profile');
@@ -497,6 +488,24 @@ for (const event of ['tick-profile-error', 'tick-profile-cancelled']) {
   });
 }
 
+test('a rejected request_tick_profile surfaces an error and leaves no profile pending', async ({ page }) => {
+  await gotoWithStub(page, { failures: { request_tick_profile: 'Tick service unavailable' } });
+  await ready(page);
+  await select(page);
+  await expect.poll(async () => (await requests(page)).length).toBe(1);
+  await expect(
+    page
+      .locator('.notification-region [role=alert]')
+      .filter({ hasText: 'Volume profile request failed: Tick service unavailable' }),
+  ).toBeVisible();
+  const range = (await profileState(page)).range;
+  expect(range).not.toBeNull();
+  // The failed request was abandoned: a result arriving for it later is stale and is not painted.
+  await respond(page);
+  expect((await profileState(page)).range).toEqual(range);
+  expect((await profileState(page)).hasProfile).toBe(false);
+});
+
 test('an incomplete-history profile result can still render its available bins', async ({ page }) => {
   await requestProfile(page);
   await respond(page, 0, false);
@@ -527,6 +536,200 @@ test('the first realtime bar can seed an accepted empty history', async ({ page 
   });
   await expect.poll(async () => (await data(page)).length).toBe(1);
   expect((await data(page))[0]).toMatchObject({ time: STUB_NOW / 1000, close: 1.0853 });
+});
+
+/** Newest stub bar opens one interval before STUB_NOW; the stub quote is stamped STUB_NOW. */
+const NEWEST_BAR_MS = STUB_NOW - INTERVAL;
+const NEWEST_SLOT = 9;
+const FUTURE_SLOT = 12;
+/** Open time of the future slot, and the end-exclusive range end it produces. */
+const FUTURE_LINE_MS = STUB_NOW + (FUTURE_SLOT - 10) * INTERVAL;
+const FUTURE_END_MS = FUTURE_LINE_MS + INTERVAL;
+
+/** Selects the tool and drags a range from bar 2 into empty space right of the newest bar. */
+async function commitFutureRange(page: Page) {
+  await gotoWithStub(page);
+  await ready(page);
+  await select(page, 2, FUTURE_SLOT);
+  await expect.poll(async () => (await requests(page)).length).toBe(1);
+}
+
+/** Pushes a quote at `quoteMs` and a bar update opening at `barMs`, as the bridge would. */
+async function pushLiveTick(page: Page, quoteMs: number, barMs: number) {
+  await pushEvent(page, 'quote-update', eurusdQuote(quoteMs));
+  await pushEvent(page, 'bar-update', {
+    symbol: 'EURUSD',
+    timeframe: 'M5',
+    candle: { ...eurusdFormingBar, timeMs: barMs },
+  });
+}
+
+/** Distance between the end line and a time, both measured in the same frame (the pane may scroll on a new bar). */
+async function endLineGap(page: Page, timeMs: number) {
+  return page.evaluate((time) => {
+    const tool = window.__chartTest!.tool('fixedRangeProfile')!;
+    return Math.abs((tool.boundaries()?.toX ?? Infinity) - window.__chartTest!.timeToX(time));
+  }, timeMs);
+}
+
+/** Drags the end handle onto a bar slot with a real pointer. */
+async function dragEndTo(page: Page, slot: number) {
+  const host = (await page.locator('.chart-host').boundingBox())!;
+  const edge = (await boundaries(page))!;
+  const target = await position(page, slot);
+  await page.mouse.move(host.x + edge.toX, target.y);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 10 });
+  await page.mouse.up();
+}
+
+async function expectEndLineAt(page: Page, timeMs: number) {
+  await expect.poll(() => endLineGap(page, timeMs)).toBeLessThan(0.001);
+}
+
+test('FRVP end placed in the empty area stays on that future slot and requests up to the quote time', async ({
+  page,
+}) => {
+  await commitFutureRange(page);
+  const edge = (await boundaries(page))!;
+  expect(edge.range).toEqual({ fromMs: STUB_NOW - 8 * INTERVAL, endMs: FUTURE_END_MS });
+  await expectEndLineAt(page, FUTURE_LINE_MS);
+  expect(await endLineGap(page, NEWEST_BAR_MS)).toBeGreaterThan(20);
+  const sent = await requests(page);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].args).toMatchObject({
+    symbol: 'EURUSD',
+    fromMs: STUB_NOW - 8 * INTERVAL,
+    endMs: STUB_NOW,
+    rows: 128,
+  });
+});
+
+test('FRVP a new bar before the end line keeps the line and refreshes with the profile kept', async ({ page }) => {
+  await commitFutureRange(page);
+  await respond(page);
+  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+  const quoteMs = STUB_NOW + 120_000;
+  await pushLiveTick(page, quoteMs, STUB_NOW);
+  await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(2);
+  expect((await requests(page))[1].args).toMatchObject({
+    fromMs: STUB_NOW - 8 * INTERVAL,
+    endMs: quoteMs,
+    rows: 128,
+  });
+  await expectEndLineAt(page, FUTURE_LINE_MS);
+  expect((await boundaries(page))!.range.endMs).toBe(FUTURE_END_MS);
+  expect((await profileState(page)).hasProfile).toBe(true);
+  await respond(page, 1);
+  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+  expect(await requests(page)).toHaveLength(2);
+});
+
+test('FRVP bars passing the end line trigger exactly one final refresh', async ({ page }) => {
+  await commitFutureRange(page);
+  await respond(page, 0);
+  await pushLiveTick(page, STUB_NOW + 20_000, STUB_NOW);
+  await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(2);
+  await respond(page, 1);
+  // Bars open up to the line's own slot: its bar is still forming, so the range stays open.
+  await pushLiveTick(page, STUB_NOW + INTERVAL + 5_000, STUB_NOW + INTERVAL);
+  await pushLiveTick(page, FUTURE_LINE_MS + 5_000, FUTURE_LINE_MS);
+  await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(3);
+  await respond(page, 2);
+  // A bar opens at the range end: the line's bar closed, one more refresh covers its last ticks.
+  await pushLiveTick(page, FUTURE_END_MS + 10_000, FUTURE_END_MS);
+  await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(4);
+  expect((await requests(page))[3].args).toMatchObject({ fromMs: STUB_NOW - 8 * INTERVAL, endMs: FUTURE_END_MS });
+  await respond(page, 3);
+  await pushLiveTick(page, FUTURE_END_MS + 20_000, FUTURE_END_MS);
+  await pushLiveTick(page, FUTURE_END_MS + 30_000, FUTURE_END_MS);
+  await page.waitForTimeout(2500);
+  expect(await requests(page)).toHaveLength(4);
+  await expectEndLineAt(page, FUTURE_LINE_MS);
+});
+
+test('FRVP end exactly on the newest bar refreshes while it forms, once after it closes, and stays on it', async ({
+  page,
+}) => {
+  await gotoWithStub(page);
+  await ready(page);
+  await select(page, 2, NEWEST_SLOT);
+  await expect.poll(async () => (await requests(page)).length).toBe(1);
+  expect((await boundaries(page))!.range.endMs).toBe(STUB_NOW);
+  await respond(page, 0);
+  await pushLiveTick(page, STUB_NOW + 20_000, NEWEST_BAR_MS);
+  await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(2);
+  expect((await requests(page))[1].args).toMatchObject({ fromMs: STUB_NOW - 8 * INTERVAL, endMs: STUB_NOW });
+  await respond(page, 1);
+  await pushLiveTick(page, STUB_NOW + 40_000, STUB_NOW);
+  await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(3);
+  await respond(page, 2);
+  await pushLiveTick(page, STUB_NOW + 60_000, STUB_NOW);
+  await pushLiveTick(page, STUB_NOW + 80_000, STUB_NOW);
+  await page.waitForTimeout(2500);
+  expect(await requests(page)).toHaveLength(3);
+  await expectEndLineAt(page, NEWEST_BAR_MS);
+});
+
+test('FRVP range ended on an older bar does not refresh on live updates', async ({ page }) => {
+  await commitProfile(page);
+  expect((await boundaries(page))!.range.endMs).toBe(STUB_NOW - 5 * INTERVAL + INTERVAL * 2);
+  await pushLiveTick(page, STUB_NOW + 60_000, STUB_NOW);
+  await pushLiveTick(page, STUB_NOW + 120_000, STUB_NOW + INTERVAL);
+  await page.waitForTimeout(2500);
+  expect(await requests(page)).toHaveLength(1);
+});
+
+test('FRVP dragging an open end back onto an older bar stops the refreshes', async ({ page }) => {
+  await commitFutureRange(page);
+  await respond(page);
+  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+  await dragEndTo(page, 7);
+  await expect.poll(async () => (await requests(page)).length).toBe(2);
+  expect((await boundaries(page))!.range.endMs).toBe(STUB_NOW - 2 * INTERVAL);
+  await respond(page, 1);
+  await pushLiveTick(page, STUB_NOW + 60_000, STUB_NOW);
+  await page.waitForTimeout(2500);
+  expect(await requests(page)).toHaveLength(2);
+});
+
+test('FRVP dragging a fixed end into the empty area opens the range and it refreshes', async ({ page }) => {
+  await gotoWithStub(page);
+  await ready(page);
+  await select(page, 2, 6);
+  await expect.poll(async () => (await requests(page)).length).toBe(1);
+  await respond(page);
+  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+  await dragEndTo(page, FUTURE_SLOT);
+  await expect.poll(async () => (await requests(page)).length).toBe(2);
+  expect((await boundaries(page))!.range.endMs).toBe(FUTURE_END_MS);
+  await expectEndLineAt(page, FUTURE_LINE_MS);
+  await respond(page, 1);
+  await pushLiveTick(page, STUB_NOW + 20_000, STUB_NOW);
+  await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(3);
+  await expectEndLineAt(page, FUTURE_LINE_MS);
+});
+
+test('FRVP refresh waits for a pending request, then follows up', async ({ page }) => {
+  await commitFutureRange(page);
+  for (let step = 1; step <= 3; step += 1) {
+    await pushLiveTick(page, STUB_NOW + step * 20_000, STUB_NOW);
+  }
+  await page.waitForTimeout(3000);
+  expect(await requests(page)).toHaveLength(1);
+  await respond(page);
+  await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(2);
+});
+
+test('FRVP reversed two clicks, first in the empty area then on an older bar, end on the future slot', async ({
+  page,
+}) => {
+  await gotoWithStub(page);
+  await ready(page);
+  await select(page, FUTURE_SLOT, 5);
+  await expect.poll(async () => (await requests(page)).length).toBe(1);
+  expect((await boundaries(page))!.range).toEqual({ fromMs: STUB_NOW - 5 * INTERVAL, endMs: FUTURE_END_MS });
+  await expectEndLineAt(page, FUTURE_LINE_MS);
 });
 
 for (const boundary of ['fromX', 'toX'] as const) {
@@ -655,3 +858,39 @@ for (const reset of ['disconnect', 'history'] as const) {
     }
   });
 }
+
+test('FRVP keeps a pending first click and a future end on their times when a new bar opens between clicks', async ({
+  page,
+}) => {
+  await gotoWithStub(page);
+  await ready(page);
+  await page.getByRole('button', { name: 'Fixed range volume profile', exact: true }).click();
+  const first = await position(page, 2);
+  await page.mouse.click(first.x, first.y);
+
+  await pushLiveTick(page, STUB_NOW, STUB_NOW);
+  await expect.poll(async () => (await data(page)).length).toBe(11);
+  await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 15 }));
+  // The range change rebuilds the empty future slots on the next animation frame; a click before
+  // that lands on a slot that has no time yet and is ignored (the rare flake this wait removes).
+  await page.evaluate(
+    () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
+
+  // Two empty slots right of the newest bar as it is now, not as it was at the first click.
+  const futureOpenMs = STUB_NOW + 2 * INTERVAL;
+  const click = await page.evaluate((timeMs) => {
+    const x = window.__chartTest!.timeToX(timeMs);
+    if (Number.isNaN(x)) {
+      throw new Error('Expected future slot coordinate');
+    }
+    return x;
+  }, futureOpenMs);
+  const host = (await page.locator('.chart-host').boundingBox())!;
+  await page.mouse.click(host.x + click, host.y + host.height * 0.3);
+
+  await expect.poll(async () => (await requests(page)).length).toBe(1);
+  // The request end is clamped to the quote clock; the committed range keeps the chosen slot.
+  expect((await boundaries(page))!.range).toEqual({ fromMs: STUB_NOW - 8 * INTERVAL, endMs: futureOpenMs + INTERVAL });
+  expect(await endLineGap(page, futureOpenMs)).toBeLessThan(1);
+});

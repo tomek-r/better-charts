@@ -1,30 +1,19 @@
 // Bridge listeners are the sole source of accepted history and live candles.
 // Selection refs reject stale events; the coordinator owns request dedupe and timeout.
 import { useCallback, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import type { Candle, BrokerSymbol } from '../../shared/bridge/types';
 import { initialHistoryBarsFor } from '../chart/engine/initialHistoryWindow';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
 import { useFieldSetterSelector } from '../../shared/state/domainStore';
 import type { BridgeSessionStores } from './bridgeSessionStores';
 import type { BridgeMarketResources } from './bridgeMarketRuntime';
+import type { MarketDataConnection } from './marketDataPort';
 
 type BridgeSessionParams = BridgeMarketResources & {
   stores: BridgeSessionStores;
-  lastRequestedRangeRef: { current: { fromMs: number; endMs: number } | undefined };
+  marketData: MarketDataConnection;
 };
-export function useBridgeSession({
-  stores,
-  chart,
-  adapterRef,
-  fixedRangeProfileState,
-  expectedProfile,
-  profileGeneration,
-  lastRequestedRangeRef,
-}: BridgeSessionParams) {
-  const profileGenerationRef = profileGeneration;
-  const expectedProfileRef = expectedProfile;
-  const fixedRangeProfileRef = fixedRangeProfileState;
+export function useBridgeSession({ stores, marketData, chart, adapterRef }: BridgeSessionParams) {
   const pendingMetadata = useRef<BrokerSymbol | undefined>(undefined);
   const dataKeyRef = useRef('');
   const latestCandleRef = useRef<Candle | undefined>(undefined);
@@ -47,30 +36,6 @@ export function useBridgeSession({
   const { setQuote } = useFieldSetterSelector(stores.quote, (setters) => setters);
   const { setAccount } = useFieldSetterSelector(stores.account, (setters) => setters);
   const { setPortfolio } = useFieldSetterSelector(stores.portfolio, (setters) => setters);
-  const requestProfileRange = useCallback(
-    (range = chart.current?.getProfileRange() ?? undefined) => {
-      const symbol = currentSymbol.current;
-      if (!symbol || !range) {
-        return;
-      }
-      const { fromMs, endMs } = range;
-      lastRequestedRangeRef.current = { fromMs, endMs };
-      const generation = ++profileGenerationRef.current;
-      expectedProfileRef.current = { symbol, fromMs, endMs, generation };
-      fixedRangeProfileRef.current.range = { fromMs, toMs: endMs };
-      fixedRangeProfileState.current.profile = undefined;
-      chart.current?.refreshOverlays();
-      void invoke('request_tick_profile', { symbol, fromMs, endMs, rows: 128 }).catch(() => undefined);
-    },
-    [
-      chart,
-      expectedProfileRef,
-      fixedRangeProfileRef,
-      fixedRangeProfileState,
-      lastRequestedRangeRef,
-      profileGenerationRef,
-    ],
-  );
   const requestHistory = useCallback(
     async (wire: string) => {
       const symbol = targetSymbol.current ?? stores.market.getState().snapshot.symbol;
@@ -155,6 +120,7 @@ export function useBridgeSession({
   );
   return {
     stores,
+    marketData,
     status: stores.connection.getState().status,
     setStatus,
     snapshot: stores.market.getState().snapshot,
@@ -191,7 +157,6 @@ export function useBridgeSession({
     requestHistory,
     chooseSymbol,
     chooseSymbolByName,
-    requestProfileRange,
   };
 }
 
