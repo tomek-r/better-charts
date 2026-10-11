@@ -7,6 +7,7 @@
 pub(crate) mod draft;
 pub(crate) mod execution;
 pub(crate) mod market;
+pub(crate) mod partial_close_gate;
 
 pub(crate) use self::draft::*;
 pub(crate) use self::execution::*;

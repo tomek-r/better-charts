@@ -54,9 +54,9 @@ token is required outside development builds.
 {
   "token": "example-token", "terminal_id": "installation-instance-id", "terminal_build": 5000,
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
-  "expert_version": "1.003", "tick_reader_version": "1.000", "trading_enabled": false,
+  "expert_version": "1.004", "tick_reader_version": "1.000", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 65535},
-  "tick_price_counts": true,
+  "tick_price_counts": true, "partial_close": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
     "H1", "H2", "H3", "H4", "H6", "H8", "H12", "D1", "W1", "MN1"]
 }
@@ -68,7 +68,7 @@ token is required outside development builds.
 {
   "heartbeat_interval_ms": 2000, "heartbeat_timeout_ms": 6000, "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 65535},
-  "tick_price_counts": true
+  "tick_price_counts": true, "partial_close": true
 }
 ```
 
@@ -81,7 +81,7 @@ the server's permission; the app's local Settings permission is an additional
 startup restriction, optionally overridden with `MT5_BRIDGE_TRADING_ENABLED`.
 Neither flag submits a command or bypasses execution gates.
 
-The app requires an exact EA `expert_version` match (`1.003` for this build)
+The app requires an exact EA `expert_version` match (`1.004` for this build)
 and an exact `tick_reader_version` match (`1.000`), the version of the
 `BetterChartsTickHistoryReader` indicator. Both expected versions live in
 `config/mq5-versions.json`; regression guards check that the EA's
@@ -110,6 +110,7 @@ Other malformed handshakes include recompile/reattach instructions.
 | Current defaults | 8 MiB / 65,535 ticks per page. |
 | Valid limits | Rust frame bytes: `1024..=2147483643`; EA frame MiB: `1..=2047`; ticks: `1..=65535`. Invalid limits reject the handshake. The frame bounds, the 8 MiB default and the `1..=1000` history page and the `initialHistoryBars` handshake window (`1..=historyBars`, currently 300) live once in `config/bridge.json`, embedded by `crates/trading-core/src/protocol/limits.rs` and imported by `apps/desktop/src/shared/bridge/limits.ts`. |
 | `tick_price_counts` | Defaults to `false`; exact price summaries require support from both peers. Raw tick pages remain supported. |
+| `partial_close` | Defaults to `false` when absent from `hello`. Rust echoes the negotiated value in `hello_ack`, publishes it as `partialClose` on the bridge status and resets it when the session ends. An EA without it ignores `order_close_request.volume` and would close the whole position, so Rust rejects every partial close unless it is `true`. |
 | `hello.supported_timeframes` | Required list of the EA's supported MT5 period codes. Must be a nonempty, unique subset of the standard periods and include `M1`. Missing, `null` or invalid advertisements reject the handshake. Published as `supportedTimeframes` on the Tauri bridge status; history commands reject periods the connected EA did not advertise. |
 
 Rust frame configuration uses Settings or the `MT5_BRIDGE_MAX_FRAME_BYTES`
@@ -335,6 +336,13 @@ with the actual open/resting price, volume and exit level, in account currency,
 excluding commissions and swap. Unset exits or unavailable calculations are `null`;
 older payloads may omit them. Live labels prefer these broker amounts and fall back
 to converted tick estimates when absent. No order is sent by these calculations.
+
+Positions also optionally include `volume_min` and `volume_step`: positive decimal
+strings carrying the symbol's `SYMBOL_VOLUME_MIN` and `SYMBOL_VOLUME_STEP`, or
+`null`/absent from older EAs. A present but non-positive or malformed value
+invalidates the snapshot. Rust uses them to validate partial-close volumes and
+forwards them to the frontend as `volumeMin` and `volumeStep` in the
+`portfolio-snapshot` event.
 
 ```json
 {
@@ -703,7 +711,12 @@ means an order without SL.
 }
 ```
 
-`volume:null` requests full close. Only full close is supported.
+`volume:null` requests a full close. A positive decimal string requests a partial
+close and requires the negotiated `partial_close` capability; Rust rejects it
+otherwise, and also when the position's cached `volume_min`/`volume_step` are
+unavailable or the volume violates them (at least `volume_min`, at most the
+position volume, a multiple of `volume_step`, remainder zero or at least
+`volume_min`). The EA re-validates against the live position and fails closed.
 
 **`order_cancel_request` payload:**
 
@@ -714,8 +727,7 @@ means an order without SL.
 }
 ```
 
-Cancel identifies a pending order by `order_id`. Partial close and Break Even
-are unsupported.
+Cancel identifies a pending order by `order_id`. Break Even is unsupported.
 
 ### Updates and errors
 
@@ -734,7 +746,11 @@ Updates reflect OrderSend results and OnTradeTransaction facts;
 `OrderSend()==true` alone is not proof of a fill. `at_update` increases
 monotonically per command. Retcode, last error, broker/deal/position IDs,
 filled volume, and message are nullable; present filled volume is a decimal
-string and message is at most 256 characters.
+string and message is at most 256 characters. For a rejected CTrade call
+(modify, close, partial close, cancel) the EA reports the broker's trade
+`retcode` and a message such as `Modify SL/TP rejected: Invalid stops (10016)`;
+`retcode` is `-1` only when the call failed before any server result existed.
+Older EAs sent `-1` with a fixed message such as `PositionModify failed`.
 
 State flow: `accepted → dispatching → server_accepted → partially_filled →
 filled`, with repeated partial fills allowed. Dispatching/server-accepted

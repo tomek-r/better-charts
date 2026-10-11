@@ -22,6 +22,8 @@ export interface BridgeStatus {
   marketSession?: MarketSessionStatus;
   /** Periods advertised by the connected EA. */
   supportedTimeframes?: string[];
+  /** Negotiated `partial_close` capability; absent or false = partial close is never offered. */
+  partialClose?: boolean;
 }
 
 export interface ExecutionSafetyStatus {
@@ -346,6 +348,9 @@ export interface OpenPosition {
   takeProfit?: string | null;
   stopLossProfit?: string | null;
   takeProfitProfit?: string | null;
+  /** Broker minimum lot and lot step for the symbol; absent = partial close is not offered. */
+  volumeMin?: string | null;
+  volumeStep?: string | null;
 }
 
 export interface PendingOrder {

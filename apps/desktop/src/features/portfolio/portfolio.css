@@ -152,22 +152,19 @@
   margin-left: 8px;
 }
 
-.portfolio-action {
-  border: 1px solid var(--color-border-strong);
-  border-radius: 5px;
-  padding: 5px 8px;
-  color: var(--color-text-label);
-  background: var(--color-raised);
-  cursor: pointer;
-  font-size: 10px;
+/* The row is the popover's positioning context: the custom-volume popover is an overlay hung
+   from the row's bottom edge, same width, so opening it never pushes later rows down. The
+   drawer is its own stacking context (z-index 20), so a small local value is enough to sit
+   above following rows; app-level modals and notifications live outside it. */
+.portfolio-item {
+  position: relative;
 }
 
-.portfolio-action:hover:not(:disabled) {
-  color: var(--color-text-secondary);
-  border-color: var(--color-muted);
-}
-
-.portfolio-action:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
+.portfolio-item > .partial-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  margin-top: 4px;
 }

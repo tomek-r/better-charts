@@ -16,7 +16,15 @@ export function useChartWorkspacePointerEffects(
   workspace: ChartWorkspaceState,
   ticket: StagedOrderGestureTicket,
 ): void {
-  const { chartHost, chart, stagedOrderState, positionOverlayState, closeActionsRef, setDrawingTool } = workspace;
+  const {
+    chartHost,
+    chart,
+    stagedOrderState,
+    positionOverlayState,
+    closeActionsRef,
+    partialCloseChipPortRef,
+    setDrawingTool,
+  } = workspace;
   const {
     unstageOrderDraft,
     toggleExit,
@@ -64,6 +72,7 @@ export function useChartWorkspacePointerEffects(
       applyPositionModify,
       applyLevelClear,
       closeActionsRef,
+      partialCloseChipPortRef,
     });
     // Paint and pointer hit tests share the chart host CSS-pixel frame.
     const frameRect = () => host.getBoundingClientRect();
@@ -135,6 +144,9 @@ export function useChartWorkspacePointerEffects(
         }
         return;
       }
+      if ((overlay.kind === 'posClose' || overlay.kind === 'posPartial') && event.button !== 0) {
+        return; // secondary buttons never act on a press; right-click is handled by `contextmenu`
+      }
       event.stopPropagation();
       event.preventDefault(); // suppresses the compat mousedown → chart pan/draw never starts
       trading.startPointer(overlay, x, overlay.kind === 'line' ? y - labelDragOffset : y, event.shiftKey);
@@ -142,6 +154,12 @@ export function useChartWorkspacePointerEffects(
         host.setPointerCapture(event.pointerId);
       } catch {
         /* capture unsupported */
+      }
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      const { x, y } = localPoint(event);
+      if (trading.openPartialMenuFor(locateGrab(x, y).overlay)) {
+        claimEvent(event);
       }
     };
     const onPointerMove = (event: PointerEvent) => {
@@ -278,6 +296,7 @@ export function useChartWorkspacePointerEffects(
     };
     host.addEventListener('keydown', onKeyDown);
     host.addEventListener('pointerdown', onPointerDown, true);
+    host.addEventListener('contextmenu', onContextMenu);
     host.addEventListener('pointermove', onPointerMove);
     host.addEventListener('pointerleave', onPointerLeave);
     host.addEventListener('pointerup', onPointerUp);
@@ -290,6 +309,7 @@ export function useChartWorkspacePointerEffects(
     return () => {
       host.removeEventListener('keydown', onKeyDown);
       host.removeEventListener('pointerdown', onPointerDown, true);
+      host.removeEventListener('contextmenu', onContextMenu);
       host.removeEventListener('pointermove', onPointerMove);
       host.removeEventListener('pointerleave', onPointerLeave);
       host.removeEventListener('pointerup', onPointerUp);
@@ -306,6 +326,7 @@ export function useChartWorkspacePointerEffects(
     stagedOrderState,
     positionOverlayState,
     closeActionsRef,
+    partialCloseChipPortRef,
     setDrawingTool,
     unstageOrderDraft,
     toggleExit,

@@ -60,7 +60,8 @@ export function tagPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
 }
 
 /** Draw a 20×20 cancel chip and return the circle that covers its painted area. */
-export function drawCancelChip(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): TradingHitCircle {
+/** The square chip frame shared by the ✕ and ▾ segments (circumscribing circle r = 10). */
+function drawChipFrame(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): TradingHitCircle {
   const r = 10;
   roundedRect(ctx, cx - r, cy - r, r * 2, r * 2, WIDGET_RADIUS);
   ctx.fillStyle = TRADING_COLORS.surface;
@@ -70,6 +71,11 @@ export function drawCancelChip(ctx: CanvasRenderingContext2D, cx: number, cy: nu
   ctx.stroke();
   ctx.lineCap = 'round';
   ctx.lineWidth = 1.75;
+  return { x: cx, y: cy, r };
+}
+
+export function drawCancelChip(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): TradingHitCircle {
+  const hit = drawChipFrame(ctx, cx, cy, color);
   const arm = 2.4;
   ctx.beginPath();
   ctx.moveTo(cx - arm, cy - arm);
@@ -78,7 +84,29 @@ export function drawCancelChip(ctx: CanvasRenderingContext2D, cx: number, cy: nu
   ctx.lineTo(cx - arm, cy + arm);
   ctx.stroke();
   ctx.lineCap = 'butt';
-  return { x: cx, y: cy, r };
+  return hit;
+}
+
+/** Distance from the ✕ chip centre to the ▾ chip centre: one chip width plus a 2px seam. */
+export const PARTIAL_CHIP_OFFSET = 22;
+
+/** The ▾ segment that opens the partial-close menu; styled exactly like the ✕. */
+export function drawPartialChip(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  color: string,
+): TradingHitCircle {
+  const hit = drawChipFrame(ctx, cx, cy, color);
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - 3.2, cy - 1.4);
+  ctx.lineTo(cx, cy + 2);
+  ctx.lineTo(cx + 3.2, cy - 1.4);
+  ctx.stroke();
+  ctx.lineJoin = 'miter';
+  ctx.lineCap = 'butt';
+  return hit;
 }
 
 /** Draggable outline handle tag; its tip points toward the controlled line. */

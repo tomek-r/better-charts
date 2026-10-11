@@ -213,6 +213,8 @@ pub(crate) struct OpenPositionView {
     swap: String,
     time_ms: i64,
     magic: String,
+    volume_min: Option<String>,
+    volume_step: Option<String>,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -251,6 +253,8 @@ impl From<OpenPosition> for OpenPositionView {
             swap: v.swap,
             time_ms: v.time_ms,
             magic: v.magic,
+            volume_min: v.volume_min,
+            volume_step: v.volume_step,
         }
     }
 }
@@ -273,6 +277,25 @@ impl From<PendingOrder> for PendingOrderView {
             expiration_ms: v.expiration_ms,
             magic: v.magic,
         }
+    }
+}
+impl PortfolioView {
+    /// Volume constraints of one cached position; `None` when the position is
+    /// unknown or its EA did not report (valid) limits, so callers fail closed.
+    pub(crate) fn partial_close_limits(
+        &self,
+        position_id: &str,
+    ) -> Option<trading_core::partial_close::PartialCloseLimits> {
+        let position = self
+            .positions
+            .iter()
+            .find(|position| position.position_id == position_id)?;
+        trading_core::partial_close::PartialCloseLimits::parse(
+            &position.volume,
+            position.volume_min.as_deref()?,
+            position.volume_step.as_deref()?,
+        )
+        .ok()
     }
 }
 impl From<PortfolioSnapshot> for PortfolioView {

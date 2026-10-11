@@ -18,6 +18,28 @@ export function formatQuote(value: string, digits: number) {
   return Number.isFinite(number) ? number.toFixed(digits) : '—';
 }
 
+const DECIMAL_VOLUME = /^(\d+)(?:\.(\d*))?$/;
+
+/**
+ * The one display rule for volumes: the EA's 8-decimal padding (`"0.05000000"`) is noise, so insignificant
+ * trailing zeros and a dangling point are dropped. Pure string work, so no digit is ever lost to float rounding.
+ * Text that is not a plain non-negative decimal is returned unchanged.
+ */
+export function formatVolume(value: string): string {
+  const match = DECIMAL_VOLUME.exec(value);
+  if (!match) {
+    return value;
+  }
+  const [, whole, fraction = ''] = match;
+  const significant = fraction.replace(/0+$/, '');
+  return significant ? `${whole}.${significant}` : whole;
+}
+
+/** Volume with the app's unit word ("units"), the one wording used by partial close and the portfolio row. */
+export function volumeWithUnit(volume: string): string {
+  return `${formatVolume(volume)} units`;
+}
+
 export interface QuotePresentation {
   precision: number;
   bidText: string;

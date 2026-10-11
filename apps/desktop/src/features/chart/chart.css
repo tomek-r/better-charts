@@ -322,3 +322,22 @@
     transition: none;
   }
 }
+
+/* Hangs a DOM panel (partial-close menu / custom-volume form) from a painted chip. */
+.chart-anchored-panel {
+  position: absolute;
+  z-index: 4;
+  width: max-content;
+  max-width: calc(100% - 16px);
+}
+
+/* The shared menu normally hangs from its trigger; here the panel positions it. */
+.chart-anchored-panel .partial-menu {
+  position: static;
+}
+
+.chart-anchored-panel .partial-popover {
+  width: 260px;
+  max-width: 100%;
+  box-sizing: border-box;
+}

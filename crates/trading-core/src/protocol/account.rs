@@ -63,6 +63,12 @@ pub struct OpenPosition {
     pub swap: String,
     pub time_ms: i64,
     pub magic: String,
+    /// Symbol `SYMBOL_VOLUME_MIN`; absent from older EAs.
+    #[serde(default)]
+    pub volume_min: Option<String>,
+    /// Symbol `SYMBOL_VOLUME_STEP`; absent from older EAs.
+    #[serde(default)]
+    pub volume_step: Option<String>,
 }
 
 impl OpenPosition {
@@ -79,6 +85,8 @@ impl OpenPosition {
         validate_positive(&self.price_current)?;
         validate_optional_positive(&self.stop_loss)?;
         validate_optional_positive(&self.take_profit)?;
+        validate_optional_positive(&self.volume_min)?;
+        validate_optional_positive(&self.volume_step)?;
         validate_decimal(&self.profit)?;
         for amount in [&self.stop_loss_profit, &self.take_profit_profit]
             .into_iter()

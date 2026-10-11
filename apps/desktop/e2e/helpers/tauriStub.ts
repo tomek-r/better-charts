@@ -79,6 +79,8 @@ export interface TauriStubOptions {
    * snapshot, the market session symbol/clock and the quote.
    */
   recordedHistory?: RecordedHistory[];
+  /** Advertise the negotiated `partialClose` capability in the default bridge status. */
+  partialClose?: boolean;
   /** Bars of the primary recording seeding `get_market_snapshot` (the configured history depth). */
   recordedSnapshotBars?: number;
 }
@@ -180,6 +182,26 @@ export function brokerSymbolFixture(
     expirationMode: 0,
     tradeExecution: 0,
     tradeMode: 0,
+    ...overrides,
+  };
+}
+
+/** Open EURUSD buy position; `overrides` carries the raw bridge fields a spec cares about (e.g. `volume_min`). */
+export function openPositionFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    ticket: '1001',
+    positionId: '885001',
+    symbol: 'EURUSD',
+    timeMs: STUB_NOW,
+    magic: 0,
+    side: 'buy',
+    volume: '1.00',
+    priceOpen: '1.0840',
+    priceCurrent: '1.0852',
+    profit: '1.20',
+    swap: '0.00',
+    stopLoss: '1.0800',
+    takeProfit: '1.0900',
     ...overrides,
   };
 }
@@ -405,6 +427,9 @@ export async function installTauriStub(
         ask: primaryLast.close,
         last: primaryLast.close,
       };
+    }
+    if (opts.partialClose !== undefined) {
+      responses.get_bridge_status = { ...(responses.get_bridge_status as object), partialClose: opts.partialClose };
     }
     const failures: Record<string, string> = { ...opts.failures };
 

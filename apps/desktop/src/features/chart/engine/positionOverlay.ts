@@ -12,6 +12,8 @@ import {
   CANCEL_CHIP_X,
   bindViewportHit,
   drawCancelChip,
+  drawPartialChip,
+  PARTIAL_CHIP_OFFSET,
   fillRiskZone,
   drawHandle,
   HANDLE_X,
@@ -41,6 +43,8 @@ export interface PositionLine {
    *  SET levels only; undefined keeps the plain "SL"/"TP" handle. */
   slMoney?: string;
   tpMoney?: string;
+  /** Partial close is available for this position: the chip paints a ▾ segment after the ✕. */
+  partialClose?: boolean;
 }
 
 export interface OrderLine {
@@ -120,6 +124,8 @@ export interface PositionOverlayState {
      *  dispatched through the same requestClosePosition/requestCancelOrder
      *  flows the portfolio rows use. */
     posCloses?: CancelChipHit[];
+    /** ▾ segments after a position's ✕ (only for positions with `partialClose`). */
+    posPartials?: CancelChipHit[];
     orderCancels?: CancelChipHit[];
     /** ✕ chips on the SL/TP rows — REMOVE that level (modify with the "0"
      *  sentinel). Ids follow the line convention (`order:` prefix for orders). */
@@ -179,6 +185,7 @@ export function createPositionOverlay(
       hit.slHandles = [];
       hit.tpHandles = [];
       hit.posCloses = [];
+      hit.posPartials = [];
       hit.orderCancels = [];
       hit.slClears = [];
       hit.tpClears = [];
@@ -258,12 +265,18 @@ export function createPositionOverlay(
               pnlColor = pos.pnl.startsWith('-') ? TRADING_COLORS.sell : palette.up;
             }
             hit.posCloses!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, pnlColor) });
+            // The ▾ joins the ✕ and pushes the P&L box right by its width.
+            const chipsShift = pos.partialClose ? PARTIAL_CHIP_OFFSET : 0;
+            if (pos.partialClose) {
+              const partialX = x + CANCEL_CHIP_X + PARTIAL_CHIP_OFFSET;
+              hit.posPartials!.push({ id: pos.id, ...drawPartialChip(ctx, partialX, labelY, pnlColor) });
+            }
             // Owner: a LIVE position row keeps ONLY the ✕ and the P&L box — the
             // Buy/Sell marker and the draft grip tag are HIDDEN (they speak of the
             // draft that made the position). The box is the SL/TP handle (same
             // drawHandle, same palette red/teal as the other elements) and the
             // number rides the SL/TP money format ("-$6.63").
-            let right = x + CANCEL_CHIP_X + 10;
+            let right = x + CANCEL_CHIP_X + 10 + chipsShift;
             if (pos.pnl !== undefined) {
               // Tip: UP for long, DOWN for short. The trade size reads as
               // "10 units" after the P&L ("P&L -$19.8 · 10 units").
@@ -274,7 +287,7 @@ export function createPositionOverlay(
               ctx.font = '400 12px system-ui, sans-serif';
               const columnWidth = Math.max(pnlColumnWidths.get(pos.id) ?? 0, ctx.measureText(pos.pnl).width);
               pnlColumnWidths.set(pos.id, columnWidth);
-              const box = drawHandle(ctx, x + HANDLE_X, labelY, 'P&L ', pnlColor, pos.side !== 'buy', {
+              const box = drawHandle(ctx, x + HANDLE_X + chipsShift, labelY, 'P&L ', pnlColor, pos.side !== 'buy', {
                 text: ` · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`,
                 amount: { text: pos.pnl, width: columnWidth },
               });

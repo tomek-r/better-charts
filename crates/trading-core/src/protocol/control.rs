@@ -31,6 +31,9 @@ pub struct HelloPayload {
     pub transfer_limits: TransferLimits,
     #[serde(default)]
     pub tick_price_counts: bool,
+    /// The EA honors `order_close_request.volume` as a partial close.
+    #[serde(default)]
+    pub partial_close: bool,
     /// Standard MT5 periods supported by this EA.
     pub supported_timeframes: Vec<String>,
 }
@@ -44,6 +47,8 @@ pub struct HelloAckPayload {
     pub transfer_limits: TransferLimits,
     #[serde(default)]
     pub tick_price_counts: bool,
+    #[serde(default)]
+    pub partial_close: bool,
 }
 
 /// One EA observation of the **active symbol's** trading session, carried on

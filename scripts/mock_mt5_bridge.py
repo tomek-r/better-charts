@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """End-to-end client mock that drives the Rust bridge server as an EA."""
 
+from decimal import Decimal, InvalidOperation
+import copy
 import json
 import os
 from pathlib import Path
@@ -213,6 +215,35 @@ def self_test_tick_history() -> int:
     return 0
 
 
+def self_test_partial_close() -> int:
+    def close(volume, positions=None):
+        positions = copy.deepcopy(MOCK_POSITIONS) if positions is None else positions
+        request = {"command_id": "c1", "position_id": "9001", "volume": volume}
+        return apply_close_request(positions, request), positions
+
+    update, positions = close("0.04")
+    assert update["status"] == "filled" and update["filled_volume"] == "0.04"
+    assert positions[0]["volume"] == "0.06", "a partial close reduces the position"
+    update, positions = close(None)
+    assert update["filled_volume"] == "0.10" and positions == [], "null volume closes fully"
+    update, positions = close("0.10")
+    assert positions == [] and update["filled_volume"] == "0.10", "the whole volume is a full close"
+    for bad, reason in (("0.11", "exceeds"), ("0.005", "below the symbol minimum"), ("0.055", "multiple"),
+                        ("0.095", "multiple"), ("0", "positive"), ("abc", "positive")):
+        error, positions = close(bad)
+        assert error["code"] == "INVALID_REQUEST" and reason in error["message"], (bad, error)
+        assert positions[0]["volume"] == "0.10", "a rejected close leaves the position untouched"
+    small = [{**MOCK_POSITIONS[0], "volume": "0.02", "volume_min": "0.02", "volume_step": "0.01"}]
+    error, _ = close("0.01", small)
+    assert "below the symbol minimum" in error["message"]
+    error, _ = close("0.02", [{**small[0], "volume": "0.03"}])
+    assert "remaining volume" in error["message"], "a remainder under the minimum is refused"
+    error = apply_close_request(copy.deepcopy(MOCK_POSITIONS), {"command_id": "c2", "position_id": "1", "volume": None})
+    assert error["code"] == "INVALID_REQUEST"
+    print("mock partial-close self-test passed: reduce, full, null volume and invalid volumes")
+    return 0
+
+
 def expect_type(message: dict, expected: str) -> dict:
     assert message.get("v") == 1, f"expected protocol v1, got {message.get('v')!r}"
     assert message.get("type") == expected, f"expected {expected}, got {message.get('type')!r}"
@@ -259,6 +290,8 @@ def wait_for(reader: FrameReader, conn: socket.socket, expected_type: str, sessi
         if handle_tick_history(reader, conn, session_id, message):
             continue
         if handle_history_page(reader, conn, session_id, message):
+            continue
+        if handle_close_request(conn, session_id, message):
             continue
         if message_type == expected_type:
             payload = message.get("payload", {})
@@ -405,6 +438,90 @@ MOCK_CANDLES = [
 ]
 
 
+MOCK_POSITIONS = [{
+    "position_id": "9001", "ticket": "9001", "symbol": "TEST.INIT", "side": "buy",
+    "volume": "0.10", "price_open": "100.0", "price_current": "102.5",
+    "stop_loss": "98.0", "take_profit": None, "profit": "25.00", "swap": "-0.10",
+    "stop_loss_profit": "-20.00", "take_profit_profit": None,
+    "time_ms": 1700000000000, "magic": "42",
+    "volume_min": "0.01", "volume_step": "0.01",
+}]
+MOCK_ORDERS = [{
+    "order_id": "7001", "symbol": "US100.TEST", "order_type": "buy_limit", "state": "placed",
+    "volume_initial": "0.10", "volume_current": "0.10", "price_open": "18000.0",
+    "price_current": "18000.0", "stop_loss": None, "take_profit": "18100.0",
+    "stop_loss_profit": None, "take_profit_profit": "100.00",
+    "time_setup_ms": 1700000120000, "expiration_ms": 1700003720000, "magic": "42",
+}]
+OPEN_POSITIONS = copy.deepcopy(MOCK_POSITIONS)
+
+
+def portfolio_snapshot(message_id: str, session_id: str, positions: list) -> dict:
+    return envelope("portfolio_snapshot", message_id, session_id, {
+        "account_login": "12345678", "captured_at_ms": 1700000121000,
+        "positions": positions, "orders": MOCK_ORDERS,
+    })
+
+
+def partial_close_rejection(position: dict, volume: Decimal) -> str | None:
+    """Mirror of the EA's PartialCloseVolumeFailure; None when the volume is closable."""
+    held, minimum, step = Decimal(position["volume"]), Decimal(position["volume_min"]), Decimal(position["volume_step"])
+    remainder = held - volume
+    if volume > held:
+        return "close volume exceeds the position volume"
+    if volume < minimum:
+        return "close volume is below the symbol minimum"
+    if volume % step != 0:
+        return "close volume is not a multiple of the volume step"
+    if remainder != 0 and remainder < minimum:
+        return "remaining volume would be below the symbol minimum"
+    return None
+
+
+def apply_close_request(positions: list, request: dict) -> dict:
+    """Apply an order_close_request to `positions` in place.
+
+    Returns an order_command_update payload, or an order_command_error payload
+    (`code` key) when the request is invalid. A null volume or one equal to the
+    position closes it fully; anything smaller reduces it.
+    """
+    command_id = request.get("command_id")
+    position = next((p for p in positions if p["position_id"] == request.get("position_id")), None)
+    if position is None:
+        return {"command_id": command_id, "code": "INVALID_REQUEST", "message": "target position does not exist"}
+    held = Decimal(position["volume"])
+    volume = held
+    if request.get("volume") is not None:
+        try:
+            volume = Decimal(request["volume"])
+        except (InvalidOperation, TypeError):
+            volume = Decimal(0)
+        failure = "close volume must be a positive decimal" if volume <= 0 else partial_close_rejection(position, volume)
+        if failure:
+            return {"command_id": command_id, "code": "INVALID_REQUEST", "message": failure}
+    if volume == held:
+        positions.remove(position)
+    else:
+        position["volume"] = str(held - volume)
+    return {
+        "command_id": command_id, "status": "filled", "retcode": 10009, "last_error": 0,
+        "broker_order_id": "mock-close-order", "deal_id": "mock-close-deal",
+        "position_id": position["position_id"], "filled_volume": str(volume),
+        "message": "fill confirmed by mock", "updated_at_ms": 1700000130000, "at_update": 4,
+    }
+
+
+def handle_close_request(conn: socket.socket, session_id: str | None, message: dict) -> bool:
+    if message.get("type") != "order_close_request":
+        return False
+    result = apply_close_request(OPEN_POSITIONS, message["payload"])
+    reply_type = "order_command_error" if "code" in result else "order_command_update"
+    send_frame(conn, envelope(reply_type, "ea-close-reply", session_id, result))
+    if reply_type == "order_command_update":
+        send_frame(conn, portfolio_snapshot("ea-portfolio-close", session_id, OPEN_POSITIONS))
+    return True
+
+
 def main() -> int:
     host = os.environ.get("MT5_BRIDGE_HOST", "127.0.0.1")
     port = env_int("MT5_BRIDGE_PORT", 8877)
@@ -422,7 +539,7 @@ def main() -> int:
             "tick_reader_version": MQ5_VERSIONS["tickReaderVersion"], "trading_enabled": False,
             "supported_timeframes": SUPPORTED_TIMEFRAMES,
             "transfer_limits": TRANSFER_LIMITS,
-            "tick_price_counts": True,
+            "tick_price_counts": True, "partial_close": True,
         }))
         hello_ack = next_non_reconcile(reader, conn, None, deadline)
         hello_payload = expect_type(hello_ack, "hello_ack")
@@ -497,23 +614,7 @@ def main() -> int:
                 "margin_mode": 2, "trade_allowed": False, "expert_allowed": False,
                 "account_trade_mode": 0, "account_trade_mode_name": "demo",
             }))
-            send_frame(conn, envelope("portfolio_snapshot", "ea-portfolio-1", session_id, {
-                "account_login": "12345678", "captured_at_ms": 1700000121000,
-                "positions": [{
-                    "position_id": "9001", "ticket": "9001", "symbol": "TEST.INIT", "side": "buy",
-                    "volume": "0.10", "price_open": "100.0", "price_current": "102.5",
-                    "stop_loss": "98.0", "take_profit": None, "profit": "25.00", "swap": "-0.10",
-                    "stop_loss_profit": "-20.00", "take_profit_profit": None,
-                    "time_ms": 1700000000000, "magic": "42",
-                }],
-                "orders": [{
-                    "order_id": "7001", "symbol": "US100.TEST", "order_type": "buy_limit", "state": "placed",
-                    "volume_initial": "0.10", "volume_current": "0.10", "price_open": "18000.0",
-                    "price_current": "18000.0", "stop_loss": None, "take_profit": "18100.0",
-                    "stop_loss_profit": None, "take_profit_profit": "100.00",
-                    "time_setup_ms": 1700000120000, "expiration_ms": 1700003720000, "magic": "42",
-                }],
-            }))
+            send_frame(conn, portfolio_snapshot("ea-portfolio-1", session_id, OPEN_POSITIONS))
             send_frame(conn, envelope("quote_update", "ea-quote-1", session_id, {
                 "symbol": "TEST.INIT", "time_ms": 1700000120000, "bid": "102.4", "ask": "102.6",
                 "last": "102.5", "volume": 14, "volume_real": "0", "flags": 6,
@@ -571,7 +672,7 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(
-            self_test_history_page() + self_test_tick_history()
+            self_test_history_page() + self_test_tick_history() + self_test_partial_close()
             if os.environ.get("MT5_MOCK_SELFTEST") == "1"
             else main()
         )

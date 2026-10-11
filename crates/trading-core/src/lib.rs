@@ -5,6 +5,7 @@
 
 pub mod execution;
 pub mod models;
+pub mod partial_close;
 pub mod position_sizing;
 pub mod protocol;
 pub mod symbol_cache;
