@@ -76,9 +76,18 @@ class TickReaderSourceGuards(unittest.TestCase):
         aggregate = EA.split("void PollPriceTickPayload()", 1)[1].split("bool PrepareRawTickPayload", 1)[0]
         self.assertIn("valid && (bid_changed || ask_changed)", aggregate)
         self.assertIn("g_tick_rejected++", aggregate)
-        self.assertIn("GetTickCount64()-started>=5", aggregate)
+        self.assertIn("GetTickCount64()-started>=BRIDGE_TICK_WORK_SLICE_MS", aggregate)
         self.assertIn("PrepareRawTickPayload();", aggregate)
         self.assertNotIn("TickJson(", aggregate)
+
+    def test_prefetch_is_session_bound_and_released_on_every_exit(self):
+        matches = EA.split("bool PrefetchMatches", 1)[1].split("bool StartTickReaderAttempt", 1)[0]
+        for guard in ("g_prefetch_session==g_session_id", "g_prefetch_symbol==symbol", "g_prefetch_from==from_ms", "g_prefetch_max==max_ticks", "to_ms<=g_prefetch_source_to"):
+            self.assertIn(guard, matches)
+        cancel = EA.split("void CancelTickHistory()", 1)[1].split("void FailTickHistory", 1)[0]
+        self.assertIn("ReleaseTickPrefetch();", cancel)
+        prepare = EA.split("bool PreparePriceTickPayload()", 1)[1].split("bool AddPriceCount", 1)[0]
+        self.assertIn("!g_tick_complete && g_tick_through>g_tick_from", prepare)
 
     def test_tick_buffer_growth_is_geometric_and_bounded(self):
         grow = EA.split("bool GrowTickPayload", 1)[1].split("bool AppendPricePayload", 1)[0]

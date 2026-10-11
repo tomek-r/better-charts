@@ -1,9 +1,10 @@
 use super::{
-    bridge_emit, clear_validated_order_check, invalidate_validated_order_check,
-    BridgeConnectionState, BridgeEvents, BridgeState, BridgeStatus, BrokerSymbolView,
-    ExecutionAdapterState, ExpectedOrderCheck, OrderCheckError, OrderCheckErrorView,
-    OrderCheckResult, OrderCheckResultView, ReconciliationStatus, SymbolInfoResult,
-    SymbolSearchOutcome, SymbolSearchResult, SymbolSearchResultView, ValidatedOrderCheck,
+    bridge_emit, clear_profile_bar_slots, clear_validated_order_check,
+    invalidate_validated_order_check, BridgeConnectionState, BridgeEvents, BridgeState,
+    BridgeStatus, BrokerSymbolView, ExecutionAdapterState, ExpectedOrderCheck, OrderCheckError,
+    OrderCheckErrorView, OrderCheckResult, OrderCheckResultView, ReconciliationStatus,
+    SymbolInfoResult, SymbolSearchOutcome, SymbolSearchResult, SymbolSearchResultView,
+    ValidatedOrderCheck,
 };
 use std::sync::Arc;
 
@@ -255,7 +256,8 @@ pub(crate) fn protocol_error(
         .tick_controller
         .lock()
         .expect("tick controller mutex poisoned")
-        .cancel();
+        .end_session();
+    clear_profile_bar_slots(state);
     publish(events, state, |status| {
         status.state = BridgeConnectionState::ProtocolError;
         status.message = Some(message.into());
@@ -321,7 +323,8 @@ pub(crate) fn disconnect(
             .tick_controller
             .lock()
             .expect("tick controller mutex poisoned")
-            .cancel();
+            .end_session();
+        clear_profile_bar_slots(state);
         *state
             .pending_symbol_search
             .lock()
@@ -417,7 +420,8 @@ pub(crate) fn protocol_error_session(
             .tick_controller
             .lock()
             .expect("tick controller mutex poisoned")
-            .cancel();
+            .end_session();
+        clear_profile_bar_slots(state);
         *state
             .pending_symbol_search
             .lock()

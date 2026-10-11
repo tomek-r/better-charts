@@ -26,7 +26,8 @@ pub use framing::{
     decode_json, encode_frame, encode_frame_with_limit, encode_json, FrameDecoder, FrameError,
 };
 pub use limits::{
-    default_frame_bytes, history_bars, initial_history_bars, max_frame_bytes, min_frame_bytes,
+    default_frame_bytes, default_ticks_per_page, history_bars, initial_history_bars,
+    max_estimated_profile_ticks, max_frame_bytes, max_ticks_per_page, min_frame_bytes,
 };
 pub use market::{
     BarUpdate, BrokerSymbol, HistoryRequest, HistorySnapshot, MarketCandle, MarketTick,
@@ -47,7 +48,7 @@ pub use versions::{expert_adviser_version, tick_reader_version};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TransferLimits {
     pub max_frame_bytes: u32,
-    pub max_ticks_per_page: u16,
+    pub max_ticks_per_page: u32,
 }
 
 impl Default for TransferLimits {
@@ -63,13 +64,13 @@ impl TransferLimits {
     pub fn measured_default() -> Self {
         Self {
             max_frame_bytes: default_frame_bytes(),
-            max_ticks_per_page: u16::MAX,
+            max_ticks_per_page: default_ticks_per_page(),
         }
     }
 
     pub fn validate(&self) -> Result<(), &'static str> {
         if !(min_frame_bytes()..=max_frame_bytes()).contains(&self.max_frame_bytes)
-            || self.max_ticks_per_page == 0
+            || !(1..=max_ticks_per_page()).contains(&self.max_ticks_per_page)
         {
             return Err("invalid transfer limits");
         }

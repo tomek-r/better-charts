@@ -209,6 +209,51 @@ pub(crate) async fn flush_outbound(
         })?;
     }
 
+    // The tick profile's own bar pages. A request whose generation was
+    // superseded while queued is dropped here instead of written to the wire.
+    let pending_profile_bars = claim_for_session(state, session_id, || {
+        let pending = state
+            .pending_profile_bars
+            .lock()
+            .expect("profile bars mutex poisoned")
+            .take();
+        pending.filter(|(generation, _)| {
+            state
+                .tick_controller
+                .lock()
+                .expect("tick controller mutex poisoned")
+                .bar_request_is_current(*generation)
+        })
+    })?;
+    if let Some((generation, request)) = pending_profile_bars {
+        let request_id = format!(
+            "rust-profile-bars-{}",
+            state.next_request_id.fetch_add(1, Ordering::Relaxed)
+        );
+        send(
+            stream,
+            MessageType::HistoryRequest,
+            request_id.clone(),
+            Some(session_id.to_owned()),
+            request.clone(),
+        )
+        .await?;
+        claim_for_session(state, session_id, || {
+            if state
+                .tick_controller
+                .lock()
+                .expect("tick controller mutex poisoned")
+                .bar_request_is_current(generation)
+            {
+                *state
+                    .expected_profile_bars
+                    .lock()
+                    .expect("profile bars mutex poisoned") =
+                    Some((generation, request_id, request));
+            }
+        })?;
+    }
+
     let pending_symbol_info = claim_for_session(state, session_id, || {
         state
             .pending_symbol_info

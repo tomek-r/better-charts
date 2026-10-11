@@ -4,6 +4,13 @@
     "min": 1024,
     "max": 2147483643
   },
+  "ticksPerPage": {
+    "default": 262144,
+    "max": 262144
+  },
   "historyBars": 1000,
-  "initialHistoryBars": 300
+  "initialHistoryBars": 300,
+  "tickProfile": {
+    "maxEstimatedTicks": 30000000
+  }
 }

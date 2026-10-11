@@ -54,8 +54,8 @@ token is required outside development builds.
 {
   "token": "example-token", "terminal_id": "installation-instance-id", "terminal_build": 5000,
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
-  "expert_version": "1.004", "tick_reader_version": "1.000", "trading_enabled": false,
-  "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 65535},
+  "expert_version": "1.005", "tick_reader_version": "1.001", "trading_enabled": false,
+  "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
   "tick_price_counts": true, "partial_close": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
     "H1", "H2", "H3", "H4", "H6", "H8", "H12", "D1", "W1", "MN1"]
@@ -67,7 +67,7 @@ token is required outside development builds.
 ```json
 {
   "heartbeat_interval_ms": 2000, "heartbeat_timeout_ms": 6000, "trading_enabled": false,
-  "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 65535},
+  "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
   "tick_price_counts": true, "partial_close": true
 }
 ```
@@ -81,8 +81,8 @@ the server's permission; the app's local Settings permission is an additional
 startup restriction, optionally overridden with `MT5_BRIDGE_TRADING_ENABLED`.
 Neither flag submits a command or bypasses execution gates.
 
-The app requires an exact EA `expert_version` match (`1.004` for this build)
-and an exact `tick_reader_version` match (`1.000`), the version of the
+The app requires an exact EA `expert_version` match (`1.005` for this build)
+and an exact `tick_reader_version` match (`1.001`), the version of the
 `BetterChartsTickHistoryReader` indicator. Both expected versions live in
 `config/mq5-versions.json`; regression guards check that the EA's
 `BRIDGE_EXPERT_VERSION` and the indicator's `BRIDGE_TICK_READER_VERSION` match
@@ -107,8 +107,8 @@ Other malformed handshakes include recompile/reattach instructions.
 | --- | --- |
 | `transfer_limits` | Negotiate each limit as the minimum of both peers' values; apply only after `hello_ack`. |
 | Missing `transfer_limits` | Use 1 MiB / 5,000 ticks per page. |
-| Current defaults | 8 MiB / 65,535 ticks per page. |
-| Valid limits | Rust frame bytes: `1024..=2147483643`; EA frame MiB: `1..=2047`; ticks: `1..=65535`. Invalid limits reject the handshake. The frame bounds, the 8 MiB default and the `1..=1000` history page and the `initialHistoryBars` handshake window (`1..=historyBars`, currently 300) live once in `config/bridge.json`, embedded by `crates/trading-core/src/protocol/limits.rs` and imported by `apps/desktop/src/shared/bridge/limits.ts`. |
+| Current defaults | 8 MiB / 262,144 ticks per page. |
+| Valid limits | Rust frame bytes: `1024..=2147483643`; EA frame MiB: `1..=2047`; ticks: `1..=262144` (`u32`; a peer advertising more is rejected). Invalid limits reject the handshake. The frame bounds, the 8 MiB default and the `1..=1000` history page and the `initialHistoryBars` handshake window (`1..=historyBars`, currently 300) and the `ticksPerPage` default/max (262,144; the EA input keeps its own literal) live once in `config/bridge.json`, as does the desktop-only `tickProfile.maxEstimatedTicks` budget (30,000,000; the EA never reads it), embedded by `crates/trading-core/src/protocol/limits.rs` and imported by `apps/desktop/src/shared/bridge/limits.ts`. |
 | `tick_price_counts` | Defaults to `false`; exact price summaries require support from both peers. Raw tick pages remain supported. |
 | `partial_close` | Defaults to `false` when absent from `hello`. Rust echoes the negotiated value in `hello_ack`, publishes it as `partialClose` on the bridge status and resets it when the session ends. An EA without it ignores `order_close_request.volume` and would close the whole position, so Rust rejects every partial close unless it is `true`. |
 | `hello.supported_timeframes` | Required list of the EA's supported MT5 period codes. Must be a nonempty, unique subset of the standard periods and include `M1`. Missing, `null` or invalid advertisements reject the handshake. Published as `supportedTimeframes` on the Tauri bridge status; history commands reject periods the connected EA did not advertise. |
@@ -223,8 +223,33 @@ bar countdown), and the bridge publishes it on the `history-page` event instead
 of `market-snapshot`, so a page of old candles never replaces the current market
 snapshot.
 
-`complete=false` on a page means the broker held no more candles older than the
-anchor, which is how a client learns it reached the end of history. A peer that
+A page may target **any supported timeframe of the active symbol**, not only
+the timeframe of the current window: the hybrid volume profile reads an
+estimate page and M1 pages while the chart shows another timeframe. A page for
+any other symbol is refused with an empty page, `complete=false`.
+
+A timeframe no chart has open is built by MT5 on demand, so its series may still
+be synchronizing when the page arrives. The EA then keeps the page pending and
+retries on its timer instead of answering empty, for at most 10 s, with at most
+4 pages waiting (a further page is answered with the error below at once).
+When the deadline passes it sends an `error` frame (`INTERNAL_ERROR`,
+`retryable: false`, message `history page synchronization timed out`) whose
+**envelope `id` equals the page's request id**. That correlated id is what lets
+the bridge fail just that request; an error with any other id is a session-level
+error. Pending pages are discarded on disconnect and when the active symbol
+changes.
+
+The bridge handles a correlated page error per id family. A `rust-profile-bars-<n>`
+error ends that profile step (estimate page: the profile falls back to ticks;
+bar page: `tick-profile-error` for the awaited range). A `rust-history-page-<n>`
+error ends only that page request: the frontend sees no page and the session
+stays up. A stale correlated error is ignored; an uncorrelated error still fails
+closed.
+
+`complete=false` on a page means only that the broker held no more candles older
+than the anchor (history exhausted, series synchronized), which is how a client
+learns it reached the end of history; it is never a stand-in for "not ready
+yet". A peer that
 predates the extension ignores `before_ms` and answers the window request
 instead: the client sees nothing strictly older and stops paging.
 
@@ -856,6 +881,14 @@ envelope `id` matches the tick request, code `INTERNAL_ERROR` or
 resetting the session; stale correlated errors are ignored. Other protocol
 errors remain fail-closed; failed requests are not retried automatically.
 
+The EA works on tick pages in bounded slices of `BRIDGE_TICK_WORK_SLICE_MS` (12 ms)
+per 20 ms timer turn, so heartbeats, quotes and commands run every turn. For an
+incomplete `price_counts` page it prefetches the next reader page from `through_ms`
+with the same count, adopted only by a `price_counts` request with the same session,
+symbol, `from_ms`, `max_ticks` and `to_ms` not beyond the origin. Any other request,
+cancel, failure, raw fallback or disconnect discards it; an unclaimed one is released
+after 30 s. Results match an on-demand read; `tick page delivered` logs `prefetch=hit|miss`.
+
 ## Desktop tick-profile events
 
 These are camelCase Tauri events, not additional TCP message types. Sequential
@@ -879,9 +912,9 @@ storage and fetching continues to the range end without sampling.
 | --- | --- |
 | Raw cache | 100,000 ticks / 128 ranges, trimmed after each page. |
 | Summary cache | 250,000 price records / 128 complete ranges; reuse contained segments, fetch edges again; clear on session change. |
-| Active fetch | 512 processed pages. |
-| Accumulator | 250,000 contribution prices and 250,000 BID prices. |
-| Exceeded work/price limit | Nonfatal `tick-profile-error`; never render a histogram of only the range's beginning. |
+| Active fetch | 2048 processed pages. |
+| Accumulator | 1,000,000 contribution prices and 1,000,000 BID prices. |
+| Exceeded work/price limit | More than 2048 tick pages or more than 1,000,000 distinct prices switch the whole range to the approximate bar profile (below); all tick data collected so far is discarded. Any other limit (count overflow, tick size change mid-profile, an unreadable tick price, a single millisecond holding more ticks than one page) ends in a nonfatal `tick-profile-error` whose `message` names it. A histogram of only the range's beginning is never rendered. |
 
 Summaries are not interpolated or trimmed; overlapping cache entries are
 replaced and future data is not cached. Terminal incomplete fragments yield
@@ -905,6 +938,114 @@ refreshes once more, then never. A range ended on an older bar never refreshes.
 
 Cancellation preserves the bridge session. With no active profile, the
 command succeeds without emitting an event. Late snapshots are ignored.
+
+### Hybrid profile: ticks or bars (no wire change)
+
+A `tick-profile` result carries three additive fields: `source` (`"ticks"` or
+`"bars"`), `barTimeframe` (e.g. `"M1"` for `bars`, `null` for `ticks`) and
+`coveredFromMs` (number or `null`): the open time in UTC milliseconds of the
+oldest bar behind a `bars` profile when the broker's history starts after
+`fromMs`, so the profile does not cover the beginning of the range; `null` when
+the whole range is covered, and always `null` for `ticks`. A consumer must show a
+non-null `coveredFromMs` as partial (the chart labels it `M2 · from 20 Mar`).
+
+When the tick cache does not already cover the range, the desktop first reads
+bars with the existing `history_request` page form (`before_ms`), under
+request ids `rust-profile-bars-<n>`, in slots of their own (the chart's lazy
+loading page slot is never shared). The **estimate** is one page ending at the
+range end, on the smallest supported timeframe whose nominal bar count over the
+range is at most 998 (`bars` = nominal count + 2, at most 1000). From the bars
+overlapping `[fromMs, endMs)` (`MN1` by calendar month) and the cached symbol
+tick size and point, `trading_core::volume_profile::estimate_profile_load`
+returns the tick volume and an upper bound of distinct BID/ASK prices. The
+source is `bars` when any of these holds, otherwise `ticks`:
+
+- estimated ticks > `tickProfile.maxEstimatedTicks` (`config/bridge.json`);
+- distinct prices > 1,000,000 (the accumulator limit);
+- `ceil(ticks / negotiated max_ticks_per_page)` > 2048 (the page limit).
+
+Any estimate failure (a correlated error frame, an invalid snapshot, a page
+that does not reach back to `fromMs` while history continues, no cached symbol
+metadata, no timeframe that fits) chooses `ticks`: the tick path never paints
+partial data. An EA error with a `rust-profile-bars-` id is correlated and handled
+as above. Uncorrelated EA errors (`ea-<n>` ids, or any id Rust did not issue for
+these requests) stay fail-closed as before.
+
+**Bar profile.** The timeframe is the smallest supported one with at most
+200,000 nominal bars over the range. Pages of 1000 bars are read backwards from
+`endMs` until the oldest bar opens at or before `fromMs` or `complete=false`
+(history exhausted); at most 220 pages. A page that is not strictly older than
+its anchor, or an error, ends the profile with a `tick-profile-error`. Bars
+overlapping the range are kept whole (edge bars are not prorated), and the
+profile uses the tick profile's row grid and value area. Volume is each bar's
+`tick_volume` spread uniformly over `[low, high]`; the `ask` series holds UP
+volume (`close > open`) and the `bid` series DOWN volume (a doji splits evenly),
+so bar profiles are approximate. `tick-profile-progress` is emitted per bar
+page (`loadedTicks` is the tick volume of the bars loaded so far).
+
+**History that ends inside the range.** When a bar walk ends because history is
+exhausted (`complete=false` or an empty page) while its oldest bar opens after
+`fromMs`, the profile is not finished with that timeframe. The whole range is
+walked again, from scratch and never mixing timeframes, on the next coarser
+supported timeframe that is at least twice as coarse as the one just tried
+(neighbouring timeframes such as M2/M3 are built from the same base history and
+end at the same place), up to `D1` and at most 10 retries. The first timeframe
+whose oldest bar opens at or before `fromMs` is used and `coveredFromMs` is
+`null`. If none reaches the range start, the timeframe reaching furthest back is
+used, the finest among equals (a coarser timeframe replaces the best only by
+reaching back at least one of its own bars, because bars open on their
+timeframe's grid), and `coveredFromMs` is the open time of its oldest bar. The
+page bound (220) applies per attempt. A timeframe whose history start was found
+is remembered per (symbol, timeframe) with the bar cache, so a repeat request
+does not page that history again; a closed repeat range is answered from the
+cache alone.
+
+**Bar cache (no wire change).** The desktop keeps the fetched bars in memory as
+one contiguous, strictly time-ordered series per (symbol, timeframe)
+(`trading_core::volume_profile::BarSeries`), so the 2 s refresh of an open range
+does not page the whole history again. Bars older than the newest cached bar are
+final; the newest may still be forming and is always re-fetched. A request pages
+`before_ms` back from `endMs` only until a page reaches the cached newest bar
+(that bar and anything newer replace the cache), then, if the range starts
+before the cached oldest bar and history does not end there, pages back from the
+cached oldest bar. A closed range inside the series sends no request. The result
+equals a full fetch of the same bars. The cache fails closed: a gap that is not
+bridged within 8 pages (a long pause), a range that does not meet the cached
+series, an overlap listing different bar times, or unordered data drops the
+entry and the range is fetched fresh. Bounds: at most 3 series, each trimmed to
+the newest 200,000 bars (LRU eviction). The cache is cleared on handshake, on
+disconnect or protocol error, and for other symbols on a symbol change; a new
+request or `cancel_tick_profile` keeps it. The estimate page is not cached. The
+remembered history starts (at most 64) are cleared with the series.
+
+A new request, `cancel_tick_profile`, a session change or disconnect and a
+symbol change invalidate the estimate and the bar pages (generation); stale or
+mismatched responses are ignored. One profile is in flight at a time.
+
+**Decision log (desktop stderr, no wire change).** Each profile prints one line
+to the `pnpm dev` terminal, `[bridge] INFO` for the choice and `[bridge] WARN`
+for a degraded case, e.g.:
+
+```text
+[bridge] INFO tick profile NAS100 2026-03-31T00:00Z..2026-06-02T00:00Z: source=ticks reason=under-budget estimate tf=H2 bars=742 ticks=16.4M/30M prices=410k/1M pages=63/2048
+[bridge] INFO tick profile NAS100 2026-03-31T00:00Z..2026-06-02T00:00Z: source=bars reason=over-tick-budget tf=M1 estimate-tf=H2 bars=742 ticks=40M/30M prices=1/1M pages=1/2048
+[bridge] INFO tick profile NAS100 2026-03-01T00:00Z..2026-09-10T00:00Z: bars tf=M2 history ends 2026-03-20T19:48Z before range start; retry tf=M4
+[bridge] INFO tick profile NAS100 2026-03-01T00:00Z..2026-09-10T00:00Z: partial-history from=2026-03-20T19:48Z tf=H1
+```
+
+The `retry` line is printed for each coarser timeframe tried; `partial-history`
+follows the `completed` line when `coveredFromMs` is non-null.
+
+`reason` is one of `under-budget estimate`, `estimate-incomplete`,
+`no-symbol-metadata`, `no-timeframe-fits`, `estimate-invalid`,
+`estimate-error code=<ErrorCode>`, `estimate-page-invalid`, `over-tick-budget`,
+`over-price-cap`, `over-page-cap`. `tf` is the collection timeframe of a bar
+profile and `estimate-tf` the estimate page's timeframe when both are shown.
+Other lines: `safety-net source=bars after limit=pages|distinct-prices` (the
+tick path fell back mid-load), `served from cache source=...`, and
+`completed source=... elapsed_ms=... pages=... [bars=...]`, and a WARN
+`history page <symbol> <tf> before_ms=<ms> failed: <code>` for a failed chart
+history page. Lines carry the symbol, range and counts only.
 
 ## Protocol errors
 

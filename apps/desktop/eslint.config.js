@@ -1,4 +1,5 @@
 // @ts-check
+import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
@@ -17,9 +18,19 @@ const compilerRulesAsWarn = Object.fromEntries(
     .map(([rule]) => [rule, 'warn']),
 );
 
-export default tseslint.config(
+export default defineConfig(
   {
-    ignores: ['dist', 'node_modules', 'target', 'playwright-report', 'test-results', 'src-tauri', 'mql5'],
+    ignores: [
+      'dist',
+      'node_modules',
+      'target',
+      'playwright-report',
+      'test-results',
+      'src-tauri',
+      'mql5',
+      '.react-profiler',
+      '.lighthouse',
+    ],
   },
   {
     files: ['**/*.{ts,tsx}'],

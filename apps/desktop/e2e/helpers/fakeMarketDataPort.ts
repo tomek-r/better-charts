@@ -28,6 +28,9 @@ export function createFakeMarketDataPort() {
 /** A finished, empty profile result for the window `[fromMs, endMs)`. */
 export function profileResultFor({ fromMs, endMs }: { fromMs: number; endMs: number }, symbol: string): ProfileResult {
   return {
+    source: 'ticks',
+    barTimeframe: null,
+    coveredFromMs: null,
     symbol,
     fromMs,
     endMs,

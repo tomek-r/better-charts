@@ -37,9 +37,26 @@ pub(crate) struct TickProfileBin {
     pub(crate) ask: u64,
 }
 
+/// Where a profile's volumes come from: exact ticks, or the approximation
+/// built from bars (bid series = down volume, ask series = up volume).
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ProfileSource {
+    Ticks,
+    Bars,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TickProfileResult {
+    pub(crate) source: ProfileSource,
+    /// Timeframe code of the bars behind a `bars` profile; `null` for ticks.
+    pub(crate) bar_timeframe: Option<String>,
+    /// Open time of the oldest bar behind a `bars` profile when the broker's
+    /// history starts inside the requested range, so the profile does not
+    /// cover its beginning; `null` when the whole range is covered (always
+    /// for ticks).
+    pub(crate) covered_from_ms: Option<i64>,
     pub(crate) symbol: String,
     pub(crate) from_ms: i64,
     pub(crate) end_ms: i64,

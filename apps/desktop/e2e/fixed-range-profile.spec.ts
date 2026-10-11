@@ -1,3 +1,4 @@
+import { palette } from '../src/shared/theme/palette';
 import { test, expect } from '@playwright/test';
 import {
   createRecordingCtx,
@@ -6,7 +7,21 @@ import {
   type PaintOp,
   type TestViewport,
 } from './helpers/overlayHarness';
-import { drawFixedRangeProfile, type FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/overlay';
+import {
+  drawFixedRangeProfile,
+  drawFixedRangeProfileSpinner,
+  drawFixedRangeProfileLoadingWash,
+  LOADING_WASH_ALPHA,
+  LOADER_LINE_MARGIN,
+  LOADER_MAX_WIDTH,
+  LOADER_MIN_WIDTH,
+  LOADER_ROW_COUNT,
+  LOADER_ROW_GAP,
+  LOADER_ROW_HEIGHT,
+  loaderRowWidths,
+  type FixedRangeProfileState,
+  type HandleEdges,
+} from '../src/features/tools/fixedRangeProfile/overlay';
 import type { ProfileResult, TickProfileBin } from '../src/shared/bridge/types';
 
 /**
@@ -52,14 +67,26 @@ const ASK_COLOR = '#26a69a';
 // maxWeight = 50, half = min(180, 600*0.2) = 120.
 // bid widths 14.4/28.8/7.2 (maxBid 28.8 → profileLeft ≈ 44.2); ask widths 96/28.8/120 (maxAsk 120 → profileRight = 193).
 // Row geometry (priceY): tops 245/205/165, bottom = top+40 → drawHeight 39.
+const TICK_SOURCE = { source: 'ticks', barTimeframe: null, coveredFromMs: null } as const;
+const BAR_SOURCE = { source: 'bars', barTimeframe: 'M1', coveredFromMs: null } as const;
+// History starts 2026-03-20 19:48 UTC inside the range: the label names the first covered day.
+const PARTIAL_BAR_SOURCE = {
+  source: 'bars',
+  barTimeframe: 'M2',
+  coveredFromMs: Date.UTC(2026, 2, 20, 19, 48),
+} as const;
 const DEFAULT_BINS: TickProfileBin[] = [
   { low: '140.00', high: '150.00', total: '10', bid: '6', ask: '40' },
   { low: '150.00', high: '160.00', total: '10', bid: '12', ask: '12' },
   { low: '160.00', high: '170.00', total: '10', bid: '3', ask: '50' },
 ];
 
-function makeProfile(bins: TickProfileBin[]): ProfileResult {
+function makeProfile(
+  bins: TickProfileBin[],
+  source: Pick<ProfileResult, 'source' | 'barTimeframe' | 'coveredFromMs'> = TICK_SOURCE,
+): ProfileResult {
   return {
+    ...source,
     symbol: 'DEMO.TEST',
     fromMs: RANGE_FROM,
     endMs: RANGE_FROM + 5 * BAR_INTERVAL,
@@ -220,6 +247,52 @@ test('level lines run from the range start (anchorX) to the chartRect right edge
   ).toEqual([185, 265]);
 });
 
+test('a bars profile paints only its bar timeframe, muted, in the top-left of the range band', () => {
+  const { ops } = paint(makeProfile(DEFAULT_BINS, BAR_SOURCE));
+  const labels = labelsOf(ops);
+  expect(labels).toHaveLength(1);
+  const [label] = labels;
+  expect(label.text).toBe('M1');
+  expect(label.style).toBe('#718099');
+  expect(label.font).toBe('400 11px system-ui, sans-serif');
+  expect(label.alpha).toBe(1);
+  // Band starts at the anchor; the label sits 6px inside it, 6px below the pane top (clipped to the pane).
+  expect(label.x).toBe(ANCHOR_X + 6);
+  expect(label.y).toBe(chartRect.y + 6);
+  // Rows and levels are painted exactly as for ticks; the label comes after them.
+  expect(ops.indexOf(label)).toBe(ops.length - 1);
+  expect(rowsOf(ops)).toHaveLength(6);
+});
+
+test('a partial bars profile names where its coverage starts, in the warning colour', () => {
+  const { ops } = paint(makeProfile(DEFAULT_BINS, PARTIAL_BAR_SOURCE));
+  const [label] = labelsOf(ops);
+  expect(labelsOf(ops)).toHaveLength(1);
+  expect(label.text).toBe('M2 · from 20 Mar');
+  expect(label.style).toBe('#ffd28a');
+  expect(label.font).toBe('400 11px system-ui, sans-serif');
+  expect(label.x).toBe(ANCHOR_X + 6);
+  expect(label.y).toBe(chartRect.y + 6);
+});
+
+test('a partial label uses the UTC day and a short English month', () => {
+  const textFor = (coveredFromMs: number) =>
+    labelsOf(paint(makeProfile(DEFAULT_BINS, { ...PARTIAL_BAR_SOURCE, coveredFromMs })).ops)[0].text;
+  expect(textFor(Date.UTC(2026, 0, 1, 0, 0))).toBe('M2 · from 1 Jan');
+  expect(textFor(Date.UTC(2026, 11, 31, 23, 59))).toBe('M2 · from 31 Dec');
+});
+
+test('a bars profile whose band starts left of the pane keeps its label inside the pane', () => {
+  const offscreen = { fromMs: bars[0].time - 100_000, toMs: bars[4].time };
+  const { ops } = paint(makeProfile(DEFAULT_BINS, BAR_SOURCE), viewport, offscreen);
+  const [label] = labelsOf(ops);
+  expect(label.x).toBe(chartRect.x + 6);
+});
+
+test('a tick profile paints no timeframe label', () => {
+  expect(labelsOf(paint(makeProfile(DEFAULT_BINS, TICK_SOURCE)).ops)).toHaveLength(0);
+});
+
 test('no text labels are painted; paint order is rows then level lines, clipped to chartRect', () => {
   const { ops } = paint(makeProfile(DEFAULT_BINS));
   const rows = rowsOf(ops);
@@ -322,4 +395,207 @@ test('a weight that does not parse defensively counts as zero', () => {
   const rows = rowsOf(paint(makeProfile(bins)).ops);
   expect(rows).toHaveLength(1);
   expect(rows[0].style).toBe(ASK_COLOR);
+});
+
+// ---------------------------------------------------------------------------
+// Slow-load profile loader: centred in the range band, clamped to the pane, only while flagged.
+// ---------------------------------------------------------------------------
+function paintSpinner(state: FixedRangeProfileState, vp: TestViewport = viewport, handles?: HandleEdges): Op[] {
+  const ops: Op[] = [];
+  drawFixedRangeProfileSpinner(recordInto(ops), renderArgsFor(vp).viewport, state, 0, handles);
+  return ops;
+}
+const spinnerState = (patch: Partial<FixedRangeProfileState> = {}): FixedRangeProfileState => ({
+  ...makeState(),
+  loadingIndicator: true,
+  ...patch,
+});
+
+const barsOf = (ops: Op[]) => ops.filter((op) => op.kind === 'fillRect');
+const bandOps = () => paintSpinner(spinnerState({ range: { fromMs: RANGE_FROM, toMs: bars[8].time } }));
+
+test('the loader is centred in the range band and the pane height', () => {
+  // Band: anchor 73 (bar 3.5) to bar 8 centre (41 + 80 - 7 + 4 = 118) -> centre x 95.5; pane y centre 45 + 200.
+  const ops = bandOps();
+  const [centreLine] = linesOf(ops);
+  expect(centreLine.minX).toBe(95.5);
+  expect(centreLine.maxX).toBe(95.5);
+  const rects = barsOf(ops);
+  expect(rects).toHaveLength(LOADER_ROW_COUNT * 2);
+  expect((Math.min(...rects.map((r) => r.minY)) + Math.max(...rects.map((r) => r.maxY))) / 2).toBe(245);
+  expect(Math.max(...rects.map((r) => r.maxY)) - Math.min(...rects.map((r) => r.minY))).toBe(
+    LOADER_ROW_COUNT * LOADER_ROW_HEIGHT + (LOADER_ROW_COUNT - 1) * LOADER_ROW_GAP,
+  );
+});
+
+test('the loader draws a dashed centre line spanning the rows plus a margin', () => {
+  const ops = bandOps();
+  const [centreLine] = linesOf(ops);
+  const rects = barsOf(ops);
+  expect(centreLine.dashed).toBe(true);
+  expect(centreLine.minY).toBe(Math.min(...rects.map((r) => r.minY)) - LOADER_LINE_MARGIN);
+  expect(centreLine.maxY).toBe(Math.max(...rects.map((r) => r.maxY)) + LOADER_LINE_MARGIN);
+});
+
+test('red bid bars end at the centre and extend left, teal ask bars start at the centre and extend right', () => {
+  const rects = barsOf(bandOps());
+  const bids = rects.filter((r) => r.style === BID_COLOR);
+  const asks = rects.filter((r) => r.style === ASK_COLOR);
+  expect(bids).toHaveLength(LOADER_ROW_COUNT);
+  expect(asks).toHaveLength(LOADER_ROW_COUNT);
+  for (const bid of bids) {
+    expect(bid.maxX).toBe(95.5);
+    expect(bid.minX).toBeLessThan(95.5);
+  }
+  for (const ask of asks) {
+    expect(ask.minX).toBe(95.5);
+    expect(ask.maxX).toBeGreaterThan(95.5);
+  }
+});
+
+test('the loader bar widths follow the animation helper at the given time', () => {
+  const ops: Op[] = [];
+  drawFixedRangeProfileSpinner(recordInto(ops), renderArgsFor(viewport).viewport, spinnerState(), 777);
+  const rects = barsOf(ops);
+  const widths = loaderRowWidths(777);
+  widths.forEach((row, i) => {
+    const bid = rects.find((r) => r.style === BID_COLOR && r.minY === rects[i * 2].minY)!;
+    expect(bid.maxX - bid.minX).toBeCloseTo(row.bid, 6);
+    const ask = rects.find((r) => r.style === ASK_COLOR && r.minY === rects[i * 2].minY)!;
+    expect(ask.maxX - ask.minX).toBeCloseTo(row.ask, 6);
+  });
+});
+
+const flatWidths = (t: number) => loaderRowWidths(t).flatMap((row) => [row.bid, row.ask]);
+const sampleTimes = Array.from({ length: 400 }, (_, i) => i * 25);
+
+test('loader row widths: five rows, within bounds, deterministic and animated', () => {
+  for (const t of [0, 123, 500, 1234, 9999]) {
+    const rows = loaderRowWidths(t);
+    expect(rows).toHaveLength(LOADER_ROW_COUNT);
+    for (const w of flatWidths(t)) {
+      expect(w).toBeGreaterThanOrEqual(LOADER_MIN_WIDTH);
+      expect(w).toBeLessThanOrEqual(LOADER_MAX_WIDTH);
+    }
+  }
+  expect(loaderRowWidths(321)).toEqual(loaderRowWidths(321));
+  expect(loaderRowWidths(0)).not.toEqual(loaderRowWidths(400));
+});
+
+test('loader bars ease between random targets without jumps', () => {
+  // Smoothstep over a >=350 ms step crosses the 15 px span at <= ~0.065 px/ms, so 16 ms moves < 1.1 px.
+  for (let t = 0; t < 10_000; t += 16) {
+    const before = flatWidths(t);
+    const after = flatWidths(t + 16);
+    before.forEach((w, i) => expect(Math.abs(after[i] - w)).toBeLessThan(1.1));
+  }
+});
+
+test('loader bars do not repeat on a fixed period', () => {
+  for (const period of [1400, 700, 2800]) {
+    const repeats = sampleTimes.filter((t) =>
+      flatWidths(t).every((w, i) => Math.abs(w - flatWidths(t + period)[i]) < 0.01),
+    );
+    expect(repeats.length).toBeLessThan(sampleTimes.length / 20);
+  }
+});
+
+test('loader bars use the whole width range rather than a regular wave', () => {
+  const all = sampleTimes.flatMap(flatWidths);
+  expect(Math.min(...all)).toBeLessThan(LOADER_MIN_WIDTH + 1);
+  expect(Math.max(...all)).toBeGreaterThan(LOADER_MAX_WIDTH - 1);
+});
+
+test('loader bars move independently, not in lockstep or as a mirror image', () => {
+  const series = Array.from({ length: LOADER_ROW_COUNT * 2 }, (_, bar) => sampleTimes.map((t) => flatWidths(t)[bar]));
+  const peakTimes = series.map((widths) => sampleTimes[widths.indexOf(Math.max(...widths))]);
+  expect(new Set(peakTimes).size).toBeGreaterThan(5);
+  const samePattern = (a: number[], b: number[]) => a.every((w, i) => Math.abs(w - b[i]) < 1e-9);
+  for (let i = 1; i < series.length; i += 1) {
+    expect(samePattern(series[0], series[i])).toBe(false);
+  }
+  const mirroredRows = sampleTimes.filter((t) => loaderRowWidths(t).every((row) => Math.abs(row.bid - row.ask) < 0.01));
+  expect(mirroredRows.length).toBeLessThan(sampleTimes.length / 20);
+});
+
+test('the loader uses the profile BID/ASK colours at full alpha', () => {
+  const ops = bandOps();
+  expect(new Set(barsOf(ops).map((r) => [r.style, r.alpha].join()))).toEqual(
+    new Set([`${BID_COLOR},1`, `${ASK_COLOR},1`]),
+  );
+});
+
+test('a band partly off screen centres the loader on its visible part', () => {
+  const ops = paintSpinner(spinnerState({ range: { fromMs: bars[0].time, toMs: bars[9].time } }), {
+    ...viewport,
+    offset: 57,
+  });
+  // Band x: 41 + 4 - 57 = -12 .. 41 + 90 - 57 + 4 = 78 -> clamped to 41 .. 78.
+  expect(linesOf(ops)[0].minX).toBe(59.5);
+});
+
+test('the loader paints nothing unless the loader flagged a slow load', () => {
+  expect(paintSpinner(spinnerState({ loadingIndicator: false }))).toEqual([]);
+  expect(paintSpinner(spinnerState({ range: null }))).toEqual([]);
+  expect(paintSpinner(spinnerState({ previewing: true }))).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// Loading wash: a translucent veil over the range band, under the spinner.
+// ---------------------------------------------------------------------------
+function paintWash(state: FixedRangeProfileState, vp: TestViewport = viewport, handles?: HandleEdges): Op[] {
+  const ops: Op[] = [];
+  drawFixedRangeProfileLoadingWash(recordInto(ops), renderArgsFor(vp).viewport, state, handles);
+  return ops;
+}
+
+test('the loading wash covers exactly the range band over the full pane height', () => {
+  // Band x: anchor 73 .. bar 8 centre 118; pane y 45 .. 445.
+  const ops = paintWash(spinnerState({ range: { fromMs: RANGE_FROM, toMs: bars[8].time } }));
+  expect(ops).toHaveLength(1);
+  expect(ops[0]).toMatchObject({ kind: 'fillRect', minX: 73, maxX: 118, minY: 45, maxY: 445 });
+});
+
+test('the loading wash is the raised palette colour at a partial alpha so candles stay visible', () => {
+  const ops = paintWash(spinnerState({ range: { fromMs: RANGE_FROM, toMs: bars[8].time } }));
+  expect([ops[0].style, ops[0].alpha]).toEqual([palette.raised, LOADING_WASH_ALPHA]);
+  expect(LOADING_WASH_ALPHA).toBeGreaterThan(0);
+  expect(LOADING_WASH_ALPHA).toBeLessThan(1);
+});
+
+test('a band partly off screen gets a wash clamped to the pane', () => {
+  const ops = paintWash(spinnerState({ range: { fromMs: bars[0].time, toMs: bars[9].time } }), {
+    ...viewport,
+    offset: 57,
+  });
+  // Band x: -12 .. 78 -> clamped to 41 .. 78.
+  expect(ops[0]).toMatchObject({ minX: 41, maxX: 78 });
+});
+
+test('the loading wash spans the handle band even when the requested end is clipped short of the right handle', () => {
+  // The request end is clipped to bar 8 (x 118) but the right handle sits on a future slot at x 150.
+  const handles = { fromX: ANCHOR_X, toX: 150 };
+  const state = spinnerState({ range: { fromMs: RANGE_FROM, toMs: bars[8].time } });
+  const ops = paintWash(state, viewport, handles);
+  expect(ops).toHaveLength(1);
+  expect(ops[0]).toMatchObject({ kind: 'fillRect', minX: 73, maxX: 150, minY: 45, maxY: 445 });
+});
+
+test('the loader is centred on the handle band, and both clamp to the pane', () => {
+  const state = spinnerState({ range: { fromMs: RANGE_FROM, toMs: bars[8].time } });
+  expect(linesOf(paintSpinner(state, viewport, { fromX: ANCHOR_X, toX: 150 }))[0].minX).toBe(111.5);
+  // Right handle beyond the pane's right edge (641): the band clamps to it.
+  const wide = { fromX: ANCHOR_X, toX: 900 };
+  expect(paintWash(state, viewport, wide)[0]).toMatchObject({ minX: 73, maxX: 641 });
+  expect(linesOf(paintSpinner(state, viewport, wide))[0].minX).toBe(357);
+});
+
+test('the loading wash paints nothing unless a slow load is flagged on a visible, unpreviewed range', () => {
+  expect(paintWash(spinnerState({ loadingIndicator: false }))).toEqual([]);
+  expect(paintWash(spinnerState({ range: null }))).toEqual([]);
+  expect(paintWash(spinnerState({ previewing: true }))).toEqual([]);
+  // Entirely right of the pane: band 641+ is off screen.
+  expect(paintWash(spinnerState(), { ...viewport, offset: -1000 })).toEqual([]);
+  // Entirely left of the pane.
+  expect(paintWash(spinnerState(), { ...viewport, offset: 1000 })).toEqual([]);
 });

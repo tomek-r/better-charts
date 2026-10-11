@@ -60,9 +60,43 @@ fn transfer_limits_negotiate_and_preserve_legacy_handshakes() {
             max_ticks_per_page: 0,
             ..modern
         },
+        TransferLimits {
+            max_ticks_per_page: 262_145,
+            ..modern
+        },
     ] {
         assert!(modern.negotiate(invalid).is_err());
     }
+}
+
+#[test]
+fn peer_advertising_the_largest_tick_page_is_accepted_and_negotiated() {
+    let modern = TransferLimits::measured_default();
+    assert_eq!(modern.max_ticks_per_page, 262_144);
+    let peer = TransferLimits {
+        max_ticks_per_page: 262_144,
+        ..modern
+    };
+    assert_eq!(modern.negotiate(peer).unwrap().max_ticks_per_page, 262_144);
+    // A legacy 65,535-tick peer still wins the minimum.
+    let older = TransferLimits {
+        max_ticks_per_page: 65_535,
+        ..modern
+    };
+    assert_eq!(modern.negotiate(older).unwrap().max_ticks_per_page, 65_535);
+}
+
+#[test]
+fn tick_history_request_accepts_the_largest_page_and_rejects_beyond() {
+    let request = |max_ticks| TickHistoryRequest {
+        symbol: "EURUSD".into(),
+        from_ms: 1,
+        to_ms: 2,
+        max_ticks,
+    };
+    assert!(request(262_144).validate().is_ok());
+    assert!(request(262_145).validate().is_err());
+    assert!(request(0).validate().is_err());
 }
 
 #[test]

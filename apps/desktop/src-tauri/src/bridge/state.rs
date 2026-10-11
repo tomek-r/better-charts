@@ -209,6 +209,12 @@ pub(crate) struct BridgeState {
     pub(crate) pending_tick_profile: Arc<Mutex<Option<TickProfileRequest>>>,
     pub(crate) expected_tick_profile: Arc<Mutex<Option<(u64, String, TickProfileRequest)>>>,
     pub(crate) tick_controller: Arc<Mutex<TickCacheController>>,
+    /// The tick profile's own bar-history request (load estimate or bar pages),
+    /// kept apart from the chart's `*_history_page` slots so neither pipeline
+    /// can displace or consume the other's request. The `u64` is the
+    /// controller generation the request belongs to.
+    pub(crate) pending_profile_bars: Arc<Mutex<Option<(u64, HistoryRequest)>>>,
+    pub(crate) expected_profile_bars: Arc<Mutex<Option<(u64, String, HistoryRequest)>>>,
     pub(crate) pending_symbol_search: Arc<Mutex<Option<SymbolSearchRequest>>>,
     pub(crate) expected_symbol_search: Arc<Mutex<Option<(String, SymbolSearchRequest)>>>,
     pub(crate) pending_symbol_info: Arc<Mutex<Option<SymbolInfoRequest>>>,
@@ -297,16 +303,106 @@ pub(crate) struct CompactTickProfile {
     pub(crate) counts: trading_core::volume_profile::FixedRangeProfileAccumulator,
 }
 
+/// Why a full-range profile stopped. Every variant ends the profile without
+/// painting a partial histogram; the distinction only informs the user which
+/// constraint to relax.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TickProfileLimit {
+    Pages,
+    DistinctPrices,
+    CountOverflow,
+    TickSizeChanged,
+    InvalidTick,
+    UncertifiableMillisecond,
+}
+
+impl TickProfileLimit {
+    /// Maps the accumulator's static error strings; unknown text is treated
+    /// as an overflow-class failure rather than blamed on the price limit.
+    pub(crate) fn from_accumulator_error(error: &str) -> Self {
+        match error {
+            "too many distinct profile prices" => Self::DistinctPrices,
+            _ => Self::CountOverflow,
+        }
+    }
+
+    pub(crate) fn message(self) -> String {
+        match self {
+            Self::Pages => format!(
+                "Profile range needs more than {MAX_ACTIVE_TICK_PAGES} tick pages; select a shorter range"
+            ),
+            Self::DistinctPrices => format!(
+                "Profile range has more than {} distinct prices; select a shorter range",
+                group_thousands(MAX_PROFILE_PRICES)
+            ),
+            Self::CountOverflow => {
+                "Profile tick counts overflowed; select a shorter range".to_owned()
+            }
+            Self::TickSizeChanged => {
+                "Symbol tick size changed during the profile; select a shorter range".to_owned()
+            }
+            Self::InvalidTick => {
+                "Profile range contains an unreadable tick price; select a shorter range"
+                    .to_owned()
+            }
+            Self::UncertifiableMillisecond => {
+                "A single millisecond holds more ticks than one page; select a shorter range"
+                    .to_owned()
+            }
+        }
+    }
+}
+
+fn group_thousands(value: usize) -> String {
+    let digits = value.to_string();
+    let mut grouped = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    grouped
+}
+
 #[derive(Debug)]
 pub(crate) enum TickPageResult {
     Stale,
     Next(TickProfileRequest),
     Final(TickHistorySnapshot, TickProfileRequest),
     Streamed(CompactTickProfile, TickProfileRequest),
-    Limit(TickProfileRequest),
+    Limit(TickProfileRequest, TickProfileLimit),
     Error(&'static str),
 }
 
-pub(crate) const MAX_ACTIVE_TICK_PAGES: usize = 512;
+pub(crate) const MAX_ACTIVE_TICK_PAGES: usize = 2048;
 pub(crate) const MAX_RETAINED_PROFILE_TICKS: usize = 250_000;
-pub(crate) const MAX_PROFILE_PRICES: usize = 250_000;
+// Cached pages stay resident after a profile ends, so the cache is bounded tighter than
+// the accumulator.
+pub(crate) const MAX_CACHED_SUMMARY_PRICES: usize = 250_000;
+// Exact per-price aggregation; 1M prices is a ~10,000-point span at a 0.01 tick.
+pub(crate) const MAX_PROFILE_PRICES: usize = 1_000_000;
+
+/// Longest bar series the approximate profile will page in; the bar timeframe
+/// is the smallest one that keeps the range under it.
+pub(crate) const MAX_PROFILE_BARS: u64 = 200_000;
+/// Bar pages one approximate profile may request: the bar bound over the
+/// 1000-bar page plus slack for the partial edge pages and calendar months.
+pub(crate) const MAX_PROFILE_BAR_PAGES: usize = 220;
+/// Bar series kept between profile requests (one per symbol and timeframe),
+/// each trimmed to `MAX_PROFILE_BARS`: about 45 MB per full series.
+pub(crate) const MAX_CACHED_BAR_SERIES: usize = 3;
+/// Pages a refresh may page back looking for the cached series before it
+/// gives up on the cache (a long pause) and fetches the range fresh.
+pub(crate) const MAX_CACHE_BRIDGE_PAGES: usize = 8;
+/// Coarser timeframes one approximate profile may try after the history of a
+/// finer one ends inside the range. Each retry walks the whole range again,
+/// but coarser timeframes need fewer pages, so the total stays near twice the
+/// first walk.
+pub(crate) const MAX_HISTORY_RETRIES: usize = 10;
+/// The coarsest timeframe a history retry goes to: beyond a day a bar is too
+/// coarse to say anything about where volume traded.
+pub(crate) const COARSEST_RETRY_TIMEFRAME: &str = "D1";
+/// History starts remembered between profile requests (symbol and timeframe
+/// each): a few bytes apiece, so many more than series are kept.
+pub(crate) const MAX_REMEMBERED_HISTORY_STARTS: usize = 64;

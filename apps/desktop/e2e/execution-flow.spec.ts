@@ -1156,6 +1156,9 @@ test('fixed range volume profile survives a timeframe switch and clears on a sym
     for (; delivered < requests.length; delivered += 1) {
       const request = requests[delivered];
       await pushEvent(page, 'tick-profile', {
+        source: 'ticks',
+        barTimeframe: null,
+        coveredFromMs: null,
         symbol: request.args.symbol,
         fromMs: request.args.fromMs,
         endMs: request.args.endMs,

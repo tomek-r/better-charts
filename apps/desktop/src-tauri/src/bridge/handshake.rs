@@ -1,6 +1,6 @@
 use super::{
-    disconnect, invalidate_validated_order_check, now_ms, protocol_error, protocol_error_session,
-    publish, publish_market, publish_reconciliation_status, read_one,
+    clear_profile_bar_slots, disconnect, invalidate_validated_order_check, now_ms, protocol_error,
+    protocol_error_session, publish, publish_market, publish_reconciliation_status, read_one,
     reconciliation_request_status, reset_reconciliation, send, send_error, BridgeConnectionState,
     BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource, MarketSnapshot,
     PendingReconciliation, ReconciliationStatus, HANDSHAKE_TIMEOUT,
@@ -270,6 +270,7 @@ pub(crate) async fn run_handshake(
         .lock()
         .expect("tick controller mutex poisoned")
         .clear();
+    clear_profile_bar_slots(state);
     *state
         .pending_symbol_search
         .lock()

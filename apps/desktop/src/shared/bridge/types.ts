@@ -166,7 +166,23 @@ export interface ProfileLevels {
   val: string;
 }
 
+/** Where a profile's volumes come from; bar profiles are an approximation. */
+export type ProfileSource = 'ticks' | 'bars';
+
 export interface ProfileResult {
+  /**
+   * `bars`: approximate profile built from OHLC bars because the tick load was too large. Its `bid` series holds
+   * DOWN volume and its `ask` series UP volume (a bar has no quote sides).
+   */
+  source: ProfileSource;
+  /** Timeframe code of the bars behind a `bars` profile (e.g. "M1"); null for ticks. */
+  barTimeframe: string | null;
+  /**
+   * Open time (UTC ms) of the oldest bar behind a `bars` profile when the broker's history starts inside the
+   * requested range, so the profile does not cover its beginning. null when the whole range is covered (always for
+   * ticks).
+   */
+  coveredFromMs: number | null;
   symbol: string;
   fromMs: number;
   endMs: number;

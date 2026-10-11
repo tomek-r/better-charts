@@ -1,8 +1,16 @@
 use rust_decimal::Decimal;
 
+mod bar_profile;
+mod bar_series;
 mod fixed_range;
 mod legacy;
 mod range_planning;
+pub use bar_profile::{
+    bar_close_ms, bar_timeframe_for_range, bar_timeframes_coarser_than, bars_overlapping_range,
+    calculate_bar_profile, estimate_profile_load, partial_coverage_start, ProfileBudget,
+    ProfileLoadEstimate,
+};
+pub use bar_series::{BarCoverage, BarSeries, BarSeriesError};
 pub use fixed_range::{
     calculate_fixed_range_profile, FixedRangeBin, FixedRangeProfile, FixedRangeProfileAccumulator,
     FixedRangeProfileConfig,

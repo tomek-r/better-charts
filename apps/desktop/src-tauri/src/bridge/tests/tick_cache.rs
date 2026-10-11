@@ -252,7 +252,7 @@ fn dense_history_loads_in_full_pages_without_refetching_time_halves() {
             let (generation, page) = controller.next_page().unwrap();
             let start = ticks.partition_point(|tick| tick.time_ms < page.wire.from_ms);
             let end = ticks.partition_point(|tick| tick.time_ms < page.wire.to_ms);
-            let count = usize::from(page.wire.max_ticks);
+            let count = usize::try_from(page.wire.max_ticks).unwrap();
             let page_end = (start + count).min(end);
             let payload = ticks[start..page_end].to_vec();
             transferred_ticks += payload.len();
@@ -338,9 +338,162 @@ fn active_page_limit_stops_without_falsely_completing_the_range() {
     controller.active.as_mut().unwrap().completed_pages = MAX_ACTIVE_TICK_PAGES;
     assert!(matches!(
         controller.ingest(generation, tick_snapshot(1, 2, true, vec![market_tick(1)])),
-        TickPageResult::Limit(_)
+        TickPageResult::Limit(_, TickProfileLimit::Pages)
     ));
     assert_eq!(controller.active.as_ref().unwrap().loaded_ticks, 1);
+}
+
+#[test]
+fn distinct_price_limit_reports_its_own_reason() {
+    let mut controller = TickCacheController::default();
+    controller.begin(tick_request(0, 2));
+    let generation = controller.generation;
+    let mut compact = CompactTickProfile {
+        tick_size: "0.1".into(),
+        complete: false,
+        counts: trading_core::volume_profile::FixedRangeProfileAccumulator::new(MAX_PROFILE_PRICES),
+    };
+    for index in 0..MAX_PROFILE_PRICES {
+        compact
+            .counts
+            .merge_price_counts(
+                rust_decimal::Decimal::from(index as u64 + 1000),
+                [1, 1, 0],
+                true,
+            )
+            .unwrap();
+    }
+    controller.active.as_mut().unwrap().compact = Some(compact);
+    assert!(matches!(
+        controller.ingest(generation, tick_snapshot(0, 2, true, vec![market_tick(0)])),
+        TickPageResult::Limit(_, TickProfileLimit::DistinctPrices)
+    ));
+}
+
+/// Page of `count` distinct tick-size-0.01 prices, each seen once as a BID.
+/// 65,535 is the largest page the wire allows (`loaded_ticks == count`).
+fn distinct_price_page(
+    from_ms: i64,
+    complete: bool,
+    first_index: usize,
+    count: usize,
+) -> trading_core::protocol::TickPriceHistorySnapshot {
+    let price = |index: usize| format!("{}.{:02}", 1000 + index / 100, index % 100);
+    trading_core::protocol::TickPriceHistorySnapshot {
+        request_id: "page".into(),
+        symbol: "NAS".into(),
+        from_ms,
+        to_ms: 1000,
+        tick_size: "0.01".into(),
+        complete,
+        through_ms: if complete { 1000 } else { from_ms + 1 },
+        loaded_ticks: count as u32,
+        rejected_ticks: 0,
+        min_quote: Some(price(first_index)),
+        max_quote: Some(price(first_index + count - 1)),
+        prices: (first_index..first_index + count)
+            .map(|index| trading_core::protocol::TickPriceCount {
+                price: price(index),
+                total: 1,
+                bid: 0,
+                ask: 0,
+                bid_seen: true,
+            })
+            .collect(),
+    }
+}
+
+/// Streams `pages` full distinct-price pages for one range; the last is complete.
+fn ingest_distinct_price_pages(
+    controller: &mut TickCacheController,
+    pages: usize,
+) -> TickPageResult {
+    const PAGE_PRICES: usize = 65_535;
+    let mut request = tick_request(0, 1000);
+    request.wire.max_ticks = 65_535;
+    controller.begin(request);
+    let generation = controller.generation;
+    let mut result = TickPageResult::Stale;
+    for index in 0..pages {
+        let page = distinct_price_page(
+            index as i64,
+            index + 1 == pages,
+            index * PAGE_PRICES,
+            PAGE_PRICES,
+        );
+        result = controller.ingest_price_counts(generation, page);
+    }
+    result
+}
+
+#[test]
+fn profile_above_the_former_250k_price_cap_completes() {
+    let mut controller = TickCacheController::default();
+    let TickPageResult::Streamed(compact, _) = ingest_distinct_price_pages(&mut controller, 5)
+    else {
+        panic!("a 327,675-price profile must complete");
+    };
+    assert_eq!(compact.counts.price_count(), 5 * 65_535);
+}
+
+#[test]
+fn summary_cache_trims_at_250k_prices_independently_of_the_accumulator_cap() {
+    let mut controller = TickCacheController::default();
+    assert!(matches!(
+        ingest_distinct_price_pages(&mut controller, 5),
+        TickPageResult::Streamed(..)
+    ));
+    let cached: usize = controller
+        .price_entries
+        .iter()
+        .map(|p| p.prices.len())
+        .sum();
+    assert!(cached <= MAX_CACHED_SUMMARY_PRICES, "{cached}");
+    assert!(
+        cached > MAX_CACHED_SUMMARY_PRICES - 65_535,
+        "only whole oldest pages are evicted: {cached}"
+    );
+    assert_eq!(MAX_CACHED_SUMMARY_PRICES, 250_000);
+}
+
+#[test]
+fn tick_size_change_is_not_reported_as_a_price_limit() {
+    let mut controller = TickCacheController::default();
+    controller.begin(tick_request(0, 2));
+    let generation = controller.generation;
+    controller.active.as_mut().unwrap().compact = Some(CompactTickProfile {
+        tick_size: "0.5".into(),
+        complete: false,
+        counts: trading_core::volume_profile::FixedRangeProfileAccumulator::new(MAX_PROFILE_PRICES),
+    });
+    assert!(matches!(
+        controller.ingest(generation, tick_snapshot(0, 2, true, vec![market_tick(0)])),
+        TickPageResult::Limit(_, TickProfileLimit::TickSizeChanged)
+    ));
+}
+
+#[test]
+fn tick_profile_limit_messages_name_the_limit_that_fired() {
+    let messages = [
+        TickProfileLimit::Pages,
+        TickProfileLimit::DistinctPrices,
+        TickProfileLimit::CountOverflow,
+        TickProfileLimit::TickSizeChanged,
+        TickProfileLimit::InvalidTick,
+        TickProfileLimit::UncertifiableMillisecond,
+    ]
+    .map(TickProfileLimit::message);
+    assert_eq!(
+        messages[0],
+        "Profile range needs more than 2048 tick pages; select a shorter range"
+    );
+    assert_eq!(
+        messages[1],
+        "Profile range has more than 1,000,000 distinct prices; select a shorter range"
+    );
+    for (index, message) in messages.iter().enumerate() {
+        assert!(!messages[..index].contains(message), "{message}");
+    }
 }
 
 fn generation(controller: &TickCacheController) -> u64 {
@@ -572,7 +725,7 @@ fn multi_day_profile_streams_past_the_old_tick_cap_and_includes_late_prices() {
         // Crossing 250k no longer reduces the wire page to one tick.
         assert_eq!(page.wire.max_ticks, 65535);
         let start = ticks.partition_point(|tick| tick.time_ms < page.wire.from_ms);
-        let end = (start + usize::from(page.wire.max_ticks)).min(ticks.len());
+        let end = (start + usize::try_from(page.wire.max_ticks).unwrap()).min(ticks.len());
         pages += 1;
         let result = controller.ingest(
             generation,
@@ -721,7 +874,7 @@ fn remote_price_pages_preserve_all_ticks_reuse_cache_and_never_clip_counts() {
     let compact = loop {
         let (generation, page) = controller.next_page().unwrap();
         let start = ticks.partition_point(|tick| tick.time_ms < page.wire.from_ms);
-        let end = (start + usize::from(page.wire.max_ticks)).min(ticks.len());
+        let end = (start + usize::try_from(page.wire.max_ticks).unwrap()).min(ticks.len());
         let complete = end == ticks.len();
         let through = if complete {
             page.wire.to_ms

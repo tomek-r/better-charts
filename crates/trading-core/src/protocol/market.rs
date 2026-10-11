@@ -337,7 +337,7 @@ pub struct TickHistoryRequest {
     pub symbol: String,
     pub from_ms: i64,
     pub to_ms: i64,
-    pub max_ticks: u16,
+    pub max_ticks: u32,
 }
 
 impl TickHistoryRequest {
@@ -345,7 +345,7 @@ impl TickHistoryRequest {
         if self.symbol.is_empty()
             || self.from_ms < 0
             || self.from_ms >= self.to_ms
-            || self.max_ticks == 0
+            || !(1..=super::max_ticks_per_page()).contains(&self.max_ticks)
         {
             return Err("invalid tick history request");
         }
@@ -393,7 +393,7 @@ impl TickHistorySnapshot {
             || self.symbol != request.symbol
             || self.from_ms != request.from_ms
             || self.to_ms != request.to_ms
-            || self.ticks.len() > usize::from(request.max_ticks)
+            || u32::try_from(self.ticks.len()).map_or(true, |count| count > request.max_ticks)
         {
             return Err("tick history request mismatch");
         }
@@ -460,7 +460,7 @@ impl TickPriceHistorySnapshot {
             || self.symbol != request.symbol
             || self.from_ms != request.from_ms
             || self.to_ms != request.to_ms
-            || self.loaded_ticks > u32::from(request.max_ticks)
+            || self.loaded_ticks > request.max_ticks
             || self.rejected_ticks > self.loaded_ticks
             || self.through_ms < self.from_ms
             || self.through_ms > self.to_ms

@@ -14,8 +14,16 @@ const CONFIG: &str = include_str!("../../../../config/bridge.json");
 #[serde(rename_all = "camelCase")]
 struct BridgeConfig {
     frame_bytes: FrameBytes,
+    ticks_per_page: TicksPerPage,
     history_bars: u16,
     initial_history_bars: u16,
+    tick_profile: TickProfileBudget,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TickProfileBudget {
+    max_estimated_ticks: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -23,6 +31,12 @@ struct BridgeConfig {
 struct FrameBytes {
     default: u32,
     min: u32,
+    max: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct TicksPerPage {
+    default: u32,
     max: u32,
 }
 
@@ -59,6 +73,17 @@ pub fn default_frame_bytes() -> u32 {
     config().frame_bytes.default
 }
 
+/// Largest tick page a peer may advertise; also the bound of one tick request.
+/// The EA keeps its own literal (it cannot read this file) as `InpBridgeMaxTicksPerPage`.
+pub fn max_ticks_per_page() -> u32 {
+    config().ticks_per_page.max
+}
+
+/// Tick page size this side advertises when nothing else limits it.
+pub fn default_ticks_per_page() -> u32 {
+    config().ticks_per_page.default
+}
+
 /// Bars per history request; `HistoryRequest::bars` is bounded by it.
 pub fn history_bars() -> u16 {
     config().history_bars
@@ -71,9 +96,22 @@ pub fn initial_history_bars() -> u16 {
     config().initial_history_bars
 }
 
+/// Desktop budget of the exact tick profile: a range whose bars estimate more
+/// ticks than this is profiled from bars instead (desktop-only; the EA never
+/// reads it).
+pub fn max_estimated_profile_ticks() -> u64 {
+    config().tick_profile.max_estimated_ticks
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tick_profile_budget_is_positive_and_below_a_hundred_million() {
+        assert!(max_estimated_profile_ticks() >= 1);
+        assert!(max_estimated_profile_ticks() <= 100_000_000);
+    }
 
     #[test]
     fn frame_bounds_are_ordered_and_leave_room_for_the_header() {
@@ -82,6 +120,12 @@ mod tests {
         assert!(default_frame_bytes() <= max_frame_bytes());
         // MQL5 arrays and SocketRead use signed 32-bit lengths.
         assert_eq!(max_frame_bytes() + 4, i32::MAX as u32);
+    }
+
+    #[test]
+    fn tick_page_default_is_within_the_maximum() {
+        assert!(default_ticks_per_page() >= 1);
+        assert!(default_ticks_per_page() <= max_ticks_per_page());
     }
 
     #[test]

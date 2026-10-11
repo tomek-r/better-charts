@@ -1,10 +1,11 @@
 mod calculation;
 pub(crate) use calculation::*;
 
+use super::TickProfileLimit;
 use super::{
     ActiveTickProfile, CachedTickRange, CompactTickProfile, TickHistorySnapshot, TickPageResult,
     TickProfileCancelledView, TickProfileProgress, TickProfileRequest, MAX_ACTIVE_TICK_PAGES,
-    MAX_PROFILE_PRICES, MAX_RETAINED_PROFILE_TICKS,
+    MAX_CACHED_SUMMARY_PRICES, MAX_PROFILE_PRICES, MAX_RETAINED_PROFILE_TICKS,
 };
 use std::collections::VecDeque;
 use trading_core::protocol::TickPriceHistorySnapshot;
@@ -18,6 +19,14 @@ pub(crate) struct TickCacheController {
     pub(crate) price_entries: VecDeque<TickPriceHistorySnapshot>,
     pub(crate) active: Option<ActiveTickProfile>,
     pub(crate) generation: u64,
+    /// Bar-history work of the current profile (estimate or approximate
+    /// profile); owned by the same generation as `active`.
+    pub(crate) bar_job: Option<super::ProfileBarJob>,
+    /// Bars fetched for approximate profiles; survives `begin`/`cancel` (an
+    /// open range refreshes constantly) and is dropped with the tick cache.
+    pub(crate) bar_cache: super::ProfileBarCache,
+    /// When the current profile request began, for the completion log line.
+    pub(crate) profile_started: Option<std::time::Instant>,
 }
 
 impl TickCacheController {
@@ -34,6 +43,8 @@ impl TickCacheController {
         request: TickProfileRequest,
     ) -> Vec<trading_core::volume_profile::TickRange> {
         self.generation += 1;
+        self.bar_job = None;
+        self.profile_started = Some(std::time::Instant::now());
         let range = trading_core::volume_profile::TickRange {
             start_ms: request.wire.from_ms,
             end_ms: request.wire.to_ms,
@@ -135,7 +146,7 @@ impl TickCacheController {
             for page in &summaries {
                 Self::accumulate_summary(&mut compact, page)?;
             }
-            Ok::<_, &'static str>(())
+            Ok::<_, TickProfileLimit>(())
         })();
         if merge.is_err() {
             return gaps;
@@ -161,12 +172,20 @@ impl TickCacheController {
     pub(crate) fn cancel(&mut self) {
         self.generation += 1;
         self.active = None;
+        self.bar_job = None;
     }
 
     pub(crate) fn clear(&mut self) {
         self.cancel();
         self.entries.clear();
         self.price_entries.clear();
+        self.bar_cache.clear();
+    }
+
+    /// Cancels the profile and forgets cached bars: the session is gone.
+    pub(crate) fn end_session(&mut self) {
+        self.cancel();
+        self.bar_cache.clear();
     }
     pub(crate) fn next_page(&self) -> Option<(u64, TickProfileRequest)> {
         let active = self.active.as_ref()?;
@@ -198,11 +217,15 @@ impl TickCacheController {
     }
 
     pub(crate) fn cancelled_view(&self) -> Option<TickProfileCancelledView> {
-        let active = self.active.as_ref()?;
+        let request = self
+            .active
+            .as_ref()
+            .map(|active| &active.request)
+            .or_else(|| self.bar_job.as_ref().map(|job| &job.request))?;
         Some(TickProfileCancelledView {
-            symbol: active.request.wire.symbol.clone(),
-            from_ms: active.request.wire.from_ms,
-            end_ms: active.request.wire.to_ms,
+            symbol: request.wire.symbol.clone(),
+            from_ms: request.wire.from_ms,
+            end_ms: request.wire.to_ms,
         })
     }
 
@@ -259,7 +282,7 @@ impl TickCacheController {
             return TickPageResult::Error("invalid tick history snapshot");
         }
         if active.completed_pages >= MAX_ACTIVE_TICK_PAGES {
-            return TickPageResult::Limit(active.request.clone());
+            return TickPageResult::Limit(active.request.clone(), TickProfileLimit::Pages);
         }
         let accepted_range = if snapshot.complete {
             Some(range)
@@ -291,8 +314,8 @@ impl TickCacheController {
         let active = self.active.as_mut().expect("active checked above");
         active.completed_pages += 1;
         if let Some(accepted) = accepted_range {
-            if Self::store_page(active, snapshot).is_err() {
-                return TickPageResult::Limit(active.request.clone());
+            if let Err(limit) = Self::store_page(active, snapshot) {
+                return TickPageResult::Limit(active.request.clone(), limit);
             }
             if accepted.end_ms == range.end_ms {
                 active.gaps.remove(0);
@@ -311,8 +334,8 @@ impl TickCacheController {
                 end_ms: range.end_ms,
             });
         } else {
-            if Self::store_page(active, snapshot).is_err() {
-                return TickPageResult::Limit(active.request.clone());
+            if let Err(limit) = Self::store_page(active, snapshot) {
+                return TickPageResult::Limit(active.request.clone(), limit);
             }
             active.incomplete = true;
             active.gaps.retain(|gap| *gap != range);
@@ -329,11 +352,24 @@ impl TickCacheController {
             };
         }
         if active.completed_pages >= MAX_ACTIVE_TICK_PAGES {
-            return TickPageResult::Limit(active.request.clone());
+            return TickPageResult::Limit(active.request.clone(), TickProfileLimit::Pages);
         }
         let next = active.gaps.first().copied().expect("non-empty gaps");
         let page = Self::page_request(active, next);
         TickPageResult::Next(page)
+    }
+
+    /// Milliseconds since the current profile began, and the tick pages it
+    /// has fetched so far.
+    pub(crate) fn profile_stats(&self) -> (u64, usize) {
+        let elapsed = self.profile_started.map_or(0, |started| {
+            u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
+        });
+        let pages = self
+            .active
+            .as_ref()
+            .map_or(0, |active| active.completed_pages);
+        (elapsed, pages)
     }
 
     pub(crate) fn finish(&mut self) {
@@ -366,7 +402,7 @@ impl TickCacheController {
             return TickPageResult::Error("invalid tick price history snapshot");
         }
         if active.completed_pages >= MAX_ACTIVE_TICK_PAGES {
-            return TickPageResult::Limit(active.request.clone());
+            return TickPageResult::Limit(active.request.clone(), TickProfileLimit::Pages);
         }
         if active.compact.is_none() {
             let mut compact = CompactTickProfile {
@@ -375,16 +411,16 @@ impl TickCacheController {
                 counts: FixedRangeProfileAccumulator::new(MAX_PROFILE_PRICES),
             };
             for part in &active.parts {
-                if Self::accumulate_page(&mut compact, part).is_err() {
-                    return TickPageResult::Limit(active.request.clone());
+                if let Err(limit) = Self::accumulate_page(&mut compact, part) {
+                    return TickPageResult::Limit(active.request.clone(), limit);
                 }
             }
             active.parts.clear();
             active.compact = Some(compact);
         }
         let compact = active.compact.as_mut().expect("compact initialized");
-        if Self::accumulate_summary(compact, &snapshot).is_err() {
-            return TickPageResult::Limit(active.request.clone());
+        if let Err(limit) = Self::accumulate_summary(compact, &snapshot) {
+            return TickPageResult::Limit(active.request.clone(), limit);
         }
         if snapshot.through_ms > snapshot.from_ms && snapshot.through_ms <= super::now_ms() {
             let mut cached = snapshot.clone();
@@ -401,7 +437,7 @@ impl TickCacheController {
                 .iter()
                 .map(|page| page.prices.len())
                 .sum::<usize>();
-            while self.price_entries.len() > 128 || prices > MAX_PROFILE_PRICES {
+            while self.price_entries.len() > 128 || prices > MAX_CACHED_SUMMARY_PRICES {
                 if let Some(page) = self.price_entries.pop_front() {
                     prices -= page.prices.len();
                 } else {
@@ -427,7 +463,10 @@ impl TickCacheController {
             );
         } else {
             // Cannot certify an overflowing millisecond; never count a sampled prefix.
-            return TickPageResult::Limit(active.request.clone());
+            return TickPageResult::Limit(
+                active.request.clone(),
+                TickProfileLimit::UncertifiableMillisecond,
+            );
         }
         if active.gaps.is_empty() {
             let mut compact = active.compact.take().expect("compact initialized");
@@ -435,7 +474,7 @@ impl TickCacheController {
             return TickPageResult::Streamed(compact, active.request.clone());
         }
         if active.completed_pages >= MAX_ACTIVE_TICK_PAGES {
-            return TickPageResult::Limit(active.request.clone());
+            return TickPageResult::Limit(active.request.clone(), TickProfileLimit::Pages);
         }
         TickPageResult::Next(Self::page_request(active, active.gaps[0]))
     }
@@ -443,12 +482,12 @@ impl TickCacheController {
     fn accumulate_summary(
         compact: &mut CompactTickProfile,
         snapshot: &TickPriceHistorySnapshot,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), TickProfileLimit> {
         if compact.tick_size != snapshot.tick_size {
-            return Err("tick size changed during tick profile");
+            return Err(TickProfileLimit::TickSizeChanged);
         }
         for item in &snapshot.prices {
-            if compact
+            compact
                 .counts
                 .merge_price_counts(
                     item.price.parse().expect("validated price"),
@@ -459,10 +498,7 @@ impl TickCacheController {
                     ],
                     item.bid_seen,
                 )
-                .is_err()
-            {
-                return Err("too many distinct profile prices");
-            }
+                .map_err(TickProfileLimit::from_accumulator_error)?;
         }
         let quotes = snapshot
             .min_quote
@@ -474,14 +510,10 @@ impl TickCacheController {
                     high.parse().expect("validated maximum"),
                 )
             });
-        if compact
+        compact
             .counts
             .merge_quote_range(u64::from(snapshot.rejected_ticks), quotes)
-            .is_err()
-        {
-            return Err("too many distinct profile prices");
-        }
-        Ok(())
+            .map_err(TickProfileLimit::from_accumulator_error)
     }
 
     pub(crate) fn final_streamed_from_cache(
@@ -512,7 +544,7 @@ impl TickCacheController {
     fn store_page(
         active: &mut ActiveTickProfile,
         snapshot: TickHistorySnapshot,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), TickProfileLimit> {
         let count = snapshot.ticks.len();
         if active.compact.is_none()
             && count > MAX_RETAINED_PROFILE_TICKS.saturating_sub(active.loaded_ticks)
@@ -540,17 +572,26 @@ impl TickCacheController {
     fn accumulate_page(
         compact: &mut CompactTickProfile,
         snapshot: &TickHistorySnapshot,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), TickProfileLimit> {
         if compact.tick_size != snapshot.tick_size {
-            return Err("tick size changed during tick profile");
+            return Err(TickProfileLimit::TickSizeChanged);
         }
         for tick in &snapshot.ticks {
-            compact.counts.push(&ProfileTick {
-                time_millis: tick.time_ms,
-                bid: tick.bid.parse().map_err(|_| "invalid tick bid")?,
-                ask: tick.ask.parse().map_err(|_| "invalid tick ask")?,
-                flags: tick.flags,
-            })?;
+            compact
+                .counts
+                .push(&ProfileTick {
+                    time_millis: tick.time_ms,
+                    bid: tick
+                        .bid
+                        .parse()
+                        .map_err(|_| TickProfileLimit::InvalidTick)?,
+                    ask: tick
+                        .ask
+                        .parse()
+                        .map_err(|_| TickProfileLimit::InvalidTick)?,
+                    flags: tick.flags,
+                })
+                .map_err(TickProfileLimit::from_accumulator_error)?;
         }
         Ok(())
     }

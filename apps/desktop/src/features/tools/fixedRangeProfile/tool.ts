@@ -11,7 +11,12 @@ import {
 } from '../../chart/engine/toolContract';
 import { palette } from '../../../shared/theme/palette';
 import { FixedRangeProfileLoader } from './loader';
-import { drawFixedRangeProfile, type FixedRangeProfileState } from './overlay';
+import {
+  drawFixedRangeProfile,
+  drawFixedRangeProfileLoadingWash,
+  drawFixedRangeProfileSpinner,
+  type FixedRangeProfileState,
+} from './overlay';
 import { isRangeOpen, rangeEndingAtAnchor, sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './range';
 
 /** Where the two drag handles sit, in pane CSS px, and the range they delimit. */
@@ -244,7 +249,11 @@ export class FixedRangeProfileTool implements ChartTool {
     ctx.save();
     drawFixedRangeProfile(ctx, viewport, this.state);
     ctx.restore();
+    // Veil the histogram but not the handles, which stay crisp; the spinner goes on top of both.
+    const handles = this.boundaries() ?? undefined;
+    drawFixedRangeProfileLoadingWash(ctx, viewport, this.state, handles);
     this.drawSelection(ctx, viewport);
+    drawFixedRangeProfileSpinner(ctx, viewport, this.state, Date.now(), handles);
   }
 
   private drawSelection(ctx: CanvasRenderingContext2D, viewport: ChartDrawTarget['viewport']): void {
