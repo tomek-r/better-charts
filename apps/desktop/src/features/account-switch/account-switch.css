@@ -29,6 +29,15 @@
   font-weight: 500;
 }
 
+.account-switch-algo {
+  margin: -8px 0 20px;
+  font-size: 14px;
+}
+
+.account-switch-algo.warn {
+  color: var(--color-warn-text);
+}
+
 .account-switch-dismiss {
   display: block;
   margin-left: auto;

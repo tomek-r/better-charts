@@ -7,6 +7,7 @@ import { useOrderTicketActions, useOrderTicketStores } from '../order-ticket/sta
 import type { OrderTicketStores } from '../order-ticket/state/orderTicketStores';
 import { AccountSwitchDialog } from './AccountSwitchDialog';
 import { accountSwitchMessage, isAccountSwitch, type AccountIdentity } from './accountSwitch';
+import { useTradingEnabled } from './useTradingEnabled';
 
 /** Clears the sizing/OrderCheck stores and invalidates every in-flight reply. */
 function clearBrokerState({ broker, coordination }: OrderTicketStores) {
@@ -41,6 +42,7 @@ function clearOverlayDrag(overlay: { current: PositionOverlayState }) {
  */
 export function AccountSwitchGuard() {
   const account = useBridgeAccount();
+  const tradingEnabled = useTradingEnabled();
   const stores = useOrderTicketStores();
   const { clearStagedWidget, resetTicketToDefaults } = useOrderTicketActions();
   const { chart, positionOverlayState, setPendingModification } = useChartResources();
@@ -78,5 +80,5 @@ export function AccountSwitchGuard() {
     }
   }, [login, server, announceSwitch]);
 
-  return notice ? <AccountSwitchDialog message={notice} onDismiss={dismiss} /> : null;
+  return notice ? <AccountSwitchDialog message={notice} tradingEnabled={tradingEnabled} onDismiss={dismiss} /> : null;
 }

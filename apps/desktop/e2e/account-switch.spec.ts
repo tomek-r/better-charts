@@ -28,7 +28,11 @@ const NEW_ACCOUNT = {
 };
 
 /** The EA reconnects with the new login: the bridge re-handshakes, then re-sends the account. */
-async function switchAccount(page: Page, account: typeof NEW_ACCOUNT = NEW_ACCOUNT): Promise<void> {
+async function switchAccount(
+  page: Page,
+  account: typeof NEW_ACCOUNT = NEW_ACCOUNT,
+  tradingEnabled = true,
+): Promise<void> {
   await pushEvent(page, 'bridge-status', { state: 'disconnected', message: 'account identity changed' });
   await pushEvent(page, 'bridge-status', {
     state: 'connected',
@@ -36,6 +40,7 @@ async function switchAccount(page: Page, account: typeof NEW_ACCOUNT = NEW_ACCOU
     terminal: 'MetaTrader 5 (demo)',
     account: account.accountLogin,
     server: account.brokerServer,
+    tradingEnabled,
     marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: 1745700000000 },
   });
   await pushEvent(page, 'market-snapshot', {
@@ -87,6 +92,38 @@ test('an account switch clears staged drafts and announces the new account in a 
   await page.keyboard.press('Enter');
   await expect(dialog).toBeHidden();
   expectNoErrors(collected);
+});
+
+test('the dialog states that algo trading is enabled', async ({ page }) => {
+  await gotoWithStub(page);
+  await openTradePanel(page);
+  await switchAccount(page);
+  const status = switchedDialog(page, 'Account was switched to Real 70001234').getByRole('status');
+  await expect(status).toHaveText('Algo trading is enabled');
+  await expect(status).toHaveAttribute('data-algo-trading', 'enabled');
+});
+
+test('the dialog warns when algo trading is disabled and updates live once it is turned on', async ({ page }) => {
+  await gotoWithStub(page);
+  await openTradePanel(page);
+  await switchAccount(page, NEW_ACCOUNT, false);
+  const status = switchedDialog(page, 'Account was switched to Real 70001234').getByRole('status');
+  await expect(status).toHaveText(
+    "Algo trading is disabled in MT5 — orders can't be sent. Turn on Algo Trading in MT5.",
+  );
+  await expect(status).toHaveAttribute('data-algo-trading', 'disabled');
+
+  // The EA reconnects after Algo Trading is turned on: same account, new session.
+  await pushEvent(page, 'bridge-status', {
+    state: 'connected',
+    protocolVersion: '2.1',
+    terminal: 'MetaTrader 5 (demo)',
+    account: NEW_ACCOUNT.accountLogin,
+    server: NEW_ACCOUNT.brokerServer,
+    tradingEnabled: true,
+    marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: 1745700000000 },
+  });
+  await expect(status).toHaveText('Algo trading is enabled');
 });
 
 test('Escape dismisses the account switch dialog', async ({ page }) => {

@@ -129,6 +129,11 @@ pub(crate) struct BridgeStatus {
     /// the single source the close gate reads. False whenever no session is live.
     #[serde(rename = "partialClose", default)]
     pub partial_close: bool,
+    /// Algo-trading permission the EA advertised in this session's hello.
+    /// Display only: the dispatch gate keeps its own copy. False whenever no
+    /// session is live.
+    #[serde(rename = "tradingEnabled", default)]
+    pub trading_enabled: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -153,6 +158,7 @@ impl Default for BridgeStatus {
             market_session: None,
             supported_timeframes: Vec::new(),
             partial_close: false,
+            trading_enabled: false,
         }
     }
 }

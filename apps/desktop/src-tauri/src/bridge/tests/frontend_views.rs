@@ -195,6 +195,7 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
         market_session: None,
         supported_timeframes: vec!["M1".into(), "M5".into()],
         partial_close: false,
+        trading_enabled: false,
     };
     let account = AccountSnapshot {
         account_login: "123".into(),

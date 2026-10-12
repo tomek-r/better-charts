@@ -533,6 +533,35 @@ async fn streamed_multi_day_profile_reaches_ui_without_truncation_or_session_res
 }
 
 #[tokio::test]
+async fn trading_permission_is_shown_from_the_hello_and_reset_on_disconnect() {
+    for advertised in [true, false] {
+        let harness = default_harness().await;
+        let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+        let mut hello = valid_hello(None);
+        hello.payload["trading_enabled"] = advertised.into();
+        client.send(hello).await.unwrap();
+        let ack = client.recv(Duration::from_secs(2)).await.unwrap();
+        assert_eq!(ack.message_type, MessageType::HelloAck);
+        let status = harness.state.status.lock().unwrap().clone();
+        assert_eq!(status.trading_enabled, advertised);
+        assert_eq!(
+            serde_json::to_value(status).unwrap()["tradingEnabled"],
+            advertised
+        );
+        if advertised {
+            drop(client);
+            assert!(
+                wait_until(Duration::from_secs(2), || {
+                    !harness.state.status.lock().unwrap().trading_enabled
+                })
+                .await,
+                "the permission must not outlive its session"
+            );
+        }
+    }
+}
+
+#[tokio::test]
 async fn partial_close_capability_is_negotiated_echoed_and_reset_on_disconnect() {
     for offered in [Some(true), Some(false), None] {
         let harness = default_harness().await;

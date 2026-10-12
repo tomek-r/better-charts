@@ -332,6 +332,7 @@ pub(crate) fn protocol_error(
         status.message = Some(message.into());
         status.market_session = None;
         status.partial_close = false;
+        status.trading_enabled = false;
     });
     reset_reconciliation(
         events,
@@ -361,6 +362,7 @@ pub(crate) fn disconnect(
             status.message = None;
             status.market_session = None;
             status.partial_close = false;
+            status.trading_enabled = false;
         });
         *state
             .current_session
@@ -453,6 +455,7 @@ pub(crate) fn protocol_error_session(
             status.message = Some(message.to_string());
             status.market_session = None;
             status.partial_close = false;
+            status.trading_enabled = false;
         });
         *state
             .current_session

@@ -1,7 +1,15 @@
 import { useEffect, useRef } from 'react';
 
 /** Modal notice that the MT5 login changed; the only control is Dismiss. */
-export function AccountSwitchDialog({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+export function AccountSwitchDialog({
+  message,
+  tradingEnabled,
+  onDismiss,
+}: {
+  message: string;
+  tradingEnabled: boolean;
+  onDismiss: () => void;
+}) {
   const dismiss = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const previous = document.activeElement;
@@ -36,6 +44,15 @@ export function AccountSwitchDialog({ message, onDismiss }: { message: string; o
         data-account-switch-dialog
       >
         <h2 id="account-switch-title">{message}</h2>
+        <p
+          role="status"
+          className={tradingEnabled ? 'account-switch-algo' : 'account-switch-algo warn'}
+          data-algo-trading={tradingEnabled ? 'enabled' : 'disabled'}
+        >
+          {tradingEnabled
+            ? 'Algo trading is enabled'
+            : "Algo trading is disabled in MT5 — orders can't be sent. Turn on Algo Trading in MT5."}
+        </p>
         <button ref={dismiss} type="button" className="account-switch-dismiss" onClick={onDismiss}>
           Dismiss
         </button>
