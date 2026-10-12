@@ -74,6 +74,10 @@ export type RawAccount = Partial<AccountSnapshot> & {
   expert_allowed?: boolean;
   account_trade_mode?: number;
   account_trade_mode_name?: string;
+  margin_call_level?: string | null;
+  stop_out_level?: string | null;
+  margin_levels_mode?: number | null;
+  margin_levels_unit?: string;
 };
 export function normalizeAccount(raw: RawAccount): AccountSnapshot {
   return {
@@ -92,6 +96,11 @@ export function normalizeAccount(raw: RawAccount): AccountSnapshot {
     expertAllowed: Boolean(raw.expertAllowed ?? raw.expert_allowed),
     accountTradeMode: raw.accountTradeMode ?? raw.account_trade_mode,
     accountTradeModeName: raw.accountTradeModeName ?? raw.account_trade_mode_name,
+    // Absent and null both mean "not reported"; never coerced to 0.
+    marginCallLevel: raw.marginCallLevel ?? raw.margin_call_level ?? null,
+    stopOutLevel: raw.stopOutLevel ?? raw.stop_out_level ?? null,
+    marginLevelsMode: raw.marginLevelsMode ?? raw.margin_levels_mode ?? null,
+    marginLevelsUnit: raw.marginLevelsUnit ?? raw.margin_levels_unit ?? 'unknown',
   };
 }
 

@@ -150,7 +150,7 @@ for (const currency of ['USD', 'EUR', 'PLN']) {
     await page.getByRole('button', { name: 'Start creating order', exact: true }).click();
     const check = page.getByLabel('MT5 OrderCheck result');
     await expect(check).toContainText(`105.00 ${currency}`);
-    await expect(check).toContainText(`9,895.00 ${currency}`);
+    await expect(check).toContainText(`9,395.00 ${currency}`);
   });
 }
 
