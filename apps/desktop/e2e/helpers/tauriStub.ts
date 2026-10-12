@@ -60,6 +60,8 @@ export interface TauriStubOptions {
    * failed check carrying the broker's own `comment`/`retcode`.
    */
   orderCheckResult?: Record<string, unknown>;
+  /** Fields merged over the default `get_account_snapshot` (e.g. margin stop-out thresholds). */
+  accountOverrides?: Record<string, unknown>;
   /** Delay the broker check event while the command itself resolves normally. */
   orderCheckDelayMs?: number;
   /**
@@ -374,6 +376,11 @@ export async function installTauriStub(
         marginMode: 2,
         tradeAllowed: true,
         expertAllowed: true,
+        marginCallLevel: '100.00',
+        stopOutLevel: '50.00',
+        marginLevelsMode: 0,
+        marginLevelsUnit: 'percent',
+        ...opts.accountOverrides,
       },
       get_portfolio_snapshot: { accountLogin: '50123456', capturedAtMs: NOW, positions: [], orders: [] },
       get_execution_safety_status: safety,
@@ -543,6 +550,12 @@ export async function installTauriStub(
           margin: '105.00',
           freeMargin: '9895.00',
           marginLevel: '9511.90',
+          // Projection after the fill against the default account above:
+          // free 9500 - 105, equity 9987.50 / (500 + 105) * 100.
+          marginAtFill: '105.00',
+          freeMarginAfterFill: '9395.00',
+          marginLevelAfterFill: '1650.83',
+          marginRisk: 'ok',
           comment: 'Done',
           checkedAtMs: NOW,
           ...opts.orderCheckResult,

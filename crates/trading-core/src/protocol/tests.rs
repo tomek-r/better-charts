@@ -654,6 +654,10 @@ fn validates_account_snapshot_values() {
         expert_allowed: true,
         account_trade_mode: 0,
         account_trade_mode_name: "demo".into(),
+        margin_call_level: None,
+        stop_out_level: None,
+        margin_levels_mode: None,
+        margin_levels_unit: "unknown".into(),
     };
     assert!(account.validate().is_ok());
     let mut legacy = serde_json::to_value(&account).unwrap();
@@ -932,6 +936,9 @@ fn order_check_result_for_test() -> OrderCheckResult {
         checked_at_ms: 2,
         time_in_force: None,
         limit_price: None,
+        margin_at_fill: None,
+        account_margin_used: None,
+        account_free_margin: None,
     }
 }
 
@@ -1084,6 +1091,128 @@ fn account_snapshot_tolerates_old_eas_and_round_trips_the_trade_mode() {
 }
 
 #[test]
+fn account_snapshot_margin_stop_out_fields_are_optional_and_round_trip() {
+    let old = serde_json::json!({
+        "account_login": "123", "broker_server": "Demo", "currency": "USD",
+        "balance": "100", "equity": "99", "margin": "1", "free_margin": "98",
+        "margin_level": "9900", "leverage": 100, "margin_mode": 0,
+        "trade_allowed": true, "expert_allowed": true
+    });
+    let parsed: AccountSnapshot = serde_json::from_value(old).unwrap();
+    assert_eq!(parsed.margin_call_level, None);
+    assert_eq!(parsed.stop_out_level, None);
+    assert_eq!(parsed.margin_levels_mode, None);
+    assert_eq!(parsed.margin_levels_unit, "unknown");
+    parsed.validate().unwrap();
+
+    let reported = AccountSnapshot {
+        margin_call_level: Some("100".into()),
+        stop_out_level: Some("50.5".into()),
+        margin_levels_mode: Some(0),
+        margin_levels_unit: "percent".into(),
+        ..parsed.clone()
+    };
+    reported.validate().unwrap();
+    let encoded = serde_json::to_value(&reported).unwrap();
+    assert_eq!(encoded["margin_call_level"], "100");
+    assert_eq!(encoded["margin_levels_mode"], 0);
+    assert_eq!(
+        serde_json::from_value::<AccountSnapshot>(encoded).unwrap(),
+        reported
+    );
+
+    // Explicit nulls are "not reported", not zero.
+    let mut with_nulls = serde_json::to_value(&parsed).unwrap();
+    with_nulls["margin_call_level"] = serde_json::Value::Null;
+    assert_eq!(
+        serde_json::from_value::<AccountSnapshot>(with_nulls)
+            .unwrap()
+            .margin_call_level,
+        None
+    );
+
+    let money = AccountSnapshot {
+        margin_levels_mode: Some(1),
+        margin_levels_unit: "money".into(),
+        ..reported.clone()
+    };
+    money.validate().unwrap();
+    for invalid in [
+        AccountSnapshot {
+            margin_levels_unit: "pct".into(),
+            ..reported.clone()
+        },
+        AccountSnapshot {
+            margin_call_level: Some("NaN".into()),
+            ..reported.clone()
+        },
+        AccountSnapshot {
+            stop_out_level: Some("-1".into()),
+            ..reported.clone()
+        },
+    ] {
+        assert!(invalid.validate().is_err());
+    }
+}
+
+#[test]
+fn order_check_result_margin_at_fill_fields_are_optional_decimals() {
+    let request = order_check_request_for_test();
+    let plain: serde_json::Value = {
+        let mut value = serde_json::to_value(order_check_result_for_test()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        for field in [
+            "margin_at_fill",
+            "account_margin_used",
+            "account_free_margin",
+        ] {
+            object.remove(field);
+        }
+        value
+    };
+    let parsed: OrderCheckResult = serde_json::from_value(plain).unwrap();
+    assert_eq!(parsed.margin_at_fill, None);
+    assert_eq!(parsed.account_margin_used, None);
+    assert_eq!(parsed.account_free_margin, None);
+    parsed.validate(&request).unwrap();
+
+    let reported = OrderCheckResult {
+        margin_at_fill: Some("0".into()),
+        account_margin_used: Some("250.50".into()),
+        account_free_margin: Some("-12.5".into()),
+        ..order_check_result_for_test()
+    };
+    reported.validate(&request).unwrap();
+    let encoded = serde_json::to_value(&reported).unwrap();
+    assert_eq!(encoded["margin_at_fill"], "0");
+    assert_eq!(
+        serde_json::from_value::<OrderCheckResult>(encoded).unwrap(),
+        reported
+    );
+
+    for invalid in [
+        OrderCheckResult {
+            margin_at_fill: Some("-0.01".into()),
+            ..reported.clone()
+        },
+        OrderCheckResult {
+            margin_at_fill: Some("1e3".into()),
+            ..reported.clone()
+        },
+        OrderCheckResult {
+            account_margin_used: Some("-1".into()),
+            ..reported.clone()
+        },
+        OrderCheckResult {
+            account_free_margin: Some("NaN".into()),
+            ..reported.clone()
+        },
+    ] {
+        assert!(invalid.validate(&request).is_err());
+    }
+}
+
+#[test]
 fn validates_portfolio_limits_and_unique_ids() {
     let position = OpenPosition {
         position_id: "p1".into(),
@@ -1225,29 +1354,7 @@ fn order_check_requires_valid_prices_and_exact_request_identity() {
     };
     let result = OrderCheckResult {
         draft_id: "draft-1".into(),
-        account_login: "123".into(),
-        broker_server: "Demo".into(),
-        symbol: "EURUSD".into(),
-        side: OrderSide::Buy,
-        order_kind: OrderKind::Limit,
-        volume: "0.10".into(),
-        requested_entry: "1.1000".into(),
-        check_price: "1.1000".into(),
-        stop_loss: Some("1.0900".into()),
-        take_profit: Some("1.1200".into()),
-        check_passed: true,
-        retcode: 0,
-        last_error: 0,
-        balance: "1000".into(),
-        equity: "1000".into(),
-        profit: "0".into(),
-        margin: "10".into(),
-        free_margin: "990".into(),
-        margin_level: "10000".into(),
-        comment: "done".into(),
-        checked_at_ms: 2,
-        time_in_force: None,
-        limit_price: None,
+        ..order_check_result_for_test()
     };
     request.validate().unwrap();
     result.validate(&request).unwrap();

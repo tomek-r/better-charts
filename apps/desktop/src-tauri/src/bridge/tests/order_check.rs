@@ -22,6 +22,10 @@ fn equity_ticks_preserve_the_current_order_check_but_permission_changes_invalida
         expert_allowed: true,
         account_trade_mode: 0,
         account_trade_mode_name: "demo".into(),
+        margin_call_level: None,
+        stop_out_level: None,
+        margin_levels_mode: None,
+        margin_levels_unit: "unknown".into(),
     };
     accept_account(&state, "session-1", account.clone())
         .unwrap()
@@ -171,7 +175,7 @@ fn expected_order_check_for_test() -> Option<ExpectedOrderCheck> {
 #[test]
 fn order_check_accepts_current_result_and_preserves_rejected_retcode() {
     let mut expected = expected_order_check_for_test();
-    let view = accept_order_check_result(&mut expected, false, order_check_result_for_test())
+    let view = accept_order_check_result(&mut expected, false, None, order_check_result_for_test())
         .unwrap()
         .unwrap();
     assert_eq!(view.draft_version, 7);
@@ -186,12 +190,148 @@ fn order_check_accepts_current_result_and_preserves_rejected_retcode() {
     rejected.check_passed = false;
     rejected.retcode = 10019;
     rejected.comment = "not enough money".into();
-    let view = accept_order_check_result(&mut expected_order_check_for_test(), false, rejected)
-        .unwrap()
-        .unwrap();
+    let view =
+        accept_order_check_result(&mut expected_order_check_for_test(), false, None, rejected)
+            .unwrap()
+            .unwrap();
     assert!(!view.check_passed);
     assert_eq!(view.retcode, 10019);
     assert_eq!(view.comment, "not enough money");
+}
+
+fn account_with_margin_levels(mode: Option<i64>, call: &str, stop_out: &str) -> AccountView {
+    let state = ready_state_with_result(order_check_result_for_test());
+    let mut account = state.account.lock().unwrap().clone().unwrap();
+    account.margin_levels_mode = mode;
+    account.margin_call_level = Some(call.into());
+    account.stop_out_level = Some(stop_out.into());
+    account
+}
+
+fn result_with_margin_at_fill(
+    equity: &str,
+    margin: &str,
+    free: &str,
+    fill: &str,
+) -> OrderCheckResult {
+    OrderCheckResult {
+        equity: equity.into(),
+        margin_at_fill: Some(fill.into()),
+        account_margin_used: Some(margin.into()),
+        account_free_margin: Some(free.into()),
+        ..order_check_result_for_test()
+    }
+}
+
+fn accepted_view(account: Option<&AccountView>, result: OrderCheckResult) -> OrderCheckResultView {
+    accept_order_check_result(&mut expected_order_check_for_test(), false, account, result)
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn order_check_projects_margin_after_fill_and_classifies_percent_mode() {
+    let account = account_with_margin_levels(Some(0), "100", "50");
+    let view = accepted_view(
+        Some(&account),
+        result_with_margin_at_fill("1000", "100", "900", "100"),
+    );
+    assert_eq!(view.margin_at_fill.as_deref(), Some("100"));
+    assert_eq!(view.free_margin_after_fill.as_deref(), Some("800"));
+    assert_eq!(view.margin_level_after_fill.as_deref(), Some("500"));
+    assert_eq!(view.margin_risk, MarginRiskView::Ok);
+
+    // 1000 / 1500 * 100 = 66.67 -> below the 100% call, above the 50% stop out.
+    let view = accepted_view(
+        Some(&account),
+        result_with_margin_at_fill("1000", "500", "500", "1000"),
+    );
+    assert_eq!(view.margin_level_after_fill.as_deref(), Some("66.67"));
+    assert_eq!(view.margin_risk, MarginRiskView::BelowMarginCall);
+
+    // 1000 / 5000 * 100 = 20 -> below the 50% stop out.
+    let view = accepted_view(
+        Some(&account),
+        result_with_margin_at_fill("1000", "1000", "0", "4000"),
+    );
+    assert_eq!(view.free_margin_after_fill.as_deref(), Some("-4000"));
+    assert_eq!(view.margin_risk, MarginRiskView::BelowStopOut);
+}
+
+#[test]
+fn order_check_money_mode_compares_equity_with_the_amounts() {
+    let account = account_with_margin_levels(Some(1), "200", "100");
+    let ok = accepted_view(
+        Some(&account),
+        result_with_margin_at_fill("500", "10", "490", "5"),
+    );
+    assert_eq!(ok.margin_risk, MarginRiskView::Ok);
+    let call = accepted_view(
+        Some(&account),
+        result_with_margin_at_fill("150", "10", "140", "5"),
+    );
+    assert_eq!(call.margin_risk, MarginRiskView::BelowMarginCall);
+    let stop_out = accepted_view(
+        Some(&account),
+        result_with_margin_at_fill("99", "10", "89", "5"),
+    );
+    assert_eq!(stop_out.margin_risk, MarginRiskView::BelowStopOut);
+}
+
+#[test]
+fn order_check_margin_projection_is_unknown_without_matching_account_or_inputs() {
+    // Old EA: no margin fields at all -> everything stays null, never 0.
+    let view = accepted_view(None, order_check_result_for_test());
+    assert_eq!(view.margin_at_fill, None);
+    assert_eq!(view.free_margin_after_fill, None);
+    assert_eq!(view.margin_level_after_fill, None);
+    assert_eq!(view.margin_risk, MarginRiskView::Unknown);
+
+    // Figures are projected, but a snapshot of another login gives no verdict.
+    let mut foreign = account_with_margin_levels(Some(0), "100", "50");
+    foreign.account_login = "999".into();
+    let view = accepted_view(
+        Some(&foreign),
+        result_with_margin_at_fill("1000", "100", "900", "100"),
+    );
+    assert_eq!(view.margin_level_after_fill.as_deref(), Some("500"));
+    assert_eq!(view.margin_risk, MarginRiskView::Unknown);
+    let mut other_server = account_with_margin_levels(Some(0), "100", "50");
+    other_server.broker_server = "Other".into();
+    let view = accepted_view(
+        Some(&other_server),
+        result_with_margin_at_fill("1000", "100", "900", "100"),
+    );
+    assert_eq!(view.margin_risk, MarginRiskView::Unknown);
+
+    // Unreported stop-out mode on a matching account is not guessed.
+    let unknown_mode = account_with_margin_levels(None, "100", "50");
+    let view = accepted_view(
+        Some(&unknown_mode),
+        result_with_margin_at_fill("1000", "100", "900", "100"),
+    );
+    assert_eq!(view.margin_risk, MarginRiskView::Unknown);
+}
+
+#[test]
+fn order_check_store_uses_the_stored_account_thresholds() {
+    let state = ready_state_with_result(order_check_result_for_test());
+    {
+        let mut account = state.account.lock().unwrap();
+        let account = account.as_mut().unwrap();
+        account.margin_levels_mode = Some(0);
+        account.margin_call_level = Some("100".into());
+        account.stop_out_level = Some("50".into());
+    }
+    *state.expected_order_check.lock().unwrap() = expected_order_check_for_test();
+    let view = accept_and_store_order_check_result(
+        &state,
+        false,
+        result_with_margin_at_fill("1000", "500", "500", "1000"),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(view.margin_risk, MarginRiskView::BelowMarginCall);
 }
 
 #[test]
@@ -292,7 +432,7 @@ fn order_check_ignores_stale_draft_and_reply_while_new_request_is_pending() {
     let mut stale_result = order_check_result_for_test();
     stale_result.draft_id = "older-draft".into();
     assert!(
-        accept_order_check_result(&mut stale_expected, false, stale_result)
+        accept_order_check_result(&mut stale_expected, false, None, stale_result)
             .unwrap()
             .is_none()
     );
@@ -300,7 +440,7 @@ fn order_check_ignores_stale_draft_and_reply_while_new_request_is_pending() {
 
     let mut expected = expected_order_check_for_test();
     assert!(
-        accept_order_check_result(&mut expected, true, order_check_result_for_test())
+        accept_order_check_result(&mut expected, true, None, order_check_result_for_test())
             .unwrap()
             .is_none()
     );
@@ -311,9 +451,13 @@ fn order_check_ignores_stale_draft_and_reply_while_new_request_is_pending() {
 fn order_check_rejects_current_result_echo_mismatch_and_accepts_current_error() {
     let mut malformed = order_check_result_for_test();
     malformed.symbol = "OTHER".into();
-    assert!(
-        accept_order_check_result(&mut expected_order_check_for_test(), false, malformed).is_err()
-    );
+    assert!(accept_order_check_result(
+        &mut expected_order_check_for_test(),
+        false,
+        None,
+        malformed
+    )
+    .is_err());
 
     let mut expected = expected_order_check_for_test();
     let view = accept_order_check_error(

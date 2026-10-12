@@ -12,8 +12,14 @@ export function useOrderTicketReviewProps(): ReviewProps {
   const stores = useOrderTicketStores();
   const actions = useOrderTicketActions();
   const gate = useTicketGateProjection();
-  const { currency, currencyDigits } = useBridgeAccountSelector(
-    useShallow((account) => ({ currency: account?.currency, currencyDigits: account?.currencyDigits })),
+  const { currency, currencyDigits, marginCallLevel, stopOutLevel, marginLevelsUnit } = useBridgeAccountSelector(
+    useShallow((account) => ({
+      currency: account?.currency,
+      currencyDigits: account?.currencyDigits,
+      marginCallLevel: account?.marginCallLevel,
+      stopOutLevel: account?.stopOutLevel,
+      marginLevelsUnit: account?.marginLevelsUnit,
+    })),
   );
   const orderCheck = useStore(stores.broker, (state) => state.orderCheck);
   const orderCheckError = useStore(stores.broker, (state) => state.orderCheckError);
@@ -25,7 +31,10 @@ export function useOrderTicketReviewProps(): ReviewProps {
     useShallow((state) => ({ riskSide: state.riskSide })),
   );
   return {
-    account: currency === undefined ? undefined : { currency, currencyDigits },
+    account:
+      currency === undefined
+        ? undefined
+        : { currency, currencyDigits, marginCallLevel, stopOutLevel, marginLevelsUnit },
     canSubmitOrder: gate.canSubmitOrder,
     effectiveVolume: gate.effectiveVolume,
     orderCheck,

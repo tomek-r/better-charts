@@ -153,8 +153,18 @@ fn order_check_result_serializes_ui_event_in_camel_case() {
         checked_at_ms: 1,
         time_in_force: None,
         limit_price: None,
+        margin_at_fill: Some("5".into()),
+        free_margin_after_fill: Some("985".into()),
+        margin_level_after_fill: None,
+        margin_risk: MarginRiskView::Unknown,
     })
     .unwrap();
+    assert_eq!(value["marginAtFill"], "5");
+    assert_eq!(value["freeMarginAfterFill"], "985");
+    assert!(value["marginLevelAfterFill"].is_null());
+    assert_eq!(value["marginRisk"], "unknown");
+    assert!(value.get("margin_at_fill").is_none());
+    assert!(value.get("margin_risk").is_none());
     assert_eq!(value["draftVersion"], 7);
     assert!(
         value.get("timeInForce").is_some(),
@@ -202,11 +212,21 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
         expert_allowed: false,
         account_trade_mode: 0,
         account_trade_mode_name: "demo".into(),
+        margin_call_level: Some("100".into()),
+        stop_out_level: Some("50".into()),
+        margin_levels_mode: Some(0),
+        margin_levels_unit: "percent".into(),
     };
     let view = accept_account(&state, "session-1", account.clone())
         .unwrap()
         .unwrap();
     let json = serde_json::to_value(view).unwrap();
+    assert_eq!(json["marginCallLevel"], "100");
+    assert_eq!(json["stopOutLevel"], "50");
+    assert_eq!(json["marginLevelsMode"], 0);
+    assert_eq!(json["marginLevelsUnit"], "percent");
+    assert!(json.get("margin_call_level").is_none());
+    assert!(json.get("margin_levels_unit").is_none());
     assert!(json.get("accountLogin").is_some());
     assert!(json.get("account_login").is_none());
     assert_eq!(json["accountTradeMode"], 0);

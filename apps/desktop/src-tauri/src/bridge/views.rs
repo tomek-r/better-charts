@@ -2,6 +2,7 @@ use super::ExecutionSafetyStatus;
 use serde::Serialize;
 use trading_core::{
     execution::RecoveryEntry,
+    margin_projection::MarginRisk,
     protocol::{
         AccountSnapshot, BrokerSymbol, MarketCandle, OpenPosition, OrderCommandError,
         OrderCommandUpdate, OrderKind, OrderSide, PendingOrder, PortfolioSnapshot, QuoteUpdate,
@@ -202,6 +203,15 @@ pub(crate) struct AccountView {
     /// `demo` | `contest` | `real` | `unknown`; distinct from the
     /// instrument-level `trade_mode` of `symbol_info`.
     pub(crate) account_trade_mode_name: String,
+    /// Margin-call level (`ACCOUNT_MARGIN_SO_CALL`): percent or account
+    /// currency per `margin_levels_unit`; `null` when not reported.
+    pub(crate) margin_call_level: Option<String>,
+    /// Stop-out level (`ACCOUNT_MARGIN_SO_SO`), same unit as the call level.
+    pub(crate) stop_out_level: Option<String>,
+    /// Raw `ACCOUNT_MARGIN_SO_MODE`; `null` when not reported.
+    pub(crate) margin_levels_mode: Option<i64>,
+    /// `percent` | `money` | `unknown`.
+    pub(crate) margin_levels_unit: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -383,6 +393,38 @@ pub(crate) struct OrderCheckResultView {
     pub(crate) time_in_force: Option<TimeInForce>,
     /// Echo of the draft's `limit_price`; `null` when the draft had none.
     pub(crate) limit_price: Option<String>,
+    /// Estimated margin the order adds once filled (`OrderCalcMargin`, order
+    /// priced in isolation); `null` when unknown.
+    pub(crate) margin_at_fill: Option<String>,
+    /// Account free margin minus `margin_at_fill`, as of the check; `null` when
+    /// either is unknown.
+    pub(crate) free_margin_after_fill: Option<String>,
+    /// Projected margin level in percent (2 decimals); `null` when unknown or
+    /// no margin would be in use.
+    pub(crate) margin_level_after_fill: Option<String>,
+    pub(crate) margin_risk: MarginRiskView,
+}
+
+/// Position of the projected state relative to the broker's thresholds.
+/// Display-only: never feeds a dispatch gate.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MarginRiskView {
+    Ok,
+    BelowMarginCall,
+    BelowStopOut,
+    Unknown,
+}
+
+impl From<MarginRisk> for MarginRiskView {
+    fn from(value: MarginRisk) -> Self {
+        match value {
+            MarginRisk::Ok => Self::Ok,
+            MarginRisk::BelowMarginCall => Self::BelowMarginCall,
+            MarginRisk::BelowStopOut => Self::BelowStopOut,
+            MarginRisk::Unknown => Self::Unknown,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -472,6 +514,10 @@ impl From<AccountSnapshot> for AccountView {
             expert_allowed: value.expert_allowed,
             account_trade_mode: value.account_trade_mode,
             account_trade_mode_name: value.account_trade_mode_name,
+            margin_call_level: value.margin_call_level,
+            stop_out_level: value.stop_out_level,
+            margin_levels_mode: value.margin_levels_mode,
+            margin_levels_unit: value.margin_levels_unit,
         }
     }
 }

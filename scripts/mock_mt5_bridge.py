@@ -393,6 +393,36 @@ def reply_risk_quote(conn: socket.socket, session_id: str, request: dict) -> Non
     }))
 
 
+MOCK_MARGIN_RATE = Decimal("0.01")
+
+
+def mock_fill_price(request: dict) -> str:
+    # The price the order executes at: the resting limit price for stop_limit
+    # (the stop only places a limit order there), otherwise the entry.
+    return request["limit_price"] if request["order_kind"] == "stop_limit" else request["entry"]
+
+
+def margin_projection_fields(request: dict) -> dict:
+    # Margin scales with the fill price so a wrong price choice per order kind shows up.
+    margin = (Decimal(request["volume"]) * Decimal(mock_fill_price(request)) * MOCK_MARGIN_RATE).quantize(Decimal("0.01"))
+    return {"margin_at_fill": str(margin), "account_margin_used": "0.00", "account_free_margin": "10000.00"}
+
+
+def self_test_margin_projection() -> int:
+    base = {"volume": "2", "entry": "100.0", "limit_price": None}
+    market = margin_projection_fields({**base, "order_kind": "market"})
+    limit = margin_projection_fields({**base, "order_kind": "limit", "entry": "90.0"})
+    stop = margin_projection_fields({**base, "order_kind": "stop", "entry": "110.0"})
+    stop_limit = margin_projection_fields({**base, "order_kind": "stop_limit", "entry": "110.0", "limit_price": "105.0"})
+    assert market["margin_at_fill"] == "2.00" and limit["margin_at_fill"] == "1.80"
+    assert stop["margin_at_fill"] == "2.20", "stop is priced at its entry"
+    assert stop_limit["margin_at_fill"] == "2.10", "stop_limit is priced at the resting limit price, not the trigger"
+    assert len({market["margin_at_fill"], limit["margin_at_fill"], stop["margin_at_fill"], stop_limit["margin_at_fill"]}) == 4
+    assert all(field in market for field in ("account_margin_used", "account_free_margin"))
+    print("mock margin-projection self-test passed: fill price per order kind")
+    return 0
+
+
 def reply_order_check(conn: socket.socket, session_id: str, request: dict) -> None:
     # Echo the entire draft verbatim; this mock is read-only and never sends orders.
     assert request["order_kind"] in {"market", "limit", "stop", "stop_limit"}, request["order_kind"]
@@ -414,6 +444,7 @@ def reply_order_check(conn: socket.socket, session_id: str, request: dict) -> No
         "free_margin": "9900.00", "margin_level": "10000.00", "comment": "Mock preflight accepted",
         "checked_at_ms": 1700000123000,
         "time_in_force": time_in_force, "limit_price": limit_price,
+        **margin_projection_fields(request),
     }))
 
 
@@ -663,6 +694,8 @@ def main() -> int:
                 "free_margin": "10000.00", "margin_level": "0.0000", "leverage": 100,
                 "margin_mode": 2, "trade_allowed": False, "expert_allowed": False,
                 "account_trade_mode": 0, "account_trade_mode_name": "demo",
+                "margin_call_level": "100.0000", "stop_out_level": "50.0000",
+                "margin_levels_mode": 0, "margin_levels_unit": "percent",
             }))
             send_frame(conn, portfolio_snapshot("ea-portfolio-1", session_id, OPEN_POSITIONS))
             send_frame(conn, envelope("quote_update", "ea-quote-1", session_id, {
@@ -723,7 +756,7 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(
-            self_test_history_page() + self_test_tick_history() + self_test_partial_close()
+            self_test_history_page() + self_test_tick_history() + self_test_partial_close() + self_test_margin_projection()
             if os.environ.get("MT5_MOCK_SELFTEST") == "1"
             else main()
         )

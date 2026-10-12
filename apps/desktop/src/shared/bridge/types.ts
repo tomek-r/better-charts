@@ -281,6 +281,14 @@ export interface AccountSnapshot {
   accountTradeMode?: number;
   /** "demo" | "contest" | "real" | "unknown"; optional for older backends. */
   accountTradeModeName?: string;
+  /** ACCOUNT_MARGIN_SO_CALL: percent or account currency per `marginLevelsUnit`; null/absent = not reported. */
+  marginCallLevel?: string | null;
+  /** ACCOUNT_MARGIN_SO_SO, same unit as `marginCallLevel`; null/absent = not reported. */
+  stopOutLevel?: string | null;
+  /** Raw ACCOUNT_MARGIN_SO_MODE (0 percent / 1 money); null/absent = not reported. */
+  marginLevelsMode?: number | null;
+  /** "percent" | "money" | "unknown"; absent from older backends. */
+  marginLevelsUnit?: string;
 }
 
 export type RiskSide = '' | 'buy' | 'sell';
@@ -334,7 +342,17 @@ export interface OrderCheckResult {
   marginLevel: string;
   comment: string;
   checkedAtMs: number;
+  /** Estimated margin the order adds once filled (order priced in isolation); null/absent = unknown. */
+  marginAtFill?: string | null;
+  /** Account free margin minus `marginAtFill`; may be negative; null/absent = unknown. */
+  freeMarginAfterFill?: string | null;
+  /** Projected margin level in percent after the fill; null/absent = unknown. */
+  marginLevelAfterFill?: string | null;
+  /** Position against the broker's margin-call / stop-out thresholds; absent = unknown. */
+  marginRisk?: MarginRisk;
 }
+
+export type MarginRisk = 'ok' | 'below_margin_call' | 'below_stop_out' | 'unknown';
 
 export interface OrderCheckError {
   draftVersion: number;

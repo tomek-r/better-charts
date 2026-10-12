@@ -332,8 +332,8 @@ test('failed OrderCheck surfaces the broker comment verbatim', async ({ page }) 
   await expect(reason).toContainText('code 10019');
   await expect(page.locator('.notification-region [role=alert]')).toHaveCount(1);
   await expect(page.locator('.notification-region [role=alert]')).not.toContainText('Last error code');
-  // The broker's margin numbers still render as the quantitative context.
-  await expect(page.locator('.order-check-grid')).toContainText('Free margin');
+  // The margin projection still renders as the quantitative context.
+  await expect(page.locator('.order-check-grid')).toContainText('Free margin after fill');
   // A failed check never enables Send.
   await expect(page.locator('.ticket-cta.send')).toBeDisabled();
   expectClean(collected);

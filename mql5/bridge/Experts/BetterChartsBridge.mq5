@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.006"
+#define BRIDGE_EXPERT_VERSION "1.007"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -487,6 +487,26 @@ bool SendHello()
    return SendFrame(hello);
   }
 
+// Quoted decimal string, or JSON null when the value is not a usable number
+// (invalid, or negative where a negative is impossible). Unknown is never 0.
+string AmountJsonOrNull(const double value,const bool allow_negative,const int digits)
+  {
+   if(!MathIsValidNumber(value) || (!allow_negative && value<0.0)) return "null";
+   return "\""+DoubleToString(value,digits)+"\"";
+  }
+
+// Margin the order adds once filled, in the account currency. Always priced
+// with the market-equivalent type (ORDER_TYPE_BUY/SELL, never the pending
+// type) at the price the order fills at; the order is priced alone, so open
+// positions (hedging offsets, netting) are ignored. null when MT5 cannot
+// compute it.
+string MarginAtFillJson(const bool is_buy,const string symbol,const double volume,const double fill_price,const int digits)
+  {
+   double margin=0.0;
+   if(!OrderCalcMargin((is_buy ? ORDER_TYPE_BUY : ORDER_TYPE_SELL),symbol,volume,fill_price,margin)) return "null";
+   return AmountJsonOrNull(margin,false,digits);
+  }
+
 string AccountPayload()
   {
    const int currency_digits=(int)AccountInfoInteger(ACCOUNT_CURRENCY_DIGITS);
@@ -501,10 +521,24 @@ string AccountPayload()
    if(trade_mode==ACCOUNT_TRADE_MODE_DEMO) trade_mode_name="demo";
    else if(trade_mode==ACCOUNT_TRADE_MODE_CONTEST) trade_mode_name="contest";
    else if(trade_mode==ACCOUNT_TRADE_MODE_REAL) trade_mode_name="real";
-   return StringFormat("{\"account_login\":\"%s\",\"broker_server\":\"%s\",\"currency\":\"%s\",\"currency_digits\":%d,\"balance\":\"%s\",\"equity\":\"%s\",\"margin\":\"%s\",\"free_margin\":\"%s\",\"margin_level\":\"%s\",\"leverage\":%d,\"margin_mode\":%d,\"trade_allowed\":%s,\"expert_allowed\":%s,\"account_trade_mode\":%I64d,\"account_trade_mode_name\":\"%s\"}",
+   // Margin-call / stop-out levels (ACCOUNT_MARGIN_SO_CALL / ACCOUNT_MARGIN_SO_SO)
+   // are percentages or deposit-currency amounts depending on
+   // ACCOUNT_MARGIN_SO_MODE. An unrecognized mode reports null for all four
+   // fields so the levels are never shown with a guessed unit.
+   const long levels_mode=AccountInfoInteger(ACCOUNT_MARGIN_SO_MODE);
+   string levels_unit="unknown";
+   int levels_digits=amount_digits;
+   if(levels_mode==ACCOUNT_STOPOUT_MODE_PERCENT) { levels_unit="percent"; levels_digits=4; }
+   else if(levels_mode==ACCOUNT_STOPOUT_MODE_MONEY) levels_unit="money";
+   const bool levels_known=(levels_unit!="unknown");
+   const string margin_call_level=(levels_known ? AmountJsonOrNull(AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL),false,levels_digits) : "null");
+   const string stop_out_level=(levels_known ? AmountJsonOrNull(AccountInfoDouble(ACCOUNT_MARGIN_SO_SO),false,levels_digits) : "null");
+   const string levels_mode_json=(levels_known ? IntegerToString(levels_mode) : "null");
+   return StringFormat("{\"account_login\":\"%s\",\"broker_server\":\"%s\",\"currency\":\"%s\",\"currency_digits\":%d,\"balance\":\"%s\",\"equity\":\"%s\",\"margin\":\"%s\",\"free_margin\":\"%s\",\"margin_level\":\"%s\",\"leverage\":%d,\"margin_mode\":%d,\"trade_allowed\":%s,\"expert_allowed\":%s,\"account_trade_mode\":%I64d,\"account_trade_mode_name\":\"%s\",\"margin_call_level\":%s,\"stop_out_level\":%s,\"margin_levels_mode\":%s,\"margin_levels_unit\":\"%s\"}",
                        JsonEscape(IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN))),JsonEscape(AccountInfoString(ACCOUNT_SERVER)),JsonEscape(AccountInfoString(ACCOUNT_CURRENCY)),amount_digits,
                        DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),amount_digits),DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY),amount_digits),DoubleToString(margin,amount_digits),DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE),amount_digits),DoubleToString(margin_level,4),
-                       AccountInfoInteger(ACCOUNT_LEVERAGE),AccountInfoInteger(ACCOUNT_MARGIN_MODE),(AccountInfoInteger(ACCOUNT_TRADE_ALLOWED)!=0?"true":"false"),(AccountInfoInteger(ACCOUNT_TRADE_EXPERT)!=0?"true":"false"),trade_mode,trade_mode_name);
+                       AccountInfoInteger(ACCOUNT_LEVERAGE),AccountInfoInteger(ACCOUNT_MARGIN_MODE),(AccountInfoInteger(ACCOUNT_TRADE_ALLOWED)!=0?"true":"false"),(AccountInfoInteger(ACCOUNT_TRADE_EXPERT)!=0?"true":"false"),trade_mode,trade_mode_name,
+                       margin_call_level,stop_out_level,levels_mode_json,levels_unit);
   }
 
 // True when the terminal now reports a different login/server than the one the
@@ -1191,7 +1225,15 @@ bool SendOrderCheck(const string draft_id,const string account_login,const strin
    if(StringLen(comment_text)>256) comment_text=StringSubstr(comment_text,0,256);
    const int currency_digits=(int)AccountInfoInteger(ACCOUNT_CURRENCY_DIGITS);
    const int amount_digits=(currency_digits>=0 && currency_digits<=8 ? currency_digits : 2);
-   const string result=StringFormat("{\"v\":1,\"type\":\"order_check_result\",\"id\":\"ea-order-check-%I64u\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"draft_id\":\"%s\",\"account_login\":\"%s\",\"broker_server\":\"%s\",\"symbol\":\"%s\",\"side\":\"%s\",\"order_kind\":\"%s\",\"volume\":\"%s\",\"requested_entry\":\"%s\",\"check_price\":\"%s\",\"stop_loss\":%s,\"take_profit\":%s,\"check_passed\":%s,\"retcode\":%u,\"last_error\":%d,\"balance\":\"%s\",\"equity\":\"%s\",\"profit\":\"%s\",\"margin\":\"%s\",\"free_margin\":\"%s\",\"margin_level\":\"%s\",\"comment\":\"%s\",\"checked_at_ms\":%I64u,\"time_in_force\":%s,\"limit_price\":%s}}",g_message_id+1,JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(draft_id),JsonEscape(account_login),JsonEscape(broker_server),JsonEscape(symbol),side,order_kind,JsonEscape(volume_text),JsonEscape(entry_text),DoubleToString(check_price,digits),NullableJsonString(stop_text),(has_take?"\""+JsonEscape(take_text)+"\"":"null"),(check_passed?"true":"false"),checked.retcode,last_error,DoubleToString(checked.balance,amount_digits),DoubleToString(checked.equity,amount_digits),DoubleToString(checked.profit,amount_digits),DoubleToString(checked.margin,amount_digits),DoubleToString(checked.margin_free,amount_digits),DoubleToString(checked.margin_level,4),JsonEscape(comment_text),(ulong)TimeGMT()*1000,NullableJsonString(time_in_force),NullableJsonString(limit_price_text));
+   // Margin projection inputs, sampled right after OrderCheck. The fill price
+   // is where the order ends up executing: the live side price for market,
+   // the entry for limit/stop, and the resting limit price for stop_limit
+   // (the stop only triggers a limit order placed at limit_price).
+   const double fill_price=(order_kind=="stop_limit" ? limit_price : check_price);
+   const string margin_at_fill_json=MarginAtFillJson(is_buy,symbol,volume,fill_price,amount_digits);
+   const string account_margin_used_json=AmountJsonOrNull(AccountInfoDouble(ACCOUNT_MARGIN),false,amount_digits);
+   const string account_free_margin_json=AmountJsonOrNull(AccountInfoDouble(ACCOUNT_MARGIN_FREE),true,amount_digits);
+   const string result=StringFormat("{\"v\":1,\"type\":\"order_check_result\",\"id\":\"ea-order-check-%I64u\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"draft_id\":\"%s\",\"account_login\":\"%s\",\"broker_server\":\"%s\",\"symbol\":\"%s\",\"side\":\"%s\",\"order_kind\":\"%s\",\"volume\":\"%s\",\"requested_entry\":\"%s\",\"check_price\":\"%s\",\"stop_loss\":%s,\"take_profit\":%s,\"check_passed\":%s,\"retcode\":%u,\"last_error\":%d,\"balance\":\"%s\",\"equity\":\"%s\",\"profit\":\"%s\",\"margin\":\"%s\",\"free_margin\":\"%s\",\"margin_level\":\"%s\",\"comment\":\"%s\",\"checked_at_ms\":%I64u,\"time_in_force\":%s,\"limit_price\":%s,\"margin_at_fill\":%s,\"account_margin_used\":%s,\"account_free_margin\":%s}}",g_message_id+1,JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(draft_id),JsonEscape(account_login),JsonEscape(broker_server),JsonEscape(symbol),side,order_kind,JsonEscape(volume_text),JsonEscape(entry_text),DoubleToString(check_price,digits),NullableJsonString(stop_text),(has_take?"\""+JsonEscape(take_text)+"\"":"null"),(check_passed?"true":"false"),checked.retcode,last_error,DoubleToString(checked.balance,amount_digits),DoubleToString(checked.equity,amount_digits),DoubleToString(checked.profit,amount_digits),DoubleToString(checked.margin,amount_digits),DoubleToString(checked.margin_free,amount_digits),DoubleToString(checked.margin_level,4),JsonEscape(comment_text),(ulong)TimeGMT()*1000,NullableJsonString(time_in_force),NullableJsonString(limit_price_text),margin_at_fill_json,account_margin_used_json,account_free_margin_json);
    g_message_id++;
    if(!SendFrame(result)) { SendOrderCheckError(draft_id,"FRAME_TOO_LARGE","order check result exceeds frame limit"); return false; }
    return true;

@@ -52,6 +52,9 @@ pub(super) fn order_check_result_for_test() -> OrderCheckResult {
         checked_at_ms: 1,
         time_in_force: None,
         limit_price: None,
+        margin_at_fill: None,
+        account_margin_used: None,
+        account_free_margin: None,
     }
 }
 
@@ -88,6 +91,10 @@ pub(super) fn ready_state_with_result(result: OrderCheckResult) -> BridgeState {
         expert_allowed: true,
         account_trade_mode: 0,
         account_trade_mode_name: "demo".into(),
+        margin_call_level: None,
+        stop_out_level: None,
+        margin_levels_mode: None,
+        margin_levels_unit: "unknown".into(),
     });
     *state.market.lock().unwrap() = MarketSnapshot {
         symbol: Some("NAS".into()),

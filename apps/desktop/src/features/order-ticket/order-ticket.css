@@ -35,6 +35,44 @@
   white-space: nowrap;
 }
 
+.order-check-margin-note {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.order-check-margin-note small {
+  color: var(--color-muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.order-check-grid b.margin-risk-below-margin-call {
+  color: var(--color-danger-text);
+}
+
+.order-check-grid b.margin-risk-below-stop-out {
+  color: var(--color-sell);
+  font-weight: 800;
+}
+
+.order-check-margin-warning {
+  padding: 4px 6px;
+  border: 1px solid var(--color-sell-border);
+  border-radius: 4px;
+  background: var(--color-sell-wash);
+  color: var(--color-danger-text);
+  font-size: 10px;
+}
+
+.order-check-margin-warning.margin-risk-below-stop-out {
+  border-color: var(--color-sell);
+  background: var(--color-sell-fill);
+  color: var(--color-sell);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .order-check-time {
   display: block;
   margin-top: 10px;
