@@ -58,9 +58,7 @@ export function OrderCheckResult({
           <b>{formatOrderMetric(orderCheck.marginLevel, orderCheck.marginLevel ? '%' : '')}</b>
         </div>
       </div>
-      <small className="order-check-time">
-        Checked {formatQuoted(orderCheck.checkedAtMs)} · Draft {orderCheck.draftId}
-      </small>
+      <small className="order-check-time">Checked {formatQuoted(orderCheck.checkedAtMs)}</small>
     </div>
   );
 }

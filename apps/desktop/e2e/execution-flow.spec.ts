@@ -176,6 +176,8 @@ async function completeOrderCheck(page: Page) {
     page.locator('.order-check-grid > div').filter({ has: page.getByText('Units', { exact: true }) }),
   ).toHaveText('Units0.10');
   await expect(page.locator('.order-check-grid')).toBeVisible();
+  // The draft id only pairs the check with its request; traders see when it ran.
+  await expect(page.locator('.order-check-time')).toHaveText(/^Checked [^·]+$/);
   expect((await wasInvoked(page, 'request_order_check'))?.args).toMatchObject({ volume: '0.10' });
 }
 
