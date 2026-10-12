@@ -188,7 +188,7 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     if (ask === null || bid === null) {
       return 0;
     }
-    return priceTagOffset(bid - ask, priceTagHeight(this.fontSize()));
+    return priceTagOffset(bid - ask, priceTagHeight(this.labelFontSize()));
   }
 
   private coordinateOf(price: number | undefined): number | null {
@@ -226,7 +226,7 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     const formatter = this.series?.priceFormatter();
     const ask = formatter === undefined || this.state.ask === undefined ? '' : formatter.format(this.state.ask);
     const bid = formatter === undefined || this.state.bid === undefined ? '' : formatter.format(this.state.bid);
-    const font = `${this.fontSize()}px ${this.fontFamily()}`;
+    const font = `${this.labelFontSize()}px ${this.labelFontFamily()}`;
     const key = `${ask}|${bid}|${font}`;
     if (this.texts.key === key) {
       return this.texts;
@@ -242,15 +242,6 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     };
     this.texts = { key, ask: padded(ask), bid: padded(bid) };
     return this.texts;
-  }
-
-  /** Font size the tags are sized against, matching the library's own labels. */
-  private fontSize(): number {
-    return this.chart?.options().layout.fontSize ?? 11;
-  }
-
-  private fontFamily(): string {
-    return this.chart?.options().layout.fontFamily ?? 'sans-serif';
   }
 
   private visible(price: number | undefined, side: 'ask' | 'bid'): boolean {

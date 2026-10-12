@@ -28,4 +28,13 @@ export abstract class AttachedSeriesPrimitive implements ISeriesPrimitive<Time> 
     this.series = null;
     this.requestUpdate = null;
   }
+
+  /** The chart's label font size, which the library sizes its own labels from. */
+  protected labelFontSize(): number {
+    return this.chart?.options().layout.fontSize ?? 11;
+  }
+
+  protected labelFontFamily(): string {
+    return this.chart?.options().layout.fontFamily ?? 'sans-serif';
+  }
 }

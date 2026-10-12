@@ -1,18 +1,30 @@
-import type { IPaneApi, ISeriesPrimitiveAxisView, SeriesAttachedParameter, Time } from 'lightweight-charts';
+import type {
+  IPaneApi,
+  IPrimitivePaneRenderer,
+  IPrimitivePaneView,
+  SeriesAttachedParameter,
+  Time,
+} from 'lightweight-charts';
 import { AttachedSeriesPrimitive } from '../attachedPrimitive';
+import type { RenderTarget } from '../drawTarget';
 import { BrokerClock } from './clock';
 import { priceTagHeight, priceTagOffset } from '../priceAxisTagsPrimitive';
+import { tagLayout } from './tagLayout';
 import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './types';
 import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
+
+/** Corner radius of the library's own labels, on the pane-facing side. */
+const TAG_RADIUS = 2;
 
 /**
  * Counts the current bar down on the price axis, under the Bid label.
  *
- * A series primitive whose only view is a price-axis label: the library paints
- * the label on the axis canvas and lays it out with the native labels, which is
- * what keeps it glued under the Bid label — the library *moves* that label to
- * keep it clear of the Ask and of the axis ticks, so a label drawn by hand from
- * the raw price coordinate would drift against it and cover the tick labels.
+ * A series primitive whose only view paints on the price-axis canvas. It is
+ * drawn here rather than as a library axis label because the library sizes a
+ * label to its text and the chart font is proportional, so the tag changed width
+ * as the digits changed. The tag sits one whole tag height under the Bid tag,
+ * which is placed by `PriceAxisTagsPrimitive` with the same spacing helpers, and
+ * its digits are drawn in fixed cells (see `tagLayout`).
  * The primitive owns no DOM node and runs no per-frame loop of its own.
  *
  * The library has no per-second animation hook, so a label only repaints when
@@ -22,7 +34,7 @@ import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
  */
 export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
   private readonly clock = new BrokerClock();
-  private readonly axisViews: readonly ISeriesPrimitiveAxisView[];
+  private readonly axisViews: readonly IPrimitivePaneView[];
   private options: BarCountdownOptions;
   private readonly state: BarCountdownState = {
     symbol: '',
@@ -36,24 +48,18 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
   private paneHeight = 0;
   /** Text the last chart update put on the axis; drives the repaint decision. */
   private shownText = '';
+  /** Axis coordinate of the tag's centre, captured with `shownText`. */
+  private shownY = NaN;
   private timer: number | undefined;
   private dueMs = 0;
 
   constructor(options: Partial<BarCountdownOptions> = {}) {
     super();
     this.options = { ...barCountdownDefaultOptions, ...options };
-    // The view list is stable: the library caches views by array identity and
-    // reads the current state through these callbacks.
-    this.axisViews = [
-      {
-        coordinate: () => this.coordinate(),
-        text: () => this.tagText(),
-        textColor: () => this.options.textColor,
-        backColor: () => this.options.backColor,
-        tickVisible: () => this.options.tickVisible,
-        visible: () => this.visible(),
-      },
-    ];
+    // The view list is stable: the library caches views by array identity. The
+    // renderer is null while the tag is hidden, so a hidden tag costs nothing.
+    const renderer: IPrimitivePaneRenderer = { draw: (target) => this.draw(target) };
+    this.axisViews = [{ zOrder: () => 'top', renderer: () => (this.shownText === '' ? null : renderer) }];
   }
 
   /** Mirror the owner's state in and re-arm the wake-up for the next change. */
@@ -111,14 +117,40 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
     this.shownText = '';
   }
 
-  priceAxisViews(): readonly ISeriesPrimitiveAxisView[] {
+  priceAxisPaneViews(): readonly IPrimitivePaneView[] {
     return this.axisViews;
   }
 
-  /** Runs on every chart update, before the axis is laid out and painted. */
+  /** Runs on every chart update, before the axis is painted; the draw reads this snapshot. */
   updateAllViews(): void {
     this.paneHeight = this.pane?.getHeight() ?? 0;
     this.shownText = this.painted();
+    this.shownY = this.coordinate();
+  }
+
+  /** Box and fixed-cell digits, in the axis canvas' own coordinates. */
+  private draw(target: RenderTarget): void {
+    const text = this.shownText;
+    const fontSize = this.labelFontSize();
+    const font = `${fontSize}px ${this.labelFontFamily()}`;
+    const layout = tagLayout(text, font, fontSize);
+    const height = Math.round(priceTagHeight(fontSize));
+    const top = Math.round(this.shownY - height / 2);
+    target.useMediaCoordinateSpace(({ context }) => {
+      context.save();
+      context.fillStyle = this.options.backColor;
+      context.beginPath();
+      context.roundRect(0, top, layout.width, height, [0, TAG_RADIUS, TAG_RADIUS, 0]);
+      context.fill();
+      context.font = font;
+      context.fillStyle = this.options.textColor;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      for (const glyph of layout.glyphs) {
+        context.fillText(glyph.char, glyph.centerX, top + height / 2);
+      }
+      context.restore();
+    });
   }
 
   /** Countdown text for the current broker second, ignoring visibility. */
@@ -137,8 +169,7 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
     // Sit one whole tag under the Bid tag, wherever the Bid/Ask tags put it:
     // their offset grows outwards when the spread is tighter than a tag, and the
     // countdown has to clear the Bid one in both cases.
-    const fontSize = this.chart?.options().layout.fontSize ?? 11;
-    const height = priceTagHeight(fontSize);
+    const height = priceTagHeight(this.labelFontSize());
     return y + this.tagsOffset(height) + height;
   }
 
