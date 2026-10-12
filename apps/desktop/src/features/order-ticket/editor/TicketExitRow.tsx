@@ -88,7 +88,9 @@ export function TicketExitRow({
         >
           ⇄
         </button>
-        <span className="ticket-unit">{ticksMode ? `${price || '—'} price` : `${ticks || '—'} ticks`}</span>
+        <span className="ticket-unit ticket-unit-readout">
+          {ticksMode ? `${price || '—'} price` : `${ticks || '—'} ticks`}
+        </span>
       </div>
     </div>
   );
