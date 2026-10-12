@@ -20,6 +20,10 @@ Lightweight Charts and Tauri/Rust. A local Expert Advisor supplies market and
 account data and executes trading commands. MT5 and a broker account are
 required and are not bundled.
 
+<p align="center">
+  <img src="docs/media/order-demo.gif" alt="Placing a buy limit order with 5% risk, dragging SL and TP, and the position closing at take profit" width="800" />
+</p>
+
 ## Features
 
 - Live candlestick charts, Bid/Ask quotes, symbol search and six timeframes.
