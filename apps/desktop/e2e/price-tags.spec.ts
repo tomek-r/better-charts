@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { chromium, devices, test, expect, type Page } from '@playwright/test';
 import { assembleGlyphRows, observeFillText, type AxisPaint } from './helpers/canvasText';
 import {
   brokerSymbolFixture,
@@ -75,6 +75,7 @@ function readTagBands(page: Page): Promise<Bands> {
 interface AxisOp extends AxisPaint {
   kind: 'box' | 'text';
   width: number;
+  height: number;
 }
 
 const PRICE_TEXT = /^\d+\.\d+$/;
@@ -104,11 +105,21 @@ async function openChart(page: Page, stub: Parameters<typeof gotoWithStub>[1] = 
   await page.addInitScript(() => {
     const ops: AxisOp[] = [];
     (window as unknown as { __tagOps: AxisOp[] }).__tagOps = ops;
-    const onAxis = (context: CanvasRenderingContext2D) => context.canvas.width <= 120 && context.canvas.height > 120;
+    // Canvas bitmaps are devicePixelRatio times their CSS size.
+    const onAxis = (context: CanvasRenderingContext2D) =>
+      context.canvas.width <= 120 * devicePixelRatio && context.canvas.height > 120 * devicePixelRatio;
     const roundRect = CanvasRenderingContext2D.prototype.roundRect;
     CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
       if (onAxis(this)) {
-        ops.push({ kind: 'box', width: Number(w), text: '', at: performance.now(), x: Number(x), y: Number(y) });
+        ops.push({
+          kind: 'box',
+          width: Number(w),
+          height: Number(h),
+          text: '',
+          at: performance.now(),
+          x: Number(x),
+          y: Number(y),
+        });
       }
       return roundRect.call(this, x, y, w, h, radii);
     };
@@ -116,8 +127,8 @@ async function openChart(page: Page, stub: Parameters<typeof gotoWithStub>[1] = 
   await observeFillText(page, () => {
     const ops = (window as unknown as { __tagOps: AxisOp[] }).__tagOps;
     return (context, text, x, y) => {
-      if (context.canvas.width <= 120 && context.canvas.height > 120) {
-        ops.push({ kind: 'text', width: 0, text: String(text), at: performance.now(), x, y });
+      if (context.canvas.width <= 120 * devicePixelRatio && context.canvas.height > 120 * devicePixelRatio) {
+        ops.push({ kind: 'text', width: 0, height: 0, text: String(text), at: performance.now(), x, y });
       }
     };
   });
@@ -167,6 +178,39 @@ test('Bid and Ask tags stay readable and unmoved when the last price moves betwe
     clip: { x: 1060, y: 340, width: 220, height: 160 },
   });
 });
+
+for (const deviceScaleFactor of [1, 2]) {
+  test(`stacked Ask, Bid and countdown tags stay flush at device pixel ratio ${deviceScaleFactor}`, async ({
+    baseURL,
+  }) => {
+    // The browser itself is launched at the ratio so canvas bitmaps scale too (see
+    // crosshair-line-sharpness.spec.ts).
+    const browser = await chromium.launch({
+      args: deviceScaleFactor === 1 ? [] : [`--force-device-scale-factor=${deviceScaleFactor}`],
+    });
+    try {
+      const context = await browser.newContext({ ...devices['Desktop Chrome'], baseURL, deviceScaleFactor });
+      const page = await context.newPage();
+      await openChart(page);
+      await pushEvent(page, 'bar-update', { symbol: 'EURUSD', timeframe: 'M5', candle });
+      // Spreads from touching to a few points, at prices that land on fractional
+      // axis coordinates: each tag used to round its own position independently.
+      for (let index = 0; index < 24; index += 1) {
+        const bid = (1.0851 + index * 0.000007).toFixed(5);
+        const ask = (1.0851 + index * 0.000007 + 0.00001 + (index % 5) * 0.00001).toFixed(5);
+        await pushEvent(page, 'quote-update', quote(STUB_NOW + 15_500 + index * 300, bid, ask));
+        await page.clock.runFor(100);
+        const boxes = (await lastFrameOps(page)).filter((op) => op.kind === 'box').sort((a, b) => a.y - b.y);
+        expect(boxes).toHaveLength(3);
+        const [askBox, bidBox, countdownBox] = boxes;
+        expect(bidBox.y, `bid ${bid} ask ${ask}`).toBe(askBox.y + askBox.height);
+        expect(countdownBox.y, `bid ${bid} ask ${ask}`).toBe(bidBox.y + bidBox.height);
+      }
+    } finally {
+      await browser.close();
+    }
+  });
+}
 
 test('Bid and Ask tags keep one box width and fixed digit cells whichever digits the price shows', async ({ page }) => {
   await openChart(page);
