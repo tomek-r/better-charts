@@ -12,7 +12,7 @@ export function useOrderTicketActionsProducer({ stores, ...inputs }: OrderTicket
   const draft = useOrderTicketDraft(inputs, stores);
   const brokerActions = useOrderTicketBrokerActions(inputs, stores, draft.resetTicketToDefaults);
   const pricing = useOrderTicketPricing(inputs, stores);
-  const sizing = useOrderTicketSizing(stores, draft.enableRiskStopLoss);
+  const sizing = useOrderTicketSizing(stores, inputs.instrument, draft.enableRiskStopLoss);
 
   return {
     ...pricing,

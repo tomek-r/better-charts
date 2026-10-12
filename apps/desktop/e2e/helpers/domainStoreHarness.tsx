@@ -55,7 +55,7 @@ export function mountDomainStoreHarness(): void {
   }
 
   function SizingCommandConsumer() {
-    const { applyUnitsMode, setRiskAmountFromInput } = useOrderTicketSizing(sizingStores, () => undefined);
+    const { applyUnitsMode, setRiskAmountFromInput } = useOrderTicketSizing(sizingStores, undefined, () => undefined);
     const [result, setResult] = useState('ready');
     return createElement(
       Fragment,

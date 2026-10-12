@@ -1,11 +1,13 @@
 import { useCallback } from 'react';
-import type { RiskSide } from '../../../shared/bridge/types';
+import type { BrokerSymbol, RiskSide } from '../../../shared/bridge/types';
+import { defaultOrderVolume } from '../domain/defaultVolume';
 import { clampRiskPercentInput } from '../domain/riskBasis';
 import { orderEntryPrice } from '../domain/ticketRules';
 import type { OrderTicketStores } from './orderTicketStores';
 
 export function useOrderTicketSizing(
   stores: OrderTicketStores,
+  instrument: BrokerSymbol | undefined,
   enableRiskStopLoss: (side: RiskSide, entry: number, overwrite?: boolean) => string | undefined,
 ) {
   const setters = stores.setters.draft;
@@ -27,7 +29,7 @@ export function useOrderTicketSizing(
     (mode: 'money' | 'equity' | 'units') => {
       const { unitsMode } = stores.draft.getState();
       if (mode !== unitsMode) {
-        setters.setOrderVolume('1');
+        setters.setOrderVolume(defaultOrderVolume(instrument));
         setters.setVolumeManual(false);
         setters.setRiskAmount('');
         setters.setSlOn(false);
@@ -40,7 +42,7 @@ export function useOrderTicketSizing(
       }
       setters.setUnitsMode(mode);
     },
-    [stores.draft, setters, unitsAutoModeRef],
+    [stores.draft, setters, unitsAutoModeRef, instrument],
   );
 
   return { setRiskAmountFromInput, applyUnitsMode };

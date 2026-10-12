@@ -4,6 +4,7 @@ import type { RiskSide } from '../../../shared/bridge/types';
 import { ticketPrice } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
 import { defaultStopLossPrice } from '../domain/defaultStopLoss';
+import { defaultOrderVolume } from '../domain/defaultVolume';
 import type { OrderTicketInputs } from './orderTicketInputs';
 import type { OrderTicketDraftStore, OrderTicketStores } from './orderTicketStores';
 
@@ -42,7 +43,7 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
     setters.setLimitPrice('');
     setters.setTimeInForce('gtc');
     setters.setUnitsMode('units');
-    setters.setOrderVolume('1');
+    setters.setOrderVolume(defaultOrderVolume(instrument));
     setters.setVolumeManual(false);
     setters.setSlUnit('ticks');
     setters.setTpUnit('ticks');
@@ -50,7 +51,7 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
     setters.setPriceReference('ask');
     setters.setPriceOffset('0');
     setters.setTicketStage('edit');
-  }, [resetOrderDraft, setters]);
+  }, [resetOrderDraft, setters, instrument]);
 
   const enableRiskStopLossForDraft = useCallback(
     (draft: OrderTicketDraftStore, side: RiskSide, entryPrice: number, overwrite = false) => {
@@ -101,7 +102,7 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
         setters.setEntry(ticketPrice(price, digits));
       }
       if (!draft.orderVolume.trim()) {
-        setters.setOrderVolume('1');
+        setters.setOrderVolume(defaultOrderVolume(instrument));
       }
       if (draft.unitsMode !== 'units' && Number(draft.riskAmount) > 0 && (!draft.stagedOnChart || fresh)) {
         enableRiskStopLossForDraft(draft, side, price, fresh);
@@ -113,6 +114,7 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
       latestCandle,
       instrumentDigitsRef,
       quote,
+      instrument,
       stores.draft,
       enableRiskStopLossForDraft,
       setters,
