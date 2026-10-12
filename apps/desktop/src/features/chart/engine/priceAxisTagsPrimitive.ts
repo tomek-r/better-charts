@@ -1,7 +1,8 @@
-import type { IPaneApi, ISeriesPrimitiveAxisView, SeriesAttachedParameter, Time } from 'lightweight-charts';
+import type { IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, Time } from 'lightweight-charts';
 import { palette } from '../../../shared/theme/palette';
 import { AttachedSeriesPrimitive } from './attachedPrimitive';
-import { measureTextWidth } from './textMeasure';
+import type { RenderTarget } from './drawTarget';
+import { paintTag, tagLayout, type TagLayout } from './fixedCellText';
 
 /**
  * Bid/Ask price-axis labels.
@@ -15,9 +16,9 @@ import { measureTextWidth } from './textMeasure';
  * axis label always prints its own price: shifting one far enough to separate
  * the tags would print a price the market never traded.
  *
- * So the tags are ordinary price-axis labels — the library paints them exactly
- * as it paints a native price line's label — spaced by the two prices so both
- * stay readable, and only ever moving with the scale.
+ * So the tags are price-axis labels drawn here in the library's label style,
+ * spaced by the two prices so both stay readable, and only ever moving with the
+ * scale.
  */
 
 /** Height of a primitive price-axis label, per 12px of font. */
@@ -36,18 +37,20 @@ export interface PriceAxisTagsState {
 }
 
 /**
- * The library measures label text with digits 2-9 replaced by `0` (its width
- * cache) and draws what it is given, so a price containing `1` measures
- * narrower than one that does not. Two labels that sit as one column then end
- * up ragged, which is what a Bid/Ask stack looks like. Both texts are measured
- * here the same way and the narrower one is padded with hair spaces, which are
- * invisible and leave the digits exactly where they were.
+ * The tags are painted here, not by the library, because the library sizes a
+ * label to its text and the chart font is proportional: the box breathed as the
+ * digits changed, and its stack neighbour (the countdown) looked dynamic. The
+ * digits are drawn in fixed cells (see `fixedCellText`), so the width depends
+ * only on the number of characters.
  */
-const CACHE_NORMALISATION = /[2-9]/g;
-const HAIR_SPACE = '\u200a';
-
-function textWidth(text: string, font: string): number {
-  return measureTextWidth(text.replace(CACHE_NORMALISATION, '0'), font);
+interface TagTexts {
+  key: string;
+  ask: string;
+  bid: string;
+  font: string;
+  layouts: { ask: TagLayout; bid: TagLayout };
+  /** Box width shared by the pair. */
+  width: number;
 }
 
 export interface PriceAxisTagsOptions {
@@ -56,35 +59,39 @@ export interface PriceAxisTagsOptions {
 }
 
 export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
-  private readonly axisViews: readonly ISeriesPrimitiveAxisView[];
+  private readonly axisViews: readonly IPrimitivePaneView[];
+  /** Axis coordinate of each tag's centre captured by `updateAllViews`; NaN while hidden. */
+  private readonly shownY = { ask: NaN, bid: NaN };
   private options: PriceAxisTagsOptions;
   private readonly state: PriceAxisTagsState = {};
-  private pane: IPaneApi<Time> | null = null;
-  private paneHeight = 0;
   /** Pending post-paint width read, so a burst of quotes schedules one. */
   private widthFrame = 0;
   /** The axis width the chart was configured with, restored on a symbol change. */
   private configuredMinimumWidth = 0;
   /** Widest axis width needed so far; never lowered while this series is shown. */
   private heldAxisWidth = 0;
-  /** Formatted (and width-matched) tag texts, kept until prices or font move. */
-  private texts: { key: string; ask: string; bid: string } = { key: '', ask: '', bid: '' };
+  /** Formatted tag texts and layouts, kept until prices or font move. */
+  private texts: TagTexts = {
+    key: '',
+    ask: '',
+    bid: '',
+    font: '',
+    layouts: { ask: { width: 0, glyphs: [] }, bid: { width: 0, glyphs: [] } },
+    width: 0,
+  };
 
   constructor(options: PriceAxisTagsOptions) {
     super();
     this.options = { ...options };
-    const tags: Array<{ price: () => number | undefined; side: 'ask' | 'bid' }> = [
-      { price: () => this.state.ask, side: 'ask' },
-      { price: () => this.state.bid, side: 'bid' },
-    ];
-    this.axisViews = tags.map((tag) => ({
-      coordinate: () => this.coordinate(tag.price(), tag.side),
-      text: () => this.text(tag.price(), tag.side),
-      textColor: () => palette.text,
-      backColor: () => (tag.side === 'ask' ? this.options.askColor : this.options.bidColor),
-      tickVisible: () => false,
-      visible: () => this.visible(tag.price(), tag.side),
-    }));
+    // The view list is stable: the library caches views by array identity. A
+    // hidden tag has no renderer, so it costs nothing.
+    this.axisViews = (['ask', 'bid'] as const).map((side) => {
+      const renderer: IPrimitivePaneRenderer = { draw: (target) => this.draw(target, side) };
+      return {
+        zOrder: () => 'top' as const,
+        renderer: () => (Number.isNaN(this.shownY[side]) ? null : renderer),
+      };
+    });
   }
 
   /** Mirror the owner's quotes in; the tags follow the prices themselves. */
@@ -100,19 +107,14 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
 
   attached(params: SeriesAttachedParameter<Time>): void {
     super.attached(params);
-    const { chart, series } = params;
-    // The pane height bounds the tags. Resolved once here; `updateAllViews`
-    // re-reads it, so nothing walks the pane list on the per-frame path.
-    this.pane = chart.panes().find((candidate) => candidate.getSeries().includes(series)) ?? null;
-    this.paneHeight = this.pane?.getHeight() ?? 0;
-    this.configuredMinimumWidth = series.priceScale().options().minimumWidth;
+    this.configuredMinimumWidth = params.series.priceScale().options().minimumWidth;
     this.heldAxisWidth = this.configuredMinimumWidth;
   }
 
   detached(): void {
     super.detached();
-    this.pane = null;
-    this.paneHeight = 0;
+    this.shownY.ask = NaN;
+    this.shownY.bid = NaN;
     cancelAnimationFrame(this.widthFrame);
     this.widthFrame = 0;
     this.configuredMinimumWidth = 0;
@@ -121,12 +123,15 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     this.state.bid = undefined;
   }
 
-  priceAxisViews(): readonly ISeriesPrimitiveAxisView[] {
+  priceAxisPaneViews(): readonly IPrimitivePaneView[] {
     return this.axisViews;
   }
 
+  /** Runs on every chart update, before the axis is painted; the draw reads this snapshot. */
   updateAllViews(): void {
-    this.paneHeight = this.pane?.getHeight() ?? 0;
+    this.refreshPaneHeight();
+    this.shownY.ask = this.visible(this.state.ask, 'ask') ? this.coordinate(this.state.ask, 'ask') : NaN;
+    this.shownY.bid = this.visible(this.state.bid, 'bid') ? this.coordinate(this.state.bid, 'bid') : NaN;
   }
 
   /**
@@ -162,7 +167,10 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     if (scale === undefined) {
       return;
     }
-    const width = scale.width();
+    // The tags are painted here, so the library's own width no longer includes
+    // them: the axis must also be at least as wide as the boxes drawn.
+    const shown = !Number.isNaN(this.shownY.ask) || !Number.isNaN(this.shownY.bid);
+    const width = Math.max(scale.width(), shown ? this.texts.width : 0);
     if (width > this.heldAxisWidth) {
       this.heldAxisWidth = width;
       scale.applyOptions({ minimumWidth: width });
@@ -218,34 +226,49 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
   }
 
   /**
-   * Both tag texts, the narrower padded so the pair shares one width. A price
-   * line's own label would be ragged here for the same reason, because the
-   * library measures every label through the same digit-normalising cache.
+   * Both tag texts and their fixed-cell layouts, kept until a price or the font
+   * changes. The pair shares one box width: with the same number of characters
+   * it is already equal, and a price that gains a digit widens both.
    */
-  private tagTexts(): { ask: string; bid: string } {
+  private tagTexts(): TagTexts {
     const formatter = this.series?.priceFormatter();
     const ask = formatter === undefined || this.state.ask === undefined ? '' : formatter.format(this.state.ask);
     const bid = formatter === undefined || this.state.bid === undefined ? '' : formatter.format(this.state.bid);
-    const font = `${this.labelFontSize()}px ${this.labelFontFamily()}`;
+    const fontSize = this.labelFontSize();
+    const font = `${fontSize}px ${this.labelFontFamily()}`;
     const key = `${ask}|${bid}|${font}`;
     if (this.texts.key === key) {
       return this.texts;
     }
-    const target = Math.max(textWidth(ask, font), textWidth(bid, font));
-    const padded = (text: string) => {
-      let out = text;
-      // Hair spaces only: they are invisible, and the digits keep their places.
-      while (out.length < 32 && textWidth(out, font) + 0.25 < target) {
-        out += HAIR_SPACE;
-      }
-      return out;
-    };
-    this.texts = { key, ask: padded(ask), bid: padded(bid) };
+    const layouts = { ask: tagLayout(ask, font, fontSize), bid: tagLayout(bid, font, fontSize) };
+    const width = Math.max(layouts.ask.width, layouts.bid.width);
+    this.texts = { key, ask, bid, font, layouts, width };
     return this.texts;
   }
 
   private visible(price: number | undefined, side: 'ask' | 'bid'): boolean {
     const y = this.coordinate(price, side);
     return this.text(price, side) !== '' && Number.isFinite(y) && y >= 0 && y <= this.paneHeight;
+  }
+
+  /** Box and fixed-cell digits, in the axis canvas' own coordinates. */
+  private draw(target: RenderTarget, side: 'ask' | 'bid'): void {
+    const centre = this.shownY[side];
+    if (Number.isNaN(centre)) {
+      return;
+    }
+    const texts = this.tagTexts();
+    const height = Math.round(priceTagHeight(this.labelFontSize()));
+    target.useMediaCoordinateSpace(({ context }) => {
+      paintTag(context, {
+        layout: texts.layouts[side],
+        width: texts.width,
+        font: texts.font,
+        backColor: side === 'ask' ? this.options.askColor : this.options.bidColor,
+        textColor: palette.text,
+        top: Math.round(centre - height / 2),
+        height,
+      });
+    });
   }
 }

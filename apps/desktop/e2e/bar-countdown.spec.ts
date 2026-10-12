@@ -1,15 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
-import { observeFillText } from './helpers/canvasText';
+import { assembleGlyphRows, observeFillText, type AxisPaint } from './helpers/canvasText';
 import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
 
 const quote = (timeMs: number) => eurusdQuote(timeMs);
 const candle = eurusdFormingBar;
 
-interface Paint {
-  text: string;
-  at: number;
-  x: number;
-}
+type Paint = AxisPaint;
 
 const COUNTDOWN_TEXT = /^\d{2}:\d{2}(:\d{2})?$/;
 
@@ -23,10 +19,10 @@ async function recordAxisText(page: Page) {
   await observeFillText(page, () => {
     const paints: Paint[] = [];
     (window as unknown as { __axisText: Paint[] }).__axisText = paints;
-    return (context, text, x) => {
+    return (context, text, x, y) => {
       // The price axis is the narrow, tall column right of the pane.
       if (context.canvas.width <= 100 && context.canvas.height > 100) {
-        paints.push({ text: String(text), at: performance.now(), x });
+        paints.push({ text: String(text), at: performance.now(), x, y });
       }
     };
   });
@@ -34,30 +30,9 @@ async function recordAxisText(page: Page) {
 async function axisPaints(page: Page): Promise<Paint[]> {
   return page.evaluate(() => (window as unknown as { __axisText: Paint[] }).__axisText);
 }
-/**
- * The countdown is drawn one glyph per cell, so its text is reassembled per
- * frame: single-character draws left to right (one per x, in case a frame is
- * painted twice). Prices and tag texts are longer strings and never match.
- */
+/** The Bid and Ask tags are glyph rows too; only the `mm:ss` row is the countdown. */
 function assembleCountdowns(paints: Paint[]): Paint[] {
-  const frames = new Map<number, Map<number, string>>();
-  for (const paint of paints) {
-    if (paint.text.length === 1) {
-      const glyphs = frames.get(paint.at) ?? new Map<number, string>();
-      glyphs.set(paint.x, paint.text);
-      frames.set(paint.at, glyphs);
-    }
-  }
-  return [...frames.entries()]
-    .map(([at, glyphs]) => ({
-      at,
-      x: Math.min(...glyphs.keys()),
-      text: [...glyphs.entries()]
-        .sort(([left], [right]) => left - right)
-        .map(([, glyph]) => glyph)
-        .join(''),
-    }))
-    .filter((paint) => COUNTDOWN_TEXT.test(paint.text));
+  return assembleGlyphRows(paints).filter((paint) => COUNTDOWN_TEXT.test(paint.text));
 }
 async function countdownPaints(page: Page): Promise<Paint[]> {
   return assembleCountdowns(await axisPaints(page));
@@ -159,11 +134,8 @@ test('the tag keeps constant digit cells while the digits change, so its width n
   const layouts = new Map<string, number[]>();
   for (let second = 0; second < 16; second += 1) {
     const text = await countdownText(page);
-    const glyphs = (await axisFrame(page)).filter((paint) => paint.text.length === 1);
-    layouts.set(
-      text,
-      [...new Set(glyphs.map((paint) => paint.x))].sort((a, b) => a - b),
-    );
+    const row = assembleGlyphRows(await axisFrame(page)).find((candidate) => COUNTDOWN_TEXT.test(candidate.text));
+    layouts.set(text, row?.glyphXs ?? []);
     await page.clock.runFor(1000);
   }
   expect([...layouts.keys()]).toEqual(expect.arrayContaining(['04:45', '04:41', '04:38', '04:30']));
