@@ -1,16 +1,51 @@
+import { useMemo } from 'react';
 import { useStore } from 'zustand';
 import type { ChartTicketOverlayState } from '../../chart/effects/useChartOverlaySync';
+import { deriveOrderRiskBasis } from '../domain/riskBasis';
 import { deriveStagedOrderDisplay } from '../domain/stagedOrderDisplay';
+import { deriveStopLossBand, stopLossRiskLabel, type StopLossBand } from '../domain/stopLossBand';
 import { useOrderTicketActions, useOrderTicketStores, type TicketActions } from './orderTicketContext';
 import type { OrderTicketInputs } from './orderTicketInputs';
 import type { OrderTicketStores } from './orderTicketStores';
 
 export function useOrderTicketChartRuntime(
-  inputs: Pick<OrderTicketInputs, 'instrument' | 'account' | 'snapshot'>,
+  inputs: Pick<OrderTicketInputs, 'instrument' | 'account' | 'snapshot' | 'quote'>,
 ): ChartTicketOverlayState {
   const stores = useOrderTicketStores();
   const draft = useStore(stores.draft);
   const broker = useStore(stores.broker);
+  const { instrument, account, quote } = inputs;
+  const { unitsMode, riskAmount, equityAllocationPercent, stagedOnChart } = draft;
+  const { riskSide, orderKind, entry, limitPrice } = draft;
+  const slBandJson = JSON.stringify(
+    stagedOnChart
+      ? deriveStopLossBand({
+          instrument,
+          account,
+          unitsMode,
+          riskBudget: deriveOrderRiskBasis({
+            unitsMode,
+            riskAmount,
+            equity: account?.equity,
+            equityAllocationPercent,
+            currency: account?.currency,
+            currencyDigits: account?.currencyDigits,
+            stagedOnChart,
+          }).effectiveRiskAmount,
+          riskLabel: stopLossRiskLabel(unitsMode, riskAmount, account?.currency),
+          side: riskSide,
+          orderKind,
+          entry,
+          limitPrice,
+          quote,
+        })
+      : undefined,
+  );
+  // Serialised so the chart mirror effect sees a stable value between equal bands.
+  const slBand = useMemo<StopLossBand | undefined>(
+    () => (slBandJson === undefined ? undefined : (JSON.parse(slBandJson) as StopLossBand)),
+    [slBandJson],
+  );
   const effectiveVolume = draft.orderVolume.trim();
   const fullDisplay = deriveStagedOrderDisplay({
     instrument: inputs.instrument,
@@ -56,6 +91,7 @@ export function useOrderTicketChartRuntime(
     orderKind: draft.orderKind,
     effectiveVolume,
     display,
+    slBand,
   };
 }
 

@@ -1,10 +1,32 @@
 import type { TradingLabelTarget } from './labelLayout';
-import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
+import { hitCircle, hitRect, STAGED_GRAB, type StagedSlBand } from './stagedOrderOverlay';
+import type { RiskSide } from '../../../shared/bridge/types';
 import { ticketPrice } from '../../../shared/format';
 import type { OrderTicketStores } from '../../order-ticket/state/orderTicketStores';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 
-type StagedGestureWorkspace = Pick<ChartWorkspaceState, 'stagedOrderState'>;
+type StagedGestureWorkspace = Pick<ChartWorkspaceState, 'stagedOrderState'> &
+  Partial<Pick<ChartWorkspaceState, 'chart'>>;
+
+/** Holds a dragged SL inside the allowed band; `edge` names the edge that caught it. */
+export function clampStopLoss(
+  price: number,
+  side: RiskSide,
+  band: StagedSlBand | undefined,
+): { price: number; edge: 'near' | 'far' | null } {
+  if (!band || band.empty) {
+    return { price, edge: null };
+  }
+  // BUY stops sit below the entry: far = lowest allowed, near = highest allowed.
+  const [lowest, highest] = side === 'buy' ? [band.farPrice, band.nearPrice] : [band.nearPrice, band.farPrice];
+  if (price < lowest) {
+    return { price: lowest, edge: side === 'buy' ? 'far' : 'near' };
+  }
+  if (price > highest) {
+    return { price: highest, edge: side === 'buy' ? 'near' : 'far' };
+  }
+  return { price, edge: null };
+}
 export type StagedOrderGestureTicket = Pick<
   OrderTicketStores['setters']['draft'],
   'setEntry' | 'setSlOn' | 'setStopLoss' | 'setTpOn' | 'setTakeProfit' | 'setStagedDragging' | 'setDragSlMoney'
@@ -130,7 +152,14 @@ export function createStagedOrderGestures(
         : null;
     return true;
   };
-  const applyDrag = (y: number, shiftKey = false) => {
+  // Alt disables the SL band clamp (today's free drag). Returns the hint to show, if any.
+  const setClampHint = (hint: string | undefined) => {
+    if (stagedOrderState.current.slClampHint !== hint) {
+      stagedOrderState.current.slClampHint = hint;
+      workspace.chart?.current?.refreshOverlays();
+    }
+  };
+  const applyDrag = (y: number, shiftKey = false, altKey = false) => {
     const { hit } = stagedOrderState.current;
     if (!hit.chartRect || !hit.toPrice) {
       return;
@@ -140,7 +169,8 @@ export function createStagedOrderGestures(
     if (!Number.isFinite(price) || price <= 0) {
       return;
     }
-    const text = ticketPrice(price, stagedOrderState.current.digits);
+    const digits = stagedOrderState.current.digits;
+    const text = ticketPrice(price, digits);
     if (drag === 'entry') {
       setEntry(text);
       const current = stagedEntryDrag;
@@ -159,7 +189,13 @@ export function createStagedOrderGestures(
             stagedOrderState.current.digits,
           );
         };
-        const stopLoss = shiftedText(current.stopLoss);
+        // A Limit entry carries its SL band along, so the shifted SL keeps its
+        // distance. A Stop Limit sizes from its fixed limit price: keep the shifted SL inside that band.
+        const order = stagedOrderState.current.order;
+        let stopLoss = shiftedText(current.stopLoss);
+        if (stopLoss !== undefined && order?.orderKindLabel === 'Stop Limit' && !altKey) {
+          stopLoss = ticketPrice(clampStopLoss(Number(stopLoss), order.side, order.slBand).price, digits);
+        }
         const takeProfit = shiftedText(current.takeProfit);
         if (stopLoss !== undefined) {
           setStopLoss(stopLoss);
@@ -169,8 +205,18 @@ export function createStagedOrderGestures(
         }
       }
     } else if (drag === 'sl') {
+      const order = stagedOrderState.current.order;
+      const band = altKey ? undefined : order?.slBand;
+      const held = order ? clampStopLoss(price, order.side, band) : { price, edge: null };
+      let hint: string | undefined;
+      if (held.edge && band) {
+        hint = held.edge === 'far' ? band.farHint : band.nearHint;
+      } else if (band?.empty) {
+        hint = band.emptyHint;
+      }
+      setClampHint(hint);
       setSlOn(true);
-      setStopLoss(text);
+      setStopLoss(held.edge ? ticketPrice(held.price, digits) : text);
     } // dragging a handle SETS the level (TV semantics)
     else {
       setTpOn(true);
@@ -178,6 +224,7 @@ export function createStagedOrderGestures(
     }
   };
   const reset = () => {
+    setClampHint(undefined);
     if (drag !== null) {
       setStagedDragging(false);
       setDragSlMoney(undefined);

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect } from 'react';
-import type { StagedOrderLevels } from '../engine/stagedOrderOverlay';
+import type { StagedOrderLevels, StagedSlBand } from '../engine/stagedOrderOverlay';
 import { quoteDigits } from '../../../shared/format';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { OrderTicketCoordination, OrderTicketDraftStore } from '../../order-ticket/state/orderTicketStores';
@@ -21,6 +21,7 @@ export type ChartTicketOverlayState = Pick<OrderTicketCoordination, 'submitSwapP
   > &
   Pick<TicketDerivation, 'effectiveVolume'> & {
     display: Pick<ReturnType<typeof deriveStagedOrderDisplay>, 'slMoney' | 'tpMoney' | 'riskRewardLabel'>;
+    slBand: StagedSlBand | undefined;
   };
 
 export function useChartWorkspaceMirrorRefEffect(
@@ -69,6 +70,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
     effectiveVolume,
     display: { slMoney, tpMoney, riskRewardLabel },
     orderKind,
+    slBand,
   } = ticket;
   const stagedOrderRef = stagedOrderState;
   // Mirror the ticket into the staged widget every relevant edit (two-way sync:
@@ -120,6 +122,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
       slMoney,
       tpMoney,
       riskRewardLabel,
+      slBand,
     };
     const previous = state.order;
     const changed =
@@ -132,7 +135,8 @@ export function useChartWorkspaceMirrorLayoutEffect(
       previous.orderKindLabel !== next.orderKindLabel ||
       previous.slMoney !== next.slMoney ||
       previous.tpMoney !== next.tpMoney ||
-      previous.riskRewardLabel !== next.riskRewardLabel;
+      previous.riskRewardLabel !== next.riskRewardLabel ||
+      previous.slBand !== next.slBand;
     state.order = next;
     const priceMoved = stagedPrevPriceRef.current !== state.currentPrice;
     stagedPrevPriceRef.current = state.currentPrice;
@@ -159,6 +163,7 @@ export function useChartWorkspaceMirrorLayoutEffect(
     slMoney,
     tpMoney,
     riskRewardLabel,
+    slBand,
     chart,
     instrumentDigitsRef,
     stagedOrderRef,

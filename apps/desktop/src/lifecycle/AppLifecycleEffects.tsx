@@ -267,6 +267,7 @@ export function LifecycleTicketPreviewAndMirror({
     instrument: session.instrument,
     account: session.account,
     snapshot: session.snapshot,
+    quote,
   });
   useOrderTicketRiskPreviewEffects(preview.input, preview.riskBasis);
   useChartWorkspaceMirrorRefEffect(

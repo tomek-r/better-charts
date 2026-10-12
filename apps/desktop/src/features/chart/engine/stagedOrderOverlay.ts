@@ -33,6 +33,17 @@ import {
  * Retina backing-store scaling; capture handlers claim only actual gestures.
  */
 
+/** Allowed SL prices for a risk-sized draft (mirrors the order-ticket domain band). */
+export interface StagedSlBand {
+  nearPrice: number;
+  farPrice: number;
+  /** No price satisfies both edges: nothing is shaded or clamped. */
+  empty: boolean;
+  nearHint: string;
+  farHint: string;
+  emptyHint: string;
+}
+
 export interface StagedOrderLevels {
   side: RiskSide;
   /** NaN hides the widget (ticket price cleared while staged). */
@@ -49,11 +60,15 @@ export interface StagedOrderLevels {
   tpMoney?: string;
   /** Risk:reward ratio, shown only when both correctly sided exit levels exist. */
   riskRewardLabel?: string;
+  /** Risk sizing only; absent in units mode or without usable broker metadata. */
+  slBand?: StagedSlBand;
 }
 
 export interface StagedOrderState {
   /** null = not staged. Written by App every render via the mirror effect. */
   order: StagedOrderLevels | null;
+  /** Why the SL drag is held at a band edge; set by the gestures, cleared on release. */
+  slClampHint?: string;
   /** Instrument digits used for every price the widget formats. */
   digits: number;
   /** Epoch ms when the current bar closes — drives the axis countdown tag. */
@@ -70,6 +85,8 @@ export interface StagedOrderState {
      *  not just the small handle box. */
     slLineY?: number;
     tpLineY?: number;
+    /** Viewport y of the allowed-SL band edges (risk sizing only). */
+    slBandY?: { nearY: number; farY: number };
     entryCancel?: TradingHitCircle;
     slHandle?: TradingHitRect;
     slCancel?: TradingHitCircle;
@@ -117,6 +134,63 @@ function cancelChip(
   key: 'entryCancel' | 'slCancel' | 'tpCancel',
 ) {
   hit[key] = drawCancelChip(ctx, cx, cy, color);
+}
+
+/**
+ * Dims the SL-side prices a risk-sized order cannot use: beyond the far edge
+ * (even the minimum lot overspends the budget) and between the entry and the
+ * near edge (too close for the broker or the volume cap). Dashed lines mark the edges.
+ */
+function paintDisallowedSlRegions(
+  ctx: CanvasRenderingContext2D,
+  chartRect: { x: number; y: number; width: number; height: number },
+  side: RiskSide,
+  entryY: number,
+  { nearY, farY }: { nearY: number; farY: number },
+) {
+  const { x, y, width, height } = chartRect;
+  const slopesDown = side === 'buy'; // BUY: SL below the entry (larger y)
+  const dim = (from: number, to: number) => {
+    const top = Math.max(Math.min(from, to), y);
+    const bottom = Math.min(Math.max(from, to), y + height);
+    if (bottom > top) {
+      ctx.fillRect(x, top, width, bottom - top);
+    }
+  };
+  ctx.save();
+  ctx.fillStyle = palette.muted;
+  ctx.globalAlpha = 0.18;
+  dim(farY, slopesDown ? y + height : y);
+  if (slopesDown ? nearY > entryY : nearY < entryY) {
+    dim(entryY, nearY);
+  }
+  ctx.globalAlpha = 0.7;
+  ctx.strokeStyle = palette.muted;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  for (const edgeY of [farY, nearY]) {
+    if (edgeY >= y && edgeY <= y + height) {
+      ctx.beginPath();
+      ctx.moveTo(x, Math.round(edgeY) + 0.5);
+      ctx.lineTo(x + width, Math.round(edgeY) + 0.5);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+/** Short pill beside the SL handle explaining which band edge holds the drag. */
+function paintClampHint(ctx: CanvasRenderingContext2D, handle: TradingHitRect, text: string) {
+  const width = ctx.measureText(text).width + 16;
+  const left = handle.x + handle.w + 8;
+  const top = handle.y;
+  ctx.fillStyle = TRADING_COLORS.surface;
+  ctx.fillRect(left, top, width, handle.h);
+  ctx.strokeStyle = palette.warn;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(left + 0.5, top + 0.5, width - 1, handle.h - 1);
+  ctx.fillStyle = palette.warnText;
+  ctx.fillText(text, left + 8, top + handle.h / 2 + 0.5);
 }
 
 export function createStagedOrderOverlay(
@@ -185,9 +259,16 @@ export function createStagedOrderOverlay(
         }
         fillRiskZone(ctx, viewport.chartRect, entryY, toY(level), color);
       };
+      const band = order.slBand && !order.slBand.empty ? order.slBand : undefined;
+      if (band) {
+        hit.slBandY = { nearY: toY(band.nearPrice), farY: toY(band.farPrice) };
+      }
       if (drawLines) {
         zone(order.stopLoss, palette.sellSoft);
         zone(order.takeProfit, palette.accent);
+        if (band && hit.slBandY) {
+          paintDisallowedSlRegions(ctx, viewport.chartRect, order.side, entryY, hit.slBandY);
+        }
       }
 
       // ── ENTRY line + inline chips: (✕) unstage · side pill · pointed qty tag.
@@ -249,6 +330,9 @@ export function createStagedOrderOverlay(
               hit.slHandle = drawHandle(ctx, x + HANDLE_X, labelY, slLabel, TRADING_COLORS.sl, labelY < entryY);
 
               const box = hit.slHandle!;
+              if (state.slClampHint) {
+                paintClampHint(ctx, box, state.slClampHint);
+              }
               return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: box.x + box.w - (x + CANCEL_CHIP_X - 10), h: 20 };
             });
           }
