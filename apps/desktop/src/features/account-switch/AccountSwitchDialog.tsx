@@ -36,7 +36,6 @@ export function AccountSwitchDialog({ message, onDismiss }: { message: string; o
         data-account-switch-dialog
       >
         <h2 id="account-switch-title">{message}</h2>
-        <p>Drafts, staged orders and checks from the previous account were cleared.</p>
         <button ref={dismiss} type="button" className="account-switch-dismiss" onClick={onDismiss}>
           Dismiss
         </button>
