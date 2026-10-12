@@ -30,6 +30,25 @@ pub struct AccountSnapshot {
     /// instrument-level `trade_mode` of `symbol_info`.
     #[serde(default = "unknown_account_trade_mode_name")]
     pub account_trade_mode_name: String,
+    /// `ACCOUNT_MARGIN_SO_CALL`: margin-call level, a percentage in `percent`
+    /// mode or an amount in the account currency in `money` mode. `null` or
+    /// absent means not reported (never 0).
+    #[serde(default)]
+    pub margin_call_level: Option<String>,
+    /// `ACCOUNT_MARGIN_SO_SO`: stop-out level, same unit as `margin_call_level`.
+    #[serde(default)]
+    pub stop_out_level: Option<String>,
+    /// Raw `ACCOUNT_MARGIN_SO_MODE` (`ENUM_ACCOUNT_STOPOUT_MODE`: 0 percent,
+    /// 1 money); `null` or absent when not reported.
+    #[serde(default)]
+    pub margin_levels_mode: Option<i64>,
+    /// `percent` | `money` | `unknown`; `unknown` also covers older EAs.
+    #[serde(default = "unknown_margin_levels_unit")]
+    pub margin_levels_unit: String,
+}
+
+fn unknown_margin_levels_unit() -> String {
+    "unknown".to_owned()
 }
 
 fn unknown_account_trade_mode() -> i64 {
@@ -514,6 +533,18 @@ impl AccountSnapshot {
             "demo" | "contest" | "real" | "unknown"
         ) {
             return Err("invalid account trade mode name");
+        }
+        if !matches!(
+            self.margin_levels_unit.as_str(),
+            "percent" | "money" | "unknown"
+        ) {
+            return Err("invalid margin stop-out mode name");
+        }
+        for level in [&self.margin_call_level, &self.stop_out_level]
+            .into_iter()
+            .flatten()
+        {
+            validate_nonnegative_order_decimal(level)?;
         }
         Ok(())
     }

@@ -161,6 +161,18 @@ pub struct OrderCheckResult {
     /// Echo of the draft's `limit_price`; `null` when the draft had none.
     #[serde(default)]
     pub limit_price: Option<String>,
+    /// `OrderCalcMargin` for the order's market-equivalent side at the fill
+    /// price, in the account currency. Prices the order alone: existing
+    /// positions (hedging/netting) are ignored. `null` or absent when the EA
+    /// could not compute it (never 0).
+    #[serde(default)]
+    pub margin_at_fill: Option<String>,
+    /// `ACCOUNT_MARGIN` sampled with the check; `null`/absent when unknown.
+    #[serde(default)]
+    pub account_margin_used: Option<String>,
+    /// `ACCOUNT_MARGIN_FREE` sampled with the check; `null`/absent when unknown.
+    #[serde(default)]
+    pub account_free_margin: Option<String>,
 }
 
 impl OrderCheckResult {
@@ -192,6 +204,18 @@ impl OrderCheckResult {
         }
         order_decimal(&self.free_margin, false)?;
         order_decimal(&self.margin_level, false)?;
+        for used_margin in [&self.margin_at_fill, &self.account_margin_used]
+            .into_iter()
+            .flatten()
+        {
+            if order_decimal(used_margin, false)? < Decimal::ZERO {
+                return Err("invalid order check decimal");
+            }
+        }
+        // Free margin can be negative on an exhausted account.
+        if let Some(free_margin) = &self.account_free_margin {
+            order_decimal(free_margin, false)?;
+        }
         Ok(())
     }
 }

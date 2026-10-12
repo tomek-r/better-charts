@@ -1,12 +1,16 @@
 use super::{
     bridge_emit, clear_profile_bar_slots, clear_validated_order_check,
-    invalidate_validated_order_check, BridgeConnectionState, BridgeEvents, BridgeState,
-    BridgeStatus, BrokerSymbolView, ExecutionAdapterState, ExpectedOrderCheck, OrderCheckError,
-    OrderCheckErrorView, OrderCheckResult, OrderCheckResultView, ReconciliationStatus,
-    SymbolInfoResult, SymbolSearchOutcome, SymbolSearchResult, SymbolSearchResultView,
-    ValidatedOrderCheck,
+    invalidate_validated_order_check, AccountView, BridgeConnectionState, BridgeEvents,
+    BridgeState, BridgeStatus, BrokerSymbolView, ExecutionAdapterState, ExpectedOrderCheck,
+    MarginRiskView, OrderCheckError, OrderCheckErrorView, OrderCheckResult, OrderCheckResultView,
+    ReconciliationStatus, SymbolInfoResult, SymbolSearchOutcome, SymbolSearchResult,
+    SymbolSearchResultView, ValidatedOrderCheck,
 };
+use rust_decimal::{Decimal, RoundingStrategy};
 use std::sync::Arc;
+use trading_core::margin_projection::{
+    classify_margin_risk, project_margin_after_fill, MarginLevelsUnit,
+};
 
 mod market;
 mod reconciliation;
@@ -85,9 +89,60 @@ pub(crate) fn accept_symbol_info(
     Ok(Some(result.symbol_info.into()))
 }
 
+struct MarginAfterFill {
+    free_margin: Option<String>,
+    margin_level: Option<String>,
+    risk: MarginRiskView,
+}
+
+fn parse_decimal(value: &Option<String>) -> Option<Decimal> {
+    value.as_deref()?.parse().ok()
+}
+
+/// Display-only projection of the account after the order fills. Funds come
+/// from the values sampled with the check itself, so they are mutually
+/// consistent; broker thresholds come from the stored account snapshot, and
+/// only when it belongs to the same login and server as the result. Nothing
+/// here feeds a dispatch gate.
+fn margin_after_fill(result: &OrderCheckResult, account: Option<&AccountView>) -> MarginAfterFill {
+    let equity = result.equity.parse().ok();
+    let projection = project_margin_after_fill(
+        equity,
+        parse_decimal(&result.account_margin_used),
+        parse_decimal(&result.account_free_margin),
+        parse_decimal(&result.margin_at_fill),
+    );
+    let account = account.filter(|account| {
+        account.account_login == result.account_login
+            && account.broker_server == result.broker_server
+    });
+    let mode = account.and_then(|account| match account.margin_levels_mode {
+        Some(0) => Some(MarginLevelsUnit::Percent),
+        Some(1) => Some(MarginLevelsUnit::Money),
+        _ => None,
+    });
+    let risk = classify_margin_risk(
+        mode,
+        account.and_then(|account| parse_decimal(&account.margin_call_level)),
+        account.and_then(|account| parse_decimal(&account.stop_out_level)),
+        equity,
+        projection.margin_level_after,
+    );
+    MarginAfterFill {
+        free_margin: projection.free_margin_after.map(|value| value.to_string()),
+        margin_level: projection.margin_level_after.map(|value| {
+            value
+                .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+                .to_string()
+        }),
+        risk: risk.into(),
+    }
+}
+
 pub(crate) fn accept_order_check_result(
     expected: &mut Option<ExpectedOrderCheck>,
     has_pending_request: bool,
+    account: Option<&AccountView>,
     result: OrderCheckResult,
 ) -> Result<Option<OrderCheckResultView>, &'static str> {
     if has_pending_request {
@@ -100,6 +155,7 @@ pub(crate) fn accept_order_check_result(
         return Ok(None);
     }
     result.validate(request)?;
+    let after_fill = margin_after_fill(&result, account);
     let view = OrderCheckResultView {
         draft_version: *draft_version,
         draft_id: result.draft_id,
@@ -126,6 +182,10 @@ pub(crate) fn accept_order_check_result(
         checked_at_ms: result.checked_at_ms,
         time_in_force: result.time_in_force,
         limit_price: result.limit_price,
+        margin_at_fill: result.margin_at_fill,
+        free_margin_after_fill: after_fill.free_margin,
+        margin_level_after_fill: after_fill.margin_level,
+        margin_risk: after_fill.risk,
     };
     *expected = None;
     Ok(Some(view))
@@ -136,12 +196,21 @@ pub(crate) fn accept_and_store_order_check_result(
     has_pending_request: bool,
     result: OrderCheckResult,
 ) -> Result<Option<OrderCheckResultView>, &'static str> {
+    // Cloned before taking the expected-check lock so the two mutexes are
+    // never held together.
+    let account = state
+        .account
+        .lock()
+        .expect("account mutex poisoned")
+        .clone();
     let mut expected = state
         .expected_order_check
         .lock()
         .expect("order check mutex poisoned");
     let stored_result = result.clone();
-    let Some(view) = accept_order_check_result(&mut expected, has_pending_request, result)? else {
+    let Some(view) =
+        accept_order_check_result(&mut expected, has_pending_request, account.as_ref(), result)?
+    else {
         return Ok(None);
     };
     *state

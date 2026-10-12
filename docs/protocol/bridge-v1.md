@@ -344,9 +344,20 @@ different identity.
   "account_login": "12345678", "broker_server": "Broker-Demo", "currency": "USD",
   "balance": "10000.00", "equity": "9980.00", "margin": "500.00", "free_margin": "9480.00",
   "margin_level": "1996.00", "leverage": 100, "margin_mode": 0, "trade_allowed": true,
-  "expert_allowed": true, "account_trade_mode": 0, "account_trade_mode_name": "demo"
+  "expert_allowed": true, "account_trade_mode": 0, "account_trade_mode_name": "demo",
+  "margin_call_level": "100.00", "stop_out_level": "50.00", "margin_levels_mode": 0,
+  "margin_levels_unit": "percent"
 }
 ```
+
+Margin-call / stop-out thresholds (EA 1.007+, additive): `margin_call_level`
+(`ACCOUNT_MARGIN_SO_CALL`) and `stop_out_level` (`ACCOUNT_MARGIN_SO_SO`) are
+nonnegative decimal strings, `margin_levels_mode` is the raw `ACCOUNT_MARGIN_SO_MODE`
+(`ENUM_ACCOUNT_STOPOUT_MODE`: `0` percent, `1` money) and `margin_levels_unit`
+is `percent|money|unknown`. In `percent` mode both levels are margin-level
+percentages; in `money` mode both are amounts in the account currency. Absent
+or `null` fields (older EAs, unrecognized mode) mean "not reported", never 0;
+the name then defaults to `unknown`.
 
 The EA supplies the raw `account_trade_mode` and semantic name
 `demo|contest|real|unknown`; absent fields default to `-1` / `unknown`.
@@ -612,9 +623,35 @@ For each present exit, minimum distance is strictly greater than
   "take_profit": "25100.0", "check_passed": true, "retcode": 0, "last_error": 0,
   "balance": "10000.00", "equity": "10000.00", "profit": "0.00", "margin": "120.00",
   "free_margin": "9880.00", "margin_level": "8333.33", "comment": "Request validated",
-  "checked_at_ms": 1770000001805, "time_in_force": "gtc", "limit_price": null
+  "checked_at_ms": 1770000001805, "time_in_force": "gtc", "limit_price": null,
+  "margin_at_fill": "120.00", "account_margin_used": "250.00", "account_free_margin": "9750.00"
 }
 ```
+
+Fill-margin fields (EA 1.007+, additive; absent or `null` means unknown, never 0):
+`margin_at_fill` is `OrderCalcMargin` for the market-equivalent side
+(`ORDER_TYPE_BUY` for buy, `ORDER_TYPE_SELL` for sell, never the pending type)
+at the order's fill price in account currency: `check_price` for market,
+`requested_entry` for limit and stop, `limit_price` for stop_limit. It is
+nonnegative and prices the order in isolation, so existing positions
+(hedging offsets, netting) are ignored and the figure is an estimate.
+`account_margin_used` (`ACCOUNT_MARGIN`, nonnegative) and `account_free_margin`
+(`ACCOUNT_MARGIN_FREE`, signed) are sampled in the same call. The pre-existing
+`margin`, `free_margin` and `margin_level` fields keep the `OrderCheck` result
+semantics and are not used for the projection.
+
+The app derives, for display only, from `equity` of this result and the three
+fields above: `freeMarginAfterFill = account_free_margin - margin_at_fill` and
+`marginLevelAfterFill = equity / (account_margin_used + margin_at_fill) * 100`
+(2 decimals; `null` when the denominator is not positive or an input is
+unknown). `marginRisk` (`ok|below_margin_call|below_stop_out|unknown`) compares the
+projection with the account's `margin_call_level` and `stop_out_level` thresholds, taken from the stored
+account snapshot only when its login and server match the result. Per the MQL5
+documentation of `ACCOUNT_MARGIN_SO_MODE`, `percent` mode compares the
+projected margin level with the levels and `money` mode compares equity with
+them; a value equal to a threshold is not below it, and stop-out outranks
+margin call. Missing thresholds or mode give `unknown`. This is a warning only
+and does not affect any dispatch gate.
 
 The result echoes draft/account fields exactly as text, using
 `requested_entry` for the requested entry. `check_price` is positive.
