@@ -54,7 +54,7 @@ token is required outside development builds.
 {
   "token": "example-token", "terminal_id": "installation-instance-id", "terminal_build": 5000,
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
-  "expert_version": "1.007", "tick_reader_version": "1.001", "trading_enabled": false,
+  "expert_version": "1.008", "tick_reader_version": "1.001", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
   "tick_price_counts": true, "partial_close": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
@@ -75,13 +75,17 @@ token is required outside development builds.
 The EA's `hello.trading_enabled` is a permission snapshot: MT5 must be connected
 with a nonzero account login, and terminal Algo Trading, EA trading, account
 trading, and account expert trading must all be allowed. The EA rechecks these
-permissions before accepting and dispatching commands. After enabling trading,
-reattach the EA to refresh the handshake. `hello_ack.trading_enabled` advertises
+permissions before accepting and dispatching commands. Since EA 1.008 a change
+of this permission mid-session makes the EA reconnect (`trading permission
+changed`), so the next hello carries the current value; no reattach is needed.
+The new session still requires the handshake and complete reconciliation. The
+app exposes the advertised value to the UI as `tradingEnabled` (display only).
+`hello_ack.trading_enabled` advertises
 the server's permission; the app's local Settings permission is an additional
 startup restriction, optionally overridden with `MT5_BRIDGE_TRADING_ENABLED`.
 Neither flag submits a command or bypasses execution gates.
 
-The app requires an exact EA `expert_version` match (`1.007` for this build)
+The app requires an exact EA `expert_version` match (`1.008` for this build)
 and an exact `tick_reader_version` match (`1.001`), the version of the
 `BetterChartsTickHistoryReader` indicator. Both expected versions live in
 `config/mq5-versions.json`; regression guards check that the EA's
