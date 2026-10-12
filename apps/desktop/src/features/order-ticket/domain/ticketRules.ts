@@ -9,7 +9,7 @@ import type {
   RiskSide,
   TimeInForce,
 } from '../../../shared/bridge/types';
-import { normalizedPrice } from '../../../shared/format';
+import { formatVolume, normalizedPrice } from '../../../shared/format';
 
 // Editable volume: positive decimal and — when instrument metadata is known — inside [volumeMin, volumeMax] and a whole multiple of volumeStep (the 1e-8 tolerance absorbs binary-float noise such as 0.3/0.1). Unknown instrument: plain positive decimal only; the backend/EA re-validates volume on the wire.
 export function orderVolumeIssue(value: string, instrument?: BrokerSymbol): string | undefined {
@@ -24,7 +24,10 @@ export function orderVolumeIssue(value: string, instrument?: BrokerSymbol): stri
   const min = Number(instrument.volumeMin);
   const max = Number(instrument.volumeMax);
   const step = Number(instrument.volumeStep);
-  const range = `Volume must be between ${instrument.volumeMin} and ${instrument.volumeMax}.`;
+  // Broker decimals carry padding ("0.10000000"); show them as a person would write them.
+  const shownMin = formatVolume(instrument.volumeMin);
+  const shownMax = formatVolume(instrument.volumeMax);
+  const range = `Volume must be between ${shownMin} and ${shownMax}.`;
   if (Number.isFinite(min) && volume < min) {
     return range;
   }
@@ -32,7 +35,7 @@ export function orderVolumeIssue(value: string, instrument?: BrokerSymbol): stri
     return range;
   }
   if (Number.isFinite(step) && step > 0 && Math.abs(volume / step - Math.round(volume / step)) > 1e-8) {
-    return `Volume must respect ${instrument.volumeStep} step (min ${instrument.volumeMin}, max ${instrument.volumeMax})`;
+    return `Volume must respect ${formatVolume(instrument.volumeStep)} step (min ${shownMin}, max ${shownMax})`;
   }
   return undefined;
 }
