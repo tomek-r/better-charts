@@ -1,12 +1,14 @@
 import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import timeframeConfig from '../../../config/timeframes.json' with { type: 'json' };
+import { HISTORY_BARS } from '../src/shared/bridge/limits';
 import type { BrokerSymbol, Candle } from '../src/shared/bridge/types';
 import { brokerSymbolFixture, type RecordedHistory } from '../e2e/helpers/tauriStub';
 
 /**
  * Loader for MetaTrader 5 "Symbols -> Bars -> Export" CSV files, used by the
- * Lighthouse harness to replay real candles through the Tauri stub.
+ * Lighthouse and React profiler harnesses to replay real candles through the
+ * Tauri stub (shared recordings dir: `captures/` at the repo root, gitignored).
  *
  * File name: `<SYMBOL>_<TIMEFRAME>.csv` (`EURUSD_M5.csv`). Format: header row
  * with `<DATE> <TIME> <OPEN> <HIGH> <LOW> <CLOSE> <TICKVOL> <VOL> <SPREAD>`
@@ -144,7 +146,7 @@ function symbolInfoFor(symbol: string, candles: Candle[]): BrokerSymbol {
 }
 
 export interface LoadedRecordings {
-  /** Primary first (LIGHTHOUSE_SYMBOL / LIGHTHOUSE_TIMEFRAME, else first file). */
+  /** Primary first (the wanted symbol/timeframe, else first file). */
   history: RecordedHistory[];
   files: string[];
 }
@@ -218,12 +220,59 @@ export function loadRecordings(
     return { history, files: names };
   }
   if (history.length > 0 && primaryAt < 0) {
-    throw new Error(
-      `No file in ${dir} matches LIGHTHOUSE_SYMBOL=${wantSymbol ?? '*'} LIGHTHOUSE_TIMEFRAME=${wantTimeframe ?? '*'}`,
-    );
+    throw new Error(`No file in ${dir} matches symbol=${wantSymbol ?? '*'} timeframe=${wantTimeframe ?? '*'}`);
   }
   if (primaryAt > 0) {
     history.unshift(history.splice(primaryAt, 1)[0]!);
   }
   return { history, files: names };
+}
+
+/** Where the harnesses look for recordings unless told otherwise. */
+export const DEFAULT_CAPTURES_DIR = resolve(process.cwd(), '..', '..', 'captures');
+
+export interface RecordingSource {
+  kind: 'files' | 'synthetic';
+  dir: string;
+  maxBars?: number;
+  primary: string;
+  recordings: Array<{ symbol: string; timeframe: string; bars: number }>;
+}
+
+export interface EnvRecordings extends LoadedRecordings {
+  source: RecordingSource;
+  /** Sentence for the run log. */
+  description: string;
+}
+
+/**
+ * Loads recordings as configured by `<prefix>_DATA`, `_MAX_BARS` (older bars
+ * beyond the initial HISTORY_BARS window), `_SYMBOL` and `_TIMEFRAME`, and
+ * describes where the data came from; synthetic when no CSV was found.
+ */
+export function loadRecordingsFromEnv(prefix: 'LIGHTHOUSE' | 'PROFILER'): EnvRecordings {
+  const dir = resolve(process.env[`${prefix}_DATA`] ?? DEFAULT_CAPTURES_DIR);
+  const maxBars = HISTORY_BARS + (Number(process.env[`${prefix}_MAX_BARS`]) || DEFAULT_MAX_BARS);
+  const recordings = loadRecordings(dir, process.env[`${prefix}_SYMBOL`], process.env[`${prefix}_TIMEFRAME`], maxBars);
+  const primary = recordings.history[0];
+  if (!primary) {
+    return {
+      ...recordings,
+      source: { kind: 'synthetic', dir, primary: 'EURUSD_M5', recordings: [] },
+      description: `data source: SYNTHETIC (10 candles); no *.csv in ${dir}`,
+    };
+  }
+  const source: RecordingSource = {
+    kind: 'files',
+    dir,
+    maxBars,
+    primary: `${primary.symbol}_${primary.timeframe}`,
+    recordings: recordings.history.map((h) => ({ symbol: h.symbol, timeframe: h.timeframe, bars: h.candles.length })),
+  };
+  const files = source.recordings.map((r) => `${r.symbol}_${r.timeframe}=${r.bars} bars (cap ${maxBars})`).join(', ');
+  return {
+    ...recordings,
+    source,
+    description: `data source: recorded files in ${dir} -> ${files}; primary ${source.primary}`,
+  };
 }

@@ -109,7 +109,12 @@ async function measure(page, action, operations) {
     committedConsumerExecutions,
   };
 }
-async function runVersion(browser, label, round, { ports, operations, stub }) {
+async function runVersion(
+  browser,
+  label,
+  round,
+  { ports, operations, stub, syntheticBars },
+) {
   const { installTauriStub, pushEvent, STUB_NOW } = stub;
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -121,7 +126,7 @@ async function runVersion(browser, label, round, { ports, operations, stub }) {
   page.on("console", (m) => {
     if (m.type() === "error") errors.push(m.text());
   });
-  await installTauriStub(page);
+  await installTauriStub(page, { syntheticBars });
   await page.goto("/");
   await page.waitForFunction(
     () => window.__E2E_TAURI_STUB__?.listenerCount("quote-update") === 1,
@@ -271,6 +276,7 @@ async function collect(browser, options) {
   const result = {
     operations: options.operations,
     roundCount: options.roundCount,
+    syntheticBars: options.syntheticBars,
     summary: summarize(runs),
   };
   fs.writeFileSync(

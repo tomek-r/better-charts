@@ -1,6 +1,8 @@
 import { test } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
+import { HISTORY_BARS, INITIAL_HISTORY_BARS } from '../src/shared/bridge/limits';
 import { installTauriStub, pushEvent } from '../e2e/helpers/tauriStub';
+import { loadRecordingsFromEnv } from './captureData';
 
 /**
  * React profiler scenario. Drives a fixed interaction sequence and records what
@@ -19,6 +21,15 @@ import { installTauriStub, pushEvent } from '../e2e/helpers/tauriStub';
  *
  * Env: PROFILER_OUT (output path), PROFILER_BASE (another dev/preview server),
  * PROFILER_MODE (label recorded in the output: dev | prod).
+ *
+ * Data: recorded MT5 candles are replayed through the stub when `*.csv`
+ * exports exist, else the stub's synthetic candles are used (INITIAL_HISTORY_BARS of them). The source
+ * (files, symbol, timeframe, bar counts) is written to `data` in the output.
+ * - PROFILER_DATA         directory of `<SYMBOL>_<TIMEFRAME>.csv` (default `captures/`
+ *                         at the repo root, shared with Lighthouse; gitignored)
+ * - PROFILER_MAX_BARS     older bars kept beyond the initial window (default 20000)
+ * - PROFILER_SYMBOL / PROFILER_TIMEFRAME  pick the primary recording the app opens
+ * Format and export steps: see the header of `lighthouse.spec.ts`.
  */
 
 const HOOK = `
@@ -135,7 +146,13 @@ test('profiler scenario', async ({ page }) => {
   };
 
   await page.addInitScript(HOOK);
-  await installTauriStub(page);
+  const { source: data, history, description } = loadRecordingsFromEnv('PROFILER');
+  console.log(description);
+  await installTauriStub(page, {
+    recordedHistory: history,
+    recordedSnapshotBars: HISTORY_BARS,
+    syntheticBars: INITIAL_HISTORY_BARS,
+  });
 
   // boot: navigation to a settled shell, then to a live chart host
   const bootStart = Date.now();
@@ -252,7 +269,7 @@ test('profiler scenario', async ({ page }) => {
   writeFileSync(
     out,
     JSON.stringify(
-      { mode, boot: { shellMs, chartMs }, navigation, steps, walls, longTasks, memoryKb: memory, commits },
+      { mode, data, boot: { shellMs, chartMs }, navigation, steps, walls, longTasks, memoryKb: memory, commits },
       null,
       1,
     ),

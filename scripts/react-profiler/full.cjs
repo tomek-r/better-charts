@@ -433,7 +433,7 @@ async function runVersion(browser, label, round, options) {
   });
   try {
     await page.addInitScript(PROFILE_INIT);
-    await installTauriStub(page);
+    await installTauriStub(page, { syntheticBars: options.syntheticBars });
     const startupStarted = Date.now();
     await page.goto("/");
     await options.expect(page.locator("main.dashboard")).toBeVisible();
@@ -934,7 +934,11 @@ async function collectFull(browser, options) {
       );
     }
   }
-  const result = { roundCount, summary: summarizeRuns(runs, roundCount) };
+  const result = {
+    roundCount,
+    syntheticBars: options.syntheticBars,
+    summary: summarizeRuns(runs, roundCount),
+  };
   fs.writeFileSync(
     path.join(output, "full-summary.json"),
     JSON.stringify(result, null, 2),

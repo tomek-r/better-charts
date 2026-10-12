@@ -37,6 +37,12 @@ import type { BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridg
  */
 
 export interface TauriStubOptions {
+  /**
+   * Count of generated synthetic candles (default 10, which many E2E
+   * assertions are pinned to). Same deterministic shape, walking back from
+   * STUB_NOW; serves the default snapshot and every unrecorded history reply.
+   */
+  syntheticBars?: number;
   /** Command → JSON-serializable response; merged over the scripted defaults. */
   responses?: Record<string, unknown>;
   /** Command → message; `invoke(cmd)` rejects with `new Error(message)`. */
@@ -255,8 +261,9 @@ export async function installTauriStub(
     };
     const candlesFor = (symbol: unknown): Array<Record<string, unknown>> => {
       const out: Array<Record<string, unknown>> = [];
-      for (let i = 0; i < 10; i += 1) {
-        out.push(candleAt(symbol, i, NOW - (10 - i) * 300_000));
+      const count = opts.syntheticBars ?? 10;
+      for (let i = 0; i < count; i += 1) {
+        out.push(candleAt(symbol, i, NOW - (count - i) * 300_000));
       }
       return out;
     };

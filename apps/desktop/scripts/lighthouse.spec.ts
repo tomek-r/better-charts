@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { HISTORY_BARS } from '../src/shared/bridge/limits';
 import { installTauriStub } from '../e2e/helpers/tauriStub';
-import { DEFAULT_MAX_BARS, loadRecordings } from './lighthouseData';
+import { loadRecordingsFromEnv } from './captureData';
 
 /**
  * Lighthouse audit of the production web build (served by the webServer in
@@ -27,8 +27,8 @@ import { DEFAULT_MAX_BARS, loadRecordings } from './lighthouseData';
  * `<ISO timestamp with - for : and .>-run<N>`, containing `report.html` and
  * `report.json`, e.g. `.lighthouse/2026-10-10T13-17-04-730Z-run3/report.html`.
  * - LIGHTHOUSE_CATEGORIES comma list of categories (default `performance`)
- * - LIGHTHOUSE_DATA       directory of recorded MT5 bars (default `captures/lighthouse/`
- *                         at the repo root; `captures/` is gitignored)
+ * - LIGHTHOUSE_DATA       directory of recorded MT5 bars (default `captures/` at the
+ *                         repo root, shared with the React profiler; gitignored)
  * - LIGHTHOUSE_MAX_BARS   older bars kept beyond the initial HISTORY_BARS window, per
  *                         file (default 20000); large exports are tail-read, never loaded whole
  * - LIGHTHOUSE_SYMBOL / LIGHTHOUSE_TIMEFRAME  pick the primary recording the app
@@ -145,29 +145,9 @@ test('lighthouse production audit', async ({ baseURL }) => {
     .filter(Boolean);
   mkdirSync(outDir, { recursive: true });
 
-  const dataDir = resolve(process.env.LIGHTHOUSE_DATA ?? join(process.cwd(), '..', '..', 'captures', 'lighthouse'));
-  // MAX_BARS counts the older bars beyond the initial HISTORY_BARS window.
-  const maxBars = HISTORY_BARS + (Number(process.env.LIGHTHOUSE_MAX_BARS) || DEFAULT_MAX_BARS);
-  const recordings = loadRecordings(dataDir, process.env.LIGHTHOUSE_SYMBOL, process.env.LIGHTHOUSE_TIMEFRAME, maxBars);
-  const primary = recordings.history[0];
-  const source = primary
-    ? {
-        kind: 'files' as const,
-        dir: dataDir,
-        maxBars,
-        primary: `${primary.symbol}_${primary.timeframe}`,
-        recordings: recordings.history.map((h) => ({
-          symbol: h.symbol,
-          timeframe: h.timeframe,
-          bars: h.candles.length,
-        })),
-      }
-    : { kind: 'synthetic' as const, dir: dataDir, primary: 'EURUSD_M5', recordings: [] };
-  console.log(
-    primary
-      ? `data source: recorded files in ${dataDir} -> ${source.recordings.map((r) => `${r.symbol}_${r.timeframe}=${r.bars} bars (cap ${maxBars})`).join(', ')}; primary ${source.primary}`
-      : `data source: SYNTHETIC (10 candles); no *.csv in ${dataDir}`,
-  );
+  const { source, history, description } = loadRecordingsFromEnv('LIGHTHOUSE');
+  const primary = history[0];
+  console.log(description);
 
   const port = await freePort();
   const profileDir = mkdtempSync(join(tmpdir(), 'bc-lighthouse-'));
@@ -176,7 +156,7 @@ test('lighthouse production audit', async ({ baseURL }) => {
     viewport: { width: 1350, height: 940 },
   });
   try {
-    await installTauriStub(context, { recordedHistory: recordings.history, recordedSnapshotBars: HISTORY_BARS });
+    await installTauriStub(context, { recordedHistory: history, recordedSnapshotBars: HISTORY_BARS });
 
     // Lighthouse navigates a page of this context (a persistent context is the
     // browser's default context, which is where its CDP target lives). Record
