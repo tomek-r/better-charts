@@ -1,4 +1,5 @@
 import { AppLifecycle } from '../../AppLifecycle';
+import { AccountSwitchGuard } from '../account-switch/AccountSwitchGuard';
 import { AppHeaderFeature } from '../app-header/AppHeaderFeature';
 import { BridgeSessionProvider } from '../bridge/BridgeSessionProvider';
 import { ChartWorkspaceProvider } from '../chart/ChartWorkspaceProvider';
@@ -25,6 +26,7 @@ export function AppWorkspaceView() {
             <OrderTicketProvider>
               <OrderTicketPanel />
               <AppLifecycle />
+              <AccountSwitchGuard />
             </OrderTicketProvider>
           </main>
         </ExecutionProvider>
