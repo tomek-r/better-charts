@@ -10,14 +10,11 @@ export interface BrokerQuote {
 export interface BarCountdownOptions {
   textColor: string;
   backColor: string;
-  /** Draw the small tick the library puts between the label and the axis edge. */
-  tickVisible: boolean;
 }
 
 export const barCountdownDefaultOptions: BarCountdownOptions = {
   textColor: palette.text,
   backColor: palette.sell,
-  tickVisible: false,
 };
 
 /**
