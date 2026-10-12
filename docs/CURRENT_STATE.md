@@ -93,6 +93,9 @@ Not implemented: break even, multiple charts or Pine Script execution.
   across equity/free-margin ticks; editing recalculates.
   Entering review flushes queued sizing before OrderCheck. Checks time out after 15 seconds
   with a notification; late replies cannot enable submission after timeout.
+  The review card shows margin at fill, free margin after fill and margin level after fill
+  (an estimate: the order is priced alone, ignoring open positions) plus the broker's
+  margin-call and stop-out levels; below either level it warns in red but never blocks Send.
   SL/TP and pending-entry drags use the execution guard; Shift+drag moves all levels.
 
 Check corresponding E2E regressions before changing these decisions.
