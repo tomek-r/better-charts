@@ -1,6 +1,13 @@
-import { test, expect, type Page } from '@playwright/test';
+import { chromium, devices, test, expect, type Page } from '@playwright/test';
 import { assembleGlyphRows, observeFillText, type AxisPaint } from './helpers/canvasText';
-import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
+import {
+  brokerSymbolFixture,
+  eurusdFormingBar,
+  eurusdQuote,
+  gotoWithStub,
+  pushEvent,
+  STUB_NOW,
+} from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 
 const quote = eurusdQuote;
@@ -68,6 +75,7 @@ function readTagBands(page: Page): Promise<Bands> {
 interface AxisOp extends AxisPaint {
   kind: 'box' | 'text';
   width: number;
+  height: number;
 }
 
 const PRICE_TEXT = /^\d+\.\d+$/;
@@ -93,15 +101,25 @@ async function tagRows(page: Page) {
     .sort((a, b) => a.y - b.y);
 }
 
-async function openChart(page: Page) {
+async function openChart(page: Page, stub: Parameters<typeof gotoWithStub>[1] = {}) {
   await page.addInitScript(() => {
     const ops: AxisOp[] = [];
     (window as unknown as { __tagOps: AxisOp[] }).__tagOps = ops;
-    const onAxis = (context: CanvasRenderingContext2D) => context.canvas.width <= 120 && context.canvas.height > 120;
+    // Canvas bitmaps are devicePixelRatio times their CSS size.
+    const onAxis = (context: CanvasRenderingContext2D) =>
+      context.canvas.width <= 120 * devicePixelRatio && context.canvas.height > 120 * devicePixelRatio;
     const roundRect = CanvasRenderingContext2D.prototype.roundRect;
     CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
       if (onAxis(this)) {
-        ops.push({ kind: 'box', width: Number(w), text: '', at: performance.now(), x: Number(x), y: Number(y) });
+        ops.push({
+          kind: 'box',
+          width: Number(w),
+          height: Number(h),
+          text: '',
+          at: performance.now(),
+          x: Number(x),
+          y: Number(y),
+        });
       }
       return roundRect.call(this, x, y, w, h, radii);
     };
@@ -109,14 +127,14 @@ async function openChart(page: Page) {
   await observeFillText(page, () => {
     const ops = (window as unknown as { __tagOps: AxisOp[] }).__tagOps;
     return (context, text, x, y) => {
-      if (context.canvas.width <= 120 && context.canvas.height > 120) {
-        ops.push({ kind: 'text', width: 0, text: String(text), at: performance.now(), x, y });
+      if (context.canvas.width <= 120 * devicePixelRatio && context.canvas.height > 120 * devicePixelRatio) {
+        ops.push({ kind: 'text', width: 0, height: 0, text: String(text), at: performance.now(), x, y });
       }
     };
   });
   await page.clock.install({ time: new Date('2026-09-30T12:00:00Z') });
   await page.clock.pauseAt(new Date('2026-09-30T12:01:00Z'));
-  await gotoWithStub(page, {});
+  await gotoWithStub(page, stub);
   await page.clock.runFor(100);
   await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 14 }));
   await page.clock.runFor(50);
@@ -161,6 +179,39 @@ test('Bid and Ask tags stay readable and unmoved when the last price moves betwe
   });
 });
 
+for (const deviceScaleFactor of [1, 2]) {
+  test(`stacked Ask, Bid and countdown tags stay flush at device pixel ratio ${deviceScaleFactor}`, async ({
+    baseURL,
+  }) => {
+    // The browser itself is launched at the ratio so canvas bitmaps scale too (see
+    // crosshair-line-sharpness.spec.ts).
+    const browser = await chromium.launch({
+      args: deviceScaleFactor === 1 ? [] : [`--force-device-scale-factor=${deviceScaleFactor}`],
+    });
+    try {
+      const context = await browser.newContext({ ...devices['Desktop Chrome'], baseURL, deviceScaleFactor });
+      const page = await context.newPage();
+      await openChart(page);
+      await pushEvent(page, 'bar-update', { symbol: 'EURUSD', timeframe: 'M5', candle });
+      // Spreads from touching to a few points, at prices that land on fractional
+      // axis coordinates: each tag used to round its own position independently.
+      for (let index = 0; index < 24; index += 1) {
+        const bid = (1.0851 + index * 0.000007).toFixed(5);
+        const ask = (1.0851 + index * 0.000007 + 0.00001 + (index % 5) * 0.00001).toFixed(5);
+        await pushEvent(page, 'quote-update', quote(STUB_NOW + 15_500 + index * 300, bid, ask));
+        await page.clock.runFor(100);
+        const boxes = (await lastFrameOps(page)).filter((op) => op.kind === 'box').sort((a, b) => a.y - b.y);
+        expect(boxes).toHaveLength(3);
+        const [askBox, bidBox, countdownBox] = boxes;
+        expect(bidBox.y, `bid ${bid} ask ${ask}`).toBe(askBox.y + askBox.height);
+        expect(countdownBox.y, `bid ${bid} ask ${ask}`).toBe(bidBox.y + bidBox.height);
+      }
+    } finally {
+      await browser.close();
+    }
+  });
+}
+
 test('Bid and Ask tags keep one box width and fixed digit cells whichever digits the price shows', async ({ page }) => {
   await openChart(page);
   await pushEvent(page, 'bar-update', { symbol: 'EURUSD', timeframe: 'M5', candle });
@@ -192,19 +243,42 @@ test('Bid and Ask tags keep one box width and fixed digit cells whichever digits
  * the chart configures. Below that minimum the axis cannot change size at all, so
  * only a wider label can reveal the resizing this test is about.
  */
-function wideCandles(count: number, base = 30432): Candle[] {
+function wideCandles(count: number, base = 30432, digits = 4): Candle[] {
   const lastOpen = Math.floor(STUB_NOW / 300_000) * 300_000;
+  const step = 10 ** -digits;
   return Array.from({ length: count }, (_, index) => ({
     timeMs: lastOpen - (count - 1 - index) * 300_000,
-    open: base.toFixed(4),
-    high: (base + 0.0006).toFixed(4),
-    low: (base - 0.0006).toFixed(4),
-    close: (base + 0.0004).toFixed(4),
+    open: base.toFixed(digits),
+    high: (base + 6 * step).toFixed(digits),
+    low: (base - 6 * step).toFixed(digits),
+    close: (base + 4 * step).toFixed(digits),
     tickVolume: 120,
     spread: 2,
     realVolume: 120,
   }));
 }
+
+test('the axis is already wide enough for the tags in the first frame after a quote', async ({ page }) => {
+  // Two-digit prices: the scale's own labels are narrower than the tag boxes.
+  const candles = wideCandles(60, 31000, 2);
+  await openChart(page, {
+    responses: { get_market_snapshot: { symbol: 'NAS100', timeframe: 'M5', complete: true, candles } },
+    historyByTimeframe: { M5: candles },
+    symbolInfo: brokerSymbolFixture('NAS100', 'Index fixture', { digits: 2, tickSize: '0.01', pointSize: '0.01' }),
+  });
+  const axisWidth = () => page.evaluate(() => window.__chartTest!.priceScale().axisWidth);
+
+  await pushEvent(page, 'quote-update', { ...quote(STUB_NOW + 15_000, '31000.04', '31000.06'), symbol: 'NAS100' });
+  // One frame: widening the axis only after the tags were painted would move the
+  // pane (and the visible bars) a frame later.
+  await page.clock.runFor(17);
+  const [askBox] = await tagBoxes(page);
+  expect(askBox.width).toBeGreaterThan(0);
+  const firstFrame = await axisWidth();
+  expect(firstFrame).toBeGreaterThanOrEqual(askBox.width);
+  await page.clock.runFor(300);
+  expect(await axisWidth()).toBe(firstFrame);
+});
 
 test('a Bid/Ask tag leaving the pane does not resize the axis', async ({ page }) => {
   const candles = wideCandles(60);

@@ -3,6 +3,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   deriveOrderTicket,
   orderEntryPrice,
+  orderVolumeIssue,
   riskRewardRatio,
   stopDistanceGuard,
 } from '../src/features/order-ticket/domain/ticketRules';
@@ -66,6 +67,19 @@ const nasdaqQuote: QuoteSnapshot = {
   volumeReal: '0',
   flags: 3,
 };
+
+test('volume limits are shown without the broker decimals trailing zeros', () => {
+  const lots = brokerSymbolFixture('TEST', 'Test instrument', {
+    volumeMin: '0.10000000',
+    volumeMax: '1000.00000000',
+    volumeStep: '0.01000000',
+  });
+  const range = 'Volume must be between 0.1 and 1000.';
+  expect(orderVolumeIssue('0.05', lots)).toBe(range);
+  expect(orderVolumeIssue('1000.5', lots)).toBe(range);
+  expect(orderVolumeIssue('0.105', lots)).toBe('Volume must respect 0.01 step (min 0.1, max 1000)');
+  expect(orderVolumeIssue('0.11', lots)).toBeUndefined();
+});
 
 test('pending order TP distances use the executable entry reference', () => {
   const buyLimit = stopDistanceGuard(instrument, 'buy', '98', '', '98.50', quote, 'limit');

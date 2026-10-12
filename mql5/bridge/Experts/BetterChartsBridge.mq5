@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.005"
+#define BRIDGE_EXPERT_VERSION "1.006"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -507,16 +507,31 @@ string AccountPayload()
                        AccountInfoInteger(ACCOUNT_LEVERAGE),AccountInfoInteger(ACCOUNT_MARGIN_MODE),(AccountInfoInteger(ACCOUNT_TRADE_ALLOWED)!=0?"true":"false"),(AccountInfoInteger(ACCOUNT_TRADE_EXPERT)!=0?"true":"false"),trade_mode,trade_mode_name);
   }
 
+// True when the terminal now reports a different login/server than the one the
+// session was bound to at hello. Every account-stamped frame must be gated on
+// this, otherwise the app sees the new login on the old session and tears it
+// down as an account mismatch instead of a clean reconnect.
+bool AccountIdentityChanged()
+  {
+   const string current_login=IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
+   const string current_server=AccountInfoString(ACCOUNT_SERVER);
+   return (g_identity_login!="" && current_login!=g_identity_login) ||
+          (g_identity_server!="" && current_server!=g_identity_server);
+  }
+
+// Reconnects when the account identity changed; returns true when it did, so
+// the caller must stop emitting for this timer turn.
+bool DisconnectIfAccountIdentityChanged()
+  {
+   if(!AccountIdentityChanged()) return false;
+   DisconnectAndRetry("account identity changed");
+   return true;
+  }
+
 bool PollAccountSnapshot()
   {
    if(g_state!=BRIDGE_READY) return true;
-   const string current_login=IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
-   const string current_server=AccountInfoString(ACCOUNT_SERVER);
-   if((g_identity_login!="" && current_login!=g_identity_login) || (g_identity_server!="" && current_server!=g_identity_server))
-     {
-      DisconnectAndRetry("account identity changed");
-      return false;
-     }
+   if(DisconnectIfAccountIdentityChanged()) return false;
    const string payload=AccountPayload();
    if(g_have_account_snapshot && payload==g_last_account_payload) return true;
    g_message_id++;
@@ -624,6 +639,7 @@ string OrderJson()
 bool PollPortfolioSnapshot()
   {
    if(g_state!=BRIDGE_READY || !g_have_account_snapshot) return true;
+   if(DisconnectIfAccountIdentityChanged()) return false;
    const string account_login=JsonEscape(IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)));
    string positions_json="[";
    int emitted=0;
@@ -3140,6 +3156,9 @@ void OnTimer()
    if(!SocketIsConnected(g_socket)) { DisconnectAndRetry("socket is no longer connected"); return; }
    ReadAvailable();
    if(g_state==BRIDGE_DISCONNECTED) return;
+   // Checked before any emission this turn (heartbeat stamps the live
+   // broker_server), not only inside the snapshot polls.
+   if(g_state==BRIDGE_READY && DisconnectIfAccountIdentityChanged()) return;
    PollMarketData();
    const ulong now=GetTickCount64();
    if(g_state==BRIDGE_READY)
