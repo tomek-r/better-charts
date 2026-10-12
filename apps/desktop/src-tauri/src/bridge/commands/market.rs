@@ -73,11 +73,26 @@ pub(crate) fn get_portfolio_snapshot(state: State<'_, BridgeState>) -> Option<Po
 
 #[tauri::command]
 pub(crate) fn request_history(
+    app: tauri::AppHandle,
     state: State<'_, BridgeState>,
     symbol: String,
     timeframe: String,
     bars: u16,
 ) -> Result<(), String> {
+    if let Some(cancelled) = request_history_inner(&state, symbol, timeframe, bars)? {
+        let _ = app.emit("tick-profile-cancelled", cancelled);
+    }
+    Ok(())
+}
+
+/// Queues a new chart window. Returns the tick-profile load it had to drop
+/// (a different symbol), so the caller can tell the frontend it was cancelled.
+pub(crate) fn request_history_inner(
+    state: &BridgeState,
+    symbol: String,
+    timeframe: String,
+    bars: u16,
+) -> Result<Option<TickProfileCancelledView>, String> {
     let request = HistoryRequest {
         symbol,
         timeframe,
@@ -106,7 +121,7 @@ pub(crate) fn request_history(
     {
         return Err("timeframe is not supported by the connected EA".into());
     }
-    invalidate_validated_order_check(&state);
+    invalidate_validated_order_check(state);
     *state
         .pending_history
         .lock()
@@ -121,6 +136,20 @@ pub(crate) fn request_history(
         .expected_history_page
         .lock()
         .expect("history page mutex poisoned") = None;
+    // Profile data is timeframe-independent, so a same-symbol window request
+    // (a timeframe switch) leaves the load running. A different symbol drops
+    // it, and the awaiting frontend must hear about that like any cancel.
+    let keeps_profile = state
+        .tick_controller
+        .lock()
+        .expect("tick controller mutex poisoned")
+        .cancelled_view()
+        .is_some_and(|active| active.symbol == request.symbol);
+    let cancelled = if keeps_profile {
+        None
+    } else {
+        cancel_tick_profile_locked(state)
+    };
     *state
         .pending_symbol_info
         .lock()
@@ -131,22 +160,8 @@ pub(crate) fn request_history(
         .expected_symbol_info
         .lock()
         .expect("symbol info mutex poisoned") = None;
-    *state
-        .pending_tick_profile
-        .lock()
-        .expect("tick profile mutex poisoned") = None;
-    *state
-        .expected_tick_profile
-        .lock()
-        .expect("tick profile mutex poisoned") = None;
-    state
-        .tick_controller
-        .lock()
-        .expect("tick controller mutex poisoned")
-        .cancel();
-    clear_profile_bar_slots(&state);
     state.wake_outbound();
-    Ok(())
+    Ok(cancelled)
 }
 
 /// One older-history page, anchored strictly before `before_ms`. Kept separate
@@ -390,6 +405,12 @@ pub(crate) fn cancel_active_tick_profile(state: &BridgeState) -> Option<TickProf
         .session_work
         .lock()
         .expect("bridge session mutex poisoned");
+    cancel_tick_profile_locked(state)
+}
+
+/// Cancels the active profile load; the caller already holds `session_work`.
+/// Returns the view the frontend needs to stop waiting for it.
+fn cancel_tick_profile_locked(state: &BridgeState) -> Option<TickProfileCancelledView> {
     *state
         .pending_tick_profile
         .lock()

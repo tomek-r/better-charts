@@ -26,10 +26,23 @@ export function sameRange(a: FixedRangeProfileRange, b: FixedRangeProfileRange):
   return a.fromMs === b.fromMs && a.endMs === b.endMs;
 }
 
-/** Whether the newest bar still opens before the range end, i.e. its last slot is not passed yet. */
-export function isRangeOpen(barSeries: TimeModel, range: FixedRangeProfileRange): boolean {
+/**
+ * Whether the range may still gain ticks: the newest bar opens before the range end. When the end falls INSIDE
+ * that bar (a coarse timeframe after a switch), bar times cannot tell, so the feed decides: a quote at or past the
+ * end means the range is final. A bar boundary at the end keeps the bar-based rule (its successor opens soon).
+ */
+export function isRangeOpen(barSeries: TimeModel, range: FixedRangeProfileRange, quoteTimeMs?: number): boolean {
   const bars = barSeries.bars;
-  return bars.length > 0 && bars[bars.length - 1].time * 1000 < range.endMs;
+  if (bars.length === 0) {
+    return false;
+  }
+  const newestOpenMs = bars[bars.length - 1].time * 1000;
+  if (newestOpenMs >= range.endMs) {
+    return false;
+  }
+  const endInsideNewestBar = range.endMs < newestOpenMs + barSeries.intervalSeconds * 1000;
+  const feedPassedEnd = quoteTimeMs !== undefined && quoteTimeMs >= range.endMs;
+  return !(endInsideNewestBar && feedPassedEnd);
 }
 
 /** The window between two anchors; its start is a real bar, so a future start is clamped to the newest bar. */

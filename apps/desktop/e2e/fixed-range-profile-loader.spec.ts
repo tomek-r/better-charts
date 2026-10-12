@@ -320,3 +320,16 @@ test('dispose clears the countdown and the visible indicator repaint loop', () =
     expect(clock.pendingTimerCount()).toBe(0);
     expect(state.loadingIndicator).toBeFalsy();
   }));
+
+test('renewing after a timeframe switch re-sends an unsettled request and leaves a loaded profile alone', () =>
+  withFakeClock(() => {
+    const { loader, market, state } = createLoader();
+    loader.requestProfile(RANGE);
+    market.publisher.publishTickProfileCancelled(market.requests[0]);
+    loader.renewUnsettledRequest(RANGE);
+    expect(market.requests).toHaveLength(2);
+    market.publisher.publishTickProfile(resultFor(market.requests[1]));
+    expect(state.profile).toBeDefined();
+    loader.renewUnsettledRequest(RANGE);
+    expect(market.requests).toHaveLength(2);
+  }));
