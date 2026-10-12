@@ -40,6 +40,8 @@ async function geometry(page: Page): Promise<BandGeometry> {
     return w.__stagedWidgetTest.geometry() as BandGeometry;
   });
 }
+type Box = { x: number; y: number; w: number; h: number };
+const boxesOverlap = (a: Box, b: Box) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 /** `limit` stages a buy limit at that price and the SL / TP at the given prices instead of the market defaults. */
 interface StageOptions {
   limit?: { entry: string; stopLoss: string; takeProfit: string };
@@ -136,21 +138,50 @@ test('risk % mode marks both band edges with a dotted line and a permanent neutr
   const label = (edge: 'near' | 'far') => geo.slBandLabels.find((item) => item.edge === edge)!;
   expect(label('far').text).toBe('Max SL · 5% risk at 0.1 units');
   expect(label('near').text).toBe('Min SL · broker stop distance');
-  // Each label sits on its own edge line, on the right, clear of the SL handle and of the other label.
-  for (const [edge, lineY] of [
-    ['far', geo.slBandY!.farY],
-    ['near', geo.slBandY!.nearY],
-  ] as const) {
-    expect(label(edge).y + label(edge).h / 2).toBeCloseTo(lineY, 0);
-    expect(label(edge).x).toBeGreaterThan(geo.slHandle!.x + geo.slHandle!.w);
+  // Both labels share the left column of the SL/TP/entry handle labels and never overlap them.
+  for (const edge of ['far', 'near'] as const) {
+    expect(label(edge).x).toBe(geo.slHandle!.x);
+    expect(boxesOverlap(label(edge), geo.slHandle!)).toBe(false);
   }
-  expect(Math.abs(label('far').y - label('near').y)).toBeGreaterThan(label('far').h);
+  expect(boxesOverlap(label('far'), label('near'))).toBe(false);
   // No shading: the pane below the far edge is the same plain background as the pane above the entry.
   const image = decodePng(await page.locator('.chart-host').screenshot());
   const sampleX = Math.round(geo.chartRect!.x - geo.container.left + geo.chartRect!.width * 0.3);
   const colorAt = (pageY: number) => pixelAt(image, sampleX, Math.round(pageY - geo.container.top));
   expect(colorAt(geo.slBandY!.farY + 30)).toEqual(colorAt(geo.entryLineY! - 80));
   await page.locator('.chart-host').screenshot({ path: testInfo.outputPath('sl-band.png') });
+});
+
+test('an SL sitting on a band edge is displaced from the edge label like it is from the entry label, never hiding either', async ({
+  page,
+}, testInfo) => {
+  await stageRiskOrder(page, 'Risk, % equity');
+  for (const [edge, price] of [
+    ['far', FAR_EDGE],
+    ['near', NEAR_EDGE],
+  ] as const) {
+    await page.getByLabel('Stop loss price').fill(price);
+    await expect
+      .poll(async () => {
+        const geo = await geometry(page);
+        const lineY = edge === 'far' ? geo.slBandY?.farY : geo.slBandY?.nearY;
+        return geo.slBandLabels.length === 2 && geo.slHandle !== null && lineY !== undefined
+          ? Math.abs(geo.slHandle.y + geo.slHandle.h / 2 - lineY) < 40
+          : false;
+      })
+      .toBe(true);
+    const geo = await geometry(page);
+    const edgeLabel = geo.slBandLabels.find((item) => item.edge === edge)!;
+    const other = geo.slBandLabels.find((item) => item.edge !== edge)!;
+    expect(edgeLabel.x).toBe(geo.slHandle!.x);
+    expect(boxesOverlap(edgeLabel, geo.slHandle!)).toBe(false);
+    expect(boxesOverlap(edgeLabel, other)).toBe(false);
+    expect(boxesOverlap(other, geo.slHandle!)).toBe(false);
+    // The dotted edge line stays at the true price: only the labels move.
+    const lineY = edge === 'far' ? geo.slBandY!.farY : geo.slBandY!.nearY;
+    expect(geo.slHandle!.y + geo.slHandle!.h / 2 - lineY).not.toBe(0);
+  }
+  await page.locator('.chart-host').screenshot({ path: testInfo.outputPath('sl-band-labels.png') });
 });
 
 test('the band labels are not handles: pressing one neither drags the SL nor steals the SL grab', async ({ page }) => {

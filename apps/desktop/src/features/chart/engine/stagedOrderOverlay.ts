@@ -165,42 +165,23 @@ function paintBandEdgeLines(
   ctx.restore();
 }
 
-const BAND_LABEL_MARGIN = 12;
-const BAND_LABEL_CLEARANCE = 4;
-
-const overlaps = (a: TradingHitRect, b: TradingHitRect | undefined, clearance = BAND_LABEL_CLEARANCE) =>
-  b !== undefined &&
-  a.x < b.x + b.w + clearance &&
-  a.x + a.w + clearance > b.x &&
-  a.y < b.y + b.h + clearance &&
-  a.y + a.h + clearance > b.y;
-
 /**
  * Permanent neutral label on a band edge, in the SL/TP handle style but without grip or tip: it is not a
- * handle and records no hit area. Right-aligned in the pane so it stays clear of the left-hand SL/TP/entry
- * labels; it is dropped (not moved) when it would still touch one of them or the other band label.
- * `held` marks the edge currently holding the SL drag.
+ * handle and records no hit area. It sits in the handle label column; the shared label layout spaces it
+ * from the SL/TP/entry labels (and the other band label) exactly as it spaces those from each other, so it
+ * is never dropped. `held` marks the edge currently holding the SL drag.
  */
 function paintBandLabel(
   ctx: CanvasRenderingContext2D,
-  chartRect: { x: number; y: number; width: number; height: number },
+  left: number,
   centerY: number,
   text: string,
   held: boolean,
-  occupied: Array<TradingHitRect | undefined>,
-): TradingHitRect | undefined {
+): TradingHitRect {
   ctx.font = '400 12px system-ui, sans-serif';
   const w = ctx.measureText(text).width + 14;
   const h = 20;
-  const box = { x: chartRect.x + chartRect.width - w - BAND_LABEL_MARGIN, y: centerY - h / 2, w, h };
-  if (
-    centerY < chartRect.y ||
-    centerY > chartRect.y + chartRect.height ||
-    box.x < chartRect.x ||
-    occupied.some((other) => overlaps(box, other))
-  ) {
-    return undefined;
-  }
+  const box = { x: left, y: centerY - h / 2, w, h };
   roundedRect(ctx, box.x, box.y, box.w, box.h, WIDGET_RADIUS);
   ctx.fillStyle = TRADING_COLORS.surface;
   ctx.fill();
@@ -419,18 +400,31 @@ export function createStagedOrderOverlay(
         }
       }
 
-      // Band edge labels last: they yield to every handle and tag drawn above.
+      // Band edge labels join the shared spacing queue with the handles. Their rows go to a scratch list, not
+      // `hit.labels`, so they can never be grabbed.
       if (drawLabels && band && hit.slBandY) {
-        const occupied: Array<TradingHitRect | undefined> = [hit.slHandle, hit.tpHandle, entryTag];
-        hit.slBandLabels = [];
+        const slBandLabels: NonNullable<StagedOrderState['hit']['slBandLabels']> = [];
+        hit.slBandLabels = slBandLabels;
         for (const edge of ['far', 'near'] as const) {
           const edgeY = edge === 'far' ? hit.slBandY.farY : hit.slBandY.nearY;
-          const text = edge === 'far' ? band.farHint : band.nearHint;
-          const box = paintBandLabel(ctx, viewport.chartRect, edgeY, text, state.slClampEdge === edge, occupied);
-          if (box) {
-            occupied.push(box);
-            hit.slBandLabels.push({ edge, text, ...box });
+          if (edgeY < y - 20 || edgeY > y + height + 20) {
+            continue;
           }
+          const text = edge === 'far' ? band.farHint : band.nearHint;
+          const level = edge === 'far' ? 'bandFar' : 'bandNear';
+          paintTradingLabel(
+            ctx,
+            viewport,
+            [],
+            { source: 'staged', id: 'draft', level },
+            edgeY,
+            (labelY) => {
+              const box = paintBandLabel(ctx, x + HANDLE_X, labelY, text, state.slClampEdge === edge);
+              slBandLabels.push({ edge, text, ...box });
+              return box;
+            },
+            labels,
+          );
         }
       }
 
