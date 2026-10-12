@@ -1,0 +1,79 @@
+.timeframe-tabs {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.timeframe-favorites {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Pre-handshake stand-in: same buttons, same wrapping, so the chart frame
+   below never moves when the real ones mount. Invisible and unfocusable. */
+.timeframe-tabs.placeholder {
+  visibility: hidden;
+}
+
+.timeframe-favorites button,
+.timeframe-chevron {
+  border: 1px solid transparent;
+  border-radius: var(--border-radius);
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--color-muted-strong);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.timeframe-favorites button {
+  width: 44px;
+  flex: 0 0 44px;
+}
+
+.timeframe-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  border-color: var(--color-border);
+}
+
+.timeframe-favorites button:hover:not(:disabled),
+.timeframe-chevron:hover:not(:disabled),
+.timeframe-chevron[aria-expanded='true'] {
+  color: var(--color-text);
+  background: var(--color-border-subtle);
+}
+
+/* Matches what the tool rail arrow renders on hover; --color-border-hover is a
+   self-referencing token that resolves to currentColor there. */
+.timeframe-chevron:hover:not(:disabled) {
+  border-color: var(--color-text-secondary);
+}
+
+.timeframe-favorites button.active {
+  color: var(--color-root);
+  background: var(--color-accent);
+  font-weight: 700;
+}
+
+.timeframe-favorites button:disabled,
+.timeframe-chevron:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.timeframe-chevron:focus-visible {
+  outline: 1px solid var(--color-accent);
+}
+
+.timeframe-chevron[aria-expanded='true'] .timeframe-caret {
+  transform: rotate(180deg);
+}

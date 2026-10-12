@@ -22,7 +22,7 @@ import { ChartWorkspaceProvider, useChartResources } from '../../src/features/ch
 import { ChartTitle } from '../../src/features/chart/ChartTitle';
 import { ChartQuotes } from '../../src/features/chart/ChartQuotes';
 import { ChartCanvas } from '../../src/features/chart/ChartCanvas';
-import { ChartTimeframes } from '../../src/features/chart/ChartTimeframes';
+import { ChartTimeframes } from '../../src/features/chart/timeframes/ChartTimeframes';
 import { ExecutionProvider } from '../../src/features/execution/ExecutionProvider';
 import type { AccountSnapshot, BrokerSymbol, QuoteSnapshot, RiskPreview } from '../../src/shared/bridge/types';
 import { OrderTicketProvider } from '../../src/features/order-ticket/OrderTicketProvider';

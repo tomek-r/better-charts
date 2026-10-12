@@ -1,0 +1,115 @@
+.timeframe-menu button:focus-visible {
+  outline: 1px solid var(--color-accent);
+}
+
+.timeframe-menu-anchor {
+  position: relative;
+  display: flex;
+}
+
+/* Floats over the chart (above its overlays, below modal dialogs) so opening
+   it never shifts the layout. Height and horizontal fit are set in JS. */
+.timeframe-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  width: 220px;
+  max-width: calc(100vw - 16px);
+  overflow-y: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  padding: 6px;
+  background: var(--color-raised);
+  box-shadow: 0 12px 32px #000a;
+}
+
+.timeframe-menu-heading {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: var(--border-radius);
+  padding: 8px 8px 6px;
+  color: var(--color-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.timeframe-caret {
+  transition: transform 120ms ease-out;
+}
+
+.timeframe-caret.collapsed {
+  transform: rotate(-90deg);
+}
+
+.timeframe-menu-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--border-radius);
+}
+
+.timeframe-menu-row:hover,
+.timeframe-menu-row:focus-within {
+  background: var(--color-border-subtle);
+}
+
+.timeframe-menu-row.active .timeframe-menu-select {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.timeframe-menu-select {
+  flex: 1;
+  border: 0;
+  border-radius: var(--border-radius);
+  padding: 8px;
+  color: var(--color-text);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.timeframe-menu-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.timeframe-menu-star {
+  display: flex;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--border-radius);
+  padding: 6px 4px;
+  color: var(--color-muted);
+  background: transparent;
+  cursor: pointer;
+  /* Outline stars appear on hover/focus; favorites stay visible. */
+  opacity: 0;
+}
+
+.timeframe-menu-row:hover .timeframe-menu-star,
+.timeframe-menu-star:focus-visible,
+.timeframe-menu-star.favorite {
+  opacity: 1;
+}
+
+.timeframe-menu-star.favorite {
+  color: var(--color-warn-highlight);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeframe-caret {
+    transition: none;
+  }
+}

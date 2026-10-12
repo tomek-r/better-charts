@@ -126,7 +126,7 @@ export function UnitsSizingRow({
           setUnitsMenuOpen((open) => !open);
         }}
       >
-        {rowLabel} <CaretIcon />
+        {rowLabel} <CaretIcon className="ticket-caret" />
       </button>
       <div className="ticket-field">
         <input
@@ -173,7 +173,7 @@ export function UnitsSizingRow({
           }}
           aria-label="Sizing mode"
         >
-          {sizingIndicator} <CaretIcon />
+          {sizingIndicator} <CaretIcon className="ticket-caret" />
         </button>
       </div>
       {unitsMenuOpen && (

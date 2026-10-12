@@ -1,6 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { gotoWithStub, stubInvocations, pushEvent } from './helpers/tauriStub';
-import { timeframeBarTime, timeframeBarOffset, timeframeLabel } from '../src/shared/bridge/timeframes';
+import {
+  timeframeBarTime,
+  timeframeBarOffset,
+  timeframeLabel,
+  timeframeLongLabel,
+  timeframeSection,
+} from '../src/shared/bridge/timeframes';
+import {
+  DEFAULT_TIMEFRAME_FAVORITES,
+  loadTimeframeFavorites,
+} from '../src/features/chart/timeframes/timeframeFavorites';
 import { futurePoints } from '../src/features/chart/engine/futureTimePoints';
 import { BrokerClock } from '../src/features/chart/engine/barCountdown/clock';
 
@@ -28,12 +38,52 @@ const periods = [
   ['MN1', '1M'],
 ];
 
-test('every advertised MT5 period can request history', async ({ page }) => {
+const longLabels: Record<string, string> = {
+  M1: '1 minute',
+  M2: '2 minutes',
+  H1: '1 hour',
+  H4: '4 hours',
+  D1: '1 day',
+  W1: '1 week',
+  MN1: '1 month',
+};
+
+test('long labels are singular for one and plural otherwise', () => {
+  for (const [wire, label] of Object.entries(longLabels)) {
+    expect(timeframeLongLabel(wire)).toBe(label);
+  }
+  expect(timeframeLongLabel('X9')).toBe('X9');
+  expect(timeframeSection('M30')).toBe('minutes');
+  expect(timeframeSection('H12')).toBe('hours');
+  expect(['D1', 'W1', 'MN1'].map(timeframeSection)).toEqual(['days', 'days', 'days']);
+});
+
+test('favorites storage falls back to defaults and drops unknown or repeated codes', () => {
+  const stored = (value: string | null) => ({ getItem: () => value });
+  const defaults = [...DEFAULT_TIMEFRAME_FAVORITES];
+  expect(loadTimeframeFavorites(stored(null))).toEqual(defaults);
+  expect(loadTimeframeFavorites(stored('{not json'))).toEqual(defaults);
+  expect(loadTimeframeFavorites(stored('{"M1":true}'))).toEqual(defaults);
+  const blocked = {
+    getItem: (): string => {
+      throw new Error('blocked');
+    },
+  };
+  expect(loadTimeframeFavorites(blocked)).toEqual(defaults);
+  expect(loadTimeframeFavorites(stored('[]'))).toEqual([]);
+  expect(loadTimeframeFavorites(stored('["H2","H2","BOGUS",7,"M3"]'))).toEqual(['H2', 'M3']);
+});
+
+test('every advertised MT5 period can request history through the menu', async ({ page }) => {
   const errors = await gotoWithStub(page);
   const group = page.getByRole('group', { name: 'Chart timeframe' });
-  await expect(group.getByRole('button')).toHaveCount(21);
+  const menu = page.getByRole('dialog', { name: 'Timeframes' });
+  await expect(group.getByRole('button')).toHaveText(['1m', '5m', '15m', '1H', '4H', '1D', '1M']);
   for (const [wire, label] of periods) {
-    await group.getByRole('button', { name: label, exact: true }).click();
+    await page.getByRole('button', { name: 'More timeframes' }).click();
+    await menu.getByRole('button', { name: timeframeLongLabel(wire), exact: true }).click();
+    await expect(menu).toHaveCount(0);
+    // A non-favorite stays visible while active.
     await expect(group.getByRole('button', { name: label, exact: true })).toHaveAttribute('aria-pressed', 'true');
     expect(
       (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history').at(-1)?.args.timeframe,
@@ -48,17 +98,30 @@ test('the selector follows the EA subset and updates its choices on reconnect', 
     responses: { get_bridge_status: { state: 'connected', supportedTimeframes: ['M1', 'M2', 'MN1'] } },
   });
   const group = page.getByRole('group', { name: 'Chart timeframe' });
-  await expect(group.getByRole('button')).toHaveText(['1m', '2m', '1M']);
-  await pushEvent(page, 'bridge-status', { state: 'connected', supportedTimeframes: ['M1', 'H12', 'W1'] });
-  await expect(group.getByRole('button')).toHaveText(['1m', '12H', '1W']);
+  const menu = page.getByRole('dialog', { name: 'Timeframes' });
+  const rows = menu.locator('.timeframe-menu-select');
+  await expect(group.getByRole('button')).toHaveText(['1m', '1M']);
+  await page.getByRole('button', { name: 'More timeframes' }).click();
+  await expect(rows).toHaveText(['1 minute', '2 minutes', '1 month']);
+  await pushEvent(page, 'bridge-status', { state: 'connected', supportedTimeframes: ['M1', 'H12', 'D1'] });
+  await expect(group.getByRole('button')).toHaveText(['1m', '1D']);
+  await expect(rows).toHaveText(['1 minute', '12 hours', '1 day']);
 });
 
 test('all periods fit a narrow chart without horizontal page overflow', async ({ page }) => {
   await page.setViewportSize({ width: 480, height: 800 });
   await gotoWithStub(page);
-  const group = page.getByRole('group', { name: 'Chart timeframe' });
-  await expect(group.getByRole('button')).toHaveCount(21);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const noOverflow = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+  await expect(page.getByRole('group', { name: 'Chart timeframe' }).getByRole('button')).toHaveCount(7);
+  expect(await noOverflow()).toBe(true);
+  await page.getByRole('button', { name: 'More timeframes' }).click();
+  const menu = page.getByRole('dialog', { name: 'Timeframes' });
+  await expect(menu.locator('.timeframe-menu-select')).toHaveCount(21);
+  expect(await noOverflow()).toBe(true);
+  const box = (await menu.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(480);
+  expect(box.y + box.height).toBeLessThanOrEqual(800);
 });
 
 const seconds = (date: string) => Date.parse(date) / 1000;

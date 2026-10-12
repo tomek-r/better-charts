@@ -91,15 +91,9 @@ async function openToolMenu(page: Page): Promise<void> {
   await expect(page.locator('.tool-flyout')).toBeVisible();
 }
 
-/** The group's chevron, parsed from its path: a positive apex offset points right. */
-async function arrowApexOffset(page: Page): Promise<number> {
-  const d = await page.locator('.tool-rail-arrow-glyph path').getAttribute('d');
-  const points = (d ?? '')
-    .replace(/[A-Za-z]/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .map(Number);
-  return points[2] - points[0];
+/** The chevron's computed transform: `none` while the menu is closed, a 180 degree turn while open. */
+async function arrowTransform(page: Page): Promise<string> {
+  return page.locator('.tool-rail-arrow-glyph').evaluate((glyph) => getComputedStyle(glyph).transform);
 }
 
 test.describe('crosshair', () => {
@@ -112,13 +106,13 @@ test.describe('crosshair', () => {
     const menu = page.locator('.tool-flyout');
     await expect(menu).toHaveCount(0);
     await expect(arrow).toHaveAttribute('aria-expanded', 'false');
-    // The indicator points right, at the menu it opens.
-    expect(await arrowApexOffset(page)).toBeGreaterThan(0);
+    // The chevron points right, at the menu it opens.
+    await expect.poll(() => arrowTransform(page)).toBe('none');
     await openToolMenu(page);
     await expect(arrow).toHaveAttribute('aria-expanded', 'true');
     await expect(head).toHaveAttribute('aria-expanded', 'true');
-    // The arrow points back at the rail while the menu is open.
-    expect(await arrowApexOffset(page)).toBeLessThan(0);
+    // The chevron is turned back at the rail while the menu is open.
+    await expect.poll(() => arrowTransform(page)).toMatch(/^matrix\(-1, /);
     // The group lists exactly the two pointer tools, and neither carries a star.
     await expect(menu.getByRole('menuitemradio')).toHaveCount(2);
     await expect(menu).not.toContainText('★');

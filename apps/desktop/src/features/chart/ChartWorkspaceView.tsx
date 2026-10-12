@@ -1,6 +1,6 @@
 import { ChartTitle } from './ChartTitle';
 import { ChartQuotes } from './ChartQuotes';
-import { ChartTimeframes } from './ChartTimeframes';
+import { ChartTimeframes } from './timeframes/ChartTimeframes';
 import { ChartCanvas } from './ChartCanvas';
 import { ChartPartialClose } from './ChartPartialClose';
 

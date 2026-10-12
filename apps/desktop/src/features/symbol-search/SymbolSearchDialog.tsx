@@ -1,3 +1,4 @@
+import { StarIcon } from '../../shared/ui/StarIcon';
 import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
 import type { Dispatch, SetStateAction } from 'react';
 import type { BrokerSymbol } from '../../shared/bridge/types';
@@ -27,15 +28,7 @@ function SymbolResultRow({
         aria-pressed={isFavorite}
         onClick={() => toggleFavorite(item)}
       >
-        <svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24">
-          <path
-            d="m12 2.75 2.85 5.78 6.38.93-4.62 4.5 1.09 6.36L12 17.32l-5.7 3 1.09-6.36-4.62-4.5 6.38-.93L12 2.75Z"
-            fill={isFavorite ? 'currentColor' : 'none'}
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <StarIcon filled={isFavorite} />
       </button>
     </div>
   );

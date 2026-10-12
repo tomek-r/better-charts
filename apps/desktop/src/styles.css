@@ -3,6 +3,8 @@
 @import './features/app-workspace/app-workspace.css';
 @import './features/topbar/topbar.css';
 @import './features/chart/chart.css';
+@import './features/chart/timeframes/timeframes.css';
+@import './features/chart/timeframes/menu/timeframe-menu.css';
 @import './features/tools/tool-rail.css';
 @import './features/symbol-search/search.css';
 @import './features/trade-panel/trade-panel.css';
