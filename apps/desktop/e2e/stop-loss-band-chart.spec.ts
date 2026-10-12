@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { brokerSymbolFixture, gotoWithStub } from './helpers/tauriStub';
+import { brokerSymbolFixture, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import { fillExitPrice, openTradePanel } from './helpers/panel';
 import { clampStopLoss } from '../src/features/chart/engine/stagedOrderGestures';
 
@@ -26,6 +26,7 @@ interface BandGeometry {
   slBand: { nearPrice: number; farPrice: number; empty: boolean } | null;
   slBandY: { nearY: number; farY: number } | null;
   slClampHint: string | null;
+  slMoney: string | null;
 }
 async function geometry(page: Page): Promise<BandGeometry> {
   return page.evaluate(() => {
@@ -37,6 +38,8 @@ async function stageRiskOrder(page: Page, mode: 'Risk, % equity' | 'Units') {
   const collected = await gotoWithStub(page, {
     symbolInfo: instrument,
     responses: {
+      // The reactive stub answers every request with a fixed 12.50 USD; specs push a realistic preview instead.
+      request_risk_preview: null,
       get_account_snapshot: {
         accountLogin: '50123456',
         brokerServer: 'Broker-Demo',
@@ -114,11 +117,33 @@ test('risk % mode shades the SL prices outside the allowed band', async ({ page 
 
 test('dragging the SL past the far edge stops at the edge price and explains why', async ({ page }, testInfo) => {
   const collected = await stageRiskOrder(page, 'Risk, % equity');
+  // Broker answer for the typed 1.0840 stop: 100 ticks x 0.6 USD x 0.1 lot = 6.00 USD of the 6.25 USD budget.
+  await expect
+    .poll(async () => (await stubInvocations(page)).filter((c) => c.cmd === 'request_risk_preview').length)
+    .toBeGreaterThan(0);
+  const request = (await stubInvocations(page)).filter((c) => c.cmd === 'request_risk_preview').at(-1)!;
+  await pushEvent(page, 'risk-preview', {
+    ...request.args,
+    riskBudget: '6.25',
+    volume: '0.10',
+    estimatedRisk: '6.00',
+    estimatedMargin: '10',
+    estimatedReward: null,
+    rr: null,
+    currency: 'USD',
+    quotedAtMs: STUB_NOW,
+  });
+  await expect.poll(async () => (await geometry(page)).slMoney).toBe('-6.00 USD');
   const release = await dragSlHandle(page, (geo) => geo.slBandY!.farY + 50);
   await expect(page.getByLabel('Stop loss price')).toHaveValue(FAR_EDGE);
   await expect.poll(async () => (await geometry(page)).slClampHint).toBe('Max SL for 5% risk at 0.1 units');
   await page.locator('.chart-host').screenshot({ path: testInfo.outputPath('sl-band-clamped.png') });
   await release();
+  // At the far edge the (projected) SL money label is the budget, never above it, and within one tick (0.06 USD) of it.
+  await expect
+    .poll(async () => Math.abs(Number(((await geometry(page)).slMoney ?? '').replace(' USD', ''))))
+    .toBeGreaterThan(6.25 - 0.06 - 1e-9);
+  expect(Math.abs(Number(((await geometry(page)).slMoney ?? '').replace(' USD', '')))).toBeLessThanOrEqual(6.25);
   expect(collected).toEqual({ pageErrors: [], consoleErrors: [] });
   await expect(page.getByLabel('Stop loss price')).toHaveValue(FAR_EDGE);
   await expect.poll(async () => (await geometry(page)).slClampHint).toBeNull();

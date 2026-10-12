@@ -26,6 +26,11 @@ export function accountMoneyBasis(
   return { currency, currencyDigits, tickSize, tickValueProfit, tickValueLoss };
 }
 
+/** Account-currency loss per 1.0 of price movement per lot: the rate `estimateLevelMoney` applies to losing levels. */
+export function lossPerPriceUnitPerLot(money: AccountMoneyBasis): number {
+  return money.tickValueLoss / money.tickSize;
+}
+
 export function estimateLevelMoney(
   entry: number,
   level: number,

@@ -1,6 +1,6 @@
 import type { AccountSnapshot, BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
 import { volumeWithUnit } from '../../../shared/format';
-import { accountMoneyBasis } from '../../../shared/money';
+import { accountMoneyBasis, lossPerPriceUnitPerLot } from '../../../shared/money';
 import { orderEntryPrice } from './ticketRules';
 
 /**
@@ -73,7 +73,7 @@ export function deriveStopLossBand(input: StopLossBandInput): StopLossBand | und
   }
   const { tickSize } = money;
   // Same loss model as the SL money labels: converted tick loss per price unit per lot.
-  const lossPerUnitPerLot = money.tickValueLoss / tickSize;
+  const lossPerUnitPerLot = lossPerPriceUnitPerLot(money);
   const buy = side === 'buy';
   const digits = instrument.digits;
 

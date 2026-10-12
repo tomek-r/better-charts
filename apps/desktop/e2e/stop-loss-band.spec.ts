@@ -4,6 +4,7 @@ import {
   stopLossRiskLabel,
   type StopLossBandInput,
 } from '../src/features/order-ticket/domain/stopLossBand';
+import { accountMoneyBasis, estimateLevelMoney } from '../src/shared/money';
 import { brokerSymbolFixture } from './helpers/tauriStub';
 
 // US100-like CFD: 1 account unit per point per lot, 0.01 tick, 0.1 minimum lot.
@@ -39,6 +40,17 @@ test('buy: farthest SL is where the minimum lot spends the whole risk budget', (
   expect(band.empty).toBe(false);
   expect(band.farHint).toBe('Max SL for 5% risk at 0.1 units');
   expect(band.nearHint).toBe('Min SL: broker stop distance');
+});
+
+test('the far edge costs at most the budget under the SL money-label model, within one tick of it', () => {
+  const money = accountMoneyBasis(instrument, 'USD', 2)!;
+  const oneTickMoney = money.tickValueLoss * Number(instrument.volumeMin);
+  for (const side of ['buy', 'sell'] as const) {
+    const band = deriveStopLossBand({ ...base, side })!;
+    const loss = -estimateLevelMoney(20000, band.farPrice, Number(instrument.volumeMin), side, money)!;
+    expect(loss).toBeLessThanOrEqual(6.25 + 1e-9);
+    expect(loss).toBeGreaterThan(6.25 - oneTickMoney - 1e-9);
+  }
 });
 
 test('sell mirrors the band above the entry', () => {
