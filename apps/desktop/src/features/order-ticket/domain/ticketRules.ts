@@ -53,6 +53,11 @@ export type StopDistanceGuard = {
   reason?: string;
 };
 
+/** The EA/Rust preflight's stop-distance rejection; the ticket blocks on it silently, so it raises no toast. */
+export function withoutStopLossTooClose(message: string | undefined): string | undefined {
+  return message?.startsWith('stop_loss too close:') ? undefined : message;
+}
+
 /** Price used for entry-relative risk sizing: stop_limit executes from its resting price. */
 export function orderEntryPrice(orderKind: OrderKind, entry: string, limitPrice: string): string {
   return orderKind === 'stop_limit' ? limitPrice : entry;
@@ -154,9 +159,8 @@ export function stopDistanceGuard(
   const tpTooClose = isTooClose(tpDistance, tpReference, takeValue);
   const points = (distance: number) => Math.round(distance / point);
   let reason: string | undefined;
-  if (slTooClose && slDistance !== undefined) {
-    reason = `stop_loss too close: distance ${points(slDistance)} pts, required >= ${minimumPoints} pts (20 ticks margin)`;
-  } else if (tpTooClose && tpDistance !== undefined) {
+  // A too-close stop blocks without wording (owner decision); the SL band keeps drafts out of it.
+  if (!slTooClose && tpTooClose && tpDistance !== undefined) {
     reason = `take_profit too close: distance ${points(tpDistance)} pts, required >= ${minimumPoints} pts (20 ticks margin)`;
   }
   return { slTooClose, tpTooClose, reason };
@@ -268,8 +272,8 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
     input.unitsMode === 'units' ? undefined : equityAllocationIssue(input.equityAllocationPercent ?? '100');
   const bridgeConnected = input.bridgeState === 'connected';
   const accountAvailable = Boolean(input.account?.accountLogin && input.account.brokerServer);
-  const stopDistanceAllowed = stopGuard?.reason === undefined;
-  const stopDistanceReason = stopGuard?.reason;
+  const stopDistanceAllowed = !stopGuard?.slTooClose && !stopGuard?.tpTooClose;
+  const stopDistanceReason = stopGuard?.slTooClose ? '' : stopGuard?.reason;
   const currentPreviewMatchesDraft = Boolean(
     input.riskPreview &&
     input.riskPreview.draftVersion === input.draftVersion &&
@@ -371,7 +375,7 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
     } else if (!orderVolumeValid) {
       ticketBlockedReason =
         effectiveVolume === '' ? 'Volume is required.' : (volumeIssue ?? 'Volume must be a positive decimal.');
-    } else if (stopDistanceReason) {
+    } else if (stopDistanceReason !== undefined) {
       ticketBlockedReason = stopDistanceReason;
     } else if (allocationIssue) {
       ticketBlockedReason = allocationIssue;
