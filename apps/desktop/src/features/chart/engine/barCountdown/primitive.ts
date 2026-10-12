@@ -2,7 +2,7 @@ import type { IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParamete
 import { AttachedSeriesPrimitive } from '../attachedPrimitive';
 import type { RenderTarget } from '../drawTarget';
 import { BrokerClock } from './clock';
-import { priceTagHeight, priceTagOffset } from '../priceAxisTagsPrimitive';
+import { priceTagHeight, tagStackTops } from '../tagStack';
 import { paintTag, tagLayout } from '../fixedCellText';
 import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './types';
 import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
@@ -114,7 +114,7 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
     const fontSize = this.labelFontSize();
     const font = `${fontSize}px ${this.labelFontFamily()}`;
     const layout = tagLayout(text, font, fontSize);
-    const height = Math.round(priceTagHeight(fontSize));
+    const height = priceTagHeight(fontSize);
     const top = Math.round(this.shownY - height / 2);
     target.useMediaCoordinateSpace(({ context }) => {
       paintTag(context, {
@@ -137,31 +137,16 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
 
   /** Anchor price to axis coordinate, below which the label is placed. */
   private coordinate(): number {
-    const price = this.state.anchorPrice;
-    const y = this.series === null || price === undefined ? null : this.series.priceToCoordinate(price);
-    if (y === null) {
+    if (this.series === null) {
       return NaN;
     }
-    // Sit one whole tag under the Bid tag, wherever the Bid/Ask tags put it:
-    // their offset grows outwards when the spread is tighter than a tag, and the
-    // countdown has to clear the Bid one in both cases.
+    // Starts exactly where the Bid tag ends, wherever the Bid/Ask tags put it:
+    // both primitives take their tops from the same whole-pixel stack.
+    const { askPrice, anchorPrice } = this.state;
     const height = priceTagHeight(this.labelFontSize());
-    return y + this.tagsOffset(height) + height;
-  }
-
-  /** Same spacing the Bid/Ask tags use, so this tag never lands on the Bid one. */
-  private tagsOffset(height: number): number {
-    const ask = this.state.askPrice;
-    const bid = this.state.anchorPrice;
-    if (ask === undefined || bid === undefined || this.series === null) {
-      return 0;
-    }
-    const askY = this.series.priceToCoordinate(ask);
-    const bidY = this.series.priceToCoordinate(bid);
-    if (askY === null || bidY === null) {
-      return 0;
-    }
-    return priceTagOffset(bidY - askY, height);
+    const askY = askPrice === undefined ? null : this.series.priceToCoordinate(askPrice);
+    const bidY = anchorPrice === undefined ? null : this.series.priceToCoordinate(anchorPrice);
+    return tagStackTops(askY, bidY, height).countdown + height / 2;
   }
 
   private visible(): boolean {

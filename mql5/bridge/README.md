@@ -27,7 +27,7 @@ submit/modify/close/cancel can execute trades. Commands are session-bound,
 journaled and sequential, with no automatic retries. See the
 [protocol contract](../../docs/protocol/bridge-v1.md).
 
-EA version `1.005` speeds up exact tick price aggregation (integer price keys). `1.004` added partial close (negotiated `partial_close` capability) and
+EA version `1.006` reconnects cleanly when the MT5 account changes: the identity check now runs before any account-stamped frame (heartbeat, portfolio snapshot), not only before account snapshots. `1.005` speeds up exact tick price aggregation (integer price keys). `1.004` added partial close (negotiated `partial_close` capability) and
 per-position `volume_min`/`volume_step`. It also includes account-currency TP/SL amounts in live portfolio
 snapshots, calculated with read-only `OrderCalcProfit` at actual entry and volume,
 and reports the installed tick reader version in the handshake.

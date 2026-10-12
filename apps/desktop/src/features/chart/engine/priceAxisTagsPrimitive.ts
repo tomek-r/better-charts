@@ -1,8 +1,15 @@
-import type { IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, Time } from 'lightweight-charts';
+import type {
+  IPriceScaleApi,
+  IPrimitivePaneRenderer,
+  IPrimitivePaneView,
+  SeriesAttachedParameter,
+  Time,
+} from 'lightweight-charts';
 import { palette } from '../../../shared/theme/palette';
 import { AttachedSeriesPrimitive } from './attachedPrimitive';
 import type { RenderTarget } from './drawTarget';
 import { paintTag, tagLayout, type TagLayout } from './fixedCellText';
+import { priceTagHeight, tagStackTops } from './tagStack';
 
 /**
  * Bid/Ask price-axis labels.
@@ -20,16 +27,6 @@ import { paintTag, tagLayout, type TagLayout } from './fixedCellText';
  * spaced by the two prices so both stay readable, and only ever moving with the
  * scale.
  */
-
-/** Height of a primitive price-axis label, per 12px of font. */
-export const priceTagHeight = (fontSize: number) => fontSize * (1 + 2 * ((2.5 + 2) / 12));
-
-/**
- * Half the shortfall when two tags would sit closer than one tag height, so
- * each moves away by the same amount. Zero once they are far enough apart,
- * which leaves a wide spread looking exactly like the native labels.
- */
-export const priceTagOffset = (gap: number, height: number) => Math.max(0, height - Math.abs(gap)) / 2;
 
 export interface PriceAxisTagsState {
   ask?: number;
@@ -100,6 +97,7 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     this.state.ask = state.ask;
     this.state.bid = state.bid;
     if (changed) {
+      this.reserveAxisWidthForTags();
       this.requestUpdate?.();
       this.holdAxisWidthAfterPaint();
     }
@@ -171,10 +169,30 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     // them: the axis must also be at least as wide as the boxes drawn.
     const shown = !Number.isNaN(this.shownY.ask) || !Number.isNaN(this.shownY.bid);
     const width = Math.max(scale.width(), shown ? this.texts.width : 0);
+    this.raiseAxisWidth(scale, width);
+  }
+
+  private raiseAxisWidth(scale: IPriceScaleApi, width: number): void {
     if (width > this.heldAxisWidth) {
       this.heldAxisWidth = width;
       scale.applyOptions({ minimumWidth: width });
     }
+  }
+
+  /**
+   * Widens the axis for the tag boxes before the paint that first draws them.
+   *
+   * The library no longer counts the tags in its own width, so waiting for the
+   * post-paint read left one frame at the narrower axis: the pane then narrowed
+   * a frame later and the visible logical range slid by a bar.
+   */
+  private reserveAxisWidthForTags(): void {
+    const scale = this.series?.priceScale();
+    if (scale === undefined) {
+      return;
+    }
+    const { width } = this.tagTexts();
+    this.raiseAxisWidth(scale, width);
   }
 
   /**
@@ -189,16 +207,6 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     }
   }
 
-  /** Both tags move away from each other by the same amount when they would touch. */
-  private offset(): number {
-    const ask = this.coordinateOf(this.state.ask);
-    const bid = this.coordinateOf(this.state.bid);
-    if (ask === null || bid === null) {
-      return 0;
-    }
-    return priceTagOffset(bid - ask, priceTagHeight(this.labelFontSize()));
-  }
-
   private coordinateOf(price: number | undefined): number | null {
     if (price === undefined || this.series === null) {
       return null;
@@ -207,15 +215,16 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
   }
 
   private coordinate(price: number | undefined, side: 'ask' | 'bid'): number {
-    const y = this.coordinateOf(price);
-    if (y === null) {
+    if (this.coordinateOf(price) === null) {
       return NaN;
     }
     // Ask above its price, Bid below its price: the pair grows outwards, so one
     // tag never covers the other however tight the spread gets, and with a wide
-    // spread the offset is zero and they sit on their prices like native labels.
-    const offset = this.offset();
-    return side === 'ask' ? y - offset : y + offset;
+    // spread they sit on their prices like native labels. The box tops are whole
+    // pixels shared with the countdown (see `tagStackTops`).
+    const height = priceTagHeight(this.labelFontSize());
+    const tops = tagStackTops(this.coordinateOf(this.state.ask), this.coordinateOf(this.state.bid), height);
+    return tops[side] + height / 2;
   }
 
   private text(price: number | undefined, side: 'ask' | 'bid'): string {
@@ -258,7 +267,7 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
       return;
     }
     const texts = this.tagTexts();
-    const height = Math.round(priceTagHeight(this.labelFontSize()));
+    const height = priceTagHeight(this.labelFontSize());
     target.useMediaCoordinateSpace(({ context }) => {
       paintTag(context, {
         layout: texts.layouts[side],
