@@ -15,10 +15,10 @@ test('timeframe buttons have equal widths and selection preserves their layout',
         return { x, y, width, height };
       }),
     );
-  await expect(tabs.getByRole('button', { name: '30m', exact: true })).toBeEnabled();
+  await expect(tabs.getByRole('button', { name: '15m', exact: true })).toBeEnabled();
   const initial = await bounds();
   expect(new Set(initial.map((button) => button.width)).size).toBe(1);
-  for (const label of ['30m', '1m']) {
+  for (const label of ['15m', '1m']) {
     await tabs.getByRole('button', { name: label, exact: true }).click();
     await expect(tabs.locator('[aria-pressed="true"]')).toHaveText(label);
     expect(await bounds()).toEqual(initial);

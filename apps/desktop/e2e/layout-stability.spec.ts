@@ -45,7 +45,7 @@ for (const viewport of [
     });
     await gotoWithStub(page);
     const tabs = page.getByRole('group', { name: 'Chart timeframe' });
-    await expect(tabs.getByRole('button', { name: '30m', exact: true })).toBeEnabled();
+    await expect(tabs.getByRole('button', { name: '15m', exact: true })).toBeEnabled();
     await expect(page.locator('.chart-host canvas').first()).toBeVisible();
     // Let any trailing layout-shift entries flush.
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));

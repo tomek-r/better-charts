@@ -103,6 +103,17 @@
 
 .tool-rail-arrow-glyph {
   display: block;
+  transition: transform 120ms ease-out;
+}
+
+.tool-rail-arrow[aria-expanded='true'] .tool-rail-arrow-glyph {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-rail-arrow-glyph {
+    transition: none;
+  }
 }
 
 .tool-rail-arrow:hover {

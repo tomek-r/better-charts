@@ -38,7 +38,7 @@ export function PartialCloseMenuButton({
         aria-label="Close part of position"
         onClick={() => setOpen((wasOpen) => !wasOpen)}
       >
-        <CaretIcon />
+        <CaretIcon className="ticket-caret" />
       </button>
       {open && !disabled && (
         <PartialCloseMenu

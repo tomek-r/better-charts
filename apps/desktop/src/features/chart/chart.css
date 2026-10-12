@@ -151,47 +151,6 @@
   font-size: 12px;
 }
 
-.timeframe-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 12px;
-}
-
-/* Pre-handshake stand-in: same buttons, same wrapping, so the chart frame
-   below never moves when the real ones mount. Invisible and unfocusable. */
-.timeframe-tabs.placeholder {
-  visibility: hidden;
-}
-
-.timeframe-tabs button {
-  width: 44px;
-  flex: 0 0 44px;
-  border: 1px solid transparent;
-  border-radius: var(--border-radius);
-  padding: 7px 8px;
-  color: var(--color-muted-strong);
-  background: transparent;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.timeframe-tabs button:hover:not(:disabled) {
-  color: var(--color-text);
-  background: var(--color-border-subtle);
-}
-
-.timeframe-tabs button.active {
-  color: var(--color-root);
-  background: var(--color-accent);
-  font-weight: 700;
-}
-
-.timeframe-tabs button:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
-
 @media (max-width: 900px) {
   .chart-section {
     height: clamp(520px, 72vh, 760px);

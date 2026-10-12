@@ -1,11 +1,11 @@
 /** 10px down-chevron drawn as SVG: deterministic size and vertical centering
  * (flex parents center the box, inline use rides the text via vertical-align) —
  * no font-glyph guessing like the old ▾/⌄ characters. */
-export function CaretIcon() {
+export function CaretIcon({ className }: { className: string }) {
   return (
     <svg
       aria-hidden="true"
-      className="ticket-caret"
+      className={className}
       width="10"
       height="10"
       viewBox="0 0 10 10"

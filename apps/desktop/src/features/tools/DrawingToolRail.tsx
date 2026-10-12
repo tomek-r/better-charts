@@ -41,9 +41,9 @@ const RAIL_LAYOUT = railLayout(CHART_TOOL_PLUGINS);
  * The group button shows whichever member is active (the first member, the arrow
  * pointer, while none is).
  *
- * The group's icon and the arrow tab beside it both open the group's menu, and
- * the chevron points at that menu while it is closed and back at the rail while
- * it is open. Picking a row makes that tool active. Escape closes the menu — and only
+ * The group's icon and the arrow tab beside it both open the group's menu. The
+ * chevron is always drawn pointing at the menu; while the menu is open CSS rotates
+ * it 180 degrees to point back at the rail. Picking a row makes that tool active. Escape closes the menu — and only
  * the menu — returning focus to the group's icon and taking the chevron away
  * with it; a click outside closes it too. The tab is revealed by the pointer,
  * so it reappears on the next hover.
@@ -156,8 +156,7 @@ export function DrawingToolRail({
                   aria-hidden="true"
                   focusable="false"
                 >
-                  {/* Closed: points at the menu it opens. Open: points back at the rail. */}
-                  <path d={flyoutOpen ? 'M8.5 3.5 5 7l3.5 3.5' : 'M5.5 3.5 9 7l-3.5 3.5'} />
+                  <path d="M5.5 3.5 9 7l-3.5 3.5" />
                 </svg>
               </button>
             </div>

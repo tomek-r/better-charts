@@ -37,6 +37,29 @@ export function timeframeLabel(wire: string): string {
   return `${amount}${unit}`;
 }
 
+/** `M3` → `3 minutes`, `H1` → `1 hour`, `MN1` → `1 month`; an unexpected code is shown as it came. */
+export function timeframeLongLabel(wire: string): string {
+  const match = WIRE_CODE.exec(wire);
+  const unit = match ? LONG_UNITS[match[1]] : undefined;
+  if (!match || !unit) {
+    return wire;
+  }
+  return `${match[2]} ${unit}${match[2] === '1' ? '' : 's'}`;
+}
+
+const LONG_UNITS: Record<string, string> = { M: 'minute', H: 'hour', D: 'day', W: 'week', MN: 'month' };
+
+export type TimeframeSection = 'minutes' | 'hours' | 'days';
+
+/** Menu grouping: minutes, hours, and everything from a day upward. */
+export function timeframeSection(wire: string): TimeframeSection {
+  const unit = WIRE_CODE.exec(wire)?.[1];
+  if (unit === 'M') {
+    return 'minutes';
+  }
+  return unit === 'H' ? 'hours' : 'days';
+}
+
 /** Nominal seconds per bar; MN1 boundaries use calendar months below. */
 export function timeframeSeconds(wire: string): number {
   const entry = config.timeframes.find((candidate) => candidate.code === wire) ?? defaultEntry;

@@ -33,7 +33,7 @@ export function TicketExitRow({
     <div className={`ticket-exit${on ? '' : ' off'}`}>
       <div className="ticket-exit-head">
         <span className="ticket-row-label">
-          {label}, {ticksMode ? 'ticks' : 'price'} <CaretIcon />
+          {label}, {ticksMode ? 'ticks' : 'price'} <CaretIcon className="ticket-caret" />
         </span>
         <input
           type="checkbox"
