@@ -1,4 +1,10 @@
-import type { IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, Time } from 'lightweight-charts';
+import type {
+  IPriceScaleApi,
+  IPrimitivePaneRenderer,
+  IPrimitivePaneView,
+  SeriesAttachedParameter,
+  Time,
+} from 'lightweight-charts';
 import { palette } from '../../../shared/theme/palette';
 import { AttachedSeriesPrimitive } from './attachedPrimitive';
 import type { RenderTarget } from './drawTarget';
@@ -100,6 +106,7 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     this.state.ask = state.ask;
     this.state.bid = state.bid;
     if (changed) {
+      this.reserveAxisWidthForTags();
       this.requestUpdate?.();
       this.holdAxisWidthAfterPaint();
     }
@@ -171,10 +178,30 @@ export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
     // them: the axis must also be at least as wide as the boxes drawn.
     const shown = !Number.isNaN(this.shownY.ask) || !Number.isNaN(this.shownY.bid);
     const width = Math.max(scale.width(), shown ? this.texts.width : 0);
+    this.raiseAxisWidth(scale, width);
+  }
+
+  private raiseAxisWidth(scale: IPriceScaleApi, width: number): void {
     if (width > this.heldAxisWidth) {
       this.heldAxisWidth = width;
       scale.applyOptions({ minimumWidth: width });
     }
+  }
+
+  /**
+   * Widens the axis for the tag boxes before the paint that first draws them.
+   *
+   * The library no longer counts the tags in its own width, so waiting for the
+   * post-paint read left one frame at the narrower axis: the pane then narrowed
+   * a frame later and the visible logical range slid by a bar.
+   */
+  private reserveAxisWidthForTags(): void {
+    const scale = this.series?.priceScale();
+    if (scale === undefined) {
+      return;
+    }
+    const { width } = this.tagTexts();
+    this.raiseAxisWidth(scale, width);
   }
 
   /**
