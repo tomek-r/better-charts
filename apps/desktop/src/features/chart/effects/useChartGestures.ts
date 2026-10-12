@@ -52,7 +52,7 @@ export function useChartWorkspacePointerEffects(
     let toolGesture = false;
     const staged = createStagedOrderGestures(
       host,
-      { stagedOrderState },
+      { stagedOrderState, chart },
       {
         unstageOrderDraft,
         toggleExit,
@@ -189,7 +189,7 @@ export function useChartWorkspacePointerEffects(
       }
       event.stopPropagation();
       if (staged.active) {
-        staged.applyDrag(y - labelDragOffset, event.shiftKey);
+        staged.applyDrag(y - labelDragOffset, event.shiftKey, event.altKey);
       } else {
         trading.applyLineDrag(y - labelDragOffset, event.shiftKey);
       }

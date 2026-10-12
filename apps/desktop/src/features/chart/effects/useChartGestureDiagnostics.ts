@@ -69,6 +69,9 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
           slMoney: state.order?.slMoney ?? null,
           tpMoney: state.order?.tpMoney ?? null,
           riskRewardLabel: state.order?.riskRewardLabel ?? null,
+          slBand: state.order?.slBand ?? null,
+          slBandY: hit.slBandY ? { nearY: rect.top + hit.slBandY.nearY, farY: rect.top + hit.slBandY.farY } : null,
+          slClampHint: state.slClampHint ?? null,
           chartRect: hit.chartRect
             ? {
                 x: rect.left + hit.chartRect.x,
