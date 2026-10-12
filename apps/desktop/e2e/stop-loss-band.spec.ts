@@ -38,8 +38,8 @@ test('buy: farthest SL is where the minimum lot spends the whole risk budget', (
   // Broker minimum is 20 ticks (0.20); the guard needs STRICTLY more.
   expect(band.nearPrice).toBeCloseTo(19999.79, 8);
   expect(band.empty).toBe(false);
-  expect(band.farHint).toBe('Max SL for 5% risk at 0.1 units');
-  expect(band.nearHint).toBe('Min SL: broker stop distance');
+  expect(band.farHint).toBe('Max SL · 5% risk at 0.1 units');
+  expect(band.nearHint).toBe('Min SL · broker stop distance');
 });
 
 test('the far edge costs at most the budget under the SL money-label model, within one tick of it', () => {
@@ -68,7 +68,8 @@ test('required volume above volumeMax pushes the nearest SL out', () => {
   const band = deriveStopLossBand({ ...base, instrument: { ...instrument, volumeMax: '1' } })!;
   // 6.25 / (1 lot x 1) = 6.25 points: any closer needs more than 1 lot.
   expect(band.nearPrice).toBeCloseTo(19993.75, 8);
-  expect(band.nearHint).toBe('Min SL for 5% risk at 1 units');
+  // 1 is the broker's volumeMax, not the order size: the text must say so.
+  expect(band.nearHint).toBe('Min SL · broker max 1 units at 5% risk');
 });
 
 test('a budget too small for any allowed distance yields an empty band', () => {

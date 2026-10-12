@@ -14,8 +14,10 @@ import {
   fillRiskZone,
   drawHandle,
   HANDLE_X,
+  roundedRect,
   tagPath,
   TRADING_COLORS,
+  WIDGET_RADIUS,
   type TradingHitCircle,
   type TradingHitRect,
   type OverlayPass,
@@ -67,8 +69,10 @@ export interface StagedOrderLevels {
 export interface StagedOrderState {
   /** null = not staged. Written by App every render via the mirror effect. */
   order: StagedOrderLevels | null;
-  /** Why the SL drag is held at a band edge; set by the gestures, cleared on release. */
+  /** Why no SL is allowed (empty band); set by the gestures during an SL drag, cleared on release. */
   slClampHint?: string;
+  /** The band edge currently holding the SL drag; its permanent label is emphasised. */
+  slClampEdge?: 'near' | 'far';
   /** Instrument digits used for every price the widget formats. */
   digits: number;
   /** Epoch ms when the current bar closes — drives the axis countdown tag. */
@@ -87,6 +91,8 @@ export interface StagedOrderState {
     tpLineY?: number;
     /** Viewport y of the allowed-SL band edges (risk sizing only). */
     slBandY?: { nearY: number; farY: number };
+    /** Painted band edge labels (viewport px). Informational only: never a grab target. */
+    slBandLabels?: Array<TradingHitRect & { edge: 'near' | 'far'; text: string }>;
     entryCancel?: TradingHitCircle;
     slHandle?: TradingHitRect;
     slCancel?: TradingHitCircle;
@@ -136,34 +142,14 @@ function cancelChip(
   hit[key] = drawCancelChip(ctx, cx, cy, color);
 }
 
-/**
- * Dims the SL-side prices a risk-sized order cannot use: beyond the far edge
- * (even the minimum lot overspends the budget) and between the entry and the
- * near edge (too close for the broker or the volume cap). Dashed lines mark the edges.
- */
-function paintDisallowedSlRegions(
+/** Dotted line across the pane at each edge of the allowed-SL band; nothing is shaded. */
+function paintBandEdgeLines(
   ctx: CanvasRenderingContext2D,
   chartRect: { x: number; y: number; width: number; height: number },
-  side: RiskSide,
-  entryY: number,
   { nearY, farY }: { nearY: number; farY: number },
 ) {
   const { x, y, width, height } = chartRect;
-  const slopesDown = side === 'buy'; // BUY: SL below the entry (larger y)
-  const dim = (from: number, to: number) => {
-    const top = Math.max(Math.min(from, to), y);
-    const bottom = Math.min(Math.max(from, to), y + height);
-    if (bottom > top) {
-      ctx.fillRect(x, top, width, bottom - top);
-    }
-  };
   ctx.save();
-  ctx.fillStyle = palette.muted;
-  ctx.globalAlpha = 0.18;
-  dim(farY, slopesDown ? y + height : y);
-  if (slopesDown ? nearY > entryY : nearY < entryY) {
-    dim(entryY, nearY);
-  }
   ctx.globalAlpha = 0.7;
   ctx.strokeStyle = palette.muted;
   ctx.lineWidth = 1;
@@ -179,7 +165,55 @@ function paintDisallowedSlRegions(
   ctx.restore();
 }
 
-/** Short pill beside the SL handle explaining which band edge holds the drag. */
+const BAND_LABEL_MARGIN = 12;
+const BAND_LABEL_CLEARANCE = 4;
+
+const overlaps = (a: TradingHitRect, b: TradingHitRect | undefined, clearance = BAND_LABEL_CLEARANCE) =>
+  b !== undefined &&
+  a.x < b.x + b.w + clearance &&
+  a.x + a.w + clearance > b.x &&
+  a.y < b.y + b.h + clearance &&
+  a.y + a.h + clearance > b.y;
+
+/**
+ * Permanent neutral label on a band edge, in the SL/TP handle style but without grip or tip: it is not a
+ * handle and records no hit area. Right-aligned in the pane so it stays clear of the left-hand SL/TP/entry
+ * labels; it is dropped (not moved) when it would still touch one of them or the other band label.
+ * `held` marks the edge currently holding the SL drag.
+ */
+function paintBandLabel(
+  ctx: CanvasRenderingContext2D,
+  chartRect: { x: number; y: number; width: number; height: number },
+  centerY: number,
+  text: string,
+  held: boolean,
+  occupied: Array<TradingHitRect | undefined>,
+): TradingHitRect | undefined {
+  ctx.font = '400 12px system-ui, sans-serif';
+  const w = ctx.measureText(text).width + 14;
+  const h = 20;
+  const box = { x: chartRect.x + chartRect.width - w - BAND_LABEL_MARGIN, y: centerY - h / 2, w, h };
+  if (
+    centerY < chartRect.y ||
+    centerY > chartRect.y + chartRect.height ||
+    box.x < chartRect.x ||
+    occupied.some((other) => overlaps(box, other))
+  ) {
+    return undefined;
+  }
+  roundedRect(ctx, box.x, box.y, box.w, box.h, WIDGET_RADIUS);
+  ctx.fillStyle = TRADING_COLORS.surface;
+  ctx.fill();
+  ctx.strokeStyle = held ? palette.warn : palette.muted;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = held ? palette.warnText : palette.mutedStrong;
+  ctx.textAlign = 'left';
+  ctx.fillText(text, box.x + 7, centerY + 0.5);
+  return box;
+}
+
+/** Short pill beside the SL handle explaining why no SL level is allowed (empty band). */
 function paintClampHint(ctx: CanvasRenderingContext2D, handle: TradingHitRect, text: string) {
   const width = ctx.measureText(text).width + 16;
   const left = handle.x + handle.w + 8;
@@ -267,9 +301,10 @@ export function createStagedOrderOverlay(
         zone(order.stopLoss, palette.sellSoft);
         zone(order.takeProfit, palette.accent);
         if (band && hit.slBandY) {
-          paintDisallowedSlRegions(ctx, viewport.chartRect, order.side, entryY, hit.slBandY);
+          paintBandEdgeLines(ctx, viewport.chartRect, hit.slBandY);
         }
       }
+      let entryTag: TradingHitRect | undefined;
 
       // ── ENTRY line + inline chips: (✕) unstage · side pill · pointed qty tag.
       // Draw first so the TP/SL handles remain visible above the price handle
@@ -308,7 +343,13 @@ export function createStagedOrderOverlay(
             ctx.fillStyle = TRADING_COLORS.text;
             ctx.fillText(tagText, cx + 8, labelY + 0.5);
 
-            return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: cx + tagW + 8 - (x + CANCEL_CHIP_X - 10), h: 20 };
+            entryTag = {
+              x: x + CANCEL_CHIP_X - 10,
+              y: labelY - 10,
+              w: cx + tagW + 8 - (x + CANCEL_CHIP_X - 10),
+              h: 20,
+            };
+            return entryTag;
           });
         }
 
@@ -375,6 +416,21 @@ export function createStagedOrderOverlay(
             hit.tpHandle = box;
             return box;
           });
+        }
+      }
+
+      // Band edge labels last: they yield to every handle and tag drawn above.
+      if (drawLabels && band && hit.slBandY) {
+        const occupied: Array<TradingHitRect | undefined> = [hit.slHandle, hit.tpHandle, entryTag];
+        hit.slBandLabels = [];
+        for (const edge of ['far', 'near'] as const) {
+          const edgeY = edge === 'far' ? hit.slBandY.farY : hit.slBandY.nearY;
+          const text = edge === 'far' ? band.farHint : band.nearHint;
+          const box = paintBandLabel(ctx, viewport.chartRect, edgeY, text, state.slClampEdge === edge, occupied);
+          if (box) {
+            occupied.push(box);
+            hit.slBandLabels.push({ edge, text, ...box });
+          }
         }
       }
 

@@ -101,10 +101,11 @@ export function deriveStopLossBand(input: StopLossBandInput): StopLossBand | und
     nearPrice,
     farPrice,
     empty: buy ? farPrice > nearPrice : farPrice < nearPrice,
+    // The volume cap is the broker's volumeMax: name it, or "1000 units" reads like the order's own size.
     nearHint: volumeCapDominates
-      ? `Min SL for ${label} risk at ${volumeWithUnit(instrument.volumeMax)}`
-      : 'Min SL: broker stop distance',
-    farHint: `Max SL for ${label} risk at ${volumeWithUnit(instrument.volumeMin)}`,
+      ? `Min SL · broker max ${volumeWithUnit(instrument.volumeMax)} at ${label} risk`
+      : 'Min SL · broker stop distance',
+    farHint: `Max SL · ${label} risk at ${volumeWithUnit(instrument.volumeMin)}`,
     emptyHint: `Risk is too low for ${volumeWithUnit(instrument.volumeMin)} at any allowed SL distance`,
   };
 }

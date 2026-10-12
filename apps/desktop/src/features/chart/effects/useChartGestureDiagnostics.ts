@@ -72,6 +72,12 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
           slBand: state.order?.slBand ?? null,
           slBandY: hit.slBandY ? { nearY: rect.top + hit.slBandY.nearY, farY: rect.top + hit.slBandY.farY } : null,
           slClampHint: state.slClampHint ?? null,
+          slClampEdge: state.slClampEdge ?? null,
+          slBandLabels: (hit.slBandLabels ?? []).map((label) => ({
+            ...label,
+            x: rect.left + label.x,
+            y: rect.top + label.y,
+          })),
           chartRect: hit.chartRect
             ? {
                 x: rect.left + hit.chartRect.x,
