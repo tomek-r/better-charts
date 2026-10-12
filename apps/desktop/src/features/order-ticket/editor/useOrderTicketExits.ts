@@ -124,6 +124,7 @@ export function useOrderTicketExits(): OrderTicketExitsProps {
     setTakeProfit: stores.setters.draft.setTakeProfit,
     stopLoss,
     setStopLoss: stores.setters.draft.setStopLoss,
+    setStopLossEditing: stores.setters.draft.setStopLossEditing,
     toggleExit: actions.toggleExit,
     applyExitTicks: actions.applyExitTicks,
     swapExitUnit: actions.swapExitUnit,

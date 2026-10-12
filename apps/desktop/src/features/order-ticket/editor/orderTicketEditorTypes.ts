@@ -69,6 +69,7 @@ export interface OrderTicketExitsProps {
   setTakeProfit: Dispatch<SetStateAction<string>>;
   stopLoss: string;
   setStopLoss: Dispatch<SetStateAction<string>>;
+  setStopLossEditing: (editing: boolean) => void;
   toggleExit: (kind: 'sl' | 'tp', on: boolean) => void;
   applyExitTicks: (kind: 'sl' | 'tp', text: string) => void;
   swapExitUnit: (kind: 'sl' | 'tp') => void;

@@ -18,8 +18,6 @@ export function useOrderTicketEntryRuntime(inputs: Pick<OrderTicketInputs, 'quot
     ticketStage: draft.ticketStage,
     stopLoss: draft.stopLoss,
     takeProfit: draft.takeProfit,
-    slOn: draft.slOn,
-    tpOn: draft.tpOn,
     quote: inputs.quote,
     setEntry: setters.setEntry,
     setStopLoss: setters.setStopLoss,

@@ -1,22 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-import { brokerSymbolFixture, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
+import { pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
+import { gotoRiskBandStub } from './helpers/riskBandStub';
 import { fillExitPrice, openTradePanel } from './helpers/panel';
 import { decodePng, pixelAt } from './helpers/pngPixels';
 import { clampStopLoss } from '../src/features/chart/engine/stagedOrderGestures';
 
-// Balance 125 USD x 5% = 6.25 USD of risk. With 0.6 USD per 0.00001 tick per lot
-// the minimum 0.1 lot spends it all at 104 ticks (0.00104) from the 1.0850 ask.
+// The minimum 0.1 lot spends the 6.25 USD budget at 104 ticks from the 1.0850 ask.
 // BUY market stop distance is measured from the 1.0846 bid: 21 ticks -> 1.08439.
-const instrument = brokerSymbolFixture('EURUSD', 'Euro vs US Dollar', {
-  digits: 5,
-  tickSize: '0.00001',
-  pointSize: '0.00001',
-  tickValueProfit: '0.6',
-  tickValueLoss: '0.6',
-  volumeMin: '0.1',
-  volumeMax: '100',
-  volumeStep: '0.1',
-});
 const FAR_EDGE = '1.08396';
 const NEAR_EDGE = '1.08439';
 
@@ -47,30 +37,7 @@ interface StageOptions {
   limit?: { entry: string; stopLoss: string; takeProfit: string };
 }
 async function stageRiskOrder(page: Page, mode: 'Risk, % equity' | 'Units', options: StageOptions = {}) {
-  const collected = await gotoWithStub(page, {
-    symbolInfo: instrument,
-    responses: {
-      // The reactive stub answers every request with a fixed 12.50 USD; specs push a realistic preview instead.
-      request_risk_preview: null,
-      get_account_snapshot: {
-        accountLogin: '50123456',
-        brokerServer: 'Broker-Demo',
-        accountTradeMode: 0,
-        accountTradeModeName: 'demo',
-        currency: 'USD',
-        currencyDigits: 2,
-        balance: '125.00',
-        equity: '125.00',
-        margin: '0.00',
-        freeMargin: '125.00',
-        marginLevel: '0.00',
-        leverage: 100,
-        marginMode: 2,
-        tradeAllowed: true,
-        expertAllowed: true,
-      },
-    },
-  });
+  const collected = await gotoRiskBandStub(page);
   await openTradePanel(page);
   await page.locator('section.order-ticket .ticket-quote-side.buy').click();
   await page.locator('.ticket-menu-trigger').click();

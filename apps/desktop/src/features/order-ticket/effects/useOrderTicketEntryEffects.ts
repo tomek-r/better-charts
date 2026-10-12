@@ -14,8 +14,6 @@ export type OrderTicketEntryEffectsInput = Pick<
   | 'ticketStage'
   | 'stopLoss'
   | 'takeProfit'
-  | 'slOn'
-  | 'tpOn'
 > & {
   quote: QuoteSnapshot | undefined;
   setEntry: OrderTicketStores['setters']['draft']['setEntry'];
@@ -40,8 +38,6 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
     ticketStage,
     stopLoss,
     takeProfit,
-    slOn,
-    tpOn,
     setStopLoss,
     setTakeProfit,
   } = ticket;
@@ -85,8 +81,10 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
       return;
     }
     const digits = quoteDigits(quote.bid, quote.ask);
-    const shiftLevel = (value: string, enabled: boolean, update: (next: string) => void) => {
-      if (!enabled || !value.trim()) {
+    // A switched-off exit keeps its price, so it must follow the quote too: otherwise it
+    // comes back stale (a SELL stop below the market) when the user switches it on again.
+    const shiftLevel = (value: string, update: (next: string) => void) => {
+      if (!value.trim()) {
         return;
       }
       const level = Number(value);
@@ -94,8 +92,8 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
         update(ticketPrice(level + delta, digits));
       }
     };
-    shiftLevel(stopLoss, slOn, setStopLoss);
-    shiftLevel(takeProfit, tpOn, setTakeProfit);
+    shiftLevel(stopLoss, setStopLoss);
+    shiftLevel(takeProfit, setTakeProfit);
     setEntry(nextEntryText);
   }, [
     orderKind,
@@ -107,8 +105,6 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
     entry,
     stopLoss,
     takeProfit,
-    slOn,
-    tpOn,
     setEntry,
     setStopLoss,
     setTakeProfit,
