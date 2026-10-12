@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { observeFillText } from './helpers/canvasText';
+import { assembleGlyphRows, observeFillText, type AxisPaint } from './helpers/canvasText';
 import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 
@@ -65,48 +65,52 @@ function readTagBands(page: Page): Promise<Bands> {
   });
 }
 
-/**
- * Widths of the price tags, paired with the text each box carries: the library
- * draws box, fill, then text for every label, so the next text after a box is
- * that box's own.
- */
-async function tagWidths(page: Page): Promise<number[]> {
-  const ops = await page.evaluate(
-    () => (window as unknown as { __tagOps: Array<{ kind: string; width: number; text: string }> }).__tagOps,
-  );
-  const widths: number[] = [];
-  let pending: number | null = null;
-  for (const op of ops) {
-    if (op.kind === 'box') {
-      pending = op.width;
-    } else if (op.kind === 'text' && pending !== null) {
-      if (op.text.startsWith('1.08521') || op.text.startsWith('1.08524')) {
-        widths.push(Number(pending.toFixed(1)));
-      }
-      pending = null;
-    }
-  }
-  return [...new Set(widths)].sort((left, right) => left - right);
+interface AxisOp extends AxisPaint {
+  kind: 'box' | 'text';
+  width: number;
+}
+
+const PRICE_TEXT = /^\d+\.\d+$/;
+
+/** The newest painted axis frame: every draw of a frame stamps the same time. */
+async function lastFrameOps(page: Page): Promise<AxisOp[]> {
+  const ops = await page.evaluate(() => (window as unknown as { __tagOps: AxisOp[] }).__tagOps);
+  const last = Math.max(...ops.map((op) => op.at));
+  return ops.filter((op) => op.at === last);
+}
+
+/** Boxes of the Ask and Bid tags (top two on the axis; the countdown is third), top first. */
+async function tagBoxes(page: Page): Promise<AxisOp[]> {
+  const boxes = (await lastFrameOps(page)).filter((op) => op.kind === 'box').sort((a, b) => a.y - b.y);
+  return boxes.slice(0, 2);
+}
+
+/** Ask and Bid tag texts rebuilt from their glyph draws, top (Ask) first. */
+async function tagRows(page: Page) {
+  const paints = (await lastFrameOps(page)).filter((op) => op.kind === 'text');
+  return assembleGlyphRows(paints)
+    .filter((row) => PRICE_TEXT.test(row.text))
+    .sort((a, b) => a.y - b.y);
 }
 
 async function openChart(page: Page) {
   await page.addInitScript(() => {
-    const ops: Array<{ kind: string; width: number; text: string }> = [];
-    (window as unknown as { __tagOps: typeof ops }).__tagOps = ops;
+    const ops: AxisOp[] = [];
+    (window as unknown as { __tagOps: AxisOp[] }).__tagOps = ops;
     const onAxis = (context: CanvasRenderingContext2D) => context.canvas.width <= 120 && context.canvas.height > 120;
     const roundRect = CanvasRenderingContext2D.prototype.roundRect;
     CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
       if (onAxis(this)) {
-        ops.push({ kind: 'box', width: Number(w), text: '' });
+        ops.push({ kind: 'box', width: Number(w), text: '', at: performance.now(), x: Number(x), y: Number(y) });
       }
       return roundRect.call(this, x, y, w, h, radii);
     };
   });
   await observeFillText(page, () => {
-    const ops = (window as unknown as { __tagOps: Array<{ kind: string; width: number; text: string }> }).__tagOps;
-    return (context, text) => {
+    const ops = (window as unknown as { __tagOps: AxisOp[] }).__tagOps;
+    return (context, text, x, y) => {
       if (context.canvas.width <= 120 && context.canvas.height > 120) {
-        ops.push({ kind: 'text', width: 0, text: String(text) });
+        ops.push({ kind: 'text', width: 0, text: String(text), at: performance.now(), x, y });
       }
     };
   });
@@ -134,8 +138,10 @@ test('Bid and Ask tags stay readable and unmoved when the last price moves betwe
   // Separated: the Bid tag does not cover the Ask tag.
   expect((settled.ask as [number, number])[1]).toBeLessThan((settled.bid as [number, number])[0]);
   // One column: the two prices are the same length but differ in digits, and the
-  // library measures a '1' narrower than a '0', so the tags are width-matched.
-  expect(await tagWidths(page)).toHaveLength(1);
+  // chart font is proportional, so the tags are drawn in fixed digit cells.
+  const [askBox, bidBox] = await tagBoxes(page);
+  expect(askBox.width).toBe(bidBox.width);
+  expect((await tagRows(page)).map((row) => row.text)).toEqual(['1.08524', '1.08521']);
 
   for (let index = 0; index < 6; index += 1) {
     await pushEvent(page, 'quote-update', quote(STUB_NOW + 15_700 + index * 300, '1.08521', '1.08524'));
@@ -153,6 +159,32 @@ test('Bid and Ask tags stay readable and unmoved when the last price moves betwe
     path: testInfo.outputPath('price-tags.png'),
     clip: { x: 1060, y: 340, width: 220, height: 160 },
   });
+});
+
+test('Bid and Ask tags keep one box width and fixed digit cells whichever digits the price shows', async ({ page }) => {
+  await openChart(page);
+  await pushEvent(page, 'bar-update', { symbol: 'EURUSD', timeframe: 'M5', candle });
+  const layouts: Array<{ widths: number[]; glyphXs: number[][] }> = [];
+  // Same length, different digits: narrow glyphs ("1") against wide ones ("8").
+  for (const [index, [bid, ask]] of [
+    ['1.08511', '1.08514'],
+    ['1.08577', '1.08578'],
+    ['1.08498', '1.08499'],
+  ].entries()) {
+    await pushEvent(page, 'quote-update', quote(STUB_NOW + 15_500 + index * 300, bid, ask));
+    await page.clock.runFor(100);
+    const rows = await tagRows(page);
+    expect(rows.map((row) => row.text)).toEqual([ask, bid]);
+    layouts.push({
+      widths: (await tagBoxes(page)).map((box) => box.width),
+      glyphXs: rows.map((row) => row.glyphXs),
+    });
+  }
+  const [reference, ...others] = layouts;
+  expect(reference.widths[0]).toBe(reference.widths[1]);
+  for (const layout of others) {
+    expect(layout).toEqual(reference);
+  }
 });
 
 /**

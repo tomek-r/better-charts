@@ -1,20 +1,11 @@
-import type {
-  IPaneApi,
-  IPrimitivePaneRenderer,
-  IPrimitivePaneView,
-  SeriesAttachedParameter,
-  Time,
-} from 'lightweight-charts';
+import type { IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, Time } from 'lightweight-charts';
 import { AttachedSeriesPrimitive } from '../attachedPrimitive';
 import type { RenderTarget } from '../drawTarget';
 import { BrokerClock } from './clock';
 import { priceTagHeight, priceTagOffset } from '../priceAxisTagsPrimitive';
-import { tagLayout } from './tagLayout';
+import { paintTag, tagLayout } from '../fixedCellText';
 import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './types';
 import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
-
-/** Corner radius of the library's own labels, on the pane-facing side. */
-const TAG_RADIUS = 2;
 
 /**
  * Counts the current bar down on the price axis, under the Bid label.
@@ -43,9 +34,6 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
     suspended: false,
     connectionIdentity: '',
   };
-  private pane: IPaneApi<Time> | null = null;
-  /** Pane height the label must stay inside, re-read on every chart update. */
-  private paneHeight = 0;
   /** Text the last chart update put on the axis; drives the repaint decision. */
   private shownText = '';
   /** Axis coordinate of the tag's centre, captured with `shownText`. */
@@ -98,12 +86,6 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
 
   attached(params: SeriesAttachedParameter<Time>): void {
     super.attached(params);
-    const { chart, series } = params;
-    // The pane is only needed for the height the label must stay inside. It is
-    // resolved once here and re-read in `updateAllViews`, so nothing walks the
-    // pane list on the per-frame or per-tick paths.
-    this.pane = chart.panes().find((candidate) => candidate.getSeries().includes(series)) ?? null;
-    this.paneHeight = this.pane?.getHeight() ?? 0;
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     this.schedule();
   }
@@ -112,8 +94,6 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.stopTimer();
     super.detached();
-    this.pane = null;
-    this.paneHeight = 0;
     this.shownText = '';
   }
 
@@ -123,7 +103,7 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
 
   /** Runs on every chart update, before the axis is painted; the draw reads this snapshot. */
   updateAllViews(): void {
-    this.paneHeight = this.pane?.getHeight() ?? 0;
+    this.refreshPaneHeight();
     this.shownText = this.painted();
     this.shownY = this.coordinate();
   }
@@ -137,19 +117,15 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
     const height = Math.round(priceTagHeight(fontSize));
     const top = Math.round(this.shownY - height / 2);
     target.useMediaCoordinateSpace(({ context }) => {
-      context.save();
-      context.fillStyle = this.options.backColor;
-      context.beginPath();
-      context.roundRect(0, top, layout.width, height, [0, TAG_RADIUS, TAG_RADIUS, 0]);
-      context.fill();
-      context.font = font;
-      context.fillStyle = this.options.textColor;
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      for (const glyph of layout.glyphs) {
-        context.fillText(glyph.char, glyph.centerX, top + height / 2);
-      }
-      context.restore();
+      paintTag(context, {
+        layout,
+        width: layout.width,
+        font,
+        backColor: this.options.backColor,
+        textColor: this.options.textColor,
+        top,
+        height,
+      });
     });
   }
 
