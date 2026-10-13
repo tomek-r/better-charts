@@ -42,7 +42,7 @@ on their existing placement and closure behavior.
 
 Streaming chart rendering uses the imperative adapter. Candle updates are
 batched per animation frame, and a history/session replacement cancels pending
-work. Palette changes follow the [color conventions](color-palette.md).
+work.
 The optional React measurement harness runs with
 `pnpm --filter better-charts profiler`. For repeatable main-versus-working-tree
 measurements, see the [React profiler guide](../performance/react-profiler.md).

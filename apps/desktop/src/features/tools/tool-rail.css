@@ -117,7 +117,7 @@
 }
 
 .tool-rail-arrow:hover {
-  border-color: var(--color-border-hover);
+  border-color: currentColor;
   color: var(--color-text-secondary);
   background: var(--color-raised);
 }

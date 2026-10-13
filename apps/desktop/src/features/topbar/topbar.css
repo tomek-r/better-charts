@@ -58,7 +58,7 @@
 }
 
 .search-trigger:hover {
-  border-color: var(--color-border-hover);
+  border-color: currentColor;
   color: var(--color-text-secondary);
 }
 
@@ -97,7 +97,7 @@
 }
 
 .panel-toggle:hover {
-  border-color: var(--color-border-hover);
+  border-color: currentColor;
   color: var(--color-text-secondary);
 }
 
@@ -121,7 +121,7 @@
 }
 
 .settings-trigger:hover {
-  border-color: var(--color-border-hover);
+  border-color: currentColor;
   color: var(--color-text-secondary);
 }
 

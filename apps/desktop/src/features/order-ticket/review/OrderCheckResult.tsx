@@ -5,7 +5,7 @@ import type {
   MarginRisk,
   OrderCheckResult as OrderCheckResultModel,
 } from '../../../shared/bridge/types';
-import { formatMoney } from '../../../shared/format';
+import { finiteNumber, formatAccountMoney, formatMarginThreshold } from '../../../shared/accountFormat';
 import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
 
 type ReviewAccount = Pick<
@@ -17,12 +17,6 @@ const MARGIN_WARNING: Partial<Record<MarginRisk, { text: string; className: stri
   below_margin_call: { text: 'Below margin call', className: 'margin-risk-below-margin-call' },
   below_stop_out: { text: 'Below stop out', className: 'margin-risk-below-stop-out' },
 };
-
-function finiteNumber(value: string | null | undefined): number | undefined {
-  return value !== null && value !== undefined && value.trim() !== '' && Number.isFinite(Number(value))
-    ? Number(value)
-    : undefined;
-}
 
 function Cell({ label, value, riskClass }: { label: string; value: ReactNode; riskClass?: string }) {
   return (
@@ -41,25 +35,10 @@ export function OrderCheckResult({
   orderCheck: OrderCheckResultModel;
   account: ReviewAccount | undefined;
 }) {
-  const money = (value: string | null | undefined) => {
-    const amount = finiteNumber(value);
-    return account?.currency && amount !== undefined
-      ? formatMoney(amount, account.currency, account.currencyDigits)
-      : '—';
-  };
+  const money = (value: string | null | undefined) => formatAccountMoney(value, account) ?? '—';
   const levelAfterFill = finiteNumber(orderCheck.marginLevelAfterFill);
   const levelText = levelAfterFill === undefined ? '—' : `${levelAfterFill.toFixed(2)}%`;
-  // Threshold unit follows ACCOUNT_MARGIN_SO_MODE: percentages or account-currency amounts.
-  const threshold = (value: string | null | undefined) => {
-    const amount = finiteNumber(value);
-    if (amount === undefined) {
-      return '—';
-    }
-    if (account?.marginLevelsUnit === 'percent') {
-      return `${amount}%`;
-    }
-    return account?.marginLevelsUnit === 'money' ? money(value) : '—';
-  };
+  const threshold = (value: string | null | undefined) => formatMarginThreshold(value, account) ?? '—';
   const risk = orderCheck.marginRisk ?? 'unknown';
   const warning = MARGIN_WARNING[risk];
   const riskClass = warning?.className;

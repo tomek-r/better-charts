@@ -97,7 +97,7 @@ export default defineConfig(
     language: 'css/css',
     extends: [css.configs.recommended],
     rules: {
-      // Design tokens are declared in tokens.css and applied per stylesheet;
+      // Colour tokens are generated from palette.ts and applied per stylesheet;
       // files are linted independently, so cross-file custom properties cannot
       // be resolved. Property/value validation stays enabled.
       'css/no-invalid-properties': ['error', { allowUnknownVariables: true }],

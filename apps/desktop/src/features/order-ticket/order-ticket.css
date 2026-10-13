@@ -217,7 +217,7 @@
 }
 
 .ticket-quote-side:hover:not(.active) {
-  border-color: var(--color-border-hover);
+  border-color: currentColor;
 }
 
 .ticket-quote-side.sell.active {

@@ -43,5 +43,7 @@ export function AccountSwitchGuard() {
     }
   }, [login, server, announceSwitch]);
 
-  return notice ? <AccountSwitchDialog message={notice} tradingEnabled={tradingEnabled} onDismiss={dismiss} /> : null;
+  return notice ? (
+    <AccountSwitchDialog message={notice} account={account} tradingEnabled={tradingEnabled} onDismiss={dismiss} />
+  ) : null;
 }

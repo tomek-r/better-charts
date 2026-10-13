@@ -38,7 +38,7 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
 - Partial close from the portfolio card (Close ▾) and the chart chip (✕ ▾):
   25/50/75% presets and a custom volume popover, validated against the
   symbol's min volume and volume step. Offered only when the EA negotiates the
-  `partial_close` capability (EA 1.004); spec in `docs/specs/partial-close.md`.
+  `partial_close` capability (EA 1.004).
 
 Not implemented: break even, multiple charts or Pine Script execution.
 

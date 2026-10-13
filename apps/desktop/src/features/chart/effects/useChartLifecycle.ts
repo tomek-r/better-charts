@@ -272,7 +272,7 @@ export function useChartWorkspaceHotkeyEffect(
   // Escape also reaches the chart's document handler to cancel drawing tools.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (document.querySelector('[data-app-settings-dialog], [data-account-switch-dialog]')) {
+      if (document.querySelector('[data-modal-dialog]')) {
         return;
       }
       // The rail's tool flyout owns Escape while it is open (it closes itself and
