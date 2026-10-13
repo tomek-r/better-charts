@@ -52,8 +52,7 @@
   background: var(--color-border-subtle);
 }
 
-/* Matches what the tool rail arrow renders on hover; --color-border-hover is a
-   self-referencing token that resolves to currentColor there. */
+/* Matches what the tool rail arrow renders on hover (currentColor). */
 .timeframe-chevron:hover:not(:disabled) {
   border-color: var(--color-text-secondary);
 }
