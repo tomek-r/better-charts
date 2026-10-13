@@ -65,6 +65,12 @@ Not implemented: break even, multiple charts or Pine Script execution.
   prefetched when idle. History paging preserves viewport; reconnecting resets to the latest history,
   while timeframe changes preserve bar spacing and right-edge pixel distance.
   Clicking the current portfolio symbol keeps the chart.
+  MT5 may answer a symbol's first history request from its local cache before
+  the series is synchronized (the EA reports `complete: true` regardless). A live
+  bar more than 3 bar periods after the newest history bar is therefore withheld
+  and the latest window is re-requested in place (at most 5 attempts, 0.5/1/2/4/8 s
+  backoff, same selection only, viewport preserved); if the history stays behind,
+  the live bar is drawn after the last attempt.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
   avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
 - Live P&L right-aligns within the widest amount observed per position, expanding
