@@ -2,6 +2,7 @@ import { useBridgeChartState, useBridgeConnection } from '../bridge/BridgeSessio
 import { useChartResources } from './ChartWorkspaceProvider';
 import type { ReactNode } from 'react';
 import { useErrorNotification } from '../../shared/ui/ErrorNotifications';
+import { HistoryWaitNotice } from './HistoryWaitNotice';
 
 /** `children` are DOM overlays hung over the canvas (positioned against the chart frame). */
 export function ChartCanvas({ children }: { children?: ReactNode }) {
@@ -23,6 +24,7 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
           <span>Connect MT5 bridge to load candles.</span>
         </div>
       )}
+      <HistoryWaitNotice />
     </div>
   );
 }

@@ -138,6 +138,27 @@
   font-size: 30px;
 }
 
+.chart-wait-notice {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 18%;
+  max-width: min(420px, calc(100% - 28px));
+  transform: translateX(-50%);
+  padding: 9px 12px;
+  border-radius: var(--border-radius);
+  color: var(--color-muted-strong);
+  background: var(--color-overlay);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  pointer-events: none;
+}
+
+.chart-wait-notice:empty {
+  display: none;
+}
+
 .chart-error {
   position: absolute;
   z-index: 3;

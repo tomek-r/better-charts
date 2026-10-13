@@ -18,3 +18,10 @@ export const HISTORY_BARS = config.historyBars;
  * the pane width is unknown. Never above `HISTORY_BARS` (the backend rejects it).
  */
 export const INITIAL_HISTORY_BARS = config.initialHistoryBars;
+
+/**
+ * How long the EA waits for MT5 to synchronize a series before it answers the
+ * initial history request with a correlated error. The wait notice counts down
+ * toward this deadline.
+ */
+export const INITIAL_HISTORY_SYNC_TIMEOUT_MS = config.initialHistorySyncTimeoutMs;

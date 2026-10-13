@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.008"
+#define BRIDGE_EXPERT_VERSION "1.009"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -200,6 +200,7 @@ void CloseConnection()
   {
    CancelTickHistory();
    ClearPendingHistoryPages();
+   ClearPendingInitialHistory();
    if(g_socket!=INVALID_HANDLE)
      {
       SocketClose(g_socket);
@@ -1377,22 +1378,93 @@ void SendProtocolError(const string code,const string message)
    SendFrame(error);
   }
 
+// SERIES_SYNCHRONIZED is the terminal's flag that the series for this
+// symbol/period is built and matches the server.
+bool IsSeriesSynchronized(const string symbol,const ENUM_TIMEFRAMES timeframe)
+  {
+   long synchronized_flag=0;
+   return (SeriesInfoInteger(symbol,timeframe,SERIES_SYNCHRONIZED,synchronized_flag) && synchronized_flag!=0);
+  }
+
 bool SendHistorySnapshot(const string request_id,const string symbol,const string timeframe_name,const ENUM_TIMEFRAMES timeframe,const long bars)
   {
+   // The newest window request wins: a still-waiting older one is dropped.
+   ClearPendingInitialHistory();
    if(!EnsureSymbol(symbol) || bars<1 || bars>1000)
      {
       SendProtocolError("INVALID_MESSAGE","unsupported history request");
       return false;
      }
    MqlRates rates[];
+   int copied=0;
+   if(ReadSynchronizedHistory(symbol,timeframe,bars,rates,copied))
+      return DeliverInitialHistory(request_id,symbol,timeframe_name,timeframe,bars,rates,copied);
+   ParkInitialHistory(request_id,symbol,timeframe_name,timeframe,bars);
+   return true;
+  }
+
+// The initial history of a selection is sent only once MT5 reports its series
+// synchronized. Before that, CopyRates returns whatever stale bars the terminal
+// cached locally while it downloads the rest, and anchoring the live feed on
+// such a bar would stretch the chart when current bars arrive. The request
+// waits on the timer (never blocking it, so heartbeats keep flowing) and, if
+// the series never synchronizes, ends with a correlated error and no data.
+#define BRIDGE_INITIAL_HISTORY_SYNC_TIMEOUT_MS 10000
+
+struct PendingInitialHistory
+  {
+   bool            active;
+   string          request_id;
+   string          symbol;
+   string          timeframe_name;
+   ENUM_TIMEFRAMES timeframe;
+   long            bars;
+   ulong           deadline_ms;
+  };
+
+PendingInitialHistory g_pending_initial;
+ulong g_pending_initial_poll_ms=0;
+
+void ClearPendingInitialHistory()
+  {
+   g_pending_initial.active=false;
+  }
+
+void ParkInitialHistory(const string request_id,const string symbol,const string timeframe_name,const ENUM_TIMEFRAMES timeframe,const long bars)
+  {
+   g_pending_initial.active=true;
+   g_pending_initial.request_id=request_id;
+   g_pending_initial.symbol=symbol;
+   g_pending_initial.timeframe_name=timeframe_name;
+   g_pending_initial.timeframe=timeframe;
+   g_pending_initial.bars=bars;
+   g_pending_initial.deadline_ms=GetTickCount64()+BRIDGE_INITIAL_HISTORY_SYNC_TIMEOUT_MS;
+   g_pending_initial_poll_ms=0;
+  }
+
+/**
+ * Reads the newest `bars` candles; true only when the series was synchronized
+ * before the copy and the copy produced candles. A synchronized series that
+ * holds fewer than `bars` (broker depth or TERMINAL_MAXBARS) is a legitimate
+ * short history and is returned as is. The copy is attempted even while the
+ * series is not synchronized because that first call is what makes MT5 start
+ * building it. The flag is read first so the copy cannot predate it.
+ */
+bool ReadSynchronizedHistory(const string symbol,const ENUM_TIMEFRAMES timeframe,const long bars,MqlRates &rates[],int &copied)
+  {
+   copied=0;
+   ArrayResize(rates,0);
+   const bool synchronized=IsSeriesSynchronized(symbol,timeframe);
    ArraySetAsSeries(rates,false);
-   const int copied=CopyRates(symbol,timeframe,0,(int)bars,rates);
-   if(copied<=0)
-     {
-      SendProtocolError("INTERNAL_ERROR","CopyRates failed");
-      return false;
-     }
+   const int result=CopyRates(symbol,timeframe,0,(int)bars,rates);
    ArraySetAsSeries(rates,false);
+   if(!synchronized || result<=0) return false;
+   copied=result;
+   return true;
+  }
+
+bool DeliverInitialHistory(const string request_id,const string symbol,const string timeframe_name,const ENUM_TIMEFRAMES timeframe,const long bars,const MqlRates &rates[],const int copied)
+  {
    const int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
    string snapshot=StringFormat("{\"v\":1,\"type\":\"history_snapshot\",\"id\":\"ea-history-%I64u\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"request_id\":\"%s\",\"symbol\":\"%s\",\"timeframe\":\"%s\",\"complete\":%s,\"candles\":[",++g_message_id,JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(request_id),JsonEscape(symbol),timeframe_name,(copied==(int)bars?"true":"false"));
    for(int i=0;i<copied;i++)
@@ -1459,9 +1531,7 @@ void RemovePendingHistoryPage(const int index)
  * `copied` are final: a full page, or a genuinely exhausted history (series
  * synchronized, fewer or no older bars).
  *
- * MQL5 semantics relied on: SeriesInfoInteger(SERIES_SYNCHRONIZED) is the
- * terminal's flag that the series for this symbol/period is built and matches
- * the server; Bars()==0 means the series is not built yet; CopyRates returns -1
+ * MQL5 semantics relied on: Bars()==0 means the series is not built yet; CopyRates returns -1
  * when data is not ready (e.g. ERR_HISTORY_WILL_UPDATED 4066) and the first
  * call for an unopened timeframe is what makes MT5 start building it. A full
  * page is valid whatever the flag says; a short page is only an end of history
@@ -1471,8 +1541,7 @@ bool ReadHistoryPage(const string symbol,const ENUM_TIMEFRAMES timeframe,const l
   {
    copied=0;
    ArrayResize(rates,0);
-   long synchronized_flag=0;
-   const bool synchronized=(SeriesInfoInteger(symbol,timeframe,SERIES_SYNCHRONIZED,synchronized_flag) && synchronized_flag!=0);
+   const bool synchronized=IsSeriesSynchronized(symbol,timeframe);
    // The anchor is the open time of the oldest candle the client holds, so
    // the page starts at the bar immediately older than it.
    const int shift=iBarShift(symbol,timeframe,(datetime)(before_ms/1000),false);
@@ -1535,7 +1604,7 @@ void HandleHistoryPageRequest(const string request_id,const string symbol,const 
         {
          if(g_pending_page_count>=BRIDGE_HISTORY_PAGE_PENDING_MAX)
            {
-            SendHistoryPageError(request_id,"history page queue is full");
+            SendCorrelatedHistoryError(request_id,"history page queue is full");
             return;
            }
          PendingHistoryPage page;
@@ -1554,9 +1623,9 @@ void HandleHistoryPageRequest(const string request_id,const string symbol,const 
    SendHistoryPageFrame(request_id,symbol,timeframe_name,rates,copied,bars,before_ms);
   }
 
-void SendHistoryPageError(const string request_id,const string reason)
+void SendCorrelatedHistoryError(const string request_id,const string reason)
   {
-   PrintFormat("BetterChartsBridge history page failed: id=%s reason=%s",request_id,reason);
+   PrintFormat("BetterChartsBridge history request failed: id=%s reason=%s",request_id,reason);
    const string error=StringFormat("{\"v\":1,\"type\":\"error\",\"id\":\"%s\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"%s\",\"retryable\":false}}",JsonEscape(request_id),JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(reason));
    if(!SendFrame(error)) DisconnectAndRetry("history page error send failed");
   }
@@ -1591,11 +1660,38 @@ void PollPendingHistoryPages()
       if(now>=page.deadline_ms)
         {
          RemovePendingHistoryPage(index);
-         SendHistoryPageError(page.request_id,"history page synchronization timed out");
+         SendCorrelatedHistoryError(page.request_id,"history page synchronization timed out");
          continue;
         }
       index++;
      }
+  }
+
+// Retries the waiting initial history on the timer. On the deadline it ends
+// the request with an error whose envelope id is the request id, so the bridge
+// fails just that request and keeps the session; no stale candles are sent.
+void PollPendingInitialHistory()
+  {
+   if(!g_pending_initial.active || g_state!=BRIDGE_READY) return;
+   const ulong now=GetTickCount64();
+   if(now-g_pending_initial_poll_ms<BRIDGE_HISTORY_PAGE_RETRY_MS) return;
+   g_pending_initial_poll_ms=now;
+   const string request_id=g_pending_initial.request_id;
+   const string symbol=g_pending_initial.symbol;
+   const string timeframe_name=g_pending_initial.timeframe_name;
+   const ENUM_TIMEFRAMES timeframe=g_pending_initial.timeframe;
+   const long bars=g_pending_initial.bars;
+   MqlRates rates[];
+   int copied=0;
+   if(ReadSynchronizedHistory(symbol,timeframe,bars,rates,copied))
+     {
+      ClearPendingInitialHistory();
+      DeliverInitialHistory(request_id,symbol,timeframe_name,timeframe,bars,rates,copied);
+      return;
+     }
+   if(now<g_pending_initial.deadline_ms) return;
+   ClearPendingInitialHistory();
+   SendCorrelatedHistoryError(request_id,"history synchronization timed out");
   }
 
 string TickJson(const MqlTick &tick,const int digits)
@@ -3183,6 +3279,7 @@ void TryConnect()
    g_session_id="";
    g_partial_close_enabled=false;
    ClearPendingHistoryPages();
+   ClearPendingInitialHistory();
    g_history_ready=false;
    g_have_last_bar=false;
    g_have_last_quote=false;
@@ -3254,6 +3351,7 @@ void OnTimer()
          g_last_portfolio_poll_ms=now;
         }
      }
+   PollPendingInitialHistory();
    PollPendingHistoryPages();
    PollTickHistory();
   }

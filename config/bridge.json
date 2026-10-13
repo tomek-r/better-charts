@@ -10,6 +10,7 @@
   },
   "historyBars": 1000,
   "initialHistoryBars": 300,
+  "initialHistorySyncTimeoutMs": 10000,
   "tickProfile": {
     "maxEstimatedTicks": 30000000
   }

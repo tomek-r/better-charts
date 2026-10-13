@@ -1,12 +1,13 @@
 // Bridge listeners are the sole source of accepted history and live candles.
 // Selection refs reject stale events; the coordinator owns request dedupe and timeout.
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { Candle, BrokerSymbol } from '../../shared/bridge/types';
 import { initialHistoryBarsFor } from '../chart/engine/initialHistoryWindow';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
 import { useFieldSetterSelector } from '../../shared/state/domainStore';
 import type { BridgeSessionStores } from './bridgeSessionStores';
 import type { BridgeMarketResources } from './bridgeMarketRuntime';
+import { beginHistoryWait, endHistoryWait } from './historyWait';
 import type { MarketDataConnection } from './marketDataPort';
 
 type BridgeSessionParams = BridgeMarketResources & {
@@ -32,7 +33,13 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
     setLoadingTimeframe,
     setSymbolLoading,
     setChartError,
+    setHistoryWaitStartedAtMs,
+    setHistoryUnavailable,
   } = useFieldSetterSelector(stores.market, (setters) => setters);
+  const historyWaitSetters = useMemo(
+    () => ({ setHistoryWaitStartedAtMs, setHistoryUnavailable }),
+    [setHistoryWaitStartedAtMs, setHistoryUnavailable],
+  );
   const { setQuote } = useFieldSetterSelector(stores.quote, (setters) => setters);
   const { setAccount } = useFieldSetterSelector(stores.account, (setters) => setters);
   const { setPortfolio } = useFieldSetterSelector(stores.portfolio, (setters) => setters);
@@ -45,6 +52,7 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
       const generation = ++requestGeneration.current;
       loadingTimeframeRef.current = wire;
       setLoadingTimeframe(wire);
+      beginHistoryWait(historyWaitSetters);
       try {
         const adapter = adapterRef.current;
         if (!adapter) {
@@ -55,11 +63,12 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
         if (generation === requestGeneration.current) {
           loadingTimeframeRef.current = undefined;
           setLoadingTimeframe(undefined);
+          endHistoryWait(historyWaitSetters);
           setChartError('History request could not be sent.');
         }
       }
     },
-    [adapterRef, chart, setChartError, setLoadingTimeframe, stores],
+    [adapterRef, chart, historyWaitSetters, setChartError, setLoadingTimeframe, stores],
   );
   const requestSymbolSelection = useCallback(
     async (symbol: string, metadata?: BrokerSymbol) => {
@@ -72,6 +81,7 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
       setQuote(undefined);
       setSymbolLoading(true);
       setChartError(undefined);
+      beginHistoryWait(historyWaitSetters);
       const generation = ++requestGeneration.current;
       try {
         const adapter = adapterRef.current;
@@ -93,10 +103,11 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
           setInstrument(undefined);
         }
         setSymbolLoading(false);
+        endHistoryWait(historyWaitSetters);
         setChartError('History request could not be sent.');
       }
     },
-    [adapterRef, chart, setChartError, setInstrument, setQuote, setSymbolLoading, stores],
+    [adapterRef, chart, historyWaitSetters, setChartError, setInstrument, setQuote, setSymbolLoading, stores],
   );
   const chooseSymbol = useCallback(
     (item: BrokerSymbol) => requestSymbolSelection(item.symbol, item),
@@ -141,6 +152,8 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
     setSymbolLoading,
     chartError: stores.market.getState().chartError,
     setChartError,
+    setHistoryWaitStartedAtMs,
+    setHistoryUnavailable,
     tauriAvailable: stores.connection.getState().tauriAvailable,
     setTauriAvailable,
     loadingTimeframe: stores.market.getState().loadingTimeframe,

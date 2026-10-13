@@ -26,7 +26,8 @@ import type { BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridg
  *
  *  - `request_risk_preview`  → `risk-preview` event
  *  - `request_order_check`   → `order-check-result` event
- *  - `request_history`       → `market-snapshot` event (feeds the chart adapter)
+ *  - `request_history`       → `market-snapshot` event (feeds the chart adapter), or
+ *                              `history-unavailable` with `historyUnavailable`
  *  - `request_history_page`  → `history-page` event (lazy-loaded older candles)
  *
  * Tests push further bridge events (`execution-command-update`,
@@ -51,6 +52,8 @@ export interface TauriStubOptions {
   listenerFailures?: string[];
   /** Delay automatic market-snapshot replies to exercise overlapping selection requests. */
   historyDelayMs?: number;
+  /** Answer every `request_history` with `history-unavailable` (the EA's synchronization timeout) instead of a snapshot. */
+  historyUnavailable?: boolean;
   /** Real timeframe-specific timestamps for chart remapping regressions. */
   historyByTimeframe?: Record<string, Candle[]>;
   /** Optional metadata delivered alongside history, as in the real bridge. */
@@ -579,6 +582,14 @@ export async function installTauriStub(
         // while the history coordinator is still waiting. Each selection
         // should issue exactly one request_history.
         setTimeout(() => {
+          if (opts.historyUnavailable) {
+            // The EA could not synchronize the series: a correlated error, no candles.
+            emit('history-unavailable', {
+              symbol: args.symbol ?? market.symbol,
+              timeframe: args.timeframe ?? market.timeframe,
+            });
+            return;
+          }
           const rec = recorded(args.symbol ?? market.symbol, args.timeframe ?? market.timeframe);
           emit('market-snapshot', {
             symbol: args.symbol ?? market.symbol,

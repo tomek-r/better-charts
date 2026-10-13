@@ -65,6 +65,16 @@ Not implemented: break even, multiple charts or Pine Script execution.
   prefetched when idle. History paging preserves viewport; reconnecting resets to the latest history,
   while timeframe changes preserve bar spacing and right-edge pixel distance.
   Clicking the current portfolio symbol keeps the chart.
+- The EA (1.009) sends the initial history only after MT5 reports the series
+  synchronized, so stale cached bars never anchor the live feed. A synchronized
+  but shallow series is sent as is (`complete=false`). Waiting past 5 s shows
+  "Loading is taking longer than usual. Waiting N s. If no data arrives, switch
+  to another symbol." counting 5 to 1 toward the shared deadline
+  (`initialHistorySyncTimeoutMs`, 10 s, in `config/bridge.json`); a series that
+  never synchronizes ends with a correlated error, the non-fatal
+  `history-unavailable` event and "No data received for {symbol} {timeframe}.
+  Switch to another symbol or try again later." The session, reconciliation and
+  dispatch gates are untouched, and the app never retries on its own.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
   avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
 - Live P&L right-aligns within the widest amount observed per position, expanding

@@ -174,6 +174,55 @@ def history_page_reply(request: dict, session_id: str, max_frame: int, sync_dela
     return sync_delay_seconds, synthetic_history_page(request, session_id, max_frame)
 
 
+# The EA sends the initial (window) history only once MT5 reports the series
+# synchronized, and ends a series that never does with a correlated error after
+# the shared deadline (config/bridge.json, BRIDGE_INITIAL_HISTORY_SYNC_TIMEOUT_MS).
+INITIAL_SYNC_DEADLINE_SECONDS = BRIDGE_CONFIG["initialHistorySyncTimeoutMs"] / 1000.0
+INITIAL_SYNC_TIMEOUT_MESSAGE = "history synchronization timed out"
+
+
+def initial_history_reply(request_id: str, symbol: str, timeframe: str, candles: list, complete: bool,
+                          session_id: str, sync_delay_seconds: float) -> tuple[float, dict]:
+    """Returns (seconds to wait, frame). Depth is not synchronization: a series
+    that synchronizes in time is answered with whatever it holds (`complete`
+    false for a short history, never an error); one that does not gets an
+    error whose envelope id is the request id and no candles."""
+    if sync_delay_seconds >= INITIAL_SYNC_DEADLINE_SECONDS:
+        error = envelope("error", request_id, session_id,
+                         {"code": "INTERNAL_ERROR", "message": INITIAL_SYNC_TIMEOUT_MESSAGE, "retryable": False})
+        return INITIAL_SYNC_DEADLINE_SECONDS, error
+    snapshot = envelope("history_snapshot", "ea-history-init", session_id, {
+        "request_id": request_id, "symbol": symbol, "timeframe": timeframe, "complete": complete, "candles": candles,
+    })
+    return sync_delay_seconds, snapshot
+
+
+def send_initial_history(conn: socket.socket, request_id: str, symbol: str, timeframe: str, candles: list,
+                         session_id: str) -> None:
+    """Manual option for the not-yet-synchronized case; it blocks this
+    single-threaded mock, so keep it below the bridge idle timeout."""
+    sync_delay = float(os.environ.get("MT5_MOCK_INITIAL_SYNC_DELAY_MS", "0")) / 1000.0
+    wait_seconds, frame = initial_history_reply(request_id, symbol, timeframe, candles, True, session_id, sync_delay)
+    time.sleep(wait_seconds)
+    send_frame(conn, frame)
+
+
+def self_test_initial_history() -> int:
+    candles = [{"time_ms": 1, "open": "1", "high": "1", "low": "1", "close": "1", "tick_volume": 1, "spread": 0, "real_volume": 0}]
+    wait, frame = initial_history_reply("rust-history-1", "TEST.INIT", "M1", candles, True, "synthetic-session", 0.25)
+    assert wait == 0.25 and frame["type"] == "history_snapshot" and frame["payload"]["candles"] == candles
+    # Synchronized but shallower than requested: sent at once, incomplete, no error.
+    wait, frame = initial_history_reply("rust-history-1", "TEST.INIT", "M1", candles, False, "synthetic-session", 0.0)
+    assert wait == 0.0 and frame["type"] == "history_snapshot" and frame["payload"]["complete"] is False
+    # Never synchronized: a correlated error and no data.
+    wait, frame = initial_history_reply("rust-history-1", "TEST.INIT", "M1", candles, True, "synthetic-session",
+                                        INITIAL_SYNC_DEADLINE_SECONDS + 1)
+    assert wait == INITIAL_SYNC_DEADLINE_SECONDS and frame["type"] == "error" and frame["id"] == "rust-history-1"
+    assert frame["payload"] == {"code": "INTERNAL_ERROR", "message": INITIAL_SYNC_TIMEOUT_MESSAGE, "retryable": False}
+    print("mock initial-history self-test passed: wait for sync, short synchronized history, correlated timeout error")
+    return 0
+
+
 def handle_history_page(reader: FrameReader, conn: socket.socket, session_id: str | None, message: dict) -> bool:
     """Answers an older-history page. A page is identified by its anchor rather
     than by its message type, so this is tested before the window branch. The
@@ -638,10 +687,7 @@ def main() -> int:
         initial = expect_type(initial_request, "history_request")
         assert initial_request.get("session_id") == session_id
         assert initial.get("symbol") == "TEST.INIT" and initial.get("timeframe") == "M1"
-        send_frame(conn, envelope("history_snapshot", "ea-history-init", session_id, {
-            "request_id": initial_request.get("id"), "symbol": "TEST.INIT", "timeframe": "M1", "complete": True,
-            "candles": MOCK_CANDLES,
-        }))
+        send_initial_history(conn, initial_request.get("id"), "TEST.INIT", "M1", MOCK_CANDLES, session_id)
         print("initial history snapshot sent", flush=True)
 
         initial_symbol_info = wait_for(reader, conn, "symbol_info_request", session_id, deadline, heartbeat_state)
@@ -756,7 +802,7 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(
-            self_test_history_page() + self_test_tick_history() + self_test_partial_close() + self_test_margin_projection()
+            self_test_history_page() + self_test_initial_history() + self_test_tick_history() + self_test_partial_close() + self_test_margin_projection()
             if os.environ.get("MT5_MOCK_SELFTEST") == "1"
             else main()
         )

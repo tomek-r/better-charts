@@ -1,7 +1,8 @@
 use super::super::{
-    bridge_emit, build_streamed_tick_profile, build_tick_profile, collect_timeframe,
-    completion_line, log_info, log_warn, safety_net_line, start_bar_collect, ProfileSource,
-    TickPageResult, TickProfileError, TickProfileLimit, TickProfileProgress, TickProfileRequest,
+    bridge_emit, build_streamed_tick_profile, build_tick_profile, claim_for_session,
+    collect_timeframe, completion_line, log_info, log_warn, safety_net_line, start_bar_collect,
+    HistoryUnavailableView, ProfileSource, TickPageResult, TickProfileError, TickProfileLimit,
+    TickProfileProgress, TickProfileRequest,
 };
 use super::{Inbound, InboundOutcome};
 use trading_core::protocol::{Envelope, ErrorCode, ErrorPayload, TickHistorySnapshot};
@@ -322,6 +323,39 @@ fn history_page_error(inbound: &Inbound<'_>, request_id: &str, code: ErrorCode) 
     InboundOutcome::Continue
 }
 
+/// A correlated failure of the chart's window history (the EA could not
+/// synchronize the series before its deadline). Only the awaited request is
+/// cleared and reported: the session, the execution gates and reconciliation
+/// are untouched, and no stale candles are shown. A stale id (the window was
+/// answered or replaced meanwhile) is ignored.
+fn history_window_error(inbound: &Inbound<'_>, request_id: &str) -> InboundOutcome {
+    let _ = claim_for_session(inbound.state, inbound.session_id, || {
+        let mut slot = inbound
+            .state
+            .expected_history
+            .lock()
+            .expect("history mutex poisoned");
+        if !slot.as_ref().is_some_and(|(id, _)| id == request_id) {
+            return;
+        }
+        let (_, request) = slot.take().expect("checked above");
+        drop(slot);
+        log_warn(&format!(
+            "history {} {} was not synchronized in time",
+            request.symbol, request.timeframe
+        ));
+        bridge_emit(
+            inbound.events,
+            "history-unavailable",
+            HistoryUnavailableView {
+                symbol: request.symbol,
+                timeframe: request.timeframe,
+            },
+        );
+    });
+    InboundOutcome::Continue
+}
+
 /// A correlated tick-read failure must not discard quotes, portfolio or execution state.
 pub(crate) async fn tick_history_error(inbound: &Inbound<'_>, message: Envelope) -> InboundOutcome {
     let error: ErrorPayload = match serde_json::from_value::<ErrorPayload>(message.payload) {
@@ -348,6 +382,10 @@ pub(crate) async fn tick_history_error(inbound: &Inbound<'_>, message: Envelope)
     }
     if message.id.starts_with("rust-history-page-") {
         return history_page_error(inbound, &message.id, error.code);
+    }
+    // After the page prefix, which this one contains.
+    if message.id.starts_with("rust-history-") {
+        return history_window_error(inbound, &message.id);
     }
     if !message.id.starts_with("rust-ticks-") {
         return InboundOutcome::ErrorFrame(

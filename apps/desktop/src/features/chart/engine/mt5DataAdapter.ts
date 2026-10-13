@@ -1,8 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
-import { HISTORY_BARS } from '../../../shared/bridge/limits';
+import { HISTORY_BARS, INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../shared/bridge/limits';
 import type { Candle, MarketSnapshot } from '../../../shared/bridge/types';
 
-const HISTORY_TIMEOUT_MS = 10_000;
+/** Older pages wait for the EA's own page deadline (BRIDGE_HISTORY_PAGE_DEADLINE_MS). */
+const PAGE_TIMEOUT_MS = 10_000;
+/**
+ * The EA answers an unsynchronized window with a correlated error at its
+ * deadline; this timeout only has to outlast that answer and its transport,
+ * and still ends the wait if the EA never answers at all.
+ */
+const WINDOW_ANSWER_GRACE_MS = 2_000;
+const WINDOW_TIMEOUT_MS = INITIAL_HISTORY_SYNC_TIMEOUT_MS + WINDOW_ANSWER_GRACE_MS;
 const HISTORY_TIMEOUT_MESSAGE = 'History request timed out.';
 const MAX_BARS = HISTORY_BARS;
 
@@ -136,11 +144,12 @@ export class Mt5DataAdapter {
     if (this.disposed || !snapshot.symbol || !snapshot.timeframe) {
       return;
     }
-    const key = pendingKey(snapshot.symbol, snapshot.timeframe);
-    const pending = this.pending.get(key);
-    if (pending) {
-      this.settle(key, pending);
-    }
+    this.settleKey(pendingKey(snapshot.symbol, snapshot.timeframe));
+  }
+
+  /** Called when the EA reports it could not synchronize the awaited window; nothing more will arrive. */
+  acceptHistoryUnavailable(symbol: string, timeframe: string): void {
+    this.settleKey(pendingKey(symbol, timeframe));
   }
 
   /**
@@ -178,11 +187,7 @@ export class Mt5DataAdapter {
 
   /** Called by the app-level page listener once a page has been accepted. */
   acceptHistoryPage(symbol: string, timeframe: string): void {
-    const key = pageKey(symbol, timeframe);
-    const pending = this.pending.get(key);
-    if (pending) {
-      this.settle(key, pending);
-    }
+    this.settleKey(pageKey(symbol, timeframe));
   }
 
   dispose(): void {
@@ -207,6 +212,7 @@ export class Mt5DataAdapter {
     if (pending.timer !== undefined) {
       clearTimeout(pending.timer);
     }
+    const timeoutMs = kind === 'page' ? PAGE_TIMEOUT_MS : WINDOW_TIMEOUT_MS;
     pending.timer = setTimeout(() => {
       this.settle(key, pending);
       this.emitError({
@@ -215,7 +221,14 @@ export class Mt5DataAdapter {
         timeframe: pending.timeframe,
         kind,
       });
-    }, HISTORY_TIMEOUT_MS);
+    }, timeoutMs);
+  }
+
+  private settleKey(key: string): void {
+    const pending = this.pending.get(key);
+    if (pending) {
+      this.settle(key, pending);
+    }
   }
 
   private settle(key: string, pending: PendingHistory): void {

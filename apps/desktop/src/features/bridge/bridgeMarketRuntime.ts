@@ -6,6 +6,7 @@ import type {
   BarUpdate,
   Candle,
   HistoryPage,
+  HistoryUnavailable,
   MarketSnapshot,
   ProfileResult,
   ProfileCancelled,
@@ -17,6 +18,7 @@ import { normalizeCandle, normalizeHistoryPage, normalizeSnapshot, isValidCandle
 import { HISTORY_BARS } from '../../shared/bridge/limits';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
 import type { BridgeSessionState } from './useBridgeSession';
+import { endHistoryWait } from './historyWait';
 
 export interface BridgeEffectRun {
   disposed: boolean;
@@ -34,6 +36,8 @@ type BridgeMarketSession = Pick<
   | 'setInstrument'
   | 'setLastSymbolSelection'
   | 'setSymbolLoading'
+  | 'setHistoryWaitStartedAtMs'
+  | 'setHistoryUnavailable'
   | 'targetSymbol'
   | 'pendingMetadata'
   | 'currentSymbol'
@@ -73,6 +77,8 @@ export function createBridgeMarketRuntime(
     setInstrument,
     setLastSymbolSelection,
     setSymbolLoading,
+    setHistoryWaitStartedAtMs,
+    setHistoryUnavailable,
     targetSymbol,
     pendingMetadata,
     currentSymbol: currentSymbolRef,
@@ -81,6 +87,7 @@ export function createBridgeMarketRuntime(
     dataKeyRef,
     marketData: { publisher },
   } = session;
+  const historyWaitSetters = { setHistoryWaitStartedAtMs, setHistoryUnavailable };
   const pendingCandles = new Map<number, Candle>();
   let candleFrame: number | undefined;
   const pageState: {
@@ -197,6 +204,14 @@ export function createBridgeMarketRuntime(
     pageState.anchorMs = undefined;
   };
 
+  const releaseSymbolSelection = (symbol: string) => {
+    if (targetSymbol.current === symbol) {
+      targetSymbol.current = undefined;
+      pendingMetadata.current = undefined;
+      setSymbolLoading(false);
+    }
+  };
+
   const onAdapterHistoryError = (failure: Mt5HistoryError) => {
     if (run.disposed) {
       return;
@@ -219,13 +234,33 @@ export function createBridgeMarketRuntime(
     ) {
       loadingTimeframeRef.current = undefined;
       setLoadingTimeframe(undefined);
+      endHistoryWait(historyWaitSetters);
       setChartError(failure.kind === 'timeout' ? 'History request timed out.' : 'History request could not be sent.');
-      if (targetSymbol.current === failure.symbol) {
-        targetSymbol.current = undefined;
-        pendingMetadata.current = undefined;
-        setSymbolLoading(false);
-      }
+      releaseSymbolSelection(failure.symbol);
     }
+  };
+
+  /**
+   * The EA could not synchronize the awaited series before its deadline and
+   * sent no candles. Only the selection being awaited is released; the notice
+   * stays until a snapshot, another selection or a session reset clears it.
+   */
+  const onHistoryUnavailable = (event: PayloadEvent<HistoryUnavailable>) => {
+    if (run.disposed || run.bridgeState !== 'connected') {
+      return;
+    }
+    const { symbol, timeframe } = event.payload;
+    const expectedSymbol = targetSymbol.current ?? currentSymbolRef.current;
+    const expectedTimeframe = loadingTimeframeRef.current ?? currentTimeframeRef.current;
+    if ((expectedSymbol && expectedSymbol !== symbol) || (expectedTimeframe && expectedTimeframe !== timeframe)) {
+      return;
+    }
+    marketAdapterRef.current?.acceptHistoryUnavailable(symbol, timeframe);
+    loadingTimeframeRef.current = undefined;
+    setLoadingTimeframe(undefined);
+    releaseSymbolSelection(symbol);
+    setHistoryWaitStartedAtMs(undefined);
+    setHistoryUnavailable({ symbol, timeframe });
   };
 
   const onMarketSnapshot = (event: PayloadEvent<MarketSnapshot>) => {
@@ -242,6 +277,7 @@ export function createBridgeMarketRuntime(
     ) {
       return;
     }
+    endHistoryWait(historyWaitSetters);
     if (targetSnapshot) {
       const metadata = pendingMetadata.current;
       if (metadata && metadata.symbol === next.symbol) {
@@ -404,6 +440,7 @@ export function createBridgeMarketRuntime(
     resetPageState,
     requestOlderHistory,
     onAdapterHistoryError,
+    onHistoryUnavailable,
     onMarketSnapshot,
     onHistoryPage,
     forwardMarketDataEvents,
