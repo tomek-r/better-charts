@@ -29,8 +29,33 @@
   font-weight: 500;
 }
 
+.account-switch-info {
+  display: grid;
+  gap: 6px;
+  margin: -8px 0 16px;
+  font-size: 14px;
+}
+
+.account-switch-info > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+}
+
+.account-switch-info dt {
+  color: var(--color-muted);
+}
+
+.account-switch-info dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-secondary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 .account-switch-algo {
-  margin: -8px 0 20px;
+  margin: 0 0 20px;
   font-size: 14px;
 }
 

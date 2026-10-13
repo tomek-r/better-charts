@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openTradePanel } from './helpers/panel';
 import { stagedState } from './helpers/stagedWidget';
 import {
@@ -31,7 +31,7 @@ const NEW_ACCOUNT = {
 /** The EA reconnects with the new login: the bridge re-handshakes, then re-sends the account. */
 async function switchAccount(
   page: Page,
-  account: typeof NEW_ACCOUNT = NEW_ACCOUNT,
+  account: Record<string, unknown> & typeof NEW_ACCOUNT = NEW_ACCOUNT,
   tradingEnabled = true,
 ): Promise<void> {
   await pushEvent(page, 'bridge-status', { state: 'disconnected', message: 'account identity changed' });
@@ -117,6 +117,68 @@ test('the dialog warns when algo trading is disabled and updates live once it is
     marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: 1745700000000 },
   });
   await expect(status).toHaveText('Algo trading is enabled');
+});
+
+const infoValue = (dialog: Locator, label: string) =>
+  dialog
+    .locator('.account-switch-info > div')
+    .filter({ has: dialog.page().locator('dt', { hasText: new RegExp(`^${label}$`) }) })
+    .locator('dd');
+
+test('the dialog lists the new account details for a hedging percent-mode account', async ({ page }) => {
+  await gotoWithStub(page);
+  await openTradePanel(page);
+  await switchAccount(page, {
+    ...NEW_ACCOUNT,
+    equity: '5120.50',
+    marginMode: 2,
+    marginCallLevel: '120',
+    stopOutLevel: '80',
+    marginLevelsUnit: 'percent',
+  });
+  const dialog = switchedDialog(page, 'Account was switched to Real 70001234');
+  await expect(infoValue(dialog, 'Server')).toHaveText('Broker-Live');
+  await expect(infoValue(dialog, 'Balance')).toHaveText('5,000.00 USD');
+  await expect(infoValue(dialog, 'Equity')).toHaveText('5,120.50 USD');
+  await expect(infoValue(dialog, 'Leverage')).toHaveText('1:30');
+  await expect(infoValue(dialog, 'Account')).toHaveText('Hedging');
+  await expect(infoValue(dialog, 'Margin call / Stop out')).toHaveText('120% · 80%');
+});
+
+test('the dialog lists a netting money-mode account and hides equal equity', async ({ page }) => {
+  await gotoWithStub(page);
+  await openTradePanel(page);
+  await switchAccount(page, {
+    ...NEW_ACCOUNT,
+    marginMode: 0,
+    marginCallLevel: '300.00',
+    stopOutLevel: '150.00',
+    marginLevelsUnit: 'money',
+  });
+  const dialog = switchedDialog(page, 'Account was switched to Real 70001234');
+  await expect(infoValue(dialog, 'Account')).toHaveText('Netting');
+  await expect(infoValue(dialog, 'Margin call / Stop out')).toHaveText('300.00 USD · 150.00 USD');
+  await expect(infoValue(dialog, 'Equity')).toHaveCount(0);
+});
+
+test('a missing field hides its row instead of showing a blank', async ({ page }) => {
+  await gotoWithStub(page);
+  await openTradePanel(page);
+  await switchAccount(page, { ...NEW_ACCOUNT, marginMode: -1 });
+  const dialog = switchedDialog(page, 'Account was switched to Real 70001234');
+  await expect(infoValue(dialog, 'Server')).toHaveText('Broker-Live');
+  await expect(infoValue(dialog, 'Account')).toHaveCount(0);
+  await expect(infoValue(dialog, 'Margin call / Stop out')).toHaveCount(0);
+});
+
+test('the dialog balance updates live while it is open', async ({ page }) => {
+  await gotoWithStub(page);
+  await openTradePanel(page);
+  await switchAccount(page);
+  const dialog = switchedDialog(page, 'Account was switched to Real 70001234');
+  await expect(infoValue(dialog, 'Balance')).toHaveText('5,000.00 USD');
+  await pushEvent(page, 'account-snapshot', { ...NEW_ACCOUNT, balance: '5250.25', equity: '5250.25' });
+  await expect(infoValue(dialog, 'Balance')).toHaveText('5,250.25 USD');
 });
 
 test('Escape dismisses the account switch dialog', async ({ page }) => {
