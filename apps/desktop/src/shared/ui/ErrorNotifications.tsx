@@ -13,6 +13,8 @@ export interface ErrorNoticeAction {
 
 interface ErrorNotice {
   id: number;
+  /** What makes two notices the same one: the stable key when given, otherwise the message itself. */
+  identity: string;
   message: string;
   action?: ErrorNoticeAction;
 }
@@ -22,9 +24,9 @@ interface ErrorNoticeState {
 }
 
 type ErrorNoticeStore = DomainStore<ErrorNoticeState> & {
-  show: (message: string, action?: ErrorNoticeAction) => void;
+  show: (message: string, action?: ErrorNoticeAction, noticeKey?: string) => void;
   dismiss: (id: number) => void;
-  retire: (message: string) => void;
+  retire: (identity: string) => void;
 };
 
 const ErrorNotificationsContext = createContext<ErrorNoticeStore | null>(null);
@@ -34,17 +36,22 @@ export function ErrorNotificationsProvider({ children }: { children: ReactNode }
     const state = createDomainStore<ErrorNoticeState>({ notices: [] });
     let nextId = 0;
     return Object.assign(state, {
-      show: (message: string, action?: ErrorNoticeAction) => {
-        const id = ++nextId;
-        state.setField('notices', (current) =>
-          current.some((notice) => notice.message === message)
+      show: (message: string, action?: ErrorNoticeAction, noticeKey?: string) => {
+        const identity = noticeKey ?? message;
+        state.setField('notices', (current) => {
+          const existing = current.find((notice) => notice.identity === identity);
+          if (!existing) {
+            return [...current.slice(-4), { id: ++nextId, identity, message, action }];
+          }
+          // A keyed notice keeps its id so the rendered alert updates in place instead of remounting.
+          return noticeKey === undefined
             ? current
-            : [...current.slice(-4), { id, message, action }],
-        );
+            : current.map((notice) => (notice === existing ? { ...existing, message, action } : notice));
+        });
       },
       dismiss: (id: number) => state.setField('notices', (current) => current.filter((notice) => notice.id !== id)),
-      retire: (message: string) =>
-        state.setField('notices', (current) => current.filter((notice) => notice.message !== message)),
+      retire: (identity: string) =>
+        state.setField('notices', (current) => current.filter((notice) => notice.identity !== identity)),
     });
   });
 
@@ -68,20 +75,40 @@ export function useNotifyError() {
   return useErrorNotifications().show;
 }
 
-export function ErrorNotification({ message, action }: { message: string | undefined; action?: ErrorNoticeAction }) {
+/**
+ * `noticeKey` marks a notice whose text changes while it stays the same problem (e.g. a live price):
+ * the text updates in place. Without it, every distinct message is its own notice.
+ */
+export function ErrorNotification({
+  message,
+  action,
+  noticeKey,
+}: {
+  message: string | undefined;
+  action?: ErrorNoticeAction;
+  noticeKey?: string;
+}) {
   const { show, retire } = useErrorNotifications();
   // The notice outlives renders, so it must call the latest action, not the one captured when it appeared.
   const runLatestAction = useEventCallback(() => action?.run());
   const actionLabel = action?.label;
+  const hasMessage = Boolean(message);
   useEffect(() => {
     if (!message) {
       return;
     }
-    show(message, actionLabel === undefined ? undefined : { label: actionLabel, run: runLatestAction });
+    show(message, actionLabel === undefined ? undefined : { label: actionLabel, run: runLatestAction }, noticeKey);
     // Field validation clears as soon as the input is corrected. Runtime
     // failures reported through useErrorNotification remain until dismissed.
-    return () => retire(message);
-  }, [message, actionLabel, show, retire, runLatestAction]);
+    // A keyed notice is retired by the effect below, not on each text change.
+    return noticeKey === undefined ? () => retire(message) : undefined;
+  }, [message, actionLabel, noticeKey, show, retire, runLatestAction]);
+  useEffect(() => {
+    if (noticeKey === undefined || !hasMessage) {
+      return;
+    }
+    return () => retire(noticeKey);
+  }, [noticeKey, hasMessage, retire]);
   return null;
 }
 

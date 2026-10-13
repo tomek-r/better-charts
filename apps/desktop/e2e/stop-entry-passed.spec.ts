@@ -106,6 +106,21 @@ test('a Buy Stop the market reached explains it and moves above Ask by the stops
   await expectMoveLeavesReviewUntilFreshCheck(page, 'Move entry above Ask', '1.0855');
 });
 
+test('the passed-entry notice updates the live Ask in place instead of remounting on each quote', async ({ page }) => {
+  const alerts = await reviewPassedStop(page, 'buy', ASK, '1.0830');
+  await expect(alerts).toHaveCount(1);
+  await alerts.evaluate((element) => {
+    (element as HTMLElement).dataset.mountMarker = 'original';
+  });
+  const nextAsks = ['1.0856', '1.0857', '1.0858'];
+  for (const [index, ask] of nextAsks.entries()) {
+    await pushEvent(page, 'quote-update', eurusdQuote(STUB_NOW + 2000 + index, '1.0852', ask));
+    await expect(alerts).toContainText(`(Ask ${ask})`);
+  }
+  await expect(alerts).toHaveCount(1);
+  await expect(alerts).toHaveAttribute('data-mount-marker', 'original');
+});
+
 test('a Sell Stop the market reached explains it and moves below Bid by the stops level', async ({ page }) => {
   const alerts = await reviewPassedStop(page, 'sell', BID, '1.0870');
   await expect(alerts).toHaveCount(1);

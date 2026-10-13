@@ -72,6 +72,7 @@ export function OrderTicketReview({
       )}
       {passedStopEntry && (
         <ErrorNotification
+          noticeKey="passed-stop-entry"
           message={passedStopEntry.message}
           action={{ label: passedStopEntry.actionLabel, run: () => moveStopEntry(passedStopEntry.suggestedEntry) }}
         />
