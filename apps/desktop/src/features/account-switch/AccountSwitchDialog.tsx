@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
 import { formatAccountMoney, formatMarginThreshold, marginModeName } from '../../shared/accountFormat';
 import type { AccountSnapshot } from '../../shared/bridge/types';
+import { ModalDialog, ModalDialogButton } from '../../shared/ui/ModalDialog';
 
 /** Label/value rows of the new account; rows with a missing value are omitted. */
 function accountInfoRows(account: AccountSnapshot | undefined): Array<[label: string, value: string]> {
@@ -74,62 +74,32 @@ export function AccountSwitchDialog({
   tradingEnabled: boolean;
   onDismiss: () => void;
 }) {
-  const dismiss = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement;
-    dismiss.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      // Modal keystrokes must not reach the chart's order/drawing shortcuts.
-      event.stopImmediatePropagation();
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onDismiss();
-      } else if (event.key === 'Tab') {
-        // Dismiss is the only control, so the focus trap is "stay on it".
-        event.preventDefault();
-        dismiss.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      window.removeEventListener('keydown', onKey, true);
-      if (previous instanceof HTMLElement && previous.isConnected) {
-        previous.focus();
-      }
-    };
-  }, [onDismiss]);
   return (
-    <div className="account-switch-backdrop">
-      <div
-        className="account-switch-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="account-switch-title"
-        data-account-switch-dialog
+    <ModalDialog
+      title={message}
+      onDismiss={onDismiss}
+      actions={
+        <ModalDialogButton variant="primary" onClick={onDismiss}>
+          Dismiss
+        </ModalDialogButton>
+      }
+    >
+      <dl className="account-switch-info">
+        {accountInfoRows(account).map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p
+        role="status"
+        className={tradingEnabled ? 'account-switch-algo' : 'account-switch-algo warn'}
+        data-algo-trading={tradingEnabled ? 'enabled' : 'disabled'}
       >
-        <h2 id="account-switch-title">{message}</h2>
-        <dl className="account-switch-info">
-          {accountInfoRows(account).map(([label, value]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <p
-          role="status"
-          className={tradingEnabled ? 'account-switch-algo' : 'account-switch-algo warn'}
-          data-algo-trading={tradingEnabled ? 'enabled' : 'disabled'}
-        >
-          <AlgoTradingIcon enabled={tradingEnabled} />
-          {tradingEnabled ? 'Algo trading is enabled' : 'Turn on Algo Trading in MT5 in order to send orders'}
-        </p>
-        <div className="account-switch-footer">
-          <button ref={dismiss} type="button" className="account-switch-dismiss" onClick={onDismiss}>
-            Dismiss
-          </button>
-        </div>
-      </div>
-    </div>
+        <AlgoTradingIcon enabled={tradingEnabled} />
+        {tradingEnabled ? 'Algo trading is enabled' : 'Turn on Algo Trading in MT5 in order to send orders'}
+      </p>
+    </ModalDialog>
   );
 }
