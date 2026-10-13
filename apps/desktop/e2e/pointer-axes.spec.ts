@@ -22,6 +22,10 @@ interface Box {
 const ACCENT: Rgb = [0x6d, 0xe0, 0xac];
 const ASK: Rgb = [0x26, 0xa6, 0x9a];
 const BID: Rgb = [0xf7, 0x52, 0x5f];
+/** `palette.border`, the pill background. */
+const PILL_BACKGROUND: Rgb = [0x2b, 0x38, 0x4b];
+/** priceTagHeight(11): the Bid/Ask/countdown tag height the price pill must match. */
+const PRICE_TAG_HEIGHT = 19;
 
 /** Bounding box and pixel count of one colour, over a rectangle of every canvas of a surface. */
 async function scan(page: Page, surface: Surface, rgb: Rgb, rect?: Box): Promise<{ count: number; box: Box | null }> {
@@ -107,14 +111,22 @@ test.describe('pointer readouts on the axes', () => {
     await page.mouse.move(host.x + 400, host.y + y);
     await expect.poll(async () => (await scan(page, 'price', ACCENT)).count).toBeGreaterThan(0);
     const bar = (await scan(page, 'price', ACCENT)).box!;
-    // The accent bar is the pill's left edge: flush with the axis' left edge, one pill high, on the pointer.
+    // The accent bar is the pill's left edge: flush with the axis' left edge, one tag high, on the pointer.
     expect(bar.x).toBe(0);
-    expect(bar.height).toBe(22);
-    expect(bar.y + bar.height / 2).toBeCloseTo(y, 0);
+    expect(bar.height).toBe(PRICE_TAG_HEIGHT);
+    // The whole-pixel top of an odd-height pill puts its centre half a pixel off the pointer.
+    expect(Math.abs(bar.y + bar.height / 2 - y)).toBeLessThanOrEqual(0.5);
     const box = (await readout(page))!.priceLabelBox!;
+    // The pill fills the axis canvas across and is exactly as tall as the Bid/Ask tags.
     expect(box.x).toBe(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(width);
-    expect(box.y + box.height / 2).toBeCloseTo(y, 0);
+    expect(box.width).toBe(width);
+    expect(box.height).toBe(PRICE_TAG_HEIGHT);
+    const paintedWidth = await page.evaluate(() => {
+      const canvas = [...document.querySelectorAll('canvas')].find((c) => c.width <= 120 && c.height > 120);
+      return canvas?.width ?? 0;
+    });
+    expect(box.width).toBe(paintedWidth);
+    expect(Math.abs(box.y + box.height / 2 - y)).toBeLessThanOrEqual(0.5);
     // Hovering, moving and leaving never change the axis width.
     for (const moveY of [60, 220, 300]) {
       await page.mouse.move(host.x + 400, host.y + moveY);
@@ -164,7 +176,12 @@ test.describe('pointer readouts on the axes', () => {
     const box = (await readout(page))!.timeLabelBox!;
     expect(box.y).toBe(0);
     expect(box.x + box.width / 2).toBeCloseTo(x, 0);
-    expect(box.height).toBeLessThanOrEqual(await page.evaluate(() => window.__chartTest!.priceScale().timeAxisHeight));
+    // The pill fills the time axis canvas top to bottom.
+    const timeAxisHeight = await page.evaluate(() => window.__chartTest!.priceScale().timeAxisHeight);
+    expect(box.height).toBe(timeAxisHeight);
+    expect(bar.height).toBe(2);
+    const pillRows = (await scan(page, 'time', PILL_BACKGROUND)).box!;
+    expect(pillRows.y + pillRows.height).toBe(timeAxisHeight);
     // Near the right edge the pill is pushed back inside the axis instead of overflowing it.
     const paneWidth = host.width - (await axisWidth(page));
     await page.mouse.move(host.x + paneWidth - 4, host.y + 150);

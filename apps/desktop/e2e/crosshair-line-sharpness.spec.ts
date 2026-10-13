@@ -105,8 +105,6 @@ async function expectSharpCrosshairLines(page: Page, deviceScaleFactor: number):
   const { pageErrors } = await gotoWithStub(page);
   await expect.poll(async () => page.evaluate(() => window.__chartTest?.data().length ?? 0)).toBe(10);
   const host = (await page.locator('.chart-host').boundingBox())!;
-  const axis = await page.evaluate(() => window.__chartTest!.priceScale());
-  const paneWidth = host.width - axis.axisWidth;
   const pointerX = host.x + POINTER.x;
   const pointerY = host.y + POINTER.y;
   const lineWidth = Math.max(1, Math.floor(deviceScaleFactor));
@@ -115,20 +113,17 @@ async function expectSharpCrosshairLines(page: Page, deviceScaleFactor: number):
   await expect
     .poll(async () => page.evaluate(() => window.__chartTest?.pointerReadout()?.priceLabelBox?.width))
     .toBeGreaterThan(0);
-  const pillWidth = await page.evaluate(() => window.__chartTest!.pointerReadout()!.priceLabelBox!.width);
 
   // Vertical line: a short slice of the pane above the horizontal line. On the time axis the
   // readout pill is centred on the line and covers it, so only the pane is checked there.
   const verticalClips: Clip[] = [
     { x: pointerX - CLIP_HALF_SPAN, y: host.y + 20, width: 2 * CLIP_HALF_SPAN, height: CLIP_LENGTH },
   ];
-  // Horizontal line: a short slice of the pane left of the vertical line, and of the price axis
-  // to the right of the readout pill, which covers the line from the axis' left edge.
+  // Horizontal line: a short slice of the pane left of the vertical line. The price readout pill
+  // fills the whole price axis at the pointer y, so only the pane is checked there.
   const horizontalClips: Clip[] = [
     { x: host.x + 20, y: pointerY - CLIP_HALF_SPAN, width: CLIP_LENGTH, height: 2 * CLIP_HALF_SPAN },
-    { x: host.x + paneWidth + pillWidth + 2, y: pointerY - CLIP_HALF_SPAN, width: 4, height: 2 * CLIP_HALF_SPAN },
   ];
-  expect(axis.axisWidth - pillWidth).toBeGreaterThan(8);
 
   const baselines = [];
   for (const clip of [...verticalClips, ...horizontalClips]) {

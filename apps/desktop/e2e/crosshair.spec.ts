@@ -187,8 +187,8 @@ test.describe('crosshair', () => {
       // Price label (price-axis coordinates): flush with the axis' left edge, centred on the pointer.
       const price = state.priceLabelBox!;
       expect(price.x).toBe(0);
-      expect(price.height).toBe(22);
-      expect(price.y + price.height / 2).toBeCloseTo(state.y, 0);
+      expect(price.height).toBe(19); // priceTagHeight(11): level with the Bid/Ask tags
+      expect(Math.abs(price.y + price.height / 2 - state.y)).toBeLessThanOrEqual(0.5); // whole-pixel top, odd height
       // Time badge (time-axis coordinates): centred on the pointer x, on the axis' top edge.
       const time = state.timeLabelBox!;
       expect(time.x + time.width / 2).toBeCloseTo(state.x, 0);
