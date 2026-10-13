@@ -1,6 +1,8 @@
 import { type Dispatch, type RefObject, type SetStateAction, useEffect, useRef, useState } from 'react';
 import { MAX_RISK_PERCENT } from '../domain/riskBasis';
 import { CaretIcon } from '../../../shared/ui/CaretIcon';
+import type { BrokerSymbol } from '../../../shared/bridge/types';
+import { unitsStepAttributes } from '../domain/defaultVolume';
 
 /** The order ticket's Units sizing row: manual volume/risk field, swap button,
  * in-field sizing indicator and the sizing-mode menu (units / money / equity). */
@@ -14,7 +16,9 @@ export function UnitsSizingRow({
   applyUnitsMode,
   currency,
   unitsAutoMode,
+  instrument,
 }: {
+  instrument: BrokerSymbol | undefined;
   unitsMode: 'money' | 'equity' | 'units';
   orderVolume: string;
   riskAmount: string;
@@ -140,6 +144,7 @@ export function UnitsSizingRow({
           min={unitsMode === 'equity' ? 0 : undefined}
           max={unitsMode === 'equity' ? MAX_RISK_PERCENT : undefined}
           step="any"
+          {...(unitsMode === 'units' ? unitsStepAttributes(instrument) : {})}
           value={unitsMode === 'units' ? orderVolume : riskAmount}
           onChange={(event) => {
             const value = event.target.value;

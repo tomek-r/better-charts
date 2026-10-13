@@ -9,6 +9,7 @@ export function OrderTicketSizing() {
     slOn,
     stopLoss,
     currency,
+    instrument,
     unitsMode,
     orderVolume,
     setOrderVolume,
@@ -42,6 +43,7 @@ export function OrderTicketSizing() {
         applyUnitsMode={applyUnitsMode}
         unitsAutoMode={unitsAutoMode}
         currency={currency}
+        instrument={instrument}
       />
       <div className="ticket-row">
         <label className="ticket-row-label" htmlFor="equity-allocation">

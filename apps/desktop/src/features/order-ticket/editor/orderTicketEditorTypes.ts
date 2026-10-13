@@ -34,6 +34,7 @@ export interface OrderTicketPricingProps {
 
 export interface OrderTicketSizingProps {
   currency: string | undefined;
+  instrument: BrokerSymbol | undefined;
   unitsMode: 'money' | 'equity' | 'units';
   orderVolume: string;
   setOrderVolume: Dispatch<SetStateAction<string>>;

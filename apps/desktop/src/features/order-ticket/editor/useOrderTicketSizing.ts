@@ -42,6 +42,7 @@ export function useOrderTicketSizing(): OrderTicketSizingProps {
   });
   return {
     currency,
+    instrument,
     unitsMode,
     orderVolume,
     setOrderVolume: stores.setters.draft.setOrderVolume,
