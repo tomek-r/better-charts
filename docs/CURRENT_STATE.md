@@ -73,7 +73,9 @@ Not implemented: break even, multiple charts or Pine Script execution.
   (`initialHistorySyncTimeoutMs`, 10 s, in `config/bridge.json`); a series that
   never synchronizes ends with a correlated error, the non-fatal
   `history-unavailable` event and "No data received for {symbol} {timeframe}.
-  Switch to another symbol or try again later." The session, reconciliation and
+  Switch to another symbol or try again later." The notice and the "Loading
+  market data" message are centered on the window (a pointer-transparent fixed
+  layer), not on the chart frame. The session, reconciliation and
   dispatch gates are untouched, and the app never retries on its own.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
   avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.

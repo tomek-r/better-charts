@@ -107,27 +107,44 @@
   min-height: 320px;
 }
 
+/* Veil over the chart frame while no candles are shown; its message lives in the viewport layer. */
 .chart-overlay {
   position: absolute;
   z-index: 3;
+  inset: 0;
+  background: var(--color-overlay);
+  pointer-events: none;
+}
+
+/* Window-sized layer that centers the loading message and the history notice on the viewport.
+   It never takes pointer events, so the top bar and trade panel stay clickable beneath it. */
+.viewport-center-layer {
+  position: fixed;
+  z-index: 4;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 9px;
-  background: var(--color-overlay);
-  color: var(--color-muted-strong);
-  text-align: center;
   pointer-events: none;
 }
 
-.chart-overlay strong {
+.loading-message {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 9px;
+  color: var(--color-muted-strong);
+  text-align: center;
+}
+
+.loading-message strong {
   color: var(--color-text-tertiary);
   font-size: 15px;
 }
 
-.chart-overlay span:last-child {
+.loading-message span:last-child {
   max-width: 320px;
   font-size: 12px;
   line-height: 1.45;
@@ -139,12 +156,7 @@
 }
 
 .chart-wait-notice {
-  position: absolute;
-  z-index: 4;
-  left: 50%;
-  bottom: 18%;
   max-width: min(420px, calc(100% - 28px));
-  transform: translateX(-50%);
   padding: 9px 12px;
   border-radius: var(--border-radius);
   color: var(--color-muted-strong);

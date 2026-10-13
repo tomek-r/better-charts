@@ -7,9 +7,9 @@ import { useHistoryWaitSecondsLeft } from './historyWaitCountdown';
 /**
  * Tells the user why the chart is still empty while MT5 synchronizes the
  * requested series, and when it gave up. The live region is always mounted so
- * screen readers announce the text when it appears; it sits over the chart
- * only, never over the top bar, so the symbol search and timeframe buttons stay
- * usable.
+ * screen readers announce the text when it appears; it is centered on the
+ * window by the pointer-transparent viewport layer, so the top bar, symbol
+ * search and timeframe buttons stay usable.
  */
 export function HistoryWaitNotice() {
   const stores = useBridgeSessionStores();

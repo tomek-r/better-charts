@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
-import { answerSymbolSearch, chooseSearchResult, openSymbolSearch } from './helpers/panel';
-import { brokerSymbolFixture, gotoWithStub, pushEvent, windowCandles } from './helpers/tauriStub';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { answerSymbolSearch, chooseSearchResult, openSymbolSearch, openTradePanel } from './helpers/panel';
+import { brokerSymbolFixture, gotoCollectingErrors, gotoWithStub, pushEvent, windowCandles } from './helpers/tauriStub';
 
 /** The EA's synchronization deadline is 10 s; the notice shows for the last 5 s of it. */
 const NEVER_ANSWERED_MS = 600_000;
@@ -38,6 +38,61 @@ test('the notice is an accessible polite live region that leaves the top bar usa
   await expect(notice(page)).toHaveAttribute('role', 'status');
   await expect(notice(page)).toHaveAttribute('aria-live', 'polite');
   await expect(notice(page)).toHaveText(waitingText(5));
+  await openSymbolSearch(page);
+  await expect(page.getByRole('dialog', { name: 'Search symbols' })).toBeVisible();
+});
+
+const CENTER_TOLERANCE_PX = 2;
+const loadingMessage = (page: Page) => page.locator('.loading-message');
+
+/** Offset of the targets' joint bounding box center from the window center, in px. */
+async function offsetFromWindowCenter(page: Page, ...targets: Locator[]) {
+  const boxes = await Promise.all(targets.map((target) => target.boundingBox()));
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const present = boxes.flatMap((box) => (box ? [box] : []));
+  expect(present).toHaveLength(targets.length);
+  const left = Math.min(...present.map((box) => box.x));
+  const right = Math.max(...present.map((box) => box.x + box.width));
+  const top = Math.min(...present.map((box) => box.y));
+  const bottom = Math.max(...present.map((box) => box.y + box.height));
+  return {
+    x: Math.abs((left + right) / 2 - (viewport?.width ?? 0) / 2),
+    y: Math.abs((top + bottom) / 2 - (viewport?.height ?? 0) / 2),
+  };
+}
+
+for (const panelOpen of [false, true]) {
+  const panelState = panelOpen ? 'open' : 'closed';
+
+  test(`the startup loading message is centered on the window with the trade panel ${panelState}`, async ({ page }) => {
+    await gotoCollectingErrors(page);
+    if (panelOpen) {
+      await openTradePanel(page);
+    }
+    const offset = await offsetFromWindowCenter(page, loadingMessage(page));
+    expect(offset.x).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
+    expect(offset.y).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
+  });
+
+  test(`the history notice is centered on the window with the trade panel ${panelState}`, async ({ page }) => {
+    await startWithUnansweredHistory(page);
+    if (panelOpen) {
+      await openTradePanel(page);
+    }
+    await page.clock.runFor(5_250);
+    await expect(notice(page)).toHaveText(waitingText(5));
+    const offset = await offsetFromWindowCenter(page, notice(page));
+    expect(offset.x).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
+    expect(offset.y).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
+  });
+}
+
+test('the top bar, symbol search and timeframe buttons stay clickable while the notice is shown', async ({ page }) => {
+  await startWithUnansweredHistory(page);
+  await page.clock.runFor(5_250);
+  await expect(notice(page)).toHaveText(waitingText(5));
+  await page.getByRole('button', { name: '1m', exact: true }).click();
   await openSymbolSearch(page);
   await expect(page.getByRole('dialog', { name: 'Search symbols' })).toBeVisible();
 });
