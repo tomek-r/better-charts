@@ -16,8 +16,6 @@ import type {
 import { normalizeCandle, normalizeHistoryPage, normalizeSnapshot, isValidCandle, normalizeQuote } from './normalizers';
 import { HISTORY_BARS } from '../../shared/bridge/limits';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
-import { initialHistoryBarsFor } from '../chart/engine/initialHistoryWindow';
-import { createStaleHistoryRecovery, isDetachedFromHistory } from './staleHistoryRecovery';
 import type { BridgeSessionState } from './useBridgeSession';
 
 export interface BridgeEffectRun {
@@ -92,26 +90,6 @@ export function createBridgeMarketRuntime(
     inFlight: boolean;
     anchorMs: number | undefined;
   } = { key: '', symbol: '', timeframe: '', inFlight: false, anchorMs: undefined };
-
-  /**
-   * MT5 can answer the first history request of a symbol from its local cache
-   * before the series is synchronized, so the newest bar is hours old while live
-   * bars are current. Re-request the latest window for the selection on screen.
-   */
-  const refreshStaleHistory = () => {
-    const symbol = currentSymbolRef.current;
-    const timeframe = currentTimeframeRef.current;
-    const adapter = marketAdapterRef.current;
-    const selectionChanging = targetSymbol.current !== undefined || loadingTimeframeRef.current !== undefined;
-    if (run.disposed || run.bridgeState !== 'connected' || !symbol || !timeframe || !adapter || selectionChanging) {
-      staleHistory.settleRefresh();
-      return;
-    }
-    adapter
-      .requestHistory(symbol, timeframe, initialHistoryBarsFor(chartRef.current))
-      .catch(() => staleHistory.settleRefresh());
-  };
-  const staleHistory = createStaleHistoryRecovery(refreshStaleHistory);
 
   const cancelCandles = () => {
     if (candleFrame !== undefined) {
@@ -233,16 +211,6 @@ export function createBridgeMarketRuntime(
       }
       return;
     }
-    if (
-      staleHistory.isRefreshing() &&
-      failure.symbol === currentSymbolRef.current &&
-      failure.timeframe === currentTimeframeRef.current
-    ) {
-      // A background refresh failing must not raise a chart error; the bounded
-      // retry decides whether to try again.
-      staleHistory.settleRefresh();
-      return;
-    }
     const expectedSymbol = targetSymbol.current ?? currentSymbolRef.current;
     const expectedTimeframe = loadingTimeframeRef.current ?? currentTimeframeRef.current;
     if (
@@ -295,12 +263,6 @@ export function createBridgeMarketRuntime(
         ? [...validCandles.slice(0, -1), previousLatest]
         : validCandles;
     const accepted = { ...next, candles };
-    const refreshedStaleHistory = sameSelection && staleHistory.isRefreshing();
-    if (sameSelection) {
-      staleHistory.settleRefresh();
-    } else {
-      staleHistory.reset();
-    }
     cancelCandles();
     try {
       marketAdapterRef.current?.acceptSnapshot(accepted);
@@ -316,10 +278,7 @@ export function createBridgeMarketRuntime(
         currentSymbolRef.current === accepted.symbol &&
         currentTimeframeRef.current !== accepted.timeframe &&
         hasHistory;
-      // A stale-history refresh swaps the same selection in place, so the
-      // user's zoom must survive it just like a timeframe switch.
-      const preserveViewport = preserveTimeframeViewport || (refreshedStaleHistory && hasHistory);
-      const viewportMode = preserveViewport ? HistoryViewportMode.BarsFromEnd : HistoryViewportMode.Reset;
+      const viewportMode = preserveTimeframeViewport ? HistoryViewportMode.BarsFromEnd : HistoryViewportMode.Reset;
       // Selection refs describe what is on screen, so set them before the swap:
       // a carried viewport can request an older page inside replaceHistory.
       dataKeyRef.current = dataKey;
@@ -429,16 +388,8 @@ export function createBridgeMarketRuntime(
     if (!isValidCandle(candle)) {
       return;
     }
-    const newestHistoryBar = latestCandleRef.current;
-    if (newestHistoryBar && candle.timeMs < newestHistoryBar.timeMs) {
+    if (latestCandleRef.current && candle.timeMs < latestCandleRef.current.timeMs) {
       return;
-    }
-    if (newestHistoryBar && timeframe && isDetachedFromHistory(newestHistoryBar, candle, timeframe)) {
-      if (staleHistory.holdDetachedBar()) {
-        return;
-      }
-    } else {
-      staleHistory.markAttached();
     }
     latestCandleRef.current = candle;
     pendingCandles.set(candle.timeMs, candle);
@@ -449,7 +400,6 @@ export function createBridgeMarketRuntime(
 
   return {
     cancelCandles,
-    cancelStaleHistoryRefresh: staleHistory.reset,
     cancelPrefetch,
     resetPageState,
     requestOlderHistory,

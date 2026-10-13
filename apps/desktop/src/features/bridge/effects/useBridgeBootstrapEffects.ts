@@ -205,7 +205,6 @@ export function useBridgeBootstrapEffects(
               ) {
                 marketRuntime.cancelCandles();
                 marketRuntime.cancelPrefetch();
-                marketRuntime.cancelStaleHistoryRefresh();
                 marketAdapterRef.current?.resetRequests();
                 marketRuntime.resetPageState();
                 loadingTimeframeRef.current = undefined;
@@ -295,7 +294,6 @@ export function useBridgeBootstrapEffects(
       run.disposed = true;
       marketRuntime.cancelCandles();
       marketRuntime.cancelPrefetch();
-      marketRuntime.cancelStaleHistoryRefresh();
       subscriptions.dispose();
     };
     // The app-level listeners are the sole source for history and realtime chart updates.
