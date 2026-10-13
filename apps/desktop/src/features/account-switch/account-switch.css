@@ -55,11 +55,20 @@
 }
 
 .account-switch-algo {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin: 0 0 20px;
   font-size: 14px;
 }
 
-.account-switch-algo.warn {
+.account-switch-algo svg {
+  flex: none;
+  color: var(--color-accent);
+}
+
+.account-switch-algo.warn,
+.account-switch-algo.warn svg {
   color: var(--color-warn-text);
 }
 

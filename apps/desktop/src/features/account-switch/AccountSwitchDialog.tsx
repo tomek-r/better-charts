@@ -22,6 +22,46 @@ function accountInfoRows(account: AccountSnapshot | undefined): Array<[label: st
   return rows.filter((row): row is [string, string] => Boolean(row[1]));
 }
 
+/** Check mark when algo trading is on, warning triangle when it is off; colour from `currentColor`. */
+function AlgoTradingIcon({ enabled }: { enabled: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      data-algo-icon={enabled ? 'check' : 'warning'}
+    >
+      {enabled ? (
+        <>
+          <circle cx="12" cy="12" r="9.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <path
+            d="m7.75 12.25 2.75 2.75 5.75-6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      ) : (
+        <>
+          <path
+            d="M12 3.25 21.5 20H2.5L12 3.25Z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          <path d="M12 9.5v4.75" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          <circle cx="12" cy="17.25" r="1.1" fill="currentColor" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 /** Modal notice that the MT5 login changed; the only control is Dismiss. */
 export function AccountSwitchDialog({
   message,
@@ -81,6 +121,7 @@ export function AccountSwitchDialog({
           className={tradingEnabled ? 'account-switch-algo' : 'account-switch-algo warn'}
           data-algo-trading={tradingEnabled ? 'enabled' : 'disabled'}
         >
+          <AlgoTradingIcon enabled={tradingEnabled} />
           {tradingEnabled
             ? 'Algo trading is enabled'
             : "Algo trading is disabled in MT5 — orders can't be sent. Turn on Algo Trading in MT5."}

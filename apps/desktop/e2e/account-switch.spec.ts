@@ -94,6 +94,7 @@ test('the dialog states that algo trading is enabled', async ({ page }) => {
   const status = switchedDialog(page, 'Account was switched to Real 70001234').getByRole('status');
   await expect(status).toHaveText('Algo trading is enabled');
   await expect(status).toHaveAttribute('data-algo-trading', 'enabled');
+  await expect(status.locator('svg')).toHaveAttribute('data-algo-icon', 'check');
 });
 
 test('the dialog warns when algo trading is disabled and updates live once it is turned on', async ({ page }) => {
@@ -105,6 +106,7 @@ test('the dialog warns when algo trading is disabled and updates live once it is
     "Algo trading is disabled in MT5 — orders can't be sent. Turn on Algo Trading in MT5.",
   );
   await expect(status).toHaveAttribute('data-algo-trading', 'disabled');
+  await expect(status.locator('svg')).toHaveAttribute('data-algo-icon', 'warning');
 
   // The EA reconnects after Algo Trading is turned on: same account, new session.
   await pushEvent(page, 'bridge-status', {
@@ -117,6 +119,7 @@ test('the dialog warns when algo trading is disabled and updates live once it is
     marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: 1745700000000 },
   });
   await expect(status).toHaveText('Algo trading is enabled');
+  await expect(status.locator('svg')).toHaveAttribute('data-algo-icon', 'check');
 });
 
 const infoValue = (dialog: Locator, label: string) =>
