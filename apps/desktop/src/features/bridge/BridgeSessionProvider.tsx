@@ -28,6 +28,7 @@ export interface BridgeMarket {
   latestCandle: Candle | undefined;
   instrument: BrokerSymbol | undefined;
   symbolLoading: boolean;
+  historyDownloading: boolean;
   chartError: string | undefined;
 }
 
@@ -37,6 +38,7 @@ export interface BridgeChartState {
   timeframe: string | undefined;
   description: string | undefined;
   symbolLoading: boolean;
+  historyDownloading: boolean;
   hasCandles: boolean;
   chartError: string | undefined;
 }
@@ -196,6 +198,7 @@ function selectMarket(state: ReturnType<BridgeSessionStores['market']['getState'
     latestCandle: state.latestCandle,
     instrument: state.instrument,
     symbolLoading: state.symbolLoading,
+    historyDownloading: state.historyDownloading,
     chartError: state.chartError,
   };
 }
@@ -229,6 +232,7 @@ export function useBridgeChartState(): BridgeChartState {
       timeframe: market.snapshot.timeframe,
       description: market.instrument?.symbol === symbol ? market.instrument?.description : undefined,
       symbolLoading: market.symbolLoading,
+      historyDownloading: market.historyDownloading,
       hasCandles: market.snapshot.candles.length > 0 || market.latestCandle !== undefined,
       chartError: market.chartError,
     };

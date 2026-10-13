@@ -36,6 +36,7 @@ type BridgeMarketSession = Pick<
   | 'setInstrument'
   | 'setLastSymbolSelection'
   | 'setSymbolLoading'
+  | 'setHistoryDownloading'
   | 'targetSymbol'
   | 'pendingMetadata'
   | 'currentSymbol'
@@ -75,6 +76,7 @@ export function createBridgeMarketRuntime(
     setInstrument,
     setLastSymbolSelection,
     setSymbolLoading,
+    setHistoryDownloading,
     targetSymbol,
     pendingMetadata,
     currentSymbol: currentSymbolRef,
@@ -104,14 +106,14 @@ export function createBridgeMarketRuntime(
     const adapter = marketAdapterRef.current;
     const selectionChanging = targetSymbol.current !== undefined || loadingTimeframeRef.current !== undefined;
     if (run.disposed || run.bridgeState !== 'connected' || !symbol || !timeframe || !adapter || selectionChanging) {
-      staleHistory.settleRefresh();
+      staleHistory.reset();
       return;
     }
     adapter
       .requestHistory(symbol, timeframe, initialHistoryBarsFor(chartRef.current))
-      .catch(() => staleHistory.settleRefresh());
+      .catch(() => staleHistory.refreshFailed());
   };
-  const staleHistory = createStaleHistoryRecovery(refreshStaleHistory);
+  const staleHistory = createStaleHistoryRecovery(refreshStaleHistory, setHistoryDownloading);
 
   const cancelCandles = () => {
     if (candleFrame !== undefined) {
@@ -238,9 +240,9 @@ export function createBridgeMarketRuntime(
       failure.symbol === currentSymbolRef.current &&
       failure.timeframe === currentTimeframeRef.current
     ) {
-      // A background refresh failing must not raise a chart error; the bounded
-      // retry decides whether to try again.
-      staleHistory.settleRefresh();
+      // A background refresh failing must not raise a chart error; the episode
+      // schedules the next attempt.
+      staleHistory.refreshFailed();
       return;
     }
     const expectedSymbol = targetSymbol.current ?? currentSymbolRef.current;
@@ -296,9 +298,7 @@ export function createBridgeMarketRuntime(
         : validCandles;
     const accepted = { ...next, candles };
     const refreshedStaleHistory = sameSelection && staleHistory.isRefreshing();
-    if (sameSelection) {
-      staleHistory.settleRefresh();
-    } else {
+    if (!sameSelection) {
       staleHistory.reset();
     }
     cancelCandles();
@@ -342,6 +342,9 @@ export function createBridgeMarketRuntime(
       );
     } catch {
       setChartError('Chart data could not be rendered.');
+    }
+    if (sameSelection) {
+      staleHistory.refreshAnswered(latestCandleRef.current, accepted.timeframe ?? DEFAULT_TIMEFRAME);
     }
     setSnapshot(accepted);
     if (loadingTimeframeRef.current === accepted.timeframe) {
@@ -434,12 +437,10 @@ export function createBridgeMarketRuntime(
       return;
     }
     if (newestHistoryBar && timeframe && isDetachedFromHistory(newestHistoryBar, candle, timeframe)) {
-      if (staleHistory.holdDetachedBar()) {
-        return;
-      }
-    } else {
-      staleHistory.markAttached();
+      staleHistory.withholdDetachedBar(candle);
+      return;
     }
+    staleHistory.markAttached();
     latestCandleRef.current = candle;
     pendingCandles.set(candle.timeMs, candle);
     if (candleFrame === undefined) {

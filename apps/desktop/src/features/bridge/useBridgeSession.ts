@@ -31,6 +31,7 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
     setLastSymbolSelection,
     setLoadingTimeframe,
     setSymbolLoading,
+    setHistoryDownloading,
     setChartError,
   } = useFieldSetterSelector(stores.market, (setters) => setters);
   const { setQuote } = useFieldSetterSelector(stores.quote, (setters) => setters);
@@ -139,6 +140,7 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
     setPortfolio,
     symbolLoading: stores.market.getState().symbolLoading,
     setSymbolLoading,
+    setHistoryDownloading,
     chartError: stores.market.getState().chartError,
     setChartError,
     tauriAvailable: stores.connection.getState().tauriAvailable,

@@ -21,6 +21,7 @@ interface BridgeMarketStoreState {
   lastSymbolSelection: BrokerSymbol | undefined;
   loadingTimeframe: string | undefined;
   symbolLoading: boolean;
+  historyDownloading: boolean;
   chartError: string | undefined;
 }
 
@@ -51,6 +52,7 @@ export function createBridgeSessionStores() {
       lastSymbolSelection: undefined,
       loadingTimeframe: undefined,
       symbolLoading: false,
+      historyDownloading: false,
       chartError: undefined,
     }),
     quote: createDomainStore<BridgeQuoteStoreState>({ quote: undefined }),

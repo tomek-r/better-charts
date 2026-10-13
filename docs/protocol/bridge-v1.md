@@ -209,8 +209,9 @@ snapshot; every response must fit the frame budget.
 answers the newest window with `CopyRates` as soon as it returns data, so a
 symbol/timeframe opened for the first time can carry a newest candle hours behind
 the live feed. The desktop app detects that when a `bar_update` lands more than 3
-bar periods after the newest history candle and re-requests the window (bounded,
-see `docs/CURRENT_STATE.md`); no wire change.
+bar periods after the newest history candle and re-requests the window every 2 s
+while the bar stays detached, showing a loader after 4 s (see
+`docs/CURRENT_STATE.md`); no wire change.
 
 #### Older-history pages (additive extension)
 
