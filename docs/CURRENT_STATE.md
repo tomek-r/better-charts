@@ -68,13 +68,9 @@ Not implemented: break even, multiple charts or Pine Script execution.
   MT5 may answer a symbol's first history request from its local cache before
   the series is synchronized (the EA reports `complete: true` regardless). A live
   bar more than 3 bar periods after the newest history bar is therefore withheld
-  and the latest window is re-requested in place every 2 s for as long as the live
-  bar stays detached (same selection only, viewport preserved, one request in
-  flight). The detached bar is never drawn over stale history. If fresh history has
-  not arrived 4 s after the episode starts, the chart shows a "Downloading history…"
-  loader (role=status, with the symbol) over the candles; it never shows for a quick
-  sync. The episode ends when history catches up, or on symbol/timeframe change,
-  session reset or dispose, which also hides the loader.
+  and the latest window is re-requested in place (at most 5 attempts, 0.5/1/2/4/8 s
+  backoff, same selection only, viewport preserved); if the history stays behind,
+  the live bar is drawn after the last attempt.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
   avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
 - Live P&L right-aligns within the widest amount observed per position, expanding

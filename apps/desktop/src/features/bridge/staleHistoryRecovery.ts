@@ -9,10 +9,8 @@ import type { Candle } from '../../shared/bridge/types';
 const STALE_HISTORY_GAP_BARS = 3;
 const MS_PER_SECOND = 1000;
 
-/** Pause before every history refresh while the live bar stays detached. */
-export const STALE_HISTORY_REFRESH_INTERVAL_MS = 2000;
-/** Quick syncs finish before this and never flash a loader. */
-export const STALE_HISTORY_LOADER_DELAY_MS = 4000;
+/** Backoff before each refresh; its length also bounds the attempts per stale episode. */
+export const STALE_HISTORY_REFRESH_DELAYS_MS = [500, 1000, 2000, 4000, 8000] as const;
 
 export function isDetachedFromHistory(newestHistoryBar: Candle, liveBar: Candle, timeframe: string): boolean {
   return (
@@ -21,98 +19,55 @@ export function isDetachedFromHistory(newestHistoryBar: Candle, liveBar: Candle,
 }
 
 /**
- * Recovery from history that MT5 served before it synchronized the series. An
- * episode starts at the first detached live bar and lasts until history catches
- * up with it (or the selection or session ends). During the episode detached
- * live bars are withheld, so the chart never stretches its price scale between
- * stale history and the live price, and the latest history is re-requested at a
- * fixed interval. The loader shows only once the episode outlasts a short delay.
+ * Bounded retry state for re-requesting the latest history. While a refresh is
+ * scheduled or in flight the detached live bars are withheld so the chart never
+ * stretches its price scale between stale history and the live price; once the
+ * attempts are used up they are rendered as-is rather than hidden forever.
  */
-export function createStaleHistoryRecovery(requestRefresh: () => void, setLoaderVisible: (visible: boolean) => void) {
-  let withheldBar: Candle | undefined;
-  // True from scheduling a refresh until its answer or failure; `retryTimer` is set only before the request leaves.
+export function createStaleHistoryRecovery(requestRefresh: () => void) {
+  let attempts = 0;
   let refreshing = false;
-  let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  let loaderTimer: ReturnType<typeof setTimeout> | undefined;
-  let loaderVisible = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const showLoader = (visible: boolean) => {
-    if (loaderVisible !== visible) {
-      loaderVisible = visible;
-      setLoaderVisible(visible);
+  const clearTimer = () => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
     }
-  };
-
-  const cancelPendingRefresh = () => {
-    if (retryTimer !== undefined) {
-      clearTimeout(retryTimer);
-      retryTimer = undefined;
-      refreshing = false;
-    }
-  };
-
-  const scheduleRefresh = () => {
-    cancelPendingRefresh();
-    refreshing = true;
-    retryTimer = setTimeout(() => {
-      retryTimer = undefined;
-      requestRefresh();
-    }, STALE_HISTORY_REFRESH_INTERVAL_MS);
-  };
-
-  const endEpisode = () => {
-    withheldBar = undefined;
-    cancelPendingRefresh();
-    clearTimeout(loaderTimer);
-    loaderTimer = undefined;
-    showLoader(false);
   };
 
   return {
-    /** Withholds a detached live bar and, for the first one of an episode, starts the refresh cycle. */
-    withholdDetachedBar(liveBar: Candle) {
-      const episodeActive = withheldBar !== undefined;
-      withheldBar = liveBar;
-      if (episodeActive) {
-        return;
+    /** Returns true when the detached live bar must be withheld until the refresh lands. */
+    holdDetachedBar(): boolean {
+      if (refreshing) {
+        return true;
       }
-      scheduleRefresh();
-      loaderTimer = setTimeout(() => {
-        loaderTimer = undefined;
-        showLoader(true);
-      }, STALE_HISTORY_LOADER_DELAY_MS);
+      if (attempts >= STALE_HISTORY_REFRESH_DELAYS_MS.length) {
+        return false;
+      }
+      refreshing = true;
+      timer = setTimeout(() => {
+        timer = undefined;
+        requestRefresh();
+      }, STALE_HISTORY_REFRESH_DELAYS_MS[attempts]);
+      attempts += 1;
+      return true;
     },
     isRefreshing: () => refreshing,
-    /** A history snapshot landed: the episode ends if it caught up with the withheld bar, otherwise it refreshes again. */
-    refreshAnswered(newestHistoryBar: Candle | undefined, timeframe: string) {
-      cancelPendingRefresh();
+    /** The refresh answered or failed; a still-detached bar may schedule the next attempt. */
+    settleRefresh() {
+      clearTimer();
       refreshing = false;
-      if (withheldBar === undefined) {
-        return;
-      }
-      if (newestHistoryBar && !isDetachedFromHistory(newestHistoryBar, withheldBar, timeframe)) {
-        endEpisode();
-        return;
-      }
-      scheduleRefresh();
-    },
-    /** The refresh request failed; the episode keeps its interval. */
-    refreshFailed() {
-      refreshing = false;
-      if (withheldBar !== undefined) {
-        scheduleRefresh();
-      }
     },
     /** A live bar continues the history, so the episode is over. */
     markAttached() {
-      if (withheldBar !== undefined) {
-        endEpisode();
-      }
+      attempts = 0;
     },
     /** Selection or session changed: forget the episode and cancel any scheduled refresh. */
     reset() {
-      endEpisode();
+      clearTimer();
       refreshing = false;
+      attempts = 0;
     },
   };
 }
