@@ -1,7 +1,6 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { type Dispatch, type SetStateAction } from 'react';
 import type { AccountSnapshot, OrderCheckResult, RiskSide } from '../../../shared/bridge/types';
-import type { PassedStopEntryGuidance } from '../domain/passedStopEntry';
 import { OrderCheckResult as OrderCheckResultView, type LocalOrderFigures } from './OrderCheckResult';
 
 function sendButtonLabel(submitting: boolean, checking: boolean): string {
@@ -16,7 +15,6 @@ export function OrderTicketReview({
   canSubmitOrder,
   effectiveVolume,
   localFigures,
-  moveStopEntry,
   orderCheck,
   orderCheckError,
   orderCheckLoading,
@@ -35,12 +33,11 @@ export function OrderTicketReview({
   canSubmitOrder: boolean;
   effectiveVolume: string;
   localFigures: LocalOrderFigures;
-  moveStopEntry: (suggestedEntry: string) => void;
   orderCheck: OrderCheckResult | undefined;
   orderCheckError: string | undefined;
   orderCheckLoading: boolean;
   orderKindDisplay: string;
-  passedStopEntry: PassedStopEntryGuidance | undefined;
+  passedStopEntry: string | undefined;
   ticketBlockedReason: string | undefined;
   riskSide: RiskSide;
   setTicketStage: Dispatch<SetStateAction<'edit' | 'review'>>;
@@ -70,13 +67,7 @@ export function OrderTicketReview({
           }
         />
       )}
-      {passedStopEntry && (
-        <ErrorNotification
-          noticeKey="passed-stop-entry"
-          message={passedStopEntry.message}
-          action={{ label: passedStopEntry.actionLabel, run: () => moveStopEntry(passedStopEntry.suggestedEntry) }}
-        />
-      )}
+      {passedStopEntry && <ErrorNotification noticeKey="passed-stop-entry" message={passedStopEntry} />}
       {/* Reasons reach the user as notifications; the card carries no text above Send. */}
       {blockedReasonShown && <ErrorNotification message={ticketBlockedReason} />}
       <div className="ticket-review-actions">

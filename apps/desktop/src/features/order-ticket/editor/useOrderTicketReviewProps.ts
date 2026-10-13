@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { useBridgeAccountSelector, useBridgeMarketSelector, useBridgeQuote } from '../../bridge/BridgeSessionProvider';
+import { useBridgeAccountSelector, useBridgeQuote } from '../../bridge/BridgeSessionProvider';
 import { passedStopEntryGuidance } from '../domain/passedStopEntry';
 import { useOrderTicketActions, useOrderTicketStores } from '../state/orderTicketContext';
 import type { OrderTicketReview } from '../review/OrderTicketReview';
@@ -31,7 +31,6 @@ export function useOrderTicketReviewProps(): ReviewProps {
     stores.draft,
     useShallow((state) => ({ riskSide: state.riskSide, orderKind: state.orderKind, entry: state.entry })),
   );
-  const instrument = useBridgeMarketSelector((market) => market.instrument);
   const quote = useBridgeQuote();
   const passedStopEntry = passedStopEntryGuidance({
     orderCheckError,
@@ -39,15 +38,7 @@ export function useOrderTicketReviewProps(): ReviewProps {
     side: riskSide,
     entry,
     quote,
-    instrument,
   });
-  // An absolute entry replaces any offset-derived one, which the edit stage would otherwise recompute.
-  // The entry edit itself drops the review and its check, so Send waits for a fresh check.
-  const moveStopEntry = (suggestedEntry: string) => {
-    stores.setters.draft.setPriceMode('absolute');
-    stores.setters.draft.setEntry(suggestedEntry);
-    stores.setters.draft.setTicketStage('edit');
-  };
   return {
     account:
       currency === undefined
@@ -66,7 +57,6 @@ export function useOrderTicketReviewProps(): ReviewProps {
     },
     orderKindDisplay: gate.orderKindDisplay,
     passedStopEntry,
-    moveStopEntry,
     ticketBlockedReason: gate.ticketBlockedReason,
     riskSide,
     setTicketStage: stores.setters.draft.setTicketStage,

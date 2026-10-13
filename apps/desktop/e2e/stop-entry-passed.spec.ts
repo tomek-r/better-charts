@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { fillExitPrice, openTradePanel } from './helpers/panel';
 import {
   brokerSymbolFixture,
@@ -11,8 +11,8 @@ import {
 } from './helpers/tauriStub';
 
 // Owner decision: when the market reaches a Stop entry the review stays blocked with specific guidance
-// and a one-click move to the nearest valid trigger. Nothing is auto-sent or auto-converted.
-const eurusd = brokerSymbolFixture('EURUSD', 'Euro / US Dollar', { stopsLevel: 10 });
+// as a notification only (no move-entry action). Nothing is auto-sent, auto-edited or auto-converted.
+const eurusd = brokerSymbolFixture('EURUSD', 'Euro / US Dollar');
 const EA_REJECTION = 'stop entry must be above ask for buy or below bid for sell';
 // Long enough to inspect the review before the stub answers; the passed-entry error arrives first.
 const CHECK_DELAY_MS = 1500;
@@ -50,20 +50,12 @@ async function reviewPassedStop(page: Page, side: 'buy' | 'sell', entry: string,
   return page.locator('.notification-region [role=alert]');
 }
 
-async function expectMoveLeavesReviewUntilFreshCheck(page: Page, action: string, movedEntry: string) {
-  await page.getByRole('button', { name: action, exact: true }).click();
-  await expect(page.locator('.ticket-review-head')).toHaveCount(0);
-  await expect(page.getByLabel('Order price')).toHaveValue(movedEntry);
+/** The notice only informs: its sole control is Dismiss, and nothing is sent or edited on the user's behalf. */
+async function expectInformOnlyNotice(page: Page, alerts: Locator) {
+  await expect(alerts.getByRole('button')).toHaveCount(1);
+  await expect(alerts.getByRole('button', { name: 'Dismiss error notification' })).toHaveCount(1);
   expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
   expect(await checkRequests(page)).toHaveLength(1);
-  await page.locator('section.order-ticket .ticket-cta').click();
-  const send = page.locator('.ticket-cta.send');
-  await expect(send).toBeDisabled();
-  await expect(send).toHaveText('Checking with MT5…');
-  await expect(send).toBeEnabled();
-  expect(await checkRequests(page)).toHaveLength(2);
-  expect((await checkRequests(page))[1].args).toMatchObject({ entry: movedEntry });
-  expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
 }
 
 function figure(page: Page, label: string) {
@@ -95,7 +87,7 @@ test('the order data block shows placeholders while checking, then fills in with
   expect((await card.boundingBox())?.height).toBe(loadingHeight);
 });
 
-test('a Buy Stop the market reached explains it and moves above Ask by the stops level', async ({ page }) => {
+test('a Buy Stop the market reached explains it without offering to move the entry', async ({ page }) => {
   const alerts = await reviewPassedStop(page, 'buy', ASK, '1.0830');
   await expect(figure(page, 'Margin at fill')).toHaveText('Margin at fill—');
   await expect(figure(page, 'Requested entry')).toHaveText(`Requested entry${ASK}`);
@@ -106,8 +98,8 @@ test('a Buy Stop the market reached explains it and moves above Ask by the stops
   await expect(alerts).not.toContainText('must be above ask');
   await expect(page.locator('section.order-ticket')).not.toContainText('Price moved past');
   await expect(page.locator('.ticket-cta.send')).toBeDisabled();
-  // Ask 1.0854 + stops level 10 points (0.00010) = 1.0855.
-  await expectMoveLeavesReviewUntilFreshCheck(page, 'Move entry above Ask', '1.0855');
+  await expectInformOnlyNotice(page, alerts);
+  await expect(page.getByRole('button', { name: /Move entry/ })).toHaveCount(0);
 });
 
 test('the passed-entry notice updates the live Ask in place instead of remounting on each quote', async ({ page }) => {
@@ -125,7 +117,7 @@ test('the passed-entry notice updates the live Ask in place instead of remountin
   await expect(alerts).toHaveAttribute('data-mount-marker', 'original');
 });
 
-test('a Sell Stop the market reached explains it and moves below Bid by the stops level', async ({ page }) => {
+test('a Sell Stop the market reached explains it without offering to move the entry', async ({ page }) => {
   const alerts = await reviewPassedStop(page, 'sell', BID, '1.0870');
   await expect(alerts).toHaveCount(1);
   await expect(alerts).toContainText(
@@ -133,5 +125,5 @@ test('a Sell Stop the market reached explains it and moves below Bid by the stop
   );
   await expect(alerts).not.toContainText('must be above ask');
   await expect(page.locator('.ticket-cta.send')).toBeDisabled();
-  await expectMoveLeavesReviewUntilFreshCheck(page, 'Move entry below Bid', '1.0851');
+  await expectInformOnlyNotice(page, alerts);
 });

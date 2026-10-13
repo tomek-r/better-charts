@@ -82,14 +82,13 @@ export function useOrderTicketBrokerActions(
   } = derived;
 
   useErrorNotification(withoutStopLossTooClose(broker.riskError));
-  // The review notification carries the specific "price moved past your stop entry" guidance and its action.
+  // The review notification carries the specific "price moved past your stop entry" guidance.
   const passedStopEntry = passedStopEntryGuidance({
     orderCheckError: broker.orderCheckError,
     orderKind,
     side: riskSide,
     entry: draft.entry,
     quote,
-    instrument,
   });
   useErrorNotification(passedStopEntry ? undefined : withoutStopLossTooClose(broker.orderCheckError));
   useErrorNotification(broker.submitStatus?.text);

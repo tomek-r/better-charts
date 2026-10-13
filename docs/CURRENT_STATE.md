@@ -111,10 +111,9 @@ Not implemented: break even, multiple charts or Pine Script execution.
   has returned a check result; until then its row is reserved but invisible.
   When the market reaches a Stop / Stop Limit trigger (EA `INVALID_PRICE`), Send stays
   blocked and one notification names the live price ("Price moved past your stop entry
-  (Ask …). Move the entry above Ask or switch to Market."; sell: Bid/below) with a
-  "Move entry above Ask" / "below Bid" action. The action sets the trigger beyond that
-  price by the stops level (at least one tick, on the tick grid), leaves review and
-  waits for the user to start a fresh check; SL/TP and sending are never touched automatically.
+  (Ask …). Move the entry above Ask or switch to Market."; sell: Bid/below). The live
+  price updates in place without re-animating the notice. It is informational only (no
+  action button); the entry, SL/TP and sending are never touched automatically.
   SL/TP and pending-entry drags use the execution guard; Shift+drag moves all levels.
 
 Check corresponding E2E regressions before changing these decisions.

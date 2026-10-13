@@ -78,16 +78,4 @@ function Dismiss({ onDismiss, label }: { onDismiss: () => void; label: string })
   );
 }
 
-function Action({ onAction, label }: { onAction: () => void; label: string }) {
-  const lifecycle = useRequiredContext(
-    DismissContext,
-    'Notification.Action requires a Notification.Status or Notification.Alert.',
-  );
-  return (
-    <button type="button" className="notification-action" disabled={lifecycle.closing} onClick={onAction}>
-      {label}
-    </button>
-  );
-}
-
-export const Notification = { Region, Status, Alert, Message, Action, Dismiss };
+export const Notification = { Region, Status, Alert, Message, Dismiss };
