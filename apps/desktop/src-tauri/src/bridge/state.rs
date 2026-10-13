@@ -165,7 +165,7 @@ impl Default for BridgeStatus {
 
 /// Seam over outbound app events. Production uses [`TauriBridgeEvents`]; the
 /// protocol tests substitute a recording double so the full
-/// `handle_connection` loop can run without a live Tauri app. Fire-and-forget:
+/// `handle_connection` loop can run without a live Tauri app. Sent without waiting:
 /// emit failures are ignored, exactly like the raw `AppHandle::emit` calls
 /// this replaces.
 pub(crate) trait BridgeEvents: Send + Sync {
@@ -182,7 +182,7 @@ impl BridgeEvents for TauriBridgeEvents {
     }
 }
 
-/// Fire-and-forget typed event emission. Serialization or emit failures are
+/// Typed event emission that does not wait for delivery. Serialization or emit failures are
 /// ignored — exactly what the raw `AppHandle::emit` calls this replaces did.
 pub(crate) fn bridge_emit<T: serde::Serialize + Clone>(
     events: &Arc<dyn BridgeEvents>,

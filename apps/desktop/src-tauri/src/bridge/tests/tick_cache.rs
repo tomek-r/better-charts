@@ -473,7 +473,7 @@ fn tick_size_change_is_not_reported_as_a_price_limit() {
 }
 
 #[test]
-fn tick_profile_limit_messages_name_the_limit_that_fired() {
+fn tick_profile_limit_messages_name_the_limit_that_was_reached() {
     let messages = [
         TickProfileLimit::Pages,
         TickProfileLimit::DistinctPrices,

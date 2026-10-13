@@ -569,7 +569,7 @@ bool DisconnectIfAccountIdentityChanged()
 // The app reads trading_enabled only from the hello, so a mid-session change
 // (e.g. Algo Trading switched off by an account change, then back on) is
 // applied by reconnecting. The new hello carries the current value, which makes
-// this fire once per change; DisconnectAndRetry's backoff bounds any flapping.
+// this run once per change; DisconnectAndRetry's backoff bounds any flapping.
 // The new session still needs the handshake and complete reconciliation.
 bool DisconnectIfTradingPermissionChanged()
   {
@@ -2460,7 +2460,7 @@ void ClearWatch()
    g_watch_filled=0.0;
   }
 
-void ArmCommandWatch(const string command_id,const string kind,const string symbol,const ulong order,const ulong position,const double volume)
+void StartCommandWatch(const string command_id,const string kind,const string symbol,const ulong order,const ulong position,const double volume)
   {
    g_watch_id=command_id;
    g_watch_kind=kind;
@@ -2471,7 +2471,7 @@ void ArmCommandWatch(const string command_id,const string kind,const string symb
    g_watch_filled=0.0;
   }
 
-void ArmCommandInFlight(const string command_id)
+void MarkCommandInFlight(const string command_id)
   {
    g_inflight=true;
    g_inflight_id=command_id;
@@ -2734,8 +2734,8 @@ void DispatchSubmit(const BridgeCommandRequest &req)
       return;
      }
    if(!BeginCommandDispatch(req.command_id)) return;
-   ArmCommandWatch(req.command_id,"submit",req.symbol,0,0,request.volume);
-   ArmCommandInFlight(req.command_id);
+   StartCommandWatch(req.command_id,"submit",req.symbol,0,0,request.volume);
+   MarkCommandInFlight(req.command_id);
    MqlTradeResult result={};
    ResetLastError();
    const bool ok=g_trade.OrderSend(request,result);
@@ -2899,8 +2899,8 @@ void DispatchClose(const BridgeCommandRequest &req)
    if(!BeginCommandDispatch(req.command_id)) return;
    // The watch completes when the filled volume reaches what was requested, so a
    // partial close (the position survives) is reported filled, not stuck partial.
-   ArmCommandWatch(req.command_id,"close",position_symbol,0,(ulong)ticket,close_volume);
-   ArmCommandInFlight(req.command_id);
+   StartCommandWatch(req.command_id,"close",position_symbol,0,(ulong)ticket,close_volume);
+   MarkCommandInFlight(req.command_id);
    ResetLastError();
    const bool ok=(is_partial ? g_trade.PositionClosePartial((ulong)ticket,close_volume) : g_trade.PositionClose((ulong)ticket));
    const int close_error=GetLastError();

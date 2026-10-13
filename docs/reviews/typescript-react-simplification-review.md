@@ -440,7 +440,7 @@ yet still uses `existing ?? await ensurePending(...)` and checks pending state
 after the resulting microtask boundary.
 
 **Proposal:** make pending creation synchronous, remove the unreachable
-coalescing arm, and retain checks that protect real dispatch/session races.
+coalescing branch, and retain checks that protect real dispatch/session races.
 The removed await changes interleaving, so this is not merely deleting a keyword.
 Understand simultaneous selection calls before removing generation checks.
 

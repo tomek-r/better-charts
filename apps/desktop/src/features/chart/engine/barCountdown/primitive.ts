@@ -50,7 +50,7 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
     this.axisViews = [{ zOrder: () => 'top', renderer: () => (this.shownText === '' ? null : renderer) }];
   }
 
-  /** Mirror the owner's state in and re-arm the wake-up for the next change. */
+  /** Mirror the owner's state in and reschedule the wake-up for the next change. */
   update(state: Readonly<BarCountdownState>): void {
     const next = this.state;
     const previousIdentity = next.connectionIdentity;
@@ -160,7 +160,7 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
   }
 
   /**
-   * Arm one wake-up for the moment the label next changes, counted from the
+   * Schedule one wake-up for the moment the label next changes, counted from the
    * broker clock. A repeating interval instead starts at an arbitrary phase and
    * accumulates its own lateness, so the label drifts away from MT5's clock and
    * eventually skips a second.
@@ -178,7 +178,7 @@ export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
     }
     const due = performance.now() + delay;
     // Quotes and candle updates arrive far faster than seconds; keep the timer
-    // already armed unless the label now changes earlier than it will.
+    // already scheduled unless the label now changes earlier than it will.
     if (this.timer !== undefined && due >= this.dueMs) {
       return;
     }

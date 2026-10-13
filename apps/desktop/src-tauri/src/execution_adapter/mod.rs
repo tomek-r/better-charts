@@ -103,7 +103,7 @@ struct AdapterInner {
     /// Commands the most recent session transition dropped without
     /// dispatching; see [`ExecutionQueueView::stranded`].
     stranded: usize,
-    /// F-2 claim gate: the handshake `trading_enabled` flag, armed by
+    /// F-2 claim gate: the handshake `trading_enabled` flag, set by
     /// `session_started_for_session` and cleared when the session ends.
     trading_enabled: bool,
     /// F-2 claim gate: reconciliation reached `Complete`, set from lib.rs
@@ -483,7 +483,7 @@ impl ExecutionAdapterState {
     /// may have reached the broker and is never retried) and every queued
     /// command is dropped with a `QueueDropped` journal event — nothing is
     /// ever auto-dispatched into the new session ("restart or reconnect must
-    /// not replay commands as new orders"). Then arms the F-2 claim
+    /// not replay commands as new orders"). Then enables the F-2 claim
     /// gates from the handshake and installs the F-5 session account binding;
     /// reconciliation restarts as not-complete for the new session.
     #[cfg(test)]
@@ -525,7 +525,7 @@ impl ExecutionAdapterState {
 
     /// Session teardown (F-1) drains the queue with a "session closed" reason
     /// and clears the session context so
-    /// the UI never keeps a stale in-flight id and no claim gate stays armed.
+    /// the UI never keeps a stale in-flight id and no claim gate stays enabled.
     pub fn session_closed(&self) {
         self.transition_session("session closed", None, false, None);
     }

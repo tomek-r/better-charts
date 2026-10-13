@@ -29,7 +29,7 @@ export function useOrderTicketStopLossSnap(slBand: StopLossBand | undefined, dig
   );
   useEffect(() => {
     if (!slOn) {
-      // A disabled input fires no blur, so release the editing hold here.
+      // A disabled input emits no blur, so release the editing hold here.
       if (stopLossEditing) {
         setters.setStopLossEditing(false);
       }

@@ -197,7 +197,7 @@ export class ChartController {
     this.notifyBarsChanged();
     // The carried-over position can sit deeper than this window reaches, which
     // leaves space before the oldest bar. Filling it is a page request, not a
-    // nudge of the viewport: the range subscription may not fire for a restored
+    // nudge of the viewport: the range subscription may not notify for a restored
     // range, so ask here rather than leave the pane looking empty.
     if (preserved) {
       this.requestOlderHistory();

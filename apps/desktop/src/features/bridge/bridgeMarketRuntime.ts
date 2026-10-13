@@ -162,7 +162,7 @@ export function createBridgeMarketRuntime(
     let frame: number | undefined;
     let idle: number | undefined;
     let timer: number | undefined;
-    const fire = () => {
+    const runPrefetch = () => {
       prefetchCancel = undefined;
       if (
         cancelled ||
@@ -178,9 +178,9 @@ export function createBridgeMarketRuntime(
     frame = requestAnimationFrame(() => {
       frame = undefined;
       if (typeof requestIdleCallback === 'function') {
-        idle = requestIdleCallback(fire, { timeout: PREFETCH_IDLE_TIMEOUT_MS });
+        idle = requestIdleCallback(runPrefetch, { timeout: PREFETCH_IDLE_TIMEOUT_MS });
       } else {
-        timer = window.setTimeout(fire, PREFETCH_FALLBACK_DELAY_MS);
+        timer = window.setTimeout(runPrefetch, PREFETCH_FALLBACK_DELAY_MS);
       }
     });
     prefetchCancel = () => {

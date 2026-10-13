@@ -2,9 +2,9 @@ import { timeframeBarOffset, timeframeBarTime } from '../../../../shared/bridge/
 import type { BrokerQuote } from './types';
 
 /**
- * Land the wake-up just past a second boundary. Timers fire at or after their
+ * Land the wake-up just past a second boundary. Timers run at or after their
  * delay and `remaining` is float, so an exact boundary can still read as the
- * previous second and burn a wake-up re-arming itself.
+ * previous second and burn a wake-up rescheduling itself.
  */
 const BOUNDARY_GUARD_MS = 20;
 

@@ -83,7 +83,7 @@ const pointerHeadIcon = (page: Page) => pointerHead(page).locator('.drawing-tool
  */
 async function openToolMenu(page: Page): Promise<void> {
   // Park off the rail first: Escape hides the chevron until the pointer comes
-  // back, and hover() alone fires no fresh pointerenter while it is still there.
+  // back, and hover() alone emits no fresh pointerenter while it is still there.
   await page.mouse.move(700, 700);
   await page.locator('.tool-rail-split').hover();
   await expect(page.locator('.tool-rail-arrow')).toBeVisible();

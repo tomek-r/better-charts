@@ -100,7 +100,7 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
           // scrollToEnd would land it, and whether follow-on-new-bar is switched on.
           offset: viewport?.offset ?? null,
           endAnchor: viewport?.endAnchor ?? null,
-          followArmed: viewport?.followArmed ?? null,
+          followEnabled: viewport?.followEnabled ?? null,
           askY: priceLinesState.current.hit.askY !== undefined ? rect.top + priceLinesState.current.hit.askY : null,
           bidY: priceLinesState.current.hit.bidY !== undefined ? rect.top + priceLinesState.current.hit.bidY : null,
         };

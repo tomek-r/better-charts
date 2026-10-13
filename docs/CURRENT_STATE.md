@@ -49,7 +49,7 @@ Not implemented: break even, multiple charts or Pine Script execution.
   dismissible bottom-right notifications with bright text, red borders and an error
   icon; messages start with a capital letter. Failed OrderCheck shows one broker
   rejection notice, without a separate last-error-code notice. Negative free margin preserves charts.
-- Arrow/Crosshair share a toolbar group; Escape closes the menu without disarming.
+- Arrow/Crosshair share a toolbar group; Escape closes the menu without deselecting the tool.
   Volume Profile is separate; boundaries drag, Delete/Backspace clears it,
   timeframe changes preserve selection and symbol changes clear it. The two
   clicks may come in either order (earlier time = start); the end may be dropped

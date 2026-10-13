@@ -6,7 +6,7 @@
 export interface FakeClock {
   /** Moves time forward and runs every timer that falls due, in time order. */
   advance(ms: number): void;
-  /** Timers scheduled and not yet fired or cleared. */
+  /** Timers scheduled and not yet run or cleared. */
   pendingTimerCount(): number;
 }
 

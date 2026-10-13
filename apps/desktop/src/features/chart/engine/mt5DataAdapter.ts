@@ -115,7 +115,7 @@ export class Mt5DataAdapter {
       dispatched: false,
     };
     this.pending.set(key, pending);
-    this.armTimeout(key, pending);
+    this.startTimeout(key, pending);
 
     // Let same-turn symbol/timeframe changes settle before dispatching history.
     await Promise.resolve();
@@ -127,7 +127,7 @@ export class Mt5DataAdapter {
     }
     pending.dispatched = true;
     if (pending.timer !== undefined) {
-      this.armTimeout(key, pending);
+      this.startTimeout(key, pending);
     }
     try {
       await invoke('request_history', { symbol, timeframe, bars: clampBars(bars) });
@@ -172,7 +172,7 @@ export class Mt5DataAdapter {
     const generation = this.selectionGeneration;
     const pending: PendingHistory = { symbol, timeframe, dispatched: true };
     this.pending.set(key, pending);
-    this.armTimeout(key, pending, 'page');
+    this.startTimeout(key, pending, 'page');
     try {
       await invoke('request_history_page', { symbol, timeframe, bars: clampBars(bars), beforeMs });
     } catch (error) {
@@ -208,7 +208,7 @@ export class Mt5DataAdapter {
     }
   }
 
-  private armTimeout(key: string, pending: PendingHistory, kind: 'timeout' | 'page' = 'timeout'): void {
+  private startTimeout(key: string, pending: PendingHistory, kind: 'timeout' | 'page' = 'timeout'): void {
     if (pending.timer !== undefined) {
       clearTimeout(pending.timer);
     }
