@@ -454,7 +454,7 @@ def mock_fill_price(request: dict) -> str:
 def margin_projection_fields(request: dict) -> dict:
     # Margin scales with the fill price so a wrong price choice per order kind shows up.
     margin = (Decimal(request["volume"]) * Decimal(mock_fill_price(request)) * MOCK_MARGIN_RATE).quantize(Decimal("0.01"))
-    return {"margin_at_fill": str(margin), "account_margin_used": "0.00", "account_free_margin": "10000.00"}
+    return {"margin_at_fill": str(margin), "account_margin_used": "0.00", "account_free_margin": "10000.00", "account_equity": "10000.00"}
 
 
 def self_test_margin_projection() -> int:
@@ -467,7 +467,7 @@ def self_test_margin_projection() -> int:
     assert stop["margin_at_fill"] == "2.20", "stop is priced at its entry"
     assert stop_limit["margin_at_fill"] == "2.10", "stop_limit is priced at the resting limit price, not the trigger"
     assert len({market["margin_at_fill"], limit["margin_at_fill"], stop["margin_at_fill"], stop_limit["margin_at_fill"]}) == 4
-    assert all(field in market for field in ("account_margin_used", "account_free_margin"))
+    assert all(field in market for field in ("account_margin_used", "account_free_margin", "account_equity"))
     print("mock margin-projection self-test passed: fill price per order kind")
     return 0
 

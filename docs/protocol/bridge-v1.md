@@ -54,7 +54,7 @@ token is required outside development builds.
 {
   "token": "example-token", "terminal_id": "installation-instance-id", "terminal_build": 5000,
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
-  "expert_version": "1.009", "tick_reader_version": "1.001", "trading_enabled": false,
+  "expert_version": "1.010", "tick_reader_version": "1.001", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
   "tick_price_counts": true, "partial_close": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
@@ -85,7 +85,7 @@ the server's permission; the app's local Settings permission is an additional
 startup restriction, optionally overridden with `MT5_BRIDGE_TRADING_ENABLED`.
 Neither flag submits a command or bypasses execution gates.
 
-The app requires an exact EA `expert_version` match (`1.009` for this build)
+The app requires an exact EA `expert_version` match (`1.010` for this build)
 and an exact `tick_reader_version` match (`1.001`), the version of the
 `BetterChartsTickHistoryReader` indicator. Both expected versions live in
 `config/mq5-versions.json`; regression guards check that the EA's
@@ -652,7 +652,8 @@ For each present exit, minimum distance is strictly greater than
   "balance": "10000.00", "equity": "10000.00", "profit": "0.00", "margin": "120.00",
   "free_margin": "9880.00", "margin_level": "8333.33", "comment": "Request validated",
   "checked_at_ms": 1770000001805, "time_in_force": "gtc", "limit_price": null,
-  "margin_at_fill": "120.00", "account_margin_used": "250.00", "account_free_margin": "9750.00"
+  "margin_at_fill": "120.00", "account_margin_used": "250.00", "account_free_margin": "9750.00",
+  "account_equity": "10000.00"
 }
 ```
 
@@ -664,11 +665,14 @@ at the order's fill price in account currency: `check_price` for market,
 nonnegative and prices the order in isolation, so existing positions
 (hedging offsets, netting) are ignored and the figure is an estimate.
 `account_margin_used` (`ACCOUNT_MARGIN`, nonnegative) and `account_free_margin`
-(`ACCOUNT_MARGIN_FREE`, signed) are sampled in the same call. The pre-existing
-`margin`, `free_margin` and `margin_level` fields keep the `OrderCheck` result
-semantics and are not used for the projection.
+(`ACCOUNT_MARGIN_FREE`, signed) are sampled in the same call, as is
+`account_equity` (`ACCOUNT_EQUITY`, signed; EA 1.010+). The pre-existing
+`balance`, `equity`, `margin`, `free_margin` and `margin_level` fields keep the
+`MqlTradeCheckResult` semantics and are not used for the projection: MT5 fills
+them only when the request was evaluated and leaves them 0 otherwise (for
+example retcode 10027, AutoTrading disabled), so a 0 there is not a real value.
 
-The app derives, for display only, from `equity` of this result and the three
+The app derives, for display only, from `account_equity` and the three
 fields above: `freeMarginAfterFill = account_free_margin - margin_at_fill` and
 `marginLevelAfterFill = equity / (account_margin_used + margin_at_fill) * 100`
 (2 decimals; `null` when the denominator is not positive or an input is

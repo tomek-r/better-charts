@@ -55,6 +55,7 @@ pub(super) fn order_check_result_for_test() -> OrderCheckResult {
         margin_at_fill: None,
         account_margin_used: None,
         account_free_margin: None,
+        account_equity: None,
     }
 }
 

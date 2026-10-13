@@ -939,6 +939,7 @@ fn order_check_result_for_test() -> OrderCheckResult {
         margin_at_fill: None,
         account_margin_used: None,
         account_free_margin: None,
+        account_equity: None,
     }
 }
 
@@ -1165,6 +1166,7 @@ fn order_check_result_margin_at_fill_fields_are_optional_decimals() {
             "margin_at_fill",
             "account_margin_used",
             "account_free_margin",
+            "account_equity",
         ] {
             object.remove(field);
         }
@@ -1174,12 +1176,14 @@ fn order_check_result_margin_at_fill_fields_are_optional_decimals() {
     assert_eq!(parsed.margin_at_fill, None);
     assert_eq!(parsed.account_margin_used, None);
     assert_eq!(parsed.account_free_margin, None);
+    assert_eq!(parsed.account_equity, None);
     parsed.validate(&request).unwrap();
 
     let reported = OrderCheckResult {
         margin_at_fill: Some("0".into()),
         account_margin_used: Some("250.50".into()),
         account_free_margin: Some("-12.5".into()),
+        account_equity: Some("5301.42".into()),
         ..order_check_result_for_test()
     };
     reported.validate(&request).unwrap();
@@ -1205,6 +1209,10 @@ fn order_check_result_margin_at_fill_fields_are_optional_decimals() {
         },
         OrderCheckResult {
             account_free_margin: Some("NaN".into()),
+            ..reported.clone()
+        },
+        OrderCheckResult {
+            account_equity: Some("NaN".into()),
             ..reported.clone()
         },
     ] {

@@ -153,6 +153,29 @@ test('money mode shows the thresholds as account-currency amounts', async ({ pag
   expectNoErrors(collected);
 });
 
+test('a check MT5 did not evaluate (retcode 10027, zeroed result) shows no stop-out warning', async ({ page }) => {
+  const { card, collected } = await reviewCard(page, {
+    orderCheckResult: {
+      checkPassed: false,
+      retcode: 10027,
+      equity: '0.00',
+      marginLevel: '0',
+      comment: 'AutoTrading disabled by client',
+      // Projection from the account sample, as the Rust boundary derives it.
+      marginAtFill: '1455.58',
+      freeMarginAfterFill: '3845.84',
+      marginLevelAfterFill: '364.21',
+      marginRisk: 'ok',
+    },
+  });
+  await expect(cell(card, 'Margin level after fill')).toHaveText('Margin level after fill364.21%');
+  await expect(cell(card, 'Margin level after fill').locator('b')).not.toHaveClass(/margin-risk/);
+  await expect(cell(card, 'Free margin after fill').locator('b')).not.toHaveClass(/margin-risk/);
+  await expect(card).not.toContainText('Below stop out');
+  await expect(card.getByRole('status')).toHaveCount(0);
+  expectNoErrors(collected);
+});
+
 test('unknown projection and thresholds render as dashes, never zero', async ({ page }) => {
   const { card, collected } = await reviewCard(page, {
     accountOverrides: {
