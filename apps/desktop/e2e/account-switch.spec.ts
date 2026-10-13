@@ -102,9 +102,7 @@ test('the dialog warns when algo trading is disabled and updates live once it is
   await openTradePanel(page);
   await switchAccount(page, NEW_ACCOUNT, false);
   const status = switchedDialog(page, 'Account was switched to Real 70001234').getByRole('status');
-  await expect(status).toHaveText(
-    "Algo trading is disabled in MT5 — orders can't be sent. Turn on Algo Trading in MT5.",
-  );
+  await expect(status).toHaveText('Turn on Algo Trading in MT5 in order to send orders');
   await expect(status).toHaveAttribute('data-algo-trading', 'disabled');
   await expect(status.locator('svg')).toHaveAttribute('data-algo-icon', 'warning');
 
