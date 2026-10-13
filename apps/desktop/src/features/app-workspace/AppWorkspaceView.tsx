@@ -8,6 +8,7 @@ import { DrawingToolsView } from '../tools/DrawingToolsView';
 import { ExecutionProvider } from '../execution/ExecutionProvider';
 import { OrderTicketPanel } from '../order-ticket/OrderTicketPanel';
 import { OrderTicketProvider } from '../order-ticket/OrderTicketProvider';
+import { SymbolChangeTicketReset } from '../order-ticket/SymbolChangeTicketReset';
 import { SymbolSearchProvider } from '../symbol-search/SymbolSearchProvider';
 import { SymbolSearchView } from '../symbol-search/SymbolSearchView';
 
@@ -27,6 +28,7 @@ export function AppWorkspaceView() {
               <OrderTicketPanel />
               <AppLifecycle />
               <AccountSwitchGuard />
+              <SymbolChangeTicketReset />
             </OrderTicketProvider>
           </main>
         </ExecutionProvider>

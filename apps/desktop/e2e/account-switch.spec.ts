@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openTradePanel } from './helpers/panel';
+import { stagedState } from './helpers/stagedWidget';
 import {
   expectNoErrors,
   gotoWithStub,
@@ -50,14 +51,6 @@ async function switchAccount(
     candles: windowCandles(10),
   });
   await pushEvent(page, 'account-snapshot', account);
-}
-
-async function stagedState(page: Page): Promise<boolean | undefined> {
-  return page.evaluate(() => {
-    const api = (window as unknown as { __stagedWidgetTest?: { geometry(): { staged: boolean } | null } })
-      .__stagedWidgetTest;
-    return api?.geometry()?.staged;
-  });
 }
 
 async function stageWithStopLoss(page: Page): Promise<void> {
