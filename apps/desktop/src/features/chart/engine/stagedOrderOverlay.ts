@@ -189,7 +189,7 @@ function paintBandText(
     w,
     h: BAND_TEXT_HEIGHT,
   };
-  ctx.fillStyle = held ? palette.warnText : palette.muted;
+  ctx.fillStyle = held ? palette.warnText : palette.textLabel;
   ctx.textAlign = 'left';
   ctx.fillText(text, box.x, centerY + 0.5);
   return box;
