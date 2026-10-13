@@ -32,7 +32,7 @@
 .account-switch-info {
   display: grid;
   gap: 6px;
-  margin: -8px 0 16px;
+  margin: 0 0 20px;
   font-size: 13px;
 }
 
@@ -72,9 +72,17 @@
   color: var(--color-warn-text);
 }
 
+/* Full-width divider above the actions, like the settings dialog footer. */
+.account-switch-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 -24px -22px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border-dialog);
+}
+
 .account-switch-dismiss {
   display: block;
-  margin-left: auto;
   padding: 10px 20px;
   border: 1px solid var(--color-accent);
   border-radius: var(--border-radius);

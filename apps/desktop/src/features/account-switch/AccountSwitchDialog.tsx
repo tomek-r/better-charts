@@ -124,9 +124,11 @@ export function AccountSwitchDialog({
           <AlgoTradingIcon enabled={tradingEnabled} />
           {tradingEnabled ? 'Algo trading is enabled' : 'Turn on Algo Trading in MT5 in order to send orders'}
         </p>
-        <button ref={dismiss} type="button" className="account-switch-dismiss" onClick={onDismiss}>
-          Dismiss
-        </button>
+        <div className="account-switch-footer">
+          <button ref={dismiss} type="button" className="account-switch-dismiss" onClick={onDismiss}>
+            Dismiss
+          </button>
+        </div>
       </div>
     </div>
   );
