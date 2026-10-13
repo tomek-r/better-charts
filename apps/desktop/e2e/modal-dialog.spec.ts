@@ -46,8 +46,12 @@ test('the scrollable layout keeps header and footer fixed, shows the close butto
   const submit = dialog.getByRole('button', { name: 'Submit' });
   await expect(close).toBeFocused();
   await expect(dialog.getByText('Footer note text')).toBeVisible();
-  // The entrance animation scales the panel, so wait for it to settle.
-  await expect.poll(async () => Math.round((await dialog.boundingBox())?.height ?? 0)).toBe(300);
+  // The entrance animation scales the panel; a rounded size can match before it ends (slow CI
+  // runners measured 99.99% scale), so wait for the animations themselves to finish.
+  await dialog.evaluate((element) =>
+    Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+  );
+  expect(Math.round((await dialog.boundingBox())?.height ?? 0)).toBe(300);
 
   const scroller = dialog.getByTestId('scroller');
   expect(await scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
