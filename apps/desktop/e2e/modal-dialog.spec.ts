@@ -1,15 +1,19 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { gotoWithStub } from './helpers/tauriStub';
 
-test('the generic modal traps Tab and Shift+Tab, dismisses on Escape and restores focus', async ({ page }) => {
+/** Loads the app page, mounts a harness from the helper module and returns its opener. */
+async function mountHarness(page: Page, mount: 'mountModalDialogHarness' | 'mountScrollableModalHarness') {
   await gotoWithStub(page);
-  await page.evaluate(async () => {
+  await page.evaluate(async (name) => {
     const harnessPath = '/e2e/helpers/modalDialogHarness.tsx';
     const harness = await import(/* @vite-ignore */ harnessPath);
-    harness.mountModalDialogHarness();
-  });
+    harness[name]();
+  }, mount);
+  return page.getByTestId('open-modal');
+}
 
-  const opener = page.getByTestId('open-modal');
+test('the generic modal traps Tab and Shift+Tab, dismisses on Escape and restores focus', async ({ page }) => {
+  const opener = await mountHarness(page, 'mountModalDialogHarness');
   await opener.focus();
   await page.keyboard.press('Enter');
 
@@ -29,4 +33,55 @@ test('the generic modal traps Tab and Shift+Tab, dismisses on Escape and restore
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(opener).toBeFocused();
+});
+
+test('the scrollable layout keeps header and footer fixed, shows the close button and footer note', async ({
+  page,
+}) => {
+  const opener = await mountHarness(page, 'mountScrollableModalHarness');
+  await opener.click();
+
+  const dialog = page.getByRole('dialog', { name: 'Scrollable modal' });
+  const close = dialog.getByRole('button', { name: 'Close scrollable' });
+  const submit = dialog.getByRole('button', { name: 'Submit' });
+  await expect(close).toBeFocused();
+  await expect(dialog.getByText('Footer note text')).toBeVisible();
+  // The entrance animation scales the panel, so wait for it to settle.
+  await expect.poll(async () => Math.round((await dialog.boundingBox())?.height ?? 0)).toBe(300);
+
+  const scroller = dialog.getByTestId('scroller');
+  expect(await scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const before = [await close.boundingBox(), await submit.boundingBox()];
+  await scroller.evaluate((element) => {
+    element.scrollTop = 500;
+  });
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect([await close.boundingBox(), await submit.boundingBox()]).toEqual(before);
+  await expect(close).toBeInViewport();
+  await expect(submit).toBeInViewport();
+
+  await close.click();
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+});
+
+test('keys typed inside the modal reach its own handlers while chart shortcuts stay blocked', async ({ page }) => {
+  const opener = await mountHarness(page, 'mountScrollableModalHarness');
+  await opener.click();
+
+  const dialog = page.getByRole('dialog', { name: 'Scrollable modal' });
+  const input = dialog.getByLabel('Probe input');
+  await input.click();
+  await page.keyboard.type('ab');
+  await expect(input).toHaveValue('ab');
+  await page.keyboard.press('Control+k');
+  await expect(page.getByRole('dialog', { name: 'Search symbols' })).toBeHidden();
+  await page.keyboard.press('Enter');
+
+  const seen = await page.evaluate(() => {
+    const recorder = window as unknown as { __modalKeys: string[]; __modalSubmits: number };
+    return { keys: recorder.__modalKeys, submits: recorder.__modalSubmits };
+  });
+  expect(seen.keys).toEqual(['a', 'b', 'Control', 'k', 'Enter']);
+  expect(seen.submits).toBe(1);
 });

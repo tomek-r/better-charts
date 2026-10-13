@@ -1,4 +1,4 @@
-/* Generic modal dialog, spacing matched to the settings dialog. */
+/* Generic modal dialog. `.scrollable` is the fixed header/footer layout with a filling body. */
 
 .modal-dialog-backdrop {
   position: fixed;
@@ -25,21 +25,44 @@
   outline: none;
 }
 
-.modal-dialog-title {
+.modal-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 0 0 20px;
+}
+
+.modal-dialog-title {
+  margin: 0;
   color: var(--color-text-bright);
   font-size: 18px;
   font-weight: 500;
 }
 
+.modal-dialog-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 32px;
+  line-height: 1;
+}
+
 /* Full-width divider above the actions, like the settings dialog footer. */
 .modal-dialog-footer {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 14px;
   margin: 0 -28px -24px;
   padding: 20px 28px;
   border-top: 1px solid var(--color-border-dialog);
+}
+
+.modal-dialog-footer-note {
+  margin: 0 auto 0 0;
+  font-size: 11px;
+  color: var(--color-muted-strong);
 }
 
 .modal-dialog-button {
@@ -62,19 +85,141 @@
   color: var(--color-accent);
 }
 
-.modal-dialog-button:disabled {
+.modal-dialog button:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-.modal-dialog-button:focus-visible {
+.modal-dialog :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
+/* ── Scrollable layout ──────────────────────────────────────────────── */
+
+/* The panel is the positioning context of a dialog nested in the body. */
+.modal-dialog.scrollable {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+}
+
+.scrollable .modal-dialog-header {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--color-border-dialog);
+}
+
+.scrollable .modal-dialog-title {
+  color: inherit;
+  font-size: 25px;
+}
+
+.modal-dialog-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.modal-dialog-body {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.scrollable .modal-dialog-footer {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .modal-dialog-backdrop.scrollable {
+    padding: 10px;
+  }
+
+  .modal-dialog.scrollable {
+    max-height: calc(100dvh - 20px);
+  }
+
+  .scrollable .modal-dialog-header {
+    padding: 18px;
+  }
+
+  .scrollable .modal-dialog-title {
+    font-size: 21px;
+  }
+
+  .scrollable .modal-dialog-footer {
+    padding: 16px 18px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .modal-dialog-footer-note {
+    width: 100%;
+  }
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────── */
+
+.modal-dialog-backdrop.is-closing {
+  animation: settings-fade-out 180ms ease-in forwards;
+}
+
+.modal-dialog-backdrop.is-closing .modal-dialog {
+  animation: settings-panel-out 180ms ease-in forwards;
+}
+
+@keyframes settings-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes settings-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes settings-panel-in {
+  from {
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes settings-panel-out {
+  from {
+    transform: translateY(0) scale(1);
+  }
+  to {
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .modal-dialog-backdrop,
-  .modal-dialog {
+  .modal-dialog,
+  .modal-dialog-backdrop.is-closing,
+  .modal-dialog-backdrop.is-closing .modal-dialog {
     animation: none;
   }
 }
