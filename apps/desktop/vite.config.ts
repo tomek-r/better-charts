@@ -3,6 +3,7 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import babel from '@rolldown/plugin-babel';
 import { checker } from 'vite-plugin-checker';
 import pkg from './package.json' with { type: 'json' };
+import { palettePlugin } from './vite/paletteCss.ts';
 
 // Cross-language pair: `window_title` in `src-tauri/src/lib.rs` formats the
 // native window title the same way.
@@ -15,6 +16,8 @@ export default defineConfig({
       name: 'app-title',
       transformIndexHtml: (html) => html.replace(/<title>[^<]*<\/title>/, `<title>${appTitle(pkg.version)}</title>`),
     },
+    // `virtual:palette.css`: the colour custom properties, from palette.ts.
+    palettePlugin(),
     react(),
     // React Compiler: auto-memoise components and hooks so a re-render can
     // skip a subtree whose inputs are unchanged. React 19 needs no runtime

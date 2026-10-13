@@ -123,7 +123,7 @@ export class BarSeriesController {
     return {
       time: bar.time as UTCTimestamp,
       value: bar.volume,
-      color: bar.close >= bar.open ? palette.upWash : palette.sellWash,
+      color: bar.close >= bar.open ? palette.upWash : palette.sellWashStrong,
     };
   }
 }
