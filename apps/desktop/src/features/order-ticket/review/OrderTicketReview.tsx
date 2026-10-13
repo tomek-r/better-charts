@@ -1,16 +1,27 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { type Dispatch, type SetStateAction } from 'react';
 import type { AccountSnapshot, OrderCheckResult, RiskSide } from '../../../shared/bridge/types';
-import { OrderCheckResult as OrderCheckResultView } from './OrderCheckResult';
+import type { PassedStopEntryGuidance } from '../domain/passedStopEntry';
+import { OrderCheckResult as OrderCheckResultView, type LocalOrderFigures } from './OrderCheckResult';
+
+function sendButtonLabel(submitting: boolean, checking: boolean): string {
+  if (submitting) {
+    return 'Sending…';
+  }
+  return checking ? 'Checking with MT5…' : 'Send order';
+}
 
 export function OrderTicketReview({
   account,
   canSubmitOrder,
   effectiveVolume,
+  localFigures,
+  moveStopEntry,
   orderCheck,
   orderCheckError,
   orderCheckLoading,
   orderKindDisplay,
+  passedStopEntry,
   ticketBlockedReason,
   riskSide,
   setTicketStage,
@@ -23,10 +34,13 @@ export function OrderTicketReview({
     | undefined;
   canSubmitOrder: boolean;
   effectiveVolume: string;
+  localFigures: LocalOrderFigures;
+  moveStopEntry: (suggestedEntry: string) => void;
   orderCheck: OrderCheckResult | undefined;
   orderCheckError: string | undefined;
   orderCheckLoading: boolean;
   orderKindDisplay: string;
+  passedStopEntry: PassedStopEntryGuidance | undefined;
   ticketBlockedReason: string | undefined;
   riskSide: RiskSide;
   setTicketStage: Dispatch<SetStateAction<'edit' | 'review'>>;
@@ -34,6 +48,10 @@ export function OrderTicketReview({
   submitStatus: { kind: 'locked' | 'error'; text: string } | undefined;
   submittingSide: RiskSide | undefined;
 }) {
+  const submitting = submittingSide !== undefined;
+  const checking = orderCheckLoading && !orderCheck && !orderCheckError;
+  const blockedReasonShown =
+    !submitStatus && orderCheck && !orderCheckError && !orderCheckLoading && !canSubmitOrder && orderCheck.checkPassed;
   return (
     <>
       <div className="ticket-review-head">
@@ -42,8 +60,7 @@ export function OrderTicketReview({
           {riskSide === 'buy' ? 'Buy' : 'Sell'} · {orderKindDisplay} · {effectiveVolume || '—'}
         </span>
       </div>
-      {orderCheckLoading && !orderCheck && !orderCheckError && <p className="search-hint">Checking with MT5…</p>}
-      {orderCheck && <OrderCheckResultView orderCheck={orderCheck} account={account} />}
+      <OrderCheckResultView orderCheck={orderCheck} local={localFigures} account={account} />
       {orderCheck && orderCheck.checkPassed === false && (
         <ErrorNotification
           message={
@@ -53,24 +70,22 @@ export function OrderTicketReview({
           }
         />
       )}
-      {!submitStatus &&
-        orderCheck &&
-        !orderCheckError &&
-        !orderCheckLoading &&
-        !canSubmitOrder &&
-        orderCheck.checkPassed && (
-          <p className="ticket-blocked-reason" role="status">
-            {ticketBlockedReason}
-          </p>
-        )}
+      {passedStopEntry && (
+        <ErrorNotification
+          message={passedStopEntry.message}
+          action={{ label: passedStopEntry.actionLabel, run: () => moveStopEntry(passedStopEntry.suggestedEntry) }}
+        />
+      )}
+      {/* Reasons reach the user as notifications; the card carries no text above Send. */}
+      {blockedReasonShown && <ErrorNotification message={ticketBlockedReason} />}
       <div className="ticket-review-actions">
         <button
           className={`ticket-cta side-${riskSide} send`}
-          disabled={!canSubmitOrder || submittingSide !== undefined}
-          aria-busy={submittingSide !== undefined}
+          disabled={!canSubmitOrder || submitting}
+          aria-busy={submitting || checking}
           onClick={() => void submitOrder(riskSide)}
         >
-          {submittingSide !== undefined ? 'Sending…' : 'Send order'}
+          {sendButtonLabel(submitting, checking)}
         </button>
         <button className="ticket-back" onClick={() => setTicketStage('edit')}>
           Cancel

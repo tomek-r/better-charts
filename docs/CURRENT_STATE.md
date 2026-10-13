@@ -103,6 +103,17 @@ Not implemented: break even, multiple charts or Pine Script execution.
   The review card shows margin at fill, free margin after fill and margin level after fill
   (an estimate: the order is priced alone, ignoring open positions) plus the broker's
   margin-call and stop-out levels; below either level it warns in red but never blocks Send.
+  Review shows no inline messages above Send; reasons appear as notifications, and the
+  checking state shows in the (disabled) Send button as "Checking with MT5…".
+  The review data block is always shown with stable rows: the ticket's own entry, SL/TP
+  and units, and "—" for figures only MT5 OrderCheck can supply (used price, margin
+  figures, check time) while loading, blocked or failed.
+  When the market reaches a Stop / Stop Limit trigger (EA `INVALID_PRICE`), Send stays
+  blocked and one notification names the live price ("Price moved past your stop entry
+  (Ask …). Move the entry above Ask or switch to Market."; sell: Bid/below) with a
+  "Move entry above Ask" / "below Bid" action. The action sets the trigger beyond that
+  price by the stops level (at least one tick, on the tick grid), leaves review and
+  waits for the user to start a fresh check; SL/TP and sending are never touched automatically.
   SL/TP and pending-entry drags use the execution guard; Shift+drag moves all levels.
 
 Check corresponding E2E regressions before changing these decisions.

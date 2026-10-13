@@ -5,6 +5,7 @@ import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { OrderTicketInputs } from './orderTicketInputs';
 import type { OrderTicketStores } from './orderTicketStores';
 import { buildTicketDerivationInput } from '../domain/ticketDerivation';
+import { passedStopEntryGuidance } from '../domain/passedStopEntry';
 import { withoutStopLossTooClose } from '../domain/ticketRules';
 import { useErrorNotification } from '../../../shared/ui/ErrorNotifications';
 
@@ -81,7 +82,16 @@ export function useOrderTicketBrokerActions(
   } = derived;
 
   useErrorNotification(withoutStopLossTooClose(broker.riskError));
-  useErrorNotification(withoutStopLossTooClose(broker.orderCheckError));
+  // The review notification carries the specific "price moved past your stop entry" guidance and its action.
+  const passedStopEntry = passedStopEntryGuidance({
+    orderCheckError: broker.orderCheckError,
+    orderKind,
+    side: riskSide,
+    entry: draft.entry,
+    quote,
+    instrument,
+  });
+  useErrorNotification(passedStopEntry ? undefined : withoutStopLossTooClose(broker.orderCheckError));
   useErrorNotification(broker.submitStatus?.text);
 
   const requestOrderCheck = useEventCallback(async () => {

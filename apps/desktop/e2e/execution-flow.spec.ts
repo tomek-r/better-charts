@@ -406,7 +406,8 @@ test('review times out safely and ignores a late broker check', async ({ page })
   await expect(page.locator('.notification-region [role=alert]')).toContainText('OrderCheck timed out');
   await expect(page.locator('.ticket-cta.send')).toBeDisabled();
   await page.clock.runFor(5_000);
-  await expect(page.locator('.order-check-result')).toHaveCount(0);
+  // The late result never lands: broker-only figures stay placeholders.
+  await expect(page.getByLabel('MT5 OrderCheck result')).toContainText('Margin at fill—');
   await expect(page.locator('.ticket-cta.send')).toBeDisabled();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator('.ticket-cta')).toBeEnabled();
@@ -441,7 +442,7 @@ test('submit sends the accepted draft', async ({ page }) => {
   await expect(page.getByLabel('Take profit enabled')).not.toBeChecked();
   await expect(page.locator('.units-row .ticket-value')).toHaveValue('1');
   await expect(page.locator('.command-status')).toHaveCount(0);
-  await expect(page.locator('.ticket-blocked-reason')).toHaveCount(0);
+  await expect(page.locator('.notification-region [role=alert]')).toHaveCount(0);
   expectClean(collected);
 });
 
@@ -534,9 +535,10 @@ test('closed market session blocks submission and explains why', async ({ page }
   // reason names the closed session instead of a stale generic gate.
   const send = page.locator('.ticket-cta.send');
   await expect(send).toBeDisabled();
-  await expect(page.locator('.ticket-blocked-reason')).toHaveText(
+  await expect(page.locator('.notification-region [role=alert]')).toHaveText(
     'Market is closed for this symbol — trading resumes when the session opens.',
   );
+  await expect(page.locator('section.order-ticket')).not.toContainText('Market is closed');
   expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
   expectClean(collected);
 });
