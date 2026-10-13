@@ -139,7 +139,7 @@ pub enum OrderKind {
     Limit,
     Stop,
     /// MT5 `ORDER_TYPE_STOP_LIMIT`: `entry` carries the stop trigger price,
-    /// `limit_price` the resting limit price placed once the trigger fires.
+    /// `limit_price` the resting limit price placed once the trigger is reached.
     StopLimit,
 }
 

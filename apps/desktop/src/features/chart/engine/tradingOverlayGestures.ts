@@ -368,7 +368,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
   };
   // ✕ chip = click semantics: dispatch only on release of a still press
   // (within CHIP_CLICK_SLOP). A press-drag starting on the chip abandons —
-  // closing a position is too destructive to fire from a pan attempt.
+  // closing a position is too destructive to run from a pan attempt.
   const finishChip = (event: { pointerId?: number }, dispatch: boolean) => {
     const current = chipPress;
     if (!current) {

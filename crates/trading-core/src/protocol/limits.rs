@@ -133,6 +133,32 @@ mod tests {
         assert!(history_bars() >= 1);
     }
 
+    /// `initialHistorySyncTimeoutMs` is read by the frontend (its wait notice
+    /// counts down to it) and mirrored by the EA, which cannot read the file;
+    /// the desktop backend only relays the EA's answer.
+    fn initial_history_sync_timeout_ms() -> u64 {
+        let config: serde_json::Value = serde_json::from_str(CONFIG).expect("valid config");
+        config["initialHistorySyncTimeoutMs"]
+            .as_u64()
+            .expect("config/bridge.json initialHistorySyncTimeoutMs must be a whole number")
+    }
+
+    #[test]
+    fn ea_waits_exactly_as_long_as_the_shared_sync_timeout() {
+        let ea = include_str!("../../../../mql5/bridge/Experts/BetterChartsBridge.mq5");
+        assert!(ea.contains(&format!(
+            "#define BRIDGE_INITIAL_HISTORY_SYNC_TIMEOUT_MS {}\n",
+            initial_history_sync_timeout_ms()
+        )));
+    }
+
+    #[test]
+    fn sync_timeout_leaves_the_frontend_a_countdown_window() {
+        // The wait notice appears for the last 5 s, so a shorter deadline
+        // would show it from the first moment.
+        assert!(initial_history_sync_timeout_ms() > 5_000);
+    }
+
     #[test]
     fn initial_history_window_fits_inside_the_request_bound() {
         assert!(initial_history_bars() >= 1);

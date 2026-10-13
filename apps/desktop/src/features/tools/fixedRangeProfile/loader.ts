@@ -127,7 +127,7 @@ export class FixedRangeProfileLoader {
 
   // Trailing throttle: a range being refreshed changes on every tick, so refreshes coalesce into one request per
   // interval. Always deferred so symbol-change effects run first. The range the chart reported last is remembered;
-  // at fire time the chain ends unless the chart still holds that very range (its final refresh arrives after a bar passed the range end), so a deleted or re-placed range is dropped.
+  // when it runs the chain ends unless the chart still holds that very range (its final refresh arrives after a bar passed the range end), so a deleted or re-placed range is dropped.
   requestThrottledRefresh(reported: FixedRangeProfileRange): void {
     this.refreshRange = reported;
     if (this.refreshTimer !== undefined) {

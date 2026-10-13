@@ -173,6 +173,12 @@ pub struct OrderCheckResult {
     /// `ACCOUNT_MARGIN_FREE` sampled with the check; `null`/absent when unknown.
     #[serde(default)]
     pub account_free_margin: Option<String>,
+    /// `ACCOUNT_EQUITY` sampled with the check; `null`/absent when unknown.
+    /// The result's own `equity` is the post-deal figure MT5 fills only when
+    /// the check was evaluated (zero on e.g. retcode 10027), so it must not
+    /// feed the margin projection.
+    #[serde(default)]
+    pub account_equity: Option<String>,
 }
 
 impl OrderCheckResult {
@@ -213,8 +219,11 @@ impl OrderCheckResult {
             }
         }
         // Free margin can be negative on an exhausted account.
-        if let Some(free_margin) = &self.account_free_margin {
-            order_decimal(free_margin, false)?;
+        for signed_amount in [&self.account_free_margin, &self.account_equity]
+            .into_iter()
+            .flatten()
+        {
+            order_decimal(signed_amount, false)?;
         }
         Ok(())
     }

@@ -16,7 +16,10 @@ export function clampRiskPercentInput(value: string): string {
 
 export type OrderRiskBasis = {
   riskMode: 'money' | 'equity';
+  /** Display budget, rounded to the currency digits in percent mode. */
   effectiveRiskAmount: string;
+  /** Unrounded budget for sizing-derived guides such as the SL band. */
+  sizingRiskAmount: string;
   equityValue: number | undefined;
   riskModeHint: string | undefined;
 };
@@ -43,7 +46,7 @@ export function deriveOrderRiskBasis({
   const equityValue = Number.isFinite(parsedEquity) && parsedEquity > 0 ? parsedEquity : undefined;
   const parsedRisk = Number(riskAmount);
   // Display hint only: native sizing receives the raw percentage and uses Decimal.
-  const percentRiskAmount =
+  const percentRiskValue =
     riskMode === 'equity' &&
     equityValue !== undefined &&
     equityAllocationIssue(equityAllocationPercent) === undefined &&
@@ -51,16 +54,19 @@ export function deriveOrderRiskBasis({
     Number.isFinite(parsedRisk) &&
     parsedRisk > 0 &&
     parsedRisk <= MAX_RISK_PERCENT
-      ? ((parsedRisk / 100) * equityValue * (Number(equityAllocationPercent) / 100)).toFixed(
-          currencyFractionDigits(currencyDigits),
-        )
-      : '';
+      ? (parsedRisk / 100) * equityValue * (Number(equityAllocationPercent) / 100)
+      : undefined;
+  const percentRiskAmount = percentRiskValue?.toFixed(currencyFractionDigits(currencyDigits)) ?? '';
   const effectiveRiskAmount = riskMode === 'money' ? riskAmount : percentRiskAmount;
+  // Rounding the display estimate can round the budget up (3.7488 -> 3.75); the band must use the unrounded
+  // budget the native sizing receives, otherwise its far edge lies beyond the last affordable SL.
+  const percentSizingAmount = percentRiskValue === undefined ? '' : String(percentRiskValue);
+  const sizingRiskAmount = riskMode === 'money' ? riskAmount : percentSizingAmount;
   let riskModeHint: string | undefined;
   if (riskMode === 'equity' && equityValue === undefined) {
     riskModeHint = stagedOnChart ? 'Account data required' : undefined;
   } else if (riskMode === 'equity' && percentRiskAmount) {
     riskModeHint = `≈ ${percentRiskAmount} ${currency ?? ''}`.trimEnd();
   }
-  return { riskMode, effectiveRiskAmount, equityValue, riskModeHint };
+  return { riskMode, effectiveRiskAmount, sizingRiskAmount, equityValue, riskModeHint };
 }

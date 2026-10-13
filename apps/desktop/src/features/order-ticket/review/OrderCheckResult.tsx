@@ -27,34 +27,48 @@ function Cell({ label, value, riskClass }: { label: string; value: ReactNode; ri
   );
 }
 
-/** MT5 OrderCheck result panel shown in the ticket's review stage. */
+/** What the ticket itself holds; shown until (or instead of) the broker's echo, never as a broker value. */
+export type LocalOrderFigures = {
+  entry: string | null;
+  stopLoss: string | null;
+  takeProfit: string | null;
+  volume: string;
+};
+
+/**
+ * Order data block of the review stage. It always renders the same rows: the OrderCheck figures
+ * when a result exists, the ticket's own prices and units otherwise, and "—" for what only MT5 can answer.
+ */
 export function OrderCheckResult({
   orderCheck,
+  local,
   account,
 }: {
-  orderCheck: OrderCheckResultModel;
+  orderCheck: OrderCheckResultModel | undefined;
+  local: LocalOrderFigures;
   account: ReviewAccount | undefined;
 }) {
   const money = (value: string | null | undefined) => formatAccountMoney(value, account) ?? '—';
-  const levelAfterFill = finiteNumber(orderCheck.marginLevelAfterFill);
+  const levelAfterFill = finiteNumber(orderCheck?.marginLevelAfterFill);
   const levelText = levelAfterFill === undefined ? '—' : `${levelAfterFill.toFixed(2)}%`;
   const threshold = (value: string | null | undefined) => formatMarginThreshold(value, account) ?? '—';
-  const risk = orderCheck.marginRisk ?? 'unknown';
-  const warning = MARGIN_WARNING[risk];
+  const warning = MARGIN_WARNING[orderCheck?.marginRisk ?? 'unknown'];
   const riskClass = warning?.className;
+  const stopLoss = orderCheck ? orderCheck.stopLoss : local.stopLoss;
+  const takeProfit = orderCheck ? orderCheck.takeProfit : local.takeProfit;
   return (
     <div className="order-check-result" aria-label="MT5 OrderCheck result">
-      {orderCheck.checkPassed && orderCheck.lastError !== 0 && (
+      {orderCheck?.checkPassed && orderCheck.lastError !== 0 && (
         <ErrorNotification message={`Last error code ${orderCheck.lastError}`} />
       )}
       <div className="order-check-grid">
-        <Cell label="Used price" value={formatOrderMetric(orderCheck.checkPrice)} />
-        <Cell label="Requested entry" value={formatOrderMetric(orderCheck.requestedEntry)} />
-        {orderCheck.stopLoss && <Cell label="Stop loss" value={formatOrderMetric(orderCheck.stopLoss)} />}
-        {orderCheck.takeProfit && <Cell label="Take profit" value={formatOrderMetric(orderCheck.takeProfit)} />}
-        <Cell label="Margin at fill" value={money(orderCheck.marginAtFill)} />
-        <Cell label="Free margin after fill" value={money(orderCheck.freeMarginAfterFill)} riskClass={riskClass} />
-        <Cell label="Units" value={formatOrderMetric(orderCheck.volume)} />
+        <Cell label="Used price" value={orderCheck ? formatOrderMetric(orderCheck.checkPrice) : '—'} />
+        <Cell label="Requested entry" value={formatOrderMetric(orderCheck ? orderCheck.requestedEntry : local.entry)} />
+        {stopLoss && <Cell label="Stop loss" value={formatOrderMetric(stopLoss)} />}
+        {takeProfit && <Cell label="Take profit" value={formatOrderMetric(takeProfit)} />}
+        <Cell label="Margin at fill" value={money(orderCheck?.marginAtFill)} />
+        <Cell label="Free margin after fill" value={money(orderCheck?.freeMarginAfterFill)} riskClass={riskClass} />
+        <Cell label="Units" value={formatOrderMetric(orderCheck ? orderCheck.volume : local.volume)} />
         <Cell label="Margin level after fill" value={levelText} riskClass={riskClass} />
       </div>
       <div className="order-check-margin-note">
@@ -67,7 +81,14 @@ export function OrderCheckResult({
           </strong>
         )}
       </div>
-      <small className="order-check-time">Checked {formatQuoted(orderCheck.checkedAtMs)}</small>
+      {/* Without a check the row stays as an invisible blank line so the card height does not jump on the result. */}
+      {orderCheck ? (
+        <small className="order-check-time">Checked {formatQuoted(orderCheck.checkedAtMs)}</small>
+      ) : (
+        <small className="order-check-time order-check-time-reserved" aria-hidden="true">
+          &nbsp;
+        </small>
+      )}
     </div>
   );
 }

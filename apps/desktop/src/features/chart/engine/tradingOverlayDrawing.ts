@@ -76,12 +76,12 @@ function drawChipFrame(ctx: CanvasRenderingContext2D, cx: number, cy: number, co
 
 export function drawCancelChip(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): TradingHitCircle {
   const hit = drawChipFrame(ctx, cx, cy, color);
-  const arm = 2.4;
+  const strokeHalfLength = 2.4;
   ctx.beginPath();
-  ctx.moveTo(cx - arm, cy - arm);
-  ctx.lineTo(cx + arm, cy + arm);
-  ctx.moveTo(cx + arm, cy - arm);
-  ctx.lineTo(cx - arm, cy + arm);
+  ctx.moveTo(cx - strokeHalfLength, cy - strokeHalfLength);
+  ctx.lineTo(cx + strokeHalfLength, cy + strokeHalfLength);
+  ctx.moveTo(cx + strokeHalfLength, cy - strokeHalfLength);
+  ctx.lineTo(cx - strokeHalfLength, cy + strokeHalfLength);
   ctx.stroke();
   ctx.lineCap = 'butt';
   return hit;

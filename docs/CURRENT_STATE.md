@@ -49,7 +49,7 @@ Not implemented: break even, multiple charts or Pine Script execution.
   dismissible bottom-right notifications with bright text, red borders and an error
   icon; messages start with a capital letter. Failed OrderCheck shows one broker
   rejection notice, without a separate last-error-code notice. Negative free margin preserves charts.
-- Arrow/Crosshair share a toolbar group; Escape closes the menu without disarming.
+- Arrow/Crosshair share a toolbar group; Escape closes the menu without deselecting the tool.
   Volume Profile is separate; boundaries drag, Delete/Backspace clears it,
   timeframe changes preserve selection and symbol changes clear it. The two
   clicks may come in either order (earlier time = start); the end may be dropped
@@ -65,6 +65,18 @@ Not implemented: break even, multiple charts or Pine Script execution.
   prefetched when idle. History paging preserves viewport; reconnecting resets to the latest history,
   while timeframe changes preserve bar spacing and right-edge pixel distance.
   Clicking the current portfolio symbol keeps the chart.
+- The EA (1.010) sends the initial history only after MT5 reports the series
+  synchronized, so stale cached bars never anchor the live feed. A synchronized
+  but shallow series is sent as is (`complete=false`). Waiting past 5 s shows
+  "Loading is taking longer than usual. Waiting N s. If no data arrives, switch
+  to another symbol." counting 5 to 1 toward the shared deadline
+  (`initialHistorySyncTimeoutMs`, 10 s, in `config/bridge.json`); a series that
+  never synchronizes ends with a correlated error, the non-fatal
+  `history-unavailable` event and "No data received for {symbol} {timeframe}.
+  Switch to another symbol or try again later." The notice and the "Loading
+  market data" message are centered on the window (a pointer-transparent fixed
+  layer), not on the chart frame. The session, reconciliation and
+  dispatch gates are untouched, and the app never retries on its own.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
   avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
 - Live P&L right-aligns within the widest amount observed per position, expanding
@@ -82,7 +94,8 @@ Not implemented: break even, multiple charts or Pine Script execution.
   Selecting a risk mode with an empty budget shows no risk validation notification;
   entering a value enables validation. Review still requires a valid stop and sizing.
   Below-minimum sizing reports that risk is too low for the minimum order size
-  at the current SL distance.
+  at the current SL distance. The Max SL guide and drag clamp use the unrounded
+  Risk % budget that native sizing receives, not the rounded "≈ amount" hint.
   Without metadata, the seed uses a quarter of the visible price span. If no valid
   stop fits, a notification asks for zooming out or a manual SL; the scale stays fixed.
 - Money/% SL drags resize volume from the cached broker quote using native Decimal
@@ -96,6 +109,17 @@ Not implemented: break even, multiple charts or Pine Script execution.
   The review card shows margin at fill, free margin after fill and margin level after fill
   (an estimate: the order is priced alone, ignoring open positions) plus the broker's
   margin-call and stop-out levels; below either level it warns in red but never blocks Send.
+  Review shows no inline messages above Send; reasons appear as notifications, and the
+  checking state shows in the (disabled) Send button as "Checking with MT5…".
+  The review data block is always shown with stable rows: the ticket's own entry, SL/TP
+  and units, and "—" for figures only MT5 OrderCheck can supply (used price, margin
+  figures) while loading, blocked or failed. The "Checked" time appears only once MT5
+  has returned a check result; until then its row is reserved but invisible.
+  When the market reaches a Stop / Stop Limit trigger (EA `INVALID_PRICE`), Send stays
+  blocked and one notification names the live price ("Price moved past your stop entry
+  (Ask …). Move the entry above Ask or switch to Market."; sell: Bid/below). The live
+  price updates in place without re-animating the notice. It is informational only (no
+  action button); the entry, SL/TP and sending are never touched automatically.
   SL/TP and pending-entry drags use the execution guard; Shift+drag moves all levels.
 
 Check corresponding E2E regressions before changing these decisions.

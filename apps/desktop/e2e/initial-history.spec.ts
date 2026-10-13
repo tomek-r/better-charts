@@ -22,7 +22,7 @@ const stubOptions = {
   olderHistoryBars: PAGE_BARS,
 };
 
-/** Loads the app with the idle prefetch parked: it is armed (one held callback) but no page was requested. */
+/** Loads the app with the idle prefetch parked: it is scheduled (one held callback) but no page was requested. */
 async function startWithPrefetchHeld(page: Page) {
   const idle = await holdIdleCallbacks(page);
   await gotoWithStub(page, stubOptions);
@@ -55,7 +55,7 @@ test('one older page is prefetched when idle, and not chained', async ({ page })
   const requests = await calls(page, 'request_history_page');
   expect(requests).toHaveLength(1);
   expect(requests[0].args).toMatchObject({ symbol: 'EURUSD', timeframe: 'M5', bars: HISTORY_BARS });
-  // The landed page arms no further idle work, and the view has no gap to page into.
+  // The landed page schedules no further idle work, and the view has no gap to page into.
   expect(await idle.held()).toBe(0);
   expect(await calls(page, 'request_history_page')).toHaveLength(1);
 });

@@ -29,7 +29,7 @@ export function useChartWorkspace() {
   // prices, the painter writes hit geometry (see features/chart/engine/priceLinesOverlay.ts).
   const priceLinesState = useRef<PriceLinesState>({ digits: 2, hit: {} });
   // The chart SL/TP drag handlers bind once at mount; they read this render's
-  // dispatch gate and auto-dispatch path through this ref (drag events fire only
+  // dispatch gate and auto-dispatch path through this ref (drag events arrive only
   // after a commit, so the stored closure always carries fresh state).
   const dragModifyRef = useRef<{ enabled: boolean; dispatch: (draft: PendingModification) => void } | undefined>(
     undefined,

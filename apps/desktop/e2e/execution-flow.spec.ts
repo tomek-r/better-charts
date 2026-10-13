@@ -28,7 +28,7 @@ function expectClean({ pageErrors, consoleErrors }: { pageErrors: string[]; cons
  * Entry is seeded deterministically from the stub quote (1.0850 ask) — the
  * market ticket's price row is disabled, mirroring TradingView. */
 async function fillRiskDraft(page: Page) {
-  // Stage first (owner flow: the CTA arms only for a staged order).
+  // Stage first (owner flow: the CTA is enabled only for a staged order).
   await page.locator('section.order-ticket .ticket-quote-side.buy').click();
   // Anchor on the connected bridge: the ticket-header DEMO badge needs the account snapshot.
   await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText('DEMO · 50123456');
@@ -81,7 +81,7 @@ interface StagedGeom {
   digits: number;
   offset: number | null;
   endAnchor: number | null;
-  followArmed: boolean | null;
+  followEnabled: boolean | null;
   askY: number | null;
   bidY: number | null;
 }
@@ -406,7 +406,8 @@ test('review times out safely and ignores a late broker check', async ({ page })
   await expect(page.locator('.notification-region [role=alert]')).toContainText('OrderCheck timed out');
   await expect(page.locator('.ticket-cta.send')).toBeDisabled();
   await page.clock.runFor(5_000);
-  await expect(page.locator('.order-check-result')).toHaveCount(0);
+  // The late result never lands: broker-only figures stay placeholders.
+  await expect(page.getByLabel('MT5 OrderCheck result')).toContainText('Margin at fill—');
   await expect(page.locator('.ticket-cta.send')).toBeDisabled();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator('.ticket-cta')).toBeEnabled();
@@ -441,7 +442,7 @@ test('submit sends the accepted draft', async ({ page }) => {
   await expect(page.getByLabel('Take profit enabled')).not.toBeChecked();
   await expect(page.locator('.units-row .ticket-value')).toHaveValue('1');
   await expect(page.locator('.command-status')).toHaveCount(0);
-  await expect(page.locator('.ticket-blocked-reason')).toHaveCount(0);
+  await expect(page.locator('.notification-region [role=alert]')).toHaveCount(0);
   expectClean(collected);
 });
 
@@ -534,9 +535,10 @@ test('closed market session blocks submission and explains why', async ({ page }
   // reason names the closed session instead of a stale generic gate.
   const send = page.locator('.ticket-cta.send');
   await expect(send).toBeDisabled();
-  await expect(page.locator('.ticket-blocked-reason')).toHaveText(
+  await expect(page.locator('.notification-region [role=alert]')).toHaveText(
     'Market is closed for this symbol — trading resumes when the session opens.',
   );
+  await expect(page.locator('section.order-ticket')).not.toContainText('Market is closed');
   expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
   expectClean(collected);
 });
@@ -632,7 +634,7 @@ test('portfolio shows positions only and dispatches close through the stubbed br
     accountLogin: '50123456',
     brokerServer: 'Broker-Demo',
   });
-  // Owner: pending orders never render — no Cancel action can fire from the list.
+  // Owner: pending orders never render — no Cancel action can run from the list.
   expect(await wasInvoked(page, 'cancel_order')).toBeUndefined();
   expectClean(collected);
 });
@@ -674,7 +676,7 @@ test('clicking a position row opens that symbol on the chart', async ({ page }) 
   await expect(page.locator('.chart-heading h1')).toHaveText('GBPUSD');
   await expect(page.locator('.chart-overlay')).toHaveCount(0);
   // The row body is the open action; Close is a separate button and must not
-  // have fired a close when the open area was clicked.
+  // have sent a close when the open area was clicked.
   expect(await wasInvoked(page, 'close_position')).toBeUndefined();
 });
 
@@ -1065,7 +1067,7 @@ test('no-SL flow: SL off + units sizing → Check enabled → Send with stopLoss
   const collected = await gotoWithStub(page);
   await openTradePanel(page);
   const ticket = page.locator('section.order-ticket');
-  // Stage first (owner flow: the CTA arms only for a staged order).
+  // Stage first (owner flow: the CTA is enabled only for a staged order).
   await ticket.locator('.ticket-quote-side.buy').click();
   // Units sizing first (SL still on), then drop the stop loss.
   await ticket.locator('.ticket-menu-trigger').click();
@@ -2143,7 +2145,7 @@ for (const mode of ['equity', 'money'] as const) {
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
     await page.mouse.move(start.x, start.y + 24, { steps: 8 });
-    // The debounced request can fire mid-drag under load; a reply echoing that
+    // The debounced request can run mid-drag under load; a reply echoing that
     // stale draftVersion is (correctly) ignored. Reply only to the request that
     // carries the final dragged stop, i.e. the one for the current draft.
     await expect

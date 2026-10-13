@@ -30,7 +30,7 @@ function isLineOp(op: Op) {
   return (op.kind === 'stroke' && op.dashed) || (op.kind === 'fillRect' && op.alpha < 1);
 }
 
-/** Row-label ops (chips/handles/tags: path fills, texts, chip borders, ✕ arms). */
+/** Row-label ops (chips/handles/tags: path fills, texts, chip borders, ✕ strokes). */
 function isLabelOp(op: Op) {
   return (
     op.kind === 'fillText' ||

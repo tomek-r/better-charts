@@ -700,7 +700,7 @@ async fn stale_correlated_error_for_a_profile_bar_page_is_ignored() {
 #[tokio::test]
 async fn uncorrelated_error_still_fails_closed() {
     let mut connection = profile_connection().await;
-    connection.send_internal_error("rust-history-1").await;
+    connection.send_internal_error("ea-1").await;
     let reply = connection.client.recv(WAIT).await.expect("error reply");
     assert_eq!(reply.message_type, MessageType::Error);
     assert_eq!(reply.payload["code"], "INVALID_MESSAGE");

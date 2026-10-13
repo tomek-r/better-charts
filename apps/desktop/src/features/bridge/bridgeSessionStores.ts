@@ -3,6 +3,7 @@ import type {
   BridgeStatus,
   BrokerSymbol,
   Candle,
+  HistoryUnavailable,
   MarketSnapshot,
   PortfolioSnapshot,
   QuoteSnapshot,
@@ -22,6 +23,10 @@ interface BridgeMarketStoreState {
   loadingTimeframe: string | undefined;
   symbolLoading: boolean;
   chartError: string | undefined;
+  /** When the pending initial history request of the current selection started; drives the wait notice. */
+  historyWaitStartedAtMs: number | undefined;
+  /** The selection whose series the EA could not synchronize in time. */
+  historyUnavailable: HistoryUnavailable | undefined;
 }
 
 interface BridgeQuoteStoreState {
@@ -52,6 +57,8 @@ export function createBridgeSessionStores() {
       loadingTimeframe: undefined,
       symbolLoading: false,
       chartError: undefined,
+      historyWaitStartedAtMs: undefined,
+      historyUnavailable: undefined,
     }),
     quote: createDomainStore<BridgeQuoteStoreState>({ quote: undefined }),
     account: createDomainStore<BridgeAccountStoreState>({ account: undefined }),

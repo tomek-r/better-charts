@@ -100,12 +100,15 @@ fn parse_decimal(value: &Option<String>) -> Option<Decimal> {
 }
 
 /// Display-only projection of the account after the order fills. Funds come
-/// from the values sampled with the check itself, so they are mutually
-/// consistent; broker thresholds come from the stored account snapshot, and
+/// from the account values sampled with the check itself (`account_*`, not the
+/// `MqlTradeCheckResult` fields), so they are mutually consistent and valid
+/// even when the check was not evaluated; broker thresholds come from the stored account snapshot, and
 /// only when it belongs to the same login and server as the result. Nothing
 /// here feeds a dispatch gate.
 fn margin_after_fill(result: &OrderCheckResult, account: Option<&AccountView>) -> MarginAfterFill {
-    let equity = result.equity.parse().ok();
+    // Never `result.equity`: it is MT5's post-deal figure, zero when the check
+    // was not evaluated (e.g. retcode 10027), which would read as a 0% level.
+    let equity = parse_decimal(&result.account_equity);
     let projection = project_margin_after_fill(
         equity,
         parse_decimal(&result.account_margin_used),

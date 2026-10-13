@@ -28,6 +28,16 @@ pub(crate) struct HistoryPageView {
     pub(crate) candles: Vec<MarketCandle>,
 }
 
+/// The EA could not synchronize the requested chart series before its
+/// deadline, so no candles will arrive for this selection. Non-fatal: the
+/// session stays up and the frontend only reports it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct HistoryUnavailableView {
+    pub(crate) symbol: String,
+    pub(crate) timeframe: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TickProfileBin {

@@ -267,7 +267,7 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
   // echo + field freshness (draftVersion === riskVersion.current, bumped by
   // every field edit) instead. An enabled SL must still carry a price.
   // Owner flow: nothing is checkable until a staged order exists (Buy/Sell click
-  // stages; (✕)/Esc/unstage disarm the ticket again).
+  // stages; (✕)/Esc/unstage clear the staged order again).
   const allocationIssue =
     input.unitsMode === 'units' ? undefined : equityAllocationIssue(input.equityAllocationPercent ?? '100');
   const bridgeConnected = input.bridgeState === 'connected';

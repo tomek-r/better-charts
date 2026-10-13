@@ -56,7 +56,7 @@ export function isOutsidePane(x: number, y: number, width: number, height: numbe
  *
  * These belong together because they are one invariant. Extending the helper
  * points changes the library's base index, which re-derives the viewport, and
- * the right offset that writes re-fires the subscription that extends them again
+ * the right offset that writes re-triggers the subscription that extends them again
  * — so separating them invites either a feedback loop or a scheduled frame that
  * outlives the chart.
  */
@@ -135,7 +135,7 @@ export class ViewportController {
     return {
       offset: range ? range.from * spacing : 0,
       endAnchor: timeScaleBaseIndex(this.data.bars.length, END_MARGIN) * spacing - width,
-      followArmed: this.isFollowing(),
+      followEnabled: this.isFollowing(),
     };
   }
 

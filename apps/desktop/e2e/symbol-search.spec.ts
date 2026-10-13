@@ -332,7 +332,7 @@ test('a stale symbol history failure cannot affect a newer accepted selection', 
   };
 
   await selectSearchResult('OLD');
-  await expect(page.locator('.chart-overlay')).toContainText('Loading market data');
+  await expect(page.locator('.loading-message')).toContainText('Loading market data');
   await selectSearchResult('NEW');
   await expect(page.locator('.chart-heading h1')).toHaveText('NEW');
   await page.evaluate(() => (window as unknown as { __rejectOldHistory?: () => void }).__rejectOldHistory?.());

@@ -32,7 +32,7 @@ async function resetProbeCounts(page: Page): Promise<void> {
   );
 }
 
-/** Re-arms the action gate, then checks that `button` moves the action consumer to `text` and rerenders it. */
+/** Resets the action gate, then checks that `button` moves the action consumer to `text` and rerenders it. */
 async function expectActionRerender(page: Page, action: Locator, button: string, text: string): Promise<void> {
   await page.getByRole('button', { name: 'Prepare action gate' }).click();
   await expect(action).toHaveText('true|false|buy');
@@ -236,6 +236,7 @@ test('risk basis keeps equity sizing derived from valid positive account equity'
   ).toEqual({
     riskMode: 'equity',
     effectiveRiskAmount: '150.00',
+    sizingRiskAmount: '150',
     equityValue: 10000,
     riskModeHint: '≈ 150.00 USD',
   });
@@ -250,6 +251,7 @@ test('risk basis keeps equity sizing derived from valid positive account equity'
   ).toEqual({
     riskMode: 'equity',
     effectiveRiskAmount: '',
+    sizingRiskAmount: '',
     equityValue: undefined,
     riskModeHint: 'Account data required',
   });

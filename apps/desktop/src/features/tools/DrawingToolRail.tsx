@@ -88,7 +88,7 @@ export function DrawingToolRail({
         return;
       }
       // The menu owns this Escape: stopping propagation keeps the chart's own
-      // Escape (deselect the active tool / unstage a draft) from firing as well.
+      // Escape (deselect the active tool / unstage a draft) from also running.
       event.stopPropagation();
       setOpenGroupId(null);
       setRevealedGroupId(null);

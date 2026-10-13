@@ -118,7 +118,7 @@ fn dispatch_gate_locks_every_submission() {
         !adapter.queue_status().dispatch_enabled,
         "the queue view must report the locked gate"
     );
-    // Even with both session gates armed, a closed dispatch gate refuses
+    // Even with both session gates enabled, a closed dispatch gate refuses
     // every claim.
     adapter.session_started(true, "001234", "Broker-Demo");
     adapter.set_reconciliation_complete(true);
@@ -552,7 +552,7 @@ fn claim_gate_requires_trading_enabled_and_complete_reconciliation() {
         "trading_enabled=false must block the claim"
     );
 
-    // A new session re-arms the handshake gate; reconciliation must reach
+    // A new session resets the handshake gate; reconciliation must reach
     // Complete before the queue moves.
     adapter.session_started(true, "001234", "Broker-Demo");
     enqueue(&adapter, "cmd-b").unwrap();

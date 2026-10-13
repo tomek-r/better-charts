@@ -147,6 +147,15 @@ export interface HistoryPage {
   candles: Candle[];
 }
 
+/**
+ * Payload of the `history-unavailable` event: the EA could not synchronize the
+ * requested series before its deadline, so no candles will arrive for it.
+ */
+export interface HistoryUnavailable {
+  symbol: string;
+  timeframe: string;
+}
+
 export interface BarUpdate {
   symbol: string;
   timeframe: string;

@@ -215,7 +215,7 @@ fn result_with_margin_at_fill(
     fill: &str,
 ) -> OrderCheckResult {
     OrderCheckResult {
-        equity: equity.into(),
+        account_equity: Some(equity.into()),
         margin_at_fill: Some(fill.into()),
         account_margin_used: Some(margin.into()),
         account_free_margin: Some(free.into()),
@@ -256,6 +256,37 @@ fn order_check_projects_margin_after_fill_and_classifies_percent_mode() {
     );
     assert_eq!(view.free_margin_after_fill.as_deref(), Some("-4000"));
     assert_eq!(view.margin_risk, MarginRiskView::BelowStopOut);
+}
+
+#[test]
+fn order_check_unevaluated_result_equity_does_not_distort_the_projection() {
+    // Retcode 10027 (AutoTrading disabled): MT5 leaves the result's own
+    // balance/equity/margin_level at 0, but the account sample is real.
+    let account = account_with_margin_levels(Some(0), "120", "80");
+    let failed_check = OrderCheckResult {
+        check_passed: false,
+        retcode: 10027,
+        equity: "0".into(),
+        margin_level: "0".into(),
+        ..result_with_margin_at_fill("5301.42", "0", "5301.42", "1455.58")
+    };
+    let view = accepted_view(Some(&account), failed_check);
+    assert_eq!(view.free_margin_after_fill.as_deref(), Some("3845.84"));
+    assert_eq!(view.margin_level_after_fill.as_deref(), Some("364.21"));
+    assert_eq!(view.margin_risk, MarginRiskView::Ok);
+}
+
+#[test]
+fn order_check_without_account_equity_has_no_level_and_unknown_risk() {
+    let account = account_with_margin_levels(Some(0), "120", "80");
+    let result = OrderCheckResult {
+        account_equity: None,
+        equity: "0".into(),
+        ..result_with_margin_at_fill("1", "0", "5301.42", "1455.58")
+    };
+    let view = accepted_view(Some(&account), result);
+    assert_eq!(view.margin_level_after_fill, None);
+    assert_eq!(view.margin_risk, MarginRiskView::Unknown);
 }
 
 #[test]

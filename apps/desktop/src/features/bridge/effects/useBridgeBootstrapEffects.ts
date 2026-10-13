@@ -12,6 +12,7 @@ import type {
   BrokerSymbol,
   Candle,
   HistoryPage,
+  HistoryUnavailable,
   MarketSnapshot,
   OrderCheckError,
   OrderCheckResult,
@@ -23,6 +24,7 @@ import type {
 import { normalizeAccount, normalizePortfolio, normalizeQuote, normalizeSnapshot } from '../normalizers';
 import { initialHistoryBarsFor } from '../../chart/engine/initialHistoryWindow';
 import type { BridgeSessionState } from '../useBridgeSession';
+import { beginHistoryWait, endHistoryWait } from '../historyWait';
 import type { BridgeTicketResponsePort } from '../bridgeTicketResponseHandlers';
 import { createBridgeMarketRuntime, type BridgeEffectRun, type BridgeMarketResources } from '../bridgeMarketRuntime';
 import { createBridgeTicketResponseHandlers } from '../bridgeTicketResponseHandlers';
@@ -118,6 +120,10 @@ export function useBridgeBootstrapEffects(
       setLatestCandle,
       setQuote,
     } = bootstrapSession;
+    const historyWaitSetters = {
+      setHistoryWaitStartedAtMs: bootstrapSession.setHistoryWaitStartedAtMs,
+      setHistoryUnavailable: bootstrapSession.setHistoryUnavailable,
+    };
     const run: BridgeEffectRun = { disposed: false, bridgeState: 'disconnected' };
     const subscriptions = new SubscriptionScope();
     let runtimeAvailable = false;
@@ -198,11 +204,11 @@ export function useBridgeBootstrapEffects(
             if (!run.disposed) {
               const next = event.payload;
               const identity = `${next.terminal ?? ''}|${next.account ?? ''}|${next.server ?? ''}`;
-              if (
+              const sessionReset =
                 next.state !== 'connected' ||
                 run.bridgeState !== 'connected' ||
-                (bridgeIdentity && identity !== bridgeIdentity)
-              ) {
+                Boolean(bridgeIdentity && identity !== bridgeIdentity);
+              if (sessionReset) {
                 marketRuntime.cancelCandles();
                 marketRuntime.cancelPrefetch();
                 marketAdapterRef.current?.resetRequests();
@@ -215,6 +221,12 @@ export function useBridgeBootstrapEffects(
                 dataKeyRef.current = '';
                 latestCandleRef.current = undefined;
                 setLatestCandle(undefined);
+                // A fresh connection makes the bridge request the initial history itself.
+                if (next.state === 'connected') {
+                  beginHistoryWait(historyWaitSetters);
+                } else {
+                  endHistoryWait(historyWaitSetters);
+                }
               }
               bridgeIdentity = identity;
               run.bridgeState = next.state;
@@ -223,6 +235,7 @@ export function useBridgeBootstrapEffects(
           }),
           listen<MarketSnapshot>('market-snapshot', marketRuntime.onMarketSnapshot),
           listen<HistoryPage>('history-page', marketRuntime.onHistoryPage),
+          listen<HistoryUnavailable>('history-unavailable', marketRuntime.onHistoryUnavailable),
           ...marketRuntime.forwardMarketDataEvents(),
           listen<BrokerSymbol>('symbol-info', marketRuntime.onSymbolInfo),
           listen<QuoteSnapshot>('quote-update', marketRuntime.onQuoteUpdate),
@@ -268,6 +281,7 @@ export function useBridgeBootstrapEffects(
           // history command also requests symbol-info; dispatch once after its
           // listeners are ready so a reopened workspace restores SL/TP amounts.
           if (run.bridgeState === 'connected' && acceptedInitial.symbol && acceptedInitial.timeframe) {
+            beginHistoryWait(historyWaitSetters);
             void adapter
               .requestHistory(
                 acceptedInitial.symbol,

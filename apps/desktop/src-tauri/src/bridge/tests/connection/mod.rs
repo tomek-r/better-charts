@@ -20,6 +20,7 @@ mod connection_errors_tests;
 mod handshake_history_tests;
 mod heartbeat_outbound_tests;
 mod history_page_tests;
+mod history_window_error_tests;
 mod profile_bars_tests;
 mod reconciliation_execution_tests;
 mod transfer_profile_tests;

@@ -40,10 +40,10 @@ pub(crate) fn configured_transfer_limits(
 
 /// Post-accept protocol for one connection. On success returns the new
 /// `session_id` with every post-handshake side effect already in place: the
-/// slots are reset, the F-2/F-5 gates are armed, the bridge status and the
+/// slots are reset, the F-2/F-5 gates are set, the bridge status and the
 /// market snapshot are published, the `hello_ack` is sent, the 7-day
 /// reconciliation request is queued, and the first 1000-bar history request
-/// is in flight with its expected slot armed. Every failure path emits the
+/// is in flight with its expected slot set. Every failure path emits the
 /// right status itself (or disconnects), so `None` means "return from the
 /// connection task" and no further cleanup is needed.
 pub(crate) async fn run_handshake(
@@ -233,7 +233,7 @@ pub(crate) async fn run_handshake(
     invalidate_validated_order_check(state);
     // A new session inherits nothing (F-1): the previous in-flight command
     // goes `unknown`, queued commands are dropped (`QueueDropped`); the
-    // handshake arms the F-2 gates and the F-5 session account binding.
+    // handshake sets the F-2 gates and the F-5 session account binding.
     adapter.session_started_for_session(
         &session_id,
         hello_payload.trading_enabled,

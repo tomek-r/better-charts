@@ -6,6 +6,8 @@ import { Notification } from './Notification';
 
 interface ErrorNotice {
   id: number;
+  /** What makes two notices the same one: the stable key when given, otherwise the message itself. */
+  identity: string;
   message: string;
 }
 
@@ -14,9 +16,9 @@ interface ErrorNoticeState {
 }
 
 type ErrorNoticeStore = DomainStore<ErrorNoticeState> & {
-  show: (message: string) => void;
+  show: (message: string, noticeKey?: string) => void;
   dismiss: (id: number) => void;
-  retire: (message: string) => void;
+  retire: (identity: string) => void;
 };
 
 const ErrorNotificationsContext = createContext<ErrorNoticeStore | null>(null);
@@ -26,15 +28,22 @@ export function ErrorNotificationsProvider({ children }: { children: ReactNode }
     const state = createDomainStore<ErrorNoticeState>({ notices: [] });
     let nextId = 0;
     return Object.assign(state, {
-      show: (message: string) => {
-        const id = ++nextId;
-        state.setField('notices', (current) =>
-          current.some((notice) => notice.message === message) ? current : [...current.slice(-4), { id, message }],
-        );
+      show: (message: string, noticeKey?: string) => {
+        const identity = noticeKey ?? message;
+        state.setField('notices', (current) => {
+          const existing = current.find((notice) => notice.identity === identity);
+          if (!existing) {
+            return [...current.slice(-4), { id: ++nextId, identity, message }];
+          }
+          // A keyed notice keeps its id so the rendered alert updates in place instead of remounting.
+          return noticeKey === undefined
+            ? current
+            : current.map((notice) => (notice === existing ? { ...existing, message } : notice));
+        });
       },
       dismiss: (id: number) => state.setField('notices', (current) => current.filter((notice) => notice.id !== id)),
-      retire: (message: string) =>
-        state.setField('notices', (current) => current.filter((notice) => notice.message !== message)),
+      retire: (identity: string) =>
+        state.setField('notices', (current) => current.filter((notice) => notice.identity !== identity)),
     });
   });
 
@@ -58,17 +67,29 @@ export function useNotifyError() {
   return useErrorNotifications().show;
 }
 
-export function ErrorNotification({ message }: { message: string | undefined }) {
+/**
+ * `noticeKey` marks a notice whose text changes while it stays the same problem (e.g. a live price):
+ * the text updates in place. Without it, every distinct message is its own notice.
+ */
+export function ErrorNotification({ message, noticeKey }: { message: string | undefined; noticeKey?: string }) {
   const { show, retire } = useErrorNotifications();
+  const hasMessage = Boolean(message);
   useEffect(() => {
     if (!message) {
       return;
     }
-    show(message);
+    show(message, noticeKey);
     // Field validation clears as soon as the input is corrected. Runtime
     // failures reported through useErrorNotification remain until dismissed.
-    return () => retire(message);
-  }, [message, show, retire]);
+    // A keyed notice is retired by the effect below, not on each text change.
+    return noticeKey === undefined ? () => retire(message) : undefined;
+  }, [message, noticeKey, show, retire]);
+  useEffect(() => {
+    if (noticeKey === undefined || !hasMessage) {
+      return;
+    }
+    return () => retire(noticeKey);
+  }, [noticeKey, hasMessage, retire]);
   return null;
 }
 

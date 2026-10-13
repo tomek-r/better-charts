@@ -81,11 +81,8 @@
   overflow-wrap: anywhere;
 }
 
-.ticket-blocked-reason {
-  margin: 8px 0 0;
-  color: var(--color-warn-text);
-  font-size: 10px;
-  line-height: 1.4;
+.order-check-time-reserved {
+  visibility: hidden;
 }
 
 /* Account environment badge (DEMO/CONTEST/REAL/UNKNOWN · login) — safety-relevant: which environment an order hits */
