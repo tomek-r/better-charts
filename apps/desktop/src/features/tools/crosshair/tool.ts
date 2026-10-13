@@ -1,7 +1,7 @@
 import type { ChartDrawTarget, ChartTool, ChartToolHost } from '../../chart/engine/toolContract';
 import { palette } from '../../../shared/theme/palette';
 
-/** Palette mirrored from styles/tokens.css — a canvas renderer cannot read CSS variables. */
+/** Colours come from the shared palette — a canvas renderer cannot read CSS variables. */
 const LINE_COLOR = palette.textLabel;
 
 /** What the e2e suite reads through `window.__chartTest.tool('crosshair')` (dev builds only). */

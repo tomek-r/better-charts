@@ -39,7 +39,7 @@ import type { ChartDrawLayer, ChartDrawTarget, RenderViewport } from './toolCont
  * with the data instead of leaving a stale readout behind.
  */
 
-/** Palette mirrored from styles/tokens.css — a canvas renderer cannot read CSS variables. */
+/** Colours come from the shared palette — a canvas renderer cannot read CSS variables. */
 const LABEL_BACKGROUND = palette.border;
 const LABEL_TEXT_COLOR = palette.text;
 const LABEL_ACCENT_COLOR = palette.accent;

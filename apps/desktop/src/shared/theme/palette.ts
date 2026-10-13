@@ -8,10 +8,13 @@
  * stylesheet; add the colour here instead (the guard in
  * `e2e/palette-css.spec.ts` enforces this).
  *
- * Palette rules (see docs/architecture/color-palette.md for the analysis):
+ * Palette rules:
  * - A colour earns a token only if no other token is within dE00 6 / dE76 12
  *   of it, except for deliberate aliases (buy == profile ask, sell == profile
  *   bid, buy == up, accent-soft == contest badge).
+ * - Keep alpha variants (washes, rings, scrims) as separate entries and keep
+ *   surface/border contrast.
+ * - index.html's pre-paint background must match `root`.
  * - Values asserted by e2e (`#f7525f`, `#26a69a`, `#ffd200`, `#f2f5fa`,
  *   `#c4c9d0`, `#121923`) are canonical for their family and never drift.
  */
