@@ -14,10 +14,8 @@ import {
   fillRiskZone,
   drawHandle,
   HANDLE_X,
-  roundedRect,
   tagPath,
   TRADING_COLORS,
-  WIDGET_RADIUS,
   type TradingHitCircle,
   type TradingHitRect,
   type OverlayPass,
@@ -90,7 +88,7 @@ export interface StagedOrderState {
     /** Viewport y of the allowed-SL band edges (risk sizing only). */
     slBandY?: { nearY: number; farY: number };
     /** Painted band edge labels (viewport px). Informational only: never a grab target. */
-    slBandLabels?: Array<TradingHitRect & { edge: 'near' | 'far'; text: string }>;
+    slBandLabels?: Array<TradingHitRect & { edge: 'near' | 'far'; text: string; held: boolean }>;
     entryCancel?: TradingHitCircle;
     slHandle?: TradingHitRect;
     slCancel?: TradingHitCircle;
@@ -163,32 +161,37 @@ function paintBandEdgeLines(
   ctx.restore();
 }
 
+/** Gap between the right end of a band text and the price axis, and between a band text and its line. */
+const BAND_TEXT_AXIS_INSET = 6;
+const BAND_TEXT_LINE_OFFSET = 9;
+const BAND_TEXT_HEIGHT = 14;
+
 /**
- * Permanent neutral label on a band edge, in the SL/TP handle style but without grip or tip: it is not a
- * handle and records no hit area. It sits in the handle label column; the shared label layout spaces it
- * from the SL/TP/entry labels (and the other band label) exactly as it spaces those from each other, so it
- * is never dropped. `held` marks the edge currently holding the SL drag.
+ * Plain muted text ("Min SL" / "Max SL") at the right end of a band edge line, right-aligned just left of the
+ * price axis. `outward` (+1 = down the screen, -1 = up) puts it on the side of its line that is OUTSIDE the
+ * allowed SL zone, a few px from the line, so it never covers where the SL can sit. It is not a handle: it
+ * takes no part in the handle label layout and records no grab area. `held` marks the edge holding the SL drag.
  */
-function paintBandLabel(
+function paintBandText(
   ctx: CanvasRenderingContext2D,
-  left: number,
-  centerY: number,
+  chartRect: { x: number; width: number },
+  lineY: number,
+  outward: 1 | -1,
   text: string,
   held: boolean,
 ): TradingHitRect {
-  ctx.font = '400 12px system-ui, sans-serif';
-  const w = ctx.measureText(text).width + 14;
-  const h = 20;
-  const box = { x: left, y: centerY - h / 2, w, h };
-  roundedRect(ctx, box.x, box.y, box.w, box.h, WIDGET_RADIUS);
-  ctx.fillStyle = TRADING_COLORS.surface;
-  ctx.fill();
-  ctx.strokeStyle = held ? palette.warn : palette.muted;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = held ? palette.warnText : palette.mutedStrong;
+  ctx.font = '400 11px system-ui, sans-serif';
+  const w = ctx.measureText(text).width;
+  const centerY = lineY + outward * BAND_TEXT_LINE_OFFSET;
+  const box = {
+    x: chartRect.x + chartRect.width - BAND_TEXT_AXIS_INSET - w,
+    y: centerY - BAND_TEXT_HEIGHT / 2,
+    w,
+    h: BAND_TEXT_HEIGHT,
+  };
+  ctx.fillStyle = held ? palette.warnText : palette.muted;
   ctx.textAlign = 'left';
-  ctx.fillText(text, box.x + 7, centerY + 0.5);
+  ctx.fillText(text, box.x, centerY + 0.5);
   return box;
 }
 
@@ -398,31 +401,26 @@ export function createStagedOrderOverlay(
         }
       }
 
-      // Band edge labels join the shared spacing queue with the handles. Their rows go to a scratch list, not
-      // `hit.labels`, so they can never be grabbed.
+      // Band texts are painted straight at their own line, never through the shared handle label queue, so
+      // they cannot displace any handle. They sit on opposite sides of the band (never over each other).
       if (drawLabels && band && hit.slBandY) {
         const slBandLabels: NonNullable<StagedOrderState['hit']['slBandLabels']> = [];
         hit.slBandLabels = slBandLabels;
+        const farIsBelow = hit.slBandY.farY > hit.slBandY.nearY;
         for (const edge of ['far', 'near'] as const) {
           const edgeY = edge === 'far' ? hit.slBandY.farY : hit.slBandY.nearY;
-          if (edgeY < y - 20 || edgeY > y + height + 20) {
+          if (edgeY < y || edgeY > y + height) {
             continue;
           }
           const text = edge === 'far' ? 'Max SL' : 'Min SL';
-          const level = edge === 'far' ? 'bandFar' : 'bandNear';
-          paintTradingLabel(
-            ctx,
-            viewport,
-            [],
-            { source: 'staged', id: 'draft', level },
-            edgeY,
-            (labelY) => {
-              const box = paintBandLabel(ctx, x + HANDLE_X, labelY, text, state.slClampEdge === edge);
-              slBandLabels.push({ edge, text, ...box });
-              return box;
-            },
-            labels,
-          );
+          const outward = (edge === 'far') === farIsBelow ? 1 : -1;
+          const held = state.slClampEdge === edge;
+          slBandLabels.push({
+            edge,
+            text,
+            held,
+            ...paintBandText(ctx, viewport.chartRect, edgeY, outward, text, held),
+          });
         }
       }
 

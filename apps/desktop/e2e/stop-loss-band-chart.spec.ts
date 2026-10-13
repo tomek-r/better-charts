@@ -4,6 +4,7 @@ import { gotoRiskBandStub } from './helpers/riskBandStub';
 import { fillExitPrice, openTradePanel } from './helpers/panel';
 import { decodePng, pixelAt } from './helpers/pngPixels';
 import { clampStopLoss } from '../src/features/chart/engine/stagedOrderGestures';
+import { layoutLabelCenters } from '../src/features/chart/engine/labelLayout';
 
 // The minimum 0.1 lot spends the 6.25 USD budget at 104 ticks from the 1.0850 ask.
 // BUY market stop distance is measured from the 1.0846 bid: 21 ticks -> 1.08439.
@@ -11,14 +12,22 @@ const FAR_EDGE = '1.08396';
 const NEAR_EDGE = '1.08439';
 
 interface BandGeometry {
-  labels: Array<{ level: string; lineY: number }>;
+  labels: Array<{ level: string; lineY: number; box: { x: number; y: number; w: number; h: number } }>;
   entryLineY: number | null;
   slHandle: { x: number; y: number; w: number; h: number } | null;
   slBand: { nearPrice: number; farPrice: number; empty: boolean } | null;
   slBandY: { nearY: number; farY: number } | null;
   slClampHint: string | null;
   slClampEdge: 'near' | 'far' | null;
-  slBandLabels: Array<{ edge: 'near' | 'far'; text: string; x: number; y: number; w: number; h: number }>;
+  slBandLabels: Array<{
+    edge: 'near' | 'far';
+    text: string;
+    held: boolean;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }>;
   slMoney: string | null;
   container: { left: number; top: number; width: number; height: number };
   chartRect: { x: number; y: number; width: number; height: number } | null;
@@ -93,6 +102,61 @@ async function dragSlHandle(page: Page, dropY: (geo: BandGeometry) => number, al
   };
 }
 
+/**
+ * Band texts are plain muted text at the right end of their dotted line, right-aligned just left of the price
+ * axis, on the side of the line OUTSIDE the allowed zone (Min SL toward the entry, Max SL beyond the far edge)
+ * and within a few px of the line. Because they sit on opposite sides they can never overlap each other.
+ */
+function expectBandTextBesideItsLine(geo: BandGeometry) {
+  const rightEdge = geo.chartRect!.x + geo.chartRect!.width;
+  const downward = geo.slBandY!.farY > geo.slBandY!.nearY;
+  for (const item of geo.slBandLabels) {
+    const lineY = item.edge === 'far' ? geo.slBandY!.farY : geo.slBandY!.nearY;
+    const outward = (item.edge === 'far') === downward ? 1 : -1;
+    const centre = item.y + item.h / 2;
+    expect(rightEdge - (item.x + item.w)).toBeGreaterThanOrEqual(2);
+    expect(rightEdge - (item.x + item.w)).toBeLessThanOrEqual(12);
+    expect((centre - lineY) * outward).toBeGreaterThan(0);
+    expect(Math.abs(centre - lineY)).toBeLessThanOrEqual(14);
+  }
+  const [first, second] = geo.slBandLabels;
+  expect(Math.abs(first.x + first.w - (second.x + second.w))).toBeLessThanOrEqual(0.5);
+}
+/** Handle labels keep the pre-band layout: spaced from each other only, as if the band did not exist. */
+function expectHandleLabelsIgnoreBand(geo: BandGeometry) {
+  const rows = [...geo.labels].sort((a, b) => a.lineY - b.lineY);
+  const { y, height } = geo.chartRect!;
+  const expected = layoutLabelCenters(
+    rows.map((row) => row.lineY),
+    y,
+    y + height,
+  );
+  rows.forEach((row, i) => {
+    expect(Math.abs(row.box.y + row.box.h / 2 - expected[i])).toBeLessThanOrEqual(1);
+  });
+}
+
+test('the entry and SL handle labels sit on their line price with the band present, even with Min SL beside the entry', async ({
+  page,
+}) => {
+  await stageRiskOrder(page, 'Risk, % equity');
+  await expect.poll(async () => (await geometry(page)).slBandLabels.length).toBe(2);
+  for (const sl of ['1.0840', NEAR_EDGE]) {
+    await page.getByLabel('Stop loss price').fill(sl);
+    await expect(page.getByLabel('Stop loss price')).toHaveValue(sl);
+    await page.waitForTimeout(400);
+    const geo = await geometry(page);
+    expect(geo.slBandLabels).toHaveLength(2);
+    expectHandleLabelsIgnoreBand(geo);
+    // Only the unset TP handle floating 30px from the entry may displace it: never the band texts.
+    const entry = geo.labels.find((row) => row.level === 'entry')!;
+    const floating = geo.labels.filter((row) => row.level !== 'entry' && Math.abs(row.lineY - entry.lineY) < 40);
+    if (floating.length === 0) {
+      expect(Math.abs(entry.box.y + entry.box.h / 2 - entry.lineY)).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
 test('risk % mode marks both band edges with a dotted line and a permanent neutral label, nothing shaded', async ({
   page,
 }, testInfo) => {
@@ -105,9 +169,11 @@ test('risk % mode marks both band edges with a dotted line and a permanent neutr
   const label = (edge: 'near' | 'far') => geo.slBandLabels.find((item) => item.edge === edge)!;
   expect(label('far').text).toBe('Max SL');
   expect(label('near').text).toBe('Min SL');
-  // Both labels share the left column of the SL/TP/entry handle labels and never overlap them.
+  expectBandTextBesideItsLine(geo);
   for (const edge of ['far', 'near'] as const) {
-    expect(label(edge).x).toBe(geo.slHandle!.x);
+    for (const row of geo.labels) {
+      expect(boxesOverlap(label(edge), row.box)).toBe(false);
+    }
     expect(boxesOverlap(label(edge), geo.slHandle!)).toBe(false);
   }
   expect(boxesOverlap(label('far'), label('near'))).toBe(false);
@@ -119,34 +185,23 @@ test('risk % mode marks both band edges with a dotted line and a permanent neutr
   await page.locator('.chart-host').screenshot({ path: testInfo.outputPath('sl-band.png') });
 });
 
-test('an SL sitting on a band edge is displaced from the edge label like it is from the entry label, never hiding either', async ({
+test('an SL sitting on a band edge keeps its handle on the line and never meets the band text', async ({
   page,
 }, testInfo) => {
   await stageRiskOrder(page, 'Risk, % equity');
-  for (const [edge, price] of [
-    ['far', FAR_EDGE],
-    ['near', NEAR_EDGE],
-  ] as const) {
+  for (const price of [FAR_EDGE, NEAR_EDGE]) {
     await page.getByLabel('Stop loss price').fill(price);
-    await expect
-      .poll(async () => {
-        const geo = await geometry(page);
-        const lineY = edge === 'far' ? geo.slBandY?.farY : geo.slBandY?.nearY;
-        return geo.slBandLabels.length === 2 && geo.slHandle !== null && lineY !== undefined
-          ? Math.abs(geo.slHandle.y + geo.slHandle.h / 2 - lineY) < 40
-          : false;
-      })
-      .toBe(true);
+    await expect(page.getByLabel('Stop loss price')).toHaveValue(price);
+    await page.waitForTimeout(400);
     const geo = await geometry(page);
-    const edgeLabel = geo.slBandLabels.find((item) => item.edge === edge)!;
-    const other = geo.slBandLabels.find((item) => item.edge !== edge)!;
-    expect(edgeLabel.x).toBe(geo.slHandle!.x);
-    expect(boxesOverlap(edgeLabel, geo.slHandle!)).toBe(false);
-    expect(boxesOverlap(edgeLabel, other)).toBe(false);
-    expect(boxesOverlap(other, geo.slHandle!)).toBe(false);
-    // The dotted edge line stays at the true price: only the labels move.
-    const lineY = edge === 'far' ? geo.slBandY!.farY : geo.slBandY!.nearY;
-    expect(geo.slHandle!.y + geo.slHandle!.h / 2 - lineY).not.toBe(0);
+    expect(geo.slBandLabels).toHaveLength(2);
+    expectHandleLabelsIgnoreBand(geo);
+    expectBandTextBesideItsLine(geo);
+    for (const item of geo.slBandLabels) {
+      for (const row of geo.labels) {
+        expect(boxesOverlap(item, row.box)).toBe(false);
+      }
+    }
   }
   await page.locator('.chart-host').screenshot({ path: testInfo.outputPath('sl-band-labels.png') });
 });
@@ -190,6 +245,10 @@ test('dragging the SL past the far edge stops at the edge price and explains why
   const release = await dragSlHandle(page, (geo) => geo.slBandY!.farY + 50);
   await expect(page.getByLabel('Stop loss price')).toHaveValue(FAR_EDGE);
   await expect.poll(async () => (await geometry(page)).slClampEdge).toBe('far');
+  // Only the clamped edge's text is emphasised.
+  await expect
+    .poll(async () => (await geometry(page)).slBandLabels.map((item) => `${item.edge}:${item.held}`).sort())
+    .toEqual(['far:true', 'near:false']);
   await page.locator('.chart-host').screenshot({ path: testInfo.outputPath('sl-band-clamped.png') });
   await release();
   // At the far edge the (projected) SL money label is the budget, never above it, and within one tick (0.06 USD) of it.

@@ -59,7 +59,12 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
           entryLineY: hit.entryLineY !== undefined ? rect.top + hit.entryLineY : null,
           // Painted label rows with the price/float centre they are bound to:
           // a grab off that centre keeps its offset while dragging.
-          labels: (hit.labels ?? []).map((row) => ({ id: row.id, level: row.level, lineY: rect.top + row.lineY })),
+          labels: (hit.labels ?? []).map((row) => ({
+            id: row.id,
+            level: row.level,
+            lineY: rect.top + row.lineY,
+            box: { x: rect.left + row.x, y: rect.top + row.y, w: row.w, h: row.h },
+          })),
           entryCancel: circle(hit.entryCancel),
           slCancel: circle(hit.slCancel),
           tpCancel: circle(hit.tpCancel),

@@ -5,12 +5,6 @@ export interface TradingLabelTarget {
   id: string;
   level: 'entry' | 'sl' | 'tp';
 }
-/** An informational label that is spaced with the trading labels but is never a grab target. */
-export interface PassiveLabelTarget {
-  source: TradingLabelTarget['source'];
-  id: string;
-  level: 'bandNear' | 'bandFar';
-}
 export interface TradingLabelHit extends TradingLabelTarget {
   x: number;
   y: number;
@@ -56,14 +50,14 @@ export function layoutLabelCenters(desired: number[], top: number, bottom: numbe
 
 /** Shared frame queue consumed by the trading-labels overlay. */
 export interface TradingLabelLayoutState {
-  pending: Array<{ target: TradingLabelTarget | PassiveLabelTarget; y: number; draw: (y: number) => void }>;
+  pending: Array<{ target: TradingLabelTarget; y: number; draw: (y: number) => void }>;
 }
 
 export function paintTradingLabel(
   ctx: CanvasRenderingContext2D,
   viewport: RenderViewport,
-  rows: Array<TradingLabelHit | (PassiveLabelTarget & Omit<TradingLabelHit, keyof TradingLabelTarget>)>,
-  target: TradingLabelTarget | PassiveLabelTarget,
+  rows: TradingLabelHit[],
+  target: TradingLabelTarget,
   lineY: number,
   draw: (labelY: number) => { x: number; y: number; w: number; h: number },
   layout?: TradingLabelLayoutState,
