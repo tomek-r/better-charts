@@ -1,6 +1,7 @@
 import type { IPrimitivePaneRenderer, IPrimitivePaneView } from 'lightweight-charts';
 import { palette } from '../../../shared/theme/palette';
 import { AttachedSeriesPrimitive } from './attachedPrimitive';
+import { priceTagHeight } from './tagStack';
 import { measureTextWidth } from './textMeasure';
 import {
   createDrawTarget,
@@ -20,13 +21,18 @@ import type { ChartDrawLayer, ChartDrawTarget, RenderViewport } from './toolCont
  * overlay stack below the pointer is ours anyway. Both labels are therefore
  * painted here, from the same coordinates the chart uses. Each canvas first
  * runs the tools' above-trading-overlays layer (`drawToolLayer`, e.g. the crosshair
- * lines), then the labels over it:
+ * lines); the axis canvases then get the labels over it. Nothing pointer-related
+ * is painted in the pane itself except that tool layer (owner decision):
  *
- *  - the time label is centred on the pointer x just above the time axis,
- *    leaving the axis tick labels visible;
- *  - the price label is a box hugged against the pane's right edge — just
- *    before the price axis, where the reference has it — with the app accent
- *    as its left edge.
+ *  - the time label is centred on the pointer x ON the time axis, as tall as the
+ *    axis canvas, covering the tick labels under it while hovering, with the app
+ *    accent as its top edge;
+ *  - the price label is a box ON the price axis at the pointer y, as wide as the
+ *    axis canvas and as tall as the Bid/Ask tags, with the app accent as its left
+ *    edge. It is drawn after every other price-axis tag (this primitive is
+ *    attached last, all views are `top`), so it covers the Bid/Ask/countdown and
+ *    SL/TP tags. It takes the current axis width and never feeds the axis width
+ *    hold logic.
  *
  * The time and price values are resolved at DRAW time from the pointer's pixel
  * position, so a scroll or zoom under a resting pointer updates the labels
@@ -38,12 +44,10 @@ const LABEL_BACKGROUND = palette.border;
 const LABEL_TEXT_COLOR = palette.text;
 const LABEL_ACCENT_COLOR = palette.accent;
 const LABEL_FONT_WEIGHT = 400;
-/** Text padding inside a label box, the box's minimum width, the accent bar width. */
+/** Text padding inside a label box, the time box's minimum width, the accent bar width. */
 const LABEL_PADDING = 8;
 const MIN_LABEL_WIDTH = 54;
 const ACCENT_WIDTH = 2;
-/** Label height per chart font size: 22px at the default 11. */
-const LABEL_HEIGHT_FACTOR = 2;
 
 const WEEKDAY_FORMAT = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short' });
 const DATE_FORMAT = new Intl.DateTimeFormat('en-GB', {
@@ -79,8 +83,8 @@ interface LabelBox {
   height: number;
 }
 
-/** Pane geometry the labels are laid out in (CSS px). */
-interface PaneRect {
+/** Size of the axis canvas a label is laid out on (CSS px). */
+interface AxisRect {
   width: number;
   height: number;
 }
@@ -97,32 +101,32 @@ export interface PointerReadout {
   priceLabelBox: LabelBox | null;
 }
 
-/** Box height derived from the chart's own font size, so it tracks the axis labels. */
-const labelHeight = (fontSize: number) => Math.round(fontSize * LABEL_HEIGHT_FACTOR);
-
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
 
-/** The price label: right-aligned in the pane, vertically centred, clamped inside it. */
-function priceLabelBox(text: string, y: number, pane: PaneRect, font: string, fontSize: number): LabelBox {
-  const width = Math.max(MIN_LABEL_WIDTH, Math.ceil(measureTextWidth(text, font)) + LABEL_PADDING * 2 + ACCENT_WIDTH);
-  const height = labelHeight(fontSize);
+/**
+ * The price label: flush with the price axis' left edge, vertically centred on the
+ * pointer, clamped inside the axis. It never exceeds the axis width — the axis is
+ * sized by the tags, not by the pointer — so a narrow axis squeezes the box.
+ */
+function priceLabelBox(y: number, axis: AxisRect, fontSize: number): LabelBox {
+  const height = priceTagHeight(fontSize);
   return {
-    x: Math.max(0, pane.width - width),
-    y: clamp(y - height / 2, 0, pane.height - height),
-    width,
+    x: 0,
+    // Whole-pixel top, as the Bid/Ask tags round theirs: no blurred edge row.
+    y: clamp(Math.round(y - height / 2), 0, axis.height - height),
+    width: axis.width,
     height,
   };
 }
 
-/** The time label: centred on pointer x, along the pane bottom above the axis. */
-function timeLabelBox(text: string, x: number, pane: PaneRect, font: string, fontSize: number): LabelBox {
+/** The time label: centred on pointer x, filling the time axis' full height, clamped inside the pane's span. */
+function timeLabelBox(text: string, x: number, paneWidth: number, axisHeight: number, font: string): LabelBox {
   const width = Math.max(MIN_LABEL_WIDTH, Math.ceil(measureTextWidth(text, font)) + LABEL_PADDING * 2);
-  const height = labelHeight(fontSize);
   return {
-    x: clamp(x - width / 2, 0, pane.width - width),
-    y: Math.max(0, pane.height - height),
+    x: clamp(x - width / 2, 0, paneWidth - width),
+    y: 0,
     width,
-    height,
+    height: axisHeight,
   };
 }
 
@@ -195,7 +199,8 @@ export class PointerReadoutPrimitive extends AttachedSeriesPrimitive {
     if (point === null || chart === null) {
       return null;
     }
-    const pane = { width: chart.timeScale().width(), height: chart.panes()[0]?.getHeight() ?? 0 };
+    const paneWidth = chart.timeScale().width();
+    const priceAxis = { width: chart.priceScale('right').width(), height: chart.panes()[0]?.getHeight() ?? 0 };
     const font = this.labelFont();
     const fontSize = this.fontSize();
     const time = this.timeAt(point.x);
@@ -205,46 +210,51 @@ export class PointerReadoutPrimitive extends AttachedSeriesPrimitive {
       y: point.y,
       timeSeconds: time?.seconds ?? null,
       timeLabel: time?.text ?? null,
-      timeLabelBox: time === null ? null : timeLabelBox(time.text, point.x, pane, font, fontSize),
+      timeLabelBox:
+        time === null ? null : timeLabelBox(time.text, point.x, paneWidth, chart.timeScale().height(), font),
       price: price?.price ?? null,
       priceLabel: price?.text ?? null,
-      priceLabelBox: price === null ? null : priceLabelBox(price.text, point.y, pane, font, fontSize),
+      priceLabelBox: price === null ? null : priceLabelBox(point.y, priceAxis, fontSize),
     };
   }
 
+  /** The pane only gets the tools' layer: the readouts live on the axes. */
   private drawPane(target: RenderTarget): void {
-    const point = this.point;
-    if (point === null) {
-      return;
-    }
     this.paintTopLayer(target, PANE_ABOVE_TRADING_OVERLAYS);
-    const price = this.priceAt(point.y);
-    const time = this.timeAt(point.x);
-    if (price === null && time === null) {
-      return;
-    }
-    target.useMediaCoordinateSpace(({ context, mediaSize }) => {
-      const font = this.labelFont();
-      const fontSize = this.fontSize();
-      context.save();
-      if (price !== null) {
-        const box = priceLabelBox(price.text, point.y, mediaSize, font, fontSize);
-        this.drawLabel(context, box, price.text, font, 'left');
-      }
-      if (time !== null) {
-        const box = timeLabelBox(time.text, point.x, mediaSize, font, fontSize);
-        this.drawLabel(context, box, time.text, font, 'top');
-      }
-      context.restore();
-    });
   }
 
   private drawTimeAxis(target: RenderTarget): void {
     this.paintTopLayer(target, TIME_AXIS_ABOVE_TRADING_OVERLAYS);
+    const point = this.point;
+    const time = point === null ? null : this.timeAt(point.x);
+    const chart = this.chart;
+    if (point === null || time === null || chart === null) {
+      return;
+    }
+    const paneWidth = chart.timeScale().width();
+    target.useMediaCoordinateSpace(({ context, mediaSize }) => {
+      const font = this.labelFont();
+      const box = timeLabelBox(time.text, point.x, paneWidth, mediaSize.height, font);
+      context.save();
+      this.drawLabel(context, box, time.text, font, 'top');
+      context.restore();
+    });
   }
 
   private drawPriceAxis(target: RenderTarget): void {
     this.paintTopLayer(target, PRICE_AXIS_ABOVE_TRADING_OVERLAYS);
+    const point = this.point;
+    const price = point === null ? null : this.priceAt(point.y);
+    if (point === null || price === null) {
+      return;
+    }
+    target.useMediaCoordinateSpace(({ context, mediaSize }) => {
+      const font = this.labelFont();
+      const box = priceLabelBox(point.y, mediaSize, this.fontSize());
+      context.save();
+      this.drawLabel(context, box, price.text, font, 'left');
+      context.restore();
+    });
   }
 
   /** Hands the active tool this canvas. Only called while a pointer is over the pane. */
@@ -276,7 +286,9 @@ export class PointerReadoutPrimitive extends AttachedSeriesPrimitive {
     context.fillStyle = LABEL_TEXT_COLOR;
     context.textAlign = 'left';
     context.textBaseline = 'middle';
-    context.fillText(text, box.x + LABEL_PADDING + (accent === 'left' ? ACCENT_WIDTH : 0), box.y + box.height / 2);
+    const inset = LABEL_PADDING + (accent === 'left' ? ACCENT_WIDTH : 0);
+    // maxWidth squeezes the text instead of overflowing when the box was capped to a narrow axis.
+    context.fillText(text, box.x + inset, box.y + box.height / 2, Math.max(1, box.width - inset - 2));
   }
 
   private timeAt(x: number): { seconds: number; text: string } | null {

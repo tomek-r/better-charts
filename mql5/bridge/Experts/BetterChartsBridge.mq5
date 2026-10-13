@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.007"
+#define BRIDGE_EXPERT_VERSION "1.008"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -111,6 +111,7 @@ string g_active_timeframe_name="";
 ENUM_TIMEFRAMES g_active_timeframe=PERIOD_M1;
 string g_identity_login="";
 string g_identity_server="";
+bool g_hello_trading_enabled=false;
 string g_last_account_payload="";
 bool g_have_account_snapshot=false;
 string g_last_portfolio_payload="";
@@ -483,7 +484,9 @@ bool SendHello()
    const string broker_server=JsonEscape(AccountInfoString(ACCOUNT_SERVER));
    g_identity_login=account_login;
    g_identity_server=AccountInfoString(ACCOUNT_SERVER);
-   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_reader_version\":%s,\"tick_price_counts\":true,\"partial_close\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,(g_reader_version=="" ? "null" : "\""+g_reader_version+"\""),SupportedTimeframesJson(),(TradingEnabled() ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
+   // Rust reads this once per session; remembered so a later change reconnects.
+   g_hello_trading_enabled=TradingEnabled();
+   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_reader_version\":%s,\"tick_price_counts\":true,\"partial_close\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,(g_reader_version=="" ? "null" : "\""+g_reader_version+"\""),SupportedTimeframesJson(),(g_hello_trading_enabled ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
    return SendFrame(hello);
   }
 
@@ -559,6 +562,18 @@ bool DisconnectIfAccountIdentityChanged()
   {
    if(!AccountIdentityChanged()) return false;
    DisconnectAndRetry("account identity changed");
+   return true;
+  }
+
+// The app reads trading_enabled only from the hello, so a mid-session change
+// (e.g. Algo Trading switched off by an account change, then back on) is
+// applied by reconnecting. The new hello carries the current value, which makes
+// this fire once per change; DisconnectAndRetry's backoff bounds any flapping.
+// The new session still needs the handshake and complete reconciliation.
+bool DisconnectIfTradingPermissionChanged()
+  {
+   if(TradingEnabled()==g_hello_trading_enabled) return false;
+   DisconnectAndRetry("trading permission changed");
    return true;
   }
 
@@ -3201,6 +3216,7 @@ void OnTimer()
    // Checked before any emission this turn (heartbeat stamps the live
    // broker_server), not only inside the snapshot polls.
    if(g_state==BRIDGE_READY && DisconnectIfAccountIdentityChanged()) return;
+   if(g_state==BRIDGE_READY && DisconnectIfTradingPermissionChanged()) return;
    PollMarketData();
    const ulong now=GetTickCount64();
    if(g_state==BRIDGE_READY)

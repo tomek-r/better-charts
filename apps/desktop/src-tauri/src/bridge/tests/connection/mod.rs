@@ -15,6 +15,7 @@ use trading_core::execution::{
 };
 use trading_core::protocol::{OrderKind, OrderSide};
 
+mod account_switch_tests;
 mod connection_errors_tests;
 mod handshake_history_tests;
 mod heartbeat_outbound_tests;

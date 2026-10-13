@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import type { ChartTicketOverlayState } from '../../chart/effects/useChartOverlaySync';
 import { deriveOrderRiskBasis } from '../domain/riskBasis';
 import { deriveStagedOrderDisplay } from '../domain/stagedOrderDisplay';
-import { deriveStopLossBand, stopLossRiskLabel, type StopLossBand } from '../domain/stopLossBand';
+import { deriveStopLossBand, type StopLossBand } from '../domain/stopLossBand';
 import { useOrderTicketActions, useOrderTicketStores, type TicketActions } from './orderTicketContext';
 import type { OrderTicketInputs } from './orderTicketInputs';
 import type { OrderTicketStores } from './orderTicketStores';
@@ -32,7 +32,6 @@ export function useOrderTicketChartRuntime(
             currencyDigits: account?.currencyDigits,
             stagedOnChart,
           }).effectiveRiskAmount,
-          riskLabel: stopLossRiskLabel(unitsMode, riskAmount, account?.currency),
           side: riskSide,
           orderKind,
           entry,

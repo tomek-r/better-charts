@@ -1,5 +1,5 @@
 import type { TradingLabelTarget } from './labelLayout';
-import { hitCircle, hitRect, STAGED_GRAB, type StagedSlBand } from './stagedOrderOverlay';
+import { hitCircle, hitRect, STAGED_GRAB, type StagedOrderLevels, type StagedSlBand } from './stagedOrderOverlay';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { ticketPrice } from '../../../shared/format';
 import type { OrderTicketStores } from '../../order-ticket/state/orderTicketStores';
@@ -27,6 +27,19 @@ export function clampStopLoss(
   }
   return { price, edge: null };
 }
+/**
+ * The band edges' distances from the entry when the band is measured from the entry itself (Limit and Stop;
+ * a Stop Limit measures from its fixed limit price, a Market order follows the quote). null = the band does
+ * not move with an entry drag.
+ */
+function entryCarriedBand(order: StagedOrderLevels): { near: number; far: number } | null {
+  const { slBand } = order;
+  if (!slBand || slBand.empty || (order.orderKindLabel !== 'Limit' && order.orderKindLabel !== 'Stop')) {
+    return null;
+  }
+  return { near: Math.abs(slBand.nearPrice - order.entry), far: Math.abs(slBand.farPrice - order.entry) };
+}
+
 export type StagedOrderGestureTicket = Pick<
   OrderTicketStores['setters']['draft'],
   'setEntry' | 'setSlOn' | 'setStopLoss' | 'setTpOn' | 'setTakeProfit' | 'setStagedDragging' | 'setDragSlMoney'
@@ -60,6 +73,8 @@ export function createStagedOrderGestures(
     takeProfit: number | null;
     canMoveExits: boolean;
     moveExits: boolean;
+    /** Band edge distances from the entry at grab time; the band travels rigidly with a Limit/Stop entry. */
+    bandDistances: { near: number; far: number } | null;
   } | null = null;
   // Shared grab resolver: cancel chips first (small targets), then handles,
   // then the entry line — never for market orders (the ticket price row is
@@ -148,18 +163,22 @@ export function createStagedOrderGestures(
             takeProfit: stagedOrder.takeProfit,
             canMoveExits,
             moveExits: event.shiftKey === true && canMoveExits,
+            bandDistances: entryCarriedBand(stagedOrder),
           }
         : null;
     return true;
   };
-  // Alt disables the SL band clamp (today's free drag). Returns the hint to show, if any.
-  const setClampHint = (hint: string | undefined) => {
-    if (stagedOrderState.current.slClampHint !== hint) {
-      stagedOrderState.current.slClampHint = hint;
+  // The SL always stays inside the band (units mode is the way to place one without a band). The permanent band labels explain the edges; while one
+  // holds the drag it is emphasised, and an empty band explains itself with a transient hint.
+  const setClampHint = (hint: string | undefined, edge?: 'near' | 'far') => {
+    const state = stagedOrderState.current;
+    if (state.slClampHint !== hint || state.slClampEdge !== edge) {
+      state.slClampHint = hint;
+      state.slClampEdge = edge;
       workspace.chart?.current?.refreshOverlays();
     }
   };
-  const applyDrag = (y: number, shiftKey = false, altKey = false) => {
+  const applyDrag = (y: number, shiftKey = false) => {
     const { hit } = stagedOrderState.current;
     if (!hit.chartRect || !hit.toPrice) {
       return;
@@ -193,7 +212,7 @@ export function createStagedOrderGestures(
         // distance. A Stop Limit sizes from its fixed limit price: keep the shifted SL inside that band.
         const order = stagedOrderState.current.order;
         let stopLoss = shiftedText(current.stopLoss);
-        if (stopLoss !== undefined && order?.orderKindLabel === 'Stop Limit' && !altKey) {
+        if (stopLoss !== undefined && order?.orderKindLabel === 'Stop Limit') {
           stopLoss = ticketPrice(clampStopLoss(Number(stopLoss), order.side, order.slBand).price, digits);
         }
         const takeProfit = shiftedText(current.takeProfit);
@@ -203,18 +222,33 @@ export function createStagedOrderGestures(
         if (takeProfit !== undefined) {
           setTakeProfit(takeProfit);
         }
+      } else if (current?.bandDistances && current.stopLoss !== null) {
+        // The band moves with the entry: an SL it leaves behind is pushed along its edge, an SL still inside stays.
+        // TP never follows. The held level is remembered so dragging back does not pull the SL back.
+        const { near, far } = current.bandDistances;
+        const side = stagedOrderState.current.order?.side;
+        const entry = Number(text);
+        if (side && Number.isFinite(entry)) {
+          const sign = side === 'buy' ? -1 : 1;
+          const band: StagedSlBand = {
+            nearPrice: entry + sign * near,
+            farPrice: entry + sign * far,
+            empty: false,
+            emptyHint: '',
+          };
+          const held = clampStopLoss(current.stopLoss, side, band);
+          if (held.edge) {
+            const heldText = ticketPrice(held.price, digits);
+            current.stopLoss = Number(heldText);
+            setStopLoss(heldText);
+          }
+        }
       }
     } else if (drag === 'sl') {
       const order = stagedOrderState.current.order;
-      const band = altKey ? undefined : order?.slBand;
+      const band = order?.slBand;
       const held = order ? clampStopLoss(price, order.side, band) : { price, edge: null };
-      let hint: string | undefined;
-      if (held.edge && band) {
-        hint = held.edge === 'far' ? band.farHint : band.nearHint;
-      } else if (band?.empty) {
-        hint = band.emptyHint;
-      }
-      setClampHint(hint);
+      setClampHint(band?.empty ? band.emptyHint : undefined, held.edge ?? undefined);
       setSlOn(true);
       setStopLoss(held.edge ? ticketPrice(held.price, digits) : text);
     } // dragging a handle SETS the level (TV semantics)

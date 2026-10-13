@@ -176,7 +176,8 @@ const cases: PolicyCase[] = [
     input: { slOn: true, stopLoss: '100', unitsMode: 'money', equityAllocationPercent: '0' },
     canCheckOrder: false,
     canSubmitOrder: false,
-    blockedReason: 'stop_loss too close: distance 0 pts, required >= 20 pts (20 ticks margin)',
+    // The stop-distance rule blocks without printing its reason (owner decision).
+    blockedReason: '',
   },
   {
     name: 'allocation failure wins over missing stop sizing',

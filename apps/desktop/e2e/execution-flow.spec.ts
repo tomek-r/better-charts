@@ -1407,6 +1407,8 @@ test('chart handles show the money at SL/TP in the account currency — only whe
   const g = (await stagedGeom(page))!;
   expect(g.slMoney).toBeNull();
   expect(g.tpMoney).toBeNull();
+  // The amounts below are for one unit; the ticket now defaults to the symbol's minimum volume.
+  await page.getByLabel('Units').fill('1');
   // SL only: the SL handle shows the signed money, TP stays silent.
   await page.getByLabel('Stop loss enabled').check();
   await page.getByLabel('Swap Stop loss input to price').click();

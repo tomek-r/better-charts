@@ -310,6 +310,7 @@ pub(crate) async fn run_handshake(
         status.message = None;
         status.market_session = None;
         status.partial_close = hello_payload.partial_close;
+        status.trading_enabled = hello_payload.trading_enabled;
     });
     drop(session_work);
     publish_market(events, state, &session_id, MarketSnapshot::default());

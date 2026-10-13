@@ -189,7 +189,7 @@ export function useChartWorkspacePointerEffects(
       }
       event.stopPropagation();
       if (staged.active) {
-        staged.applyDrag(y - labelDragOffset, event.shiftKey, event.altKey);
+        staged.applyDrag(y - labelDragOffset, event.shiftKey);
       } else {
         trading.applyLineDrag(y - labelDragOffset, event.shiftKey);
       }

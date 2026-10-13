@@ -1,4 +1,5 @@
 import { AppLifecycle } from '../../AppLifecycle';
+import { AccountSwitchGuard } from '../account-switch/AccountSwitchGuard';
 import { AppHeaderFeature } from '../app-header/AppHeaderFeature';
 import { BridgeSessionProvider } from '../bridge/BridgeSessionProvider';
 import { ChartWorkspaceProvider } from '../chart/ChartWorkspaceProvider';
@@ -7,6 +8,7 @@ import { DrawingToolsView } from '../tools/DrawingToolsView';
 import { ExecutionProvider } from '../execution/ExecutionProvider';
 import { OrderTicketPanel } from '../order-ticket/OrderTicketPanel';
 import { OrderTicketProvider } from '../order-ticket/OrderTicketProvider';
+import { SymbolChangeTicketReset } from '../order-ticket/SymbolChangeTicketReset';
 import { SymbolSearchProvider } from '../symbol-search/SymbolSearchProvider';
 import { SymbolSearchView } from '../symbol-search/SymbolSearchView';
 
@@ -25,6 +27,8 @@ export function AppWorkspaceView() {
             <OrderTicketProvider>
               <OrderTicketPanel />
               <AppLifecycle />
+              <AccountSwitchGuard />
+              <SymbolChangeTicketReset />
             </OrderTicketProvider>
           </main>
         </ExecutionProvider>

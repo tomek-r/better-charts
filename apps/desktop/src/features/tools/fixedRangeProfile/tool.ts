@@ -54,6 +54,8 @@ export class FixedRangeProfileTool implements ChartTool {
   private selection: PlacedFixedRangeProfile | null = null;
   /** Whether the newest bar opened before the range end at the last bar change: its last bar may still gain ticks. */
   private wasOpenAtLastBarsChange = false;
+  /** The timeframe of the bars `wasOpenAtLastBarsChange` was judged on. */
+  private lastTimeframe: string | undefined;
   private boundary: {
     side: 'from' | 'end';
     original: PlacedFixedRangeProfile;
@@ -158,7 +160,7 @@ export class FixedRangeProfileTool implements ChartTool {
         } else {
           const placed = spanBetweenAnchors(this.host.barSeries, this.first, anchor);
           this.selection = placed;
-          this.wasOpenAtLastBarsChange = isRangeOpen(this.host.barSeries, placed);
+          this.markPlaced(placed);
           this.first = this.hover = null;
           this.host.returnToDefaultTool();
           this.loader.requestProfile(placed);
@@ -175,7 +177,7 @@ export class FixedRangeProfileTool implements ChartTool {
     this.state.previewing = false;
     if (commit && !sameRange(current.original, current.preview)) {
       this.selection = current.preview;
-      this.wasOpenAtLastBarsChange = isRangeOpen(this.host.barSeries, current.preview);
+      this.markPlaced(current.preview);
       this.loader.requestProfile(current.preview);
     }
     this.host.requestRepaint();
@@ -204,10 +206,36 @@ export class FixedRangeProfileTool implements ChartTool {
       return;
     }
     const wasOpen = this.wasOpenAtLastBarsChange;
-    this.wasOpenAtLastBarsChange = isRangeOpen(this.host.barSeries, selection);
+    this.wasOpenAtLastBarsChange = this.isOpen(selection);
+    const timeframe = this.host.barSeries.timeframe;
+    if (timeframe !== this.lastTimeframe) {
+      // The profile is timeframe-independent, so "was open" on the previous timeframe's bars is no reason for a
+      // final refresh. A request still unsettled is renewed rather than waited for; a loaded profile stays.
+      this.lastTimeframe = timeframe;
+      this.loader.renewUnsettledRequest(selection);
+      if (this.wasOpenAtLastBarsChange) {
+        this.loader.requestThrottledRefresh(selection);
+      }
+      return;
+    }
     if (wasOpen || this.wasOpenAtLastBarsChange) {
       this.loader.requestThrottledRefresh(selection);
     }
+  }
+
+  /** Records the committed range and the timeframe whose bars it is judged against. */
+  private markPlaced(range: PlacedFixedRangeProfile): void {
+    this.lastTimeframe = this.host.barSeries.timeframe;
+    this.wasOpenAtLastBarsChange = this.isOpen(range);
+  }
+
+  /** Whether the range may still gain ticks, judged by the newest bar and by the feed's newest quote. */
+  private isOpen(range: PlacedFixedRangeProfile): boolean {
+    const { currentMarket, barSeries } = this.host;
+    const quote = currentMarket.quote();
+    const quoteTimeMs =
+      quote && quote.symbol === currentMarket.symbol() && Number.isFinite(quote.timeMs) ? quote.timeMs : undefined;
+    return isRangeOpen(barSeries, range, quoteTimeMs);
   }
 
   deleteDrawing(): boolean {

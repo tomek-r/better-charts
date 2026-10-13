@@ -16,5 +16,6 @@
 @import './features/settings/settings.css';
 @import './features/settings/setup-guide-modal/setup-guide-modal.css';
 @import './shared/ui/notification.css';
+@import './features/account-switch/account-switch.css';
 @import './shared/ui/error-text.css';
 @import './shared/ui/command-status.css';

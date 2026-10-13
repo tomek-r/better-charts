@@ -87,7 +87,6 @@ export function OrderCheckResult({
             {warning.text}
           </strong>
         )}
-        <small>Estimated at fill — the order is priced alone, ignoring open positions.</small>
       </div>
       <small className="order-check-time">Checked {formatQuoted(orderCheck.checkedAtMs)}</small>
     </div>

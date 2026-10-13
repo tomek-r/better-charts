@@ -150,7 +150,7 @@ export function SymbolSearchView() {
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (document.querySelector('[data-app-settings-dialog]')) {
+      if (document.querySelector('[data-app-settings-dialog], [data-account-switch-dialog]')) {
         return;
       }
       if (event.key === 'Escape' && toolFlyoutOpen()) {

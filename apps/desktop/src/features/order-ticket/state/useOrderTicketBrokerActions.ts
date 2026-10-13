@@ -5,6 +5,7 @@ import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { OrderTicketInputs } from './orderTicketInputs';
 import type { OrderTicketStores } from './orderTicketStores';
 import { buildTicketDerivationInput } from '../domain/ticketDerivation';
+import { withoutStopLossTooClose } from '../domain/ticketRules';
 import { useErrorNotification } from '../../../shared/ui/ErrorNotifications';
 
 export function useOrderTicketBrokerActions(
@@ -79,8 +80,8 @@ export function useOrderTicketBrokerActions(
     canSubmitOrder,
   } = derived;
 
-  useErrorNotification(broker.riskError);
-  useErrorNotification(broker.orderCheckError);
+  useErrorNotification(withoutStopLossTooClose(broker.riskError));
+  useErrorNotification(withoutStopLossTooClose(broker.orderCheckError));
   useErrorNotification(broker.submitStatus?.text);
 
   const requestOrderCheck = useEventCallback(async () => {

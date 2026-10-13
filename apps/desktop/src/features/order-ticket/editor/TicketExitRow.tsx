@@ -2,6 +2,7 @@
  * dual ticks⇄price field. The price string is the canonical value (what the
  * backend receives); the ticks view converts through the instrument tick size
  * and is disabled when the tick size is unknown. */
+import type { KeyboardEvent } from 'react';
 import { CaretIcon } from '../../../shared/ui/CaretIcon';
 
 export function TicketExitRow({
@@ -16,6 +17,7 @@ export function TicketExitRow({
   onSwap,
   swapDisabled,
   priceInvalid,
+  onEditingChange,
 }: {
   label: string;
   ticksMode: boolean;
@@ -28,7 +30,18 @@ export function TicketExitRow({
   onSwap: () => void;
   swapDisabled: boolean;
   priceInvalid?: boolean;
+  /** Reports focus in/out of the value inputs; Enter commits by leaving the input. */
+  onEditingChange?: (editing: boolean) => void;
 }) {
+  const editing = {
+    onFocus: () => onEditingChange?.(true),
+    onBlur: () => onEditingChange?.(false),
+    onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
+      if (onEditingChange && event.key === 'Enter') {
+        event.currentTarget.blur();
+      }
+    },
+  };
   return (
     <div className={`ticket-exit${on ? '' : ' off'}`}>
       <div className="ticket-exit-head">
@@ -56,6 +69,7 @@ export function TicketExitRow({
             value={ticks}
             disabled={!on}
             onChange={(event) => onTicks(event.target.value)}
+            {...editing}
             placeholder="Ticks"
             type="number"
             aria-label={`${label} ticks`}
@@ -71,6 +85,7 @@ export function TicketExitRow({
             value={price}
             disabled={!on}
             onChange={(event) => onPrice(event.target.value)}
+            {...editing}
             placeholder="Price"
             aria-label={`${label} price`}
           />
@@ -88,7 +103,9 @@ export function TicketExitRow({
         >
           ⇄
         </button>
-        <span className="ticket-unit">{ticksMode ? `${price || '—'} price` : `${ticks || '—'} ticks`}</span>
+        <span className="ticket-unit ticket-unit-readout">
+          {ticksMode ? `${price || '—'} price` : `${ticks || '—'} ticks`}
+        </span>
       </div>
     </div>
   );

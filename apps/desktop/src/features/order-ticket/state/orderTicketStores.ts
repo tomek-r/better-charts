@@ -46,6 +46,8 @@ export type OrderTicketDraftStore = {
   stagedOnChart: boolean;
   stagedDragging: boolean;
   dragSlMoney: string | undefined;
+  /** An SL input has focus: the band snap waits for blur/Enter so typing is not rewritten mid-keystroke. */
+  stopLossEditing: boolean;
   orderVolume: string;
   volumeManual: boolean;
 };
@@ -91,6 +93,7 @@ export function createOrderTicketStores() {
     stagedOnChart: false,
     stagedDragging: false,
     dragSlMoney: undefined,
+    stopLossEditing: false,
     orderVolume: '1',
     volumeManual: false,
   });

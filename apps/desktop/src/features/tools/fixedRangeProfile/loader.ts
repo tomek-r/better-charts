@@ -114,6 +114,17 @@ export class FixedRangeProfileLoader {
     }
   }
 
+  /**
+   * Safety net after a timeframe switch: a request that never settled (its terminal event was lost or came while
+   * the old timeframe's data was swapped) is sent again instead of waited for. A loaded profile is left alone.
+   */
+  renewUnsettledRequest(range: FixedRangeProfileRange): void {
+    if (this.expected?.settled) {
+      return;
+    }
+    this.requestProfile(range, { keepProfile: true });
+  }
+
   // Trailing throttle: a range being refreshed changes on every tick, so refreshes coalesce into one request per
   // interval. Always deferred so symbol-change effects run first. The range the chart reported last is remembered;
   // at fire time the chain ends unless the chart still holds that very range (its final refresh arrives after a bar passed the range end), so a deleted or re-placed range is dropped.

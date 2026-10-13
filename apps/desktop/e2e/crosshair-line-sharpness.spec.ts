@@ -84,7 +84,7 @@ function expectOneSolidLine(
 
 for (const deviceScaleFactor of [1, 2]) {
   test.describe(`crosshair line sharpness at device pixel ratio ${deviceScaleFactor}`, () => {
-    test('both lines are whole opaque device pixels on the pane and on both axes', async ({ baseURL }) => {
+    test('both lines are whole opaque device pixels on the pane and beside the price readout', async ({ baseURL }) => {
       // Playwright's emulated deviceScaleFactor alone leaves the canvas bitmaps at 1x (the
       // device-pixel-content-box observer reports unscaled sizes), so the browser itself
       // is launched at the ratio as well. That flag cannot be set per describe group.
@@ -105,24 +105,26 @@ async function expectSharpCrosshairLines(page: Page, deviceScaleFactor: number):
   const { pageErrors } = await gotoWithStub(page);
   await expect.poll(async () => page.evaluate(() => window.__chartTest?.data().length ?? 0)).toBe(10);
   const host = (await page.locator('.chart-host').boundingBox())!;
-  const axis = await page.evaluate(() => window.__chartTest!.priceScale());
-  const paneWidth = host.width - axis.axisWidth;
   const pointerX = host.x + POINTER.x;
   const pointerY = host.y + POINTER.y;
   const lineWidth = Math.max(1, Math.floor(deviceScaleFactor));
 
-  // Vertical line: a short slice of the pane above the horizontal line, and of the time axis.
+  await page.mouse.move(pointerX, pointerY);
+  await expect
+    .poll(async () => page.evaluate(() => window.__chartTest?.pointerReadout()?.priceLabelBox?.width))
+    .toBeGreaterThan(0);
+
+  // Vertical line: a short slice of the pane above the horizontal line. On the time axis the
+  // readout pill is centred on the line and covers it, so only the pane is checked there.
   const verticalClips: Clip[] = [
     { x: pointerX - CLIP_HALF_SPAN, y: host.y + 20, width: 2 * CLIP_HALF_SPAN, height: CLIP_LENGTH },
-    { x: pointerX - CLIP_HALF_SPAN, y: host.y + axis.paneHeight + 2, width: 2 * CLIP_HALF_SPAN, height: 10 },
   ];
-  // Horizontal line: a short slice of the pane left of the vertical line, and of the price axis.
+  // Horizontal line: a short slice of the pane left of the vertical line. The price readout pill
+  // fills the whole price axis at the pointer y, so only the pane is checked there.
   const horizontalClips: Clip[] = [
     { x: host.x + 20, y: pointerY - CLIP_HALF_SPAN, width: CLIP_LENGTH, height: 2 * CLIP_HALF_SPAN },
-    { x: host.x + paneWidth + 2, y: pointerY - CLIP_HALF_SPAN, width: 10, height: 2 * CLIP_HALF_SPAN },
   ];
 
-  await page.mouse.move(pointerX, pointerY);
   const baselines = [];
   for (const clip of [...verticalClips, ...horizontalClips]) {
     baselines.push(await screenshotClip(page, clip));

@@ -39,8 +39,6 @@ export interface StagedSlBand {
   farPrice: number;
   /** No price satisfies both edges: nothing is shaded or clamped. */
   empty: boolean;
-  nearHint: string;
-  farHint: string;
   emptyHint: string;
 }
 
@@ -67,8 +65,10 @@ export interface StagedOrderLevels {
 export interface StagedOrderState {
   /** null = not staged. Written by App every render via the mirror effect. */
   order: StagedOrderLevels | null;
-  /** Why the SL drag is held at a band edge; set by the gestures, cleared on release. */
+  /** Why no SL is allowed (empty band); set by the gestures during an SL drag, cleared on release. */
   slClampHint?: string;
+  /** The band edge currently holding the SL drag; its permanent label is emphasised. */
+  slClampEdge?: 'near' | 'far';
   /** Instrument digits used for every price the widget formats. */
   digits: number;
   /** Epoch ms when the current bar closes — drives the axis countdown tag. */
@@ -87,6 +87,8 @@ export interface StagedOrderState {
     tpLineY?: number;
     /** Viewport y of the allowed-SL band edges (risk sizing only). */
     slBandY?: { nearY: number; farY: number };
+    /** Painted band edge labels (viewport px). Informational only: never a grab target. */
+    slBandLabels?: Array<TradingHitRect & { edge: 'near' | 'far'; text: string; held: boolean }>;
     entryCancel?: TradingHitCircle;
     slHandle?: TradingHitRect;
     slCancel?: TradingHitCircle;
@@ -136,34 +138,14 @@ function cancelChip(
   hit[key] = drawCancelChip(ctx, cx, cy, color);
 }
 
-/**
- * Dims the SL-side prices a risk-sized order cannot use: beyond the far edge
- * (even the minimum lot overspends the budget) and between the entry and the
- * near edge (too close for the broker or the volume cap). Dashed lines mark the edges.
- */
-function paintDisallowedSlRegions(
+/** Dotted line across the pane at each edge of the allowed-SL band; nothing is shaded. */
+function paintBandEdgeLines(
   ctx: CanvasRenderingContext2D,
   chartRect: { x: number; y: number; width: number; height: number },
-  side: RiskSide,
-  entryY: number,
   { nearY, farY }: { nearY: number; farY: number },
 ) {
   const { x, y, width, height } = chartRect;
-  const slopesDown = side === 'buy'; // BUY: SL below the entry (larger y)
-  const dim = (from: number, to: number) => {
-    const top = Math.max(Math.min(from, to), y);
-    const bottom = Math.min(Math.max(from, to), y + height);
-    if (bottom > top) {
-      ctx.fillRect(x, top, width, bottom - top);
-    }
-  };
   ctx.save();
-  ctx.fillStyle = palette.muted;
-  ctx.globalAlpha = 0.18;
-  dim(farY, slopesDown ? y + height : y);
-  if (slopesDown ? nearY > entryY : nearY < entryY) {
-    dim(entryY, nearY);
-  }
   ctx.globalAlpha = 0.7;
   ctx.strokeStyle = palette.muted;
   ctx.lineWidth = 1;
@@ -179,7 +161,41 @@ function paintDisallowedSlRegions(
   ctx.restore();
 }
 
-/** Short pill beside the SL handle explaining which band edge holds the drag. */
+/** Gap between the right end of a band text and the price axis, and between a band text and its line. */
+const BAND_TEXT_AXIS_INSET = 6;
+const BAND_TEXT_LINE_OFFSET = 9;
+const BAND_TEXT_HEIGHT = 14;
+
+/**
+ * Plain muted text ("Min SL" / "Max SL") at the right end of a band edge line, right-aligned just left of the
+ * price axis. `outward` (+1 = down the screen, -1 = up) puts it on the side of its line that is OUTSIDE the
+ * allowed SL zone, a few px from the line, so it never covers where the SL can sit. It is not a handle: it
+ * takes no part in the handle label layout and records no grab area. `held` marks the edge holding the SL drag.
+ */
+function paintBandText(
+  ctx: CanvasRenderingContext2D,
+  chartRect: { x: number; width: number },
+  lineY: number,
+  outward: 1 | -1,
+  text: string,
+  held: boolean,
+): TradingHitRect {
+  ctx.font = '400 11px system-ui, sans-serif';
+  const w = ctx.measureText(text).width;
+  const centerY = lineY + outward * BAND_TEXT_LINE_OFFSET;
+  const box = {
+    x: chartRect.x + chartRect.width - BAND_TEXT_AXIS_INSET - w,
+    y: centerY - BAND_TEXT_HEIGHT / 2,
+    w,
+    h: BAND_TEXT_HEIGHT,
+  };
+  ctx.fillStyle = held ? palette.warnText : palette.textLabel;
+  ctx.textAlign = 'left';
+  ctx.fillText(text, box.x, centerY + 0.5);
+  return box;
+}
+
+/** Short pill beside the SL handle explaining why no SL level is allowed (empty band). */
 function paintClampHint(ctx: CanvasRenderingContext2D, handle: TradingHitRect, text: string) {
   const width = ctx.measureText(text).width + 16;
   const left = handle.x + handle.w + 8;
@@ -267,9 +283,10 @@ export function createStagedOrderOverlay(
         zone(order.stopLoss, palette.sellSoft);
         zone(order.takeProfit, palette.accent);
         if (band && hit.slBandY) {
-          paintDisallowedSlRegions(ctx, viewport.chartRect, order.side, entryY, hit.slBandY);
+          paintBandEdgeLines(ctx, viewport.chartRect, hit.slBandY);
         }
       }
+      let entryTag: TradingHitRect | undefined;
 
       // ── ENTRY line + inline chips: (✕) unstage · side pill · pointed qty tag.
       // Draw first so the TP/SL handles remain visible above the price handle
@@ -308,7 +325,13 @@ export function createStagedOrderOverlay(
             ctx.fillStyle = TRADING_COLORS.text;
             ctx.fillText(tagText, cx + 8, labelY + 0.5);
 
-            return { x: x + CANCEL_CHIP_X - 10, y: labelY - 10, w: cx + tagW + 8 - (x + CANCEL_CHIP_X - 10), h: 20 };
+            entryTag = {
+              x: x + CANCEL_CHIP_X - 10,
+              y: labelY - 10,
+              w: cx + tagW + 8 - (x + CANCEL_CHIP_X - 10),
+              h: 20,
+            };
+            return entryTag;
           });
         }
 
@@ -374,6 +397,29 @@ export function createStagedOrderOverlay(
             const box = drawHandle(ctx, x + HANDLE_X, labelY, 'TP', TRADING_COLORS.tp, floatAbove);
             hit.tpHandle = box;
             return box;
+          });
+        }
+      }
+
+      // Band texts are painted straight at their own line, never through the shared handle label queue, so
+      // they cannot displace any handle. They sit on opposite sides of the band (never over each other).
+      if (drawLabels && band && hit.slBandY) {
+        const slBandLabels: NonNullable<StagedOrderState['hit']['slBandLabels']> = [];
+        hit.slBandLabels = slBandLabels;
+        const farIsBelow = hit.slBandY.farY > hit.slBandY.nearY;
+        for (const edge of ['far', 'near'] as const) {
+          const edgeY = edge === 'far' ? hit.slBandY.farY : hit.slBandY.nearY;
+          if (edgeY < y || edgeY > y + height) {
+            continue;
+          }
+          const text = edge === 'far' ? 'Max SL' : 'Min SL';
+          const outward = (edge === 'far') === farIsBelow ? 1 : -1;
+          const held = state.slClampEdge === edge;
+          slBandLabels.push({
+            edge,
+            text,
+            held,
+            ...paintBandText(ctx, viewport.chartRect, edgeY, outward, text, held),
           });
         }
       }

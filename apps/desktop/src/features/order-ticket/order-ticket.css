@@ -394,6 +394,15 @@
   white-space: nowrap;
 }
 
+/* The exits readout echoes the live price; its digits change with every tick, so it owns a fixed
+   column (tabular digits, reserved width) and the input keeps the same remaining space. */
+.ticket-unit.ticket-unit-readout {
+  flex: 0 0 15ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
 .ticket-hint {
   margin: -4px 0 0;
   color: var(--color-text);

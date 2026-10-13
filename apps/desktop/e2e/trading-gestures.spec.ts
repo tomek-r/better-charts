@@ -240,6 +240,8 @@ test('placing a manual order retains SL and TP account amounts on the live posit
   });
   await openTradePanel(page);
   await page.locator('.ticket-quote-side.buy').click();
+  // The amounts are for one unit; the ticket defaults to the symbol's minimum volume.
+  await page.getByLabel('Units').fill('1');
   await fillExitPrice(page, 'Stop loss', '1.0840');
   await fillExitPrice(page, 'Take profit', '1.0860');
   await expect.poll(() => paintedText(page)).toContain('SL -100.00 USD');

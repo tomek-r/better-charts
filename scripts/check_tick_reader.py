@@ -18,7 +18,12 @@ class TickReaderSourceGuards(unittest.TestCase):
         for flag in ("TERMINAL_CONNECTED", "TERMINAL_TRADE_ALLOWED", "MQL_TRADE_ALLOWED",
                      "ACCOUNT_LOGIN", "ACCOUNT_TRADE_ALLOWED", "ACCOUNT_TRADE_EXPERT"):
             self.assertIn(flag, helper)
-        self.assertIn('TradingEnabled() ? "true" : "false"', EA)
+        # The hello advertises the remembered value read from the same helper, so
+        # the timer pass can compare against exactly what the app was told.
+        self.assertIn("g_hello_trading_enabled=TradingEnabled();", EA)
+        self.assertIn('g_hello_trading_enabled ? "true" : "false"', EA)
+        self.assertIn("if(TradingEnabled()==g_hello_trading_enabled) return false;", EA)
+        self.assertIn('DisconnectAndRetry("trading permission changed")', EA)
         self.assertIn('TradingEnabled() ? "yes" : "no"', EA)
         self.assertEqual(EA.count("if(!TradingEnabled())"), 2)
         self.assertNotIn("trading_enabled=yes", EA)

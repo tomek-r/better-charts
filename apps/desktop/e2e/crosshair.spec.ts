@@ -166,7 +166,7 @@ test.describe('crosshair', () => {
       }
       const host = (await page.locator('.chart-host').boundingBox())!;
       const pane = await chartGeometry(page);
-      // Aim at the oldest real candle — far enough from the right edge for the
+      // Aim at the oldest real candle — far enough from the edge for the
       // time label to sit dead centre on the pointer — at 40% of the pane height.
       const timeMs = STUB_NOW - 9 * BAR_MS;
       const local = { x: await candleX(page, timeMs), y: Math.round(pane.paneHeight * 0.4) };
@@ -184,18 +184,17 @@ test.describe('crosshair', () => {
       // Price readout: the series' own formatting of the price at that y.
       expect(state.priceLabel).toMatch(/^\d+\.\d+$/);
       expect(Number(state.priceLabel)).toBeCloseTo(state.price!, 4);
-      // Price label: hugged against the pane's right edge, centred on the pointer.
+      // Price label (price-axis coordinates): flush with the axis' left edge, centred on the pointer.
       const price = state.priceLabelBox!;
-      expect(price.x + price.width).toBeCloseTo(pane.paneWidth, 0);
-      expect(price.height).toBe(22);
-      expect(price.y + price.height / 2).toBeCloseTo(state.y, 0);
-      // Time badge: centred on the pointer x, just above the time axis in the pane.
+      expect(price.x).toBe(0);
+      expect(price.height).toBe(19); // priceTagHeight(11): level with the Bid/Ask tags
+      expect(Math.abs(price.y + price.height / 2 - state.y)).toBeLessThanOrEqual(0.5); // whole-pixel top, odd height
+      // Time badge (time-axis coordinates): centred on the pointer x, on the axis' top edge.
       const time = state.timeLabelBox!;
       expect(time.x + time.width / 2).toBeCloseTo(state.x, 0);
       expect(time.x).toBeGreaterThanOrEqual(0);
       expect(time.x + time.width).toBeLessThanOrEqual(pane.paneWidth + 1);
-      expect(time.y).toBeGreaterThanOrEqual(0);
-      expect(time.y + time.height).toBeCloseTo(pane.paneHeight, 0);
+      expect(time.y).toBe(0);
       // Horizontal moves keep the price, vertical moves change it — the readout
       // tracks the pointer rather than the last resolved value.
       await page.mouse.move(host.x + local.x - 40, host.y + local.y);

@@ -344,6 +344,7 @@ export async function installTauriStub(
         account: '50123456',
         server: 'Broker-Demo',
         lastHeartbeat: NOW,
+        tradingEnabled: true,
         message: 'Bridge connected — market data is flowing.',
         marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: NOW },
       },

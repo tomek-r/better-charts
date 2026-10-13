@@ -19,6 +19,7 @@ export function OrderTicketExits() {
     setTakeProfit,
     stopLoss,
     setStopLoss,
+    setStopLossEditing,
     toggleExit,
     applyExitTicks,
     swapExitUnit,
@@ -55,6 +56,7 @@ export function OrderTicketExits() {
             onSwap={() => swapExitUnit('sl')}
             swapDisabled={!tickKnown}
             priceInvalid={slTooClose}
+            onEditingChange={setStopLossEditing}
           />
           {riskRewardLabel && <p className="ticket-hint ticket-risk-reward">RR {riskRewardLabel}</p>}
           {!tickKnown && <p className="ticket-hint">Tick size unknown — ticks⇄price conversion disabled.</p>}

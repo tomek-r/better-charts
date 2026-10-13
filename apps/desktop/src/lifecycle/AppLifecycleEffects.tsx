@@ -19,6 +19,8 @@ import {
   useChartWorkspaceMirrorLayoutEffect,
 } from '../features/chart/effects/useChartOverlaySync';
 import { useOrderTicketEntryEffects } from '../features/order-ticket/effects/useOrderTicketEntryEffects';
+import { useOrderTicketDefaultVolume } from '../features/order-ticket/effects/useOrderTicketDefaultVolume';
+import { useOrderTicketStopLossSnap } from '../features/order-ticket/effects/useOrderTicketStopLossSnap';
 import { useOrderTicketOrderCheckEffects } from '../features/order-ticket/effects/useOrderTicketOrderCheckEffects';
 import { useOrderTicketRiskPreviewEffects } from '../features/order-ticket/effects/useOrderTicketRiskPreviewEffects';
 import { usePortfolioAccountResetEffect } from '../features/portfolio/usePortfolio';
@@ -269,6 +271,8 @@ export function LifecycleTicketPreviewAndMirror({
     snapshot: session.snapshot,
     quote,
   });
+  useOrderTicketDefaultVolume(session.instrument);
+  useOrderTicketStopLossSnap(ticketChart.slBand, session.instrument?.digits);
   useOrderTicketRiskPreviewEffects(preview.input, preview.riskBasis);
   useChartWorkspaceMirrorRefEffect(
     workspace,

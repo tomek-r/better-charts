@@ -592,6 +592,61 @@ fn new_profile_request_and_cancel_clear_the_queued_bar_request() {
 }
 
 #[test]
+fn timeframe_switch_keeps_the_same_symbol_profile_load_running() {
+    let state = connected_state();
+    seed_symbol(&state, "EURUSD");
+    start(&state);
+    let queued = state.pending_profile_bars.lock().unwrap().clone();
+
+    let cancelled =
+        crate::bridge::commands::request_history_inner(&state, "EURUSD".into(), "M15".into(), 300)
+            .unwrap();
+
+    // Profile data is timeframe-independent: nothing to cancel, nothing dropped.
+    assert!(cancelled.is_none());
+    assert_eq!(*state.pending_profile_bars.lock().unwrap(), queued);
+    assert!(state
+        .tick_controller
+        .lock()
+        .unwrap()
+        .cancelled_view()
+        .is_some());
+    assert_eq!(
+        state
+            .pending_history
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|r| r.timeframe.as_str()),
+        Some("M15")
+    );
+}
+
+#[test]
+fn history_for_another_symbol_drops_the_profile_and_reports_the_cancellation() {
+    let state = connected_state();
+    seed_symbol(&state, "EURUSD");
+    start(&state);
+
+    let cancelled =
+        crate::bridge::commands::request_history_inner(&state, "GBPUSD".into(), "M1".into(), 300)
+            .unwrap()
+            .expect("the awaited profile request must end with a cancellation");
+
+    assert_eq!(cancelled.symbol, "EURUSD");
+    assert_eq!(cancelled.from_ms, RANGE_FROM);
+    assert_eq!(cancelled.end_ms, RANGE_END);
+    assert!(state.pending_profile_bars.lock().unwrap().is_none());
+    assert!(state.pending_tick_profile.lock().unwrap().is_none());
+    assert!(state
+        .tick_controller
+        .lock()
+        .unwrap()
+        .cancelled_view()
+        .is_none());
+}
+
+#[test]
 fn config_budget_is_within_sane_bounds() {
     let budget = trading_core::protocol::max_estimated_profile_ticks();
     assert!(budget >= 1_000_000);
