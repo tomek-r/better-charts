@@ -1,9 +1,5 @@
 import { expect, test } from '@playwright/test';
-import {
-  deriveStopLossBand,
-  stopLossRiskLabel,
-  type StopLossBandInput,
-} from '../src/features/order-ticket/domain/stopLossBand';
+import { deriveStopLossBand, type StopLossBandInput } from '../src/features/order-ticket/domain/stopLossBand';
 import { accountMoneyBasis, estimateLevelMoney } from '../src/shared/money';
 import { brokerSymbolFixture } from './helpers/tauriStub';
 
@@ -23,7 +19,6 @@ const base: StopLossBandInput = {
   account: { currency: 'USD', currencyDigits: 2 },
   unitsMode: 'equity',
   riskBudget: '6.25',
-  riskLabel: '5%',
   side: 'buy',
   orderKind: 'limit',
   entry: '20000',
@@ -38,8 +33,6 @@ test('buy: farthest SL is where the minimum lot spends the whole risk budget', (
   // Broker minimum is 20 ticks (0.20); the guard needs STRICTLY more.
   expect(band.nearPrice).toBeCloseTo(19999.79, 8);
   expect(band.empty).toBe(false);
-  expect(band.farHint).toBe('Max SL · 5% risk at 0.1 units');
-  expect(band.nearHint).toBe('Min SL · broker stop distance');
 });
 
 test('the far edge costs at most the budget under the SL money-label model, within one tick of it', () => {
@@ -68,8 +61,6 @@ test('required volume above volumeMax pushes the nearest SL out', () => {
   const band = deriveStopLossBand({ ...base, instrument: { ...instrument, volumeMax: '1' } })!;
   // 6.25 / (1 lot x 1) = 6.25 points: any closer needs more than 1 lot.
   expect(band.nearPrice).toBeCloseTo(19993.75, 8);
-  // 1 is the broker's volumeMax, not the order size: the text must say so.
-  expect(band.nearHint).toBe('Min SL · broker max 1 units at 5% risk');
 });
 
 test('a budget too small for any allowed distance yields an empty band', () => {
@@ -112,9 +103,4 @@ test('units mode, missing or foreign-currency metadata and invalid budgets add n
   expect(deriveStopLossBand({ ...base, riskBudget: '0' })).toBeUndefined();
   expect(deriveStopLossBand({ ...base, entry: '' })).toBeUndefined();
   expect(deriveStopLossBand({ ...base, instrument: { ...instrument, volumeMin: 'x' } })).toBeUndefined();
-});
-
-test('risk label names percent or money budgets', () => {
-  expect(stopLossRiskLabel('equity', '5', 'USD')).toBe('5%');
-  expect(stopLossRiskLabel('money', '10', 'USD')).toBe('10 USD');
 });

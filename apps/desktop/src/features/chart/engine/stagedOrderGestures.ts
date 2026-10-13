@@ -234,8 +234,6 @@ export function createStagedOrderGestures(
             nearPrice: entry + sign * near,
             farPrice: entry + sign * far,
             empty: false,
-            nearHint: '',
-            farHint: '',
             emptyHint: '',
           };
           const held = clampStopLoss(current.stopLoss, side, band);

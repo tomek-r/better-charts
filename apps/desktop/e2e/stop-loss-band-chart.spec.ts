@@ -103,8 +103,8 @@ test('risk % mode marks both band edges with a dotted line and a permanent neutr
   expect(geo.slBand?.nearPrice).toBeCloseTo(Number(NEAR_EDGE), 8);
   expect(geo.slBandY!.farY).toBeGreaterThan(geo.slBandY!.nearY);
   const label = (edge: 'near' | 'far') => geo.slBandLabels.find((item) => item.edge === edge)!;
-  expect(label('far').text).toBe('Max SL · 5% risk at 0.1 units');
-  expect(label('near').text).toBe('Min SL · broker stop distance');
+  expect(label('far').text).toBe('Max SL');
+  expect(label('near').text).toBe('Min SL');
   // Both labels share the left column of the SL/TP/entry handle labels and never overlap them.
   for (const edge of ['far', 'near'] as const) {
     expect(label(edge).x).toBe(geo.slHandle!.x);
@@ -231,7 +231,7 @@ test('units mode has no band and no clamp', async ({ page }) => {
 });
 
 test('clampStopLoss holds each side inside its band and ignores empty or missing bands', () => {
-  const band = { nearPrice: 99.9, farPrice: 90, empty: false, nearHint: 'n', farHint: 'f', emptyHint: 'e' };
+  const band = { nearPrice: 99.9, farPrice: 90, empty: false, emptyHint: 'e' };
   expect(clampStopLoss(80, 'buy', band)).toEqual({ price: 90, edge: 'far' });
   expect(clampStopLoss(99.95, 'buy', band)).toEqual({ price: 99.9, edge: 'near' });
   expect(clampStopLoss(95, 'buy', band)).toEqual({ price: 95, edge: null });

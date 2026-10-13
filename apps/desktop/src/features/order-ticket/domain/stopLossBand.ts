@@ -15,8 +15,6 @@ export interface StopLossBand {
   farPrice: number;
   /** No price satisfies both edges: the shading and the clamp are skipped. */
   empty: boolean;
-  nearHint: string;
-  farHint: string;
   emptyHint: string;
 }
 
@@ -26,18 +24,11 @@ export interface StopLossBandInput {
   unitsMode: 'money' | 'equity' | 'units';
   /** Risk budget in the account currency (see deriveOrderRiskBasis). */
   riskBudget: string;
-  /** Human wording of the budget for hints, e.g. "5%" or "10 USD". */
-  riskLabel: string;
   side: RiskSide;
   orderKind: OrderKind;
   entry: string;
   limitPrice: string;
   quote: QuoteSnapshot | undefined;
-}
-
-export function stopLossRiskLabel(unitsMode: 'money' | 'equity' | 'units', riskAmount: string, currency = ''): string {
-  const amount = riskAmount.trim();
-  return unitsMode === 'equity' ? `${amount}%` : `${amount} ${currency}`.trimEnd();
 }
 
 // Prices live on the tick grid; the epsilon absorbs binary-float noise such as 0.3/0.1.
@@ -82,7 +73,6 @@ export function deriveStopLossBand(input: StopLossBandInput): StopLossBand | und
   const brokerNear = (Math.floor(stopsMinimum / tickSize + GRID_EPSILON) + 1) * tickSize;
   // Closer than this the required volume would exceed volumeMax.
   const volumeNear = Math.ceil(budget / (volumeMax * lossPerUnitPerLot) / tickSize - GRID_EPSILON) * tickSize;
-  const volumeCapDominates = volumeNear > brokerNear;
   const nearDistance = Math.max(brokerNear, volumeNear);
   const farDistance = Math.floor(budget / (volumeMin * lossPerUnitPerLot) / tickSize + GRID_EPSILON) * tickSize;
 
@@ -96,16 +86,10 @@ export function deriveStopLossBand(input: StopLossBandInput): StopLossBand | und
   const signed = buy ? -1 : 1;
   const nearPrice = onGrid(guardReference + signed * nearDistance, digits);
   const farPrice = onGrid(entryReference + signed * farDistance, digits);
-  const label = input.riskLabel;
   return {
     nearPrice,
     farPrice,
     empty: buy ? farPrice > nearPrice : farPrice < nearPrice,
-    // The volume cap is the broker's volumeMax: name it, or "1000 units" reads like the order's own size.
-    nearHint: volumeCapDominates
-      ? `Min SL · broker max ${volumeWithUnit(instrument.volumeMax)} at ${label} risk`
-      : 'Min SL · broker stop distance',
-    farHint: `Max SL · ${label} risk at ${volumeWithUnit(instrument.volumeMin)}`,
     emptyHint: `Risk is too low for ${volumeWithUnit(instrument.volumeMin)} at any allowed SL distance`,
   };
 }

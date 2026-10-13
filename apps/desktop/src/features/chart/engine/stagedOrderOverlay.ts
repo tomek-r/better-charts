@@ -41,8 +41,6 @@ export interface StagedSlBand {
   farPrice: number;
   /** No price satisfies both edges: nothing is shaded or clamped. */
   empty: boolean;
-  nearHint: string;
-  farHint: string;
   emptyHint: string;
 }
 
@@ -410,7 +408,7 @@ export function createStagedOrderOverlay(
           if (edgeY < y - 20 || edgeY > y + height + 20) {
             continue;
           }
-          const text = edge === 'far' ? band.farHint : band.nearHint;
+          const text = edge === 'far' ? 'Max SL' : 'Min SL';
           const level = edge === 'far' ? 'bandFar' : 'bandNear';
           paintTradingLabel(
             ctx,
