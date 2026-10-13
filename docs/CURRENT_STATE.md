@@ -88,7 +88,8 @@ Not implemented: break even, multiple charts or Pine Script execution.
   Selecting a risk mode with an empty budget shows no risk validation notification;
   entering a value enables validation. Review still requires a valid stop and sizing.
   Below-minimum sizing reports that risk is too low for the minimum order size
-  at the current SL distance.
+  at the current SL distance. The Max SL guide and drag clamp use the unrounded
+  Risk % budget that native sizing receives, not the rounded "≈ amount" hint.
   Without metadata, the seed uses a quarter of the visible price span. If no valid
   stop fits, a notification asks for zooming out or a manual SL; the scale stays fixed.
 - Money/% SL drags resize volume from the cached broker quote using native Decimal

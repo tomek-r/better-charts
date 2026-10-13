@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { deriveStopLossBand, type StopLossBandInput } from '../src/features/order-ticket/domain/stopLossBand';
+import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
 import { accountMoneyBasis, estimateLevelMoney } from '../src/shared/money';
 import { brokerSymbolFixture } from './helpers/tauriStub';
 
@@ -43,6 +44,27 @@ test('the far edge costs at most the budget under the SL money-label model, with
     const loss = -estimateLevelMoney(20000, band.farPrice, Number(instrument.volumeMin), side, money)!;
     expect(loss).toBeLessThanOrEqual(6.25 + 1e-9);
     expect(loss).toBeGreaterThan(6.25 - oneTickMoney - 1e-9);
+  }
+});
+
+test('percent risk: the far edge never costs more than the unrounded budget the native sizing receives', () => {
+  // 3% of 124.96 USD = 3.7488 USD; the displayed estimate rounds up to 3.75 and must not size the band.
+  const basis = deriveOrderRiskBasis({
+    unitsMode: 'equity',
+    riskAmount: '3',
+    equity: '124.96',
+    equityAllocationPercent: '100',
+    currency: 'USD',
+    currencyDigits: 2,
+    stagedOnChart: true,
+  });
+  expect(basis.effectiveRiskAmount).toBe('3.75');
+  const money = accountMoneyBasis(instrument, 'USD', 2)!;
+  const volumeMin = Number(instrument.volumeMin);
+  for (const side of ['buy', 'sell'] as const) {
+    const band = deriveStopLossBand({ ...base, side, entry: '30482.43', riskBudget: basis.sizingRiskAmount })!;
+    const loss = -estimateLevelMoney(30482.43, band.farPrice, volumeMin, side, money)!;
+    expect(loss).toBeLessThanOrEqual(3.7488 + 1e-9);
   }
 });
 

@@ -236,6 +236,7 @@ test('risk basis keeps equity sizing derived from valid positive account equity'
   ).toEqual({
     riskMode: 'equity',
     effectiveRiskAmount: '150.00',
+    sizingRiskAmount: '150',
     equityValue: 10000,
     riskModeHint: '≈ 150.00 USD',
   });
@@ -250,6 +251,7 @@ test('risk basis keeps equity sizing derived from valid positive account equity'
   ).toEqual({
     riskMode: 'equity',
     effectiveRiskAmount: '',
+    sizingRiskAmount: '',
     equityValue: undefined,
     riskModeHint: 'Account data required',
   });

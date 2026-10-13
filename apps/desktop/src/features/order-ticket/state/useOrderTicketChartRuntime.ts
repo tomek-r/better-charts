@@ -31,7 +31,7 @@ export function useOrderTicketChartRuntime(
             currency: account?.currency,
             currencyDigits: account?.currencyDigits,
             stagedOnChart,
-          }).effectiveRiskAmount,
+          }).sizingRiskAmount,
           side: riskSide,
           orderKind,
           entry,
