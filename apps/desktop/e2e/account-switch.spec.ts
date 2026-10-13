@@ -105,6 +105,10 @@ test('the dialog warns when algo trading is disabled and updates live once it is
   await expect(status).toHaveText('Turn on Algo Trading in MT5 in order to send orders');
   await expect(status).toHaveAttribute('data-algo-trading', 'disabled');
   await expect(status.locator('svg')).toHaveAttribute('data-algo-icon', 'warning');
+  // The icon sits on the line's vertical centre.
+  const line = (await status.boundingBox())!;
+  const icon = (await status.locator('svg').boundingBox())!;
+  expect(Math.abs(icon.y + icon.height / 2 - (line.y + line.height / 2))).toBeLessThanOrEqual(1);
 
   // The EA reconnects after Algo Trading is turned on: same account, new session.
   await pushEvent(page, 'bridge-status', {
