@@ -81,6 +81,10 @@
   overflow-wrap: anywhere;
 }
 
+.order-check-time-reserved {
+  visibility: hidden;
+}
+
 /* Account environment badge (DEMO/CONTEST/REAL/UNKNOWN · login) — safety-relevant: which environment an order hits */
 .ticket-account-badge {
   flex: 0 0 auto;

@@ -81,7 +81,14 @@ export function OrderCheckResult({
           </strong>
         )}
       </div>
-      <small className="order-check-time">Checked {orderCheck ? formatQuoted(orderCheck.checkedAtMs) : '—'}</small>
+      {/* Without a check the row stays as an invisible blank line so the card height does not jump on the result. */}
+      {orderCheck ? (
+        <small className="order-check-time">Checked {formatQuoted(orderCheck.checkedAtMs)}</small>
+      ) : (
+        <small className="order-check-time order-check-time-reserved" aria-hidden="true">
+          &nbsp;
+        </small>
+      )}
     </div>
   );
 }

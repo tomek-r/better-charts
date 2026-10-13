@@ -107,7 +107,8 @@ Not implemented: break even, multiple charts or Pine Script execution.
   checking state shows in the (disabled) Send button as "Checking with MT5…".
   The review data block is always shown with stable rows: the ticket's own entry, SL/TP
   and units, and "—" for figures only MT5 OrderCheck can supply (used price, margin
-  figures, check time) while loading, blocked or failed.
+  figures) while loading, blocked or failed. The "Checked" time appears only once MT5
+  has returned a check result; until then its row is reserved but invisible.
   When the market reaches a Stop / Stop Limit trigger (EA `INVALID_PRICE`), Send stays
   blocked and one notification names the live price ("Price moved past your stop entry
   (Ask …). Move the entry above Ask or switch to Market."; sell: Bid/below) with a

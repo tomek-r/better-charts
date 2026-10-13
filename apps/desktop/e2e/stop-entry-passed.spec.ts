@@ -85,8 +85,12 @@ test('the order data block shows placeholders while checking, then fills in with
   await expect(figure(page, 'Requested entry')).toHaveText('Requested entry1.0860');
   await expect(figure(page, 'Stop loss')).toHaveText('Stop loss1.0830');
   await expect(figure(page, 'Units')).not.toHaveText('Units—');
+  // No check time before MT5 has checked; its row stays reserved so the card does not jump.
+  await expect(card).not.toContainText('Checked');
+  await expect(card.locator('.order-check-time')).toBeHidden();
   const loadingHeight = (await card.boundingBox())?.height;
   await expect(page.locator('.ticket-cta.send')).toBeEnabled();
+  await expect(card.locator('.order-check-time')).toHaveText(/^Checked [^·]+$/);
   await expect(figure(page, 'Margin at fill')).toHaveText('Margin at fill105.00 USD');
   expect((await card.boundingBox())?.height).toBe(loadingHeight);
 });
