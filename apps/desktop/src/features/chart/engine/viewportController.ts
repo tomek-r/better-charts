@@ -176,9 +176,14 @@ export class ViewportController {
     this.paneHeight = this.chart.panes()[0]?.getHeight() ?? 0;
   }
 
-  /** Extends the helper points when the pane needs more of them than the last rebuild left. */
-  ensureFuture(width: number, barSpacing: number): void {
-    if (this.futureCount < neededFutureBarCount(width, barSpacing)) {
+  /**
+   * Extends the helper points when the pane needs more of them than the last
+   * rebuild left. Sized from the time-scale width, the same measure `extendFuture`
+   * builds them from: the host is wider by the price axis, so measuring it asked
+   * for a rebuild on every resize, including ones that shrank the pane.
+   */
+  ensureFuture(barSpacing: number): void {
+    if (this.futureCount < neededFutureBarCount(this.chart.timeScale().width(), barSpacing)) {
       this.extendFuture(barSpacing);
     }
   }
@@ -199,8 +204,7 @@ export class ViewportController {
       // explicit reset, replacing the new end anchor with a stale one.
       cancelAnimationFrame(this.futureFrame);
       this.futureFrame = 0;
-      const scale = this.chart.timeScale();
-      this.ensureFuture(scale.width(), DEFAULT_BAR_SPACING);
+      this.ensureFuture(DEFAULT_BAR_SPACING);
       const to = timeScaleBaseIndex(this.data.bars.length, END_MARGIN);
       this.restoreViewport(to, DEFAULT_BAR_SPACING);
       this.fitPriceScale(to, DEFAULT_BAR_SPACING);

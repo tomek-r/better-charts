@@ -391,7 +391,7 @@ export class ChartController {
     // The crosshair tool rejects pointer positions outside the pane, so its bounds
     // are re-measured here rather than waiting for the next overlay paint.
     this.view.measurePane();
-    this.view.ensureFuture(width, spacing);
+    this.view.ensureFuture(spacing);
     this.refreshOverlays();
   }
 
