@@ -12,8 +12,9 @@ pnpm --filter better-charts exec playwright install chromium
 pnpm test:e2e
 ```
 
-Browser installation requires network access once. Playwright starts Vite on
-port 1420 and reuses an existing server. Traces are saved on failure. On busy
+Browser installation requires network access once. Playwright starts its own
+Vite on port 1421 (never reusing a running server, so it cannot collide with
+`pnpm tauri dev` on 1420). Traces are saved on failure. On busy
 machines, limit concurrency with `pnpm test:e2e --workers=2`.
 
 Price-scale regressions also have a WebKit suite for the macOS desktop browser
