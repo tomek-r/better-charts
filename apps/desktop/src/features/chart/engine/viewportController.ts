@@ -68,6 +68,8 @@ export class ViewportController {
   private paneWidth = 0;
   private paneHeight = 0;
   private retainedPrices: { minValue: number; maxValue: number } | null = null;
+  private queuedWrite: { to: number; barSpacing: number } | null = null;
+  private queuedWriteFrame = 0;
   /**
    * Set by the controller: reports every visible-range change. This is the only
    * signal lazy loading has that the user moved the pane over a gap.
@@ -89,12 +91,38 @@ export class ViewportController {
 
   destroy(): void {
     cancelAnimationFrame(this.futureFrame);
+    cancelAnimationFrame(this.queuedWriteFrame);
     this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.onRangeChange);
   }
 
+  /**
+   * The pane's logical range. While a write is queued the library has not applied
+   * it yet, so this answers with the range the write will produce: a second write
+   * in the same task (several bars flushed together, a resize after a bar) must
+   * start from where the first one is taking the view, not from where it was.
+   */
   visibleRange(): { from: number; to: number } | null {
+    if (this.queuedWrite) {
+      const { to, barSpacing } = this.queuedWrite;
+      return { from: to - this.chart.timeScale().width() / barSpacing + 1, to };
+    }
     const range = this.chart.timeScale().getVisibleLogicalRange();
     return range ? { from: Number(range.from), to: Number(range.to) } : null;
+  }
+
+  /**
+   * The library applies `applyOptions` and `setVisibleLogicalRange` at its next
+   * paint, not when they are called. The paint callback was registered by that
+   * write, so the frame registered here runs after it, once the write has landed.
+   */
+  private noteQueuedWrite(to: number, barSpacing: number): void {
+    this.queuedWrite = { to, barSpacing };
+    if (!this.queuedWriteFrame) {
+      this.queuedWriteFrame = requestAnimationFrame(() => {
+        this.queuedWriteFrame = 0;
+        this.queuedWrite = null;
+      });
+    }
   }
 
   isFollowing(): boolean {
@@ -126,9 +154,11 @@ export class ViewportController {
     if (!previous) {
       return;
     }
-    this.traced('anchorAfterPrepend', () =>
-      this.chart.timeScale().setVisibleLogicalRange({ from: previous.from + added, to: previous.to + added }),
-    );
+    this.traced('anchorAfterPrepend', () => {
+      const scale = this.chart.timeScale();
+      scale.setVisibleLogicalRange({ from: previous.from + added, to: previous.to + added });
+      this.noteQueuedWrite(previous.to + added, scale.width() / (previous.to - previous.from + 1));
+    });
   }
 
   /**
@@ -221,6 +251,7 @@ export class ViewportController {
       // index; this remains stable through consecutive drawer resize frames.
       const baseIndex = timeScaleBaseIndex(this.data.bars.length, this.futureCount);
       this.chart.timeScale().applyOptions({ barSpacing, rightOffset: to - baseIndex });
+      this.noteQueuedWrite(to, barSpacing);
     });
   }
 

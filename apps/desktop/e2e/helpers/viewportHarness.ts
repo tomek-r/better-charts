@@ -1,12 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import {
-  gotoWithStub,
-  pushEvent,
-  STUB_M5_INTERVAL_MS,
-  stubInvocations,
-  windowCandles,
-  type TauriStubOptions,
-} from './tauriStub';
+import { gotoWithStub, STUB_M5_INTERVAL_MS, stubInvocations, windowCandles, type TauriStubOptions } from './tauriStub';
 
 /**
  * Bars in the window every viewport spec loads: enough for the helper points, the
@@ -82,28 +75,52 @@ export async function newestBarPlacement(page: Page): Promise<{ slots: number; f
  * live feed does, without waiting for the chart to draw it. Returns its open time in
  * seconds.
  */
-export async function emitLiveBar(page: Page, slotsAhead = 1): Promise<number> {
-  const newest = await page.evaluate(() => window.__chartTest!.data().at(-1)!.time);
-  const time = newest + slotsAhead * INTERVAL_SECONDS;
-  await pushEvent(page, 'bar-update', {
-    symbol: 'EURUSD',
-    timeframe: 'M5',
-    candle: {
-      timeMs: time * 1000,
-      open: '1.0850',
-      high: '1.0860',
-      low: '1.0840',
-      close: '1.0855',
-      tickVolume: 10,
-      spread: 2,
-      realVolume: 0,
+export function emitLiveBar(page: Page, slotsAhead = 1): Promise<number> {
+  return emitLiveBars(page, [slotsAhead]);
+}
+
+/**
+ * Delivers one bar per entry of `gaps` in a single task, each opening that many
+ * intervals after the previous one (the first after the chart's newest), so the app
+ * flushes them together as it does after a stalled frame. Returns the last open
+ * time in seconds.
+ */
+export async function emitLiveBars(page: Page, gaps: number[]): Promise<number> {
+  return page.evaluate(
+    ({ steps, intervalSeconds }) => {
+      const stub = (window as unknown as { __E2E_TAURI_STUB__: { emit(name: string, body: unknown): void } })
+        .__E2E_TAURI_STUB__;
+      let time = window.__chartTest!.data().at(-1)!.time;
+      for (const step of steps) {
+        time += step * intervalSeconds;
+        stub.emit('bar-update', {
+          symbol: 'EURUSD',
+          timeframe: 'M5',
+          candle: {
+            timeMs: time * 1000,
+            open: '1.0850',
+            high: '1.0860',
+            low: '1.0840',
+            close: '1.0855',
+            tickVolume: 10,
+            spread: 2,
+            realVolume: 0,
+          },
+        });
+      }
+      return time;
     },
-  });
-  return time;
+    { steps: gaps, intervalSeconds: INTERVAL_SECONDS },
+  );
+}
+
+/** Delivers live bars (see `emitLiveBars`) and waits until the chart has drawn the last. */
+export async function pushLiveBars(page: Page, gaps: number[]): Promise<void> {
+  const time = await emitLiveBars(page, gaps);
+  await expect.poll(() => page.evaluate(() => window.__chartTest!.data().at(-1)!.time)).toBe(time);
 }
 
 /** Delivers a live bar and waits until the chart has drawn it. */
-export async function pushLiveBar(page: Page, slotsAhead = 1): Promise<void> {
-  const time = await emitLiveBar(page, slotsAhead);
-  await expect.poll(() => page.evaluate(() => window.__chartTest!.data().at(-1)!.time)).toBe(time);
+export function pushLiveBar(page: Page, slotsAhead = 1): Promise<void> {
+  return pushLiveBars(page, [slotsAhead]);
 }
