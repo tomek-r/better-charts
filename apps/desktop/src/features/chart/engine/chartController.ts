@@ -25,6 +25,7 @@ import { ChartToolSet } from './toolSet';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installDevTestApi, removeDevTestApi } from './devTestApi';
 import { initialHistoryWindow } from './initialHistoryWindow';
+import { clearViewportChangeLog, viewportChangeLog } from './viewportDiagnostics';
 
 /** What the app gives the chart for its tools; a tool sees it only through its `ChartToolHost`. */
 export type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
@@ -148,6 +149,8 @@ export class ChartController {
         data: () => this.bars.map((bar) => ({ ...bar })),
         visibleRange: () => this.visibleRange(),
         scrollToRange: (range) => this.chart.timeScale().setVisibleLogicalRange(range),
+        viewportChanges: viewportChangeLog,
+        clearViewportChanges: clearViewportChangeLog,
         timeToX: (timeMs) => this.timeToX(timeMs),
         tool: (id) => this.toolTestApi(id),
         pointerReadout: () => this.pointerReadout.readout(),
@@ -174,6 +177,10 @@ export class ChartController {
    * changes can retain the bars-from-end position; other replacements reset.
    */
   replaceHistory(candles: readonly Candle[], timeframe?: string, viewportMode = HistoryViewportMode.Reset): boolean {
+    return this.view.traced('replaceHistory', () => this.swapHistory(candles, timeframe, viewportMode));
+  }
+
+  private swapHistory(candles: readonly Candle[], timeframe: string | undefined, viewportMode: HistoryViewportMode) {
     if (this.removed) {
       return false;
     }
