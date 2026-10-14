@@ -67,7 +67,7 @@ export function TopBar({
             <rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
             <path d="M10.5 2.5v11" fill="none" stroke="currentColor" strokeWidth="1.5" />
           </svg>
-          <span>Panel</span>
+          <span>Trade</span>
         </button>
         <button className="settings-trigger" aria-label="App settings" onClick={openSettings}>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
