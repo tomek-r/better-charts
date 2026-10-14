@@ -123,6 +123,13 @@ export async function pushLiveBars(page: Page, gaps: number[]): Promise<void> {
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data().at(-1)!.time)).toBe(time);
 }
 
+/** Lets two frames pass, so every write the app queued for the next paint has landed. */
+export async function waitForPaint(page: Page): Promise<void> {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)))),
+  );
+}
+
 /** Delivers a live bar and waits until the chart has drawn it. */
 export function pushLiveBar(page: Page, slotsAhead = 1): Promise<void> {
   return pushLiveBars(page, [slotsAhead]);

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations, type StubInternals } from './helpers/tauriStub';
+import { waitForPaint } from './helpers/viewportHarness';
 
 const interval = 300_000;
 const history = Array.from({ length: 300 }, (_, index) => ({
@@ -61,12 +62,6 @@ async function pageRequests(page: Page) {
   return (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history_page');
 }
 
-async function waitTwoFrames(page: Page): Promise<void> {
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)))),
-  );
-}
-
 test('reconnecting with a shorter same-selection history matches initial-load framing', async ({ page, browser }) => {
   await loadHistory(page, history);
   await page.evaluate(() => window.__chartTest!.scrollToRange({ from: 125, to: 155 }));
@@ -79,9 +74,9 @@ test('reconnecting with a shorter same-selection history matches initial-load fr
   await expect
     .poll(() => page.evaluate(() => window.__chartTest!.data().at(-1)?.time))
     .toBe(refreshed.at(-1)!.timeMs / 1000);
-  await waitTwoFrames(page);
-  await waitTwoFrames(page);
-  await waitTwoFrames(page);
+  await waitForPaint(page);
+  await waitForPaint(page);
+  await waitForPaint(page);
   const reconnectRange = await page.evaluate(() => window.__chartTest!.visibleRange());
 
   const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
@@ -93,7 +88,7 @@ test('reconnecting with a shorter same-selection history matches initial-load fr
     },
   });
   await expect.poll(() => referencePage.evaluate(() => window.__chartTest?.data().length)).toBe(10);
-  await waitTwoFrames(referencePage);
+  await waitForPaint(referencePage);
   const initialLoadRange = await referencePage.evaluate(() => window.__chartTest!.visibleRange());
   expect(reconnectRange?.from).toBeCloseTo(initialLoadRange?.from ?? NaN, 0);
   expect(reconnectRange?.to).toBeCloseTo(initialLoadRange?.to ?? NaN, 0);
@@ -109,7 +104,7 @@ test('reconnect history keeps real market gaps without synthesizing candles', as
   await reconnectWithSnapshot(page, refreshed);
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data().length)).toBe(300);
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data()[250]?.close)).toBe(1.0855);
-  await waitTwoFrames(page);
+  await waitForPaint(page);
   expect(await page.evaluate(() => window.__chartTest!.visibleRange()?.to)).toBeCloseTo(304, 0);
 
   const times = await page.evaluate(() => window.__chartTest!.data().map((bar) => bar.time * 1000));
@@ -128,7 +123,7 @@ test('disconnect clears an older-page request and rejects its stale response', a
   const refreshed = history.slice(-10).map((candle) => ({ ...candle, timeMs: candle.timeMs + 8 * interval }));
   await reconnectWithSnapshot(page, refreshed);
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data().length)).toBe(10);
-  await waitTwoFrames(page);
+  await waitForPaint(page);
 
   await pushHistoryPage(page, oldBeforeMs, history.slice(0, 290));
   expect(await page.evaluate(() => window.__chartTest!.data().length)).toBe(10);

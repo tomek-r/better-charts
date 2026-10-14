@@ -12,9 +12,6 @@ import {
 } from './futureTimePoints';
 import { recordViewportChange, type ViewportSnapshot } from './viewportDiagnostics';
 
-/** Follow only near the real last candle's five-bar end anchor. */
-const AT_END_TOLERANCE_BARS = 5;
-
 /**
  * Where the pane sat, captured before the series is replaced.
  *
@@ -125,12 +122,16 @@ export class ViewportController {
     }
   }
 
+  /**
+   * True while the newest bar is on screen, even partly. A zoom or pan that keeps
+   * it in view keeps the pane following new bars at the distance the user chose from
+   * the right edge; only moving it out of view stops that, and bringing it back
+   * resumes it.
+   */
   isFollowing(): boolean {
     const range = this.visibleRange();
-    return (
-      range !== null &&
-      Math.abs(range.to - timeScaleBaseIndex(this.data.bars.length, END_MARGIN)) <= AT_END_TOLERANCE_BARS
-    );
+    const newest = this.data.bars.length - 1;
+    return range !== null && newest >= 0 && range.from <= newest + 0.5 && range.to >= newest - 0.5;
   }
 
   /**
