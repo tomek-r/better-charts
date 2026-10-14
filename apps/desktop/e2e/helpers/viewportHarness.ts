@@ -77,8 +77,12 @@ export async function newestBarPlacement(page: Page): Promise<{ slots: number; f
   });
 }
 
-/** Opens a bar `slotsAhead` intervals after the current newest one, as the live feed does. */
-export async function pushLiveBar(page: Page, slotsAhead = 1): Promise<void> {
+/**
+ * Delivers a bar opening `slotsAhead` intervals after the chart's newest one, as the
+ * live feed does, without waiting for the chart to draw it. Returns its open time in
+ * seconds.
+ */
+export async function emitLiveBar(page: Page, slotsAhead = 1): Promise<number> {
   const newest = await page.evaluate(() => window.__chartTest!.data().at(-1)!.time);
   const time = newest + slotsAhead * INTERVAL_SECONDS;
   await pushEvent(page, 'bar-update', {
@@ -95,5 +99,11 @@ export async function pushLiveBar(page: Page, slotsAhead = 1): Promise<void> {
       realVolume: 0,
     },
   });
+  return time;
+}
+
+/** Delivers a live bar and waits until the chart has drawn it. */
+export async function pushLiveBar(page: Page, slotsAhead = 1): Promise<void> {
+  const time = await emitLiveBar(page, slotsAhead);
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data().at(-1)!.time)).toBe(time);
 }
