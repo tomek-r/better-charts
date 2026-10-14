@@ -1,5 +1,12 @@
 import { expect, type Page } from '@playwright/test';
-import { gotoWithStub, pushEvent, STUB_M5_INTERVAL_MS, windowCandles, type TauriStubOptions } from './tauriStub';
+import {
+  gotoWithStub,
+  pushEvent,
+  STUB_M5_INTERVAL_MS,
+  stubInvocations,
+  windowCandles,
+  type TauriStubOptions,
+} from './tauriStub';
 
 /**
  * Bars in the window every viewport spec loads: enough for the helper points, the
@@ -12,9 +19,9 @@ const INTERVAL_SECONDS = STUB_M5_INTERVAL_MS / 1000;
 
 /**
  * Loads an EURUSD M5 window and waits for the startup sequence to finish. The app
- * replaces the history twice (the cached snapshot, then its own history request),
- * and either replacement re-frames the view, so a spec must not touch the viewport
- * before the second one has landed.
+ * replaces the history more than once (the cached snapshot, then the answer to its
+ * own history request), and each replacement re-frames the view, so a spec must not
+ * touch the viewport before the last one has landed.
  */
 export async function loadViewportWindow(
   page: Page,
@@ -26,7 +33,23 @@ export async function loadViewportWindow(
     historyByTimeframe: { M5: candles },
     ...options.stub,
   });
-  await expect.poll(() => countChanges(page, 'replaceHistory')).toBeGreaterThanOrEqual(2);
+  // React runs the startup effect twice in development, so a replacement count
+  // cannot say when the app's own history request was answered. The stub answers
+  // it a task after the invoke; waiting for that invoke and then for the count to
+  // hold still outlasts it.
+  await expect
+    .poll(async () => (await stubInvocations(page)).some((call) => call.cmd === 'request_history'))
+    .toBe(true);
+  let previous = -1;
+  await expect
+    .poll(async () => {
+      const current = await countChanges(page, 'replaceHistory');
+      const settled = current === previous;
+      previous = current;
+      await page.waitForTimeout(100);
+      return settled;
+    })
+    .toBe(true);
   return collected;
 }
 
