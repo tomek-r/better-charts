@@ -54,7 +54,7 @@ token is required outside development builds.
 {
   "token": "example-token", "terminal_id": "installation-instance-id", "terminal_build": 5000,
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
-  "expert_version": "1.010", "tick_reader_version": "1.001", "trading_enabled": false,
+  "expert_version": "1.011", "tick_reader_version": "1.001", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
   "tick_price_counts": true, "partial_close": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
@@ -85,7 +85,7 @@ the server's permission; the app's local Settings permission is an additional
 startup restriction, optionally overridden with `MT5_BRIDGE_TRADING_ENABLED`.
 Neither flag submits a command or bypasses execution gates.
 
-The app requires an exact EA `expert_version` match (`1.010` for this build)
+The app requires an exact EA `expert_version` match (`1.011` for this build)
 and an exact `tick_reader_version` match (`1.001`), the version of the
 `BetterChartsTickHistoryReader` indicator. Both expected versions live in
 `config/mq5-versions.json`; regression guards check that the EA's
@@ -230,6 +230,12 @@ whose id is stale or not issued by the bridge is ignored or fails closed as
 before. The frontend shows a wait notice during the last 5 s before the
 deadline and a "no data" notice after the event; it never retries on its own.
 
+A window request for a symbol the terminal does not have ends the same way, at
+once: the same correlated `error` frame (envelope `id` = the `history_request`
+id) with message `symbol not available` (EA 1.011+), so the bridge emits
+`history-unavailable` and keeps the session. Earlier EAs answered an
+uncorrelated `INVALID_MESSAGE`, which ended the session.
+
 #### Older-history pages (additive extension)
 
 Both payloads take an optional `before_ms` epoch-millisecond anchor. Absent is
@@ -266,6 +272,15 @@ When the deadline passes it sends an `error` frame (`INTERNAL_ERROR`,
 the bridge fail just that request; an error with any other id is a session-level
 error. Pending pages are discarded on disconnect and when the active symbol
 changes.
+
+While a window (initial) history for a symbol is still waiting for
+`SERIES_SYNCHRONIZED`, no active symbol is established yet. A page for that
+same symbol joins the same pending list instead of being answered empty: it is
+served once the initial history is delivered, and if the initial history times
+out every waiting page ends at once with its own correlated error (message
+`initial history synchronization timed out`, envelope `id` = the page's request
+id), right after the initial history's own error. Such a page counts against
+the 4-page limit.
 
 The bridge handles a correlated page error per id family. A `rust-profile-bars-<n>`
 error ends that profile step (estimate page: the profile falls back to ticks;
@@ -496,8 +511,14 @@ remaining volume/current price may be zero. Optional comments are at most
 256 characters.
 
 `sequence_after >= sequence_before`; `complete=true` additionally requires
-equal sequence values and no truncation. `history_to_ms` is the end actually
-read; `captured_at_ms >= history_to_ms`. `reconcile_error` contains
+equal sequence values and no truncation. `captured_at_ms` is the EA's server
+clock reading (the later of `TimeTradeServer()` and `TimeCurrent()`).
+`history_to_ms` is the end of the window read: that clock plus a look-ahead of
+60 000 ms, so a deal booked after the last quote, or inside the second the
+whole-second clocks have already floored, is inside the window. Hence
+`history_to_ms - captured_at_ms <= 60000` (`history_to_ms >= history_from_ms`);
+the bridge rejects a larger gap. A deal `time_ms` may exceed `captured_at_ms`
+but never `history_to_ms`. `reconcile_error` contains
 `request_id`, `code`, and `message` and does not satisfy the reconciliation gate.
 
 Reconciliation is observation: missing records, incomplete snapshots, and

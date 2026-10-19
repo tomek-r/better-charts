@@ -72,7 +72,7 @@ Not implemented: break even, multiple charts or Pine Script execution.
   while a pointer is pressed on the pane (at most 10 s), so a drag is not shifted
   by a new bar.
   Clicking the current portfolio symbol keeps the chart.
-- The EA (1.010) sends the initial history only after MT5 reports the series
+- The EA (1.011) sends the initial history only after MT5 reports the series
   synchronized, so stale cached bars never anchor the live feed. A synchronized
   but shallow series is sent as is (`complete=false`). Waiting past 5 s shows
   "Loading is taking longer than usual. Waiting N s. If no data arrives, switch

@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.010"
+#define BRIDGE_EXPERT_VERSION "1.011"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -814,6 +814,22 @@ void SendReconcileError(const string request_id,const string code,const string m
    if(!SendFrame(response)) DisconnectAndRetry("reconcile error send failed");
   }
 
+// A deal can be booked after the last quote and inside the second that the
+// whole-second clocks (TimeCurrent, TimeTradeServer) have already floored, so a
+// window ending exactly "now" would drop the newest deal while still reporting
+// a complete snapshot. The window therefore reaches this far past the clock;
+// captured_at_ms stays the real clock reading.
+#define BRIDGE_HISTORY_WINDOW_LOOKAHEAD_MS 60000
+
+// Latest server time the terminal knows: the estimated trade-server time can
+// lag a fresh quote and the last quote time can lag the trade server.
+long ServerNowMs()
+  {
+   const datetime trade_server=TimeTradeServer();
+   const datetime last_quote=TimeCurrent();
+   return (long)(trade_server>last_quote ? trade_server : last_quote)*1000;
+  }
+
 bool SendReconcileSnapshot(const string request_id,const string account_login,const string broker_server,const long history_from_ms,const long max_orders,const long max_deals)
   {
    if(request_id=="" || StringLen(request_id)>128 || account_login=="" || StringLen(account_login)>128 || broker_server=="" || StringLen(broker_server)>128 || history_from_ms<0 || max_orders<1 || max_orders>1000 || max_deals<1 || max_deals>1000)
@@ -824,8 +840,9 @@ bool SendReconcileSnapshot(const string request_id,const string account_login,co
      { SendReconcileError(request_id,"ACCOUNT_UNAVAILABLE","MT5 account is not connected"); return false; }
    const ulong sequence_before=g_trade_sequence;
    const datetime from_time=(datetime)(history_from_ms/1000);
-   const long history_to_ms=(long)TimeCurrent()*1000;
-   if(history_from_ms>history_to_ms)
+   const long window_server_now_ms=ServerNowMs();
+   const long history_to_ms=window_server_now_ms+BRIDGE_HISTORY_WINDOW_LOOKAHEAD_MS;
+   if(history_from_ms>window_server_now_ms)
      { SendReconcileError(request_id,"INVALID_MESSAGE","history start is in the future"); return false; }
    if(!HistorySelect(from_time,(datetime)(history_to_ms/1000)))
      { SendReconcileError(request_id,"HISTORY_SELECT_FAILED","MT5 could not select account history"); return false; }
@@ -888,8 +905,8 @@ bool SendReconcileSnapshot(const string request_id,const string account_login,co
    active_orders+="]";
 
    const ulong sequence_after=g_trade_sequence;
-   long captured_at_ms=(long)TimeCurrent()*1000;
-   if(captured_at_ms<history_to_ms) captured_at_ms=history_to_ms;
+   long captured_at_ms=ServerNowMs();
+   if(captured_at_ms<window_server_now_ms) captured_at_ms=window_server_now_ms;
    const bool complete=(sequence_before==sequence_after && history_items_readable && position_total<=500 && order_total<=500);
    const ulong snapshot_message_id=++g_message_id;
    const string payload=StringFormat("{\"request_id\":\"%s\",\"account_login\":\"%s\",\"broker_server\":\"%s\",\"snapshot_id\":\"ea-reconcile-%I64u\",\"history_from_ms\":%I64d,\"history_to_ms\":%I64d,\"sequence_before\":%I64u,\"sequence_after\":%I64u,\"complete\":%s,\"captured_at_ms\":%I64d,\"positions\":%s,\"active_orders\":%s,\"history_orders\":%s,\"history_deals\":%s}",JsonEscape(request_id),JsonEscape(account_login),JsonEscape(broker_server),snapshot_message_id,history_from_ms,history_to_ms,sequence_before,sequence_after,(complete?"true":"false"),captured_at_ms,positions,active_orders,history_orders,history_deals);
@@ -1394,9 +1411,18 @@ bool SendHistorySnapshot(const string request_id,const string symbol,const strin
   {
    // The newest window request wins: a still-waiting older one is dropped.
    ClearPendingInitialHistory();
-   if(!EnsureSymbol(symbol) || bars<1 || bars>1000)
+   if(bars<1 || bars>1000)
      {
       SendProtocolError("INVALID_MESSAGE","unsupported history request");
+      return false;
+     }
+   // A symbol this terminal does not have fails just this request. The error
+   // carries the request id, so the bridge clears it and keeps the session; an
+   // uncorrelated error would end it and a reconnect would ask for the same
+   // symbol again.
+   if(!EnsureSymbol(symbol))
+     {
+      SendCorrelatedHistoryError(request_id,"symbol not available");
       return false;
      }
    MqlRates rates[];
@@ -1601,10 +1627,14 @@ void HandleHistoryPageRequest(const string request_id,const string symbol,const 
   {
    MqlRates rates[];
    int copied=0;
+   // While the initial history waits for MT5 to synchronize its series, the
+   // active symbol is not established yet. A page of that same symbol waits
+   // with the others; answering now would report a false "no older candles".
+   const bool initial_history_waiting=(g_pending_initial.active && symbol==g_pending_initial.symbol);
    if(EnsureSymbol(symbol) && timeframe!=PERIOD_CURRENT && bars>=1 && bars<=1000 && before_ms>0 &&
-      g_history_ready && symbol==g_active_symbol)
+      (initial_history_waiting || (g_history_ready && symbol==g_active_symbol)))
      {
-      if(!ReadHistoryPage(symbol,timeframe,bars,before_ms,rates,copied))
+      if(initial_history_waiting || !ReadHistoryPage(symbol,timeframe,bars,before_ms,rates,copied))
         {
          if(g_pending_page_count>=BRIDGE_HISTORY_PAGE_PENDING_MAX)
            {
@@ -1671,9 +1701,23 @@ void PollPendingHistoryPages()
      }
   }
 
+// Ends every waiting page with its own correlated error, so a page that waited
+// for an initial history that never arrived fails now instead of at its own
+// deadline.
+void FailPendingHistoryPages(const string reason)
+  {
+   while(g_pending_page_count>0)
+     {
+      const string request_id=g_pending_pages[0].request_id;
+      RemovePendingHistoryPage(0);
+      SendCorrelatedHistoryError(request_id,reason);
+     }
+  }
+
 // Retries the waiting initial history on the timer. On the deadline it ends
 // the request with an error whose envelope id is the request id, so the bridge
 // fails just that request and keeps the session; no stale candles are sent.
+// Pages that waited for it fail with the same outcome.
 void PollPendingInitialHistory()
   {
    if(!g_pending_initial.active || g_state!=BRIDGE_READY) return;
@@ -1696,6 +1740,7 @@ void PollPendingInitialHistory()
    if(now<g_pending_initial.deadline_ms) return;
    ClearPendingInitialHistory();
    SendCorrelatedHistoryError(request_id,"history synchronization timed out");
+   FailPendingHistoryPages("initial history synchronization timed out");
   }
 
 string TickJson(const MqlTick &tick,const int digits)

@@ -50,6 +50,8 @@ MAX_FRAME = 1024 * 1024
 SESSION_ID = "capture-session-1"
 REQUEST_ID = "capture-reconcile-1"
 HISTORY_WINDOW_MS = 7 * 24 * 3600 * 1000
+# Mirrors HISTORY_WINDOW_LOOKAHEAD_MS in crates/trading-core/src/protocol/account.rs.
+HISTORY_WINDOW_LOOKAHEAD_MS = 60_000
 MAX_COLLECTION = 500
 MAX_HISTORY_LIMIT = 1000
 MAX_ID_CHARS = 128
@@ -340,7 +342,7 @@ def _check_comments(records, label: str, problems) -> None:
 
 RULE_ECHO = "echo: request_id/account_login/broker_server match the request"
 RULE_SNAPSHOT_ID = "snapshot_id: non-empty, trimmed, <= 128 chars"
-RULE_WINDOW = "history window: history_from_ms echoed; history_to_ms >= from; captured_at_ms >= to"
+RULE_WINDOW = "history window: history_from_ms echoed; history_to_ms >= from; history_to_ms - captured_at_ms <= 60000"
 RULE_SEQUENCE = "sequence: sequence_after >= sequence_before; complete requires before == after"
 RULE_COUNTS = "counts: positions/active_orders <= 500; history_orders/deals <= 500 (and <= 1000)"
 RULE_IDS = "ids: non-empty, trimmed, <= 128 chars, unique within each collection"
@@ -387,8 +389,8 @@ def validate_snapshot(payload: dict, request: dict):
         problems.append("history_to_ms < history_from_ms")
     if not _is_int(captured_at_ms):
         problems.append("captured_at_ms is not an integer")
-    elif _is_int(to_ms) and captured_at_ms < to_ms:
-        problems.append("captured_at_ms < history_to_ms")
+    elif _is_int(to_ms) and to_ms - captured_at_ms > HISTORY_WINDOW_LOOKAHEAD_MS:
+        problems.append("history_to_ms is more than the lookahead past captured_at_ms")
     rules.append((RULE_WINDOW, problems))
 
     # 4) sequence discipline.

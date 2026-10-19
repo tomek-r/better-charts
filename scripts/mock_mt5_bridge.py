@@ -22,6 +22,9 @@ TIMEOUT_SECONDS = 20.0
 HEARTBEAT_SECONDS = 2.0
 RECONCILE_STATE = {"seen": False, "request": None, "outcome": None}
 RECONCILE_COUNTER = {"snapshot": 0}
+# How far past the broker clock a history window reaches (the EA's lookahead,
+# crates/trading-core/src/protocol/account.rs HISTORY_WINDOW_LOOKAHEAD_MS).
+HISTORY_WINDOW_LOOKAHEAD_MS = 60_000
 
 
 def env_int(name: str, default: int) -> int:
@@ -197,6 +200,27 @@ def initial_history_reply(request_id: str, symbol: str, timeframe: str, candles:
     return sync_delay_seconds, snapshot
 
 
+INITIAL_PAGE_TIMEOUT_MESSAGE = "initial history synchronization timed out"
+
+
+def replies_to_pages_requested_while_initial_history_waits(
+        initial_request_id: str, symbol: str, timeframe: str, candles: list, page_requests: list,
+        session_id: str, sync_delay_seconds: float, max_frame: int) -> list[dict]:
+    """The frames the EA sends, in order, when older-history pages for the
+    waiting symbol arrive before its initial history is delivered. The EA does
+    not answer them with an empty page (a false "no older candles"): they wait
+    for the initial history, then are served normally; when the initial history
+    times out they end with their own correlated error right after it."""
+    _, initial = initial_history_reply(initial_request_id, symbol, timeframe, candles, True, session_id,
+                                       sync_delay_seconds)
+    if initial["type"] == "error":
+        failed_pages = [envelope("error", page["_request_id"], session_id,
+                                 {"code": "INTERNAL_ERROR", "message": INITIAL_PAGE_TIMEOUT_MESSAGE, "retryable": False})
+                        for page in page_requests]
+        return [initial, *failed_pages]
+    return [initial, *(synthetic_history_page(page, session_id, max_frame) for page in page_requests)]
+
+
 def send_initial_history(conn: socket.socket, request_id: str, symbol: str, timeframe: str, candles: list,
                          session_id: str) -> None:
     """Manual option for the not-yet-synchronized case; it blocks this
@@ -219,7 +243,22 @@ def self_test_initial_history() -> int:
                                         INITIAL_SYNC_DEADLINE_SECONDS + 1)
     assert wait == INITIAL_SYNC_DEADLINE_SECONDS and frame["type"] == "error" and frame["id"] == "rust-history-1"
     assert frame["payload"] == {"code": "INTERNAL_ERROR", "message": INITIAL_SYNC_TIMEOUT_MESSAGE, "retryable": False}
-    print("mock initial-history self-test passed: wait for sync, short synchronized history, correlated timeout error")
+    # Pages requested while it waits are not answered empty: served after it, or failed with it.
+    pages = [{"symbol": "TEST.INIT", "timeframe": "M1", "bars": 100, "before_ms": 1_700_000_000_000,
+              "_request_id": f"rust-profile-bars-{number}"} for number in (1, 2)]
+    served = replies_to_pages_requested_while_initial_history_waits(
+        "rust-history-1", "TEST.INIT", "M1", candles, pages, "synthetic-session", 0.25, TRANSFER_LIMITS["max_frame_bytes"])
+    assert [frame["type"] for frame in served] == ["history_snapshot"] * 3
+    assert served[0]["payload"]["request_id"] == "rust-history-1"
+    assert [frame["payload"]["request_id"] for frame in served[1:]] == ["rust-profile-bars-1", "rust-profile-bars-2"]
+    assert all(frame["payload"]["candles"] for frame in served[1:]), "a page is never answered empty while waiting"
+    failed = replies_to_pages_requested_while_initial_history_waits(
+        "rust-history-1", "TEST.INIT", "M1", candles, pages, "synthetic-session", INITIAL_SYNC_DEADLINE_SECONDS + 1,
+        TRANSFER_LIMITS["max_frame_bytes"])
+    assert [frame["type"] for frame in failed] == ["error"] * 3
+    assert [frame["id"] for frame in failed] == ["rust-history-1", "rust-profile-bars-1", "rust-profile-bars-2"]
+    assert all(frame["payload"]["message"] == INITIAL_PAGE_TIMEOUT_MESSAGE for frame in failed[1:])
+    print("mock initial-history self-test passed: wait for sync, short synchronized history, correlated timeout error, pages held while it waits")
     return 0
 
 
@@ -515,8 +554,8 @@ def reply_reconcile(conn: socket.socket, session_id: str | None, request: dict, 
     snapshot_number = RECONCILE_COUNTER["snapshot"]
     history_from_ms = int(request.get("history_from_ms", 0))
     now_ms = int(time.time() * 1000)
-    history_to_ms = max(now_ms, history_from_ms)
-    captured_at_ms = max(now_ms, history_to_ms)
+    captured_at_ms = max(now_ms, history_from_ms)
+    history_to_ms = captured_at_ms + HISTORY_WINDOW_LOOKAHEAD_MS
     # Setup may precede the requested window (setup-before-window acceptance rule);
     # done stays inside [history_from_ms, history_to_ms] and never before setup.
     time_setup_ms = history_from_ms - 5000

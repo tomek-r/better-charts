@@ -1584,6 +1584,29 @@ fn reconciliation_validates_limits_duplicates_and_ranges() {
 }
 
 #[test]
+fn reconciliation_window_may_reach_past_the_clock_by_the_lookahead_only() {
+    let request = reconcile_request();
+    let captured_at_ms = 150;
+    let deal_after_the_clock = HistoryDeal {
+        time_ms: captured_at_ms + 10,
+        ..reconcile_snapshot().history_deals[0].clone()
+    };
+    let snapshot = ReconcileSnapshot {
+        history_to_ms: captured_at_ms + HISTORY_WINDOW_LOOKAHEAD_MS,
+        captured_at_ms,
+        history_deals: vec![deal_after_the_clock],
+        ..reconcile_snapshot()
+    };
+    assert!(snapshot.validate(&request).is_ok());
+    assert!(ReconcileSnapshot {
+        history_to_ms: snapshot.history_to_ms + 1,
+        ..snapshot
+    }
+    .validate(&request)
+    .is_err());
+}
+
+#[test]
 fn reconciliation_complete_requires_stable_sequence() {
     let request = reconcile_request();
     let snapshot = reconcile_snapshot();
