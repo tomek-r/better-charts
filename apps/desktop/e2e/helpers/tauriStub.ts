@@ -94,6 +94,8 @@ export interface TauriStubOptions {
   partialClose?: boolean;
   /** Bars of the primary recording seeding `get_market_snapshot` (the configured history depth). */
   recordedSnapshotBars?: number;
+  /** Holds `save_app_settings` open this long, to observe a dialog while it saves. */
+  saveDelayMs?: number;
 }
 
 export interface RecordedHistory {
@@ -693,6 +695,9 @@ export async function installTauriStub(
       }
       if (!Object.prototype.hasOwnProperty.call(responses, cmd)) {
         throw new Error(`E2E Tauri stub has no scripted response for command "${cmd}".`);
+      }
+      if (cmd === 'save_app_settings' && opts.saveDelayMs !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, opts.saveDelayMs));
       }
       if (cmd === 'save_app_settings' && responses[cmd] === 'reactive') {
         const view = responses.get_app_settings as Record<string, unknown>;
