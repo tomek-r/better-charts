@@ -299,6 +299,88 @@ async fn heartbeat_market_session_is_stored_and_clears_when_absent() {
 }
 
 #[tokio::test]
+async fn heartbeat_broker_utc_offset_is_stored_and_invalid_offset_rejected() {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let handshake = complete_handshake(&mut client, &harness).await;
+    let heartbeat = |id: &str, sequence: u64, offset: serde_json::Value| {
+        BridgeClient::envelope(
+            MessageType::Heartbeat,
+            id,
+            Some(&handshake.session),
+            serde_json::json!({
+                "sequence": sequence,
+                "terminal_connected": true,
+                "account_connected": true,
+                "broker_server": "Broker-Demo",
+                "broker_utc_offset_minutes": offset,
+            }),
+        )
+    };
+
+    client
+        .send(heartbeat("hb-off-1", 21, serde_json::json!(330)))
+        .await
+        .unwrap();
+    let ack = client.recv(Duration::from_secs(2)).await.expect("ack");
+    assert_eq!(ack.message_type, MessageType::HeartbeatAck);
+    assert_eq!(
+        harness
+            .state
+            .status
+            .lock()
+            .unwrap()
+            .broker_utc_offset_minutes,
+        Some(330)
+    );
+
+    // A heartbeat without the field (older EA) clears it.
+    client
+        .send(BridgeClient::envelope(
+            MessageType::Heartbeat,
+            "hb-off-3",
+            Some(&handshake.session),
+            serde_json::json!({
+                "sequence": 23,
+                "terminal_connected": true,
+                "account_connected": true,
+                "broker_server": "Broker-Demo"
+            }),
+        ))
+        .await
+        .unwrap();
+    let _ = client.recv(Duration::from_secs(2)).await.expect("ack");
+    assert_eq!(
+        harness
+            .state
+            .status
+            .lock()
+            .unwrap()
+            .broker_utc_offset_minutes,
+        None
+    );
+
+    // An offset that is no 15-minute step is a malformed heartbeat: rejected
+    // like a malformed market session, and never stored.
+    client
+        .send(heartbeat("hb-off-2", 24, serde_json::json!(7)))
+        .await
+        .unwrap();
+    let error = client.recv(Duration::from_secs(2)).await.expect("error");
+    let payload: ErrorPayload = serde_json::from_value(error.payload).unwrap();
+    assert_eq!(payload.code, ErrorCode::InvalidMessage);
+    assert_eq!(
+        harness
+            .state
+            .status
+            .lock()
+            .unwrap()
+            .broker_utc_offset_minutes,
+        None
+    );
+}
+
+#[tokio::test]
 async fn heartbeat_with_malformed_market_session_is_rejected() {
     let harness = default_harness().await;
     let mut client = BridgeClient::connect(harness.addr).await.unwrap();

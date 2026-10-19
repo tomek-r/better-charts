@@ -476,6 +476,18 @@ string MarketSessionJson()
                        JsonEscape(g_active_symbol),(is_open?"true":"false"),trade_mode,(long)TimeTradeServer()*1000);
   }
 
+// Heartbeat `broker_utc_offset_minutes`: the server's UTC offset from
+// TimeTradeServer()-TimeGMT(), rounded to the nearest 15 minutes (the two
+// clocks are read a moment apart); `null` outside -14h..+14h so an unusable
+// clock is unknown, never a wrong zone. Sent per heartbeat because DST moves it.
+string BrokerUtcOffsetJson()
+  {
+   const long difference_seconds=(long)TimeTradeServer()-(long)TimeGMT();
+   const long offset_minutes=(long)MathRound((double)difference_seconds/900.0)*15;
+   if(offset_minutes<-840 || offset_minutes>840) return "null";
+   return IntegerToString(offset_minutes);
+  }
+
 bool SendHello()
   {
    g_message_id++;
@@ -3380,7 +3392,7 @@ void OnTimer()
       const string account_login=IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
       const bool account_connected=(terminal_connected && account_login!="0" && account_login!="");
       const string broker_server=JsonEscape(AccountInfoString(ACCOUNT_SERVER));
-      string heartbeat=StringFormat("{\"v\":1,\"type\":\"heartbeat\",\"id\":\"ea-%I64u\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"sequence\":%I64u,\"terminal_connected\":%s,\"account_connected\":%s,\"broker_server\":\"%s\",\"market_session\":%s}}",g_message_id,JsonEscape(g_session_id),(ulong)TimeGMT()*1000,g_heartbeat_sequence,(terminal_connected?"true":"false"),(account_connected?"true":"false"),broker_server,MarketSessionJson());
+      string heartbeat=StringFormat("{\"v\":1,\"type\":\"heartbeat\",\"id\":\"ea-%I64u\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"sequence\":%I64u,\"terminal_connected\":%s,\"account_connected\":%s,\"broker_server\":\"%s\",\"market_session\":%s,\"broker_utc_offset_minutes\":%s}}",g_message_id,JsonEscape(g_session_id),(ulong)TimeGMT()*1000,g_heartbeat_sequence,(terminal_connected?"true":"false"),(account_connected?"true":"false"),broker_server,MarketSessionJson(),BrokerUtcOffsetJson());
       if(!SendFrame(heartbeat)) { DisconnectAndRetry("heartbeat send failed"); return; }
       g_last_heartbeat_ms=now;
      }

@@ -363,6 +363,8 @@ export async function installTauriStub(
         tradingEnabled: true,
         message: 'Bridge connected — market data is flowing.',
         marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: NOW },
+        // Literal: this function is serialized into the page and cannot see module constants.
+        brokerUtcOffsetMinutes: 180,
       },
       get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles },
       // No auto-fill race: a fixed quote seeds Entry deterministically (market

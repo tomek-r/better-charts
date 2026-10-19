@@ -193,6 +193,7 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
         last_heartbeat: None,
         message: None,
         market_session: None,
+        broker_utc_offset_minutes: None,
         supported_timeframes: vec!["M1".into(), "M5".into()],
         partial_close: false,
         trading_enabled: false,

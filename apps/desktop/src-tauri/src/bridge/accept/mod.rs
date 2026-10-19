@@ -334,6 +334,7 @@ pub(crate) fn protocol_error(
         status.state = BridgeConnectionState::ProtocolError;
         status.message = Some(message.into());
         status.market_session = None;
+        status.broker_utc_offset_minutes = None;
         status.partial_close = false;
         status.trading_enabled = false;
     });
@@ -364,6 +365,7 @@ pub(crate) fn disconnect(
             status.state = BridgeConnectionState::Disconnected;
             status.message = None;
             status.market_session = None;
+            status.broker_utc_offset_minutes = None;
             status.partial_close = false;
             status.trading_enabled = false;
         });
@@ -462,6 +464,7 @@ pub(crate) fn protocol_error_session(
             status.state = BridgeConnectionState::ProtocolError;
             status.message = Some(message.to_string());
             status.market_session = None;
+            status.broker_utc_offset_minutes = None;
             status.partial_close = false;
             status.trading_enabled = false;
         });

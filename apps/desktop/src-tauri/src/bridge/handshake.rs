@@ -322,6 +322,7 @@ pub(crate) async fn run_handshake(
         status.server = Some(hello_payload.broker_server.clone());
         status.message = None;
         status.market_session = None;
+        status.broker_utc_offset_minutes = None;
         status.partial_close = hello_payload.partial_close;
         status.trading_enabled = hello_payload.trading_enabled;
     });

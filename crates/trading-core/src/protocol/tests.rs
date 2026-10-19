@@ -2187,6 +2187,37 @@ fn heartbeat_market_session_is_optional_and_validated() {
 }
 
 #[test]
+fn heartbeat_broker_utc_offset_is_optional_and_validated() {
+    let heartbeat = |offset: Option<serde_json::Value>| -> HeartbeatPayload {
+        let mut payload = serde_json::json!({
+            "sequence": 1,
+            "terminal_connected": true,
+            "account_connected": true,
+            "broker_server": "Broker-Demo",
+        });
+        if let Some(value) = offset {
+            payload["broker_utc_offset_minutes"] = value;
+        }
+        serde_json::from_value(payload).unwrap()
+    };
+    // An older EA omits the field, and an explicit null means unknown.
+    assert_eq!(heartbeat(None).broker_utc_offset_minutes, None);
+    assert!(heartbeat(None).validate().is_ok());
+    assert!(heartbeat(Some(serde_json::Value::Null)).validate().is_ok());
+    for valid in [0, 180, 330, -300, -210, 840, -840] {
+        let parsed = heartbeat(Some(valid.into()));
+        assert_eq!(parsed.broker_utc_offset_minutes, Some(valid));
+        assert!(parsed.validate().is_ok(), "{valid} should be valid");
+    }
+    for invalid in [1, 185, -5, 855, -855, 900] {
+        assert!(
+            heartbeat(Some(invalid.into())).validate().is_err(),
+            "{invalid} should be rejected"
+        );
+    }
+}
+
+#[test]
 fn partial_close_capability_defaults_to_false_and_round_trips() {
     let ack: HelloAckPayload = serde_json::from_value(serde_json::json!({
         "heartbeat_interval_ms": 2000,

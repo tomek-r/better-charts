@@ -20,6 +20,8 @@ export interface BridgeStatus {
   message?: string;
   /** Absent until the first heartbeat carrying an observation (fail closed). */
   marketSession?: MarketSessionStatus;
+  /** Broker UTC offset in minutes from the latest heartbeat; absent or null = unknown (display only). */
+  brokerUtcOffsetMinutes?: number | null;
   /** Periods advertised by the connected EA. */
   supportedTimeframes?: string[];
   /** Negotiated `partial_close` capability; absent or false = partial close is never offered. */

@@ -20,12 +20,11 @@ pub(crate) async fn heartbeat(
             return InboundOutcome::ErrorFrame(ErrorCode::InvalidMessage, "invalid heartbeat");
         }
     };
-    // A present-but-malformed observation is rejected with the same error as a
-    // malformed heartbeat: the app must never act on an unvalidated session.
-    if let Some(session) = heartbeat.market_session.as_ref() {
-        if session.validate().is_err() {
-            return InboundOutcome::ErrorFrame(ErrorCode::InvalidMessage, "invalid heartbeat");
-        }
+    // A present-but-malformed observation (market session, broker offset) is
+    // rejected with the same error as a malformed heartbeat: the app must never
+    // act on unvalidated data.
+    if heartbeat.validate().is_err() {
+        return InboundOutcome::ErrorFrame(ErrorCode::InvalidMessage, "invalid heartbeat");
     }
     {
         let _session_work = match inbound.state.session_work.lock() {
@@ -55,6 +54,7 @@ pub(crate) async fn heartbeat(
         *last_heartbeat = tokio::time::Instant::now();
         publish(inbound.events, inbound.state, |status| {
             status.last_heartbeat = Some(now_ms());
+            status.broker_utc_offset_minutes = heartbeat.broker_utc_offset_minutes;
             status.market_session = heartbeat.market_session.map(MarketSessionView::from);
         });
     }

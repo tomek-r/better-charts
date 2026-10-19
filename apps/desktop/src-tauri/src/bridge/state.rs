@@ -124,6 +124,10 @@ pub(crate) struct BridgeStatus {
     /// until the first heartbeat that carries one (fail closed).
     #[serde(rename = "marketSession", default)]
     pub market_session: Option<MarketSessionView>,
+    /// Broker UTC offset in minutes the EA reported on its latest heartbeat
+    /// (cleared with `market_session`); `None` while unknown. Display only.
+    #[serde(rename = "brokerUtcOffsetMinutes", default)]
+    pub broker_utc_offset_minutes: Option<i32>,
     #[serde(rename = "supportedTimeframes")]
     pub supported_timeframes: Vec<String>,
     /// Whether the connected EA negotiated partial close for this session;
@@ -157,6 +161,7 @@ impl Default for BridgeStatus {
             last_heartbeat: None,
             message: None,
             market_session: None,
+            broker_utc_offset_minutes: None,
             supported_timeframes: Vec::new(),
             partial_close: false,
             trading_enabled: false,

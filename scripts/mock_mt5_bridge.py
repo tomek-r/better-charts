@@ -394,6 +394,9 @@ def expect_type(message: dict, expected: str) -> dict:
     return payload
 
 
+MOCK_BROKER_UTC_OFFSET_MINUTES = 180
+
+
 def market_session_fragment(symbol: str = "TEST.INIT") -> dict:
     """EA market-session observation carried on every heartbeat.
 
@@ -411,6 +414,7 @@ def maybe_heartbeat(conn: socket.socket, session_id: str, heartbeat_state: dict)
         send_frame(conn, envelope("heartbeat", f"ea-heartbeat-{sequence}", session_id, {
             "sequence": sequence, "terminal_connected": True, "account_connected": True,
             "broker_server": "mock", "market_session": market_session_fragment(),
+            "broker_utc_offset_minutes": MOCK_BROKER_UTC_OFFSET_MINUTES,
         }))
         heartbeat_state["next"] = now + HEARTBEAT_SECONDS
 
@@ -794,6 +798,7 @@ def main() -> int:
             send_frame(conn, envelope("heartbeat", "ea-heartbeat-1", session_id, {
                 "sequence": 1, "terminal_connected": True, "account_connected": True,
                 "broker_server": "mock", "market_session": market_session_fragment(),
+                "broker_utc_offset_minutes": MOCK_BROKER_UTC_OFFSET_MINUTES,
             }))
             heartbeat_ack = next_non_reconcile(reader, conn, session_id, deadline)
             heartbeat_payload = expect_type(heartbeat_ack, "heartbeat_ack")

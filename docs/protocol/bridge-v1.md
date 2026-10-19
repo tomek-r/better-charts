@@ -30,7 +30,8 @@ validation live in [`protocol`](../../crates/trading-core/src/protocol/mod.rs).
   "payload": {"sequence": 1, "terminal_connected": true,
     "account_connected": true, "broker_server": "Broker-Demo",
     "market_session": {"symbol": "NAS100", "is_open": true, "trade_mode": 4,
-      "server_time_ms": 1770000000000}}
+      "server_time_ms": 1770000000000},
+    "broker_utc_offset_minutes": 180}
 }
 ```
 
@@ -123,7 +124,13 @@ override; EA inputs are
 sent before acknowledgement.
 
 `heartbeat` contains `sequence`, `terminal_connected`, `account_connected`,
-`broker_server`, and the optional `market_session` observation described below.
+`broker_server`, the optional `market_session` observation described below,
+and the optional `broker_utc_offset_minutes`: the broker server's UTC offset as
+an integer number of minutes, `TimeTradeServer() - TimeGMT()` rounded to the
+nearest 15 minutes (EA 1.011). It is a heartbeat field because DST can change
+it mid-session. Rust rejects a value that is not a multiple of 15 or lies
+outside -840..=840 like a malformed heartbeat; `null` or an absent field means
+unknown. The app only carries it in the bridge status for display.
 `heartbeat_ack` contains the same `sequence`. The interval is 2 seconds and
 timeout is 6 seconds. Heartbeats check transport liveness;
 market/account/portfolio publication runs independently. Reconnect delays are
