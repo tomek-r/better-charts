@@ -91,17 +91,24 @@ pub(crate) fn load() -> Result<(), ConfigError> {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     struct Fixture(PathBuf);
 
     impl Fixture {
         fn new() -> Self {
+            // The clock alone is not unique: tests starting together can read the
+            // same timestamp, and the sequence keeps their directories apart.
+            static SEQUENCE: AtomicU64 = AtomicU64::new(0);
             let unique = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            let path =
-                env::temp_dir().join(format!("better-charts-env-{}-{unique}", std::process::id()));
+            let path = env::temp_dir().join(format!(
+                "better-charts-env-{}-{unique}-{}",
+                std::process::id(),
+                SEQUENCE.fetch_add(1, Ordering::Relaxed)
+            ));
             fs::create_dir(&path).unwrap();
             Self(path)
         }
