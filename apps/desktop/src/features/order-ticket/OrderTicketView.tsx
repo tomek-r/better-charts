@@ -1,3 +1,4 @@
+import { Separated } from '../../shared/ui/SeparatorIcon';
 import { OrderTicketEditor } from './editor/OrderTicketEditor';
 import { OrderTicketReview } from './review/OrderTicketReview';
 import { useOrderTicketHeader } from './editor/useOrderTicketHeader';
@@ -22,7 +23,7 @@ export function OrderTicketView() {
           <strong>{symbol ?? '—'}</strong>
           {environment && (
             <span className={`ticket-account-badge ${environment.kind}`} title={environment.title}>
-              {environment.label}
+              <Separated parts={environment.labelParts} />
             </span>
           )}
         </div>

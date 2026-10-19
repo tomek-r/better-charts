@@ -1,6 +1,7 @@
 import { Profiler, type ProfilerOnRenderCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ErrorNotificationsProvider } from '../../src/shared/ui/ErrorNotifications';
+import { Separated } from '../../src/shared/ui/SeparatorIcon';
 import type { ReactNode } from 'react';
 import { AppHeaderView } from '../../src/features/app-header/AppHeaderView';
 import {
@@ -192,9 +193,10 @@ function PanelProbe() {
 
 function TicketHeaderProbe() {
   const { environment, symbol } = useOrderTicketHeader();
+  const environmentLabel = environment === undefined ? 'none' : <Separated parts={environment.labelParts} />;
   return (
     <output data-testid="probe-ticket-header">
-      {symbol ?? '—'}|{environment?.label ?? 'none'}
+      {symbol ?? '—'}|{environmentLabel}
     </output>
   );
 }

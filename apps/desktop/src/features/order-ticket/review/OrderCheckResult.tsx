@@ -6,6 +6,7 @@ import type {
   OrderCheckResult as OrderCheckResultModel,
 } from '../../../shared/bridge/types';
 import { finiteNumber, formatAccountMoney, formatMarginThreshold } from '../../../shared/accountFormat';
+import { Separated } from '../../../shared/ui/SeparatorIcon';
 import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
 
 type ReviewAccount = Pick<
@@ -56,6 +57,10 @@ export function OrderCheckResult({
   const riskClass = warning?.className;
   const stopLoss = orderCheck ? orderCheck.stopLoss : local.stopLoss;
   const takeProfit = orderCheck ? orderCheck.takeProfit : local.takeProfit;
+  const marginThresholds = [
+    `Margin call ${threshold(account?.marginCallLevel)}`,
+    `Stop out ${threshold(account?.stopOutLevel)}`,
+  ];
   return (
     <div className="order-check-result" aria-label="MT5 OrderCheck result">
       {orderCheck?.checkPassed && orderCheck.lastError !== 0 && (
@@ -73,7 +78,7 @@ export function OrderCheckResult({
       </div>
       <div className="order-check-margin-note">
         <small>
-          Margin call {threshold(account?.marginCallLevel)} · Stop out {threshold(account?.stopOutLevel)}
+          <Separated parts={marginThresholds} />
         </small>
         {warning && (
           <strong className={`order-check-margin-warning ${riskClass}`} role="status">

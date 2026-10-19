@@ -220,7 +220,7 @@ test.describe('portfolio card overflow regression', () => {
     expect(sizes.rowScroll).toBeLessThanOrEqual(sizes.rowWidth + 1);
     expect(sizes.panelScroll).toBeLessThanOrEqual(sizes.panelWidth + 1);
     // And no value is ellipsized away — the full string must stay rendered.
-    await expect(row).toContainText('30375.67 · P/L 80.68 USD · Swap 0.00 USD');
+    await expect(row).toContainText(/30375\.67\s*P\/L 80\.68 USD\s*Swap 0\.00 USD/);
     expect(pageErrors).toEqual([]);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });

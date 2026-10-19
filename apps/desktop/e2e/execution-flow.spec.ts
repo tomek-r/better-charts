@@ -32,7 +32,7 @@ async function fillRiskDraft(page: Page) {
   // Stage first (owner flow: the CTA is enabled only for a staged order).
   await page.locator('section.order-ticket .ticket-quote-side.buy').click();
   // Anchor on the connected bridge: the ticket-header DEMO badge needs the account snapshot.
-  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText('DEMO · 50123456');
+  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText(/^DEMO\s*50123456$/);
   // Market order: price row disabled, entry follows the quote.
   const priceInput = page
     .locator('.ticket-row')
@@ -194,9 +194,10 @@ test('stubbed runtime connects: sidebar, account badge and chart data render', a
   await expect(page.locator('.execution-safety-card')).toHaveCount(0);
   await expect(page.locator('.recovery-card')).toHaveCount(0);
   await expect(page.locator('.reconciliation-card')).toHaveCount(0);
-  // Account environment badge: DEMO · login, tooltip carries the raw enum + server.
+  // Account environment badge: DEMO then its login, divided by the separator icon; the tooltip carries the raw
+  // enum and the server.
   const badge = page.locator('.ticket-title .ticket-account-badge');
-  await expect(badge).toHaveText('DEMO · 50123456');
+  await expect(badge).toHaveText(/^DEMO\s*50123456$/);
   await expect(badge).toHaveAttribute('title', 'account_trade_mode=0 · Broker-Demo');
   // The portfolio card lists open positions only, and the default stub snapshot
   // has none, so the panel deliberately renders no card here. The populated case

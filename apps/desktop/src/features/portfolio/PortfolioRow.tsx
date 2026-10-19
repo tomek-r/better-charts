@@ -4,6 +4,7 @@ import { PartialCloseMenuButton } from '../partial-close/PartialCloseMenuButton'
 import { PartialCloseVolumePopover } from '../partial-close/PartialCloseVolumePopover';
 import { partialCloseLimits, partialCloseTitle } from '../partial-close/partialCloseVolume';
 import { volumeWithUnit } from '../../shared/format';
+import { Separated } from '../../shared/ui/SeparatorIcon';
 import { accountAmount } from './accountAmount';
 
 interface PortfolioRowProps {
@@ -36,6 +37,11 @@ export function PortfolioRow({
   const accountUnavailable = !account?.accountLogin || !account?.brokerServer;
   const locked = accountUnavailable || commandInFlight;
   const itemRef = useRef<HTMLDivElement>(null);
+  const profitText = accountAmount(position.profit, account?.currency, account?.currencyDigits);
+  const swapText = position.swap
+    ? `Swap ${accountAmount(position.swap, account?.currency, account?.currencyDigits)}`
+    : '';
+  const exitParts = [`SL ${position.stopLoss ?? '—'}`, `TP ${position.takeProfit ?? '—'}`];
 
   // The popover floats below the row inside the scrolling drawer; for the last row it extends
   // the drawer's scroll area rather than being clipped, so bring it into view when it opens.
@@ -58,18 +64,15 @@ export function PortfolioRow({
           <div>
             <strong>{position.symbol}</strong>
             <span>
-              Position · {position.side} · {volumeWithUnit(position.volume)}
+              <Separated parts={['Position', position.side, volumeWithUnit(position.volume)]} />
             </span>
           </div>
           <div>
             <span>
-              {position.priceCurrent} · P/L {accountAmount(position.profit, account?.currency, account?.currencyDigits)}
-              {position.swap
-                ? ` · Swap ${accountAmount(position.swap, account?.currency, account?.currencyDigits)}`
-                : ''}
+              <Separated parts={[position.priceCurrent, `P/L ${profitText}`, swapText]} />
             </span>
             <small>
-              SL {position.stopLoss ?? '—'} · TP {position.takeProfit ?? '—'}
+              <Separated parts={exitParts} />
             </small>
           </div>
         </button>

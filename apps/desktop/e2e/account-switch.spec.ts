@@ -76,7 +76,7 @@ test('an account switch clears staged drafts and announces the new account in a 
   await expect(dialog).toBeVisible();
   await expect.poll(() => stagedState(page)).toBe(false);
   await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
-  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText('REAL · 70001234');
+  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText(/^REAL\s*70001234$/);
 
   // Keyboard: focus lands on Dismiss, Tab stays trapped inside, Enter dismisses.
   const dismiss = dialog.getByRole('button', { name: 'Dismiss' });
@@ -152,7 +152,7 @@ test('the dialog lists the new account details for a hedging percent-mode accoun
   await expect(infoValue(dialog, 'Equity')).toHaveText('5,120.50 USD');
   await expect(infoValue(dialog, 'Leverage')).toHaveText('1:30');
   await expect(infoValue(dialog, 'Account')).toHaveText('Hedging');
-  await expect(infoValue(dialog, 'Margin call / Stop out')).toHaveText('120% · 80%');
+  await expect(infoValue(dialog, 'Margin call / Stop out')).toHaveText(/^120%\s*80%$/);
 });
 
 test('the dialog lists a netting money-mode account and hides equal equity', async ({ page }) => {
@@ -167,7 +167,7 @@ test('the dialog lists a netting money-mode account and hides equal equity', asy
   });
   const dialog = switchedDialog(page, 'Account was switched to Real 70001234');
   await expect(infoValue(dialog, 'Account')).toHaveText('Netting');
-  await expect(infoValue(dialog, 'Margin call / Stop out')).toHaveText('300.00 USD · 150.00 USD');
+  await expect(infoValue(dialog, 'Margin call / Stop out')).toHaveText(/^300\.00 USD\s*150\.00 USD$/);
   await expect(infoValue(dialog, 'Equity')).toHaveCount(0);
 });
 
@@ -242,6 +242,6 @@ test('reconnecting to the same account does not clear drafts or show the dialog'
 test('first connection announces nothing', async ({ page }) => {
   await gotoWithStub(page);
   await openTradePanel(page);
-  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText('DEMO · 50123456');
+  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText(/^DEMO\s*50123456$/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });

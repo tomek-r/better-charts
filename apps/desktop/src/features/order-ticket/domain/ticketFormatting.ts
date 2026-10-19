@@ -10,7 +10,8 @@ export function accountEnvironment(
   >,
 ): {
   kind: 'demo' | 'contest' | 'real' | 'unknown';
-  label: string;
+  /** The badge label in its parts: the environment kind, then the account number. */
+  labelParts: string[];
   title: string;
 } {
   const name = account?.accountTradeModeName;
@@ -30,7 +31,7 @@ export function accountEnvironment(
   const server = account?.brokerServer ? ` · ${account.brokerServer}` : '';
   return {
     kind,
-    label: `${kind.toUpperCase()} · ${account?.accountLogin ?? '—'}`,
+    labelParts: [kind.toUpperCase(), account?.accountLogin ?? '—'],
     title: `account_trade_mode=${mode ?? 'unknown'}${server}`,
   };
 }

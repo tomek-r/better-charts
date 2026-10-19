@@ -1,9 +1,11 @@
+import type { ReactNode } from 'react';
 import { formatAccountMoney, formatMarginThreshold, marginModeName } from '../../shared/accountFormat';
 import type { AccountSnapshot } from '../../shared/bridge/types';
 import { ModalDialog, ModalDialogButton } from '../../shared/ui/ModalDialog';
+import { Separated } from '../../shared/ui/SeparatorIcon';
 
 /** Label/value rows of the new account; rows with a missing value are omitted. */
-function accountInfoRows(account: AccountSnapshot | undefined): Array<[label: string, value: string]> {
+function accountInfoRows(account: AccountSnapshot | undefined): Array<[label: string, value: ReactNode]> {
   if (!account) {
     return [];
   }
@@ -11,15 +13,15 @@ function accountInfoRows(account: AccountSnapshot | undefined): Array<[label: st
   const equity = formatAccountMoney(account.equity, account);
   const marginCall = formatMarginThreshold(account.marginCallLevel, account);
   const stopOut = formatMarginThreshold(account.stopOutLevel, account);
-  const rows: Array<[string, string | undefined]> = [
+  const rows: Array<[string, ReactNode]> = [
     ['Server', account.brokerServer],
     ['Balance', balance],
     ['Equity', equity !== balance ? equity : undefined],
     ['Leverage', account.leverage > 0 ? `1:${account.leverage}` : undefined],
     ['Account', marginModeName(account.marginMode)],
-    ['Margin call / Stop out', marginCall && stopOut ? `${marginCall} · ${stopOut}` : undefined],
+    ['Margin call / Stop out', marginCall && stopOut ? <Separated parts={[marginCall, stopOut]} /> : undefined],
   ];
-  return rows.filter((row): row is [string, string] => Boolean(row[1]));
+  return rows.filter((row): row is [string, ReactNode] => Boolean(row[1]));
 }
 
 /** Check mark when algo trading is on, warning triangle when it is off; colour from `currentColor`. */

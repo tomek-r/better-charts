@@ -1,6 +1,7 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
 import { type Dispatch, type SetStateAction } from 'react';
 import type { AccountSnapshot, OrderCheckResult, RiskSide } from '../../../shared/bridge/types';
+import { Separated } from '../../../shared/ui/SeparatorIcon';
 import { OrderCheckResult as OrderCheckResultView, type LocalOrderFigures } from './OrderCheckResult';
 
 function sendButtonLabel(submitting: boolean, checking: boolean): string {
@@ -54,7 +55,7 @@ export function OrderTicketReview({
       <div className="ticket-review-head">
         <strong>Review order</strong>
         <span>
-          {riskSide === 'buy' ? 'Buy' : 'Sell'} · {orderKindDisplay} · {effectiveVolume || '—'}
+          <Separated parts={[riskSide === 'buy' ? 'Buy' : 'Sell', orderKindDisplay, effectiveVolume || '—']} />
         </span>
       </div>
       <OrderCheckResultView orderCheck={orderCheck} local={localFigures} account={account} />
