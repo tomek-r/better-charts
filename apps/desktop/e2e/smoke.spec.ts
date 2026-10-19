@@ -77,6 +77,8 @@ test('shows the no-bridge fallback state without crashing', async ({ page }) => 
   await expect(page.locator('.app-footer')).toHaveCount(0);
   // Chart area falls back to its waiting overlay instead of crashing.
   await expect(page.locator('.loading-message strong')).toHaveText('Waiting for market data');
+  // The shared loader's glyph turns here too, not only in the journal.
+  await expect(page.locator('.loading-message .overlay-glyph')).toHaveCSS('animation-name', 'loading-glyph-turn');
   // Hit testing with text enabled detects canvases painted over the message.
   const overlayTextOnTop = await page.locator('.loading-message strong').evaluate((heading) => {
     const previous = heading.style.pointerEvents;

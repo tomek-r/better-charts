@@ -2,6 +2,7 @@ import { useBridgeChartState, useBridgeConnection } from '../bridge/BridgeSessio
 import { useChartResources } from './ChartWorkspaceProvider';
 import type { ReactNode } from 'react';
 import { useErrorNotification } from '../../shared/ui/ErrorNotifications';
+import { LoadingMessage } from '../../shared/ui/LoadingMessage';
 import { HistoryWaitNotice } from './HistoryWaitNotice';
 
 /** `children` are DOM overlays hung over the canvas (positioned against the chart frame). */
@@ -21,11 +22,10 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
       {/* Centered on the window, not on the chart frame, so it reads the same with the trade panel open or closed. */}
       <div className="viewport-center-layer">
         {showLoadingMessage && (
-          <div className="loading-message">
-            <span className="overlay-glyph">◒</span>
-            <strong>{symbolLoading ? 'Loading market data' : 'Waiting for market data'}</strong>
-            <span>Connect MT5 bridge to load candles.</span>
-          </div>
+          <LoadingMessage
+            title={symbolLoading ? 'Loading market data' : 'Waiting for market data'}
+            hint="Connect MT5 bridge to load candles."
+          />
         )}
         <HistoryWaitNotice />
       </div>

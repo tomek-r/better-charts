@@ -1,0 +1,39 @@
+.loading-message {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 9px;
+  color: var(--color-muted-strong);
+  text-align: center;
+}
+
+.loading-message strong {
+  color: var(--color-text-tertiary);
+  font-size: 15px;
+}
+
+.loading-message span:last-child {
+  max-width: 320px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Inline-block, not inline: `transform` (the turn below) is ignored on a plain inline box. */
+.overlay-glyph {
+  display: inline-block;
+  color: var(--color-muted);
+  font-size: 30px;
+  animation: loading-glyph-turn 1.2s linear infinite;
+}
+
+@keyframes loading-glyph-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-glyph {
+    animation: none;
+  }
+}

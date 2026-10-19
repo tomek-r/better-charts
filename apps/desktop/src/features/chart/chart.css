@@ -130,31 +130,6 @@
   pointer-events: none;
 }
 
-.loading-message {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  gap: 9px;
-  color: var(--color-muted-strong);
-  text-align: center;
-}
-
-.loading-message strong {
-  color: var(--color-text-tertiary);
-  font-size: 15px;
-}
-
-.loading-message span:last-child {
-  max-width: 320px;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.overlay-glyph {
-  color: var(--color-muted);
-  font-size: 30px;
-}
-
 .chart-wait-notice {
   max-width: min(420px, calc(100% - 28px));
   padding: 9px 12px;
