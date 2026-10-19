@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import socket
 import struct
+import sys
 import time
 
 BRIDGE_CONFIG = json.loads((Path(__file__).resolve().parent.parent / "config/bridge.json").read_text())
@@ -842,7 +843,7 @@ if __name__ == "__main__":
     try:
         raise SystemExit(
             self_test_history_page() + self_test_initial_history() + self_test_tick_history() + self_test_partial_close() + self_test_margin_projection()
-            if os.environ.get("MT5_MOCK_SELFTEST") == "1"
+            if "--self-test" in sys.argv[1:] or os.environ.get("MT5_MOCK_SELFTEST") == "1"
             else main()
         )
     except (AssertionError, ConnectionError, TimeoutError, OSError) as error:

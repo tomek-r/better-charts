@@ -12,5 +12,5 @@ pnpm --filter better-charts dup
 cargo test --workspace --offline
 pnpm test:e2e
 $PY scripts/check_tick_reader.py
-MT5_MOCK_SELFTEST=1 $PY scripts/mock_mt5_bridge.py
-MT5_CAPTURE_SELFTEST=1 $PY scripts/capture_reconcile_snapshot.py
+$PY scripts/mock_mt5_bridge.py --self-test
+$PY scripts/capture_reconcile_snapshot.py --self-test

@@ -66,13 +66,9 @@ jobs:
       - run: python -m py_compile scripts/mock_mt5_bridge.py scripts/capture_reconcile_snapshot.py scripts/check_tick_reader.py
       - run: python scripts/check_tick_reader.py
       - name: Mock bridge self-test
-        env:
-          MT5_MOCK_SELFTEST: "1"
-        run: python scripts/mock_mt5_bridge.py
+        run: python scripts/mock_mt5_bridge.py --self-test
       - name: Capture tool self-test
-        env:
-          MT5_CAPTURE_SELFTEST: "1"
-        run: python scripts/capture_reconcile_snapshot.py
+        run: python scripts/capture_reconcile_snapshot.py --self-test
       - name: Install browser
         if: runner.os == 'Linux'
         run: pnpm --filter better-charts exec playwright install --with-deps chromium

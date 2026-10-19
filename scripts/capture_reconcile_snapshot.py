@@ -31,7 +31,7 @@ tool stays standalone (no imports from the mock).
 Usage:
     python3 scripts/capture_reconcile_snapshot.py --help
     MT5_BRIDGE_PORT=8765 python3 scripts/capture_reconcile_snapshot.py
-    MT5_CAPTURE_SELFTEST=1 python3 scripts/capture_reconcile_snapshot.py
+    python3 scripts/capture_reconcile_snapshot.py --self-test
 
 Python 3.9+, standard library only.
 """
@@ -84,7 +84,7 @@ DEAL_DECIMAL_FIELDS = (
 )
 
 USAGE = """\
-usage: capture_reconcile_snapshot.py [--help]
+usage: capture_reconcile_snapshot.py [--help] [--self-test]
 
 Standalone read-only capture of a real reconcile_snapshot (or
 reconcile_error) from the MetaTrader 5 bridge EA. The tool listens on TCP,
@@ -104,6 +104,7 @@ Environment:
                          CWD (default capture_reconcile_snapshot.json);
                          the sidecar is written to "<out>.meta.json"
   MT5_CAPTURE_SELFTEST   set to 1 to run the in-process loopback self-test
+                         (same as the --self-test flag)
 
 Exit status: 0 = capture succeeded and every contract rule passed;
 1 = failure (protocol, timeout, token mismatch, or a failed rule).
@@ -1140,11 +1141,12 @@ def main(argv) -> int:
     if any(arg in ("-h", "--help") for arg in argv):
         print(USAGE)
         return 0
-    if argv:
+    if any(arg != "--self-test" for arg in argv):
         print(USAGE)
         return 2
     selftest_env = os.environ.get("MT5_CAPTURE_SELFTEST")
-    if selftest_env is not None and selftest_env.strip() not in ("", "0"):
+    selftest_env_set = selftest_env is not None and selftest_env.strip() not in ("", "0")
+    if "--self-test" in argv or selftest_env_set:
         print("running in-process loopback self-test (no files are written)")
         return run_selftest()
     return run_capture()

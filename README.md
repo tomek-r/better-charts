@@ -119,8 +119,8 @@ pnpm build
 pnpm test:e2e
 python3 -m py_compile scripts/mock_mt5_bridge.py scripts/capture_reconcile_snapshot.py scripts/check_tick_reader.py
 python3 scripts/check_tick_reader.py
-MT5_MOCK_SELFTEST=1 python3 scripts/mock_mt5_bridge.py
-MT5_CAPTURE_SELFTEST=1 python3 scripts/capture_reconcile_snapshot.py
+python3 scripts/mock_mt5_bridge.py --self-test
+python3 scripts/capture_reconcile_snapshot.py --self-test
 ```
 
 Offline Rust checks require previously fetched dependencies. Python 3 is needed
