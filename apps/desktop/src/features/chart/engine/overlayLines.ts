@@ -28,7 +28,7 @@ export function levelMoneyText(
   return value === undefined ? undefined : formatSignedMoney(value, money.currency, money.currencyDigits);
 }
 /** Signed money P&L in the ACCOUNT currency, the levelMoneyText format
- *  ("-6.63 USD" / "+1.04 USD") so the P&L box reads exactly like SL/TP money. */
+ *  ("−6.63 USD" / "+1.04 USD") so the P&L box reads exactly like SL/TP money. */
 export function pnlMoneyText(
   profit: string | undefined,
   currency: string | undefined,

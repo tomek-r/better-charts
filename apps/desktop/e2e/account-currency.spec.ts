@@ -63,7 +63,7 @@ test('live exits retain broker account amounts without tick metadata', () => {
     takeProfitProfit: '40.11',
   };
   const line = toPositionLine(position, undefined, 'PLN');
-  expect(line?.slMoney).toBe('-42.12 PLN');
+  expect(line?.slMoney).toBe('−42.12 PLN');
   expect(line?.tpMoney).toBe('+40.11 PLN');
   const order = {
     ...position,
@@ -74,7 +74,7 @@ test('live exits retain broker account amounts without tick metadata', () => {
     volumeInitial: '1',
     volumeCurrent: '1',
   };
-  expect(toOrderLine(order, undefined, 'PLN')?.slMoney).toBe('-42.12 PLN');
+  expect(toOrderLine(order, undefined, 'PLN')?.slMoney).toBe('−42.12 PLN');
   expect(toPositionLine({ ...position, stopLoss: null }, undefined, 'PLN')?.slMoney).toBeUndefined();
 });
 
@@ -146,7 +146,7 @@ for (const currency of ['USD', 'EUR', 'PLN']) {
           return state.__stagedWidgetTest?.geometry().slMoney;
         }),
       )
-      .toBe(`-12.50 ${currency}`);
+      .toBe(`−12.50 ${currency}`);
     await page.getByRole('button', { name: 'Start creating order', exact: true }).click();
     const check = page.getByLabel('MT5 OrderCheck result');
     await expect(check).toContainText(`105.00 ${currency}`);

@@ -23,6 +23,7 @@ import {
   type OverlayPass,
 } from './tradingOverlayDrawing';
 import { palette } from '../../../shared/theme/palette';
+import { MINUS_SIGN } from '../../../shared/format';
 
 export interface PositionLine {
   id: string;
@@ -33,7 +34,7 @@ export interface PositionLine {
   stopLoss?: number;
   takeProfit?: number;
   /** Signed money P&L in the ACCOUNT currency (SL/TP money format),
-   *  e.g. "+$1.04" / "-$6.63". */
+   *  e.g. "+$1.04" / "−$6.63". */
   pnl?: string;
   /** Third segment of the entry tag ("⋮⋮  |  1  |  Market") — the kind shown
    *  while staging; a filled position carries no order type, so App may leave
@@ -262,7 +263,7 @@ export function createPositionOverlay(
             // Before the first P&L arrives it falls back to the side colour.
             let pnlColor = sideColor;
             if (pos.pnl !== undefined) {
-              pnlColor = pos.pnl.startsWith('-') ? TRADING_COLORS.sell : palette.up;
+              pnlColor = pos.pnl.startsWith(MINUS_SIGN) ? TRADING_COLORS.sell : palette.up;
             }
             hit.posCloses!.push({ id: pos.id, ...drawCancelChip(ctx, x + CANCEL_CHIP_X, labelY, pnlColor) });
             // The ▾ joins the ✕ and pushes the P&L box right by its width.
@@ -275,7 +276,7 @@ export function createPositionOverlay(
             // Buy/Sell marker and the draft grip tag are HIDDEN (they speak of the
             // draft that made the position). The box is the SL/TP handle (same
             // drawHandle, same palette red/teal as the other elements) and the
-            // number rides the SL/TP money format ("-$6.63").
+            // number rides the SL/TP money format ("−$6.63").
             let right = x + CANCEL_CHIP_X + 10 + chipsShift;
             if (pos.pnl !== undefined) {
               // Tip: UP for long, DOWN for short. The trade size reads as

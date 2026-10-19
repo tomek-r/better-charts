@@ -9,7 +9,7 @@ import type {
   RiskSide,
   TimeInForce,
 } from '../../../shared/bridge/types';
-import { formatVolume, normalizedPrice } from '../../../shared/format';
+import { formatVolume, normalizedPrice, withMinusSign } from '../../../shared/format';
 
 // Editable volume: positive decimal and — when instrument metadata is known — inside [volumeMin, volumeMax] and a whole multiple of volumeStep (the 1e-8 tolerance absorbs binary-float noise such as 0.3/0.1). Unknown instrument: plain positive decimal only; the backend/EA re-validates volume on the wire.
 export function orderVolumeIssue(value: string, instrument?: BrokerSymbol): string | undefined {
@@ -161,7 +161,9 @@ export function stopDistanceGuard(
   let reason: string | undefined;
   // A too-close stop blocks without wording (owner decision); the SL band keeps drafts out of it.
   if (!slTooClose && tpTooClose && tpDistance !== undefined) {
-    reason = `take_profit too close: distance ${points(tpDistance)} pts, required >= ${minimumPoints} pts (20 ticks margin)`;
+    // A take profit on the wrong side measures a negative distance, and this message is display text.
+    const distanceText = withMinusSign(String(points(tpDistance)));
+    reason = `take_profit too close: distance ${distanceText} pts, required >= ${minimumPoints} pts (20 ticks margin)`;
   }
   return { slTooClose, tpTooClose, reason };
 }
