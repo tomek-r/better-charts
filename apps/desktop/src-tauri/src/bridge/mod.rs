@@ -4,6 +4,7 @@
 //! The whole module is `pub(crate)`; the only public crate API is `run()`.
 
 pub(crate) mod accept;
+pub(crate) mod chart_selection;
 pub(crate) mod commands;
 pub(crate) mod connection;
 pub(crate) mod handshake;
@@ -21,6 +22,7 @@ pub(crate) mod views;
 mod tests;
 
 use accept::*;
+use chart_selection::*;
 use commands::*;
 // Only the test suite references it through `use super::*`.
 #[cfg(test)]

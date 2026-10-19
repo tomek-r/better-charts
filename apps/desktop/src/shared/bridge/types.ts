@@ -156,6 +156,16 @@ export interface HistoryUnavailable {
   timeframe: string;
 }
 
+/**
+ * A reconnect could not reopen the selection the user was viewing, so the
+ * bridge requested `shownSymbol` (the EA's chart symbol) in its place.
+ */
+export interface SelectionFallback {
+  symbol: string;
+  timeframe: string;
+  shownSymbol: string;
+}
+
 export interface BarUpdate {
   symbol: string;
   timeframe: string;

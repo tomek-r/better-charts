@@ -23,6 +23,7 @@ mod history_page_tests;
 mod history_window_error_tests;
 mod profile_bars_tests;
 mod reconciliation_execution_tests;
+mod selection_restore_tests;
 mod transfer_profile_tests;
 
 /// Records events the server would emit to the frontend.

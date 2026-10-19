@@ -62,7 +62,11 @@ Not implemented: break even, multiple charts or Pine Script execution.
 - Price scale fits on load, then holds until rescaled; axis hover exposes `A`/`L`.
   The first history request covers only the visible pane (`initialHistoryBars`
   in `config/bridge.json`; the UI measures the pane), then one older page is
-  prefetched when idle. History paging preserves viewport; reconnecting or a
+  prefetched when idle. A reconnect of the same terminal and account reopens
+  the symbol and timeframe the user was viewing (the bridge requests them
+  itself); if they cannot be served, the EA's chart symbol is shown with a
+  notice, and another account starts from the chart symbol. History paging
+  preserves viewport; reconnecting or a
   new symbol resets to the latest history, while any replacement of the same
   symbol's series (a timeframe change or a fresh window) preserves bar spacing
   and the distance from the newest bar. The chart follows new bars while the
@@ -72,7 +76,7 @@ Not implemented: break even, multiple charts or Pine Script execution.
   while a pointer is pressed on the pane (at most 10 s), so a drag is not shifted
   by a new bar.
   Clicking the current portfolio symbol keeps the chart.
-- The EA (1.011) sends the initial history only after MT5 reports the series
+- The EA (1.012) sends the initial history only after MT5 reports the series
   synchronized, so stale cached bars never anchor the live feed. A synchronized
   but shallow series is sent as is (`complete=false`). Waiting past 5 s shows
   "Loading is taking longer than usual. Waiting N s. If no data arrives, switch
