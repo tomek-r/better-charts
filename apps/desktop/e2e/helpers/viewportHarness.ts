@@ -22,9 +22,12 @@ export async function loadViewportWindow(
 ): Promise<{ pageErrors: string[]; consoleErrors: string[] }> {
   const candles = windowCandles(options.bars ?? VIEWPORT_WINDOW_BARS);
   const collected = await gotoWithStub(page, {
-    responses: { get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles } },
     historyByTimeframe: { M5: candles },
     ...options.stub,
+    responses: {
+      get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles },
+      ...options.stub?.responses,
+    },
   });
   // React runs the startup effect twice in development, so a replacement count
   // cannot say when the app's own history request was answered. The stub answers
