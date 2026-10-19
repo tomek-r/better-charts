@@ -252,7 +252,7 @@ async fn heartbeat_market_session_is_stored_and_clears_when_absent() {
                     "symbol": "NAS100",
                     "is_open": true,
                     "trade_mode": 4,
-                    "server_time_ms": 1_770_000_000_000_i64
+                    "server_time_ms": crate::test_clock::broker_morning_ms()
                 }
             }),
         ))
@@ -266,7 +266,10 @@ async fn heartbeat_market_session_is_stored_and_clears_when_absent() {
         assert_eq!(session.symbol, "NAS100");
         assert!(session.is_open);
         assert_eq!(session.trade_mode, 4);
-        assert_eq!(session.server_time_ms, 1_770_000_000_000);
+        assert_eq!(
+            session.server_time_ms,
+            crate::test_clock::broker_morning_ms()
+        );
     }
 
     // A later heartbeat without the field clears the observation, so the

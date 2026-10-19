@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import type { BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridge/types';
+import { STUB_NOW } from './stubClock';
 
 /**
  * Deterministic in-page Tauri v2 stub for execution-flow E2E tests.
@@ -111,8 +112,18 @@ export interface RecordedInvoke {
   args: Record<string, unknown>;
 }
 
-/** Fixed clock for deterministic stub payloads (rendered times are never asserted). */
-export const STUB_NOW = 1745700000000;
+export { STUB_NOW };
+
+/**
+ * Starts the page's controllable clock at the current time and pauses it `aheadMs` later, so the
+ * spec drives time with `runFor`. The page clock stays on the desktop's real date, apart from the
+ * broker clock of `STUB_NOW`.
+ */
+export async function pausePageClockAhead(page: Page, aheadMs = 60_000): Promise<void> {
+  const installedAt = Date.now();
+  await page.clock.install({ time: installedAt });
+  await page.clock.pauseAt(installedAt + aheadMs);
+}
 
 /** Five-minute bar length in milliseconds, the interval `windowCandles` uses. */
 export const STUB_M5_INTERVAL_MS = 300_000;
@@ -234,9 +245,9 @@ export async function installTauriStub(
   page: Pick<Page, 'addInitScript'>,
   options: TauriStubOptions = {},
 ): Promise<void> {
-  await page.addInitScript((opts: TauriStubOptions) => {
+  const stubArgument = { opts: options, now: STUB_NOW };
+  await page.addInitScript(({ opts, now: NOW }: typeof stubArgument) => {
     const w = window as unknown as Record<string, unknown>;
-    const NOW = 1745700000000;
 
     const safety = {
       journalState: 'ready',
@@ -741,7 +752,7 @@ export async function installTauriStub(
       emit,
       listenerCount: (event: string) => (listeners.get(event) ?? []).filter((id) => callbacks.has(id)).length,
     };
-  }, options);
+  }, stubArgument);
 }
 
 /**

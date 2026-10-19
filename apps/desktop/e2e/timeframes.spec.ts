@@ -126,6 +126,7 @@ test('all periods fit a narrow chart without horizontal page overflow', async ({
 
 const seconds = (date: string) => Date.parse(date) / 1000;
 
+// Pinned because the subject is month alignment known answers: leap February 2024 and the Dec to Jan rollover.
 test('monthly padding follows calendar boundaries through leap February', () => {
   const start = seconds('2024-01-01T00:00:00Z');
   expect(futurePoints(start, 'MN1', 96, 3).map((point) => point.time)).toEqual([
@@ -140,6 +141,7 @@ test('monthly padding follows calendar boundaries through leap February', () => 
   expect(timeframeLabel('M1')).toBe('1m');
 });
 
+// Pinned because the subject is the month-end boundary of leap February 2024 (29 days, not 30).
 test('monthly countdown ends at the next month rather than after 30 days', () => {
   const clock = new BrokerClock();
   const first = { symbol: 'XBRUSD', timeMs: Date.parse('2024-02-28T23:59:58Z') };

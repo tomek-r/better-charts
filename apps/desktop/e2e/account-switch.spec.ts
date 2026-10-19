@@ -5,6 +5,7 @@ import {
   expectNoErrors,
   gotoWithStub,
   pushEvent,
+  STUB_NOW,
   stubInvocations,
   wasInvoked,
   windowCandles,
@@ -42,7 +43,7 @@ async function switchAccount(
     account: account.accountLogin,
     server: account.brokerServer,
     tradingEnabled,
-    marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: 1745700000000 },
+    marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: STUB_NOW },
   });
   await pushEvent(page, 'market-snapshot', {
     symbol: 'EURUSD',
@@ -122,7 +123,7 @@ test('the dialog warns when algo trading is disabled and updates live once it is
     account: NEW_ACCOUNT.accountLogin,
     server: NEW_ACCOUNT.brokerServer,
     tradingEnabled: true,
-    marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: 1745700000000 },
+    marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: STUB_NOW },
   });
   await expect(status).toHaveText('Algo trading is enabled');
   await expect(status.locator('svg')).toHaveAttribute('data-algo-icon', 'check');

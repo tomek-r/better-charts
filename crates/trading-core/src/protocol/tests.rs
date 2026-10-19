@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_clock::utc_now_ms;
 
 #[test]
 fn decoder_handles_a_large_coalesced_batch_and_preserves_partial_tail() {
@@ -194,13 +195,14 @@ fn older_history_pages_are_an_additive_optional_extension() {
     assert!(!window.is_page());
 
     let mut page = window.clone();
-    page.before_ms = Some(1_700_000_000_000);
+    let before_ms = utc_now_ms() - 86_400_000;
+    page.before_ms = Some(before_ms);
     assert!(page.is_page());
     assert_eq!(page.validate(), Ok(()));
     let encoded = serde_json::to_value(&page).unwrap();
     assert_eq!(
         encoded.get("before_ms"),
-        Some(&serde_json::json!(1_700_000_000_000i64))
+        Some(&serde_json::json!(before_ms))
     );
     assert_eq!(
         serde_json::from_value::<HistoryRequest>(encoded).unwrap(),
@@ -1712,7 +1714,7 @@ fn order_command_update() -> OrderCommandUpdate {
         position_id: None,
         filled_volume: None,
         message: Some("pending order placed".into()),
-        updated_at_ms: 1770000001980,
+        updated_at_ms: utc_now_ms() + 1_980,
         at_update: 2,
     }
 }
@@ -2155,6 +2157,7 @@ fn heartbeat_market_session_is_optional_and_validated() {
     .unwrap();
     assert!(legacy.market_session.is_none());
 
+    let server_time_ms = utc_now_ms();
     let observed: HeartbeatPayload = serde_json::from_value(serde_json::json!({
         "sequence": 2,
         "terminal_connected": true,
@@ -2164,7 +2167,7 @@ fn heartbeat_market_session_is_optional_and_validated() {
             "symbol": "NAS100",
             "is_open": false,
             "trade_mode": 4,
-            "server_time_ms": 1_770_000_000_000_i64,
+            "server_time_ms": server_time_ms,
         },
     }))
     .unwrap();
@@ -2172,7 +2175,7 @@ fn heartbeat_market_session_is_optional_and_validated() {
     assert_eq!(session.symbol, "NAS100");
     assert!(!session.is_open);
     assert_eq!(session.trade_mode, 4);
-    assert_eq!(session.server_time_ms, 1_770_000_000_000);
+    assert_eq!(session.server_time_ms, server_time_ms);
     session.validate().unwrap();
 
     let mut blank_symbol = session.clone();

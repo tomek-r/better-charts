@@ -9,7 +9,14 @@ import {
 } from '../src/features/order-ticket/domain/ticketRules';
 import type { QuoteSnapshot } from '../src/shared/bridge/types';
 import { fillExitPrice, openTradePanel } from './helpers/panel';
-import { brokerSymbolFixture, gotoWithStub, pushEvent, stubInvocations, wasInvoked } from './helpers/tauriStub';
+import {
+  brokerSymbolFixture,
+  gotoWithStub,
+  pushEvent,
+  STUB_NOW,
+  stubInvocations,
+  wasInvoked,
+} from './helpers/tauriStub';
 
 const instrument = brokerSymbolFixture('TEST', 'Test instrument', {
   digits: 2,
@@ -242,7 +249,7 @@ test('rendered risk freshness rejects an old preview and accepts the current ver
     estimatedMargin: '105.00',
     rr: '2.00',
     currency: 'USD',
-    quotedAtMs: 1745700000000,
+    quotedAtMs: STUB_NOW,
   };
   await pushEvent(page, 'risk-preview', preview);
   await expect(ticket.locator('.ticket-cta')).toBeEnabled();
@@ -291,7 +298,7 @@ test('risk input uses the latest market quote for its default stop', async ({ pa
     bid: '1.08540',
     ask: '1.08560',
     last: '1.08540',
-    timeMs: 1745700001000,
+    timeMs: STUB_NOW + 1000,
   });
   await expect(page.getByLabel('Order price')).toHaveValue('1.08560');
   await page.getByLabel('Risk amount').fill('25');
@@ -313,7 +320,7 @@ test('market quote changes update stop validation and the review gate', async ({
     bid: '1.08410',
     ask: '1.08500',
     last: '1.08410',
-    timeMs: 1745700001000,
+    timeMs: STUB_NOW + 1000,
   });
   await expect(action).toBeDisabled();
   await expect(page.getByLabel('Stop loss price')).toHaveClass(/invalid/);
@@ -323,7 +330,7 @@ test('market quote changes update stop validation and the review gate', async ({
     bid: '1.08460',
     ask: '1.08500',
     last: '1.08460',
-    timeMs: 1745700002000,
+    timeMs: STUB_NOW + 2000,
   });
   await expect(action).toBeEnabled();
   await action.click();
@@ -383,7 +390,7 @@ test('pending price offsets preserve entry on swap and follow the selected quote
   await page.getByRole('button', { name: 'Enter price as an offset from the reference', exact: true }).click();
   await pushEvent(page, 'quote-update', {
     symbol: 'EURUSD',
-    timeMs: 1745700001000,
+    timeMs: STUB_NOW + 1000,
     bid: '1.08600',
     ask: '1.08630',
     last: '1.08610',

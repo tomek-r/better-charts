@@ -398,6 +398,7 @@ fn bar_close_adds_the_nominal_length() {
 
 #[test]
 fn monthly_bar_closes_on_the_next_calendar_month() {
+    // Pinned because the subject is month-length and year-rollover known answers.
     // 2024-02-01 (leap February, 29 days) -> 2024-03-01.
     assert_eq!(
         bar_close_ms(1_706_745_600_000, "MN1"),

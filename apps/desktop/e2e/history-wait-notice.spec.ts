@@ -1,6 +1,13 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { answerSymbolSearch, chooseSearchResult, openSymbolSearch, openTradePanel } from './helpers/panel';
-import { brokerSymbolFixture, gotoCollectingErrors, gotoWithStub, pushEvent, windowCandles } from './helpers/tauriStub';
+import {
+  brokerSymbolFixture,
+  gotoCollectingErrors,
+  gotoWithStub,
+  pausePageClockAhead,
+  pushEvent,
+  windowCandles,
+} from './helpers/tauriStub';
 
 /** The EA's synchronization deadline is 10 s; the notice shows for the last 5 s of it. */
 const NEVER_ANSWERED_MS = 600_000;
@@ -13,8 +20,7 @@ const notice = (page: Page) => page.locator('.chart-wait-notice');
 
 /** A fake clock that only moves when the test advances it, with a history request that is never answered. */
 async function startWithUnansweredHistory(page: Page) {
-  await page.clock.install({ time: new Date('2026-09-30T12:00:00Z') });
-  await page.clock.pauseAt(new Date('2026-09-30T12:01:00Z'));
+  await pausePageClockAhead(page);
   await gotoWithStub(page, { historyDelayMs: NEVER_ANSWERED_MS });
   await page.clock.runFor(100);
 }

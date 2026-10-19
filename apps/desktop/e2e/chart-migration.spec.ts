@@ -454,15 +454,15 @@ test('drawer resize preserves a panned logical right edge and candle distance fr
   const parked = { from: original.from + 20, to: original.to + 20 };
   await page.evaluate((range) => window.__chartTest?.scrollToRange(range), parked);
   const view = async () =>
-    page.evaluate(() => {
+    page.evaluate((newestBarMs) => {
       const chart = window.__chartTest!;
       const host = document.querySelector('.chart-host')!.getBoundingClientRect();
       return {
         to: chart.visibleRange()!.to,
         width: host.width,
-        candleFromRight: host.width - chart.timeToX(1745700000000 - 300_000)!,
+        candleFromRight: host.width - chart.timeToX(newestBarMs)!,
       };
-    });
+    }, STUB_NOW - 300_000);
   await expect.poll(async () => (await view()).to).toBeCloseTo(parked.to, 5);
   const before = await view();
   await openTradePanel(page);

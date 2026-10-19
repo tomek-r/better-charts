@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { gotoWithStub, pushEvent, stubInvocations } from './helpers/tauriStub';
+import { gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 
 test('closed panel defers ticket UI while chart updates stay active and drafts survive toggles', async ({ page }) => {
   const { pageErrors, consoleErrors } = await gotoWithStub(page);
@@ -10,7 +10,7 @@ test('closed panel defers ticket UI while chart updates stay active and drafts s
   await expect(page.locator('.chart-heading h1')).toHaveText('EURUSD');
   await pushEvent(page, 'quote-update', {
     symbol: 'EURUSD',
-    timeMs: 1745700001000,
+    timeMs: STUB_NOW + 1000,
     bid: '1.2345',
     ask: '1.2347',
     last: '1.2345',

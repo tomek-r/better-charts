@@ -4,6 +4,7 @@ import { openTradePanel } from './helpers/panel';
 import type { RenderBar } from '../src/features/chart/engine/mt5DataAdapter';
 import {
   gotoWithStub,
+  pausePageClockAhead,
   pushCommandError,
   pushCommandUpdate,
   pushEvent,
@@ -360,8 +361,7 @@ test('100 percent risk review flushes debounced sizing before OrderCheck', async
   await page.getByRole('menuitemradio', { name: 'Risk, % equity' }).click();
   await page.getByLabel('Risk percent').fill('100');
   await expect(page.locator('.ticket-cta')).toBeEnabled();
-  await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') });
-  await page.clock.pauseAt(new Date('2024-01-01T00:00:01Z'));
+  await pausePageClockAhead(page, 1000);
   // A floating equity tick schedules another sizing request without changing
   // the explicit draft. Start review before its debounce expires.
   await pushEvent(page, 'account-snapshot', {
@@ -397,8 +397,7 @@ test('review times out safely and ignores a late broker check', async ({ page })
   await openTradePanel(page);
   await fillRiskDraft(page);
   await expect(page.locator('.ticket-cta')).toBeEnabled();
-  await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') });
-  await page.clock.pauseAt(new Date('2024-01-01T00:00:01Z'));
+  await pausePageClockAhead(page, 1000);
   await page.locator('.ticket-cta').click();
   await expect(page.getByText('Checking with MT5…', { exact: true })).toBeVisible();
   await page.clock.runFor(15_001);

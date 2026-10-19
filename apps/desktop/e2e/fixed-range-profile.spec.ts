@@ -23,6 +23,7 @@ import {
   type HandleEdges,
 } from '../src/features/tools/fixedRangeProfile/overlay';
 import type { ProfileResult, TickProfileBin } from '../src/shared/bridge/types';
+import { formatDayMonth, MS_PER_DAY, STUB_NOW } from './helpers/stubClock';
 
 /**
  * Geometry + paint-order regression for the fixed-range volume-profile overlay.
@@ -69,11 +70,12 @@ const ASK_COLOR = '#26a69a';
 // Row geometry (priceY): tops 245/205/165, bottom = top+40 → drawHeight 39.
 const TICK_SOURCE = { source: 'ticks', barTimeframe: null, coveredFromMs: null } as const;
 const BAR_SOURCE = { source: 'bars', barTimeframe: 'M1', coveredFromMs: null } as const;
-// History starts 2026-03-20 19:48 UTC inside the range: the label names the first covered day.
+// History starts ten days ago, inside the range: the label names the first covered day.
+const COVERED_FROM_MS = STUB_NOW - 10 * MS_PER_DAY;
 const PARTIAL_BAR_SOURCE = {
   source: 'bars',
   barTimeframe: 'M2',
-  coveredFromMs: Date.UTC(2026, 2, 20, 19, 48),
+  coveredFromMs: COVERED_FROM_MS,
 } as const;
 const DEFAULT_BINS: TickProfileBin[] = [
   { low: '140.00', high: '150.00', total: '10', bid: '6', ask: '40' },
@@ -268,7 +270,7 @@ test('a partial bars profile names where its coverage starts, in the warning col
   const { ops } = paint(makeProfile(DEFAULT_BINS, PARTIAL_BAR_SOURCE));
   const [label] = labelsOf(ops);
   expect(labelsOf(ops)).toHaveLength(1);
-  expect(label.text).toBe('M2 · from 20 Mar');
+  expect(label.text).toBe(`M2 · from ${formatDayMonth(COVERED_FROM_MS)}`);
   expect(label.style).toBe('#ffd28a');
   expect(label.font).toBe('400 11px system-ui, sans-serif');
   expect(label.x).toBe(ANCHOR_X + 6);
@@ -278,6 +280,7 @@ test('a partial bars profile names where its coverage starts, in the warning col
 test('a partial label uses the UTC day and a short English month', () => {
   const textFor = (coveredFromMs: number) =>
     labelsOf(paint(makeProfile(DEFAULT_BINS, { ...PARTIAL_BAR_SOURCE, coveredFromMs })).ops)[0].text;
+  // Pinned because the subject is the label at the year edges: the first and last UTC minute of a year.
   expect(textFor(Date.UTC(2026, 0, 1, 0, 0))).toBe('M2 · from 1 Jan');
   expect(textFor(Date.UTC(2026, 11, 31, 23, 59))).toBe('M2 · from 31 Dec');
 });

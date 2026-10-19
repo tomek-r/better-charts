@@ -10,4 +10,6 @@ pub mod partial_close;
 pub mod position_sizing;
 pub mod protocol;
 pub mod symbol_cache;
+#[cfg(test)]
+mod test_clock;
 pub mod volume_profile;

@@ -931,11 +931,12 @@ def run_selftest() -> int:
             f"got {got!r}",
         )
 
+        history_from_ms = int(time.time() * 1000) - 30 * 86_400_000
         request = {
             "request_id": REQUEST_ID,
             "account_login": "12345678",
             "broker_server": "Selftest-Demo",
-            "history_from_ms": 1700000000000,
+            "history_from_ms": history_from_ms,
             "max_history_orders": MAX_COLLECTION,
             "max_history_deals": MAX_COLLECTION,
         }
@@ -948,7 +949,7 @@ def run_selftest() -> int:
             and got.get("id") == REQUEST_ID
             and payload.get("request_id") == REQUEST_ID
             and payload.get("account_login") == "12345678"
-            and payload.get("history_from_ms") == 1700000000000
+            and payload.get("history_from_ms") == history_from_ms
             and payload.get("max_history_orders") == MAX_COLLECTION
             and payload.get("max_history_deals") == MAX_COLLECTION,
             f"got {got!r}",

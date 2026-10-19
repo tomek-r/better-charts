@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
-import { gotoWithStub } from './helpers/tauriStub';
+import { gotoWithStub, STUB_NOW } from './helpers/tauriStub';
 
 interface ProbeCounts {
   [name: string]: number;
@@ -8,7 +8,8 @@ interface ProbeCounts {
 
 async function mountHarness(page: Page) {
   await gotoWithStub(page);
-  await page.evaluate(async () => {
+  await page.evaluate(async (stubNow) => {
+    (window as unknown as { __stubNow: number }).__stubNow = stubNow;
     // Keep production UI out of this independent provider harness's hit targets.
     const appRoot = document.getElementById('root');
     if (appRoot) {
@@ -20,7 +21,7 @@ async function mountHarness(page: Page) {
     container.id = 'provider-isolation-harness';
     document.body.append(container);
     harness.mountProviderIsolationHarness(container);
-  });
+  }, STUB_NOW);
   await expect(page.getByTestId('provider-probe-ready')).toBeVisible();
   await expect(page.getByTestId('probe-settings')).toContainText('127.0.0.1:8765');
   await resetProbeCounts(page);
@@ -115,10 +116,10 @@ test('bridge runtime projection reads current state from each canonical domain s
   await page.getByRole('button', { name: 'Set test portfolio' }).click();
 
   await expect(page.getByTestId('probe-bridge-runtime')).toHaveText(
-    'connected|false|EURUSD|1.0852|1.0852|1000.00|1745700001000',
+    `connected|false|EURUSD|1.0852|1.0852|1000.00|${STUB_NOW + 1000}`,
   );
   await expect(page.getByTestId('probe-bridge-lifecycle-runtime')).toHaveText(
-    'connected|false|EURUSD|1.0852|1000.00|1745700001000',
+    `connected|false|EURUSD|1.0852|1000.00|${STUB_NOW + 1000}`,
   );
 });
 

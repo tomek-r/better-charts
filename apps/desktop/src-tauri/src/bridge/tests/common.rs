@@ -72,7 +72,7 @@ pub(super) fn ready_state_with_result(result: OrderCheckResult) -> BridgeState {
             symbol: "NAS".into(),
             is_open: true,
             trade_mode: 4,
-            server_time_ms: 1_770_000_000_000,
+            server_time_ms: crate::test_clock::broker_morning_ms(),
         }),
         ..BridgeStatus::default()
     };
