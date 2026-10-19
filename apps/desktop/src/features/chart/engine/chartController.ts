@@ -25,6 +25,8 @@ import { ChartToolSet } from './toolSet';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installDevTestApi, removeDevTestApi } from './devTestApi';
 import { initialHistoryWindow } from './initialHistoryWindow';
+import { clearViewportChangeLog, viewportChangeLog } from './viewportDiagnostics';
+import { PointerCandleHold } from './pointerCandleHold';
 
 /** What the app gives the chart for its tools; a tool sees it only through its `ChartToolHost`. */
 export type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
@@ -76,6 +78,7 @@ export class ChartController {
   private readonly countdown: CountdownController;
   private symbol = '';
   private removed = false;
+  private readonly liveCandleHold: PointerCandleHold;
   private readonly view: ViewportController;
   private readonly tools: ChartToolSet;
   // Set once the broker's page came back short, or a page held nothing older
@@ -137,6 +140,7 @@ export class ChartController {
     this.scaleControls = new PriceScaleController(host, this.chart, this.candles);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
+    this.liveCandleHold = new PointerCandleHold(host, (candle) => this.updateCandle(candle));
     this.resize();
     this.view.onViewportChanged = () => this.requestOlderHistory();
     this.view.start();
@@ -148,6 +152,8 @@ export class ChartController {
         data: () => this.bars.map((bar) => ({ ...bar })),
         visibleRange: () => this.visibleRange(),
         scrollToRange: (range) => this.chart.timeScale().setVisibleLogicalRange(range),
+        viewportChanges: viewportChangeLog,
+        clearViewportChanges: clearViewportChangeLog,
         timeToX: (timeMs) => this.timeToX(timeMs),
         tool: (id) => this.toolTestApi(id),
         pointerReadout: () => this.pointerReadout.readout(),
@@ -174,6 +180,10 @@ export class ChartController {
    * changes can retain the bars-from-end position; other replacements reset.
    */
   replaceHistory(candles: readonly Candle[], timeframe?: string, viewportMode = HistoryViewportMode.Reset): boolean {
+    return this.view.traced('replaceHistory', () => this.swapHistory(candles, timeframe, viewportMode));
+  }
+
+  private swapHistory(candles: readonly Candle[], timeframe: string | undefined, viewportMode: HistoryViewportMode) {
     if (this.removed) {
       return false;
     }
@@ -183,8 +193,9 @@ export class ChartController {
       return false;
     }
     // A replaced window is a new history: paging may resume where the last
-    // series had already reached its end.
+    // series had already reached its end, and candles held for the old one are stale.
     this.olderHistoryExhausted = false;
+    this.liveCandleHold.discard();
     this.view.resetFuture();
     this.view.extendFuture();
     // Carried over in time, never in logical indices: the same index is another
@@ -207,6 +218,9 @@ export class ChartController {
 
   updateCandle(candle: Candle): void {
     if (this.removed) {
+      return;
+    }
+    if (this.liveCandleHold.hold(candle)) {
       return;
     }
     const bar = toRenderBar(candle);
@@ -377,7 +391,7 @@ export class ChartController {
     // The crosshair tool rejects pointer positions outside the pane, so its bounds
     // are re-measured here rather than waiting for the next overlay paint.
     this.view.measurePane();
-    this.view.ensureFuture(width, spacing);
+    this.view.ensureFuture(spacing);
     this.refreshOverlays();
   }
 
@@ -456,6 +470,7 @@ export class ChartController {
     this.tools.disposeTools();
     this.view.destroy();
     this.observer.disconnect();
+    this.liveCandleHold.destroy();
     this.connection.destroy();
     this.legend.destroy();
     this.scaleControls.destroy();

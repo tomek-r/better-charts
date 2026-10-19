@@ -38,6 +38,7 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
 
   const resetTicketToDefaults = useCallback(() => {
     resetOrderDraft();
+    setters.setRiskSide('');
     setters.setRiskAmount('');
     setters.setOrderKind('market');
     setters.setLimitPrice('');

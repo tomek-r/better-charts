@@ -183,7 +183,8 @@ Choose the minimum checks appropriate to the change:
 - MQL5: in addition to Rust/TS checks, compile in MetaEditor with 0 errors / 0
   warnings. If that environment is unavailable, report it explicitly.
 
-Playwright starts Vite on port `1420` and uses the browser Tauri stub. It does
+Playwright starts its own Vite on port `1421` (`--strictPort`, never reusing a
+running server, so it cannot collide with `pnpm tauri dev` on `1420`) and uses the browser Tauri stub. It does
 not replace testing in the real Tauri/MT5 runtime. Installing Chromium
 (`npx playwright install chromium`) requires network access and is a one-time
 environment setup, not part of normal code changes.

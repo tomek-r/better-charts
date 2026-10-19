@@ -10,9 +10,7 @@ import {
   neededFutureBarCount,
   timeScaleBaseIndex,
 } from './futureTimePoints';
-
-/** Follow only near the real last candle's five-bar end anchor. */
-const AT_END_TOLERANCE_BARS = 5;
+import { recordViewportChange, type ViewportSnapshot } from './viewportDiagnostics';
 
 /**
  * Where the pane sat, captured before the series is replaced.
@@ -67,6 +65,8 @@ export class ViewportController {
   private paneWidth = 0;
   private paneHeight = 0;
   private retainedPrices: { minValue: number; maxValue: number } | null = null;
+  private queuedWrite: { to: number; barSpacing: number } | null = null;
+  private queuedWriteFrame = 0;
   /**
    * Set by the controller: reports every visible-range change. This is the only
    * signal lazy loading has that the user moved the pane over a gap.
@@ -88,20 +88,50 @@ export class ViewportController {
 
   destroy(): void {
     cancelAnimationFrame(this.futureFrame);
+    cancelAnimationFrame(this.queuedWriteFrame);
     this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.onRangeChange);
   }
 
+  /**
+   * The pane's logical range. While a write is queued the library has not applied
+   * it yet, so this answers with the range the write will produce: a second write
+   * in the same task (several bars flushed together, a resize after a bar) must
+   * start from where the first one is taking the view, not from where it was.
+   */
   visibleRange(): { from: number; to: number } | null {
+    if (this.queuedWrite) {
+      const { to, barSpacing } = this.queuedWrite;
+      return { from: to - this.chart.timeScale().width() / barSpacing + 1, to };
+    }
     const range = this.chart.timeScale().getVisibleLogicalRange();
     return range ? { from: Number(range.from), to: Number(range.to) } : null;
   }
 
+  /**
+   * The library applies `applyOptions` and `setVisibleLogicalRange` at its next
+   * paint, not when they are called. The paint callback was registered by that
+   * write, so the frame registered here runs after it, once the write has landed.
+   */
+  private noteQueuedWrite(to: number, barSpacing: number): void {
+    this.queuedWrite = { to, barSpacing };
+    if (!this.queuedWriteFrame) {
+      this.queuedWriteFrame = requestAnimationFrame(() => {
+        this.queuedWriteFrame = 0;
+        this.queuedWrite = null;
+      });
+    }
+  }
+
+  /**
+   * True while the newest bar is on screen, even partly. A zoom or pan that keeps
+   * it in view keeps the pane following new bars at the distance the user chose from
+   * the right edge; only moving it out of view stops that, and bringing it back
+   * resumes it.
+   */
   isFollowing(): boolean {
     const range = this.visibleRange();
-    return (
-      range !== null &&
-      Math.abs(range.to - timeScaleBaseIndex(this.data.bars.length, END_MARGIN)) <= AT_END_TOLERANCE_BARS
-    );
+    const newest = this.data.bars.length - 1;
+    return range !== null && newest >= 0 && range.from <= newest + 0.5 && range.to >= newest - 0.5;
   }
 
   /**
@@ -125,7 +155,35 @@ export class ViewportController {
     if (!previous) {
       return;
     }
-    this.chart.timeScale().setVisibleLogicalRange({ from: previous.from + added, to: previous.to + added });
+    this.traced('anchorAfterPrepend', () => {
+      const scale = this.chart.timeScale();
+      scale.setVisibleLogicalRange({ from: previous.from + added, to: previous.to + added });
+      this.noteQueuedWrite(previous.to + added, scale.width() / (previous.to - previous.from + 1));
+    });
+  }
+
+  /**
+   * Runs a write to the time scale and, in development, records the view before
+   * and after it. The branch is statically false in a production build.
+   */
+  traced<T>(caller: string, write: () => T): T {
+    if (!import.meta.env.DEV) {
+      return write();
+    }
+    const before = this.snapshot();
+    const result = write();
+    recordViewportChange(caller, before, this.snapshot());
+    return result;
+  }
+
+  private snapshot(): ViewportSnapshot {
+    return {
+      range: this.visibleRange(),
+      barCount: this.data.bars.length,
+      futureCount: this.futureCount,
+      barSpacing: this.chart.timeScale().options().barSpacing,
+      following: this.isFollowing(),
+    };
   }
 
   diagnosticViewport() {
@@ -149,9 +207,14 @@ export class ViewportController {
     this.paneHeight = this.chart.panes()[0]?.getHeight() ?? 0;
   }
 
-  /** Extends the helper points when the pane needs more of them than the last rebuild left. */
-  ensureFuture(width: number, barSpacing: number): void {
-    if (this.futureCount < neededFutureBarCount(width, barSpacing)) {
+  /**
+   * Extends the helper points when the pane needs more of them than the last
+   * rebuild left. Sized from the time-scale width, the same measure `extendFuture`
+   * builds them from: the host is wider by the price axis, so measuring it asked
+   * for a rebuild on every resize, including ones that shrank the pane.
+   */
+  ensureFuture(barSpacing: number): void {
+    if (this.futureCount < neededFutureBarCount(this.chart.timeScale().width(), barSpacing)) {
       this.extendFuture(barSpacing);
     }
   }
@@ -167,46 +230,68 @@ export class ViewportController {
 
   /** Restores the default zoom and the end anchor, and fits the price scale. */
   resetToEnd(): void {
-    // A pending helper rebuild would preserve the old visible range after this
-    // explicit reset, replacing the new end anchor with a stale one.
-    cancelAnimationFrame(this.futureFrame);
-    this.futureFrame = 0;
-    const scale = this.chart.timeScale();
-    this.ensureFuture(scale.width(), DEFAULT_BAR_SPACING);
-    const to = timeScaleBaseIndex(this.data.bars.length, END_MARGIN);
-    this.restoreViewport(to, DEFAULT_BAR_SPACING);
-    this.fitPriceScale(to, DEFAULT_BAR_SPACING);
+    this.traced('resetToEnd', () => {
+      // A pending helper rebuild would preserve the old visible range after this
+      // explicit reset, replacing the new end anchor with a stale one.
+      cancelAnimationFrame(this.futureFrame);
+      this.futureFrame = 0;
+      this.ensureFuture(DEFAULT_BAR_SPACING);
+      const to = timeScaleBaseIndex(this.data.bars.length, END_MARGIN);
+      this.restoreViewport(to, DEFAULT_BAR_SPACING);
+      this.fitPriceScale(to, DEFAULT_BAR_SPACING);
+    });
   }
 
   restoreViewport(to: number, barSpacing: number): void {
-    // Applying range bounds also derives zoom from the current pane width.
-    // Preserve zoom explicitly while helper points change the library's base
-    // index; this remains stable through consecutive drawer resize frames.
-    const baseIndex = timeScaleBaseIndex(this.data.bars.length, this.futureCount);
-    this.chart.timeScale().applyOptions({ barSpacing, rightOffset: to - baseIndex });
+    this.traced('restoreViewport', () => {
+      if (import.meta.env.DEV) {
+        this.assertFutureCountMatchesSeries();
+      }
+      // Applying range bounds also derives zoom from the current pane width.
+      // Preserve zoom explicitly while helper points change the library's base
+      // index; this remains stable through consecutive drawer resize frames.
+      const baseIndex = timeScaleBaseIndex(this.data.bars.length, this.futureCount);
+      this.chart.timeScale().applyOptions({ barSpacing, rightOffset: to - baseIndex });
+      this.noteQueuedWrite(to, barSpacing);
+    });
+  }
+
+  /**
+   * The right offset is computed against `futureCount`; if it differs from the
+   * helper series' real length the offset lands that many bars off, leaving the
+   * newest bars far from the right edge or beyond it.
+   */
+  private assertFutureCountMatchesSeries(): void {
+    const actual = this.future.data().length;
+    if (actual !== this.futureCount) {
+      console.error(`Viewport helper points out of sync: counted ${this.futureCount}, series holds ${actual}.`);
+    }
   }
 
   extendFuture(barSpacing = this.chart.timeScale().options().barSpacing): void {
     const last = this.data.lastBar();
     if (!last) {
       this.future.setData([]);
+      this.futureCount = 0;
       return;
     }
-    const scale = this.chart.timeScale();
-    const spacing = barSpacing;
-    const count = neededFutureBarCount(scale.width(), spacing);
-    const range = this.visibleRange();
-    // Rebuilt only on a new real bar or resize; never on an existing-bar tick.
-    this.future.setData(
-      futurePoints(last.time, this.data.timeframe, last.close, count).map(({ time, value }) => ({
-        time: time as UTCTimestamp,
-        value,
-      })),
-    );
-    this.futureCount = count;
-    if (range) {
-      this.restoreViewport(range.to, spacing);
-    }
+    this.traced('extendFuture', () => {
+      const scale = this.chart.timeScale();
+      const spacing = barSpacing;
+      const count = neededFutureBarCount(scale.width(), spacing);
+      const range = this.visibleRange();
+      // Rebuilt only on a new real bar or resize; never on an existing-bar tick.
+      this.future.setData(
+        futurePoints(last.time, this.data.timeframe, last.close, count).map(({ time, value }) => ({
+          time: time as UTCTimestamp,
+          value,
+        })),
+      );
+      this.futureCount = count;
+      if (range) {
+        this.restoreViewport(range.to, spacing);
+      }
+    });
   }
 
   viewport(): RenderViewport {

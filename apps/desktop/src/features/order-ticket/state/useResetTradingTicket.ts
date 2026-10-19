@@ -41,7 +41,6 @@ export function useResetTradingTicket(): () => void {
   return useEventCallback(() => {
     clearStagedWidget();
     resetTicketToDefaults();
-    stores.draft.setters.setRiskSide('');
     stores.draft.setters.setStagedDragging(false);
     stores.draft.setters.setDragSlMoney(undefined);
     clearBrokerState(stores);

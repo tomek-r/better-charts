@@ -306,15 +306,16 @@ export function createBridgeMarketRuntime(
       const replaced = dataKeyRef.current !== dataKey || (chartRef.current?.getData().length ?? 0) === 0;
       const chart = chartRef.current;
       const hasHistory = (chart?.getData().length ?? 0) > 0;
-      // Auto scale is off by default, so there is no "the user has not
-      // touched anything yet" case to fall back to: a timeframe change
-      // always carries the view over, and replaceHistory fits the scale to
-      // the new candles itself.
-      const preserveTimeframeViewport =
-        currentSymbolRef.current === accepted.symbol &&
-        currentTimeframeRef.current !== accepted.timeframe &&
-        hasHistory;
-      const viewportMode = preserveTimeframeViewport ? HistoryViewportMode.BarsFromEnd : HistoryViewportMode.Reset;
+      // The same symbol always carries the view over, measured from the newest
+      // bar: a timeframe change, and equally a window that replaces the series in
+      // place (a fresh answer to a history request), whose newest bar may be
+      // several bars later than the chart's. Pinning the old logical position
+      // there left the newest bars off the right edge. Only a new symbol or a
+      // fresh session (selection refs cleared) starts from the default view.
+      // Auto scale is off by default, so replaceHistory fits the scale to the
+      // new candles itself.
+      const preserveViewport = currentSymbolRef.current === accepted.symbol && hasHistory;
+      const viewportMode = preserveViewport ? HistoryViewportMode.BarsFromEnd : HistoryViewportMode.Reset;
       // Selection refs describe what is on screen, so set them before the swap:
       // a carried viewport can request an older page inside replaceHistory.
       dataKeyRef.current = dataKey;

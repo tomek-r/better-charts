@@ -441,6 +441,8 @@ test('submit sends the accepted draft', async ({ page }) => {
   await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
   await expect(page.getByLabel('Take profit enabled')).not.toBeChecked();
   await expect(page.locator('.units-row .ticket-value')).toHaveValue('1');
+  // No side stays selected either: the Buy/Sell buttons are back to their initial state.
+  await expect(page.locator('section.order-ticket .ticket-quote-side.active')).toHaveCount(0);
   await expect(page.locator('.command-status')).toHaveCount(0);
   await expect(page.locator('.notification-region [role=alert]')).toHaveCount(0);
   expectClean(collected);
