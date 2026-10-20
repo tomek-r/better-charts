@@ -1,5 +1,5 @@
-//! Locate the MQL5 data folders of the configured MT5 installation, and any
-//! existing copy of the two MQL5 files the app ships.
+//! Locate the MQL5 data folders of an MT5 installation, and any existing copy of
+//! the two MQL5 files the app ships.
 //!
 //! MT5 supports two data-folder layouts:
 //!
@@ -26,6 +26,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::discover::HostOs;
 use crate::download_resources::{EXPERT_ADVISOR_RESOURCE, INDICATOR_RESOURCE};
 use crate::mt5_backend::Mt5BackendConfig;
 
@@ -34,7 +35,7 @@ use crate::mt5_backend::Mt5BackendConfig;
 /// accepts every drive letter.
 const WINE_DRIVE: char = 'c';
 /// Separator of the Windows paths the configuration and `origin.txt` carry.
-const WINDOWS_FOLDER_SEPARATOR: char = '\\';
+pub(super) const WINDOWS_FOLDER_SEPARATOR: char = '\\';
 /// Folder a Wine prefix maps to drive `C:`.
 const WINE_DRIVE_C: &str = "drive_c";
 /// Folder of a Wine prefix that holds the Windows user profiles.
@@ -60,23 +61,59 @@ const MQL5_RESOURCE_PREFIX: &str = "mql5/";
 /// only stops a pathological tree from stalling the caller.
 pub(crate) const MAX_FOLDER_DEPTH: usize = 4;
 
-/// Host the configured Windows path is resolved on. Passed as data so the
-/// native and the Wine mapping are both unit-tested on any operating system.
+/// Host a Windows path is resolved on. Passed as data so the native and the Wine
+/// mapping are both unit-tested on any operating system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostPlatform {
-    /// Windows: the configured path is a host path already.
+    /// Windows: the Windows path is a host path already.
     Windows,
     /// macOS or Linux: the path is resolved inside the Wine prefix.
     Wine,
 }
 
-/// The host this process runs on. The only place that looks at the compile-time
-/// target, so every mapping function below stays pure.
-fn current_host() -> HostPlatform {
+/// The operating system this process runs on. The only place that looks at the
+/// compile-time target, so every mapping function below stays pure.
+pub(super) fn current_host_os() -> HostOs {
     if cfg!(windows) {
-        HostPlatform::Windows
+        HostOs::Windows
+    } else if cfg!(target_os = "macos") {
+        HostOs::MacOs
     } else {
-        HostPlatform::Wine
+        HostOs::Linux
+    }
+}
+
+/// The host a Windows path is resolved on for this operating system.
+fn current_host() -> HostPlatform {
+    match current_host_os() {
+        HostOs::Windows => HostPlatform::Windows,
+        HostOs::MacOs | HostOs::Linux => HostPlatform::Wine,
+    }
+}
+
+/// What the locator needs to know about an installation. Implemented by the
+/// explicit backend configuration and by an installation that
+/// [`super::discover`] found, so both reach the same path mapping.
+pub trait InstallationLocation {
+    /// Host the Windows paths of this installation are resolved on.
+    fn host(&self) -> HostPlatform;
+    /// Wine prefix holding `drive_c`; empty when the installation has none.
+    fn wine_prefix(&self) -> &Path;
+    /// Windows path of the terminal executable.
+    fn terminal_exe_windows(&self) -> &str;
+}
+
+impl InstallationLocation for Mt5BackendConfig {
+    fn host(&self) -> HostPlatform {
+        current_host()
+    }
+
+    fn wine_prefix(&self) -> &Path {
+        &self.wine_prefix
+    }
+
+    fn terminal_exe_windows(&self) -> &str {
+        &self.terminal_exe_windows
     }
 }
 
@@ -131,14 +168,15 @@ pub fn windows_path_on_host(
     }
 }
 
-/// Folder holding the configured `terminal64.exe`, which is the install folder
-/// and therefore the parent of a portable data folder. The path is resolved on
-/// the running host: unchanged on Windows, inside the Wine prefix elsewhere.
-pub fn install_dir(config: &Mt5BackendConfig) -> Option<PathBuf> {
+/// Folder holding the installation's `terminal64.exe`, which is the install
+/// folder and therefore the parent of a portable data folder. The path is
+/// resolved on the installation's host: unchanged on Windows, inside the Wine
+/// prefix elsewhere.
+pub fn install_dir(installation: &impl InstallationLocation) -> Option<PathBuf> {
     let terminal_exe = windows_path_on_host(
-        &config.terminal_exe_windows,
-        current_host(),
-        &config.wine_prefix,
+        installation.terminal_exe_windows(),
+        installation.host(),
+        installation.wine_prefix(),
     )?;
     terminal_exe.parent().map(Path::to_path_buf)
 }
@@ -216,7 +254,7 @@ fn sorted_entries(folder: &Path) -> Vec<fs::DirEntry> {
 
 /// Sub-folders of `folder` in name order. `DirEntry::file_type` never follows a
 /// symbolic link, so a linked folder is neither reported nor searched.
-fn sorted_folders(folder: &Path) -> Vec<PathBuf> {
+pub(super) fn sorted_folders(folder: &Path) -> Vec<PathBuf> {
     sorted_entries(folder)
         .into_iter()
         .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
@@ -324,25 +362,24 @@ fn wine_terminals_roots(wine_prefix: &Path) -> Vec<PathBuf> {
 }
 
 /// Roots of the standard layout: `%APPDATA%\MetaQuotes\Terminal` on Windows and
-/// one root per Wine user profile on macOS/Linux. Empty when nothing is
-/// configured, which reports no standard data folder instead of a guessed one.
-pub fn terminals_roots(config: &Mt5BackendConfig) -> Vec<PathBuf> {
-    match current_host() {
+/// one root per Wine user profile on macOS/Linux. Empty when the installation has
+/// no prefix, which reports no standard data folder instead of a guessed one.
+pub fn terminals_roots(installation: &impl InstallationLocation) -> Vec<PathBuf> {
+    match installation.host() {
         HostPlatform::Windows => {
             let app_data = env::var_os(APPDATA_VARIABLE).map(PathBuf::from);
             windows_terminals_root(app_data).into_iter().collect()
         }
-        HostPlatform::Wine => wine_terminals_roots(&config.wine_prefix),
+        HostPlatform::Wine => wine_terminals_roots(installation.wine_prefix()),
     }
 }
 
-/// Every data folder of the configured installation, for the host this process
-/// runs on.
-pub fn locate_data_folders(config: &Mt5BackendConfig) -> Vec<DataFolder> {
-    let Some(install_folder) = install_dir(config) else {
+/// Every data folder of `installation`, for the host its paths are resolved on.
+pub fn locate_data_folders(installation: &impl InstallationLocation) -> Vec<DataFolder> {
+    let Some(install_folder) = install_dir(installation) else {
         return Vec::new();
     };
-    let roots = terminals_roots(config);
+    let roots = terminals_roots(installation);
     data_folders_under(&install_folder, roots.iter().map(PathBuf::as_path))
 }
 

@@ -1,5 +1,7 @@
+use super::discover::*;
 use super::locate::*;
-use crate::mt5_backend::Mt5BackendConfig;
+use crate::mt5_backend::{is_configured, Mt5BackendConfig};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -382,4 +384,310 @@ fn locate_data_folders_follows_the_configured_installation() {
     let portable_mql5 = fixture.folder(&format!("{INSTALL_FOLDER_IN_PREFIX}/MQL5"));
     let portable = locate_data_folders(&config);
     assert_eq!(portable, vec![expected_portable_folder(&portable_mql5)]);
+}
+
+/// macOS defaults of the official application, verified on the owner's machine.
+const MACOS_HOME: &str = "/Users/trader";
+const MACOS_PREFIX: &str =
+    "/Users/trader/Library/Application Support/net.metaquotes.wine.metatrader5";
+const MACOS_WINE_BINARY: &str =
+    "/Applications/MetaTrader 5.app/Contents/SharedSupport/wine/bin/wine";
+/// Linux defaults: the prefix MetaQuotes' installer creates, a plain Wine prefix,
+/// and a `wine` binary on PATH.
+const LINUX_HOME: &str = "/home/trader";
+const LINUX_MT5_PREFIX: &str = "/home/trader/.mt5";
+const LINUX_WINE_PREFIX: &str = "/home/trader/.wine";
+const LINUX_PATH_FOLDER: &str = "/usr/local/bin";
+const WINE_ON_PATH: &str = "/usr/local/bin/wine";
+/// Windows default program folder and the broker-branded folders scanned below it.
+const PROGRAM_FILES: &str = r"C:\Program Files";
+const ACME_TERMINAL_EXE: &str = r"C:\Program Files\Acme MetaTrader 5\terminal64.exe";
+const ZULU_TERMINAL_EXE: &str = r"C:\Program Files\Zulu MetaTrader 5\terminal64.exe";
+
+/// Environment lookup over `pairs`; every other variable reads as unset.
+fn env_map(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+    let pairs: Vec<(String, String)> = pairs
+        .iter()
+        .map(|(key, value)| (key.to_string(), value.to_string()))
+        .collect();
+    move |key: &str| {
+        pairs
+            .iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value.clone())
+    }
+}
+
+/// Host path of the default terminal inside a Wine prefix.
+fn terminal_exe_in_prefix(wine_prefix: &str) -> PathBuf {
+    windows_path_on_host(TERMINAL_EXE, HostPlatform::Wine, Path::new(wine_prefix))
+        .expect("the default terminal path resolves inside a prefix")
+}
+
+fn discovered_wine_installation(wine_prefix: &str, wine_binary: &str) -> Mt5Installation {
+    Mt5Installation {
+        host: HostPlatform::Wine,
+        wine_prefix: Some(PathBuf::from(wine_prefix)),
+        wine_binary: Some(PathBuf::from(wine_binary)),
+        terminal_exe_windows: TERMINAL_EXE.to_string(),
+        source: InstallationSource::Discovered,
+    }
+}
+
+fn discovered_windows_installation(terminal_exe_windows: &str) -> Mt5Installation {
+    Mt5Installation {
+        host: HostPlatform::Windows,
+        wine_prefix: None,
+        wine_binary: None,
+        terminal_exe_windows: terminal_exe_windows.to_string(),
+        source: InstallationSource::Discovered,
+    }
+}
+
+/// Probe over a fixed picture of the disk, so all three operating systems are
+/// tested on any host.
+#[derive(Default)]
+struct FakeProbe {
+    files: BTreeSet<PathBuf>,
+    folders: BTreeMap<PathBuf, Vec<String>>,
+}
+
+impl FakeProbe {
+    /// Probe where exactly `files` exist and no folder is listed.
+    fn with_files(files: impl IntoIterator<Item = PathBuf>) -> Self {
+        Self {
+            files: files.into_iter().collect(),
+            folders: BTreeMap::new(),
+        }
+    }
+
+    /// Adds `folder`, listing `names` in the name order the real probe produces.
+    fn listing(mut self, folder: &str, names: &[&str]) -> Self {
+        let names = names.iter().map(|name| (*name).to_string()).collect();
+        self.folders.insert(PathBuf::from(folder), names);
+        self
+    }
+}
+
+impl InstallProbe for FakeProbe {
+    fn is_file(&self, path: &Path) -> bool {
+        self.files.contains(path)
+    }
+
+    fn folder_names(&self, folder: &Path) -> Vec<String> {
+        self.folders.get(folder).cloned().unwrap_or_default()
+    }
+}
+
+#[test]
+fn macos_finds_the_official_application() {
+    let probe = FakeProbe::with_files([
+        terminal_exe_in_prefix(MACOS_PREFIX),
+        PathBuf::from(MACOS_WINE_BINARY),
+    ]);
+    let env = env_map(&[("HOME", MACOS_HOME)]);
+
+    assert_eq!(
+        discover_installations_with(&env, HostOs::MacOs, &probe),
+        vec![discovered_wine_installation(
+            MACOS_PREFIX,
+            MACOS_WINE_BINARY
+        )]
+    );
+}
+
+#[test]
+fn macos_reports_nothing_when_the_application_is_incomplete() {
+    let env = env_map(&[("HOME", MACOS_HOME)]);
+    let without_wine = FakeProbe::with_files([terminal_exe_in_prefix(MACOS_PREFIX)]);
+    assert!(discover_installations_with(&env, HostOs::MacOs, &without_wine).is_empty());
+
+    let without_terminal = FakeProbe::with_files([PathBuf::from(MACOS_WINE_BINARY)]);
+    assert!(discover_installations_with(&env, HostOs::MacOs, &without_terminal).is_empty());
+
+    // Without a home folder neither default can be resolved.
+    let complete = FakeProbe::with_files([
+        terminal_exe_in_prefix(MACOS_PREFIX),
+        PathBuf::from(MACOS_WINE_BINARY),
+    ]);
+    assert!(discover_installations_with(&env_map(&[]), HostOs::MacOs, &complete).is_empty());
+}
+
+#[test]
+fn linux_probes_the_metaquotes_prefix_before_a_plain_wine_prefix() {
+    let probe = FakeProbe::with_files([
+        terminal_exe_in_prefix(LINUX_MT5_PREFIX),
+        terminal_exe_in_prefix(LINUX_WINE_PREFIX),
+        PathBuf::from(WINE_ON_PATH),
+    ]);
+    let env = env_map(&[("HOME", LINUX_HOME), ("PATH", LINUX_PATH_FOLDER)]);
+
+    assert_eq!(
+        discover_installations_with(&env, HostOs::Linux, &probe),
+        vec![
+            discovered_wine_installation(LINUX_MT5_PREFIX, WINE_ON_PATH),
+            discovered_wine_installation(LINUX_WINE_PREFIX, WINE_ON_PATH),
+        ]
+    );
+}
+
+#[test]
+fn linux_reports_nothing_without_a_wine_prefix() {
+    let probe = FakeProbe::with_files([PathBuf::from(WINE_ON_PATH)]);
+    let env = env_map(&[("HOME", LINUX_HOME), ("PATH", LINUX_PATH_FOLDER)]);
+
+    assert!(discover_installations_with(&env, HostOs::Linux, &probe).is_empty());
+}
+
+#[test]
+fn linux_reports_nothing_when_wine_is_not_on_path() {
+    // Both prefixes look complete, but the bare `wine` that runs them is missing.
+    let probe = FakeProbe::with_files([
+        terminal_exe_in_prefix(LINUX_MT5_PREFIX),
+        terminal_exe_in_prefix(LINUX_WINE_PREFIX),
+    ]);
+    let env = env_map(&[("HOME", LINUX_HOME), ("PATH", LINUX_PATH_FOLDER)]);
+
+    assert!(discover_installations_with(&env, HostOs::Linux, &probe).is_empty());
+}
+
+#[test]
+fn windows_finds_the_metaquotes_folder() {
+    let probe = FakeProbe::with_files([PathBuf::from(TERMINAL_EXE)]);
+    let env = env_map(&[("ProgramFiles", PROGRAM_FILES)]);
+
+    assert_eq!(
+        discover_installations_with(&env, HostOs::Windows, &probe),
+        vec![discovered_windows_installation(TERMINAL_EXE)]
+    );
+}
+
+#[test]
+fn windows_scans_broker_folders_below_the_program_folder() {
+    let probe = FakeProbe::with_files([
+        PathBuf::from(TERMINAL_EXE),
+        PathBuf::from(ACME_TERMINAL_EXE),
+        PathBuf::from(ZULU_TERMINAL_EXE),
+        PathBuf::from(r"C:\Program Files\Unrelated\tool.exe"),
+    ]);
+    // The real probe lists sub-folders in name order; the default folder is
+    // listed too and must not be reported twice.
+    let probe = probe.listing(
+        PROGRAM_FILES,
+        &[
+            "Acme MetaTrader 5",
+            "MetaTrader 5",
+            "Unrelated",
+            "Zulu MetaTrader 5",
+        ],
+    );
+    let env = env_map(&[("ProgramFiles", PROGRAM_FILES)]);
+
+    assert_eq!(
+        discover_installations_with(&env, HostOs::Windows, &probe),
+        vec![
+            discovered_windows_installation(TERMINAL_EXE),
+            discovered_windows_installation(ACME_TERMINAL_EXE),
+            discovered_windows_installation(ZULU_TERMINAL_EXE),
+        ]
+    );
+}
+
+#[test]
+fn windows_reports_nothing_when_no_terminal_exists() {
+    let unrelated_tool = PathBuf::from(r"C:\Program Files\Unrelated\tool.exe");
+    let probe = FakeProbe::with_files([unrelated_tool]);
+    let probe = probe.listing(PROGRAM_FILES, &["Unrelated"]);
+    let env = env_map(&[("ProgramFiles", PROGRAM_FILES)]);
+
+    assert!(discover_installations_with(&env, HostOs::Windows, &probe).is_empty());
+}
+
+#[test]
+fn a_configured_linux_installation_wins_over_the_defaults() {
+    // The defaults are present, but the environment override is the only answer.
+    let probe = FakeProbe::with_files([
+        terminal_exe_in_prefix(LINUX_MT5_PREFIX),
+        PathBuf::from(WINE_ON_PATH),
+    ]);
+    let env = env_map(&[
+        ("HOME", LINUX_HOME),
+        ("PATH", LINUX_PATH_FOLDER),
+        ("MT5_WINE_PREFIX", "/custom/prefix"),
+        ("MT5_WINE_BINARY", "/custom/wine"),
+        ("MT5_TERMINAL_EXE", "D:\\Custom\\terminal64.exe"),
+    ]);
+
+    assert_eq!(
+        discover_installations_with(&env, HostOs::Linux, &probe),
+        vec![Mt5Installation {
+            host: HostPlatform::Wine,
+            wine_prefix: Some(PathBuf::from("/custom/prefix")),
+            wine_binary: Some(PathBuf::from("/custom/wine")),
+            terminal_exe_windows: "D:\\Custom\\terminal64.exe".to_string(),
+            source: InstallationSource::Configured,
+        }]
+    );
+}
+
+#[test]
+fn a_configured_windows_installation_carries_no_wine_settings() {
+    let env = env_map(&[
+        ("MT5_TERMINAL_EXE", "D:\\MetaTrader 5\\terminal64.exe"),
+        // Nothing on Windows can use a Wine prefix, so it is not reported.
+        ("MT5_WINE_PREFIX", "/ignored/prefix"),
+        ("MT5_WINE_BINARY", "/ignored/wine"),
+    ]);
+
+    assert_eq!(
+        discover_installations_with(&env, HostOs::Windows, &FakeProbe::default()),
+        vec![Mt5Installation {
+            host: HostPlatform::Windows,
+            wine_prefix: None,
+            wine_binary: None,
+            terminal_exe_windows: "D:\\MetaTrader 5\\terminal64.exe".to_string(),
+            source: InstallationSource::Configured,
+        }]
+    );
+}
+
+#[test]
+fn a_blank_override_falls_back_to_discovery() {
+    let probe = FakeProbe::with_files([PathBuf::from(TERMINAL_EXE)]);
+    let env = env_map(&[("ProgramFiles", PROGRAM_FILES), ("MT5_TERMINAL_EXE", "  ")]);
+
+    assert_eq!(
+        discover_installations_with(&env, HostOs::Windows, &probe),
+        vec![discovered_windows_installation(TERMINAL_EXE)]
+    );
+}
+
+#[test]
+fn a_discovered_installation_drives_the_locator() {
+    // The locator reads both sources through one accessor; only the Wine mapping
+    // is host independent, so the native case stays covered by its own test.
+    let installation = discovered_wine_installation(LINUX_MT5_PREFIX, WINE_ON_PATH);
+
+    assert_eq!(
+        install_dir(&installation),
+        Some(PathBuf::from(LINUX_MT5_PREFIX).join(INSTALL_FOLDER_IN_PREFIX))
+    );
+}
+
+#[test]
+fn discovery_never_reaches_the_configuration_auto_start_reads() {
+    let probe = FakeProbe::with_files([
+        terminal_exe_in_prefix(LINUX_MT5_PREFIX),
+        PathBuf::from(WINE_ON_PATH),
+    ]);
+    let env = env_map(&[("HOME", LINUX_HOME), ("PATH", LINUX_PATH_FOLDER)]);
+    assert_eq!(
+        discover_installations_with(&env, HostOs::Linux, &probe).len(),
+        1
+    );
+
+    // The configuration auto-start is gated on stays unconfigured, so a
+    // discovered terminal can never make an unconfigured machine start MT5.
+    let config = Mt5BackendConfig::from_env_with(|_| None);
+    assert!(!is_configured(&config));
 }
