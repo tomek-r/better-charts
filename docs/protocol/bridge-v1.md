@@ -410,7 +410,7 @@ different identity.
   "margin_level": "1996.00", "leverage": 100, "margin_mode": 0, "trade_allowed": true,
   "expert_allowed": true, "account_trade_mode": 0, "account_trade_mode_name": "demo",
   "margin_call_level": "100.00", "stop_out_level": "50.00", "margin_levels_mode": 0,
-  "margin_levels_unit": "percent"
+  "margin_levels_unit": "percent", "account_company": "Broker Ltd"
 }
 ```
 
@@ -425,6 +425,11 @@ the name then defaults to `unknown`.
 
 The EA supplies the raw `account_trade_mode` and semantic name
 `demo|contest|real|unknown`; absent fields default to `-1` / `unknown`.
+`account_company` (EA 1.011+, additive) is `ACCOUNT_COMPANY`, the broker's
+company name, trimmed and at most 128 characters; `null` or absent means not
+reported (older EAs, an empty name). Rust rejects an untrimmed, empty or longer
+value like any invalid account snapshot. The app shows it in the order-ticket
+account badge after the account number.
 `currency_digits` is the optional MT5 monetary precision (`0..=8`); absent defaults
 to 2 for older EAs. Money inputs, budget rounding, account and chart labels use
 the account currency and precision. Monetary displays use `amount CODE`, including

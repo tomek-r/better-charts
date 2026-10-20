@@ -788,7 +788,7 @@ def main() -> int:
                 "margin_mode": 2, "trade_allowed": False, "expert_allowed": False,
                 "account_trade_mode": 0, "account_trade_mode_name": "demo",
                 "margin_call_level": "100.0000", "stop_out_level": "50.0000",
-                "margin_levels_mode": 0, "margin_levels_unit": "percent",
+                "margin_levels_mode": 0, "margin_levels_unit": "percent", "account_company": "Mock Broker Ltd",
             }))
             send_frame(conn, portfolio_snapshot("ea-portfolio-1", session_id, OPEN_POSITIONS))
             send_frame(conn, envelope("quote_update", "ea-quote-1", session_id, {

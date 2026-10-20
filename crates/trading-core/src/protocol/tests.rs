@@ -656,6 +656,7 @@ fn validates_account_snapshot_values() {
         expert_allowed: true,
         account_trade_mode: 0,
         account_trade_mode_name: "demo".into(),
+        account_company: None,
         margin_call_level: None,
         stop_out_level: None,
         margin_levels_mode: None,
@@ -1091,6 +1092,35 @@ fn account_snapshot_tolerates_old_eas_and_round_trips_the_trade_mode() {
     }
     .validate()
     .is_err());
+}
+
+#[test]
+fn account_snapshot_company_is_optional_and_bounded() {
+    let older = serde_json::json!({
+        "account_login": "123", "broker_server": "Demo", "currency": "USD",
+        "balance": "100", "equity": "99", "margin": "1", "free_margin": "98",
+        "margin_level": "9900", "leverage": 100, "margin_mode": 0,
+        "trade_allowed": true, "expert_allowed": true
+    });
+    let parsed: AccountSnapshot = serde_json::from_value(older).unwrap();
+    assert_eq!(parsed.account_company, None);
+    parsed.validate().unwrap();
+
+    let reported = AccountSnapshot {
+        account_company: Some("Raw Trading Ltd".into()),
+        ..parsed.clone()
+    };
+    reported.validate().unwrap();
+    let encoded = serde_json::to_value(&reported).unwrap();
+    assert_eq!(encoded["account_company"], "Raw Trading Ltd");
+
+    for invalid in ["", " Raw Trading Ltd", "Raw Trading Ltd ", &"x".repeat(129)] {
+        let account = AccountSnapshot {
+            account_company: Some(invalid.to_owned()),
+            ..parsed.clone()
+        };
+        assert!(account.validate().is_err(), "{invalid:?} must be rejected");
+    }
 }
 
 #[test]

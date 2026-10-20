@@ -523,6 +523,22 @@ string MarginAtFillJson(const bool is_buy,const string symbol,const double volum
    return AmountJsonOrNull(margin,false,digits);
   }
 
+// Broker company (ACCOUNT_COMPANY) for display. Trimmed and capped at 128
+// characters so the app's bound always holds; an empty name reports null.
+string AccountCompanyJson()
+  {
+   string company=AccountInfoString(ACCOUNT_COMPANY);
+   StringTrimLeft(company);
+   StringTrimRight(company);
+   if(StringLen(company)>128)
+     {
+      company=StringSubstr(company,0,128);
+      StringTrimRight(company);
+     }
+   if(company=="") return "null";
+   return "\""+JsonEscape(company)+"\"";
+  }
+
 string AccountPayload()
   {
    const int currency_digits=(int)AccountInfoInteger(ACCOUNT_CURRENCY_DIGITS);
@@ -550,11 +566,11 @@ string AccountPayload()
    const string margin_call_level=(levels_known ? AmountJsonOrNull(AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL),false,levels_digits) : "null");
    const string stop_out_level=(levels_known ? AmountJsonOrNull(AccountInfoDouble(ACCOUNT_MARGIN_SO_SO),false,levels_digits) : "null");
    const string levels_mode_json=(levels_known ? IntegerToString(levels_mode) : "null");
-   return StringFormat("{\"account_login\":\"%s\",\"broker_server\":\"%s\",\"currency\":\"%s\",\"currency_digits\":%d,\"balance\":\"%s\",\"equity\":\"%s\",\"margin\":\"%s\",\"free_margin\":\"%s\",\"margin_level\":\"%s\",\"leverage\":%d,\"margin_mode\":%d,\"trade_allowed\":%s,\"expert_allowed\":%s,\"account_trade_mode\":%I64d,\"account_trade_mode_name\":\"%s\",\"margin_call_level\":%s,\"stop_out_level\":%s,\"margin_levels_mode\":%s,\"margin_levels_unit\":\"%s\"}",
+   return StringFormat("{\"account_login\":\"%s\",\"broker_server\":\"%s\",\"currency\":\"%s\",\"currency_digits\":%d,\"balance\":\"%s\",\"equity\":\"%s\",\"margin\":\"%s\",\"free_margin\":\"%s\",\"margin_level\":\"%s\",\"leverage\":%d,\"margin_mode\":%d,\"trade_allowed\":%s,\"expert_allowed\":%s,\"account_trade_mode\":%I64d,\"account_trade_mode_name\":\"%s\",\"margin_call_level\":%s,\"stop_out_level\":%s,\"margin_levels_mode\":%s,\"margin_levels_unit\":\"%s\",\"account_company\":%s}",
                        JsonEscape(IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN))),JsonEscape(AccountInfoString(ACCOUNT_SERVER)),JsonEscape(AccountInfoString(ACCOUNT_CURRENCY)),amount_digits,
                        DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),amount_digits),DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY),amount_digits),DoubleToString(margin,amount_digits),DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE),amount_digits),DoubleToString(margin_level,4),
                        AccountInfoInteger(ACCOUNT_LEVERAGE),AccountInfoInteger(ACCOUNT_MARGIN_MODE),(AccountInfoInteger(ACCOUNT_TRADE_ALLOWED)!=0?"true":"false"),(AccountInfoInteger(ACCOUNT_TRADE_EXPERT)!=0?"true":"false"),trade_mode,trade_mode_name,
-                       margin_call_level,stop_out_level,levels_mode_json,levels_unit);
+                       margin_call_level,stop_out_level,levels_mode_json,levels_unit,AccountCompanyJson());
   }
 
 // True when the terminal now reports a different login/server than the one the

@@ -8,12 +8,13 @@ type HeaderState = { environment: HeaderEnvironment | undefined; symbol: string 
 export function useOrderTicketHeader(): HeaderState {
   const { symbol } = useBridgeMarketSelector((market) => ({ symbol: market.snapshot.symbol }));
   const accountPresent = useBridgeAccountSelector((account) => account !== undefined);
-  const { tradeModeName, tradeMode, accountLogin, brokerServer } = useBridgeAccountSelector(
+  const { tradeModeName, tradeMode, accountLogin, brokerServer, accountCompany } = useBridgeAccountSelector(
     useShallow((account) => ({
       tradeModeName: account?.accountTradeModeName,
       tradeMode: account?.accountTradeMode,
       accountLogin: account?.accountLogin,
       brokerServer: account?.brokerServer,
+      accountCompany: account?.accountCompany,
     })),
   );
   const environment = accountPresent
@@ -22,6 +23,7 @@ export function useOrderTicketHeader(): HeaderState {
         brokerServer,
         accountTradeModeName: tradeModeName,
         accountTradeMode: tradeMode,
+        accountCompany,
       })
     : undefined;
   return { environment, symbol };

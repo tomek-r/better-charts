@@ -312,6 +312,8 @@ export interface AccountSnapshot {
   marginLevelsMode?: number | null;
   /** "percent" | "money" | "unknown"; absent from older backends. */
   marginLevelsUnit?: string;
+  /** ACCOUNT_COMPANY, the broker's company name; null/absent = not reported. */
+  accountCompany?: string | null;
 }
 
 export type RiskSide = '' | 'buy' | 'sell';

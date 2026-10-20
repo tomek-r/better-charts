@@ -78,6 +78,7 @@ export type RawAccount = Partial<AccountSnapshot> & {
   stop_out_level?: string | null;
   margin_levels_mode?: number | null;
   margin_levels_unit?: string;
+  account_company?: string | null;
 };
 export function normalizeAccount(raw: RawAccount): AccountSnapshot {
   return {
@@ -101,6 +102,7 @@ export function normalizeAccount(raw: RawAccount): AccountSnapshot {
     stopOutLevel: raw.stopOutLevel ?? raw.stop_out_level ?? null,
     marginLevelsMode: raw.marginLevelsMode ?? raw.margin_levels_mode ?? null,
     marginLevelsUnit: raw.marginLevelsUnit ?? raw.margin_levels_unit ?? 'unknown',
+    accountCompany: raw.accountCompany ?? raw.account_company ?? null,
   };
 }
 

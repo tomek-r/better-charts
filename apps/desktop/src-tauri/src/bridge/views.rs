@@ -222,6 +222,8 @@ pub(crate) struct AccountView {
     pub(crate) margin_levels_mode: Option<i64>,
     /// `percent` | `money` | `unknown`.
     pub(crate) margin_levels_unit: String,
+    /// Broker company name (`ACCOUNT_COMPANY`); `null` when not reported.
+    pub(crate) account_company: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -528,6 +530,7 @@ impl From<AccountSnapshot> for AccountView {
             stop_out_level: value.stop_out_level,
             margin_levels_mode: value.margin_levels_mode,
             margin_levels_unit: value.margin_levels_unit,
+            account_company: value.account_company,
         }
     }
 }

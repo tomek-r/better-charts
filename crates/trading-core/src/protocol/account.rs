@@ -45,6 +45,10 @@ pub struct AccountSnapshot {
     /// `percent` | `money` | `unknown`; `unknown` also covers older EAs.
     #[serde(default = "unknown_margin_levels_unit")]
     pub margin_levels_unit: String,
+    /// `ACCOUNT_COMPANY`, the broker's company name, for display; `null` or
+    /// absent when not reported (older EAs, an empty name).
+    #[serde(default)]
+    pub account_company: Option<String>,
 }
 
 fn unknown_margin_levels_unit() -> String {
@@ -544,6 +548,11 @@ impl AccountSnapshot {
             "percent" | "money" | "unknown"
         ) {
             return Err("invalid margin stop-out mode name");
+        }
+        if let Some(company) = &self.account_company {
+            if !bounded_text(company, 128, false) {
+                return Err("invalid account company");
+            }
         }
         for level in [&self.margin_call_level, &self.stop_out_level]
             .into_iter()

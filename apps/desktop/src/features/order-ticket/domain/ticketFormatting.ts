@@ -6,11 +6,14 @@ import type { AccountSnapshot } from '../../../shared/bridge/types';
  * environment an order would hit, shown with the account number. */
 export function accountEnvironment(
   account?: Partial<
-    Pick<AccountSnapshot, 'accountTradeModeName' | 'accountTradeMode' | 'brokerServer' | 'accountLogin'>
+    Pick<
+      AccountSnapshot,
+      'accountTradeModeName' | 'accountTradeMode' | 'brokerServer' | 'accountLogin' | 'accountCompany'
+    >
   >,
 ): {
   kind: 'demo' | 'contest' | 'real' | 'unknown';
-  /** The badge label in its parts: the environment kind, then the account number. */
+  /** The badge label in its parts: the environment kind, the account number, then the broker company when known. */
   labelParts: string[];
   title: string;
 } {
@@ -29,9 +32,10 @@ export function accountEnvironment(
     kind = 'unknown';
   }
   const server = account?.brokerServer ? ` · ${account.brokerServer}` : '';
+  const company = account?.accountCompany;
   return {
     kind,
-    labelParts: [kind.toUpperCase(), account?.accountLogin ?? '—'],
+    labelParts: [kind.toUpperCase(), account?.accountLogin ?? '—', ...(company ? [company] : [])],
     title: `account_trade_mode=${mode ?? 'unknown'}${server}`,
   };
 }
