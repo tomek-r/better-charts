@@ -1,5 +1,5 @@
 import type { AccountSnapshot } from '../../shared/bridge/types';
-import { accountEnvironment } from '../order-ticket/domain/ticketFormatting';
+import { accountEnvironment } from '../account-badge/accountEnvironment';
 
 export type AccountIdentity = Pick<AccountSnapshot, 'accountLogin' | 'brokerServer'>;
 

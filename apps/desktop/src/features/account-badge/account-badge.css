@@ -1,0 +1,51 @@
+/* Account environment badge (kind, account number, broker company) in the top bar — safety-relevant:
+   which environment an order would hit. No background and no border on purpose: the colour carries the
+   signal, and the bar's own flex centring keeps the badge level with the search button. */
+.account-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  flex: 0 0 auto;
+  padding: 4px 0;
+  /* Same colour, size and weight as the top bar's "Search symbols" label (.search-trigger). */
+  color: var(--color-muted-strong);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* Account icon before the number and money icon before "Real": sized to the text and centred on the line;
+   each takes the colour of the text it sits in (the money icon the kind's colour). */
+.account-badge-icon,
+.account-badge-money {
+  width: 1.5em;
+  height: 1.5em;
+  flex: none;
+}
+
+/* One part (icon and text): the icon is centred on the text by the flex row, with a small gap. */
+.account-badge-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+/* Demo stays an INFO blue on purpose: buy/long borrows the up teal now, so
+   taking the buy tokens would have put Demo and Contest in the same teal on a
+   safety badge. Only the kind word is coloured. */
+.account-badge-kind.demo {
+  color: var(--color-info);
+}
+
+.account-badge-kind.contest {
+  color: var(--color-accent-soft);
+}
+
+.account-badge-kind.real {
+  color: var(--color-warn-text);
+}
+
+.account-badge-kind.unknown {
+  color: var(--color-text-label);
+}

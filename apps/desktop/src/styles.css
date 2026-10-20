@@ -2,6 +2,7 @@
 @import './styles/base.css';
 @import './features/app-workspace/app-workspace.css';
 @import './features/topbar/topbar.css';
+@import './features/account-badge/account-badge.css';
 @import './features/chart/chart.css';
 @import './features/chart/timeframes/timeframes.css';
 @import './features/chart/timeframes/menu/timeframe-menu.css';

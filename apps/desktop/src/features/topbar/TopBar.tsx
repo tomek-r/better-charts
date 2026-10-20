@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
+import { AccountBadge } from '../account-badge/AccountBadge';
 
 /** Static brand mark: hoisted so a re-render reuses the same element. */
 const brandMark = (
@@ -47,6 +48,7 @@ export function TopBar({
         <small>v{__APP_VERSION__}</small>
       </div>
       <div className="topbar-actions">
+        <AccountBadge />
         <button className="search-trigger" onClick={() => setSearchOpen(true)} aria-label="Search symbols">
           <span className="search-trigger-label">
             <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">

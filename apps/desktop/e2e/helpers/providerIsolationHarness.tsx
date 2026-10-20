@@ -1,9 +1,9 @@
 import { Profiler, type ProfilerOnRenderCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ErrorNotificationsProvider } from '../../src/shared/ui/ErrorNotifications';
-import { Separated } from '../../src/shared/ui/SeparatorIcon';
 import type { ReactNode } from 'react';
 import { AppHeaderView } from '../../src/features/app-header/AppHeaderView';
+import { AccountBadge } from '../../src/features/account-badge/AccountBadge';
 import {
   PanelVisibilityProvider,
   usePanelActions,
@@ -191,12 +191,12 @@ function PanelProbe() {
   return <output data-testid="probe-panel">{String(panelOpen)}</output>;
 }
 
-function TicketHeaderProbe() {
-  const { environment, symbol } = useOrderTicketHeader();
-  const environmentLabel = environment === undefined ? 'none' : <Separated parts={environment.labelParts} />;
+/** The account-environment badge consumer: its testid keeps the spec's existing probe key. */
+function EnvironmentBadgeProbe() {
+  const symbol = useOrderTicketHeader();
   return (
     <output data-testid="probe-ticket-header">
-      {symbol ?? '—'}|{environmentLabel}
+      {symbol ?? '—'}|<AccountBadge />
     </output>
   );
 }
@@ -508,7 +508,7 @@ function WorkspaceProbes() {
           <ExecutionProvider>
             <OrderTicketProvider>
               <Probe id="ticket-header">
-                <TicketHeaderProbe />
+                <EnvironmentBadgeProbe />
               </Probe>
               <Probe id="ticket-edit">
                 <TicketEditProbe />

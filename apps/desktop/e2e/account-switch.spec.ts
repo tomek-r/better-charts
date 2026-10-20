@@ -76,7 +76,9 @@ test('an account switch clears staged drafts and announces the new account in a 
   await expect(dialog).toBeVisible();
   await expect.poll(() => stagedState(page)).toBe(false);
   await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
-  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText(/^REAL\s*70001234$/);
+  await expect(page.locator('.topbar-actions .account-badge')).toHaveText(/^70001234 Real$/);
+  // Only a real account carries the money icon before its kind word.
+  await expect(page.locator('.topbar-actions .account-badge .account-badge-money')).toBeVisible();
 
   // Keyboard: focus lands on Dismiss, Tab stays trapped inside, Enter dismisses.
   const dismiss = dialog.getByRole('button', { name: 'Dismiss' });
@@ -241,7 +243,8 @@ test('reconnecting to the same account does not clear drafts or show the dialog'
 
 test('first connection announces nothing', async ({ page }) => {
   await gotoWithStub(page);
-  await openTradePanel(page);
-  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText(/^DEMO\s*50123456$/);
+  // The badge lives in the top bar, so the trade panel stays closed here.
+  await expect(page.locator('.topbar-actions .account-badge')).toHaveText(/^50123456 Demo$/);
+  await expect(page.locator('.topbar-actions .account-badge .account-badge-money')).toHaveCount(0);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });

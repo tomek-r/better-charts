@@ -31,8 +31,8 @@ function expectClean({ pageErrors, consoleErrors }: { pageErrors: string[]; cons
 async function fillRiskDraft(page: Page) {
   // Stage first (owner flow: the CTA is enabled only for a staged order).
   await page.locator('section.order-ticket .ticket-quote-side.buy').click();
-  // Anchor on the connected bridge: the ticket-header DEMO badge needs the account snapshot.
-  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText(/^DEMO\s*50123456$/);
+  // Anchor on the connected bridge: the top-bar Demo badge needs the account snapshot.
+  await expect(page.locator('.topbar-actions .account-badge')).toHaveText(/^50123456 Demo$/);
   // Market order: price row disabled, entry follows the quote.
   const priceInput = page
     .locator('.ticket-row')
@@ -194,11 +194,11 @@ test('stubbed runtime connects: sidebar, account badge and chart data render', a
   await expect(page.locator('.execution-safety-card')).toHaveCount(0);
   await expect(page.locator('.recovery-card')).toHaveCount(0);
   await expect(page.locator('.reconciliation-card')).toHaveCount(0);
-  // Account environment badge: DEMO then its login, divided by the separator icon; the tooltip carries the raw
-  // enum and the server.
-  const badge = page.locator('.ticket-title .ticket-account-badge');
-  await expect(badge).toHaveText(/^DEMO\s*50123456$/);
-  await expect(badge).toHaveAttribute('title', 'account_trade_mode=0 · Broker-Demo');
+  // Account environment badge in the top bar: its login then Demo, each part marked by its icon; the tooltip
+  // carries the raw enum and the server.
+  const badge = page.locator('.topbar-actions .account-badge');
+  await expect(badge).toHaveText(/^50123456 Demo$/);
+  await expect(badge).toHaveAttribute('title', 'account_trade_mode=0, Broker-Demo');
   // The portfolio card lists open positions only, and the default stub snapshot
   // has none, so the panel deliberately renders no card here. The populated case
   // is covered by "portfolio shows positions only" below.

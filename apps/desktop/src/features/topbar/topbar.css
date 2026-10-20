@@ -87,6 +87,11 @@
 .topbar-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  /* Fills the bar next to the brand, so the account badge appearing with the first account snapshot
+     does not move the group's own box (layout shift). */
+  flex: 1;
+  min-width: 0;
   gap: 10px;
 }
 

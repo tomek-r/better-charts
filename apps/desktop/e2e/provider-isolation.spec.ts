@@ -209,7 +209,7 @@ test('irrelevant account fields stay out of ticket views while currency changes 
 
   await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Set real account' }).click();
-  await expect(page.getByTestId('probe-ticket-header')).toContainText(/REAL\s*001234/);
+  await expect(page.getByTestId('probe-ticket-header')).toContainText(/001234 Real/);
   const environmentCounts = await probeCounts(page);
   expect(environmentCounts['ticket-header']).toBeGreaterThan(0);
 });

@@ -1,4 +1,3 @@
-import { Separated } from '../../shared/ui/SeparatorIcon';
 import { OrderTicketEditor } from './editor/OrderTicketEditor';
 import { OrderTicketReview } from './review/OrderTicketReview';
 import { useOrderTicketHeader } from './editor/useOrderTicketHeader';
@@ -14,18 +13,13 @@ function OrderTicketBody() {
 }
 
 export function OrderTicketView() {
-  const { environment, symbol } = useOrderTicketHeader();
+  const symbol = useOrderTicketHeader();
 
   return (
     <section className="order-ticket" aria-label="Order ticket">
       <div className="ticket-header">
         <div className="ticket-title">
           <strong>{symbol ?? '—'}</strong>
-          {environment && (
-            <span className={`ticket-account-badge ${environment.kind}`} title={environment.title}>
-              <Separated parts={environment.labelParts} />
-            </span>
-          )}
         </div>
       </div>
       <OrderTicketBody />
