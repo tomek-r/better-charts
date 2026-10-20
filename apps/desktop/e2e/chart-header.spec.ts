@@ -58,6 +58,23 @@ test('chart title shows current broker description and updates it without changi
   await expect(description).toHaveCount(0);
 });
 
+test('bid, spread and ask cards are vertically centred on the symbol title', async ({ page }) => {
+  await gotoWithStub(page);
+  const title = page.locator('.chart-heading h1');
+  const cards = page.locator('.chart-heading .quote-cards > div');
+  await expect(title).toHaveText('EURUSD');
+  await expect(cards).toHaveCount(3);
+  const centreY = async (box: ReturnType<typeof page.locator>) => {
+    const bounds = await box.boundingBox();
+    expect(bounds).not.toBeNull();
+    return bounds!.y + bounds!.height / 2;
+  };
+  const titleCentre = await centreY(title);
+  for (let index = 0; index < 3; index += 1) {
+    expect(Math.abs((await centreY(cards.nth(index))) - titleCentre)).toBeLessThanOrEqual(1);
+  }
+});
+
 test('symbol selection hides the previous description while loading and shows the accepted symbol description', async ({
   page,
 }) => {
