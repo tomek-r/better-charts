@@ -360,6 +360,31 @@ test('review action reads the latest draft fields after editing', async ({ page 
   });
 });
 
+/** Starts the review of a Buy draft whose OrderCheck request the stub rejects with `reason`; returns the alerts. */
+async function startReviewWithRejectedOrderCheck(page: Page, reason: string) {
+  await gotoWithStub(page, { symbolInfo: eurusd, failures: { request_order_check: reason } });
+  await openTradePanel(page);
+  const ticket = page.locator('section.order-ticket');
+  await expect(ticket.locator('.ticket-tick-value')).toBeVisible();
+  await ticket.locator('.ticket-quote-side.buy').click();
+  const cta = ticket.locator('.ticket-cta');
+  await expect(cta).toBeEnabled();
+  await cta.click();
+  await expect.poll(() => wasInvoked(page, 'request_order_check')).toBeTruthy();
+  return page.locator('.notification-region [role=alert]');
+}
+
+test('a rejected OrderCheck request shows the backend reason in the notification', async ({ page }) => {
+  const reason = 'EA is not connected';
+  const alerts = await startReviewWithRejectedOrderCheck(page, reason);
+  await expect(alerts).toHaveText(`OrderCheck could not be requested: ${reason}`);
+});
+
+test('a rejected OrderCheck request with the stop-distance reason raises no notification', async ({ page }) => {
+  const alerts = await startReviewWithRejectedOrderCheck(page, 'stop_loss too close: distance 0.14, required >= 0.20');
+  await expect(alerts).toHaveCount(0);
+});
+
 test('RR uses broker money estimates when they differ from price distances', () => {
   expect(
     riskRewardRatio('buy', '100', '99', '101', {

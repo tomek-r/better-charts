@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { HISTORY_BARS, INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../shared/bridge/limits';
 import type { Candle, MarketSnapshot } from '../../../shared/bridge/types';
+import { errorText } from '../../../shared/errorText';
 
 /** Older pages wait for the EA's own page deadline (BRIDGE_HISTORY_PAGE_DEADLINE_MS). */
 const PAGE_TIMEOUT_MS = 10_000;
@@ -132,7 +133,7 @@ export class Mt5DataAdapter {
     try {
       await invoke('request_history', { symbol, timeframe, bars: clampBars(bars) });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorText(error);
       this.settle(key, pending);
       this.emitError({ message, symbol, timeframe, kind: 'dispatch' });
       throw error;
@@ -178,7 +179,7 @@ export class Mt5DataAdapter {
     } catch (error) {
       this.settle(key, pending);
       if (generation === this.selectionGeneration) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorText(error);
         this.emitError({ message, symbol, timeframe, kind: 'page' });
       }
       throw error;

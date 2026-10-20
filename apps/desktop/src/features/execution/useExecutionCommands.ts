@@ -5,6 +5,7 @@ import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { SubscriptionScope } from '../../shared/bridge/subscriptionScope';
+import { errorText } from '../../shared/errorText';
 import type { ChartController } from '../chart/engine/chartController';
 import type {
   AccountSnapshot,
@@ -106,7 +107,7 @@ export function useExecutionCommands({
         }
       }
     } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
+      const text = errorText(error);
       setCloseCancelStatus(
         /dispatch is disabled/i.test(text)
           ? { kind: 'locked', text: 'Dispatch locked — nothing was sent to MT5. Owner approval required.', source }
