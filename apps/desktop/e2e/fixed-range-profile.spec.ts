@@ -268,21 +268,31 @@ test('a bars profile paints only its bar timeframe, muted, in the top-left of th
 
 test('a partial bars profile names where its coverage starts, in the warning colour', () => {
   const { ops } = paint(makeProfile(DEFAULT_BINS, PARTIAL_BAR_SOURCE));
-  const [label] = labelsOf(ops);
-  expect(labelsOf(ops)).toHaveLength(1);
-  expect(label.text).toBe(`M2 · from ${formatDayMonth(COVERED_FROM_MS)}`);
-  expect(label.style).toBe('#ffd28a');
-  expect(label.font).toBe('400 11px system-ui, sans-serif');
-  expect(label.x).toBe(ANCHOR_X + 6);
-  expect(label.y).toBe(chartRect.y + 6);
+  const labels = labelsOf(ops);
+  const [timeframePart, coveredFromPart] = labels;
+  // Two parts of one label — the diamond separator sits between them, so the covered day is a part of its own.
+  expect(labels.map((label) => label.text)).toEqual(['M2', `from ${formatDayMonth(COVERED_FROM_MS)}`]);
+  for (const label of labels) {
+    expect(label.style).toBe('#ffd28a');
+    expect(label.font).toBe('400 11px system-ui, sans-serif');
+    expect(label.y).toBe(chartRect.y + 6);
+  }
+  // The label starts 6px inside the band, which starts at the anchor.
+  expect(timeframePart.x).toBe(ANCHOR_X + 6);
+  // One filled diamond, in the label colour, sitting between the two parts.
+  const separators = ops.filter((op) => op.kind === 'fill');
+  expect(separators).toHaveLength(1);
+  expect(separators[0].style).toBe('#ffd28a');
+  expect(separators[0].minX).toBeGreaterThan(ANCHOR_X + 6);
+  expect(coveredFromPart.x).toBeGreaterThan(separators[0].maxX);
 });
 
 test('a partial label uses the UTC day and a short English month', () => {
-  const textFor = (coveredFromMs: number) =>
-    labelsOf(paint(makeProfile(DEFAULT_BINS, { ...PARTIAL_BAR_SOURCE, coveredFromMs })).ops)[0].text;
+  const coveredDayFor = (coveredFromMs: number) =>
+    labelsOf(paint(makeProfile(DEFAULT_BINS, { ...PARTIAL_BAR_SOURCE, coveredFromMs })).ops)[1].text;
   // Pinned because the subject is the label at the year edges: the first and last UTC minute of a year.
-  expect(textFor(Date.UTC(2026, 0, 1, 0, 0))).toBe('M2 · from 1 Jan');
-  expect(textFor(Date.UTC(2026, 11, 31, 23, 59))).toBe('M2 · from 31 Dec');
+  expect(coveredDayFor(Date.UTC(2026, 0, 1, 0, 0))).toBe('from 1 Jan');
+  expect(coveredDayFor(Date.UTC(2026, 11, 31, 23, 59))).toBe('from 31 Dec');
 });
 
 test('a bars profile whose band starts left of the pane keeps its label inside the pane', () => {

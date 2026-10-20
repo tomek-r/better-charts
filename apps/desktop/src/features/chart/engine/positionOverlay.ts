@@ -280,7 +280,7 @@ export function createPositionOverlay(
             let right = x + CANCEL_CHIP_X + 10 + chipsShift;
             if (pos.pnl !== undefined) {
               // Tip: UP for long, DOWN for short. The trade size reads as
-              // "10 units" after the P&L ("P&L -$19.8 · 10 units").
+              // "10 units" after the P&L ("P&L -$19.8 ◆ 10 units").
               // RR is recomputed from the PREVIEWED exits, so dragging SL/TP
               // updates it live exactly like the staged tag.
               const rrLabel =
@@ -289,7 +289,7 @@ export function createPositionOverlay(
               const columnWidth = Math.max(pnlColumnWidths.get(pos.id) ?? 0, ctx.measureText(pos.pnl).width);
               pnlColumnWidths.set(pos.id, columnWidth);
               const box = drawHandle(ctx, x + HANDLE_X + chipsShift, labelY, 'P&L ', pnlColor, pos.side !== 'buy', {
-                text: ` · ${pos.volume} units${rrLabel ? ` · RR ${rrLabel}` : ''}`,
+                parts: [`${pos.volume} units`, ...(rrLabel ? [`RR ${rrLabel}`] : [])],
                 amount: { text: pos.pnl, width: columnWidth },
               });
               right = box.x + box.w;

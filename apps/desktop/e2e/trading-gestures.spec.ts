@@ -171,7 +171,7 @@ test('live P&L column grows to the widest observed amount and never shrinks', as
         w.__positionAmountWidth = context.measureText(text).width;
       }
       if (text.includes(' units')) {
-        w.__positionSuffixX = x + context.measureText(text.slice(0, text.indexOf(' · '))).width;
+        w.__positionSuffixX = x;
       }
     };
   });
@@ -194,7 +194,10 @@ test('live P&L column grows to the widest observed amount and never shrinks', as
     });
   const initial = await layout();
   let widest = initial.width;
-  expect(initial.suffix).toBe(initial.start + widest);
+  // The units part rides one diamond separator right of the reserved amount column.
+  const suffixGap = initial.suffix - initial.right;
+  expect(initial.right).toBe(initial.start + widest);
+  expect(suffixGap).toBeGreaterThan(0);
   for (const profit of ['-15.60', '9999.99', '0.00', '1.20']) {
     await clearPaintedText(page);
     await pushEvent(page, 'portfolio-snapshot', {
@@ -209,8 +212,8 @@ test('live P&L column grows to the widest observed amount and never shrinks', as
     const current = await layout();
     widest = Math.max(widest, current.width);
     expect(current.start).toBe(initial.start);
-    expect(current.suffix).toBe(initial.start + widest);
-    expect(current.right).toBe(current.suffix);
+    expect(current.right).toBe(initial.start + widest);
+    expect(current.suffix).toBeCloseTo(current.right + suffixGap, 6);
   }
 });
 
