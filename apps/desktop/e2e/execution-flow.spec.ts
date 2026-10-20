@@ -1280,43 +1280,52 @@ test('canvas gesture: cancelling the staged widget RESETS the SL/TP draft — no
   expectClean(collected);
 });
 
-test('canvas gesture: switching side (Buy→Sell / Sell→Buy) starts a fresh draft — no stale SL/TP (owner)', async ({
+test('switching side (Buy→Sell / Sell→Buy) mirrors SL and TP across the new entry (owner)', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  await openTradePanel(page);
+  const ticket = page.locator('section.order-ticket');
+  await stageAndPaint(page);
+  // Buy at the stub ask 1.0850: SL 50 points below, TP 50 points above.
+  await page.getByLabel('Stop loss enabled').check();
+  await page.getByLabel('Stop loss price').fill('1.0800');
+  await page.getByLabel('Take profit enabled').check();
+  await page.getByLabel('Take profit price').fill('1.0900');
+  // Sell enters at the stub bid 1.0846; both levels keep their distance on the other side.
+  const sell = ticket.locator('.ticket-quote-side.sell');
+  await sell.click();
+  await expect(sell).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Stop loss enabled')).toBeChecked();
+  await expect(page.getByLabel('Stop loss price')).toHaveValue('1.0896');
+  await expect(page.getByLabel('Take profit enabled')).toBeChecked();
+  await expect(page.getByLabel('Take profit price')).toHaveValue('1.0796');
+  await expect.poll(async () => (await stagedGeom(page))?.staged, { timeout: 10_000 }).toBe(true);
+  // …and back: Buy at the ask 1.0850 restores the original levels.
+  const buy = ticket.locator('.ticket-quote-side.buy');
+  await buy.click();
+  await expect(buy).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Stop loss price')).toHaveValue('1.08');
+  await expect(page.getByLabel('Take profit price')).toHaveValue('1.09');
+  // Nothing was dispatched by staging or switching.
+  expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
+  expect(await wasInvoked(page, 'request_order_check')).toBeUndefined();
+  expectClean(collected);
+});
+
+test('switching side without SL or TP starts a fresh draft, and the price reference follows the side', async ({
   page,
 }) => {
   const collected = await gotoWithStub(page);
   await openTradePanel(page);
   const ticket = page.locator('section.order-ticket');
   await stageAndPaint(page);
-  // Fill the buy draft: SL via the ticket, TP via the ticket (same mirrored state).
-  await page.getByLabel('Stop loss enabled').check();
-  await page.getByLabel('Stop loss price').fill('1.0800');
-  await page.getByLabel('Take profit enabled').check();
-  await page.getByLabel('Take profit price').fill('1.0900');
-  // Switch side: Sell must start FRESH — SL/TP levels and toggles cleared.
-  const sell = ticket.locator('.ticket-quote-side.sell');
-  await sell.click();
-  await expect(sell).toHaveAttribute('aria-pressed', 'true');
+  await ticket.getByRole('button', { name: 'Limit', exact: true }).click();
+  const reference = page.getByLabel('Price reference');
+  await ticket.locator('.ticket-quote-side.sell').click();
   await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
-  await expect(page.getByLabel('Stop loss price')).toHaveValue('');
   await expect(page.getByLabel('Take profit enabled')).not.toBeChecked();
-  await expect(page.getByLabel('Take profit price')).toHaveValue('');
-  await expect.poll(async () => (await stagedGeom(page))?.staged, { timeout: 10_000 }).toBe(true);
-  await expect.poll(async () => (await stagedGeom(page))?.slHandle !== null, { timeout: 10_000 }).toBe(true);
-  const onSell = (await stagedGeom(page))!;
-  expect(onSell.slCancel).toBeNull();
-  expect(onSell.tpCancel).toBeNull();
-  // …and back the other way: sell's levels must not leak into the buy draft.
-  await page.getByLabel('Stop loss enabled').check();
-  await page.getByLabel('Stop loss price').fill('1.0900');
-  const buy = ticket.locator('.ticket-quote-side.buy');
-  await buy.click();
-  await expect(buy).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
-  await expect(page.getByLabel('Stop loss price')).toHaveValue('');
-  await expect.poll(async () => (await stagedGeom(page))?.staged, { timeout: 10_000 }).toBe(true);
-  // Nothing was dispatched by staging or switching.
-  expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
-  expect(await wasInvoked(page, 'request_order_check')).toBeUndefined();
+  await expect(reference).toHaveValue('bid');
+  await ticket.locator('.ticket-quote-side.buy').click();
+  await expect(reference).toHaveValue('ask');
   expectClean(collected);
 });
 
