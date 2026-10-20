@@ -37,3 +37,17 @@ test('a bar arriving mid-drag does not shift the bars away from the pointer', as
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => window.__chartTest!.data().at(-1)!.time)).toBe(newestTime);
 });
+
+test('a right-click on the pane does not hold live bars back', async ({ page }) => {
+  await loadViewportWindow(page);
+  const center = await page.evaluate(() => {
+    const host = document.querySelector('.chart-host')!.getBoundingClientRect();
+    return { x: host.left + host.width / 2, y: host.top + host.height / 2 };
+  });
+  await page.mouse.move(center.x, center.y);
+  // The context menu would swallow the release, so the button stays down here.
+  await page.mouse.down({ button: 'right' });
+  const newestTime = await emitLiveBar(page);
+  await expect.poll(() => page.evaluate(() => window.__chartTest!.data().at(-1)!.time)).toBe(newestTime);
+  await page.mouse.up({ button: 'right' });
+});
