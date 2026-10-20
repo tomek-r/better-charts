@@ -6,6 +6,8 @@ mod download_resources;
 mod execution_adapter;
 mod execution_journal;
 mod mt5_backend;
+#[allow(dead_code)] // Install-to-MT5 task 1: the locator is not wired to a command yet.
+mod mt5_install;
 mod runtime_config;
 #[cfg(test)]
 mod test_clock;

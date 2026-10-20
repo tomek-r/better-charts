@@ -9,11 +9,15 @@ use std::fs;
 use std::path::Path;
 use tauri::{path::BaseDirectory, AppHandle, Manager};
 
+/// Bundled bridge expert advisor; the install locator derives its MT5 folder
+/// and file name from this path, so the shipped names have one definition.
+pub(crate) const EXPERT_ADVISOR_RESOURCE: &str = "mql5/Experts/BetterChartsBridge.mq5";
+
+/// Bundled tick history indicator, named the same way for the same reason.
+pub(crate) const INDICATOR_RESOURCE: &str = "mql5/Indicators/BetterChartsTickHistoryReader.mq5";
+
 /// The only resources the setup guide can save.
-const SAVED_RESOURCES: &[&str] = &[
-    "mql5/Experts/BetterChartsBridge.mq5",
-    "mql5/Indicators/BetterChartsTickHistoryReader.mq5",
-];
+const SAVED_RESOURCES: &[&str] = &[EXPERT_ADVISOR_RESOURCE, INDICATOR_RESOURCE];
 
 /// Copy a bundled resource to `destination`. Fails closed unless `resource` is
 /// in `SAVED_RESOURCES`.
