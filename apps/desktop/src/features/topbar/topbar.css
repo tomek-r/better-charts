@@ -48,6 +48,13 @@
   font-size: 12px;
 }
 
+/* Top bar buttons never shrink: the account badge beside them absorbs any shortage. */
+.search-trigger,
+.panel-toggle,
+.settings-trigger {
+  flex-shrink: 0;
+}
+
 .search-trigger {
   display: flex;
   align-items: center;

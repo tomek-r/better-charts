@@ -5,7 +5,11 @@
   display: flex;
   align-items: center;
   gap: 0.75em;
-  flex: 0 0 auto;
+  /* The badge is the only top bar item that shrinks: when the bar runs out of room it gives way itself
+     (company name first), so its arrival never moves or resizes the buttons beside it. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   padding: 4px 0;
   /* Same colour, size and weight as the top bar's "Search symbols" label (.search-trigger). */
   color: var(--color-muted-strong);
@@ -29,6 +33,19 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35em;
+  /* Account number and kind never shrink; only the company part (below) may. */
+  flex: none;
+}
+
+.account-badge-part:has(> .account-badge-company) {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.account-badge-company {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Demo stays an INFO blue on purpose: buy/long borrows the up teal now, so

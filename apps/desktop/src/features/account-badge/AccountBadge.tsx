@@ -20,7 +20,7 @@ export function AccountBadge() {
         <>
           <span className="account-badge-part">
             <BankIcon className="account-badge-icon account-badge-bank" />
-            {company}
+            <span className="account-badge-company">{company}</span>
           </span>{' '}
         </>
       )}
