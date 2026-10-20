@@ -247,9 +247,28 @@ fn source_text(source: ProfileSource) -> &'static str {
     }
 }
 
-/// Info-level line for the `pnpm dev` terminal, like the other bridge events.
+/// Environment variable that turns the info-level decision lines on.
+const PROFILE_LOG_VARIABLE: &str = "MT5_BRIDGE_PROFILE_LOG";
+
+/// Only `1` turns the lines on: live profiles refresh every few seconds, so
+/// they stay quiet unless someone is diagnosing the source choice.
+fn profile_log_enabled_by(value: Option<&str>) -> bool {
+    value == Some("1")
+}
+
+/// Read once: the environment is settled before the first profile is built.
+fn profile_log_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED
+        .get_or_init(|| profile_log_enabled_by(std::env::var(PROFILE_LOG_VARIABLE).ok().as_deref()))
+}
+
+/// Info-level line for the `pnpm dev` terminal, printed only when
+/// `MT5_BRIDGE_PROFILE_LOG=1`.
 pub(crate) fn log_info(line: &str) {
-    eprintln!("[bridge] INFO {line}");
+    if profile_log_enabled() {
+        eprintln!("[bridge] INFO {line}");
+    }
 }
 
 /// Warn-level line: a degraded but handled condition.
@@ -358,6 +377,17 @@ mod tests {
             max_prices: 1_000_000,
             pages,
             max_pages: 2048,
+        }
+    }
+
+    #[test]
+    fn decision_lines_are_opt_in_through_the_profile_log_variable() {
+        assert!(profile_log_enabled_by(Some("1")));
+        for off in [None, Some(""), Some("0"), Some("true"), Some(" 1")] {
+            assert!(
+                !profile_log_enabled_by(off),
+                "{off:?} must keep the lines off"
+            );
         }
     }
 

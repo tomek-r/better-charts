@@ -1138,9 +1138,11 @@ A new request, `cancel_tick_profile`, a session change or disconnect and a
 symbol change invalidate the estimate and the bar pages (generation); stale or
 mismatched responses are ignored. One profile is in flight at a time.
 
-**Decision log (desktop stderr, no wire change).** Each profile prints one line
-to the `pnpm dev` terminal, `[bridge] INFO` for the choice and `[bridge] WARN`
-for a degraded case, e.g.:
+**Decision log (desktop stderr, no wire change).** With `MT5_BRIDGE_PROFILE_LOG=1`
+each profile prints one `[bridge] INFO` line for the choice to the `pnpm dev`
+terminal; without it (the default) the info lines stay off, because a live
+profile refreshes every few seconds. `[bridge] WARN` lines for a degraded case
+are always printed. Info lines look like:
 
 ```text
 [bridge] INFO tick profile NAS100 2026-03-31T00:00Z..2026-06-02T00:00Z: source=ticks reason=under-budget estimate tf=H2 bars=742 ticks=16.4M/30M prices=410k/1M pages=63/2048
