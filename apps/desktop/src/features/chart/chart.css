@@ -46,14 +46,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Section label above the symbol, matching the topbar's version tag. */
-.eyebrow {
-  color: var(--color-muted);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  font-weight: 700;
-}
-
 /* Live bid/spread/ask cards, right-aligned in the heading row. */
 .quote-cards {
   display: flex;
