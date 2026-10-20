@@ -108,6 +108,17 @@ test('the selector follows the EA subset and updates its choices on reconnect', 
   await expect(rows).toHaveText(['1 minute', '12 hours', '1 day']);
 });
 
+test('every timeframe row shows its star without hovering, favorite or not', async ({ page }) => {
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'More timeframes' }).click();
+  const menu = page.getByRole('dialog', { name: 'Timeframes' });
+  // Park the pointer outside the menu so no row is hovered.
+  await page.mouse.move(0, 0);
+  // 2m is not a default favorite, 1m is.
+  await expect(menu.getByRole('button', { name: 'Add 2m to favorites', exact: true })).toHaveCSS('opacity', '1');
+  await expect(menu.getByRole('button', { name: 'Remove 1m from favorites', exact: true })).toHaveCSS('opacity', '1');
+});
+
 test('all periods fit a narrow chart without horizontal page overflow', async ({ page }) => {
   await page.setViewportSize({ width: 480, height: 800 });
   await gotoWithStub(page);

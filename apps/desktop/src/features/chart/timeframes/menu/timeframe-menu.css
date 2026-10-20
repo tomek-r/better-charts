@@ -94,14 +94,6 @@
   color: var(--color-muted);
   background: transparent;
   cursor: pointer;
-  /* Outline stars appear on hover/focus; favorites stay visible. */
-  opacity: 0;
-}
-
-.timeframe-menu-row:hover .timeframe-menu-star,
-.timeframe-menu-star:focus-visible,
-.timeframe-menu-star.favorite {
-  opacity: 1;
 }
 
 .timeframe-menu-star.favorite {
