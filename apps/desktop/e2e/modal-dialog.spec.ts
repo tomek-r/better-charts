@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import { gotoWithStub } from './helpers/tauriStub';
 
+/** Panel widths the size tokens in modal-dialog.css stand for. */
+const COMPACT_WIDTH = 440;
+const WIDE_SIZE = 860;
+
 /** Loads the app page, mounts a harness from the helper module and returns its opener. */
 async function mountHarness(page: Page, mount: 'mountModalDialogHarness' | 'mountScrollableModalHarness') {
   await gotoWithStub(page);
@@ -21,6 +25,11 @@ test('the generic modal traps Tab and Shift+Tab, dismisses on Escape and restore
   const cancel = dialog.getByRole('button', { name: 'Cancel' });
   const confirm = dialog.getByRole('button', { name: 'Confirm' });
   await expect(page.locator('[data-modal-dialog]')).toHaveCount(1);
+  await expect(dialog).toHaveAttribute('data-size', 'compact');
+  await dialog.evaluate((element) =>
+    Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+  );
+  expect(Math.round((await dialog.boundingBox())?.width ?? 0)).toBe(COMPACT_WIDTH);
   await expect(cancel).toBeFocused();
 
   await page.keyboard.press('Tab');
@@ -51,7 +60,10 @@ test('the scrollable layout keeps header and footer fixed, shows the close butto
   await dialog.evaluate((element) =>
     Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)),
   );
-  expect(Math.round((await dialog.boundingBox())?.height ?? 0)).toBe(300);
+  // The wide size is 860 tall, capped by the viewport minus the backdrop padding.
+  const viewportHeight = page.viewportSize()!.height;
+  expect(Math.round((await dialog.boundingBox())?.height ?? 0)).toBe(Math.min(WIDE_SIZE, viewportHeight - 24));
+  expect(Math.round((await dialog.boundingBox())?.width ?? 0)).toBe(WIDE_SIZE);
 
   const scroller = dialog.getByTestId('scroller');
   expect(await scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);

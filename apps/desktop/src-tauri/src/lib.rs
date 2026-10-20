@@ -7,6 +7,8 @@ mod execution_adapter;
 mod execution_journal;
 mod mt5_backend;
 mod runtime_config;
+#[cfg(test)]
+mod test_clock;
 
 use app_settings::{get_app_settings, save_app_settings, AppSettingsState};
 use bridge::commands::{

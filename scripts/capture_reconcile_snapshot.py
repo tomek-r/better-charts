@@ -31,7 +31,7 @@ tool stays standalone (no imports from the mock).
 Usage:
     python3 scripts/capture_reconcile_snapshot.py --help
     MT5_BRIDGE_PORT=8765 python3 scripts/capture_reconcile_snapshot.py
-    MT5_CAPTURE_SELFTEST=1 python3 scripts/capture_reconcile_snapshot.py
+    python3 scripts/capture_reconcile_snapshot.py --self-test
 
 Python 3.9+, standard library only.
 """
@@ -50,6 +50,8 @@ MAX_FRAME = 1024 * 1024
 SESSION_ID = "capture-session-1"
 REQUEST_ID = "capture-reconcile-1"
 HISTORY_WINDOW_MS = 7 * 24 * 3600 * 1000
+# Mirrors HISTORY_WINDOW_LOOKAHEAD_MS in crates/trading-core/src/protocol/account.rs.
+HISTORY_WINDOW_LOOKAHEAD_MS = 60_000
 MAX_COLLECTION = 500
 MAX_HISTORY_LIMIT = 1000
 MAX_ID_CHARS = 128
@@ -82,7 +84,7 @@ DEAL_DECIMAL_FIELDS = (
 )
 
 USAGE = """\
-usage: capture_reconcile_snapshot.py [--help]
+usage: capture_reconcile_snapshot.py [--help] [--self-test]
 
 Standalone read-only capture of a real reconcile_snapshot (or
 reconcile_error) from the MetaTrader 5 bridge EA. The tool listens on TCP,
@@ -102,6 +104,7 @@ Environment:
                          CWD (default capture_reconcile_snapshot.json);
                          the sidecar is written to "<out>.meta.json"
   MT5_CAPTURE_SELFTEST   set to 1 to run the in-process loopback self-test
+                         (same as the --self-test flag)
 
 Exit status: 0 = capture succeeded and every contract rule passed;
 1 = failure (protocol, timeout, token mismatch, or a failed rule).
@@ -340,7 +343,7 @@ def _check_comments(records, label: str, problems) -> None:
 
 RULE_ECHO = "echo: request_id/account_login/broker_server match the request"
 RULE_SNAPSHOT_ID = "snapshot_id: non-empty, trimmed, <= 128 chars"
-RULE_WINDOW = "history window: history_from_ms echoed; history_to_ms >= from; captured_at_ms >= to"
+RULE_WINDOW = "history window: history_from_ms echoed; history_to_ms >= from; history_to_ms - captured_at_ms <= 60000"
 RULE_SEQUENCE = "sequence: sequence_after >= sequence_before; complete requires before == after"
 RULE_COUNTS = "counts: positions/active_orders <= 500; history_orders/deals <= 500 (and <= 1000)"
 RULE_IDS = "ids: non-empty, trimmed, <= 128 chars, unique within each collection"
@@ -387,8 +390,8 @@ def validate_snapshot(payload: dict, request: dict):
         problems.append("history_to_ms < history_from_ms")
     if not _is_int(captured_at_ms):
         problems.append("captured_at_ms is not an integer")
-    elif _is_int(to_ms) and captured_at_ms < to_ms:
-        problems.append("captured_at_ms < history_to_ms")
+    elif _is_int(to_ms) and to_ms - captured_at_ms > HISTORY_WINDOW_LOOKAHEAD_MS:
+        problems.append("history_to_ms is more than the lookahead past captured_at_ms")
     rules.append((RULE_WINDOW, problems))
 
     # 4) sequence discipline.
@@ -928,11 +931,12 @@ def run_selftest() -> int:
             f"got {got!r}",
         )
 
+        history_from_ms = int(time.time() * 1000) - 30 * 86_400_000
         request = {
             "request_id": REQUEST_ID,
             "account_login": "12345678",
             "broker_server": "Selftest-Demo",
-            "history_from_ms": 1700000000000,
+            "history_from_ms": history_from_ms,
             "max_history_orders": MAX_COLLECTION,
             "max_history_deals": MAX_COLLECTION,
         }
@@ -945,7 +949,7 @@ def run_selftest() -> int:
             and got.get("id") == REQUEST_ID
             and payload.get("request_id") == REQUEST_ID
             and payload.get("account_login") == "12345678"
-            and payload.get("history_from_ms") == 1700000000000
+            and payload.get("history_from_ms") == history_from_ms
             and payload.get("max_history_orders") == MAX_COLLECTION
             and payload.get("max_history_deals") == MAX_COLLECTION,
             f"got {got!r}",
@@ -1138,11 +1142,12 @@ def main(argv) -> int:
     if any(arg in ("-h", "--help") for arg in argv):
         print(USAGE)
         return 0
-    if argv:
+    if any(arg != "--self-test" for arg in argv):
         print(USAGE)
         return 2
     selftest_env = os.environ.get("MT5_CAPTURE_SELFTEST")
-    if selftest_env is not None and selftest_env.strip() not in ("", "0"):
+    selftest_env_set = selftest_env is not None and selftest_env.strip() not in ("", "0")
+    if "--self-test" in argv or selftest_env_set:
         print("running in-process loopback self-test (no files are written)")
         return run_selftest()
     return run_capture()

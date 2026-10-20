@@ -22,6 +22,7 @@ fn equity_ticks_preserve_the_current_order_check_but_permission_changes_invalida
         expert_allowed: true,
         account_trade_mode: 0,
         account_trade_mode_name: "demo".into(),
+        account_company: None,
         margin_call_level: None,
         stop_out_level: None,
         margin_levels_mode: None,

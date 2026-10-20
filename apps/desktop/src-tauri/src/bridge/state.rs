@@ -1,5 +1,6 @@
 use super::{
-    AccountView, MarketCandle, PortfolioView, QuoteView, SymbolCacheState, TickCacheController,
+    AccountView, ChartSelectionMemory, MarketCandle, PortfolioView, QuoteView, SymbolCacheState,
+    TickCacheController,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -123,6 +124,10 @@ pub(crate) struct BridgeStatus {
     /// until the first heartbeat that carries one (fail closed).
     #[serde(rename = "marketSession", default)]
     pub market_session: Option<MarketSessionView>,
+    /// Broker UTC offset in minutes the EA reported on its latest heartbeat
+    /// (cleared with `market_session`); `None` while unknown. Display only.
+    #[serde(rename = "brokerUtcOffsetMinutes", default)]
+    pub broker_utc_offset_minutes: Option<i32>,
     #[serde(rename = "supportedTimeframes")]
     pub supported_timeframes: Vec<String>,
     /// Whether the connected EA negotiated partial close for this session;
@@ -156,6 +161,7 @@ impl Default for BridgeStatus {
             last_heartbeat: None,
             message: None,
             market_session: None,
+            broker_utc_offset_minutes: None,
             supported_timeframes: Vec::new(),
             partial_close: false,
             trading_enabled: false,
@@ -206,6 +212,8 @@ pub(crate) struct BridgeState {
     pub(crate) transfer_limits: Arc<Mutex<trading_core::protocol::TransferLimits>>,
     pub(crate) tick_price_counts: Arc<Mutex<bool>>,
     pub(crate) market: Arc<Mutex<MarketSnapshot>>,
+    /// Outlives every session: what a reconnect of the same account reopens.
+    pub(crate) chart_selection: Arc<Mutex<ChartSelectionMemory>>,
     pub(crate) pending_history: Arc<Mutex<Option<HistoryRequest>>>,
     pub(crate) expected_history: Arc<Mutex<Option<(String, HistoryRequest)>>>,
     /// One older-history page, kept apart from [`Self::pending_history`] so lazy

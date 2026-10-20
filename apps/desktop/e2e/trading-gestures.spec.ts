@@ -150,7 +150,7 @@ test('live position paints broker P&L before symbol metadata is available', asyn
   // RR is derived from the entry/SL/TP prices, so a live position shows it even
   // before symbol metadata (contract size / currency) arrives.
   await expect.poll(() => paintedText(page)).toContain('RR 1.00');
-  expect(await paintedText(page)).not.toContain('SL -');
+  expect(await paintedText(page)).not.toContain('SL −');
 });
 
 test('live P&L column grows to the widest observed amount and never shrinks', async ({ page }) => {
@@ -166,12 +166,12 @@ test('live P&L column grows to the widest observed amount and never shrinks', as
       if (text.endsWith('P&L ')) {
         w.__positionAmountStartX = x + context.measureText(text).width;
       }
-      if (context.textAlign === 'right' && /^[+-]/.test(text)) {
+      if (context.textAlign === 'right' && /^[+−]/.test(text)) {
         w.__positionAmountRightX = x;
         w.__positionAmountWidth = context.measureText(text).width;
       }
       if (text.includes(' units')) {
-        w.__positionSuffixX = x + context.measureText(text.slice(0, text.indexOf(' · '))).width;
+        w.__positionSuffixX = x;
       }
     };
   });
@@ -194,7 +194,10 @@ test('live P&L column grows to the widest observed amount and never shrinks', as
     });
   const initial = await layout();
   let widest = initial.width;
-  expect(initial.suffix).toBe(initial.start + widest);
+  // The units part rides one diamond separator right of the reserved amount column.
+  const suffixGap = initial.suffix - initial.right;
+  expect(initial.right).toBe(initial.start + widest);
+  expect(suffixGap).toBeGreaterThan(0);
   for (const profit of ['-15.60', '9999.99', '0.00', '1.20']) {
     await clearPaintedText(page);
     await pushEvent(page, 'portfolio-snapshot', {
@@ -204,13 +207,13 @@ test('live P&L column grows to the widest observed amount and never shrinks', as
     await expect
       .poll(() => paintedText(page))
       .toContain(
-        `P&L ${Number(profit) < 0 ? '-' : '+'}${Math.abs(Number(profit)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`,
+        `P&L ${Number(profit) < 0 ? '−' : '+'}${Math.abs(Number(profit)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`,
       );
     const current = await layout();
     widest = Math.max(widest, current.width);
     expect(current.start).toBe(initial.start);
-    expect(current.suffix).toBe(initial.start + widest);
-    expect(current.right).toBe(current.suffix);
+    expect(current.right).toBe(initial.start + widest);
+    expect(current.suffix).toBeCloseTo(current.right + suffixGap, 6);
   }
 });
 
@@ -218,7 +221,7 @@ test('bootstrap requests history once and restores live SL/TP amounts from symbo
   await recordCanvasText(page);
   await gotoWithStub(page, { responses: { get_portfolio_snapshot: portfolio }, symbolInfo: instrument });
   await expect.poll(() => paintedText(page)).toContain('P&L +1.20 USD');
-  await expect.poll(() => paintedText(page)).toContain('SL -10.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('SL −10.00 USD');
   await expect.poll(() => paintedText(page)).toContain('TP +10.00 USD');
   expect((await stubInvocations(page)).filter((entry) => entry.cmd === 'request_history')).toHaveLength(1);
 });
@@ -244,7 +247,7 @@ test('placing a manual order retains SL and TP account amounts on the live posit
   await page.getByLabel('Units').fill('1');
   await fillExitPrice(page, 'Stop loss', '1.0840');
   await fillExitPrice(page, 'Take profit', '1.0860');
-  await expect.poll(() => paintedText(page)).toContain('SL -100.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('SL −100.00 USD');
   await expect.poll(() => paintedText(page)).toContain('TP +100.00 USD');
   await page.getByRole('button', { name: 'Start creating order', exact: true }).click();
   await page.getByRole('button', { name: 'Send order', exact: true }).click();
@@ -256,7 +259,7 @@ test('placing a manual order retains SL and TP account amounts on the live posit
     orders: [],
   });
   await expect.poll(async () => (await geometry(page)).posCloses.length).toBe(1);
-  await expect.poll(() => paintedText(page)).toContain('SL -100.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('SL −100.00 USD');
   await expect.poll(() => paintedText(page)).toContain('TP +100.00 USD');
 });
 
@@ -264,7 +267,7 @@ test('late contract and currency updates repaint live P&L and SL/TP amounts', as
   await recordCanvasText(page);
   await ready(page);
   await pushEvent(page, 'symbol-info', instrument);
-  await expect.poll(() => paintedText(page)).toContain('SL -10.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('SL −10.00 USD');
   await expect.poll(() => paintedText(page)).toContain('TP +10.00 USD');
   await clearPaintedText(page);
   await pushEvent(page, 'symbol-info', {
@@ -273,7 +276,7 @@ test('late contract and currency updates repaint live P&L and SL/TP amounts', as
     tickValueProfit: '20',
     tickValueLoss: '20',
   });
-  await expect.poll(() => paintedText(page)).toContain('SL -20.00 USD');
+  await expect.poll(() => paintedText(page)).toContain('SL −20.00 USD');
   await expect.poll(() => paintedText(page)).toContain('TP +20.00 USD');
   await clearPaintedText(page);
   await pushEvent(page, 'account-snapshot', {
@@ -298,7 +301,7 @@ test('late contract and currency updates repaint live P&L and SL/TP amounts', as
     tickValueProfit: '18',
     tickValueLoss: '19',
   });
-  await expect.poll(() => paintedText(page)).toContain('SL -19.00 EUR');
+  await expect.poll(() => paintedText(page)).toContain('SL −19.00 EUR');
   await expect.poll(() => paintedText(page)).toContain('TP +18.00 EUR');
 });
 

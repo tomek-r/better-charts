@@ -39,6 +39,9 @@ async function geometry(page: Page): Promise<BandGeometry> {
     return w.__stagedWidgetTest.geometry() as BandGeometry;
   });
 }
+/** The SL money label as a magnitude: the display minus is typographic, which `Number` does not read. */
+const slMoneyMagnitude = async (page: Page): Promise<number> =>
+  Math.abs(Number(((await geometry(page)).slMoney ?? '').replace('−', '').replace(' USD', '')));
 type Box = { x: number; y: number; w: number; h: number };
 const boxesOverlap = (a: Box, b: Box) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 /** `limit` stages a buy limit at that price and the SL / TP at the given prices instead of the market defaults. */
@@ -241,7 +244,7 @@ test('dragging the SL past the far edge stops at the edge price and explains why
     currency: 'USD',
     quotedAtMs: STUB_NOW,
   });
-  await expect.poll(async () => (await geometry(page)).slMoney).toBe('-6.00 USD');
+  await expect.poll(async () => (await geometry(page)).slMoney).toBe('−6.00 USD');
   const release = await dragSlHandle(page, (geo) => geo.slBandY!.farY + 50);
   await expect(page.getByLabel('Stop loss price')).toHaveValue(FAR_EDGE);
   await expect.poll(async () => (await geometry(page)).slClampEdge).toBe('far');
@@ -252,10 +255,8 @@ test('dragging the SL past the far edge stops at the edge price and explains why
   await page.locator('.chart-host').screenshot({ path: testInfo.outputPath('sl-band-clamped.png') });
   await release();
   // At the far edge the (projected) SL money label is the budget, never above it, and within one tick (0.06 USD) of it.
-  await expect
-    .poll(async () => Math.abs(Number(((await geometry(page)).slMoney ?? '').replace(' USD', ''))))
-    .toBeGreaterThan(6.25 - 0.06 - 1e-9);
-  expect(Math.abs(Number(((await geometry(page)).slMoney ?? '').replace(' USD', '')))).toBeLessThanOrEqual(6.25);
+  await expect.poll(async () => slMoneyMagnitude(page)).toBeGreaterThan(6.25 - 0.06 - 1e-9);
+  expect(await slMoneyMagnitude(page)).toBeLessThanOrEqual(6.25);
   expect(collected).toEqual({ pageErrors: [], consoleErrors: [] });
   await expect(page.getByLabel('Stop loss price')).toHaveValue(FAR_EDGE);
   await expect.poll(async () => (await geometry(page)).slClampEdge).toBeNull();

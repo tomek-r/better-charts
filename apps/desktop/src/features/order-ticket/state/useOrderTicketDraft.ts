@@ -1,10 +1,11 @@
 import { useCallback } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { RiskSide } from '../../../shared/bridge/types';
-import { ticketPrice } from '../../../shared/format';
+import { quoteDigits, ticketPrice } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
 import { defaultStopLossPrice } from '../domain/defaultStopLoss';
 import { defaultOrderVolume } from '../domain/defaultVolume';
+import { flipExits, sideReference } from '../domain/sideFlip';
 import type { OrderTicketInputs } from './orderTicketInputs';
 import type { OrderTicketDraftStore, OrderTicketStores } from './orderTicketStores';
 
@@ -27,6 +28,13 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
   const setters = stores.setters.draft;
   const notifyError = useNotifyError();
   const { submitSwapPendingRef, stagedPrevPriceRef } = stores.coordination;
+
+  // Side flip: symbol-info may not have arrived yet, so the quote text carries the precision;
+  // the entry and exits must share it or the market-follow effect sees a nonzero delta.
+  const ticketDigits = useCallback(
+    () => instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : instrumentDigitsRef.current),
+    [instrument, quote, instrumentDigitsRef],
+  );
 
   const resetOrderDraft = useCallback(() => {
     setters.setSlOn(false);
@@ -146,16 +154,43 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
     }
   }, [stagedActiveRef, submitSwapPendingRef, clearStagedWidget, resetOrderDraft]);
 
+  // The entry a side switch starts from: the new side's quote, else the last candle close.
+  const quoteEntryFor = useCallback(
+    (side: RiskSide): number => {
+      if (quote) {
+        return Number(side === 'buy' ? quote.ask : quote.bid);
+      }
+      return Number(latestCandle?.close ?? snapshot.candles[snapshot.candles.length - 1]?.close);
+    },
+    [quote, latestCandle, snapshot.candles],
+  );
+
   const stageFromQuote = useCallback(
     (side: RiskSide) => {
-      const switched = stores.draft.getState().riskSide !== side;
-      if (switched) {
-        resetOrderDraft();
+      const draft = stores.draft.getState();
+      const switched = draft.riskSide !== side;
+      setters.setPriceReference(sideReference(side));
+      if (!switched) {
+        stageOrderDraft(side, false);
+        return;
       }
+      const newEntry = quoteEntryFor(side);
+      const flipped = draft.riskSide === '' ? undefined : flipExits(draft, newEntry, ticketDigits());
       setters.setRiskSide(side);
-      stageOrderDraft(side, switched);
+      if (!flipped) {
+        resetOrderDraft();
+        stageOrderDraft(side, true);
+        return;
+      }
+      // The levels keep their distance on the other side; the entry is the new side's quote.
+      setters.setEntry(ticketPrice(newEntry, ticketDigits()));
+      setters.setStopLoss(flipped.stopLoss);
+      setters.setTakeProfit(flipped.takeProfit);
+      setters.setSlOn(flipped.stopLoss !== '');
+      setters.setTpOn(flipped.takeProfit !== '');
+      stageOrderDraft(side, false);
     },
-    [stores.draft, resetOrderDraft, stageOrderDraft, setters],
+    [stores.draft, resetOrderDraft, stageOrderDraft, setters, quoteEntryFor, ticketDigits],
   );
 
   return {

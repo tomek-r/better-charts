@@ -1,12 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
+import { errorText } from '../../../shared/errorText';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { OrderTicketInputs } from './orderTicketInputs';
 import type { OrderTicketStores } from './orderTicketStores';
 import { buildTicketDerivationInput } from '../domain/ticketDerivation';
 import { passedStopEntryGuidance } from '../domain/passedStopEntry';
-import { withoutStopLossTooClose } from '../domain/ticketRules';
+import { ORDER_CHECK_REQUEST_FAILED, withoutStopLossTooClose } from '../domain/ticketRules';
 import { useErrorNotification } from '../../../shared/ui/ErrorNotifications';
 
 export function useOrderTicketBrokerActions(
@@ -127,11 +128,14 @@ export function useOrderTicketBrokerActions(
         limitPrice: normalizedLimitPrice,
         draftVersion,
       });
-    } catch {
+    } catch (error) {
       if (orderCheckPendingRef.current?.generation === generation) {
         orderCheckPendingRef.current = undefined;
         setters.broker.setOrderCheckLoading(false);
-        setters.broker.setOrderCheckError('OrderCheck could not be requested.');
+        const reason = errorText(error).trim();
+        setters.broker.setOrderCheckError(
+          reason ? `${ORDER_CHECK_REQUEST_FAILED}: ${reason}` : `${ORDER_CHECK_REQUEST_FAILED}.`,
+        );
       }
     }
   });
@@ -163,7 +167,7 @@ export function useOrderTicketBrokerActions(
       setters.draft.setStagedOnChart(false);
       resetTicketToDefaults();
     } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
+      const text = errorText(error);
       setters.broker.setSubmitStatus(
         /dispatch is disabled/i.test(text)
           ? { kind: 'locked', text: 'Dispatch locked — nothing was sent to MT5. Owner approval required.' }

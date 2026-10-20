@@ -1,4 +1,4 @@
-import { formatMoney } from '../../shared/format';
+import { formatMoney, withMinusSign } from '../../shared/format';
 
 /** Account precision for money; two decimals for nonmonetary account metrics. */
 export function accountAmount(value?: string, currency?: string, digits?: number): string {
@@ -11,6 +11,6 @@ export function accountAmount(value?: string, currency?: string, digits?: number
     return formatMoney(parsed, currency, digits);
   }
   return Number.isFinite(parsed)
-    ? parsed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? withMinusSign(parsed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
     : text;
 }

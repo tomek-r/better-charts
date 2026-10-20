@@ -57,7 +57,7 @@ export function mountScrollableModalHarness(): void {
     const props: HarnessProps & { title: string; onDismiss: () => void } = {
       title: 'Scrollable modal',
       layout: 'scrollable',
-      height: 300,
+      size: 'wide',
       onDismiss: close,
       onSubmit: (event) => {
         event.preventDefault();

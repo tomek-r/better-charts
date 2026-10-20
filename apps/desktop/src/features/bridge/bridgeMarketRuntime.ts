@@ -13,6 +13,7 @@ import type {
   ProfileError,
   BrokerSymbol,
   QuoteSnapshot,
+  SelectionFallback,
 } from '../../shared/bridge/types';
 import { normalizeCandle, normalizeHistoryPage, normalizeSnapshot, isValidCandle, normalizeQuote } from './normalizers';
 import { HISTORY_BARS } from '../../shared/bridge/limits';
@@ -263,6 +264,19 @@ export function createBridgeMarketRuntime(
     setHistoryUnavailable({ symbol, timeframe });
   };
 
+  /**
+   * A reconnect could not reopen the selection the user was viewing, and the
+   * bridge has requested the EA's chart symbol instead. That window is accepted
+   * like any first window of a session; this only tells the user why it differs.
+   */
+  const onSelectionFallback = (event: PayloadEvent<SelectionFallback>) => {
+    if (run.disposed || run.bridgeState !== 'connected') {
+      return;
+    }
+    const { symbol, shownSymbol } = event.payload;
+    setChartError(`${symbol} is not available on this account — showing ${shownSymbol}`);
+  };
+
   const onMarketSnapshot = (event: PayloadEvent<MarketSnapshot>) => {
     if (run.disposed || run.bridgeState !== 'connected') {
       return;
@@ -442,6 +456,7 @@ export function createBridgeMarketRuntime(
     requestOlderHistory,
     onAdapterHistoryError,
     onHistoryUnavailable,
+    onSelectionFallback,
     onMarketSnapshot,
     onHistoryPage,
     forwardMarketDataEvents,

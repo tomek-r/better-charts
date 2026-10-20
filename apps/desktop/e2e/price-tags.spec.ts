@@ -5,6 +5,7 @@ import {
   eurusdFormingBar,
   eurusdQuote,
   gotoWithStub,
+  pausePageClockAhead,
   pushEvent,
   STUB_NOW,
 } from './helpers/tauriStub';
@@ -132,8 +133,7 @@ async function openChart(page: Page, stub: Parameters<typeof gotoWithStub>[1] = 
       }
     };
   });
-  await page.clock.install({ time: new Date('2026-09-30T12:00:00Z') });
-  await page.clock.pauseAt(new Date('2026-09-30T12:01:00Z'));
+  await pausePageClockAhead(page);
   await gotoWithStub(page, stub);
   await page.clock.runFor(100);
   await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 14 }));

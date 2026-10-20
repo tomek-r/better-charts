@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { gotoWithStub } from './helpers/tauriStub';
+import { gotoWithStub, STUB_NOW } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 
 const validCandle: Candle = {
-  timeMs: 1_700_000_000_000,
+  timeMs: STUB_NOW,
   open: '1.2300',
   high: '1.2400',
   low: '1.2200',

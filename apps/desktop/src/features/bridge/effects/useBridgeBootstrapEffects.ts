@@ -20,6 +20,7 @@ import type {
   QuoteSnapshot,
   RiskPreview,
   RiskPreviewError,
+  SelectionFallback,
 } from '../../../shared/bridge/types';
 import { normalizeAccount, normalizePortfolio, normalizeQuote, normalizeSnapshot } from '../normalizers';
 import { initialHistoryBarsFor } from '../../chart/engine/initialHistoryWindow';
@@ -115,6 +116,7 @@ export function useBridgeBootstrapEffects(
       setAccount,
       setPortfolio,
       setLoadingTimeframe,
+      setSymbolLoading,
       setChartError,
       setSnapshot,
       setLatestCandle,
@@ -215,6 +217,11 @@ export function useBridgeBootstrapEffects(
                 marketRuntime.resetPageState();
                 loadingTimeframeRef.current = undefined;
                 setLoadingTimeframe(undefined);
+                // A pick that never got its window belongs to the old session; left set,
+                // it would reject the new session's first window as a stale answer.
+                targetSymbol.current = undefined;
+                pendingMetadata.current = undefined;
+                setSymbolLoading(false);
                 chartRef.current?.resetTools('session');
                 currentSymbolRef.current = undefined;
                 currentTimeframeRef.current = undefined;
@@ -236,6 +243,7 @@ export function useBridgeBootstrapEffects(
           listen<MarketSnapshot>('market-snapshot', marketRuntime.onMarketSnapshot),
           listen<HistoryPage>('history-page', marketRuntime.onHistoryPage),
           listen<HistoryUnavailable>('history-unavailable', marketRuntime.onHistoryUnavailable),
+          listen<SelectionFallback>('selection-fallback', marketRuntime.onSelectionFallback),
           ...marketRuntime.forwardMarketDataEvents(),
           listen<BrokerSymbol>('symbol-info', marketRuntime.onSymbolInfo),
           listen<QuoteSnapshot>('quote-update', marketRuntime.onQuoteUpdate),

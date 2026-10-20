@@ -1,6 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
 import { assembleGlyphRows, observeFillText, type AxisPaint } from './helpers/canvasText';
-import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
+import { MS_PER_DAY } from './helpers/stubClock';
+import {
+  eurusdFormingBar,
+  eurusdQuote,
+  gotoWithStub,
+  pausePageClockAhead,
+  pushEvent,
+  STUB_NOW,
+} from './helpers/tauriStub';
 
 const quote = (timeMs: number) => eurusdQuote(timeMs);
 const candle = eurusdFormingBar;
@@ -69,8 +77,7 @@ async function clockNow(page: Page): Promise<number> {
 
 async function start(page: Page, historyDelayMs = 0) {
   await recordAxisText(page);
-  await page.clock.install({ time: new Date('2026-09-30T12:00:00Z') });
-  await page.clock.pauseAt(new Date('2026-09-30T12:01:00Z'));
+  await pausePageClockAhead(page);
   const errors = await gotoWithStub(page, { historyDelayMs });
   await page.clock.runFor(historyDelayMs + 100);
   await expect(page.getByLabel('Candle OHLC')).toContainText('EURUSD');
@@ -98,7 +105,7 @@ test('price-axis countdown follows broker time, ignores repeated/old quotes and 
   await page.clock.runFor(50);
   expect(await countdownText(page)).toBe(''); // A cached first tick cannot start a countdown.
   await activate(page);
-  expect(await countdownText(page)).toBe('04:45'); // Desktop clock is intentionally a different year.
+  expect(await countdownText(page)).toBe('04:45'); // Desktop clock is intentionally a different day.
   await expect(page.getByLabel('Candle OHLC')).not.toContainText('04:45');
   await page.screenshot({ path: testInfo.outputPath('bar-countdown.png') });
   await page.clock.runFor(1000);
@@ -107,7 +114,7 @@ test('price-axis countdown follows broker time, ignores repeated/old quotes and 
   await pushEvent(page, 'quote-update', quote(STUB_NOW + 10_000));
   await page.clock.runFor(1000);
   expect(await countdownText(page)).toBe('04:43');
-  await page.clock.setSystemTime(new Date('2020-01-01T00:00:00Z'));
+  await page.clock.setSystemTime(Date.now() - 400 * MS_PER_DAY); // The desktop clock jumps back more than a year.
   await page.clock.runFor(1000);
   expect(await countdownText(page)).toBe('04:42');
   // Expiry repaints the axis without the tag, rather than leaving it behind.

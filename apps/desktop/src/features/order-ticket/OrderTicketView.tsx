@@ -13,18 +13,13 @@ function OrderTicketBody() {
 }
 
 export function OrderTicketView() {
-  const { environment, symbol } = useOrderTicketHeader();
+  const symbol = useOrderTicketHeader();
 
   return (
     <section className="order-ticket" aria-label="Order ticket">
       <div className="ticket-header">
         <div className="ticket-title">
           <strong>{symbol ?? '—'}</strong>
-          {environment && (
-            <span className={`ticket-account-badge ${environment.kind}`} title={environment.title}>
-              {environment.label}
-            </span>
-          )}
         </div>
       </div>
       <OrderTicketBody />

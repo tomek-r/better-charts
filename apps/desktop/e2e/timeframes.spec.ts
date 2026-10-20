@@ -108,6 +108,17 @@ test('the selector follows the EA subset and updates its choices on reconnect', 
   await expect(rows).toHaveText(['1 minute', '12 hours', '1 day']);
 });
 
+test('every timeframe row shows its star without hovering, favorite or not', async ({ page }) => {
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'More timeframes' }).click();
+  const menu = page.getByRole('dialog', { name: 'Timeframes' });
+  // Park the pointer outside the menu so no row is hovered.
+  await page.mouse.move(0, 0);
+  // 2m is not a default favorite, 1m is.
+  await expect(menu.getByRole('button', { name: 'Add 2m to favorites', exact: true })).toHaveCSS('opacity', '1');
+  await expect(menu.getByRole('button', { name: 'Remove 1m from favorites', exact: true })).toHaveCSS('opacity', '1');
+});
+
 test('all periods fit a narrow chart without horizontal page overflow', async ({ page }) => {
   await page.setViewportSize({ width: 480, height: 800 });
   await gotoWithStub(page);
@@ -126,6 +137,7 @@ test('all periods fit a narrow chart without horizontal page overflow', async ({
 
 const seconds = (date: string) => Date.parse(date) / 1000;
 
+// Pinned because the subject is month alignment known answers: leap February 2024 and the Dec to Jan rollover.
 test('monthly padding follows calendar boundaries through leap February', () => {
   const start = seconds('2024-01-01T00:00:00Z');
   expect(futurePoints(start, 'MN1', 96, 3).map((point) => point.time)).toEqual([
@@ -140,6 +152,7 @@ test('monthly padding follows calendar boundaries through leap February', () => 
   expect(timeframeLabel('M1')).toBe('1m');
 });
 
+// Pinned because the subject is the month-end boundary of leap February 2024 (29 days, not 30).
 test('monthly countdown ends at the next month rather than after 30 days', () => {
   const clock = new BrokerClock();
   const first = { symbol: 'XBRUSD', timeMs: Date.parse('2024-02-28T23:59:58Z') };

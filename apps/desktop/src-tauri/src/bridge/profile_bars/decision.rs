@@ -247,9 +247,28 @@ fn source_text(source: ProfileSource) -> &'static str {
     }
 }
 
-/// Info-level line for the `pnpm dev` terminal, like the other bridge events.
+/// Environment variable that turns the info-level decision lines on.
+const PROFILE_LOG_VARIABLE: &str = "MT5_BRIDGE_PROFILE_LOG";
+
+/// Only `1` turns the lines on: live profiles refresh every few seconds, so
+/// they stay quiet unless someone is diagnosing the source choice.
+fn profile_log_enabled_by(value: Option<&str>) -> bool {
+    value == Some("1")
+}
+
+/// Read once: the environment is settled before the first profile is built.
+fn profile_log_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED
+        .get_or_init(|| profile_log_enabled_by(std::env::var(PROFILE_LOG_VARIABLE).ok().as_deref()))
+}
+
+/// Info-level line for the `pnpm dev` terminal, printed only when
+/// `MT5_BRIDGE_PROFILE_LOG=1`.
 pub(crate) fn log_info(line: &str) {
-    eprintln!("[bridge] INFO {line}");
+    if profile_log_enabled() {
+        eprintln!("[bridge] INFO {line}");
+    }
 }
 
 /// Warn-level line: a degraded but handled condition.
@@ -307,13 +326,43 @@ fn utc_minute(ms: i64) -> String {
 mod tests {
     use super::*;
     use crate::bridge::TickHistoryRequest;
+    use crate::test_clock::utc_now_ms;
+
+    const DAY_MS: i64 = 86_400_000;
+
+    fn range_start_ms() -> i64 {
+        utc_now_ms() - 62 * DAY_MS
+    }
+
+    fn range_end_ms() -> i64 {
+        utc_now_ms() - DAY_MS
+    }
+
+    /// The history of a bar series that ends 11 days before the range starts.
+    fn history_end_ms() -> i64 {
+        range_start_ms() - 11 * DAY_MS
+    }
+
+    /// The range as the decision lines print it. `utc_minute` has its own
+    /// known-answer test, so the expected lines can build on it.
+    fn range_label() -> String {
+        format!(
+            "{}..{}",
+            utc_minute(range_start_ms()),
+            utc_minute(range_end_ms())
+        )
+    }
+
+    fn line_prefix() -> String {
+        format!("tick profile NAS100 {}:", range_label())
+    }
 
     fn request() -> TickProfileRequest {
         TickProfileRequest {
             wire: TickHistoryRequest {
                 symbol: "NAS100".into(),
-                from_ms: 1_774_915_200_000,
-                to_ms: 1_780_358_400_000,
+                from_ms: range_start_ms(),
+                to_ms: range_end_ms(),
                 max_ticks: 5000,
             },
             rows: 128,
@@ -332,7 +381,20 @@ mod tests {
     }
 
     #[test]
+    fn decision_lines_are_opt_in_through_the_profile_log_variable() {
+        assert!(profile_log_enabled_by(Some("1")));
+        for off in [None, Some(""), Some("0"), Some("true"), Some(" 1")] {
+            assert!(
+                !profile_log_enabled_by(off),
+                "{off:?} must keep the lines off"
+            );
+        }
+    }
+
+    #[test]
     fn range_is_printed_as_utc_minutes() {
+        // Pinned because the subject is the known-answer formatting of fixed
+        // instants, including a month-length edge (31 March) and the epoch.
         assert_eq!(utc_minute(1_774_915_200_000), "2026-03-31T00:00Z");
         assert_eq!(utc_minute(1_780_358_400_000), "2026-06-02T00:00Z");
         assert_eq!(utc_minute(0), "1970-01-01T00:00Z");
@@ -376,15 +438,18 @@ mod tests {
             SourceDecision::from_load(load(16_400_000, 410_000, 63)).with_estimate("H2", 742);
         assert_eq!(
             decision_line(&request(), &decision, None),
-            "tick profile NAS100 2026-03-31T00:00Z..2026-06-02T00:00Z: source=ticks \
-             reason=under-budget estimate tf=H2 bars=742 ticks=16.4M/30M prices=410k/1M pages=63/2048"
+            format!(
+                "{} source=ticks \
+                 reason=under-budget estimate tf=H2 bars=742 ticks=16.4M/30M prices=410k/1M pages=63/2048",
+                line_prefix()
+            )
         );
     }
 
     #[test]
     fn decision_lines_for_each_fallback_reason() {
         let line = |decision: SourceDecision| decision_line(&request(), &decision, None);
-        let prefix = "tick profile NAS100 2026-03-31T00:00Z..2026-06-02T00:00Z: source=ticks";
+        let prefix = format!("{} source=ticks", line_prefix());
         assert_eq!(
             line(SourceDecision::ticks(SourceReason::EstimateIncomplete).with_estimate("H2", 0)),
             format!("{prefix} reason=estimate-incomplete tf=H2 bars=0")
@@ -418,21 +483,27 @@ mod tests {
         let decision = SourceDecision::from_load(load(40_000_000, 1, 1)).with_estimate("H2", 742);
         assert_eq!(
             decision_line(&request(), &decision, Some("M1")),
-            "tick profile NAS100 2026-03-31T00:00Z..2026-06-02T00:00Z: source=bars \
-             reason=over-tick-budget tf=M1 estimate-tf=H2 bars=742 ticks=40M/30M prices=1/1M pages=1/2048"
+            format!(
+                "{} source=bars \
+                 reason=over-tick-budget tf=M1 estimate-tf=H2 bars=742 ticks=40M/30M prices=1/1M pages=1/2048",
+                line_prefix()
+            )
         );
     }
 
     #[test]
     fn retry_and_partial_history_lines_name_the_timeframes_and_the_history_start() {
-        let prefix = "tick profile NAS100 2026-03-31T00:00Z..2026-06-02T00:00Z:";
+        let prefix = line_prefix();
+        let history_end = utc_minute(history_end_ms());
         assert_eq!(
-            retry_line(&request(), "M2", Some(1_774_036_080_000), "M3"),
-            format!("{prefix} bars tf=M2 history ends 2026-03-20T19:48Z before range start; retry tf=M3")
+            retry_line(&request(), "M2", Some(history_end_ms()), "M3"),
+            format!(
+                "{prefix} bars tf=M2 history ends {history_end} before range start; retry tf=M3"
+            )
         );
         assert_eq!(
-            partial_history_line(&request(), "H1", 1_774_036_080_000),
-            format!("{prefix} partial-history from=2026-03-20T19:48Z tf=H1")
+            partial_history_line(&request(), "H1", history_end_ms()),
+            format!("{prefix} partial-history from={history_end} tf=H1")
         );
         assert_eq!(
             retry_line(&request(), "M2", None, "H1"),
@@ -442,7 +513,7 @@ mod tests {
 
     #[test]
     fn safety_net_cache_and_completion_lines() {
-        let prefix = "tick profile NAS100 2026-03-31T00:00Z..2026-06-02T00:00Z:";
+        let prefix = line_prefix();
         assert_eq!(
             safety_net_line(&request(), TickProfileLimit::Pages, Some("M1")),
             format!("{prefix} safety-net source=bars after limit=pages tf=M1")

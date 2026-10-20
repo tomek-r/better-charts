@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_clock::utc_now_ms;
 
 #[test]
 fn decoder_handles_a_large_coalesced_batch_and_preserves_partial_tail() {
@@ -194,13 +195,14 @@ fn older_history_pages_are_an_additive_optional_extension() {
     assert!(!window.is_page());
 
     let mut page = window.clone();
-    page.before_ms = Some(1_700_000_000_000);
+    let before_ms = utc_now_ms() - 86_400_000;
+    page.before_ms = Some(before_ms);
     assert!(page.is_page());
     assert_eq!(page.validate(), Ok(()));
     let encoded = serde_json::to_value(&page).unwrap();
     assert_eq!(
         encoded.get("before_ms"),
-        Some(&serde_json::json!(1_700_000_000_000i64))
+        Some(&serde_json::json!(before_ms))
     );
     assert_eq!(
         serde_json::from_value::<HistoryRequest>(encoded).unwrap(),
@@ -654,6 +656,7 @@ fn validates_account_snapshot_values() {
         expert_allowed: true,
         account_trade_mode: 0,
         account_trade_mode_name: "demo".into(),
+        account_company: None,
         margin_call_level: None,
         stop_out_level: None,
         margin_levels_mode: None,
@@ -1089,6 +1092,35 @@ fn account_snapshot_tolerates_old_eas_and_round_trips_the_trade_mode() {
     }
     .validate()
     .is_err());
+}
+
+#[test]
+fn account_snapshot_company_is_optional_and_bounded() {
+    let older = serde_json::json!({
+        "account_login": "123", "broker_server": "Demo", "currency": "USD",
+        "balance": "100", "equity": "99", "margin": "1", "free_margin": "98",
+        "margin_level": "9900", "leverage": 100, "margin_mode": 0,
+        "trade_allowed": true, "expert_allowed": true
+    });
+    let parsed: AccountSnapshot = serde_json::from_value(older).unwrap();
+    assert_eq!(parsed.account_company, None);
+    parsed.validate().unwrap();
+
+    let reported = AccountSnapshot {
+        account_company: Some("Raw Trading Ltd".into()),
+        ..parsed.clone()
+    };
+    reported.validate().unwrap();
+    let encoded = serde_json::to_value(&reported).unwrap();
+    assert_eq!(encoded["account_company"], "Raw Trading Ltd");
+
+    for invalid in ["", " Raw Trading Ltd", "Raw Trading Ltd ", &"x".repeat(129)] {
+        let account = AccountSnapshot {
+            account_company: Some(invalid.to_owned()),
+            ..parsed.clone()
+        };
+        assert!(account.validate().is_err(), "{invalid:?} must be rejected");
+    }
 }
 
 #[test]
@@ -1584,6 +1616,29 @@ fn reconciliation_validates_limits_duplicates_and_ranges() {
 }
 
 #[test]
+fn reconciliation_window_may_reach_past_the_clock_by_the_lookahead_only() {
+    let request = reconcile_request();
+    let captured_at_ms = 150;
+    let deal_after_the_clock = HistoryDeal {
+        time_ms: captured_at_ms + 10,
+        ..reconcile_snapshot().history_deals[0].clone()
+    };
+    let snapshot = ReconcileSnapshot {
+        history_to_ms: captured_at_ms + HISTORY_WINDOW_LOOKAHEAD_MS,
+        captured_at_ms,
+        history_deals: vec![deal_after_the_clock],
+        ..reconcile_snapshot()
+    };
+    assert!(snapshot.validate(&request).is_ok());
+    assert!(ReconcileSnapshot {
+        history_to_ms: snapshot.history_to_ms + 1,
+        ..snapshot
+    }
+    .validate(&request)
+    .is_err());
+}
+
+#[test]
 fn reconciliation_complete_requires_stable_sequence() {
     let request = reconcile_request();
     let snapshot = reconcile_snapshot();
@@ -1689,7 +1744,7 @@ fn order_command_update() -> OrderCommandUpdate {
         position_id: None,
         filled_volume: None,
         message: Some("pending order placed".into()),
-        updated_at_ms: 1770000001980,
+        updated_at_ms: utc_now_ms() + 1_980,
         at_update: 2,
     }
 }
@@ -2132,6 +2187,7 @@ fn heartbeat_market_session_is_optional_and_validated() {
     .unwrap();
     assert!(legacy.market_session.is_none());
 
+    let server_time_ms = utc_now_ms();
     let observed: HeartbeatPayload = serde_json::from_value(serde_json::json!({
         "sequence": 2,
         "terminal_connected": true,
@@ -2141,7 +2197,7 @@ fn heartbeat_market_session_is_optional_and_validated() {
             "symbol": "NAS100",
             "is_open": false,
             "trade_mode": 4,
-            "server_time_ms": 1_770_000_000_000_i64,
+            "server_time_ms": server_time_ms,
         },
     }))
     .unwrap();
@@ -2149,7 +2205,7 @@ fn heartbeat_market_session_is_optional_and_validated() {
     assert_eq!(session.symbol, "NAS100");
     assert!(!session.is_open);
     assert_eq!(session.trade_mode, 4);
-    assert_eq!(session.server_time_ms, 1_770_000_000_000);
+    assert_eq!(session.server_time_ms, server_time_ms);
     session.validate().unwrap();
 
     let mut blank_symbol = session.clone();
@@ -2158,6 +2214,37 @@ fn heartbeat_market_session_is_optional_and_validated() {
     let mut negative_time = session;
     negative_time.server_time_ms = -1;
     assert!(negative_time.validate().is_err());
+}
+
+#[test]
+fn heartbeat_broker_utc_offset_is_optional_and_validated() {
+    let heartbeat = |offset: Option<serde_json::Value>| -> HeartbeatPayload {
+        let mut payload = serde_json::json!({
+            "sequence": 1,
+            "terminal_connected": true,
+            "account_connected": true,
+            "broker_server": "Broker-Demo",
+        });
+        if let Some(value) = offset {
+            payload["broker_utc_offset_minutes"] = value;
+        }
+        serde_json::from_value(payload).unwrap()
+    };
+    // An older EA omits the field, and an explicit null means unknown.
+    assert_eq!(heartbeat(None).broker_utc_offset_minutes, None);
+    assert!(heartbeat(None).validate().is_ok());
+    assert!(heartbeat(Some(serde_json::Value::Null)).validate().is_ok());
+    for valid in [0, 180, 330, -300, -210, 840, -840] {
+        let parsed = heartbeat(Some(valid.into()));
+        assert_eq!(parsed.broker_utc_offset_minutes, Some(valid));
+        assert!(parsed.validate().is_ok(), "{valid} should be valid");
+    }
+    for invalid in [1, 185, -5, 855, -855, 900] {
+        assert!(
+            heartbeat(Some(invalid.into())).validate().is_err(),
+            "{invalid} should be rejected"
+        );
+    }
 }
 
 #[test]

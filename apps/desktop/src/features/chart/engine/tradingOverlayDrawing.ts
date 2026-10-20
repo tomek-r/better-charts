@@ -1,4 +1,5 @@
 import { palette } from '../../../shared/theme/palette';
+import { drawSeparatedText, separatedTextWidth } from '../../../shared/canvas/separatedText';
 import type { RenderViewport } from './overlayTypes';
 
 export interface TradingHitRect {
@@ -109,6 +110,15 @@ export function drawPartialChip(
   return hit;
 }
 
+/**
+ * What follows the handle label: the right-aligned live amount (its column reserved up front so the box
+ * never jitters) and the parts that ride after it, separated by the diamond.
+ */
+interface HandleTrailing {
+  parts: string[];
+  amount: { text: string; width: number };
+}
+
 /** Draggable outline handle tag; its tip points toward the controlled line. */
 export function drawHandle(
   ctx: CanvasRenderingContext2D,
@@ -117,15 +127,18 @@ export function drawHandle(
   label: string,
   color: string,
   tipDown: boolean,
-  /** Right-align the live amount so reserved space stays before it, not after it. */
-  trailing?: { text: string; amount: { text: string; width: number } },
+  trailing?: HandleTrailing,
 ): TradingHitRect {
   ctx.font = '400 12px system-ui, sans-serif';
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
   const leadingWidth = ctx.measureText(`⋮⋮  ${label}`).width;
   const trailingOffset =
     leadingWidth + (trailing ? Math.max(trailing.amount.width, ctx.measureText(trailing.amount.text).width) : 0);
-  const w = (trailing ? trailingOffset + ctx.measureText(trailing.text).width : leadingWidth) + 14;
+  // The empty first part makes the diamond sit between the amount and the first trailing part.
+  const trailingParts = trailing ? ['', ...trailing.parts] : [];
+  const contentWidth = trailing ? trailingOffset + separatedTextWidth(ctx, trailingParts) : leadingWidth;
+  const w = contentWidth + 14;
   const h = 20;
   const top = centerY - h / 2;
   roundedRect(ctx, x, top, w, h, WIDGET_RADIUS);
@@ -153,7 +166,7 @@ export function drawHandle(
     ctx.textAlign = 'right';
     ctx.fillText(trailing.amount.text, x + 7 + trailingOffset, centerY + 0.5);
     ctx.textAlign = 'left';
-    ctx.fillText(trailing.text, x + 7 + trailingOffset, centerY + 0.5);
+    drawSeparatedText(ctx, trailingParts, x + 7 + trailingOffset, centerY + 0.5);
   }
   return { x, y: top, w, h };
 }

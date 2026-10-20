@@ -105,7 +105,7 @@ test('shows margin, free margin and level after the fill with the percent thresh
   await expect(cell(card, 'Margin at fill')).toHaveText('Margin at fill105.00 USD');
   await expect(cell(card, 'Free margin after fill')).toHaveText('Free margin after fill9,395.00 USD');
   await expect(cell(card, 'Margin level after fill')).toHaveText('Margin level after fill1650.83%');
-  await expect(card).toContainText('Margin call 100% · Stop out 50%');
+  await expect(card).toContainText(/Margin call 100%\s*Stop out 50%/);
   await expect(card).not.toContainText('Estimated at fill');
   // The three MT5 cells are replaced, not duplicated.
   for (const retired of ['Margin', 'Free margin', 'Margin level']) {
@@ -149,7 +149,7 @@ test('money mode shows the thresholds as account-currency amounts', async ({ pag
       marginLevelsUnit: 'money',
     },
   });
-  await expect(card).toContainText('Margin call 200.00 USD · Stop out 100.00 USD');
+  await expect(card).toContainText(/Margin call 200\.00 USD\s*Stop out 100\.00 USD/);
   expectNoErrors(collected);
 });
 
@@ -194,7 +194,7 @@ test('unknown projection and thresholds render as dashes, never zero', async ({ 
   await expect(cell(card, 'Margin at fill')).toHaveText('Margin at fill—');
   await expect(cell(card, 'Free margin after fill')).toHaveText('Free margin after fill—');
   await expect(cell(card, 'Margin level after fill')).toHaveText('Margin level after fill—');
-  await expect(card).toContainText('Margin call — · Stop out —');
+  await expect(card).toContainText(/Margin call —\s*Stop out —/);
   await expect(card.getByRole('status')).toHaveCount(0);
   expectNoErrors(collected);
 });

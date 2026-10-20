@@ -18,8 +18,8 @@ pub(crate) use tick_profile::{tick_history, tick_history_error, tick_price_histo
 use super::{
     accept_account, accept_bar_update, accept_quote, accept_symbol_info,
     accept_symbol_search_result, bridge_emit, claim_for_session, publish_market_inner,
-    BarUpdateAcceptance, HistoryPageView, Inbound, InboundOutcome, MarketSnapshot, PortfolioView,
-    SymbolSearchOutcome,
+    remember_shown_window, BarUpdateAcceptance, HistoryPageView, Inbound, InboundOutcome,
+    MarketSnapshot, PortfolioView, SymbolSearchOutcome,
 };
 use trading_core::protocol::{
     AccountSnapshot, BarUpdate, Envelope, ErrorCode, HistorySnapshot, PortfolioSnapshot,
@@ -110,6 +110,7 @@ pub(crate) async fn history_snapshot(inbound: &Inbound<'_>, message: Envelope) -
                 "invalid history snapshot",
             );
         }
+        remember_shown_window(inbound.state, &snapshot.symbol, &snapshot.timeframe);
         let market = MarketSnapshot {
             symbol: Some(snapshot.symbol),
             timeframe: Some(snapshot.timeframe),

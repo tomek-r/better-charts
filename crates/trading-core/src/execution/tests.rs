@@ -716,7 +716,7 @@ fn modify_some_levels_set_and_none_levels_leave_unchanged_through_validation() {
 
 #[test]
 fn updates_regress_only_against_the_previous_update_not_the_local_clock() {
-    let local_now: u64 = 1_770_000_000_000;
+    let local_now = crate::test_clock::utc_now_ms() as u64;
     // The EA clock runs a consistent one hour behind the local Rust clock.
     let ea_now: i64 = local_now as i64 - 3_600_000;
     let mut registry = ExecutionRegistry::new();

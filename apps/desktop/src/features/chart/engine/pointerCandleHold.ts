@@ -28,6 +28,7 @@ export class PointerCandleHold {
   /** Keeps the candle for the release and returns true while a pointer is pressed; false means apply it now. */
   hold(candle: Candle): boolean {
     if (!this.isPressed()) {
+      this.applyHeld();
       return false;
     }
     this.held.push(candle);
@@ -62,14 +63,22 @@ export class PointerCandleHold {
     return true;
   }
 
-  private readonly onPress = (): void => {
+  // Only a primary-button press scrolls the pane; a right-click opens a menu that swallows its release.
+  private readonly onPress = (event: PointerEvent): void => {
+    if (event.button !== 0) {
+      return;
+    }
     this.pressStartedAtMs = Date.now();
   };
 
   private readonly onRelease = (): void => {
     this.pressStartedAtMs = null;
+    this.applyHeld();
+  };
+
+  private applyHeld(): void {
     for (const candle of this.held.splice(0)) {
       this.apply(candle);
     }
-  };
+  }
 }

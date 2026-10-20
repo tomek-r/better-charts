@@ -1,9 +1,10 @@
 use super::*;
 
-/// Accepts two sequential connections, numbering them like `run_server`.
-async fn start_two_session_bridge(
+/// Accepts `sessions` sequential connections, numbering them like `run_server`.
+pub(super) async fn start_sequential_bridge(
     state: BridgeState,
     adapter: ExecutionAdapterState,
+    sessions: u64,
 ) -> BridgeHarness {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -19,7 +20,7 @@ async fn start_two_session_bridge(
         adapter: adapter.clone(),
     };
     tokio::spawn(async move {
-        for session_number in 1..=2 {
+        for session_number in 1..=sessions {
             let Ok((stream, _)) = listener.accept().await else {
                 return;
             };
@@ -64,7 +65,7 @@ fn account_intent(id: &str, account_login: &str) -> ExecutionIntent {
 async fn account_switch_reconnect_reaches_ready_and_dispatches_for_new_account() {
     let journal = test_journal_path();
     let adapter = ExecutionAdapterState::new(ExecutionSafetyState::open(&journal));
-    let harness = start_two_session_bridge(BridgeState::default(), adapter.clone()).await;
+    let harness = start_sequential_bridge(BridgeState::default(), adapter.clone(), 2).await;
 
     let mut old_client = BridgeClient::connect(harness.addr).await.unwrap();
     let old = complete_handshake(&mut old_client, &harness).await;

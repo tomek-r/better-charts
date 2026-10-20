@@ -4,6 +4,7 @@ import { openTradePanel } from './helpers/panel';
 import type { RenderBar } from '../src/features/chart/engine/mt5DataAdapter';
 import {
   gotoWithStub,
+  pausePageClockAhead,
   pushCommandError,
   pushCommandUpdate,
   pushEvent,
@@ -30,8 +31,8 @@ function expectClean({ pageErrors, consoleErrors }: { pageErrors: string[]; cons
 async function fillRiskDraft(page: Page) {
   // Stage first (owner flow: the CTA is enabled only for a staged order).
   await page.locator('section.order-ticket .ticket-quote-side.buy').click();
-  // Anchor on the connected bridge: the ticket-header DEMO badge needs the account snapshot.
-  await expect(page.locator('.ticket-title .ticket-account-badge')).toHaveText('DEMO · 50123456');
+  // Anchor on the connected bridge: the top-bar Demo badge needs the account snapshot.
+  await expect(page.locator('.topbar-actions .account-badge')).toHaveText(/^50123456 Demo$/);
   // Market order: price row disabled, entry follows the quote.
   const priceInput = page
     .locator('.ticket-row')
@@ -193,10 +194,11 @@ test('stubbed runtime connects: sidebar, account badge and chart data render', a
   await expect(page.locator('.execution-safety-card')).toHaveCount(0);
   await expect(page.locator('.recovery-card')).toHaveCount(0);
   await expect(page.locator('.reconciliation-card')).toHaveCount(0);
-  // Account environment badge: DEMO · login, tooltip carries the raw enum + server.
-  const badge = page.locator('.ticket-title .ticket-account-badge');
-  await expect(badge).toHaveText('DEMO · 50123456');
-  await expect(badge).toHaveAttribute('title', 'account_trade_mode=0 · Broker-Demo');
+  // Account environment badge in the top bar: its login then Demo, each part marked by its icon; the tooltip
+  // carries the raw enum and the server.
+  const badge = page.locator('.topbar-actions .account-badge');
+  await expect(badge).toHaveText(/^50123456 Demo$/);
+  await expect(badge).toHaveAttribute('title', 'account_trade_mode=0, Broker-Demo');
   // The portfolio card lists open positions only, and the default stub snapshot
   // has none, so the panel deliberately renders no card here. The populated case
   // is covered by "portfolio shows positions only" below.
@@ -360,8 +362,7 @@ test('100 percent risk review flushes debounced sizing before OrderCheck', async
   await page.getByRole('menuitemradio', { name: 'Risk, % equity' }).click();
   await page.getByLabel('Risk percent').fill('100');
   await expect(page.locator('.ticket-cta')).toBeEnabled();
-  await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') });
-  await page.clock.pauseAt(new Date('2024-01-01T00:00:01Z'));
+  await pausePageClockAhead(page, 1000);
   // A floating equity tick schedules another sizing request without changing
   // the explicit draft. Start review before its debounce expires.
   await pushEvent(page, 'account-snapshot', {
@@ -397,8 +398,7 @@ test('review times out safely and ignores a late broker check', async ({ page })
   await openTradePanel(page);
   await fillRiskDraft(page);
   await expect(page.locator('.ticket-cta')).toBeEnabled();
-  await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') });
-  await page.clock.pauseAt(new Date('2024-01-01T00:00:01Z'));
+  await pausePageClockAhead(page, 1000);
   await page.locator('.ticket-cta').click();
   await expect(page.getByText('Checking with MT5…', { exact: true })).toBeVisible();
   await page.clock.runFor(15_001);
@@ -476,7 +476,7 @@ test('a second order using 1 percent risk keeps its accepted review through equi
     currency: 'USD',
     quotedAtMs: STUB_NOW,
   });
-  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-5.75 USD');
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−5.75 USD');
   await page.locator('.ticket-cta').click();
   const send = page.locator('.ticket-cta.send');
   await expect(send).toBeEnabled();
@@ -499,7 +499,7 @@ test('a second order using 1 percent risk keeps its accepted review through equi
     accountTradeModeName: 'demo',
   });
   await expect(page.locator('.ticket-review-head')).toBeVisible();
-  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-5.75 USD');
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−5.75 USD');
   await expect(send).toBeEnabled();
   await send.click();
   const submissions = (await stubInvocations(page)).filter((item) => item.cmd === 'submit_order');
@@ -1280,43 +1280,52 @@ test('canvas gesture: cancelling the staged widget RESETS the SL/TP draft — no
   expectClean(collected);
 });
 
-test('canvas gesture: switching side (Buy→Sell / Sell→Buy) starts a fresh draft — no stale SL/TP (owner)', async ({
+test('switching side (Buy→Sell / Sell→Buy) mirrors SL and TP across the new entry (owner)', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  await openTradePanel(page);
+  const ticket = page.locator('section.order-ticket');
+  await stageAndPaint(page);
+  // Buy at the stub ask 1.0850: SL 50 points below, TP 50 points above.
+  await page.getByLabel('Stop loss enabled').check();
+  await page.getByLabel('Stop loss price').fill('1.0800');
+  await page.getByLabel('Take profit enabled').check();
+  await page.getByLabel('Take profit price').fill('1.0900');
+  // Sell enters at the stub bid 1.0846; both levels keep their distance on the other side.
+  const sell = ticket.locator('.ticket-quote-side.sell');
+  await sell.click();
+  await expect(sell).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Stop loss enabled')).toBeChecked();
+  await expect(page.getByLabel('Stop loss price')).toHaveValue('1.0896');
+  await expect(page.getByLabel('Take profit enabled')).toBeChecked();
+  await expect(page.getByLabel('Take profit price')).toHaveValue('1.0796');
+  await expect.poll(async () => (await stagedGeom(page))?.staged, { timeout: 10_000 }).toBe(true);
+  // …and back: Buy at the ask 1.0850 restores the original levels.
+  const buy = ticket.locator('.ticket-quote-side.buy');
+  await buy.click();
+  await expect(buy).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Stop loss price')).toHaveValue('1.08');
+  await expect(page.getByLabel('Take profit price')).toHaveValue('1.09');
+  // Nothing was dispatched by staging or switching.
+  expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
+  expect(await wasInvoked(page, 'request_order_check')).toBeUndefined();
+  expectClean(collected);
+});
+
+test('switching side without SL or TP starts a fresh draft, and the price reference follows the side', async ({
   page,
 }) => {
   const collected = await gotoWithStub(page);
   await openTradePanel(page);
   const ticket = page.locator('section.order-ticket');
   await stageAndPaint(page);
-  // Fill the buy draft: SL via the ticket, TP via the ticket (same mirrored state).
-  await page.getByLabel('Stop loss enabled').check();
-  await page.getByLabel('Stop loss price').fill('1.0800');
-  await page.getByLabel('Take profit enabled').check();
-  await page.getByLabel('Take profit price').fill('1.0900');
-  // Switch side: Sell must start FRESH — SL/TP levels and toggles cleared.
-  const sell = ticket.locator('.ticket-quote-side.sell');
-  await sell.click();
-  await expect(sell).toHaveAttribute('aria-pressed', 'true');
+  await ticket.getByRole('button', { name: 'Limit', exact: true }).click();
+  const reference = page.getByLabel('Price reference');
+  await ticket.locator('.ticket-quote-side.sell').click();
   await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
-  await expect(page.getByLabel('Stop loss price')).toHaveValue('');
   await expect(page.getByLabel('Take profit enabled')).not.toBeChecked();
-  await expect(page.getByLabel('Take profit price')).toHaveValue('');
-  await expect.poll(async () => (await stagedGeom(page))?.staged, { timeout: 10_000 }).toBe(true);
-  await expect.poll(async () => (await stagedGeom(page))?.slHandle !== null, { timeout: 10_000 }).toBe(true);
-  const onSell = (await stagedGeom(page))!;
-  expect(onSell.slCancel).toBeNull();
-  expect(onSell.tpCancel).toBeNull();
-  // …and back the other way: sell's levels must not leak into the buy draft.
-  await page.getByLabel('Stop loss enabled').check();
-  await page.getByLabel('Stop loss price').fill('1.0900');
-  const buy = ticket.locator('.ticket-quote-side.buy');
-  await buy.click();
-  await expect(buy).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
-  await expect(page.getByLabel('Stop loss price')).toHaveValue('');
-  await expect.poll(async () => (await stagedGeom(page))?.staged, { timeout: 10_000 }).toBe(true);
-  // Nothing was dispatched by staging or switching.
-  expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
-  expect(await wasInvoked(page, 'request_order_check')).toBeUndefined();
+  await expect(reference).toHaveValue('bid');
+  await ticket.locator('.ticket-quote-side.buy').click();
+  await expect(reference).toHaveValue('ask');
   expectClean(collected);
 });
 
@@ -1417,7 +1426,7 @@ test('chart handles show the money at SL/TP in the account currency — only whe
   await page.getByLabel('Stop loss enabled').check();
   await page.getByLabel('Swap Stop loss input to price').click();
   await page.getByLabel('Stop loss price').fill('1.0800');
-  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-500.00 USD');
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−500.00 USD');
   expect((await stagedGeom(page))!.tpMoney).toBeNull();
   // TP set too: gain in the account currency.
   await page.getByLabel('Take profit enabled').check();
@@ -1746,11 +1755,11 @@ test('pending risk sizing keeps loss and reward based on actual volume', async (
     currency: 'USD',
     quotedAtMs: STUB_NOW,
   });
-  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-57.75 USD');
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−57.75 USD');
   await page.getByLabel('Risk amount').fill('59');
   // While the new broker preview is pending, the last 4.2 units and 0.005 price
   // distance give both amounts $57.75; a budget edit does not change volume.
-  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-57.75 USD');
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−57.75 USD');
   await expect.poll(async () => (await stagedGeom(page))?.tpMoney).toBe('+57.75 USD');
   await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).toBe('1.00');
   await expect(page.locator('.ticket-risk-reward')).toHaveText('RR 1.00');
@@ -1772,7 +1781,7 @@ test('pending risk sizing keeps loss and reward based on actual volume', async (
     currency: 'USD',
     quotedAtMs: STUB_NOW,
   });
-  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-58.80 USD');
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−58.80 USD');
   await expect.poll(async () => (await stagedGeom(page))?.tpMoney).toBe('+64.68 USD');
   await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).toBe('1.10');
   await expect(page.locator('.ticket-risk-reward')).toHaveText('RR 1.10');
@@ -1811,7 +1820,7 @@ for (const level of ['sl', 'tp'] as const) {
       .poll(async () => stagedGeom(page))
       .toMatchObject({
         volume: '2.60',
-        slMoney: '-25.00 USD',
+        slMoney: '−25.00 USD',
         tpMoney: '+24.50 USD',
         riskRewardLabel: '0.98',
       });
@@ -1865,7 +1874,7 @@ test('staged RR matches broker SL/TP amounts rather than equal price distances',
     currency: 'USD',
     quotedAtMs: STUB_NOW,
   });
-  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-57.56 USD');
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−57.56 USD');
   await expect.poll(async () => (await stagedGeom(page))?.tpMoney).toBe('+56.19 USD');
   await expect.poll(async () => (await stagedGeom(page))?.riskRewardLabel).toBe('0.98');
   await expect(page.locator('.ticket-risk-reward')).toHaveText('RR 0.98');
@@ -1953,7 +1962,7 @@ test('halving equity allocation halves the percent risk budget and updates check
     quotedAtMs: STUB_NOW,
   });
   await pushEvent(page, 'risk-preview', preview(full.args, '1.00', '100.00'));
-  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-100.00 USD');
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−100.00 USD');
   await page.getByLabel('Equity allocation percent').fill('50');
   await expect
     .poll(async () => (await latest())?.args)
@@ -1962,7 +1971,7 @@ test('halving equity allocation halves the percent risk budget and updates check
   const half = await latest();
   expect(half.args.draftVersion as number).toBeGreaterThan(full.args.draftVersion as number);
   await pushEvent(page, 'risk-preview', preview(half.args, '0.50', '50.00'));
-  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-50.00 USD');
+  await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−50.00 USD');
   // A late full-equity response cannot restore the previous volume/budget.
   await pushEvent(page, 'risk-preview', preview(full.args, '1.00', '100.00'));
   await page.getByRole('button', { name: 'Start creating order' }).click();
@@ -1998,14 +2007,14 @@ for (const mode of ['equity', 'money'] as const) {
       currency: 'USD',
       quotedAtMs: STUB_NOW,
     });
-    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-100.00 USD');
+    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−100.00 USD');
     const handle = (await stagedGeom(page))!.slHandle!;
     const start = { x: handle.x + handle.w / 2, y: handle.y + handle.h / 2 };
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
     await page.mouse.move(start.x, start.y + 24, { steps: 8 });
     await expect(page.getByLabel('Stop loss price')).not.toHaveValue('1.0840');
-    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-100.00 USD');
+    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−100.00 USD');
     await expect.poll(async () => (await wasInvoked(page, 'project_risk_preview'))?.args.riskAmount).toBe(riskBudget);
     await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('0.50');
     await page.mouse.up();
@@ -2027,7 +2036,7 @@ for (const mode of ['equity', 'money'] as const) {
       currency: 'USD',
       quotedAtMs: STUB_NOW,
     });
-    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-100.00 USD');
+    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−100.00 USD');
     await expect(page.getByRole('button', { name: 'Send order', exact: true })).toBeEnabled();
     // A delayed native projection must not overwrite a newer MT5 quote.
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -2064,7 +2073,7 @@ for (const mode of ['equity', 'money'] as const) {
       currency: 'USD',
       quotedAtMs: STUB_NOW,
     });
-    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-80.00 USD');
+    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−80.00 USD');
     await page.evaluate(async () => {
       const w = window as unknown as { __releaseRiskProjection?: () => void };
       if (!w.__releaseRiskProjection) {
@@ -2074,7 +2083,7 @@ for (const mode of ['equity', 'money'] as const) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     });
     await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('0.40');
-    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-80.00 USD');
+    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−80.00 USD');
     expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
     expectClean(collected);
   });
@@ -2141,7 +2150,7 @@ for (const mode of ['equity', 'money'] as const) {
       quotedAtMs: STUB_NOW,
     });
     await pushEvent(page, 'risk-preview', reply(initial.args, '1.00', '100'));
-    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-100.00 USD');
+    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−100.00 USD');
     const handle = (await stagedGeom(page))!.slHandle!;
     const start = { x: handle.x + handle.w / 2, y: handle.y + handle.h / 2 };
     await page.mouse.move(start.x, start.y);
@@ -2160,9 +2169,9 @@ for (const mode of ['equity', 'money'] as const) {
     // A fresh broker result may refine volume while the display is held.
     await pushEvent(page, 'risk-preview', reply(moved.args, '0.40', '80'));
     await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('0.40');
-    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-100.00 USD');
+    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−100.00 USD');
     await page.mouse.up();
-    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-80.00 USD');
+    await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−80.00 USD');
     expect(await wasInvoked(page, 'submit_order')).toBeUndefined();
     expectClean(collected);
   });
@@ -2206,7 +2215,7 @@ for (const mode of ['equity', 'money'] as const) {
       await pushEvent(page, 'risk-preview', reply(increased.args, '17.3', '213.48'));
       await expect.poll(async () => (await stagedGeom(page))?.volume).toBe('17.3');
       await expect(page.getByLabel('Stop loss price')).toHaveValue(stop);
-      await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('-213.48 USD');
+      await expect.poll(async () => (await stagedGeom(page))?.slMoney).toBe('−213.48 USD');
       const geometry = (await stagedGeom(page))!;
       expect(Number(stop)).toBeGreaterThan(geometry.priceRange!.min);
       expect(Number(stop)).toBeLessThan(geometry.priceRange!.max);

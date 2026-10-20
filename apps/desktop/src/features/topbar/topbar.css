@@ -48,6 +48,13 @@
   font-size: 12px;
 }
 
+/* Top bar buttons never shrink: the account badge beside them absorbs any shortage. */
+.search-trigger,
+.panel-toggle,
+.settings-trigger {
+  flex-shrink: 0;
+}
+
 .search-trigger {
   display: flex;
   align-items: center;
@@ -87,6 +94,11 @@
 .topbar-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  /* Fills the bar next to the brand, so the account badge appearing with the first account snapshot
+     does not move the group's own box (layout shift). */
+  flex: 1;
+  min-width: 0;
   gap: 10px;
 }
 

@@ -1,11 +1,13 @@
 use super::super::{
     bridge_emit, build_streamed_tick_profile, build_tick_profile, claim_for_session,
-    collect_timeframe, completion_line, log_info, log_warn, safety_net_line, start_bar_collect,
-    HistoryUnavailableView, ProfileSource, TickPageResult, TickProfileError, TickProfileLimit,
-    TickProfileProgress, TickProfileRequest,
+    collect_timeframe, completion_line, log_info, log_warn, request_history_inner, safety_net_line,
+    start_bar_collect, ChartSelection, HistoryUnavailableView, ProfileSource, TickPageResult,
+    TickProfileError, TickProfileLimit, TickProfileProgress, TickProfileRequest,
 };
 use super::{Inbound, InboundOutcome};
-use trading_core::protocol::{Envelope, ErrorCode, ErrorPayload, TickHistorySnapshot};
+use trading_core::protocol::{
+    initial_history_bars, Envelope, ErrorCode, ErrorPayload, TickHistorySnapshot,
+};
 
 /// `tick_history_snapshot`: ingest one page of the active tick-profile
 /// request and drive the progress/finalization state machine.
@@ -328,15 +330,19 @@ fn history_page_error(inbound: &Inbound<'_>, request_id: &str, code: ErrorCode) 
 /// cleared and reported: the session, the execution gates and reconciliation
 /// are untouched, and no stale candles are shown. A stale id (the window was
 /// answered or replaced meanwhile) is ignored.
+///
+/// When the failed window was the selection a reconnect reopened, the chart
+/// symbol is requested once in its place and the user is told, instead of
+/// leaving the chart empty.
 fn history_window_error(inbound: &Inbound<'_>, request_id: &str) -> InboundOutcome {
-    let _ = claim_for_session(inbound.state, inbound.session_id, || {
+    let fallback = claim_for_session(inbound.state, inbound.session_id, || {
         let mut slot = inbound
             .state
             .expected_history
             .lock()
             .expect("history mutex poisoned");
         if !slot.as_ref().is_some_and(|(id, _)| id == request_id) {
-            return;
+            return None;
         }
         let (_, request) = slot.take().expect("checked above");
         drop(slot);
@@ -344,6 +350,19 @@ fn history_window_error(inbound: &Inbound<'_>, request_id: &str) -> InboundOutco
             "history {} {} was not synchronized in time",
             request.symbol, request.timeframe
         ));
+        let restore = inbound
+            .state
+            .chart_selection
+            .lock()
+            .expect("chart selection mutex poisoned")
+            .restore_unavailable(&ChartSelection {
+                symbol: request.symbol.clone(),
+                timeframe: request.timeframe.clone(),
+            });
+        if let Some((notice, fallback)) = restore {
+            bridge_emit(inbound.events, "selection-fallback", notice);
+            return Some(fallback);
+        }
         bridge_emit(
             inbound.events,
             "history-unavailable",
@@ -352,7 +371,19 @@ fn history_window_error(inbound: &Inbound<'_>, request_id: &str) -> InboundOutco
                 timeframe: request.timeframe,
             },
         );
-    });
+        None
+    })
+    .ok()
+    .flatten();
+    if let Some(fallback) = fallback {
+        // Queues like a user selection; a failure leaves the chart empty, as before.
+        let _ = request_history_inner(
+            inbound.state,
+            fallback.symbol,
+            fallback.timeframe,
+            initial_history_bars(),
+        );
+    }
     InboundOutcome::Continue
 }
 

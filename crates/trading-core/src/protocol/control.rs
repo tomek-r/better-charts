@@ -89,6 +89,25 @@ pub struct HeartbeatPayload {
     /// older EAs, which Rust treats as unknown and fails closed.
     #[serde(default)]
     pub market_session: Option<MarketSessionStatus>,
+    /// The broker server's UTC offset in minutes, reported by the EA itself
+    /// (`TimeTradeServer() - TimeGMT()` rounded to 15 minutes). Absent on older
+    /// EAs; it is a heartbeat field because DST can change it mid-session.
+    #[serde(default)]
+    pub broker_utc_offset_minutes: Option<i32>,
+}
+
+impl HeartbeatPayload {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if let Some(session) = self.market_session.as_ref() {
+            session.validate()?;
+        }
+        if let Some(offset) = self.broker_utc_offset_minutes {
+            if offset % 15 != 0 || offset.abs() > 14 * 60 {
+                return Err("invalid broker utc offset");
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

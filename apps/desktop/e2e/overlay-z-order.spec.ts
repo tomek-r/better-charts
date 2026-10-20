@@ -68,7 +68,7 @@ function collidingStates(): ChartOverlayState {
           stopLoss: 150.4,
           takeProfit: 149.4,
           pnl: '+1.04 USD',
-          slMoney: '-6.63 USD',
+          slMoney: '−6.63 USD',
           tpMoney: '+8.00 USD',
         },
       ],

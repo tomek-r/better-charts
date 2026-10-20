@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import type { BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridge/types';
+import { STUB_NOW } from './stubClock';
 
 /**
  * Deterministic in-page Tauri v2 stub for execution-flow E2E tests.
@@ -94,6 +95,8 @@ export interface TauriStubOptions {
   partialClose?: boolean;
   /** Bars of the primary recording seeding `get_market_snapshot` (the configured history depth). */
   recordedSnapshotBars?: number;
+  /** Holds `save_app_settings` open this long, to observe a dialog while it saves. */
+  saveDelayMs?: number;
 }
 
 export interface RecordedHistory {
@@ -109,8 +112,18 @@ export interface RecordedInvoke {
   args: Record<string, unknown>;
 }
 
-/** Fixed clock for deterministic stub payloads (rendered times are never asserted). */
-export const STUB_NOW = 1745700000000;
+export { STUB_NOW };
+
+/**
+ * Starts the page's controllable clock at the current time and pauses it `aheadMs` later, so the
+ * spec drives time with `runFor`. The page clock stays on the desktop's real date, apart from the
+ * broker clock of `STUB_NOW`.
+ */
+export async function pausePageClockAhead(page: Page, aheadMs = 60_000): Promise<void> {
+  const installedAt = Date.now();
+  await page.clock.install({ time: installedAt });
+  await page.clock.pauseAt(installedAt + aheadMs);
+}
 
 /** Five-minute bar length in milliseconds, the interval `windowCandles` uses. */
 export const STUB_M5_INTERVAL_MS = 300_000;
@@ -232,9 +245,9 @@ export async function installTauriStub(
   page: Pick<Page, 'addInitScript'>,
   options: TauriStubOptions = {},
 ): Promise<void> {
-  await page.addInitScript((opts: TauriStubOptions) => {
+  const stubArgument = { opts: options, now: STUB_NOW };
+  await page.addInitScript(({ opts, now: NOW }: typeof stubArgument) => {
     const w = window as unknown as Record<string, unknown>;
-    const NOW = 1745700000000;
 
     const safety = {
       journalState: 'ready',
@@ -350,6 +363,8 @@ export async function installTauriStub(
         tradingEnabled: true,
         message: 'Bridge connected — market data is flowing.',
         marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: NOW },
+        // Literal: this function is serialized into the page and cannot see module constants.
+        brokerUtcOffsetMinutes: 180,
       },
       get_market_snapshot: { symbol: 'EURUSD', timeframe: 'M5', complete: true, candles },
       // No auto-fill race: a fixed quote seeds Entry deterministically (market
@@ -694,6 +709,9 @@ export async function installTauriStub(
       if (!Object.prototype.hasOwnProperty.call(responses, cmd)) {
         throw new Error(`E2E Tauri stub has no scripted response for command "${cmd}".`);
       }
+      if (cmd === 'save_app_settings' && opts.saveDelayMs !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, opts.saveDelayMs));
+      }
       if (cmd === 'save_app_settings' && responses[cmd] === 'reactive') {
         const view = responses.get_app_settings as Record<string, unknown>;
         const next = {
@@ -736,7 +754,7 @@ export async function installTauriStub(
       emit,
       listenerCount: (event: string) => (listeners.get(event) ?? []).filter((id) => callbacks.has(id)).length,
     };
-  }, options);
+  }, stubArgument);
 }
 
 /**

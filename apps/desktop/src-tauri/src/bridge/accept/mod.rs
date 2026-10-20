@@ -334,6 +334,7 @@ pub(crate) fn protocol_error(
         status.state = BridgeConnectionState::ProtocolError;
         status.message = Some(message.into());
         status.market_session = None;
+        status.broker_utc_offset_minutes = None;
         status.partial_close = false;
         status.trading_enabled = false;
     });
@@ -364,6 +365,7 @@ pub(crate) fn disconnect(
             status.state = BridgeConnectionState::Disconnected;
             status.message = None;
             status.market_session = None;
+            status.broker_utc_offset_minutes = None;
             status.partial_close = false;
             status.trading_enabled = false;
         });
@@ -371,6 +373,11 @@ pub(crate) fn disconnect(
             .current_session
             .lock()
             .expect("session mutex poisoned") = None;
+        state
+            .chart_selection
+            .lock()
+            .expect("chart selection mutex poisoned")
+            .session_ended(false);
         reset_reconciliation(
             events,
             state,
@@ -457,6 +464,7 @@ pub(crate) fn protocol_error_session(
             status.state = BridgeConnectionState::ProtocolError;
             status.message = Some(message.to_string());
             status.market_session = None;
+            status.broker_utc_offset_minutes = None;
             status.partial_close = false;
             status.trading_enabled = false;
         });
@@ -464,6 +472,11 @@ pub(crate) fn protocol_error_session(
             .current_session
             .lock()
             .expect("session mutex poisoned") = None;
+        state
+            .chart_selection
+            .lock()
+            .expect("chart selection mutex poisoned")
+            .session_ended(true);
         // A protocol error ends this session exactly like a disconnect (F-1):
         // in-flight goes `unknown` through the journaled update path and
         // queued commands are dropped with a `QueueDropped` event — never

@@ -12,6 +12,10 @@
 }
 
 .modal-dialog {
+  --modal-width-compact: 440px;
+  --modal-width-wide: 860px;
+  --modal-height-wide: 860px;
+  width: min(var(--modal-width), 100%);
   padding: 24px 28px;
   color: var(--color-text-tertiary);
   background: var(--color-root);
@@ -19,6 +23,14 @@
   border-radius: var(--border-radius);
   border: 1px solid var(--color-border-dialog);
   animation: settings-panel-in 180ms ease-out;
+}
+
+.modal-dialog[data-size='compact'] {
+  --modal-width: var(--modal-width-compact);
+}
+
+.modal-dialog[data-size='wide'] {
+  --modal-width: var(--modal-width-wide);
 }
 
 .modal-dialog:focus {
@@ -75,6 +87,20 @@
   cursor: pointer;
 }
 
+/* Save and Saving… overlap in one cell; the hidden one still sizes the button. */
+.modal-dialog-save {
+  display: grid;
+  justify-items: center;
+}
+
+.modal-dialog-save-label {
+  grid-area: 1 / 1;
+}
+
+.modal-dialog-save-label[data-shown='false'] {
+  visibility: hidden;
+}
+
 .modal-dialog-button.primary {
   background: var(--color-accent);
   color: var(--color-root);
@@ -105,6 +131,10 @@
   padding: 0;
   max-height: calc(100dvh - 24px);
   overflow: hidden;
+}
+
+.modal-dialog.scrollable[data-size='wide'] {
+  height: var(--modal-height-wide);
 }
 
 .scrollable .modal-dialog-header {

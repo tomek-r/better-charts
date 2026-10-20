@@ -16,7 +16,7 @@ mod timeframes;
 mod versions;
 pub use account::{
     AccountSnapshot, HistoryDeal, HistoryOrder, OpenPosition, PendingOrder, PortfolioSnapshot,
-    ReconcileError, ReconcileRequest, ReconcileSnapshot,
+    ReconcileError, ReconcileRequest, ReconcileSnapshot, HISTORY_WINDOW_LOOKAHEAD_MS,
 };
 pub use control::{
     Envelope, ErrorCode, ErrorPayload, HeartbeatAckPayload, HeartbeatPayload, HelloAckPayload,

@@ -30,7 +30,8 @@ validation live in [`protocol`](../../crates/trading-core/src/protocol/mod.rs).
   "payload": {"sequence": 1, "terminal_connected": true,
     "account_connected": true, "broker_server": "Broker-Demo",
     "market_session": {"symbol": "NAS100", "is_open": true, "trade_mode": 4,
-      "server_time_ms": 1770000000000}}
+      "server_time_ms": 1770000000000},
+    "broker_utc_offset_minutes": 180}
 }
 ```
 
@@ -54,7 +55,7 @@ token is required outside development builds.
 {
   "token": "example-token", "terminal_id": "installation-instance-id", "terminal_build": 5000,
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
-  "expert_version": "1.010", "tick_reader_version": "1.001", "trading_enabled": false,
+  "expert_version": "1.012", "tick_reader_version": "1.001", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
   "tick_price_counts": true, "partial_close": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
@@ -85,7 +86,7 @@ the server's permission; the app's local Settings permission is an additional
 startup restriction, optionally overridden with `MT5_BRIDGE_TRADING_ENABLED`.
 Neither flag submits a command or bypasses execution gates.
 
-The app requires an exact EA `expert_version` match (`1.010` for this build)
+The app requires an exact EA `expert_version` match (`1.012` for this build)
 and an exact `tick_reader_version` match (`1.001`), the version of the
 `BetterChartsTickHistoryReader` indicator. Both expected versions live in
 `config/mq5-versions.json`; regression guards check that the EA's
@@ -123,7 +124,13 @@ override; EA inputs are
 sent before acknowledgement.
 
 `heartbeat` contains `sequence`, `terminal_connected`, `account_connected`,
-`broker_server`, and the optional `market_session` observation described below.
+`broker_server`, the optional `market_session` observation described below,
+and the optional `broker_utc_offset_minutes`: the broker server's UTC offset as
+an integer number of minutes, `TimeTradeServer() - TimeGMT()` rounded to the
+nearest 15 minutes (EA 1.011). It is a heartbeat field because DST can change
+it mid-session. Rust rejects a value that is not a multiple of 15 or lies
+outside -840..=840 like a malformed heartbeat; `null` or an absent field means
+unknown. The app only carries it in the bridge status for display.
 `heartbeat_ack` contains the same `sequence`. The interval is 2 seconds and
 timeout is 6 seconds. Heartbeats check transport liveness;
 market/account/portfolio publication runs independently. Reconnect delays are
@@ -164,7 +171,21 @@ responses for stale request IDs, sessions, symbols, timeframes, or generations.
 
 After the handshake, Rust requests M1 history for `chart_symbol`, asking for
 `initialHistoryBars` candles (`config/bridge.json`; enough for the first view)
-rather than the full `1..=1000` bound. The desktop UI sizes its own requests
+rather than the full `1..=1000` bound. A reconnect of the same terminal and
+account (`terminal_id`, `account_login`, `broker_server` all equal) instead
+requests the symbol and timeframe of the last window the bridge accepted, when
+the new `hello` still advertises that timeframe, so the chart keeps what the
+user was viewing; another account starts from `chart_symbol` and the default
+timeframe as above. The reopened selection is tried once. Any correlated
+history error for it (`history synchronization timed out`, or `symbol not
+available` from EA 1.012, which answers a window for a symbol the terminal does
+not have with the same correlated error) makes the bridge request
+`chart_symbol` in its place, inside the session. Should an uncorrelated error
+end the session before the window arrives, the stored selection is dropped and
+the next `hello` starts from `chart_symbol`. Both cases emit the non-fatal
+`selection-fallback` Tauri event (`{symbol, timeframe, shownSymbol}`), which the
+UI shows as "SYMBOL is not available on this account — showing SHOWN". The wire
+format is unchanged. The desktop UI sizes its own requests
 the same way from the measured pane width and then prefetches one older page
 when idle; the EA honours any `bars` in `1..=1000`, so this is not a wire change. Supported
 timeframes are the 21 standard [MT5 periods](https://www.mql5.com/en/docs/constants/chartconstants/enum_timeframes):
@@ -230,6 +251,12 @@ whose id is stale or not issued by the bridge is ignored or fails closed as
 before. The frontend shows a wait notice during the last 5 s before the
 deadline and a "no data" notice after the event; it never retries on its own.
 
+A window request for a symbol the terminal does not have ends the same way, at
+once: the same correlated `error` frame (envelope `id` = the `history_request`
+id) with message `symbol not available` (EA 1.011+), so the bridge emits
+`history-unavailable` and keeps the session. Earlier EAs answered an
+uncorrelated `INVALID_MESSAGE`, which ended the session.
+
 #### Older-history pages (additive extension)
 
 Both payloads take an optional `before_ms` epoch-millisecond anchor. Absent is
@@ -266,6 +293,15 @@ When the deadline passes it sends an `error` frame (`INTERNAL_ERROR`,
 the bridge fail just that request; an error with any other id is a session-level
 error. Pending pages are discarded on disconnect and when the active symbol
 changes.
+
+While a window (initial) history for a symbol is still waiting for
+`SERIES_SYNCHRONIZED`, no active symbol is established yet. A page for that
+same symbol joins the same pending list instead of being answered empty: it is
+served once the initial history is delivered, and if the initial history times
+out every waiting page ends at once with its own correlated error (message
+`initial history synchronization timed out`, envelope `id` = the page's request
+id), right after the initial history's own error. Such a page counts against
+the 4-page limit.
 
 The bridge handles a correlated page error per id family. A `rust-profile-bars-<n>`
 error ends that profile step (estimate page: the profile falls back to ticks;
@@ -374,7 +410,7 @@ different identity.
   "margin_level": "1996.00", "leverage": 100, "margin_mode": 0, "trade_allowed": true,
   "expert_allowed": true, "account_trade_mode": 0, "account_trade_mode_name": "demo",
   "margin_call_level": "100.00", "stop_out_level": "50.00", "margin_levels_mode": 0,
-  "margin_levels_unit": "percent"
+  "margin_levels_unit": "percent", "account_company": "Broker Ltd"
 }
 ```
 
@@ -389,6 +425,11 @@ the name then defaults to `unknown`.
 
 The EA supplies the raw `account_trade_mode` and semantic name
 `demo|contest|real|unknown`; absent fields default to `-1` / `unknown`.
+`account_company` (EA 1.011+, additive) is `ACCOUNT_COMPANY`, the broker's
+company name, trimmed and at most 128 characters; `null` or absent means not
+reported (older EAs, an empty name). Rust rejects an untrimmed, empty or longer
+value like any invalid account snapshot. The app shows it in the order-ticket
+account badge after the account number.
 `currency_digits` is the optional MT5 monetary precision (`0..=8`); absent defaults
 to 2 for older EAs. Money inputs, budget rounding, account and chart labels use
 the account currency and precision. Monetary displays use `amount CODE`, including
@@ -496,8 +537,14 @@ remaining volume/current price may be zero. Optional comments are at most
 256 characters.
 
 `sequence_after >= sequence_before`; `complete=true` additionally requires
-equal sequence values and no truncation. `history_to_ms` is the end actually
-read; `captured_at_ms >= history_to_ms`. `reconcile_error` contains
+equal sequence values and no truncation. `captured_at_ms` is the EA's server
+clock reading (the later of `TimeTradeServer()` and `TimeCurrent()`).
+`history_to_ms` is the end of the window read: that clock plus a look-ahead of
+60 000 ms, so a deal booked after the last quote, or inside the second the
+whole-second clocks have already floored, is inside the window. Hence
+`history_to_ms - captured_at_ms <= 60000` (`history_to_ms >= history_from_ms`);
+the bridge rejects a larger gap. A deal `time_ms` may exceed `captured_at_ms`
+but never `history_to_ms`. `reconcile_error` contains
 `request_id`, `code`, and `message` and does not satisfy the reconciliation gate.
 
 Reconciliation is observation: missing records, incomplete snapshots, and
@@ -1096,9 +1143,11 @@ A new request, `cancel_tick_profile`, a session change or disconnect and a
 symbol change invalidate the estimate and the bar pages (generation); stale or
 mismatched responses are ignored. One profile is in flight at a time.
 
-**Decision log (desktop stderr, no wire change).** Each profile prints one line
-to the `pnpm dev` terminal, `[bridge] INFO` for the choice and `[bridge] WARN`
-for a degraded case, e.g.:
+**Decision log (desktop stderr, no wire change).** With `MT5_BRIDGE_PROFILE_LOG=1`
+each profile prints one `[bridge] INFO` line for the choice to the `pnpm dev`
+terminal; without it (the default) the info lines stay off, because a live
+profile refreshes every few seconds. `[bridge] WARN` lines for a degraded case
+are always printed. Info lines look like:
 
 ```text
 [bridge] INFO tick profile NAS100 2026-03-31T00:00Z..2026-06-02T00:00Z: source=ticks reason=under-budget estimate tf=H2 bars=742 ticks=16.4M/30M prices=410k/1M pages=63/2048

@@ -20,6 +20,8 @@ export interface BridgeStatus {
   message?: string;
   /** Absent until the first heartbeat carrying an observation (fail closed). */
   marketSession?: MarketSessionStatus;
+  /** Broker UTC offset in minutes from the latest heartbeat; absent or null = unknown (display only). */
+  brokerUtcOffsetMinutes?: number | null;
   /** Periods advertised by the connected EA. */
   supportedTimeframes?: string[];
   /** Negotiated `partial_close` capability; absent or false = partial close is never offered. */
@@ -154,6 +156,16 @@ export interface HistoryPage {
 export interface HistoryUnavailable {
   symbol: string;
   timeframe: string;
+}
+
+/**
+ * A reconnect could not reopen the selection the user was viewing, so the
+ * bridge requested `shownSymbol` (the EA's chart symbol) in its place.
+ */
+export interface SelectionFallback {
+  symbol: string;
+  timeframe: string;
+  shownSymbol: string;
 }
 
 export interface BarUpdate {
@@ -300,6 +312,8 @@ export interface AccountSnapshot {
   marginLevelsMode?: number | null;
   /** "percent" | "money" | "unknown"; absent from older backends. */
   marginLevelsUnit?: string;
+  /** ACCOUNT_COMPANY, the broker's company name; null/absent = not reported. */
+  accountCompany?: string | null;
 }
 
 export type RiskSide = '' | 'buy' | 'sell';

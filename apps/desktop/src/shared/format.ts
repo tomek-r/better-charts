@@ -93,12 +93,28 @@ export function normalizedPrice(value?: string | null) {
   const text = value.trim();
   return /^\d+(\.\d+)?$/.test(text) ? text : null;
 }
+
+/** Typographic minus (U+2212): every negative number the user reads uses it, never the ASCII hyphen. */
+export const MINUS_SIGN = '−';
+
+/**
+ * Display only: swaps the leading ASCII '-' of a rendered number for the typographic minus. Text that is parsed,
+ * typed into an input or sent to the bridge keeps the ASCII hyphen, so this never touches anything but the sign.
+ */
+export function withMinusSign(text: string): string {
+  return text.startsWith('-') ? `${MINUS_SIGN}${text.slice(1)}` : text;
+}
+
 /** MT5-style amounts: account precision and the deposit currency code. */
 export function formatMoney(value: number, currency: string, digits?: number): string {
   const precision = currencyFractionDigits(digits);
-  return `${value.toLocaleString('en-US', { minimumFractionDigits: precision, maximumFractionDigits: precision })} ${currency}`;
+  const amount = value.toLocaleString('en-US', {
+    minimumFractionDigits: precision,
+    maximumFractionDigits: precision,
+  });
+  return withMinusSign(`${amount} ${currency}`);
 }
 
 export function formatSignedMoney(value: number, currency: string, digits?: number): string {
-  return `${value >= 0 ? '+' : '-'}${formatMoney(Math.abs(value), currency, digits)}`;
+  return `${value >= 0 ? '+' : MINUS_SIGN}${formatMoney(Math.abs(value), currency, digits)}`;
 }

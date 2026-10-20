@@ -1,0 +1,11 @@
+.separator-icon {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  /* The spaces on both sides carry most of the gap. */
+  margin: 0 2px;
+  vertical-align: middle;
+  fill: currentColor;
+  opacity: 0.55;
+  flex: none;
+}

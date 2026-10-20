@@ -1,6 +1,6 @@
 use super::{
-    app_data_dir, BridgeState, BridgeStatus, MarketSnapshot, ReconciliationStatus,
-    TickCacheController,
+    app_data_dir, BridgeState, BridgeStatus, ChartSelectionMemory, MarketSnapshot,
+    ReconciliationStatus, TickCacheController,
 };
 use std::{
     fs,
@@ -105,6 +105,7 @@ impl BridgeState {
             transfer_limits: Arc::new(Mutex::new(Default::default())),
             tick_price_counts: Arc::new(Mutex::new(false)),
             market: Arc::new(Mutex::new(MarketSnapshot::default())),
+            chart_selection: Arc::new(Mutex::new(ChartSelectionMemory::default())),
             pending_history: Arc::new(Mutex::new(None)),
             expected_history: Arc::new(Mutex::new(None)),
             pending_history_page: Arc::new(Mutex::new(None)),

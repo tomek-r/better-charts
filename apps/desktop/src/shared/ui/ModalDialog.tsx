@@ -13,6 +13,9 @@ import {
 const FOCUSABLE_SELECTOR =
   'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
+/** `compact` for short confirmations, `wide` for a tall multi-section dialog. */
+export type ModalDialogSize = 'compact' | 'wide';
+
 function focusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
 }
@@ -62,8 +65,7 @@ export function ModalDialog({
   onDismiss,
   onSubmit,
   initialFocusRef,
-  width = 440,
-  height,
+  size = 'compact',
   layout = 'compact',
   bodyDisabled = false,
   bodyClassName,
@@ -84,10 +86,11 @@ export function ModalDialog({
   onDismiss: () => void;
   onSubmit?: (event: SubmitEvent) => void;
   initialFocusRef?: RefObject<HTMLElement | null>;
-  /** Maximum panel width in px; the panel shrinks on narrow viewports. */
-  width?: number;
-  /** Fixed panel height in px (capped by the viewport); `layout="scrollable"` only. */
-  height?: number;
+  /**
+   * Named panel size; the pixel values are tokens in modal-dialog.css. The panel shrinks on narrow viewports, and
+   * `wide` also has a fixed height (capped by the viewport) for `layout="scrollable"`.
+   */
+  size?: ModalDialogSize;
   layout?: 'compact' | 'scrollable';
   /** Disables every control in the body while an action is in flight; `layout="scrollable"` only. */
   bodyDisabled?: boolean;
@@ -184,7 +187,7 @@ export function ModalDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        style={{ width: `min(${width}px, 100%)`, height }}
+        data-size={size}
         data-modal-dialog
       >
         <header className="modal-dialog-header">

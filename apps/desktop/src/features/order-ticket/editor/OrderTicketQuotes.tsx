@@ -17,7 +17,7 @@ export function OrderTicketQuotes() {
           className="ticket-spread"
           title={
             spreadPoints !== null
-              ? `${spreadPoints} pts · ${spreadText} price units`
+              ? `${spreadPoints} pts, ${spreadText} price units`
               : 'Instrument point size unknown — raw price spread'
           }
         >

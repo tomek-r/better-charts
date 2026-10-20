@@ -571,7 +571,7 @@ fn order_submit_requires_an_open_market_session_for_the_active_symbol() {
             symbol: symbol.into(),
             is_open,
             trade_mode: 4,
-            server_time_ms: 1_770_000_000_000,
+            server_time_ms: crate::test_clock::broker_morning_ms(),
         }
     }
 

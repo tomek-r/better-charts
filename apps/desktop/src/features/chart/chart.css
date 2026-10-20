@@ -17,7 +17,7 @@
 
 .chart-heading {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
@@ -44,14 +44,6 @@
   color: var(--color-muted-strong);
   font-size: 12px;
   overflow-wrap: anywhere;
-}
-
-/* Section label above the symbol, matching the topbar's version tag. */
-.eyebrow {
-  color: var(--color-muted);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  font-weight: 700;
 }
 
 /* Live bid/spread/ask cards, right-aligned in the heading row. */
@@ -128,31 +120,6 @@
   flex-direction: column;
   gap: 9px;
   pointer-events: none;
-}
-
-.loading-message {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  gap: 9px;
-  color: var(--color-muted-strong);
-  text-align: center;
-}
-
-.loading-message strong {
-  color: var(--color-text-tertiary);
-  font-size: 15px;
-}
-
-.loading-message span:last-child {
-  max-width: 320px;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.overlay-glyph {
-  color: var(--color-muted);
-  font-size: 30px;
 }
 
 .chart-wait-notice {

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import socket
 import struct
+import sys
 import time
 
 BRIDGE_CONFIG = json.loads((Path(__file__).resolve().parent.parent / "config/bridge.json").read_text())
@@ -22,6 +23,12 @@ TIMEOUT_SECONDS = 20.0
 HEARTBEAT_SECONDS = 2.0
 RECONCILE_STATE = {"seen": False, "request": None, "outcome": None}
 RECONCILE_COUNTER = {"snapshot": 0}
+# How far past the broker clock a history window reaches (the EA's lookahead,
+# crates/trading-core/src/protocol/account.rs HISTORY_WINDOW_LOOKAHEAD_MS).
+HISTORY_WINDOW_LOOKAHEAD_MS = 60_000
+# The mock's canned market data (candles, quotes, positions, orders) is stamped
+# relative to this instant: the start of the minute one hour before startup.
+MOCK_DATA_START_MS = int(time.time() * 1000) // 60_000 * 60_000 - 3_600_000
 
 
 def env_int(name: str, default: int) -> int:
@@ -127,7 +134,7 @@ def tick_price_summary(message: dict) -> dict:
 
 # Oldest bar time the mock's synthetic history reaches. A page that cannot be
 # filled reports complete=False, which is how a client learns it reached the end.
-HISTORY_FLOOR_MS = 1_699_992_800_000
+HISTORY_FLOOR_MS = MOCK_DATA_START_MS - 7_200_000
 HISTORY_INTERVAL_MS = 60_000
 # Mirrors the EA: older pages are served for any supported timeframe of the
 # active symbol only (the symbol of the last window snapshot).
@@ -197,6 +204,27 @@ def initial_history_reply(request_id: str, symbol: str, timeframe: str, candles:
     return sync_delay_seconds, snapshot
 
 
+INITIAL_PAGE_TIMEOUT_MESSAGE = "initial history synchronization timed out"
+
+
+def replies_to_pages_requested_while_initial_history_waits(
+        initial_request_id: str, symbol: str, timeframe: str, candles: list, page_requests: list,
+        session_id: str, sync_delay_seconds: float, max_frame: int) -> list[dict]:
+    """The frames the EA sends, in order, when older-history pages for the
+    waiting symbol arrive before its initial history is delivered. The EA does
+    not answer them with an empty page (a false "no older candles"): they wait
+    for the initial history, then are served normally; when the initial history
+    times out they end with their own correlated error right after it."""
+    _, initial = initial_history_reply(initial_request_id, symbol, timeframe, candles, True, session_id,
+                                       sync_delay_seconds)
+    if initial["type"] == "error":
+        failed_pages = [envelope("error", page["_request_id"], session_id,
+                                 {"code": "INTERNAL_ERROR", "message": INITIAL_PAGE_TIMEOUT_MESSAGE, "retryable": False})
+                        for page in page_requests]
+        return [initial, *failed_pages]
+    return [initial, *(synthetic_history_page(page, session_id, max_frame) for page in page_requests)]
+
+
 def send_initial_history(conn: socket.socket, request_id: str, symbol: str, timeframe: str, candles: list,
                          session_id: str) -> None:
     """Manual option for the not-yet-synchronized case; it blocks this
@@ -219,7 +247,22 @@ def self_test_initial_history() -> int:
                                         INITIAL_SYNC_DEADLINE_SECONDS + 1)
     assert wait == INITIAL_SYNC_DEADLINE_SECONDS and frame["type"] == "error" and frame["id"] == "rust-history-1"
     assert frame["payload"] == {"code": "INTERNAL_ERROR", "message": INITIAL_SYNC_TIMEOUT_MESSAGE, "retryable": False}
-    print("mock initial-history self-test passed: wait for sync, short synchronized history, correlated timeout error")
+    # Pages requested while it waits are not answered empty: served after it, or failed with it.
+    pages = [{"symbol": "TEST.INIT", "timeframe": "M1", "bars": 100, "before_ms": MOCK_DATA_START_MS,
+              "_request_id": f"rust-profile-bars-{number}"} for number in (1, 2)]
+    served = replies_to_pages_requested_while_initial_history_waits(
+        "rust-history-1", "TEST.INIT", "M1", candles, pages, "synthetic-session", 0.25, TRANSFER_LIMITS["max_frame_bytes"])
+    assert [frame["type"] for frame in served] == ["history_snapshot"] * 3
+    assert served[0]["payload"]["request_id"] == "rust-history-1"
+    assert [frame["payload"]["request_id"] for frame in served[1:]] == ["rust-profile-bars-1", "rust-profile-bars-2"]
+    assert all(frame["payload"]["candles"] for frame in served[1:]), "a page is never answered empty while waiting"
+    failed = replies_to_pages_requested_while_initial_history_waits(
+        "rust-history-1", "TEST.INIT", "M1", candles, pages, "synthetic-session", INITIAL_SYNC_DEADLINE_SECONDS + 1,
+        TRANSFER_LIMITS["max_frame_bytes"])
+    assert [frame["type"] for frame in failed] == ["error"] * 3
+    assert [frame["id"] for frame in failed] == ["rust-history-1", "rust-profile-bars-1", "rust-profile-bars-2"]
+    assert all(frame["payload"]["message"] == INITIAL_PAGE_TIMEOUT_MESSAGE for frame in failed[1:])
+    print("mock initial-history self-test passed: wait for sync, short synchronized history, correlated timeout error, pages held while it waits")
     return 0
 
 
@@ -246,7 +289,7 @@ def handle_history_page(reader: FrameReader, conn: socket.socket, session_id: st
 
 
 def self_test_history_page() -> int:
-    request = {"symbol": "TEST.INIT", "timeframe": "M1", "bars": 1000, "before_ms": 1_700_000_000_000,
+    request = {"symbol": "TEST.INIT", "timeframe": "M1", "bars": 1000, "before_ms": MOCK_DATA_START_MS,
                "_request_id": "synthetic-history-page"}
     payload = synthetic_history_page(request, "synthetic-session", TRANSFER_LIMITS["max_frame_bytes"])["payload"]
     # The mock's history is shorter than a page, so the client is told it is done.
@@ -287,7 +330,7 @@ def self_test_history_page() -> int:
 
 def self_test_tick_history() -> int:
     for limits in (TRANSFER_LIMITS, LEGACY_TRANSFER_LIMITS, {**TRANSFER_LIMITS, "max_frame_bytes": 1024 * 1024}):
-        request = {"symbol": "TEST.SYNTHETIC", "from_ms": 1_700_000_000_000, "to_ms": 1_700_001_000_000, "max_ticks": limits["max_ticks_per_page"], "_request_id": "synthetic-page"}
+        request = {"symbol": "TEST.SYNTHETIC", "from_ms": MOCK_DATA_START_MS, "to_ms": MOCK_DATA_START_MS + 1_000_000, "max_ticks": limits["max_ticks_per_page"], "_request_id": "synthetic-page"}
         message = synthetic_tick_history(request, "synthetic-session", limits)
         payload = message["payload"]
         size = len(json.dumps(message, separators=(",", ":")).encode())
@@ -351,13 +394,16 @@ def expect_type(message: dict, expected: str) -> dict:
     return payload
 
 
+MOCK_BROKER_UTC_OFFSET_MINUTES = 180
+
+
 def market_session_fragment(symbol: str = "TEST.INIT") -> dict:
     """EA market-session observation carried on every heartbeat.
 
     The mock is always inside an open session: Rust's submission gate compares
     `symbol` against the order symbol and requires `is_open` to be true.
     """
-    return {"symbol": symbol, "is_open": True, "trade_mode": 4, "server_time_ms": 1700000120000}
+    return {"symbol": symbol, "is_open": True, "trade_mode": 4, "server_time_ms": MOCK_DATA_START_MS + 120_000}
 
 
 def maybe_heartbeat(conn: socket.socket, session_id: str, heartbeat_state: dict) -> None:
@@ -368,6 +414,7 @@ def maybe_heartbeat(conn: socket.socket, session_id: str, heartbeat_state: dict)
         send_frame(conn, envelope("heartbeat", f"ea-heartbeat-{sequence}", session_id, {
             "sequence": sequence, "terminal_connected": True, "account_connected": True,
             "broker_server": "mock", "market_session": market_session_fragment(),
+            "broker_utc_offset_minutes": MOCK_BROKER_UTC_OFFSET_MINUTES,
         }))
         heartbeat_state["next"] = now + HEARTBEAT_SECONDS
 
@@ -438,7 +485,7 @@ def reply_risk_quote(conn: socket.socket, session_id: str, request: dict) -> Non
         "entry": request["entry"], "stop_loss": request["stop_loss"], "take_profit": request.get("take_profit"),
         "reference_volume": "1.00", "loss_at_reference": "10.00", "reward_at_reference": "20.00",
         "margin_at_reference": "100.00", "currency": "USD", "tick_size": "0.1",
-        "volume_min": "0.01", "volume_max": "100.00", "volume_step": "0.01", "quoted_at_ms": 1700000122000,
+        "volume_min": "0.01", "volume_max": "100.00", "volume_step": "0.01", "quoted_at_ms": MOCK_DATA_START_MS + 122_000,
     }))
 
 
@@ -491,7 +538,7 @@ def reply_order_check(conn: socket.socket, session_id: str, request: dict) -> No
         "check_passed": True, "retcode": 0, "last_error": 0, "balance": "10000.00",
         "equity": "10000.00", "profit": "0.00", "margin": "100.00",
         "free_margin": "9900.00", "margin_level": "10000.00", "comment": "Mock preflight accepted",
-        "checked_at_ms": 1700000123000,
+        "checked_at_ms": MOCK_DATA_START_MS + 123_000,
         "time_in_force": time_in_force, "limit_price": limit_price,
         **margin_projection_fields(request),
     }))
@@ -515,8 +562,8 @@ def reply_reconcile(conn: socket.socket, session_id: str | None, request: dict, 
     snapshot_number = RECONCILE_COUNTER["snapshot"]
     history_from_ms = int(request.get("history_from_ms", 0))
     now_ms = int(time.time() * 1000)
-    history_to_ms = max(now_ms, history_from_ms)
-    captured_at_ms = max(now_ms, history_to_ms)
+    captured_at_ms = max(now_ms, history_from_ms)
+    history_to_ms = captured_at_ms + HISTORY_WINDOW_LOOKAHEAD_MS
     # Setup may precede the requested window (setup-before-window acceptance rule);
     # done stays inside [history_from_ms, history_to_ms] and never before setup.
     time_setup_ms = history_from_ms - 5000
@@ -562,9 +609,9 @@ def handle_reconcile(reader: FrameReader, conn: socket.socket, session_id: str |
 
 # Three fixed M1 candles every mock history reply serves.
 MOCK_CANDLES = [
-    {"time_ms": 1700000000000, "open": "100.0", "high": "101.0", "low": "99.0", "close": "100.5", "tick_volume": 10, "spread": 2, "real_volume": 0},
-    {"time_ms": 1700000060000, "open": "100.5", "high": "102.0", "low": "100.0", "close": "101.5", "tick_volume": 12, "spread": 2, "real_volume": 0},
-    {"time_ms": 1700000120000, "open": "101.5", "high": "103.0", "low": "101.0", "close": "102.5", "tick_volume": 14, "spread": 2, "real_volume": 0},
+    {"time_ms": MOCK_DATA_START_MS, "open": "100.0", "high": "101.0", "low": "99.0", "close": "100.5", "tick_volume": 10, "spread": 2, "real_volume": 0},
+    {"time_ms": MOCK_DATA_START_MS + 60_000, "open": "100.5", "high": "102.0", "low": "100.0", "close": "101.5", "tick_volume": 12, "spread": 2, "real_volume": 0},
+    {"time_ms": MOCK_DATA_START_MS + 120_000, "open": "101.5", "high": "103.0", "low": "101.0", "close": "102.5", "tick_volume": 14, "spread": 2, "real_volume": 0},
 ]
 
 
@@ -573,7 +620,7 @@ MOCK_POSITIONS = [{
     "volume": "0.10", "price_open": "100.0", "price_current": "102.5",
     "stop_loss": "98.0", "take_profit": None, "profit": "25.00", "swap": "-0.10",
     "stop_loss_profit": "-20.00", "take_profit_profit": None,
-    "time_ms": 1700000000000, "magic": "42",
+    "time_ms": MOCK_DATA_START_MS, "magic": "42",
     "volume_min": "0.01", "volume_step": "0.01",
 }]
 MOCK_ORDERS = [{
@@ -581,14 +628,14 @@ MOCK_ORDERS = [{
     "volume_initial": "0.10", "volume_current": "0.10", "price_open": "18000.0",
     "price_current": "18000.0", "stop_loss": None, "take_profit": "18100.0",
     "stop_loss_profit": None, "take_profit_profit": "100.00",
-    "time_setup_ms": 1700000120000, "expiration_ms": 1700003720000, "magic": "42",
+    "time_setup_ms": MOCK_DATA_START_MS + 120_000, "expiration_ms": MOCK_DATA_START_MS + 3_720_000, "magic": "42",
 }]
 OPEN_POSITIONS = copy.deepcopy(MOCK_POSITIONS)
 
 
 def portfolio_snapshot(message_id: str, session_id: str, positions: list) -> dict:
     return envelope("portfolio_snapshot", message_id, session_id, {
-        "account_login": "12345678", "captured_at_ms": 1700000121000,
+        "account_login": "12345678", "captured_at_ms": MOCK_DATA_START_MS + 121_000,
         "positions": positions, "orders": MOCK_ORDERS,
     })
 
@@ -637,7 +684,7 @@ def apply_close_request(positions: list, request: dict) -> dict:
         "command_id": command_id, "status": "filled", "retcode": 10009, "last_error": 0,
         "broker_order_id": "mock-close-order", "deal_id": "mock-close-deal",
         "position_id": position["position_id"], "filled_volume": str(volume),
-        "message": "fill confirmed by mock", "updated_at_ms": 1700000130000, "at_update": 4,
+        "message": "fill confirmed by mock", "updated_at_ms": MOCK_DATA_START_MS + 130_000, "at_update": 4,
     }
 
 
@@ -741,16 +788,17 @@ def main() -> int:
                 "margin_mode": 2, "trade_allowed": False, "expert_allowed": False,
                 "account_trade_mode": 0, "account_trade_mode_name": "demo",
                 "margin_call_level": "100.0000", "stop_out_level": "50.0000",
-                "margin_levels_mode": 0, "margin_levels_unit": "percent",
+                "margin_levels_mode": 0, "margin_levels_unit": "percent", "account_company": "Mock Broker Ltd",
             }))
             send_frame(conn, portfolio_snapshot("ea-portfolio-1", session_id, OPEN_POSITIONS))
             send_frame(conn, envelope("quote_update", "ea-quote-1", session_id, {
-                "symbol": "TEST.INIT", "time_ms": 1700000120000, "bid": "102.4", "ask": "102.6",
+                "symbol": "TEST.INIT", "time_ms": MOCK_DATA_START_MS + 120_000, "bid": "102.4", "ask": "102.6",
                 "last": "102.5", "volume": 14, "volume_real": "0", "flags": 6,
             }))
             send_frame(conn, envelope("heartbeat", "ea-heartbeat-1", session_id, {
                 "sequence": 1, "terminal_connected": True, "account_connected": True,
                 "broker_server": "mock", "market_session": market_session_fragment(),
+                "broker_utc_offset_minutes": MOCK_BROKER_UTC_OFFSET_MINUTES,
             }))
             heartbeat_ack = next_non_reconcile(reader, conn, session_id, deadline)
             heartbeat_payload = expect_type(heartbeat_ack, "heartbeat_ack")
@@ -788,9 +836,9 @@ def main() -> int:
         send_frame(conn, envelope("history_snapshot", "ea-history-us100", session_id, {
             "request_id": history_request.get("_request_id"), "symbol": "US100.TEST", "timeframe": timeframe, "complete": True,
             "candles": [
-                {"time_ms": 1700000000000, "open": "18000.0", "high": "18001.0", "low": "17999.0", "close": "18000.5", "tick_volume": 10, "spread": 2, "real_volume": 0},
-                {"time_ms": 1700000060000, "open": "18000.5", "high": "18002.0", "low": "18000.0", "close": "18001.5", "tick_volume": 12, "spread": 2, "real_volume": 0},
-                {"time_ms": 1700000120000, "open": "18001.5", "high": "18003.0", "low": "18001.0", "close": "18002.5", "tick_volume": 14, "spread": 2, "real_volume": 0},
+                {"time_ms": MOCK_DATA_START_MS, "open": "18000.0", "high": "18001.0", "low": "17999.0", "close": "18000.5", "tick_volume": 10, "spread": 2, "real_volume": 0},
+                {"time_ms": MOCK_DATA_START_MS + 60_000, "open": "18000.5", "high": "18002.0", "low": "18000.0", "close": "18001.5", "tick_volume": 12, "spread": 2, "real_volume": 0},
+                {"time_ms": MOCK_DATA_START_MS + 120_000, "open": "18001.5", "high": "18003.0", "low": "18001.0", "close": "18002.5", "tick_volume": 14, "spread": 2, "real_volume": 0},
             ],
         }))
         selected_symbol_info = wait_for(reader, conn, "symbol_info_request", session_id, deadline, heartbeat_state)
@@ -803,7 +851,7 @@ if __name__ == "__main__":
     try:
         raise SystemExit(
             self_test_history_page() + self_test_initial_history() + self_test_tick_history() + self_test_partial_close() + self_test_margin_projection()
-            if os.environ.get("MT5_MOCK_SELFTEST") == "1"
+            if "--self-test" in sys.argv[1:] or os.environ.get("MT5_MOCK_SELFTEST") == "1"
             else main()
         )
     except (AssertionError, ConnectionError, TimeoutError, OSError) as error:

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { ProfileCancelled, ProfileError, ProfileResult } from '../../shared/bridge/types';
+import { errorText } from '../../shared/errorText';
 
 /** A bounded tick-profile request: the window `[fromMs, endMs)` of one symbol. */
 export interface TickProfileRequest {
@@ -70,7 +71,7 @@ export function createMarketDataConnection(): MarketDataConnection {
             symbol,
             fromMs,
             endMs,
-            message: `Volume profile request failed: ${reason instanceof Error ? reason.message : String(reason)}`,
+            message: `Volume profile request failed: ${errorText(reason)}`,
           });
         });
       },

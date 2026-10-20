@@ -45,6 +45,10 @@ pub struct AccountSnapshot {
     /// `percent` | `money` | `unknown`; `unknown` also covers older EAs.
     #[serde(default = "unknown_margin_levels_unit")]
     pub margin_levels_unit: String,
+    /// `ACCOUNT_COMPANY`, the broker's company name, for display; `null` or
+    /// absent when not reported (older EAs, an empty name).
+    #[serde(default)]
+    pub account_company: Option<String>,
 }
 
 fn unknown_margin_levels_unit() -> String {
@@ -225,6 +229,11 @@ pub struct ReconcileSnapshot {
     pub history_deals: Vec<HistoryDeal>,
 }
 
+/// How far past the EA's server clock (`captured_at_ms`) a history window may
+/// reach. The EA looks ahead so a deal booked after the last quote, or inside
+/// the second the whole-second clocks have floored, is still in the window.
+pub const HISTORY_WINDOW_LOOKAHEAD_MS: i64 = 60_000;
+
 impl ReconcileSnapshot {
     pub fn validate(&self, request: &ReconcileRequest) -> Result<(), &'static str> {
         request.validate()?;
@@ -234,7 +243,7 @@ impl ReconcileSnapshot {
             || !bounded_id(&self.snapshot_id, 128)
             || self.history_from_ms != request.history_from_ms
             || self.history_to_ms < self.history_from_ms
-            || self.captured_at_ms < self.history_to_ms
+            || self.history_to_ms.saturating_sub(self.captured_at_ms) > HISTORY_WINDOW_LOOKAHEAD_MS
             || self.sequence_after < self.sequence_before
             || (self.complete && self.sequence_before != self.sequence_after)
             || self.positions.len() > 500
@@ -539,6 +548,11 @@ impl AccountSnapshot {
             "percent" | "money" | "unknown"
         ) {
             return Err("invalid margin stop-out mode name");
+        }
+        if let Some(company) = &self.account_company {
+            if !bounded_text(company, 128, false) {
+                return Err("invalid account company");
+            }
         }
         for level in [&self.margin_call_level, &self.stop_out_level]
             .into_iter()

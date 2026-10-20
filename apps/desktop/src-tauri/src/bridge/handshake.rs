@@ -1,16 +1,16 @@
 use super::{
-    clear_profile_bar_slots, disconnect, invalidate_validated_order_check, now_ms, protocol_error,
-    protocol_error_session, publish, publish_market, publish_reconciliation_status, read_one,
-    reconciliation_request_status, reset_reconciliation, send, send_error, BridgeConnectionState,
-    BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource, MarketSnapshot,
-    PendingReconciliation, ReconciliationStatus, HANDSHAKE_TIMEOUT,
+    bridge_emit, clear_profile_bar_slots, disconnect, invalidate_validated_order_check, now_ms,
+    protocol_error, protocol_error_session, publish, publish_market, publish_reconciliation_status,
+    read_one, reconciliation_request_status, reset_reconciliation, send, send_error,
+    BridgeConnectionState, BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource,
+    MarketSnapshot, PendingReconciliation, ReconciliationStatus, TerminalIdentity,
+    HANDSHAKE_TIMEOUT,
 };
 use std::{sync::atomic::Ordering, sync::Arc};
 use tokio::net::TcpStream;
 use trading_core::protocol::{
-    default_timeframe, initial_history_bars, ErrorCode, HelloAckPayload, HelloPayload,
-    HistoryRequest, MessageType, ReconcileRequest, SymbolInfoRequest, TransferLimits,
-    PROTOCOL_VERSION,
+    initial_history_bars, ErrorCode, HelloAckPayload, HelloPayload, HistoryRequest, MessageType,
+    ReconcileRequest, SymbolInfoRequest, TransferLimits, PROTOCOL_VERSION,
 };
 
 /// A component version string from `hello`, or `None` when absent, not a
@@ -190,9 +190,22 @@ pub(crate) async fn run_handshake(
         }
     };
     source.set_max_frame_size(transfer_limits.max_frame_bytes as usize);
+    let session_start = state
+        .chart_selection
+        .lock()
+        .expect("chart selection mutex poisoned")
+        .begin_session(
+            &TerminalIdentity {
+                terminal: hello_payload.terminal_id.clone(),
+                account: hello_payload.account_login.clone(),
+                server: hello_payload.broker_server.clone(),
+            },
+            &hello_payload.chart_symbol,
+            &supported_timeframes,
+        );
     let requested_history = HistoryRequest {
-        symbol: hello_payload.chart_symbol.clone(),
-        timeframe: default_timeframe().into(),
+        symbol: session_start.request.symbol,
+        timeframe: session_start.request.timeframe,
         bars: initial_history_bars(),
         before_ms: None,
     };
@@ -309,11 +322,15 @@ pub(crate) async fn run_handshake(
         status.server = Some(hello_payload.broker_server.clone());
         status.message = None;
         status.market_session = None;
+        status.broker_utc_offset_minutes = None;
         status.partial_close = hello_payload.partial_close;
         status.trading_enabled = hello_payload.trading_enabled;
     });
     drop(session_work);
     publish_market(events, state, &session_id, MarketSnapshot::default());
+    if let Some(notice) = session_start.rejected {
+        bridge_emit(events, "selection-fallback", notice);
+    }
     if send(
         stream,
         MessageType::HelloAck,

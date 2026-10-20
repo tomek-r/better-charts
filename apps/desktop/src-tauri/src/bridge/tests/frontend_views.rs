@@ -193,6 +193,7 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
         last_heartbeat: None,
         message: None,
         market_session: None,
+        broker_utc_offset_minutes: None,
         supported_timeframes: vec!["M1".into(), "M5".into()],
         partial_close: false,
         trading_enabled: false,
@@ -213,6 +214,7 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
         expert_allowed: false,
         account_trade_mode: 0,
         account_trade_mode_name: "demo".into(),
+        account_company: Some("Raw Trading Ltd".into()),
         margin_call_level: Some("100".into()),
         stop_out_level: Some("50".into()),
         margin_levels_mode: Some(0),
@@ -234,6 +236,8 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
     assert_eq!(json["accountTradeModeName"], "demo");
     assert!(json.get("account_trade_mode").is_none());
     assert!(json.get("account_trade_mode_name").is_none());
+    assert_eq!(json["accountCompany"], "Raw Trading Ltd");
+    assert!(json.get("account_company").is_none());
     assert!(accept_account(&state, "old", account.clone())
         .unwrap()
         .is_none());

@@ -2,6 +2,7 @@
 @import './styles/base.css';
 @import './features/app-workspace/app-workspace.css';
 @import './features/topbar/topbar.css';
+@import './features/account-badge/account-badge.css';
 @import './features/chart/chart.css';
 @import './features/chart/timeframes/timeframes.css';
 @import './features/chart/timeframes/menu/timeframe-menu.css';
@@ -16,6 +17,7 @@
 @import './features/settings/settings.css';
 @import './features/settings/setup-guide-modal/setup-guide-modal.css';
 @import './shared/ui/notification.css';
+@import './shared/ui/loading-message.css';
 @import './shared/ui/modal-dialog.css';
 @import './features/account-switch/account-switch.css';
 @import './shared/ui/error-text.css';

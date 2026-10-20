@@ -113,8 +113,7 @@ export function AppSettingsDialog({
     <ModalDialog
       title="App settings"
       layout="scrollable"
-      width={860}
-      height={860}
+      size="wide"
       backdropRef={backdrop}
       backdropClassName="settings-backdrop"
       className="settings-dialog"
@@ -134,8 +133,14 @@ export function AppSettingsDialog({
           <ModalDialogButton variant="secondary" disabled={busy} onClick={onClose}>
             Cancel
           </ModalDialogButton>
-          <ModalDialogButton type="submit" disabled={!draft || busy || !!loadError}>
-            {saving ? 'Saving…' : 'Save'}
+          {/* Both labels share one grid cell, so the button keeps the wider width and Cancel never moves. */}
+          <ModalDialogButton type="submit" className="modal-dialog-save" disabled={!draft || busy || !!loadError}>
+            <span className="modal-dialog-save-label" data-shown={!saving}>
+              Save
+            </span>
+            <span className="modal-dialog-save-label" data-shown={saving}>
+              Saving…
+            </span>
           </ModalDialogButton>
         </>
       }

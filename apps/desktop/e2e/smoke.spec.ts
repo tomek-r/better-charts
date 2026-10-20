@@ -77,6 +77,8 @@ test('shows the no-bridge fallback state without crashing', async ({ page }) => 
   await expect(page.locator('.app-footer')).toHaveCount(0);
   // Chart area falls back to its waiting overlay instead of crashing.
   await expect(page.locator('.loading-message strong')).toHaveText('Waiting for market data');
+  // The shared loader's glyph turns here too, not only in the journal.
+  await expect(page.locator('.loading-message .overlay-glyph')).toHaveCSS('animation-name', 'loading-glyph-turn');
   // Hit testing with text enabled detects canvases painted over the message.
   const overlayTextOnTop = await page.locator('.loading-message strong').evaluate((heading) => {
     const previous = heading.style.pointerEvents;
@@ -220,7 +222,7 @@ test.describe('portfolio card overflow regression', () => {
     expect(sizes.rowScroll).toBeLessThanOrEqual(sizes.rowWidth + 1);
     expect(sizes.panelScroll).toBeLessThanOrEqual(sizes.panelWidth + 1);
     // And no value is ellipsized away — the full string must stay rendered.
-    await expect(row).toContainText('30375.67 · P/L 80.68 USD · Swap 0.00 USD');
+    await expect(row).toContainText(/30375\.67\s*P\/L 80\.68 USD\s*Swap 0\.00 USD/);
     expect(pageErrors).toEqual([]);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });

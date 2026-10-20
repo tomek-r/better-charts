@@ -1,5 +1,6 @@
 import type { RenderViewport } from '../../chart/engine/toolContract';
 import type { ProfileResult, TickProfileBin } from '../../../shared/bridge/types';
+import { drawSeparatedText } from '../../../shared/canvas/separatedText';
 import { palette } from '../../../shared/theme/palette';
 
 /**
@@ -216,8 +217,8 @@ function drawBarTimeframeLabel(
   ctx.font = BAR_LABEL_FONT;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  const text = coveredFromMs === null ? timeframe : `${timeframe} · from ${formatUtcDayMonth(coveredFromMs)}`;
-  ctx.fillText(text, Math.max(x, bandLeft) + BAR_LABEL_INSET, y + BAR_LABEL_INSET);
+  const parts = coveredFromMs === null ? [timeframe] : [timeframe, `from ${formatUtcDayMonth(coveredFromMs)}`];
+  drawSeparatedText(ctx, parts, Math.max(x, bandLeft) + BAR_LABEL_INSET, y + BAR_LABEL_INSET);
 }
 
 /** `20 Mar`: UTC day and short English month, independent of the browser locale. */

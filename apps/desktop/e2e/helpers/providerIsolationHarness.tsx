@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ErrorNotificationsProvider } from '../../src/shared/ui/ErrorNotifications';
 import type { ReactNode } from 'react';
 import { AppHeaderView } from '../../src/features/app-header/AppHeaderView';
+import { AccountBadge } from '../../src/features/account-badge/AccountBadge';
 import {
   PanelVisibilityProvider,
   usePanelActions,
@@ -62,9 +63,14 @@ const DEMO_ACCOUNT: AccountSnapshot = {
 interface ProviderHarnessWindow extends Window {
   __providerProbeCounts: Record<string, number>;
   __resetProviderProbeCounts: () => void;
+  /** The broker clock the spec derived, so the page and the spec read the same value. */
+  __stubNow: number;
 }
 
 const getHarnessWindow = () => window as unknown as ProviderHarnessWindow;
+
+/** The harness's broker clock plus `offsetMs`. */
+const stubNowMs = (offsetMs = 0) => getHarnessWindow().__stubNow + offsetMs;
 
 const recordRender: ProfilerOnRenderCallback = (id) => {
   const counts = getHarnessWindow().__providerProbeCounts;
@@ -185,11 +191,12 @@ function PanelProbe() {
   return <output data-testid="probe-panel">{String(panelOpen)}</output>;
 }
 
-function TicketHeaderProbe() {
-  const { environment, symbol } = useOrderTicketHeader();
+/** The account-environment badge consumer: its testid keeps the spec's existing probe key. */
+function EnvironmentBadgeProbe() {
+  const symbol = useOrderTicketHeader();
   return (
     <output data-testid="probe-ticket-header">
-      {symbol ?? '—'}|{environment?.label ?? 'none'}
+      {symbol ?? '—'}|<AccountBadge />
     </output>
   );
 }
@@ -199,7 +206,7 @@ function BridgeControls() {
   const updateQuote = () => {
     const quote: QuoteSnapshot = {
       symbol: 'EURUSD',
-      timeMs: 1745700001000,
+      timeMs: stubNowMs(1000),
       bid: '1.0852',
       ask: '1.0854',
       last: '1.0852',
@@ -220,14 +227,14 @@ function BridgeControls() {
     session.setAccount({ ...DEMO_ACCOUNT, ...next });
   };
   const setPortfolio = () => {
-    session.setPortfolio({ accountLogin: '001234', capturedAtMs: 1745700001000, positions: [], orders: [] });
+    session.setPortfolio({ accountLogin: '001234', capturedAtMs: stubNowMs(1000), positions: [], orders: [] });
   };
   const updateCandle = () => {
     session.setLatestCandle((candle) => (candle ? { ...candle, close: '1.0852' } : candle));
   };
   const setBridgeStatus = () => session.setStatus({ state: 'connected', message: 'Harness bridge is connected.' });
   const loadedCandle = {
-    timeMs: 1745700000000,
+    timeMs: stubNowMs(),
     open: '1.0846',
     high: '1.0860',
     low: '1.0840',
@@ -318,7 +325,7 @@ function TicketControls() {
     bridge.setAccount(DEMO_ACCOUNT);
     bridge.setQuote({
       symbol: 'EURUSD',
-      timeMs: 1745700001000,
+      timeMs: stubNowMs(1000),
       bid: '1.0850',
       ask: '1.0852',
       last: '1.0850',
@@ -354,7 +361,7 @@ function TicketControls() {
       estimatedReward: '100',
       estimatedMargin: '100',
       currency: 'USD',
-      quotedAtMs: 1745700001000,
+      quotedAtMs: stubNowMs(1000),
     };
     broker.setRiskPreview(preview);
     broker.setRiskProjection(preview);
@@ -394,7 +401,7 @@ function TicketControls() {
           bridge.setStatus({
             state: 'connected',
             message: 'Harness bridge is connected.',
-            marketSession: { symbol: 'EURUSD', isOpen: false, tradeMode: 0, serverTimeMs: 1745700001000 },
+            marketSession: { symbol: 'EURUSD', isOpen: false, tradeMode: 0, serverTimeMs: stubNowMs(1000) },
           })
         }
       >
@@ -501,7 +508,7 @@ function WorkspaceProbes() {
           <ExecutionProvider>
             <OrderTicketProvider>
               <Probe id="ticket-header">
-                <TicketHeaderProbe />
+                <EnvironmentBadgeProbe />
               </Probe>
               <Probe id="ticket-edit">
                 <TicketEditProbe />
