@@ -3,7 +3,7 @@ import { isTauri, invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { afterExitAnimation } from '../../../shared/ui/afterExitAnimation';
 import { DownloadIcon } from '../../../shared/ui/DownloadIcon';
-import { InstallToMt5 } from './InstallToMt5';
+import { InstallToMt5 } from './installation/InstallToMt5';
 
 // The EA and tick-history reader already ship with the app as Tauri resources
 // (see tauri.conf.json). The guide downloads them to a folder the user picks:
