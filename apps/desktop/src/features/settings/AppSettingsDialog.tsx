@@ -1,7 +1,7 @@
 import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
 import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../shared/ui/ModalDialog';
-import { Suspense, use, useCallback, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
+import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { SetupGuideModal } from './setup-guide-modal/SetupGuideModal';
 import type { AppSettingsData } from './settingsTypes';
@@ -17,16 +17,23 @@ export function AppSettingsDialog({
   settings,
   loadRequest,
   closing,
+  guideOpen,
   loadError,
   onClose,
+  onOpenGuide,
+  onCloseGuide,
   onExited,
   onSaved,
 }: {
   closing: boolean;
   settings: AppSettingsData | undefined;
   loadRequest: Promise<void>;
+  /** The setup guide is opened through the settings store, so other surfaces can open it too. */
+  guideOpen: boolean;
   loadError: string | undefined;
   onClose: () => void;
+  onOpenGuide: () => void;
+  onCloseGuide: () => void;
   onExited: () => void;
   onSaved: (settings: AppSettingsData) => void;
 }) {
@@ -36,9 +43,7 @@ export function AppSettingsDialog({
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
   const guideTrigger = useRef<HTMLElement | null>(null);
-  const closeGuide = useCallback(() => setGuideOpen(false), []);
   const backdrop = useRef<HTMLDivElement>(null);
   // Unmounting happens when the backdrop's own exit animation ends; reopening
   // (closing back to false) cancels a pending exit through this cleanup.
@@ -144,7 +149,7 @@ export function AppSettingsDialog({
           </ModalDialogButton>
         </>
       }
-      overlay={guideOpen && <SetupGuideModal onClose={closeGuide} />}
+      overlay={guideOpen && <SetupGuideModal onClose={onCloseGuide} />}
     >
       <nav className="settings-nav" aria-label="Settings categories">
         {(['MT5 setup', 'Trading'] as const).map((item, index) => (
@@ -179,7 +184,7 @@ export function AppSettingsDialog({
                     disabled={saving || closing}
                     onClick={(event) => {
                       guideTrigger.current = event.currentTarget;
-                      setGuideOpen(true);
+                      onOpenGuide();
                     }}
                   >
                     <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">

@@ -1,14 +1,16 @@
+import { BridgeComponentOutdatedNotice } from '../bridge/BridgeComponentOutdatedNotice';
 import { Notification } from '../../shared/ui/Notification';
 import { ErrorNotifications } from '../../shared/ui/ErrorNotifications';
 import { useAppSettingsView } from '../settings/AppSettingsProvider';
 
-/** Settings notifications: the configuration error and the restart reminder. */
+/** Settings notifications: the configuration error and the restart reminder, plus a bridge refusal the bundled files fix. */
 export function AppNotificationsView() {
   const settings = useAppSettingsView();
 
   return (
     <Notification.Region>
       <ErrorNotifications />
+      <BridgeComponentOutdatedNotice />
       {settings.configurationNotice ? (
         <Notification.Alert key={`error-${settings.notificationRevision}-${settings.configurationNotice}`}>
           <Notification.Message>{settings.configurationNotice}</Notification.Message>

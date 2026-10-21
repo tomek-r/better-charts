@@ -139,6 +139,12 @@ pub(crate) struct BridgeStatus {
     /// session is live.
     #[serde(rename = "tradingEnabled", default)]
     pub trading_enabled: bool,
+    /// True only for a refusal the bundled MT5 files fix (an outdated EA or
+    /// tick reader), so the UI can offer to install them again instead of
+    /// reading the message. False for every other error, and cleared wherever
+    /// `message` is.
+    #[serde(rename = "componentOutdated", default)]
+    pub component_outdated: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -165,6 +171,7 @@ impl Default for BridgeStatus {
             supported_timeframes: Vec::new(),
             partial_close: false,
             trading_enabled: false,
+            component_outdated: false,
         }
     }
 }

@@ -310,10 +310,23 @@ pub(crate) fn reset_reconciliation(
     publish_reconciliation_status(events, state, status);
 }
 
-pub(crate) fn protocol_error(
+/// Why a protocol error was reported. Only `ComponentOutdated` is actionable
+/// from inside the app (reinstall the bundled MT5 files), so only it sets the
+/// `componentOutdated` flag the UI reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProtocolErrorCause {
+    ComponentOutdated,
+    Other,
+}
+
+/// Publishes the protocol-error status. The caller has already decided that no
+/// session is live; the cause rides along as a machine-readable flag so no UI
+/// code has to read `message`.
+fn report_protocol_error(
     events: &Arc<dyn BridgeEvents>,
     state: &BridgeState,
     message: impl Into<String>,
+    cause: ProtocolErrorCause,
 ) {
     if state
         .current_session
@@ -333,6 +346,7 @@ pub(crate) fn protocol_error(
     publish(events, state, |status| {
         status.state = BridgeConnectionState::ProtocolError;
         status.message = Some(message.into());
+        status.component_outdated = cause == ProtocolErrorCause::ComponentOutdated;
         status.market_session = None;
         status.broker_utc_offset_minutes = None;
         status.partial_close = false;
@@ -343,6 +357,30 @@ pub(crate) fn protocol_error(
         state,
         ReconciliationStatus::unavailable("bridge protocol error"),
     );
+}
+
+/// A rejection the bundled MT5 files fix: the installed EA or tick reader is
+/// not the version this app requires. Marks the status so the UI can offer
+/// reinstalling them; the message keeps the human-readable instructions.
+pub(crate) fn protocol_error_component_outdated(
+    events: &Arc<dyn BridgeEvents>,
+    state: &BridgeState,
+    message: impl Into<String>,
+) {
+    report_protocol_error(
+        events,
+        state,
+        message,
+        ProtocolErrorCause::ComponentOutdated,
+    );
+}
+
+pub(crate) fn protocol_error(
+    events: &Arc<dyn BridgeEvents>,
+    state: &BridgeState,
+    message: impl Into<String>,
+) {
+    report_protocol_error(events, state, message, ProtocolErrorCause::Other);
 }
 
 pub(crate) fn disconnect(
@@ -364,6 +402,7 @@ pub(crate) fn disconnect(
         publish(events, state, |status| {
             status.state = BridgeConnectionState::Disconnected;
             status.message = None;
+            status.component_outdated = false;
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;
@@ -463,6 +502,9 @@ pub(crate) fn protocol_error_session(
         publish(events, state, |status| {
             status.state = BridgeConnectionState::ProtocolError;
             status.message = Some(message.to_string());
+            // A session-level error is never a version mismatch: both are
+            // checked before a session exists.
+            status.component_outdated = false;
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;

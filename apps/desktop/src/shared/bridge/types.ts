@@ -28,6 +28,11 @@ export interface BridgeStatus {
   partialClose?: boolean;
   /** Algo-trading permission the EA advertised for this session (display only); absent or false = disabled in MT5. */
   tradingEnabled?: boolean;
+  /**
+   * True only when the connection was refused because the installed EA or tick reader is not the version the app
+   * requires, so reinstalling the bundled files fixes it. Absent or false for every other error.
+   */
+  componentOutdated?: boolean;
 }
 
 export interface ExecutionSafetyStatus {
