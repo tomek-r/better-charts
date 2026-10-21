@@ -25,6 +25,14 @@ const INDICATOR_FILE: &str = "BetterChartsTickHistoryReader.mq5";
 /// Standard terminals root inside a test folder.
 const TEST_TERMINALS_ROOT: &str = "roaming/MetaQuotes/Terminal";
 
+/// Joins a '/'-separated relative constant component by component, so the result
+/// uses the host separator and equals the path the code under test builds.
+fn join_relative(base: &Path, relative: &str) -> PathBuf {
+    relative
+        .split('/')
+        .fold(base.to_path_buf(), |path, part| path.join(part))
+}
+
 /// Test folders must be unique: the suite runs in parallel and every test shares
 /// the process id. The counter keeps the name unique within one process.
 static NEXT_FOLDER: AtomicU64 = AtomicU64::new(0);
@@ -48,7 +56,7 @@ impl TempFolder {
 
     /// Creates and returns a folder below the temporary folder.
     fn folder(&self, relative: &str) -> PathBuf {
-        let folder = self.0.join(relative);
+        let folder = join_relative(&self.0, relative);
         create_folder(&folder);
         folder
     }
@@ -177,7 +185,7 @@ fn unsupported_paths_have_no_host_folder() {
 #[test]
 fn install_dir_is_the_wine_folder_of_the_configured_terminal() {
     let fixture = TempFolder::new("install-dir");
-    let expected = fixture.path().join(INSTALL_FOLDER_IN_PREFIX);
+    let expected = join_relative(fixture.path(), INSTALL_FOLDER_IN_PREFIX);
     let config = config_with_terminal(fixture.path());
     assert_eq!(install_dir(&config), Some(expected));
 }
@@ -213,13 +221,25 @@ fn portable_layout_is_the_install_folder_itself() {
     assert_eq!(found, vec![expected_portable_folder(&mql5)]);
 }
 
+/// The install folder as `origin.txt` records it. Under Wine the fixture folder
+/// maps to the `C:` form; natively it already carries its own drive letter.
+#[cfg(windows)]
+fn origin_of(install_folder: &Path) -> String {
+    install_folder.to_string_lossy().into_owned()
+}
+
+#[cfg(not(windows))]
+fn origin_of(_install_folder: &Path) -> String {
+    INSTALL_FOLDER_WINDOWS.to_string()
+}
+
 #[test]
 fn standard_layout_reads_a_utf16_origin_file() {
     let fixture = TempFolder::new("standard-utf16");
     let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
     let terminals_root = fixture.folder(TEST_TERMINALS_ROOT);
     // Trailing separator and line break, as MT5 writes them.
-    let origin = format!("{INSTALL_FOLDER_WINDOWS}\\\r\n");
+    let origin = format!("{}\\\r\n", origin_of(&install_folder));
     let data_folder = create_standard_data_folder(&terminals_root, &utf16_le_with_bom(&origin));
 
     let found = data_folders(&install_folder, Some(terminals_root.as_path()));
@@ -231,8 +251,10 @@ fn standard_layout_accepts_a_utf8_origin_file() {
     let fixture = TempFolder::new("standard-utf8");
     let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
     let terminals_root = fixture.folder(TEST_TERMINALS_ROOT);
-    let origin = b"c:/program files/metatrader 5\r\n";
-    let data_folder = create_standard_data_folder(&terminals_root, origin);
+    // Separators and letter case are ignored when the origin is compared.
+    let folder_form = origin_of(&install_folder).to_lowercase().replace('\\', "/");
+    let origin = format!("{folder_form}\r\n");
+    let data_folder = create_standard_data_folder(&terminals_root, origin.as_bytes());
 
     let found = data_folders(&install_folder, Some(terminals_root.as_path()));
     assert_eq!(found, vec![expected_standard_folder(&data_folder)]);
@@ -677,7 +699,10 @@ fn a_discovered_installation_drives_the_locator() {
 
     assert_eq!(
         install_dir(&installation),
-        Some(PathBuf::from(LINUX_MT5_PREFIX).join(INSTALL_FOLDER_IN_PREFIX))
+        Some(join_relative(
+            Path::new(LINUX_MT5_PREFIX),
+            INSTALL_FOLDER_IN_PREFIX
+        ))
     );
 }
 
@@ -954,9 +979,7 @@ fn a_portable_source_maps_to_a_relative_windows_path() {
     let data_folder = Path::new(
         "/Users/trader/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5",
     );
-    let source = data_folder
-        .join("MQL5/Experts/Advisors")
-        .join(EXPERT_ADVISOR_FILE);
+    let source = join_relative(data_folder, "MQL5/Experts/Advisors").join(EXPERT_ADVISOR_FILE);
 
     let relative =
         relative_windows_path(data_folder, &source).expect("the source is inside the folder");
@@ -970,9 +993,7 @@ fn a_portable_source_maps_to_a_relative_windows_path() {
 #[test]
 fn a_source_below_a_folder_with_a_space_is_refused() {
     let data_folder = Path::new("/tmp/data");
-    let source = data_folder
-        .join("MQL5/My Advisors")
-        .join(EXPERT_ADVISOR_FILE);
+    let source = join_relative(data_folder, "MQL5/My Advisors").join(EXPERT_ADVISOR_FILE);
 
     match relative_windows_path(data_folder, &source) {
         Err(CompileError::PathHasSpace { path }) => assert_eq!(path, source),
@@ -1074,9 +1095,7 @@ impl CommandRunner for FakeRunner {
 fn the_wine_command_runs_the_editor_relative_to_the_data_folder() {
     let fixture = TempFolder::new("compile-wine-command");
     let (installation, install_folder) = wine_installation_with_editor(&fixture);
-    let source = install_folder
-        .join("MQL5/Experts/Advisors")
-        .join(EXPERT_ADVISOR_FILE);
+    let source = join_relative(&install_folder, "MQL5/Experts/Advisors").join(EXPERT_ADVISOR_FILE);
 
     let command =
         compile_command(&installation, &install_folder, &source).expect("the command is built");
@@ -1101,7 +1120,7 @@ fn the_wine_command_runs_the_editor_relative_to_the_data_folder() {
 fn the_windows_command_runs_the_editor_itself() {
     let fixture = TempFolder::new("compile-windows-command");
     let (installation, install_folder) = windows_installation_with_editor(&fixture);
-    let source = install_folder.join("MQL5/Indicators").join(INDICATOR_FILE);
+    let source = join_relative(&install_folder, "MQL5/Indicators").join(INDICATOR_FILE);
     let editor = install_folder.join(METAEDITOR_EXE_FILE);
 
     let command =
@@ -1120,9 +1139,7 @@ fn a_missing_editor_is_reported_before_the_run() {
     let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
     let wine_prefix = fixture.path().to_string_lossy().into_owned();
     let installation = discovered_wine_installation(&wine_prefix, MACOS_WINE_BINARY);
-    let source = install_folder
-        .join("MQL5/Experts")
-        .join(EXPERT_ADVISOR_FILE);
+    let source = join_relative(&install_folder, "MQL5/Experts").join(EXPERT_ADVISOR_FILE);
 
     match compile_command(&installation, &install_folder, &source) {
         Err(CompileError::EditorMissing { path }) => {
@@ -1259,10 +1276,7 @@ fn two_located_installations() -> Vec<LocatedInstallation> {
 #[test]
 fn the_list_shows_each_installation_with_the_data_folders_the_locator_found() {
     let fixture = TempFolder::new("list-views");
-    let standard_root = fixture
-        .path()
-        .join(TEST_TERMINALS_ROOT)
-        .join(DATA_FOLDER_ID);
+    let standard_root = join_relative(fixture.path(), TEST_TERMINALS_ROOT).join(DATA_FOLDER_ID);
     let installations = vec![
         located_installation(
             discovered_windows_installation(TERMINAL_EXE),
@@ -1592,7 +1606,7 @@ impl ProcessControl for FakeTerminal {
 #[test]
 fn the_startup_files_sit_where_mt5_reads_them() {
     let fixture = TempFolder::new("restart-file-paths");
-    let install_folder = fixture.path().join(INSTALL_FOLDER_IN_PREFIX);
+    let install_folder = join_relative(fixture.path(), INSTALL_FOLDER_IN_PREFIX);
     let mql5 = install_folder.join("MQL5");
     let expected_ini = install_folder.join("config").join(STARTUP_INI_FILE);
     let expected_preset = mql5.join("Presets").join(STARTUP_PRESET_FILE);
