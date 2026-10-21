@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { AccountBadge } from '../account-badge/AccountBadge';
+import { DemoAccountNotice } from '../demo-notice/DemoAccountNotice';
 
 /** Static brand mark: hoisted so a re-render reuses the same element. */
 const brandMark = (
@@ -78,6 +79,7 @@ export function TopBar({
           </svg>
         </button>
       </div>
+      <DemoAccountNotice />
     </header>
   );
 }

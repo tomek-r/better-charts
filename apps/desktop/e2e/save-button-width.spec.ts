@@ -10,7 +10,15 @@ test('the App settings dialog keeps its Save and Cancel buttons still while savi
   const save = dialog.getByRole('button', { name: 'Save', exact: true });
   const cancel = dialog.getByRole('button', { name: 'Cancel', exact: true });
   await expect(save).toBeEnabled();
-  await page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished)));
+  // Infinite animations (the demo-account marquee) never finish; only the dialog's own transitions settle.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+        .map((animation) => animation.finished),
+    ),
+  );
   const [saveBefore, cancelBefore] = await Promise.all([save.boundingBox(), cancel.boundingBox()]);
   await save.click();
   const saving = dialog.getByRole('button', { name: 'Saving…', exact: true });
