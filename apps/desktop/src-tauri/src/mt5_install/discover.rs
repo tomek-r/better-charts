@@ -10,10 +10,13 @@
 //! only reported installation, parsed by [`Mt5BackendConfig::resolve`] so the
 //! override means exactly what it means to the backend.
 //!
-//! Why discovery never feeds [`Mt5BackendConfig`]: the boot hook starts a terminal
-//! only for an explicitly configured installation. Discovered paths would make
-//! every machine that happens to have MT5 installed auto-start it, so this module
-//! is reachable from the install command alone and never from `from_env`.
+//! What detection feeds: the settings form. A discovered installation fills the
+//! installation paths the user has left unset (`app_settings::detected_paths`), so
+//! the app can install, compile, and later reach the terminal without the user
+//! typing a path. It never overrides a value the user set and never touches the
+//! auto-start flag: `MT5_BACKEND_ENABLED` stays the user's choice, and the boot hook
+//! spawns a terminal only for an explicitly configured, auto-start-enabled
+//! installation, so detected paths never start MT5 by themselves.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -330,6 +333,13 @@ pub fn discover_installations(
     host_os: HostOs,
 ) -> Vec<Mt5Installation> {
     discover_installations_with(env, host_os, &HostProbe)
+}
+
+/// Every usable installation on the machine this process runs on, read from the
+/// process environment. The one entry point for a fresh scan of this computer.
+pub fn discover_this_machine() -> Vec<Mt5Installation> {
+    let env: &dyn Fn(&str) -> Option<String> = &|name: &str| std::env::var(name).ok();
+    discover_installations(env, super::locate::current_host_os())
 }
 
 /// Core of [`discover_installations`] with an injected [`InstallProbe`], so every

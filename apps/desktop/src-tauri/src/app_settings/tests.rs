@@ -1,4 +1,8 @@
+use super::detected_paths::fill_detected_paths;
 use super::*;
+use crate::mt5_backend::DEFAULT_WINE_BINARY;
+use crate::mt5_install::discover::{InstallationSource, Mt5Installation};
+use crate::mt5_install::locate::HostPlatform;
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
@@ -173,4 +177,199 @@ fn unavailable_directory_is_reported_without_mutating_view() {
     let parent = fixture.0.join("file-parent");
     fs::write(&parent, b"not-a-directory").unwrap();
     assert!(persist(&parent.join(SETTINGS_FILE), &valid()).is_err());
+}
+
+/// Windows path of the terminal discovery reports on every platform.
+const DETECTED_TERMINAL: &str = r"C:\Program Files\MetaTrader 5\terminal64.exe";
+/// Prefix and binary of the Wine installation the detection tests use.
+const DETECTED_PREFIX: &str = "/home/demo/.mt5";
+const DETECTED_WINE: &str = "/usr/bin/wine";
+
+/// A Wine-host installation, as discovery reports one on macOS or Linux.
+fn detected_wine_installation() -> Mt5Installation {
+    Mt5Installation {
+        host: HostPlatform::Wine,
+        wine_prefix: Some(PathBuf::from(DETECTED_PREFIX)),
+        wine_binary: Some(PathBuf::from(DETECTED_WINE)),
+        terminal_exe_windows: DETECTED_TERMINAL.to_string(),
+        source: InstallationSource::Discovered,
+    }
+}
+
+/// A native Windows installation, where no Wine setting applies.
+fn detected_windows_installation() -> Mt5Installation {
+    Mt5Installation {
+        host: HostPlatform::Windows,
+        wine_prefix: None,
+        wine_binary: None,
+        terminal_exe_windows: DETECTED_TERMINAL.to_string(),
+        source: InstallationSource::Discovered,
+    }
+}
+
+#[test]
+fn detection_fills_every_unset_installation_path() {
+    let settings = valid();
+
+    let (filled, fields) = fill_detected_paths(&settings, &detected_wine_installation(), &[]);
+
+    assert_eq!(filled.terminal_path, DETECTED_TERMINAL);
+    assert_eq!(filled.wine_prefix, DETECTED_PREFIX);
+    assert_eq!(filled.wine_binary, DETECTED_WINE);
+    assert_eq!(fields, vec!["terminalPath", "winePrefix", "wineBinary"]);
+}
+#[test]
+fn detection_keeps_every_value_the_user_set() {
+    let mut settings = valid();
+    settings.terminal_path = r"D:\MetaTrader 5\terminal64.exe".into();
+    settings.wine_prefix = "/home/demo/custom".into();
+    settings.wine_binary = "/home/demo/bin/wine".into();
+
+    let (filled, fields) = fill_detected_paths(&settings, &detected_wine_installation(), &[]);
+
+    // AppSettings has no Debug (it holds the token), so assert_eq! cannot compare it.
+    assert!(filled == settings);
+    assert!(fields.is_empty());
+}
+#[test]
+fn detection_keeps_a_field_an_environment_override_supplies() {
+    let settings = valid();
+
+    let (filled, fields) = fill_detected_paths(
+        &settings,
+        &detected_wine_installation(),
+        &["terminalPath".to_string()],
+    );
+
+    assert_eq!(filled.terminal_path, "");
+    assert_eq!(fields, vec!["winePrefix", "wineBinary"]);
+}
+#[test]
+fn the_shared_default_wine_binary_is_replaced_by_the_detected_one() {
+    let settings = valid();
+    assert_eq!(settings.wine_binary, DEFAULT_WINE_BINARY);
+
+    let (filled, fields) = fill_detected_paths(&settings, &detected_wine_installation(), &[]);
+
+    assert_eq!(filled.wine_binary, DETECTED_WINE);
+    assert!(fields.contains(&"wineBinary"));
+}
+#[test]
+fn a_windows_installation_fills_only_the_terminal_path() {
+    let settings = valid();
+
+    let (filled, fields) = fill_detected_paths(&settings, &detected_windows_installation(), &[]);
+
+    assert_eq!(filled.terminal_path, DETECTED_TERMINAL);
+    assert_eq!(filled.wine_prefix, "");
+    assert_eq!(filled.wine_binary, DEFAULT_WINE_BINARY);
+    assert_eq!(fields, vec!["terminalPath"]);
+}
+#[test]
+fn detection_never_changes_the_auto_start_flag() {
+    let mut settings = valid();
+    settings.terminal_path = r"D:\MetaTrader 5\terminal64.exe".into();
+    settings.wine_prefix = "/home/demo/custom".into();
+    settings.auto_start_mt5 = true;
+
+    let (filled, _) = fill_detected_paths(&settings, &detected_wine_installation(), &[]);
+    assert!(filled.auto_start_mt5);
+
+    let (default_filled, _) = fill_detected_paths(&valid(), &detected_wine_installation(), &[]);
+    assert!(!default_filled.auto_start_mt5);
+}
+#[test]
+fn a_first_launch_shows_detected_paths_without_writing_a_settings_file() {
+    let fixture = Fixture::new();
+    let path = fixture.path();
+
+    let state = AppSettingsState::resolve_with_installation(
+        Some(path.clone()),
+        HashMap::new(),
+        None,
+        Some(detected_wine_installation()),
+    );
+
+    let view = state.view().unwrap();
+    assert_eq!(view.mt5_bridge_settings.terminal_path, DETECTED_TERMINAL);
+    assert_eq!(view.mt5_bridge_settings.wine_prefix, DETECTED_PREFIX);
+    assert!(!view.mt5_bridge_settings.auto_start_mt5);
+    assert_eq!(
+        view.detected_fields,
+        vec!["terminalPath", "winePrefix", "wineBinary"]
+    );
+    // A settings file without a token cannot validate, so the first save stores it.
+    assert!(!path.exists());
+}
+#[test]
+fn an_existing_settings_file_receives_the_detected_paths() {
+    let fixture = Fixture::new();
+    persist(&fixture.path(), &valid()).unwrap();
+
+    let state = AppSettingsState::resolve_with_installation(
+        Some(fixture.path()),
+        HashMap::new(),
+        None,
+        Some(detected_wine_installation()),
+    );
+
+    let stored = read_file(&fixture.path()).unwrap().unwrap();
+    assert_eq!(stored.terminal_path, DETECTED_TERMINAL);
+    assert_eq!(stored.wine_prefix, DETECTED_PREFIX);
+    assert!(!stored.auto_start_mt5);
+    assert!(state.view().unwrap().configured);
+}
+#[test]
+fn detected_paths_are_never_written_over_an_override() {
+    let fixture = Fixture::new();
+    persist(&fixture.path(), &valid()).unwrap();
+    let override_terminal = r"D:\Custom\terminal64.exe";
+
+    let state = AppSettingsState::resolve_with_installation(
+        Some(fixture.path()),
+        HashMap::from([(
+            "MT5_TERMINAL_EXE".to_string(),
+            override_terminal.to_string(),
+        )]),
+        None,
+        Some(detected_wine_installation()),
+    );
+
+    assert_eq!(
+        read_file(&fixture.path()).unwrap().unwrap().terminal_path,
+        "",
+        "the override stays out of the settings file"
+    );
+    let view = state.view().unwrap();
+    assert_eq!(view.mt5_bridge_settings.terminal_path, override_terminal);
+    assert!(!view.detected_fields.contains(&"terminalPath"));
+}
+#[test]
+fn an_install_fills_the_unset_paths_and_keeps_the_rest() {
+    let fixture = Fixture::new();
+    let mut stored = valid();
+    stored.wine_prefix = "/home/demo/custom".into();
+    persist(&fixture.path(), &stored).unwrap();
+    let state = AppSettingsState::resolve(Some(fixture.path()), HashMap::new(), None);
+
+    state.fill_from_installation(&detected_wine_installation());
+
+    let after = read_file(&fixture.path()).unwrap().unwrap();
+    assert_eq!(after.terminal_path, DETECTED_TERMINAL);
+    assert_eq!(after.wine_prefix, "/home/demo/custom");
+    assert_eq!(after.wine_binary, DETECTED_WINE);
+    assert!(!after.auto_start_mt5);
+    assert_eq!(
+        state.view().unwrap().detected_fields,
+        vec!["terminalPath", "wineBinary"]
+    );
+}
+#[test]
+fn an_install_without_a_settings_file_writes_nothing() {
+    let fixture = Fixture::new();
+    let state = AppSettingsState::resolve(Some(fixture.path()), HashMap::new(), None);
+
+    state.fill_from_installation(&detected_wine_installation());
+
+    assert!(!fixture.path().exists());
 }

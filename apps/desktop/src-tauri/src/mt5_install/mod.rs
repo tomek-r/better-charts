@@ -21,9 +21,9 @@
 
 pub(crate) mod commands;
 mod compile;
-mod discover;
+pub(crate) mod discover;
 mod install;
-mod locate;
+pub(crate) mod locate;
 
 #[cfg(test)]
 mod tests;

@@ -9,9 +9,16 @@ import {
   openSetupGuide,
 } from './helpers/setupGuide';
 
-const DONE_LINE = 'Done. Attach BetterChartsBridge to a chart in MT5 and enable Algo Trading.';
+const DONE_LINE = 'Installed and compiled. Attach the EA to a chart and enable Algo Trading.';
+/** The success line's tooltip: the same sentence, then what each file became. */
+const DONE_TITLE = `${DONE_LINE} BetterChartsTickHistoryReader.mq5 installed, BetterChartsBridge.mq5 updated`;
 
-test('installs both files into the only data folder and reports the compile result', async ({ page }) => {
+/** Layout height: unlike boundingBox it ignores the dialog's scale-in animation transform. */
+const layoutHeight = (element: Locator) => element.evaluate((node) => (node as HTMLElement).offsetHeight);
+
+test('installs both files into the only data folder and reports the clean compile beside the button', async ({
+  page,
+}) => {
   await gotoWithStub(page);
   const guide = await openSetupGuide(page);
   const install = guide.locator('.setup-guide-install');
@@ -22,23 +29,27 @@ test('installs both files into the only data folder and reports the compile resu
   await expect(install.getByRole('combobox')).toHaveCount(0);
   await expect(install.getByRole('button', { name: 'Install to MT5' })).toBeEnabled();
   expect(await mt5InstallRequests(page)).toEqual([]);
+  const heightBefore = await layoutHeight(guide);
 
   await install.getByRole('button', { name: 'Install to MT5' }).click();
 
-  // Rows follow the report: the tick-history indicator first, then the EA.
-  await expect(install.locator('.setup-guide-install-file-name')).toHaveText([
-    'BetterChartsTickHistoryReader.mq5',
-    'BetterChartsBridge.mq5',
-  ]);
-  await expect(install.locator('.setup-guide-install-file-outcome')).toHaveText(['Installed', 'Updated']);
-  await expect(install.locator('.setup-guide-install-file-compile')).toHaveText([
-    'Compiled, 0 errors',
-    'Compiled, 0 errors',
-  ]);
-  await expect(install.locator('.setup-guide-install-done')).toHaveText(DONE_LINE);
+  // A clean run reports one line in the button's own row: no result rows, and the
+  // dialog keeps the height it had before installing.
+  const done = install.locator('.setup-guide-install-actions .setup-guide-install-done');
+  await expect(done).toHaveText(DONE_LINE);
+  await expect(done).toHaveAttribute('title', DONE_TITLE);
+  await expect(install.locator('.setup-guide-install-file')).toHaveCount(0);
+  expect(await done.evaluate((element) => element.parentElement?.className)).toBe('setup-guide-install-actions');
+  expect(await layoutHeight(guide)).toBe(heightBefore);
 
-  // The result list belongs to the automatic section, never to the numbered steps.
-  await expect(guide.locator('.setup-guide-steps .setup-guide-install-file')).toHaveCount(0);
+  // Same row as the button, not a paragraph under it.
+  const button = await install.getByRole('button', { name: 'Install to MT5' }).boundingBox();
+  const line = await done.boundingBox();
+  expect(line!.y).toBeGreaterThanOrEqual(button!.y);
+  expect(line!.y + line!.height).toBeLessThanOrEqual(button!.y + button!.height);
+
+  // The line belongs to the automatic section, never to the numbered steps.
+  await expect(guide.locator('.setup-guide-steps .setup-guide-install-done')).toHaveCount(0);
   expect(await mt5InstallRequests(page)).toEqual([
     { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: PORTABLE_MQL5_PATH },
   ]);
@@ -80,7 +91,8 @@ test('two data folders ask which one to install into and send its path', async (
   await folder.selectOption({ label: `MetaTrader 5: ${STANDARD_MQL5_PATH}` });
   await install.getByRole('button', { name: 'Install to MT5' }).click();
 
-  await expect(install.locator('.setup-guide-install-done')).toHaveText(DONE_LINE);
+  await expect(install.locator('.setup-guide-install-actions .setup-guide-install-done')).toHaveText(DONE_LINE);
+  await expect(install.locator('.setup-guide-install-file')).toHaveCount(0);
   expect(await mt5InstallRequests(page)).toEqual([
     { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: STANDARD_MQL5_PATH },
   ]);

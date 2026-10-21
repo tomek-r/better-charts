@@ -327,6 +327,7 @@ export async function installTauriStub(
         restartRequired: false,
         platform: 'linux',
         overriddenKeys: [],
+        detectedFields: [],
         configurationError: null,
       },
       save_app_settings: 'reactive',
@@ -754,6 +755,8 @@ export async function installTauriStub(
           configured: true,
           firstLaunch: false,
           restartRequired: true,
+          // A saved field is the user's own value, so the detection hint clears.
+          detectedFields: [],
         };
         responses.get_app_settings = next;
         return next;

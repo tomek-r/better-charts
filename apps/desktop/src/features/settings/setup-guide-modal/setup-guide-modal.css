@@ -146,9 +146,20 @@
   font-size: 12px;
 }
 
+/* Button row: the success line sits beside the button, and this row's min-height
+   keeps the dialog's height the same while that line appears or clears. */
+.setup-guide-install-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 39px;
+  margin-top: 12px;
+}
+
 /* Primary action of the guide: the accent fill the dialogs use for their main button. */
 .setup-guide-install-run {
-  margin-top: 12px;
+  flex: none;
   padding: 9px 18px;
   border: 1px solid var(--color-accent);
   border-radius: var(--border-radius);
@@ -221,11 +232,18 @@
   overflow-wrap: anywhere;
 }
 
+/* Inline success line: one row with the button, so it ellipsizes instead of wrapping
+   and the row (and with it the dialog) keeps its height either way. */
 .setup-guide-install-done {
-  margin: 10px 0 0;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
   color: var(--color-accent);
   font-size: 12px;
   line-height: 1.55;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .setup-guide-downloads {

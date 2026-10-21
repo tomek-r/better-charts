@@ -26,6 +26,9 @@ const OUTCOME_WORDS: Record<Mt5InstallOutcome, string> = {
 /** Discovery found nothing: the manual steps below are then the only route. */
 const MT5_NOT_FOUND_TEXT = 'MetaTrader 5 was not found on this computer. Use the manual steps below.';
 
+/** Shown beside the button once both files installed and compiled without a diagnostic. */
+const INSTALL_CLEAN_TEXT = 'Installed and compiled. Attach the EA to a chart and enable Algo Trading.';
+
 /** One installation paired with one of its data folders: exactly what an install request names. */
 interface InstallTarget {
   terminalPath: string;
@@ -72,6 +75,11 @@ function everyFileCompiledClean(files: Mt5FileReport[]): boolean {
     files.length > 0 &&
     files.every((file) => file.compiled !== null && file.compiled.errors === 0 && file.compiled.warnings === 0)
   );
+}
+
+/** What each file became, as the success line's tooltip spells it out. */
+function outcomeSummary(files: Mt5FileReport[]): string {
+  return files.map((file) => `${FILE_NAMES[file.file]} ${OUTCOME_WORDS[file.outcome].toLowerCase()}`).join(', ');
 }
 
 /** The data folder the install writes into: plain text for one, a select when there is a choice. */
@@ -125,7 +133,7 @@ function FileResultRow({ file }: { file: Mt5FileReport }) {
   );
 }
 
-/** One row per installed file, then the next step once every file compiled clean. */
+/** One row per file, shown only when a diagnostic or an uncompiled file needs attention. */
 function InstallResults({ report }: { report: Mt5InstallReport }) {
   return (
     <div className="setup-guide-install-results">
@@ -134,11 +142,6 @@ function InstallResults({ report }: { report: Mt5InstallReport }) {
           <FileResultRow key={file.file} file={file} />
         ))}
       </ul>
-      {everyFileCompiledClean(report.files) && (
-        <p className="setup-guide-install-done">
-          Done. Attach BetterChartsBridge to a chart in MT5 and enable Algo Trading.
-        </p>
-      )}
     </div>
   );
 }
@@ -148,6 +151,10 @@ function InstallResults({ report }: { report: Mt5InstallReport }) {
  * shows what MetaEditor made of them. Enabling Algo Trading stays with the user: the
  * app never turns it on. The manual steps below remain the fallback when MT5 is not
  * found or an install is refused.
+ *
+ * A run that compiled everything clean reports one short line beside the button, in
+ * the row the button already occupies, so the dialog keeps its height; anything left
+ * to fix keeps the detailed rows below.
  */
 export function InstallToMt5() {
   const shellAvailable = isTauri();
@@ -185,6 +192,8 @@ export function InstallToMt5() {
   const targets = installations ? installTargets(installations) : [];
   const selected = chooseTarget(targets, selectedKey);
   const withoutDataFolder = (installations ?? []).filter((installation) => installation.dataFolders.length === 0);
+  // Success has its own one-line report; every other outcome keeps the detailed rows.
+  const cleanReport = report !== undefined && everyFileCompiledClean(report.files) ? report : undefined;
 
   /** A report or refusal belongs to the folder it was asked about, so choosing another one clears it. */
   function chooseDataFolder(key: string) {
@@ -235,14 +244,24 @@ export function InstallToMt5() {
       {selected !== undefined && (
         <>
           <DataFolderChoice targets={targets} selected={selected} disabled={running} onChoose={chooseDataFolder} />
-          <button
-            type="button"
-            className="setup-guide-install-run"
-            disabled={running}
-            onClick={() => void install(selected)}
-          >
-            {running ? 'Installing…' : 'Install to MT5'}
-          </button>
+          <div className="setup-guide-install-actions">
+            <button
+              type="button"
+              className="setup-guide-install-run"
+              disabled={running}
+              onClick={() => void install(selected)}
+            >
+              {running ? 'Installing…' : 'Install to MT5'}
+            </button>
+            {cleanReport && (
+              <p
+                className="setup-guide-install-done"
+                title={`${INSTALL_CLEAN_TEXT} ${outcomeSummary(cleanReport.files)}`}
+              >
+                {INSTALL_CLEAN_TEXT}
+              </p>
+            )}
+          </div>
           <p className="setup-guide-install-note">
             If the EA is attached to a chart, MT5 reloads it and the bridge reconnects. Install is refused while an
             order is being sent.
@@ -252,7 +271,7 @@ export function InstallToMt5() {
               {error}
             </p>
           )}
-          {report && <InstallResults report={report} />}
+          {report !== undefined && cleanReport === undefined && <InstallResults report={report} />}
         </>
       )}
       {withoutDataFolder.map((installation) => (

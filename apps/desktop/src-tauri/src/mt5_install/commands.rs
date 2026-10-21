@@ -9,8 +9,9 @@
 //! run on a blocking thread, because MetaEditor takes seconds.
 //!
 //! Security: these commands never start the MT5 terminal, never attach the expert
-//! advisor, and never touch AutoTrading. The only writes are the two `.mq5` files
-//! and MetaEditor's own `.ex5` and `.log` output beside them.
+//! advisor, and never touch AutoTrading. The only writes are the two `.mq5` files,
+//! MetaEditor's own `.ex5` and `.log` output beside them, and — after a successful
+//! install — the settings paths the user has not set yet.
 
 use std::path::{Path, PathBuf};
 
@@ -19,9 +20,10 @@ use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 
 use super::compile::{compile_installed, CompileResult, ProcessRunner};
-use super::discover::{discover_installations, InstallationSource, Mt5Installation};
+use super::discover::{discover_this_machine, InstallationSource, Mt5Installation};
 use super::install::{install_bundled_sources, BundledSources, InstallOutcome, InstalledFile};
-use super::locate::{current_host_os, locate_data_folders, DataFolder, Layout, Mql5File};
+use super::locate::{locate_data_folders, DataFolder, Layout, Mql5File};
+use crate::app_settings::AppSettingsState;
 use crate::download_resources::{EXPERT_ADVISOR_RESOURCE, INDICATOR_RESOURCE};
 use crate::execution_adapter::{ExecutionAdapterState, ExecutionQueueView};
 
@@ -275,10 +277,7 @@ pub(super) fn matched_target(
 /// opened is then offered, and an installation that has disappeared is refused
 /// instead of written into.
 fn installations_on_this_machine() -> Vec<LocatedInstallation> {
-    // The process environment is what discovery reads; a configured `MT5_*` variable
-    // stays an override for it.
-    let env: &dyn Fn(&str) -> Option<String> = &|name: &str| std::env::var(name).ok();
-    discover_installations(env, current_host_os())
+    discover_this_machine()
         .into_iter()
         .map(|installation| {
             let data_folders = locate_data_folders(&installation);
@@ -341,6 +340,18 @@ pub(crate) fn list_mt5_installations() -> Vec<Mt5InstallationView> {
     installation_views(&installations_on_this_machine())
 }
 
+/// Runs [`install_and_compile`] on a blocking thread, because MetaEditor takes
+/// seconds.
+async fn blocking_install(
+    target: InstallTarget,
+    sources: BundledSources,
+    queue: ExecutionQueueView,
+) -> Result<Mt5InstallReport, String> {
+    tauri::async_runtime::spawn_blocking(move || install_and_compile(&target, &sources, &queue))
+        .await
+        .map_err(|error| format!("The install did not complete: {error}."))?
+}
+
 /// Installs the bundled MQL5 files into one data folder and compiles them.
 ///
 /// `terminal_path` and `mql5_path` must be the values [`list_mt5_installations`]
@@ -348,6 +359,11 @@ pub(crate) fn list_mt5_installations() -> Vec<Mt5InstallationView> {
 /// edited request can never write into a folder the guide did not show. An order
 /// queued or in flight also refuses the whole install: recompiling the attached
 /// advisor would drop the bridge session under it.
+///
+/// A successful install also fills the settings paths the user has not set from the
+/// installation that just worked, so the next launch can reach that terminal. The
+/// fill is best effort and never fails the install, and the auto-start flag keeps
+/// its own value, so it never starts MT5 by itself.
 #[tauri::command]
 pub(crate) async fn install_to_mt5(
     app: AppHandle,
@@ -355,11 +371,13 @@ pub(crate) async fn install_to_mt5(
     mql5_path: String,
 ) -> Result<Mt5InstallReport, String> {
     let target = matched_target(&installations_on_this_machine(), &terminal_path, &mql5_path)?;
+    let installation = target.installation.clone();
     let sources = bundled_sources(&app)?;
     // Sampled right before installing, so an order submitted while the scan ran still
     // leaves both files untouched.
     let queue = app.state::<ExecutionAdapterState>().queue_status();
-    tauri::async_runtime::spawn_blocking(move || install_and_compile(&target, &sources, &queue))
-        .await
-        .map_err(|error| format!("The install did not complete: {error}."))?
+    let report = blocking_install(target, sources, queue).await?;
+    app.state::<AppSettingsState>()
+        .fill_from_installation(&installation);
+    Ok(report)
 }
