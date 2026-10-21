@@ -3,6 +3,7 @@ import { useExecutionCommandEffects } from '../features/execution/useExecutionCo
 import type { ExecutionCommandState } from '../features/execution/useExecutionCommands';
 import { useBridgeBootstrapEffects } from '../features/bridge/effects/useBridgeBootstrapEffects';
 import { useBridgeStreamEffects } from '../features/bridge/effects/useBridgeStreamEffects';
+import { useLastChartSelectionEffects } from '../features/bridge/effects/useLastChartSelectionEffects';
 import { usePartialCloseAvailable } from '../features/partial-close/usePartialCloseAvailable';
 import { useBridgeQuote } from '../features/bridge/BridgeSessionProvider';
 import { useOrderTicketStores } from '../features/order-ticket/state/orderTicketContext';
@@ -190,6 +191,7 @@ export function LifecycleAccountAndCheck({
     accountLoginRef.current = session.account?.accountLogin;
     brokerServerRef.current = session.account?.brokerServer;
   }, [accountLoginRef, brokerServerRef, session.account?.accountLogin, session.account?.brokerServer]);
+  useLastChartSelectionEffects(session.snapshot, session.status, session.account);
   const check = useOrderTicketCheckRuntime({
     snapshot: session.snapshot,
     status: session.status,

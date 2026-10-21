@@ -2,56 +2,32 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openTradePanel } from './helpers/panel';
 import { stagedState } from './helpers/stagedWidget';
 import {
-  expectNoErrors,
-  gotoWithStub,
-  pushEvent,
-  STUB_NOW,
-  stubInvocations,
-  wasInvoked,
-  windowCandles,
-} from './helpers/tauriStub';
+  accountSnapshotFixture,
+  connectBridgeSession,
+  connectedStatus,
+  type AccountSnapshotFixture,
+} from './helpers/bridgeConnect';
+import { expectNoErrors, gotoWithStub, pushEvent, stubInvocations, wasInvoked } from './helpers/tauriStub';
 
-const NEW_ACCOUNT = {
+const NEW_ACCOUNT = accountSnapshotFixture({
   accountLogin: '70001234',
   brokerServer: 'Broker-Live',
   accountTradeMode: 2,
   accountTradeModeName: 'real',
-  currency: 'USD',
-  currencyDigits: 2,
   balance: '5000.00',
   equity: '5000.00',
-  margin: '0.00',
   freeMargin: '5000.00',
-  marginLevel: '0.00',
   leverage: 30,
-  marginMode: 2,
-  tradeAllowed: true,
-  expertAllowed: true,
-};
+});
 
 /** The EA reconnects with the new login: the bridge re-handshakes, then re-sends the account. */
 async function switchAccount(
   page: Page,
-  account: Record<string, unknown> & typeof NEW_ACCOUNT = NEW_ACCOUNT,
+  account: AccountSnapshotFixture = NEW_ACCOUNT,
   tradingEnabled = true,
 ): Promise<void> {
   await pushEvent(page, 'bridge-status', { state: 'disconnected', message: 'account identity changed' });
-  await pushEvent(page, 'bridge-status', {
-    state: 'connected',
-    protocolVersion: '2.1',
-    terminal: 'MetaTrader 5 (demo)',
-    account: account.accountLogin,
-    server: account.brokerServer,
-    tradingEnabled,
-    marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: STUB_NOW },
-  });
-  await pushEvent(page, 'market-snapshot', {
-    symbol: 'EURUSD',
-    timeframe: 'M5',
-    complete: true,
-    candles: windowCandles(10),
-  });
-  await pushEvent(page, 'account-snapshot', account);
+  await connectBridgeSession(page, account, { tradingEnabled });
 }
 
 async function stageWithStopLoss(page: Page): Promise<void> {
@@ -118,15 +94,7 @@ test('the dialog warns when algo trading is disabled and updates live once it is
   expect(Math.abs(icon.y + icon.height / 2 - (line.y + line.height / 2))).toBeLessThanOrEqual(1);
 
   // The EA reconnects after Algo Trading is turned on: same account, new session.
-  await pushEvent(page, 'bridge-status', {
-    state: 'connected',
-    protocolVersion: '2.1',
-    terminal: 'MetaTrader 5 (demo)',
-    account: NEW_ACCOUNT.accountLogin,
-    server: NEW_ACCOUNT.brokerServer,
-    tradingEnabled: true,
-    marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: STUB_NOW },
-  });
+  await pushEvent(page, 'bridge-status', connectedStatus(NEW_ACCOUNT));
   await expect(status).toHaveText('Algo trading is enabled');
   await expect(status.locator('svg')).toHaveAttribute('data-algo-icon', 'check');
 });

@@ -29,6 +29,35 @@ import { beginHistoryWait, endHistoryWait } from '../historyWait';
 import type { BridgeTicketResponsePort } from '../bridgeTicketResponseHandlers';
 import { createBridgeMarketRuntime, type BridgeEffectRun, type BridgeMarketResources } from '../bridgeMarketRuntime';
 import { createBridgeTicketResponseHandlers } from '../bridgeTicketResponseHandlers';
+import {
+  accountIdentityKey,
+  isSameChartSelection,
+  loadLastChartSelection,
+  restorableSelection,
+  settleStartRestore,
+  type LastChartSelection,
+} from '../lastChartSelection';
+import { brokerListsSymbol } from '../brokerSymbolList';
+
+type MarketAdapter = NonNullable<BridgeMarketResources['adapterRef']['current']>;
+
+/**
+ * The chart window saved for this account, when the broker still lists its
+ * symbol and serves its timeframe. The window the session already opened needs
+ * no check: it is on screen, so there is nothing to reopen.
+ */
+async function savedSelectionFor(
+  account: Pick<AccountSnapshot, 'accountLogin' | 'brokerServer'> | undefined,
+  supportedTimeframes: readonly string[] | undefined,
+  shownWindow: LastChartSelection | undefined,
+): Promise<LastChartSelection | undefined> {
+  const accountKey = accountIdentityKey(account?.accountLogin, account?.brokerServer);
+  const saved = restorableSelection(loadLastChartSelection(accountKey), supportedTimeframes);
+  if (!saved || isSameChartSelection(saved, shownWindow) || !(await brokerListsSymbol(saved.symbol))) {
+    return undefined;
+  }
+  return saved;
+}
 
 export function useBridgeBootstrapEffects(
   session: Pick<
@@ -121,6 +150,7 @@ export function useBridgeBootstrapEffects(
       setSnapshot,
       setLatestCandle,
       setQuote,
+      setInstrument,
     } = bootstrapSession;
     const historyWaitSetters = {
       setHistoryWaitStartedAtMs: bootstrapSession.setHistoryWaitStartedAtMs,
@@ -141,6 +171,49 @@ export function useBridgeBootstrapEffects(
       accountLoginRef,
       brokerServerRef,
     );
+    const requestWindow = (adapter: MarketAdapter, selection: LastChartSelection) => {
+      beginHistoryWait(historyWaitSetters);
+      void adapter
+        .requestHistory(selection.symbol, selection.timeframe, initialHistoryBarsFor(chartRef.current))
+        .catch(() => undefined);
+    };
+    // Reopens the saved window exactly like a user pick, so a refusal leaves the
+    // session's own window on screen instead of an empty chart.
+    const openSavedWindow = (adapter: MarketAdapter, saved: LastChartSelection) => {
+      targetSymbol.current = saved.symbol;
+      loadingTimeframeRef.current = saved.timeframe;
+      setLoadingTimeframe(saved.timeframe);
+      setSymbolLoading(true);
+      setInstrument(undefined);
+      setQuote(undefined);
+      requestWindow(adapter, saved);
+    };
+    // The saved window is applied once per app run: on the first connected session
+    // with a known account. Spent flag keeps later reconnects from overriding the
+    // user's own picks. The account may arrive before or after the connected status.
+    let restoreSpent = false;
+    let connectedAccount: Pick<AccountSnapshot, 'accountLogin' | 'brokerServer'> | undefined;
+    let supportedTimeframes: readonly string[] | undefined;
+    const restoreOnFirstConnection = async () => {
+      const adapter = marketAdapterRef.current;
+      const account = connectedAccount;
+      if (restoreSpent || run.disposed || run.bridgeState !== 'connected' || !adapter || !account) {
+        return;
+      }
+      if (!accountIdentityKey(account.accountLogin, account.brokerServer)) {
+        return;
+      }
+      restoreSpent = true;
+      const shownWindow =
+        currentSymbolRef.current && currentTimeframeRef.current
+          ? { symbol: currentSymbolRef.current, timeframe: currentTimeframeRef.current }
+          : undefined;
+      const saved = await savedSelectionFor(account, supportedTimeframes, shownWindow);
+      if (saved && !run.disposed && run.bridgeState === 'connected') {
+        openSavedWindow(adapter, saved);
+      }
+      settleStartRestore();
+    };
     const start = async () => {
       // Capture the adapter before any await: once this run is disposed the ref
       // may already point at the NEXT mount's adapter, which we must not touch.
@@ -194,9 +267,15 @@ export function useBridgeBootstrapEffects(
             setQuote(nextQuote);
           }
         }
-        if (initialAccount) {
-          const nextAccount = normalizeAccount(initialAccount);
+        const nextAccount = initialAccount ? normalizeAccount(initialAccount) : undefined;
+        if (nextAccount) {
           setAccount(nextAccount);
+        }
+        supportedTimeframes = bridge.supportedTimeframes;
+        if (run.bridgeState === 'connected' && nextAccount) {
+          connectedAccount = nextAccount;
+          // This start path applies the saved window itself, before any listener event.
+          restoreSpent = Boolean(accountIdentityKey(nextAccount.accountLogin, nextAccount.brokerServer));
         }
         if (initialPortfolio) {
           setPortfolio(normalizePortfolio(initialPortfolio));
@@ -223,6 +302,7 @@ export function useBridgeBootstrapEffects(
                 pendingMetadata.current = undefined;
                 setSymbolLoading(false);
                 chartRef.current?.resetTools('session');
+                connectedAccount = undefined;
                 currentSymbolRef.current = undefined;
                 currentTimeframeRef.current = undefined;
                 dataKeyRef.current = '';
@@ -237,7 +317,9 @@ export function useBridgeBootstrapEffects(
               }
               bridgeIdentity = identity;
               run.bridgeState = next.state;
+              supportedTimeframes = next.supportedTimeframes;
               setStatus(next);
+              void restoreOnFirstConnection();
             }
           }),
           listen<MarketSnapshot>('market-snapshot', marketRuntime.onMarketSnapshot),
@@ -253,6 +335,8 @@ export function useBridgeBootstrapEffects(
               accountLoginRef.current = nextAccount.accountLogin;
               brokerServerRef.current = nextAccount.brokerServer;
               setAccount(nextAccount);
+              connectedAccount = nextAccount;
+              void restoreOnFirstConnection();
             }
           }),
           listen<PortfolioSnapshot>('portfolio-snapshot', (event) => {
@@ -288,15 +372,24 @@ export function useBridgeBootstrapEffects(
           // The cached market snapshot has no instrument metadata. The existing
           // history command also requests symbol-info; dispatch once after its
           // listeners are ready so a reopened workspace restores SL/TP amounts.
-          if (run.bridgeState === 'connected' && acceptedInitial.symbol && acceptedInitial.timeframe) {
-            beginHistoryWait(historyWaitSetters);
-            void adapter
-              .requestHistory(
-                acceptedInitial.symbol,
-                acceptedInitial.timeframe,
-                initialHistoryBarsFor(chartRef.current),
-              )
-              .catch(() => undefined);
+          const shownWindow =
+            acceptedInitial.symbol && acceptedInitial.timeframe
+              ? { symbol: acceptedInitial.symbol, timeframe: acceptedInitial.timeframe }
+              : undefined;
+          const savedSelection =
+            run.bridgeState === 'connected'
+              ? await savedSelectionFor(nextAccount, bridge.supportedTimeframes, shownWindow)
+              : undefined;
+          if (run.disposed) {
+            return;
+          }
+          if (run.bridgeState === 'connected' && savedSelection) {
+            openSavedWindow(adapter, savedSelection);
+          } else if (run.bridgeState === 'connected' && shownWindow) {
+            requestWindow(adapter, shownWindow);
+          }
+          if (restoreSpent) {
+            settleStartRestore();
           }
         }
       } catch {
