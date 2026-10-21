@@ -62,6 +62,13 @@ For development, use `pnpm tauri dev`. `pnpm dev` starts a browser-only preview;
 
 ## Connect to MetaTrader 5
 
+Better Charts can install the two MT5 files itself. Open **App settings** and click
+**How to set up the bridge connection**: the app finds MT5 on Windows, macOS and
+Linux (Wine), copies both sources into the chosen `MQL5` data folder, compiles them
+with MetaEditor, and can restart MT5 with the EA attached. It never enables Algo
+Trading, and both are refused while an order is being sent. The manual steps below
+remain the fallback, for example when MT5 is not found.
+
 1. Open MT5's **File → Open Data Folder**. Copy
    [BetterChartsBridge.mq5](mql5/bridge/Experts/BetterChartsBridge.mq5) into
    `MQL5/Experts/` and
