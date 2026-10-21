@@ -32,6 +32,13 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   MT5 quotes incorporate price, contract and leverage; `OrderCheck` checks affordability.
 - Authenticated local TCP, account/session binding, reconciliation, append-only
   journals, one command in flight, saved settings and opt-in MT5 startup.
+- A demo (or contest) account scrolls three sentences in a thin strip along the
+  top bar's bottom edge, in the badge's demo colour: "Demo account. No real money
+  is involved.", "Orders here use your broker's demo funds." and "Switch to a real
+  account in MT5 to trade live.", spaced with no separator glyph. The strip is an
+  absolute overlay that takes no layout space, so a real or disconnected account
+  shows no strip and neither kind moves the bar or the chart; reduced motion shows
+  the first sentence once, static and centred.
 - Setup guide's automatic install (App settings -> "How to set up the bridge
   connection"): finds MT5 on Windows, macOS (the official app with its bundled
   Wine) and Linux (Wine prefixes `~/.mt5` and `~/.wine`), lists the `MQL5` data
