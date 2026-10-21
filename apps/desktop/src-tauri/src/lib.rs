@@ -6,8 +6,6 @@ mod download_resources;
 mod execution_adapter;
 mod execution_journal;
 mod mt5_backend;
-#[allow(dead_code)]
-// Install-to-MT5: discovery, the locator, and the installer await their command.
 mod mt5_install;
 mod runtime_config;
 #[cfg(test)]
@@ -28,6 +26,7 @@ use download_resources::save_bundled_resource;
 use execution_adapter::ExecutionAdapterState;
 use execution_journal::{app_data_dir, ExecutionSafetyState};
 use mt5_backend::Mt5BackendState;
+use mt5_install::commands::{install_to_mt5, list_mt5_installations};
 use std::time::Duration;
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, Runtime, WebviewWindow};
@@ -170,7 +169,9 @@ pub fn run() {
             get_mt5_backend_status,
             start_mt5_backend,
             stop_mt5_backend,
-            save_bundled_resource
+            save_bundled_resource,
+            list_mt5_installations,
+            install_to_mt5
         ])
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Finished && webview.label() == MAIN_WINDOW_LABEL {

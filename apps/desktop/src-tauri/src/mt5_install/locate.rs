@@ -340,6 +340,10 @@ fn data_folders_under<'a>(
 /// A portable install never consults `terminals_root`: its terminal loads the
 /// `MQL5` folder beside the executable, so a standard folder cannot be the one in
 /// use.
+///
+/// Test entry point only: the commands resolve both inputs themselves through
+/// [`locate_data_folders`].
+#[cfg(test)]
 pub fn data_folders(install_folder: &Path, terminals_root: Option<&Path>) -> Vec<DataFolder> {
     data_folders_under(install_folder, terminals_root)
 }

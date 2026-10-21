@@ -5,8 +5,10 @@
 //! `discover` finds installations on Windows, macOS, and Linux when no `MT5_*`
 //! variable is set (the variables stay overrides), `locate` documents the two MT5
 //! data-folder layouts and the Wine path mapping, `install` copies the bundled
-//! sources into a data folder without disturbing a running order, and `compile`
-//! runs MetaEditor over the installed copies and reads the log it writes back.
+//! sources into a data folder without disturbing a running order, `compile` runs
+//! MetaEditor over the installed copies and reads the log it writes back, and
+//! `commands` exposes the two Tauri commands the setup guide calls, which act on the
+//! terminal and `MQL5` paths those first two modules report.
 //! Starting the terminal stays the backend's job, so nothing here starts MT5.
 //!
 //! Privacy: below an MT5 folder this module reads directory listings, `origin.txt`
@@ -17,6 +19,7 @@
 //! else is opened, because those folders also hold account state, logs, and
 //! journal files that are private to the user.
 
+pub(crate) mod commands;
 mod compile;
 mod discover;
 mod install;

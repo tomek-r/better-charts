@@ -1,3 +1,4 @@
+use super::commands::*;
 use super::compile::*;
 use super::discover::*;
 use super::install::*;
@@ -1208,4 +1209,240 @@ fn an_old_log_is_removed_before_the_run() {
 
     assert!(matches!(outcome, Err(CompileError::LogMissing { .. })));
     assert!(!log.exists(), "an old log is never this run's result");
+}
+
+/// Data folder of the MetaTrader installation the command tests target.
+fn metaquotes_mql5() -> PathBuf {
+    Path::new("/wine/drive_c/Program Files/MetaTrader 5/MQL5").to_path_buf()
+}
+
+/// A configured installation, as the `MT5_*` environment variables produce one.
+fn configured_installation(terminal_exe_windows: &str) -> Mt5Installation {
+    Mt5Installation {
+        host: HostPlatform::Windows,
+        wine_prefix: None,
+        wine_binary: None,
+        terminal_exe_windows: terminal_exe_windows.to_string(),
+        source: InstallationSource::Configured,
+    }
+}
+
+/// One scanned installation, as both commands receive it.
+fn located_installation(
+    installation: Mt5Installation,
+    data_folders: Vec<DataFolder>,
+) -> LocatedInstallation {
+    LocatedInstallation {
+        installation,
+        data_folders,
+    }
+}
+
+/// Two installations, each with its own portable data folder: the picture the
+/// matching tests validate requests against.
+fn two_located_installations() -> Vec<LocatedInstallation> {
+    let acme_mql5 = Path::new("/wine/drive_c/Program Files/Acme MetaTrader 5/MQL5");
+    vec![
+        located_installation(
+            discovered_windows_installation(TERMINAL_EXE),
+            vec![expected_portable_folder(&metaquotes_mql5())],
+        ),
+        located_installation(
+            discovered_windows_installation(ACME_TERMINAL_EXE),
+            vec![expected_portable_folder(acme_mql5)],
+        ),
+    ]
+}
+
+#[test]
+fn the_list_shows_each_installation_with_the_data_folders_the_locator_found() {
+    let fixture = TempFolder::new("list-views");
+    let standard_root = fixture
+        .path()
+        .join(TEST_TERMINALS_ROOT)
+        .join(DATA_FOLDER_ID);
+    let installations = vec![
+        located_installation(
+            discovered_windows_installation(TERMINAL_EXE),
+            vec![
+                expected_portable_folder(&metaquotes_mql5()),
+                expected_standard_folder(&standard_root),
+            ],
+        ),
+        // An installation without a data folder is still listed, with an empty
+        // list, and a configured one says so.
+        located_installation(configured_installation(ACME_TERMINAL_EXE), Vec::new()),
+    ];
+
+    let views =
+        serde_json::to_value(installation_views(&installations)).expect("the list serializes");
+
+    let expected = serde_json::json!([
+        {
+            "terminalPath": TERMINAL_EXE,
+            "label": "MetaTrader 5",
+            "configured": false,
+            "dataFolders": [
+                {
+                    "mql5Path": metaquotes_mql5().display().to_string(),
+                    "layout": "portable",
+                },
+                {
+                    "mql5Path": standard_root.join("MQL5").display().to_string(),
+                    "layout": "standard",
+                },
+            ],
+        },
+        {
+            "terminalPath": ACME_TERMINAL_EXE,
+            "label": "Acme MetaTrader 5",
+            "configured": true,
+            "dataFolders": [],
+        },
+    ]);
+    assert_eq!(views, expected);
+}
+
+#[test]
+fn the_listed_data_folder_of_the_requested_installation_is_accepted() {
+    let installations = two_located_installations();
+    let requested = metaquotes_mql5().display().to_string();
+
+    let target = matched_target(&installations, TERMINAL_EXE, &requested)
+        .expect("a data folder the list reported is accepted");
+
+    assert_eq!(target.installation.terminal_exe_windows, TERMINAL_EXE);
+    assert_eq!(target.data_folder.mql5, metaquotes_mql5());
+}
+
+#[test]
+fn a_terminal_that_was_not_listed_is_refused() {
+    let installations = two_located_installations();
+    let requested = metaquotes_mql5().display().to_string();
+
+    let refused = matched_target(
+        &installations,
+        r"C:\Program Files\Zulu MetaTrader 5\terminal64.exe",
+        &requested,
+    )
+    .expect_err("an unlisted terminal is refused");
+
+    assert!(
+        refused.contains("Zulu MetaTrader 5") && refused.contains("reload"),
+        "the message names the terminal and what to do: {refused}"
+    );
+}
+
+#[test]
+fn a_data_folder_of_another_installation_is_refused() {
+    let installations = two_located_installations();
+    // The folder is real, but it belongs to the Acme installation.
+    let other_installation_mql5 = Path::new("/wine/drive_c/Program Files/Acme MetaTrader 5/MQL5")
+        .display()
+        .to_string();
+
+    let refused = matched_target(&installations, TERMINAL_EXE, &other_installation_mql5)
+        .expect_err("a folder of another installation is refused");
+
+    assert!(
+        refused.contains(&other_installation_mql5) && refused.contains("reload"),
+        "the message names the refused folder and what to do: {refused}"
+    );
+}
+
+#[test]
+fn only_the_exact_listed_form_of_a_data_folder_is_accepted() {
+    let installations = two_located_installations();
+    let with_trailing_separator = format!("{}/", metaquotes_mql5().display());
+
+    // The comparison is the exact string the list returned, so another spelling of
+    // the same folder is refused instead of being normalised into a write.
+    assert!(matched_target(&installations, TERMINAL_EXE, &with_trailing_separator).is_err());
+    assert!(matched_target(&installations, TERMINAL_EXE, "MQL5").is_err());
+}
+
+#[test]
+fn the_report_names_each_file_with_its_outcome_and_compile_result() {
+    let indicator_path =
+        Path::new("/wine/drive_c/Program Files/MetaTrader 5/MQL5/Indicators").join(INDICATOR_FILE);
+    let advisor_path = Path::new("/wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts")
+        .join(EXPERT_ADVISOR_FILE);
+    let installed = vec![
+        installed_file(
+            Mql5File::Indicator,
+            &indicator_path,
+            InstallOutcome::Unchanged,
+        ),
+        installed_file(
+            Mql5File::ExpertAdvisor,
+            &advisor_path,
+            InstallOutcome::Updated,
+        ),
+    ];
+    // The broken indicator ended the compile run, so the advisor never ran.
+    let compiles = vec![CompileResult {
+        file: Mql5File::Indicator,
+        errors: 1,
+        warnings: 1,
+        messages: vec![ERROR_DIAGNOSTIC.to_string(), WARNING_DIAGNOSTIC.to_string()],
+    }];
+
+    let report =
+        serde_json::to_value(install_report(&installed, &compiles)).expect("the report serializes");
+
+    let expected = serde_json::json!({
+        "files": [
+            {
+                "file": "indicator",
+                "path": indicator_path.display().to_string(),
+                "outcome": "unchanged",
+                "compiled": {
+                    "errors": 1,
+                    "warnings": 1,
+                    "messages": [ERROR_DIAGNOSTIC, WARNING_DIAGNOSTIC],
+                },
+            },
+            {
+                "file": "expertAdvisor",
+                "path": advisor_path.display().to_string(),
+                "outcome": "updated",
+                "compiled": null,
+            },
+        ],
+    });
+    assert_eq!(report, expected);
+}
+
+#[test]
+fn a_compile_result_belongs_to_its_own_file() {
+    let advisor_path = Path::new("/wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts")
+        .join(EXPERT_ADVISOR_FILE);
+    let installed = vec![installed_file(
+        Mql5File::ExpertAdvisor,
+        &advisor_path,
+        InstallOutcome::Installed,
+    )];
+    // Results are matched by file, never by position: the indicator's result says
+    // nothing about the advisor.
+    let compiles = vec![
+        CompileResult {
+            file: Mql5File::Indicator,
+            errors: 3,
+            warnings: 0,
+            messages: Vec::new(),
+        },
+        CompileResult {
+            file: Mql5File::ExpertAdvisor,
+            errors: 0,
+            warnings: 2,
+            messages: vec![WARNING_DIAGNOSTIC.to_string()],
+        },
+    ];
+
+    let report =
+        serde_json::to_value(install_report(&installed, &compiles)).expect("the report serializes");
+
+    assert_eq!(report["files"][0]["outcome"], "installed");
+    assert_eq!(report["files"][0]["compiled"]["errors"], 0);
+    assert_eq!(report["files"][0]["compiled"]["warnings"], 2);
 }
