@@ -30,6 +30,7 @@ import { STUB_NOW } from './stubClock';
  *  - `request_history`       → `market-snapshot` event (feeds the chart adapter), or
  *                              `history-unavailable` with `historyUnavailable`
  *  - `request_history_page`  → `history-page` event (lazy-loaded older candles)
+ *  - `search_symbols`        → `symbol-search-result` event, answered from `brokerSymbols`
  *
  * Tests push further bridge events (`execution-command-update`,
  * `execution-command-error`, …) with `pushEvent`/`pushCommandUpdate`, which
@@ -59,6 +60,12 @@ export interface TauriStubOptions {
   historyByTimeframe?: Record<string, Candle[]>;
   /** Optional metadata delivered alongside history, as in the real bridge. */
   symbolInfo?: BrokerSymbol;
+  /**
+   * The broker symbol list `search_symbols` answers from: a query returns the
+   * symbols whose name contains it, case-insensitively, like the live bridge.
+   * Unset, `search_symbols` resolves null and publishes no result.
+   */
+  brokerSymbols?: BrokerSymbol[];
   /**
    * Fields merged over the reactive `order-check-result` payload — e.g. a
    * failed check carrying the broker's own `comment`/`retcode`.
@@ -423,7 +430,7 @@ export async function installTauriStub(
       get_execution_recovery_snapshot: { safety, entries: [] },
       get_mt5_backend_status: { running: true, configured: true, autoStartEnabled: false },
       get_execution_queue_status: { pending: 0, inFlight: null, dispatchEnabled: true },
-      search_symbols: null,
+      search_symbols: opts.brokerSymbols ? 'reactive' : null,
       request_tick_profile: null,
       cancel_tick_profile: null,
       start_mt5_backend: null,
@@ -661,6 +668,18 @@ export async function installTauriStub(
           },
           opts.olderHistoryDelayMs ?? opts.historyDelayMs ?? 0,
         );
+        return null;
+      }
+      if (cmd === 'search_symbols') {
+        // The broker answers by query; the app listens on the event, as with the real bridge.
+        const query = String(args.query ?? '')
+          .trim()
+          .toLowerCase();
+        const limit = Math.max(1, Math.floor(Number(args.limit)) || 20);
+        const symbols = (opts.brokerSymbols ?? [])
+          .filter((entry) => entry.symbol.toLowerCase().includes(query))
+          .slice(0, limit);
+        emit('symbol-search-result', { query: args.query, source: 'live', symbols });
         return null;
       }
       throw new Error(`E2E Tauri stub: command "${cmd}" marked reactive but has no handler.`);
