@@ -1,15 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
-import type { BridgeStatus } from '../src/shared/bridge/types';
-import { expectNoErrors, gotoWithStub, pushEvent } from './helpers/tauriStub';
+import { expect, test } from '@playwright/test';
+import { expectNoErrors, gotoWithStub, pushBridgeStatus } from './helpers/tauriStub';
 
 /** The bridge version refusal, worded as the Rust handshake words it. */
 const OUTDATED_BRIDGE_MESSAGE =
   'App requires MT5 bridge version 1.012, but installed bridge version is 1.006. Update and reattach BetterChartsBridge in MT5.';
-
-/** Pushes one connection state through the same `bridge-status` listener the real bridge emits into. */
-async function pushBridgeStatus(page: Page, status: BridgeStatus): Promise<void> {
-  await pushEvent(page, 'bridge-status', status);
-}
 
 test.describe('outdated MT5 bridge components', () => {
   test('a version refusal offers the automatic install from the setup guide', async ({ page }) => {

@@ -1,7 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { gotoWithStub } from './helpers/tauriStub';
+import { gotoWithStub, pushBridgeStatus } from './helpers/tauriStub';
 import {
   DEFAULT_TERMINAL_PATH,
+  cleanInstallReport,
   PORTABLE_MQL5_PATH,
   STANDARD_MQL5_PATH,
   mt5InstallRequests,
@@ -9,12 +10,25 @@ import {
   openSetupGuide,
 } from './helpers/setupGuide';
 
-const DONE_LINE = 'Installed and compiled. Attach the EA to a chart and enable Algo Trading.';
+const FIRST_INSTALL_LINE =
+  'Installed and compiled. Drag BetterChartsBridge onto a chart in MT5 and enter the token, or restart MT5 with the EA attached.';
+const RECONNECT_LINE = 'Installed and compiled. MT5 reloads the EA and the bridge reconnects.';
+const REATTACH_LINE = 'Installed and compiled. Reattach BetterChartsBridge in MT5.';
+/** The stub's default report updates the EA, and its default bridge is connected: the reconnect line. */
+const DONE_LINE = RECONNECT_LINE;
 /** The success line's tooltip: the same sentence, then what each file became. */
 const DONE_TITLE = `${DONE_LINE} BetterChartsTickHistoryReader.mq5 installed, BetterChartsBridge.mq5 updated`;
 
 /** Layout height: unlike boundingBox it ignores the dialog's scale-in animation transform. */
 const layoutHeight = (element: Locator) => element.evaluate((node) => (node as HTMLElement).offsetHeight);
+
+/** The success line shares the button's row: it starts and ends within the button's vertical extent. */
+async function expectBesideButton(install: Locator, done: Locator): Promise<void> {
+  const button = await install.getByRole('button', { name: 'Install to MT5' }).boundingBox();
+  const line = await done.boundingBox();
+  expect(line!.y).toBeGreaterThanOrEqual(button!.y);
+  expect(line!.y + line!.height).toBeLessThanOrEqual(button!.y + button!.height);
+}
 
 test('installs both files into the only data folder and reports the clean compile beside the button', async ({
   page,
@@ -43,10 +57,7 @@ test('installs both files into the only data folder and reports the clean compil
   expect(await layoutHeight(guide)).toBe(heightBefore);
 
   // Same row as the button, not a paragraph under it.
-  const button = await install.getByRole('button', { name: 'Install to MT5' }).boundingBox();
-  const line = await done.boundingBox();
-  expect(line!.y).toBeGreaterThanOrEqual(button!.y);
-  expect(line!.y + line!.height).toBeLessThanOrEqual(button!.y + button!.height);
+  await expectBesideButton(install, done);
 
   // The line belongs to the automatic section, never to the numbered steps.
   await expect(guide.locator('.setup-guide-steps .setup-guide-install-done')).toHaveCount(0);
@@ -105,6 +116,46 @@ async function runInstall(page: Page, stubOptions: Parameters<typeof gotoWithStu
   const install = guide.locator('.setup-guide-install');
   await install.getByRole('button', { name: 'Install to MT5' }).click();
   return install;
+}
+
+const DONE_LINE_CASES = [
+  {
+    name: 'a first install names both routes to a connection',
+    report: cleanInstallReport('installed'),
+    bridge: { state: 'connected' },
+    line: FIRST_INSTALL_LINE,
+  },
+  {
+    name: 'an update while connected says the bridge reconnects',
+    report: cleanInstallReport('updated'),
+    bridge: { state: 'connected' },
+    line: RECONNECT_LINE,
+  },
+  {
+    name: 'an update while not connected asks to reattach the EA',
+    report: cleanInstallReport('updated'),
+    bridge: { state: 'disconnected' },
+    line: REATTACH_LINE,
+  },
+] as const;
+
+for (const { name, report, bridge, line } of DONE_LINE_CASES) {
+  test(`${name}, in full beside the button without changing the dialog height`, async ({ page }) => {
+    await gotoWithStub(page, { responses: { install_to_mt5: report } });
+    const guide = await openSetupGuide(page);
+    const install = guide.locator('.setup-guide-install');
+    await pushBridgeStatus(page, bridge);
+    const heightBefore = await layoutHeight(guide);
+
+    await install.getByRole('button', { name: 'Install to MT5' }).click();
+
+    const done = install.locator('.setup-guide-install-actions .setup-guide-install-done');
+    await expect(done).toHaveText(line);
+    await expectBesideButton(install, done);
+    expect(await layoutHeight(guide)).toBe(heightBefore);
+    // The two-line clamp must not cut the sentence off at the default viewport.
+    expect(await done.evaluate((node) => node.scrollHeight <= node.clientHeight)).toBe(true);
+  });
 }
 
 test('a refused install shows the reason and leaves the button usable', async ({ page }) => {

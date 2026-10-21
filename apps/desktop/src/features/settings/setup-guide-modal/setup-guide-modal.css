@@ -146,11 +146,12 @@
   font-size: 12px;
 }
 
-/* Button row: the success line sits beside the button, and this row's min-height
-   keeps the dialog's height the same while that line appears or clears. */
+/* Button row: the success line sits beside the button, and this row reserves the two
+   text lines it may need (2 × 12px × 1.55 = 37.2px) before the line exists, so the
+   dialog's height stays the same while that line appears, changes or clears. */
 .setup-guide-install-actions {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 10px;
   min-width: 0;
   min-height: 39px;
@@ -232,18 +233,21 @@
   overflow-wrap: anywhere;
 }
 
-/* Inline success line: one row with the button, so it ellipsizes instead of wrapping
-   and the row (and with it the dialog) keeps its height either way. */
+/* Inline success line: one row with the button, wrapped to at most two lines and
+   clamped with an ellipsis past that (the title carries the full sentence). Its box is
+   centred in the row the button fills, so the text never sets the row's height. */
 .setup-guide-install-done {
   flex: 1;
+  align-self: center;
   min-width: 0;
   margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   color: var(--color-accent);
   font-size: 12px;
   line-height: 1.55;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .setup-guide-downloads {

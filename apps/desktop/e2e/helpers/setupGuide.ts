@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import type { Mt5InstallationView } from '../../src/shared/bridge/types';
+import type { Mt5InstallationView, Mt5InstallOutcome, Mt5InstallReport } from '../../src/shared/bridge/types';
 
 /** Host `MQL5` folder of the stub's default portable installation. */
 export const PORTABLE_MQL5_PATH = '/mt5/drive_c/Program Files/MetaTrader 5/MQL5';
@@ -18,6 +18,32 @@ export function mt5Installation(overrides: Partial<Mt5InstallationView> = {}): M
     configured: false,
     dataFolders: [{ mql5Path: PORTABLE_MQL5_PATH, layout: 'portable' }],
     ...overrides,
+  };
+}
+
+/**
+ * A clean `install_to_mt5` report: both bundled files compiled without a diagnostic,
+ * with the outcomes the test cares about (the EA outcome picks the success line).
+ */
+export function cleanInstallReport(
+  expertAdvisor: Mt5InstallOutcome,
+  indicator: Mt5InstallOutcome = expertAdvisor,
+): Mt5InstallReport {
+  return {
+    files: [
+      {
+        file: 'indicator',
+        path: `${PORTABLE_MQL5_PATH}/Indicators/BetterChartsTickHistoryReader.mq5`,
+        outcome: indicator,
+        compiled: { errors: 0, warnings: 0, messages: [] },
+      },
+      {
+        file: 'expertAdvisor',
+        path: `${PORTABLE_MQL5_PATH}/Experts/BetterChartsBridge.mq5`,
+        outcome: expertAdvisor,
+        compiled: { errors: 0, warnings: 0, messages: [] },
+      },
+    ],
   };
 }
 

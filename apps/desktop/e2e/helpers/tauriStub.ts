@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import type { BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridge/types';
+import type { BridgeStatus, BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridge/types';
 import { STUB_NOW } from './stubClock';
 
 /**
@@ -884,6 +884,11 @@ export async function pushEvent(page: Page, event: string, payload: unknown): Pr
     },
     { event, payload },
   );
+}
+
+/** Pushes a `bridge-status` state into the app, exactly as the bridge's own listener receives it. */
+export async function pushBridgeStatus(page: Page, status: BridgeStatus): Promise<void> {
+  await pushEvent(page, 'bridge-status', status);
 }
 
 /** Pushes an `execution-command-update` event into the app's log-only listener. */

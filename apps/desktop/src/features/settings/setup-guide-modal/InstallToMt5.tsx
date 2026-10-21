@@ -1,6 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 import { errorText } from '../../../shared/errorText';
+import { useBridgeConnectionSelector } from '../../bridge/BridgeSessionProvider';
 import type {
   Mt5CompiledView,
   Mt5FileReport,
@@ -26,8 +27,15 @@ const OUTCOME_WORDS: Record<Mt5InstallOutcome, string> = {
 /** Discovery found nothing: the manual steps below are then the only route. */
 const MT5_NOT_FOUND_TEXT = 'MetaTrader 5 was not found on this computer. Use the manual steps below.';
 
-/** Shown beside the button once both files installed and compiled without a diagnostic. */
-const INSTALL_CLEAN_TEXT = 'Installed and compiled. Attach the EA to a chart and enable Algo Trading.';
+/** A first install leaves the EA off every chart, so the success line names both routes to a connection. */
+const FIRST_INSTALL_DONE_TEXT =
+  'Installed and compiled. Drag BetterChartsBridge onto a chart in MT5 and enter the token, or restart MT5 with the EA attached.';
+
+/** An updated EA that a live bridge is attached to: MT5 reloads it and the link returns by itself. */
+const RECONNECT_DONE_TEXT = 'Installed and compiled. MT5 reloads the EA and the bridge reconnects.';
+
+/** An updated EA with no bridge: nothing reloads it, so the user has to reattach it. */
+const REATTACH_DONE_TEXT = 'Installed and compiled. Reattach BetterChartsBridge in MT5.';
 
 /** One installation paired with one of its data folders: exactly what an install request names. */
 interface InstallTarget {
@@ -80,6 +88,18 @@ function everyFileCompiledClean(files: Mt5FileReport[]): boolean {
 /** What each file became, as the success line's tooltip spells it out. */
 function outcomeSummary(files: Mt5FileReport[]): string {
   return files.map((file) => `${FILE_NAMES[file.file]} ${OUTCOME_WORDS[file.outcome].toLowerCase()}`).join(', ');
+}
+
+/**
+ * The success line of a clean report, from what happened to the EA and whether a
+ * bridge was connected when Install was pressed: a first install has no attached EA
+ * to reload, and an update only comes back by itself while a bridge is live.
+ */
+function installDoneText(files: Mt5FileReport[], bridgeConnected: boolean): string {
+  if (files.some((file) => file.file === 'expertAdvisor' && file.outcome === 'installed')) {
+    return FIRST_INSTALL_DONE_TEXT;
+  }
+  return bridgeConnected ? RECONNECT_DONE_TEXT : REATTACH_DONE_TEXT;
 }
 
 /** The data folder the install writes into: plain text for one, a select when there is a choice. */
@@ -154,14 +174,18 @@ function InstallResults({ report }: { report: Mt5InstallReport }) {
  *
  * A run that compiled everything clean reports one short line beside the button, in
  * the row the button already occupies, so the dialog keeps its height; anything left
- * to fix keeps the detailed rows below.
+ * to fix keeps the detailed rows below. That line words the next step from what
+ * happened to the EA and from the connection the press found.
  */
 export function InstallToMt5() {
   const shellAvailable = isTauri();
+  const bridgeConnected = useBridgeConnectionSelector(({ status }) => status.state === 'connected');
   const [installations, setInstallations] = useState<Mt5InstallationView[]>();
   const [selectedKey, setSelectedKey] = useState<string>();
   const [running, setRunning] = useState(false);
   const [report, setReport] = useState<Mt5InstallReport>();
+  // Captured with the press: the install itself drops the connection while MT5 reloads the EA.
+  const [connectedAtInstall, setConnectedAtInstall] = useState(false);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -194,6 +218,7 @@ export function InstallToMt5() {
   const withoutDataFolder = (installations ?? []).filter((installation) => installation.dataFolders.length === 0);
   // Success has its own one-line report; every other outcome keeps the detailed rows.
   const cleanReport = report !== undefined && everyFileCompiledClean(report.files) ? report : undefined;
+  const doneLine = cleanReport === undefined ? undefined : installDoneText(cleanReport.files, connectedAtInstall);
 
   /** A report or refusal belongs to the folder it was asked about, so choosing another one clears it. */
   function chooseDataFolder(key: string) {
@@ -209,6 +234,7 @@ export function InstallToMt5() {
     setRunning(true);
     setError(undefined);
     setReport(undefined);
+    setConnectedAtInstall(bridgeConnected);
     try {
       setReport(
         await invoke<Mt5InstallReport>('install_to_mt5', {
@@ -253,12 +279,9 @@ export function InstallToMt5() {
             >
               {running ? 'Installing…' : 'Install to MT5'}
             </button>
-            {cleanReport && (
-              <p
-                className="setup-guide-install-done"
-                title={`${INSTALL_CLEAN_TEXT} ${outcomeSummary(cleanReport.files)}`}
-              >
-                {INSTALL_CLEAN_TEXT}
+            {cleanReport !== undefined && doneLine !== undefined && (
+              <p className="setup-guide-install-done" title={`${doneLine} ${outcomeSummary(cleanReport.files)}`}>
+                {doneLine}
               </p>
             )}
           </div>
