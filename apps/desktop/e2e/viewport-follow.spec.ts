@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { holdIdleCallbacks } from './helpers/tauriStub';
-import { loadViewportWindow, newestBarPlacement, pushLiveBars, waitForPaint } from './helpers/viewportHarness';
+import { loadViewportWindow, newestBarPlacement, pushLiveBars, shiftView } from './helpers/viewportHarness';
 
 // The chart follows new bars while the newest bar is in view, and a deliberate
 // placement of it (zoomed, panned into the right margin) is kept at its distance
@@ -10,17 +10,6 @@ import { loadViewportWindow, newestBarPlacement, pushLiveBars, waitForPaint } fr
 test.beforeEach(async ({ page }) => {
   await holdIdleCallbacks(page);
 });
-
-/** Moves the view like a pan, after the app's own queued writes have landed so they cannot undo it. */
-async function shiftView(page: Page, bars: number): Promise<void> {
-  await waitForPaint(page);
-  await page.evaluate((shift) => {
-    const chart = window.__chartTest!;
-    const range = chart.visibleRange()!;
-    chart.scrollToRange({ from: range.from + shift, to: range.to + shift });
-  }, bars);
-  await waitForPaint(page);
-}
 
 async function visibleTo(page: Page): Promise<number> {
   return page.evaluate(() => window.__chartTest!.visibleRange()!.to);

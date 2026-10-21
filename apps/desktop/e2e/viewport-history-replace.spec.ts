@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { holdIdleCallbacks, pushEvent, windowCandles } from './helpers/tauriStub';
-import { loadViewportWindow, newestBarPlacement, VIEWPORT_WINDOW_BARS } from './helpers/viewportHarness';
+import { loadViewportWindow, newestBarPlacement, shiftView, VIEWPORT_WINDOW_BARS } from './helpers/viewportHarness';
 
 test.beforeEach(async ({ page }) => {
   await holdIdleCallbacks(page);
@@ -13,11 +13,7 @@ test.beforeEach(async ({ page }) => {
  */
 async function expectDistanceKept(page: Page, newerBars: number, parkedBack: number): Promise<void> {
   await loadViewportWindow(page);
-  await page.evaluate((back) => {
-    const chart = window.__chartTest!;
-    const range = chart.visibleRange()!;
-    chart.scrollToRange({ from: range.from - back, to: range.to - back });
-  }, parkedBack);
+  await shiftView(page, -parkedBack);
   const before = await newestBarPlacement(page);
 
   const candles = windowCandles(VIEWPORT_WINDOW_BARS, 1.085, -newerBars);

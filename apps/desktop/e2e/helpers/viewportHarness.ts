@@ -130,6 +130,17 @@ export async function waitForPaint(page: Page): Promise<void> {
   );
 }
 
+/** Moves the view like a pan, after the app's own queued writes have landed so they cannot undo it. */
+export async function shiftView(page: Page, bars: number): Promise<void> {
+  await waitForPaint(page);
+  await page.evaluate((shift) => {
+    const chart = window.__chartTest!;
+    const range = chart.visibleRange()!;
+    chart.scrollToRange({ from: range.from + shift, to: range.to + shift });
+  }, bars);
+  await waitForPaint(page);
+}
+
 /** Delivers a live bar and waits until the chart has drawn it. */
 export function pushLiveBar(page: Page, slotsAhead = 1): Promise<void> {
   return pushLiveBars(page, [slotsAhead]);
