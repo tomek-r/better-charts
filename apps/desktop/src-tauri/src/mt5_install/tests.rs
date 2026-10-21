@@ -1,5 +1,7 @@
 use super::discover::*;
+use super::install::*;
 use super::locate::*;
+use crate::execution_adapter::ExecutionQueueView;
 use crate::mt5_backend::{is_configured, Mt5BackendConfig};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -690,4 +692,178 @@ fn discovery_never_reaches_the_configuration_auto_start_reads() {
     // discovered terminal can never make an unconfigured machine start MT5.
     let config = Mt5BackendConfig::from_env_with(|_| None);
     assert!(!is_configured(&config));
+}
+
+/// Bundled sources the install tests copy; the app ships the same two file names.
+const BUNDLED_ADVISOR_SOURCE: &str = "// bundled expert advisor\n";
+const BUNDLED_INDICATOR_SOURCE: &str = "// bundled indicator\n";
+/// Content of a destination copy an install has to replace.
+const PREVIOUS_SOURCE: &str = "// previous version\n";
+/// Folder holding the test's copy of the bundled resources.
+const BUNDLED_RESOURCES_FOLDER: &str = "Resources/mql5";
+
+/// Writes both bundled sources into the test folder, named as MT5 loads them, so
+/// the only difference between a test's source and its destination is the folder
+/// it sits in.
+fn bundled_sources(fixture: &TempFolder) -> BundledSources {
+    let resources = fixture.folder(BUNDLED_RESOURCES_FOLDER);
+    let expert_advisor = resources.join(EXPERT_ADVISOR_FILE);
+    fs::write(&expert_advisor, BUNDLED_ADVISOR_SOURCE).expect("bundled advisor is writable");
+    let indicator = resources.join(INDICATOR_FILE);
+    fs::write(&indicator, BUNDLED_INDICATOR_SOURCE).expect("bundled indicator is writable");
+    BundledSources {
+        expert_advisor,
+        indicator,
+    }
+}
+
+/// Queue view of a settled adapter: nothing queued and nothing in flight.
+fn idle_queue() -> ExecutionQueueView {
+    ExecutionQueueView {
+        pending: 0,
+        in_flight: None,
+        dispatch_enabled: true,
+        stranded: 0,
+    }
+}
+
+fn installed_file(file: Mql5File, path: &Path, outcome: InstallOutcome) -> InstalledFile {
+    InstalledFile {
+        file,
+        path: path.to_path_buf(),
+        outcome,
+    }
+}
+
+fn is_empty_folder(folder: &Path) -> bool {
+    let mut entries = fs::read_dir(folder).expect("test folder is readable");
+    entries.next().is_none()
+}
+
+#[test]
+fn fresh_install_writes_both_files_to_the_default_folders() {
+    let fixture = TempFolder::new("install-fresh");
+    let mql5 = fixture.folder("MQL5");
+    let indicator = mql5.join("Indicators").join(INDICATOR_FILE);
+    let advisor = mql5.join("Experts").join(EXPERT_ADVISOR_FILE);
+
+    let installed = install_bundled_sources(&bundled_sources(&fixture), &mql5, &idle_queue())
+        .expect("a fresh install succeeds");
+
+    // The indicator comes first: the advisor loads it through iCustom.
+    assert_eq!(
+        installed,
+        vec![
+            installed_file(Mql5File::Indicator, &indicator, InstallOutcome::Installed),
+            installed_file(Mql5File::ExpertAdvisor, &advisor, InstallOutcome::Installed),
+        ]
+    );
+    assert_eq!(
+        fs::read_to_string(&indicator).expect("indicator is readable"),
+        BUNDLED_INDICATOR_SOURCE
+    );
+    assert_eq!(
+        fs::read_to_string(&advisor).expect("advisor is readable"),
+        BUNDLED_ADVISOR_SOURCE
+    );
+}
+
+#[test]
+fn an_existing_copy_is_updated_where_it_is() {
+    let fixture = TempFolder::new("install-update");
+    let mql5 = fixture.folder("MQL5");
+    // The verified installation keeps the advisor one level below `Experts`.
+    let advisors = fixture.folder("MQL5/Experts/Advisors");
+    let advisor = advisors.join(EXPERT_ADVISOR_FILE);
+    fs::write(&advisor, PREVIOUS_SOURCE).expect("previous advisor copy is writable");
+
+    let installed = install_bundled_sources(&bundled_sources(&fixture), &mql5, &idle_queue())
+        .expect("the update succeeds");
+
+    let updated = installed.last().expect("the advisor is installed last");
+    assert_eq!(updated.file, Mql5File::ExpertAdvisor);
+    assert_eq!(updated.path, advisor);
+    assert_eq!(updated.outcome, InstallOutcome::Updated);
+    assert_eq!(
+        fs::read_to_string(&advisor).expect("advisor is readable"),
+        BUNDLED_ADVISOR_SOURCE
+    );
+    // No second copy appears in the MT5-recommended folder.
+    assert!(!mql5.join("Experts").join(EXPERT_ADVISOR_FILE).exists());
+}
+
+#[test]
+fn identical_content_is_unchanged_and_keeps_its_timestamp() {
+    let fixture = TempFolder::new("install-unchanged");
+    let mql5 = fixture.folder("MQL5");
+    let indicator = fixture.folder("MQL5/Indicators").join(INDICATOR_FILE);
+    fs::write(&indicator, BUNDLED_INDICATOR_SOURCE).expect("indicator copy is writable");
+    let advisor = fixture.folder("MQL5/Experts").join(EXPERT_ADVISOR_FILE);
+    fs::write(&advisor, BUNDLED_ADVISOR_SOURCE).expect("advisor copy is writable");
+    let modified = fs::metadata(&indicator)
+        .and_then(|metadata| metadata.modified())
+        .expect("timestamp is readable");
+
+    let installed = install_bundled_sources(&bundled_sources(&fixture), &mql5, &idle_queue())
+        .expect("the comparison succeeds");
+
+    let outcomes: Vec<InstallOutcome> = installed.iter().map(|file| file.outcome).collect();
+    assert_eq!(outcomes, vec![InstallOutcome::Unchanged; 2]);
+    let rewritten = fs::metadata(&indicator)
+        .and_then(|metadata| metadata.modified())
+        .expect("timestamp is readable");
+    assert_eq!(rewritten, modified, "an unchanged file is not rewritten");
+}
+
+/// The install refuses a queue that still carries work and writes nothing at all.
+fn assert_refused_without_writing(queue: &ExecutionQueueView) {
+    let fixture = TempFolder::new("install-order");
+    let mql5 = fixture.folder("MQL5");
+
+    let error = install_bundled_sources(&bundled_sources(&fixture), &mql5, queue)
+        .expect_err("an order in the queue refuses the install");
+
+    assert!(matches!(error, InstallError::OrderInFlight));
+    assert!(is_empty_folder(&mql5), "the order guard writes nothing");
+}
+
+#[test]
+fn a_pending_order_refuses_the_install() {
+    let pending = ExecutionQueueView {
+        pending: 1,
+        ..idle_queue()
+    };
+
+    assert_refused_without_writing(&pending);
+}
+
+#[test]
+fn an_order_in_flight_refuses_the_install() {
+    let in_flight = ExecutionQueueView {
+        in_flight: Some("cmd-1".to_string()),
+        ..idle_queue()
+    };
+
+    assert_refused_without_writing(&in_flight);
+}
+
+#[test]
+fn a_missing_source_is_reported_before_anything_is_written() {
+    let fixture = TempFolder::new("install-source-missing");
+    let mql5 = fixture.folder("MQL5");
+    let sources = BundledSources {
+        expert_advisor: fixture.path().join(EXPERT_ADVISOR_FILE),
+        indicator: fixture.path().join("absent").join(INDICATOR_FILE),
+    };
+
+    let error = install_bundled_sources(&sources, &mql5, &idle_queue())
+        .expect_err("a missing source fails the install");
+
+    match error {
+        InstallError::SourceUnreadable { file, .. } => {
+            assert_eq!(file, Mql5File::Indicator, "the indicator is read first");
+        }
+        other => panic!("unexpected install error: {other:?}"),
+    }
+    assert!(is_empty_folder(&mql5), "a missing source writes nothing");
 }
