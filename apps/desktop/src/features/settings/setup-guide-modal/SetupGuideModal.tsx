@@ -3,6 +3,7 @@ import { isTauri, invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { afterExitAnimation } from '../../../shared/ui/afterExitAnimation';
 import { DownloadIcon } from '../../../shared/ui/DownloadIcon';
+import { InstallToMt5 } from './InstallToMt5';
 
 // The EA and tick-history reader already ship with the app as Tauri resources
 // (see tauri.conf.json). The guide downloads them to a folder the user picks:
@@ -32,7 +33,10 @@ async function downloadResource(resourcePath: string, fileName: string): Promise
   }
 }
 
-/** A simple overlay that sits on top of the open settings content. */
+/**
+ * A simple overlay that sits on top of the open settings content. The automatic
+ * install comes first, with the manual steps below it as the fallback.
+ */
 export function SetupGuideModal({ onClose }: { onClose: () => void }) {
   const closeButton = useRef<HTMLButtonElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
@@ -87,43 +91,47 @@ export function SetupGuideModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <ol className="setup-guide-steps">
-          <li>
-            Download the files below — a save dialog lets you choose the folder.
-            <div className="setup-guide-downloads">
-              {BUNDLED_RESOURCES.map((resource) => (
-                <button
-                  key={resource.resourcePath}
-                  type="button"
-                  className="setup-guide-download"
-                  data-resource={resource.resourcePath}
-                  disabled={!shellAvailable}
-                  onClick={() => {
-                    void downloadResource(resource.resourcePath, resource.fileName);
-                  }}
-                >
-                  <DownloadIcon />
-                  <span className="setup-guide-download-file">{resource.fileName}</span>
-                  <span className="setup-guide-download-kind">{resource.kind}</span>
-                </button>
-              ))}
-            </div>
-          </li>
-          <li>
-            In MetaTrader 5, open <strong>MQL5</strong> in the Navigator tree, then <strong>Expert Advisors</strong>{' '}
-            (right-click &rarr; Show in Data Folder) and <strong>Indicators</strong>.
-          </li>
-          <li>
-            Copy <code>BetterChartsBridge.mq5</code> into the <code>Experts</code> folder and{' '}
-            <code>BetterChartsTickHistoryReader.mq5</code> into the <code>Indicators</code> folder.
-          </li>
-          <li>
-            Press <strong>F7</strong> in MetaEditor to compile both (aim for 0 errors) and attach the EA to any chart.
-          </li>
-          <li>
-            Back here, the connection switches to <strong>connected</strong> — the bridge is ready.
-          </li>
-        </ol>
+        <div className="setup-guide-body">
+          <InstallToMt5 />
+          <h3 className="setup-guide-title setup-guide-manual-title">Or install manually</h3>
+          <ol className="setup-guide-steps">
+            <li>
+              Download the files below — a save dialog lets you choose the folder.
+              <div className="setup-guide-downloads">
+                {BUNDLED_RESOURCES.map((resource) => (
+                  <button
+                    key={resource.resourcePath}
+                    type="button"
+                    className="setup-guide-download"
+                    data-resource={resource.resourcePath}
+                    disabled={!shellAvailable}
+                    onClick={() => {
+                      void downloadResource(resource.resourcePath, resource.fileName);
+                    }}
+                  >
+                    <DownloadIcon />
+                    <span className="setup-guide-download-file">{resource.fileName}</span>
+                    <span className="setup-guide-download-kind">{resource.kind}</span>
+                  </button>
+                ))}
+              </div>
+            </li>
+            <li>
+              In MetaTrader 5, open <strong>MQL5</strong> in the Navigator tree, then <strong>Expert Advisors</strong>{' '}
+              (right-click &rarr; Show in Data Folder) and <strong>Indicators</strong>.
+            </li>
+            <li>
+              Copy <code>BetterChartsBridge.mq5</code> into the <code>Experts</code> folder and{' '}
+              <code>BetterChartsTickHistoryReader.mq5</code> into the <code>Indicators</code> folder.
+            </li>
+            <li>
+              Press <strong>F7</strong> in MetaEditor to compile both (aim for 0 errors) and attach the EA to any chart.
+            </li>
+            <li>
+              Back here, the connection switches to <strong>connected</strong> — the bridge is ready.
+            </li>
+          </ol>
+        </div>
       </div>
     </div>
   );

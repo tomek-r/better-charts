@@ -1,0 +1,155 @@
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { gotoWithStub } from './helpers/tauriStub';
+import {
+  DEFAULT_TERMINAL_PATH,
+  PORTABLE_MQL5_PATH,
+  STANDARD_MQL5_PATH,
+  mt5InstallRequests,
+  mt5Installation,
+  openSetupGuide,
+} from './helpers/setupGuide';
+
+const DONE_LINE = 'Done. Attach BetterChartsBridge to a chart in MT5 and enable Algo Trading.';
+
+test('installs both files into the only data folder and reports the compile result', async ({ page }) => {
+  await gotoWithStub(page);
+  const guide = await openSetupGuide(page);
+  const install = guide.locator('.setup-guide-install');
+
+  // One target: shown as text, with no folder select to ask about.
+  await expect(install.locator('.setup-guide-install-target')).toContainText('MetaTrader 5');
+  await expect(install.locator('code')).toHaveText(PORTABLE_MQL5_PATH);
+  await expect(install.getByRole('combobox')).toHaveCount(0);
+  await expect(install.getByRole('button', { name: 'Install to MT5' })).toBeEnabled();
+  expect(await mt5InstallRequests(page)).toEqual([]);
+
+  await install.getByRole('button', { name: 'Install to MT5' }).click();
+
+  // Rows follow the report: the tick-history indicator first, then the EA.
+  await expect(install.locator('.setup-guide-install-file-name')).toHaveText([
+    'BetterChartsTickHistoryReader.mq5',
+    'BetterChartsBridge.mq5',
+  ]);
+  await expect(install.locator('.setup-guide-install-file-outcome')).toHaveText(['Installed', 'Updated']);
+  await expect(install.locator('.setup-guide-install-file-compile')).toHaveText([
+    'Compiled, 0 errors',
+    'Compiled, 0 errors',
+  ]);
+  await expect(install.locator('.setup-guide-install-done')).toHaveText(DONE_LINE);
+
+  // The result list belongs to the automatic section, never to the numbered steps.
+  await expect(guide.locator('.setup-guide-steps .setup-guide-install-file')).toHaveCount(0);
+  expect(await mt5InstallRequests(page)).toEqual([
+    { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: PORTABLE_MQL5_PATH },
+  ]);
+});
+
+test('a machine without MetaTrader 5 points at the manual steps and offers no install', async ({ page }) => {
+  await gotoWithStub(page, { responses: { list_mt5_installations: [] } });
+  const guide = await openSetupGuide(page);
+  const install = guide.locator('.setup-guide-install');
+
+  await expect(install.locator('.setup-guide-install-note')).toHaveText(
+    'MetaTrader 5 was not found on this computer. Use the manual steps below.',
+  );
+  await expect(install.getByRole('button')).toHaveCount(0);
+  await expect(guide.locator('.setup-guide-manual-title')).toHaveText('Or install manually');
+});
+
+test('two data folders ask which one to install into and send its path', async ({ page }) => {
+  await gotoWithStub(page, {
+    responses: {
+      list_mt5_installations: [
+        mt5Installation({
+          dataFolders: [
+            { mql5Path: PORTABLE_MQL5_PATH, layout: 'portable' },
+            { mql5Path: STANDARD_MQL5_PATH, layout: 'standard' },
+          ],
+        }),
+      ],
+    },
+  });
+  const guide = await openSetupGuide(page);
+  const install = guide.locator('.setup-guide-install');
+
+  const folder = install.getByLabel('MetaTrader 5 data folder');
+  await expect(folder.locator('option')).toHaveText([
+    `MetaTrader 5: ${PORTABLE_MQL5_PATH}`,
+    `MetaTrader 5: ${STANDARD_MQL5_PATH}`,
+  ]);
+  await folder.selectOption({ label: `MetaTrader 5: ${STANDARD_MQL5_PATH}` });
+  await install.getByRole('button', { name: 'Install to MT5' }).click();
+
+  await expect(install.locator('.setup-guide-install-done')).toHaveText(DONE_LINE);
+  expect(await mt5InstallRequests(page)).toEqual([
+    { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: STANDARD_MQL5_PATH },
+  ]);
+});
+
+/** Opens the guide on a stub with the given scripted answers, clicks Install, and returns the install section. */
+async function runInstall(page: Page, stubOptions: Parameters<typeof gotoWithStub>[1]): Promise<Locator> {
+  await gotoWithStub(page, stubOptions);
+  const guide = await openSetupGuide(page);
+  const install = guide.locator('.setup-guide-install');
+  await install.getByRole('button', { name: 'Install to MT5' }).click();
+  return install;
+}
+
+test('a refused install shows the reason and leaves the button usable', async ({ page }) => {
+  const refusal = 'An order is being sent to MT5; install after it settles.';
+  const install = await runInstall(page, { failures: { install_to_mt5: refusal } });
+
+  await expect(install.getByRole('alert')).toHaveText(refusal);
+  await expect(install.locator('.setup-guide-install-file')).toHaveCount(0);
+  await expect(install.getByRole('button', { name: 'Install to MT5' })).toBeEnabled();
+});
+
+/** An install report whose indicator compiled as given and whose EA compiled clean. */
+function reportWithIndicator(indicatorCompiled: { errors: number; warnings: number; messages: string[] } | null) {
+  return {
+    files: [
+      {
+        file: 'indicator',
+        path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5/Indicators/BetterChartsTickHistoryReader.mq5',
+        outcome: 'installed',
+        compiled: indicatorCompiled,
+      },
+      {
+        file: 'expertAdvisor',
+        path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/BetterChartsBridge.mq5',
+        outcome: 'unchanged',
+        compiled: indicatorCompiled && indicatorCompiled.errors > 0 ? null : { errors: 0, warnings: 0, messages: [] },
+      },
+    ],
+  };
+}
+
+test('a compile with a warning is not reported as clean and gets no done line', async ({ page }) => {
+  const install = await runInstall(page, {
+    responses: { install_to_mt5: reportWithIndicator({ errors: 0, warnings: 1, messages: [] }) },
+  });
+
+  await expect(install.locator('.setup-guide-install-file-compile')).toHaveText([
+    '0 errors, 1 warning',
+    'Compiled, 0 errors',
+  ]);
+  await expect(install.locator('.setup-guide-install-done')).toHaveCount(0);
+});
+
+test('a broken indicator reports its messages and stops short of the done line', async ({ page }) => {
+  const indicatorMessage =
+    "BetterChartsTickHistoryReader.mq5 (48,12) : error 123: 'OnCalculate' - undeclared identifier";
+  const install = await runInstall(page, {
+    responses: {
+      install_to_mt5: reportWithIndicator({ errors: 1, warnings: 2, messages: [indicatorMessage] }),
+    },
+  });
+
+  await expect(install.locator('.setup-guide-install-file-outcome')).toHaveText(['Installed', 'Already up to date']);
+  await expect(install.locator('.setup-guide-install-file-compile')).toHaveText([
+    '1 error, 2 warnings',
+    'Not compiled: the indicator has errors',
+  ]);
+  await expect(install.locator('.setup-guide-install-messages li')).toHaveText([indicatorMessage]);
+  await expect(install.locator('.setup-guide-install-done')).toHaveCount(0);
+});

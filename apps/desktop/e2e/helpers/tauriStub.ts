@@ -428,6 +428,33 @@ export async function installTauriStub(
       cancel_tick_profile: null,
       start_mt5_backend: null,
       stop_mt5_backend: null,
+      // Setup guide: one portable installation on this machine, and a clean report
+      // for installing both bundled files. A test overrides either to script a
+      // machine with no MT5, several data folders, or a compile failure.
+      list_mt5_installations: [
+        {
+          terminalPath: 'C:\\Program Files\\MetaTrader 5\\terminal64.exe',
+          label: 'MetaTrader 5',
+          configured: false,
+          dataFolders: [{ mql5Path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5', layout: 'portable' }],
+        },
+      ],
+      install_to_mt5: {
+        files: [
+          {
+            file: 'indicator',
+            path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5/Indicators/BetterChartsTickHistoryReader.mq5',
+            outcome: 'installed',
+            compiled: { errors: 0, warnings: 0, messages: [] },
+          },
+          {
+            file: 'expertAdvisor',
+            path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/BetterChartsBridge.mq5',
+            outcome: 'updated',
+            compiled: { errors: 0, warnings: 0, messages: [] },
+          },
+        ],
+      },
       submit_order: null,
       close_position: null,
       cancel_order: null,
@@ -703,6 +730,13 @@ export async function installTauriStub(
         w.__setupGuideSaves = saves;
         return null;
       }
+      // The setup-guide install command: record the target for assertions, then
+      // answer with the scripted report (a test may script a compile failure).
+      if (cmd === 'install_to_mt5') {
+        const installs = (w.__mt5Installs as Array<Record<string, unknown>> | undefined) ?? [];
+        installs.push({ terminalPath: args.terminalPath, mql5Path: args.mql5Path });
+        w.__mt5Installs = installs;
+      }
       if (Object.prototype.hasOwnProperty.call(failures, cmd)) {
         throw new Error(failures[cmd]);
       }
@@ -735,6 +769,7 @@ export async function installTauriStub(
     // The real Tauri runtime sets this; @tauri-apps/api/core isTauri() reads it.
     w.isTauri = true;
     w.__setupGuideSaves = [];
+    w.__mt5Installs = [];
     w.__TAURI_INTERNALS__ = {
       invoke,
       transformCallback,
