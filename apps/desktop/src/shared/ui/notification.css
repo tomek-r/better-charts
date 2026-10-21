@@ -120,3 +120,28 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* Follow-up a notification offers next to Dismiss (e.g. reinstalling the bundled MT5 files). */
+.notification-action {
+  flex: none;
+  align-self: center;
+  padding: 4px 10px;
+  border: 1px solid var(--color-accent);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-bright);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.notification-action:hover {
+  background: var(--color-accent-ring-soft);
+}
+
+.notification-action:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

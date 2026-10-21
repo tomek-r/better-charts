@@ -28,6 +28,11 @@ export interface BridgeStatus {
   partialClose?: boolean;
   /** Algo-trading permission the EA advertised for this session (display only); absent or false = disabled in MT5. */
   tradingEnabled?: boolean;
+  /**
+   * True only when the connection was refused because the installed EA or tick reader is not the version the app
+   * requires, so reinstalling the bundled files fixes it. Absent or false for every other error.
+   */
+  componentOutdated?: boolean;
 }
 
 export interface ExecutionSafetyStatus {
@@ -468,4 +473,60 @@ export interface MT5BridgeSettings {
   winePrefix: string;
   wineBinary: string;
   configPath: string;
+}
+
+/** One MT5 installation the setup guide offers, as `list_mt5_installations` reports it. */
+export interface Mt5InstallationView {
+  /** Windows path of `terminal64.exe`, in the form the install command accepts back. */
+  terminalPath: string;
+  /** Name of the install folder, e.g. `MetaTrader 5`. */
+  label: string;
+  /** Whether the `MT5_*` environment variables configured this installation. */
+  configured: boolean;
+  /** Every `MQL5` folder the installation uses; empty when it has not created one yet. */
+  dataFolders: Mt5DataFolderView[];
+}
+
+/** One `MQL5` folder of an installation. */
+export interface Mt5DataFolderView {
+  /** Host path of the folder, which the install command accepts back verbatim. */
+  mql5Path: string;
+  /** `portable`: inside the install folder; `standard`: in the user profile. */
+  layout: 'portable' | 'standard';
+}
+
+/** The bundled file, named by the role it plays in MT5. */
+export type Mt5InstallFile = 'expertAdvisor' | 'indicator';
+
+/** What the install step did to one file. */
+export type Mt5InstallOutcome = 'installed' | 'updated' | 'unchanged';
+
+/** MetaEditor's result for one file. */
+export interface Mt5CompiledView {
+  errors: number;
+  warnings: number;
+  /** The log's error and warning lines, already capped by the compiler. */
+  messages: string[];
+}
+
+/** What happened to one bundled file. */
+export interface Mt5FileReport {
+  file: Mt5InstallFile;
+  /** Host path of the installed copy. */
+  path: string;
+  outcome: Mt5InstallOutcome;
+  /** Null when the file was not compiled: a broken indicator ends the run, so the EA is never compiled. */
+  compiled: Mt5CompiledView | null;
+}
+
+/** `install_to_mt5` report: what installing and compiling the two bundled files produced. */
+export interface Mt5InstallReport {
+  /** One entry per installed file, indicator first as the install step writes it. */
+  files: Mt5FileReport[];
+}
+
+/** `restart_mt5_with_ea` report: the terminal is starting again with the EA attached. */
+export interface Mt5RestartReport {
+  /** True once MT5 was relaunched; the session itself arrives later as a bridge status. */
+  restarted: boolean;
 }
