@@ -1,64 +1,53 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useState } from 'react';
 import { errorText } from '../../../../shared/errorText';
-import { useBridgeConnectionSelector } from '../../../bridge/BridgeSessionProvider';
 import type { Mt5InstallationView, Mt5InstallReport, Mt5RestartReport } from '../../../../shared/bridge/types';
 import { chooseTarget, installTargets, type InstallTarget } from './installTargets';
-import { everyFileCompiledClean, installDoneText } from './installText';
+import { everyFileCompiledClean } from './installText';
 
-/**
- * Where the done line stands within its optional restart. Only `idle` shows the line
- * itself; every other step replaces it in the same reserved row, so the dialog keeps
- * its height.
- */
-export type RestartStep = 'idle' | 'confirm' | 'running' | 'done';
+/** The two presses the section offers: the plain install, and the install that then restarts MT5. */
+export type InstallButton = 'install' | 'installAndRestart';
 
-/** Everything the install section renders: the folders, the last report and the restart's place in it. */
+/** The call in flight: which button started it, and whether it has reached the restart. */
+interface InstallRun {
+  button: InstallButton;
+  restarting: boolean;
+}
+
+/** Everything the install section renders: the folders, the step in flight and the last report. */
 interface InstallToMt5View {
   shellAvailable: boolean;
   installations: Mt5InstallationView[] | undefined;
   targets: InstallTarget[];
   selected: InstallTarget | undefined;
   withoutDataFolder: Mt5InstallationView[];
-  report: Mt5InstallReport | undefined;
-  cleanReport: Mt5InstallReport | undefined;
-  doneLine: string | undefined;
-  installedTarget: InstallTarget | undefined;
-  running: boolean;
-  restartStep: RestartStep;
+  results: Mt5InstallReport | undefined;
+  pressed: InstallButton | undefined;
+  restarting: boolean;
   busy: boolean;
   error: string | undefined;
-  restartLink: RefObject<HTMLButtonElement | null>;
-  restartConfirm: RefObject<HTMLButtonElement | null>;
   chooseDataFolder: (key: string) => void;
   install: (target: InstallTarget) => Promise<void>;
-  restart: (target: InstallTarget) => Promise<void>;
-  cancelRestart: () => void;
-  openRestart: () => void;
+  installAndRestart: (target: InstallTarget) => Promise<void>;
+}
+
+/** Both commands name the same folder: the install writes it and the restart reopens that terminal on it. */
+function targetArgs(target: InstallTarget): { terminalPath: string; mql5Path: string } {
+  return { terminalPath: target.terminalPath, mql5Path: target.mql5Path };
 }
 
 /**
- * The install section's state: the folders the backend listed, the last report, the
- * restart's step and the one in-flight call at a time. The list, install and restart
- * commands are the section's only ways to reach the backend.
+ * The install section's state: the folders the backend listed, the last report and the
+ * one in-flight call at a time. The list, install and restart commands are the section's
+ * only ways to reach the backend.
  */
 export function useInstallToMt5(): InstallToMt5View {
   const shellAvailable = isTauri();
-  const bridgeConnected = useBridgeConnectionSelector(({ status }) => status.state === 'connected');
   const [installations, setInstallations] = useState<Mt5InstallationView[]>();
   const [selectedKey, setSelectedKey] = useState<string>();
-  const [running, setRunning] = useState(false);
+  const [run, setRun] = useState<InstallRun>();
   const [report, setReport] = useState<Mt5InstallReport>();
-  /** The folder the report came from: a restart names the target the install wrote into. */
-  const [installedTarget, setInstalledTarget] = useState<InstallTarget>();
-  // Captured with the press: the install itself drops the connection while MT5 reloads the EA.
-  const [connectedAtInstall, setConnectedAtInstall] = useState(false);
-  const [restartStep, setRestartStep] = useState<RestartStep>('idle');
   const [error, setError] = useState<string>();
-  const restartLink = useRef<HTMLButtonElement>(null);
-  const restartConfirm = useRef<HTMLButtonElement>(null);
-  // Set by Cancel, so the effect below knows the link is back and may take focus again.
-  const refocusLink = useRef(false);
 
   useEffect(() => {
     if (!shellAvailable) {
@@ -81,87 +70,45 @@ export function useInstallToMt5(): InstallToMt5View {
     };
   }, [shellAvailable]);
 
-  // A confirmation takes focus as soon as it exists, so a keyboard user confirms or cancels at once.
-  useEffect(() => {
-    if (restartStep === 'confirm') {
-      restartConfirm.current?.focus();
-    } else if (restartStep === 'idle' && refocusLink.current) {
-      refocusLink.current = false;
-      restartLink.current?.focus();
-    }
-  }, [restartStep]);
-
   const targets = installations ? installTargets(installations) : [];
   const selected = chooseTarget(targets, selectedKey);
   const withoutDataFolder = (installations ?? []).filter((installation) => installation.dataFolders.length === 0);
-  // Success has its own one-line report; every other outcome keeps the detailed rows.
-  const cleanReport = report !== undefined && everyFileCompiledClean(report.files) ? report : undefined;
-  const doneLine = cleanReport === undefined ? undefined : installDoneText(cleanReport.files, connectedAtInstall);
-  const restarting = restartStep === 'running';
-  // One target at a time: the install and the restart both own the terminal while they run.
-  const busy = running || restarting;
+  // A clean run says nothing and shows no rows; anything left to fix keeps the detailed rows below the buttons.
+  const results = report !== undefined && everyFileCompiledClean(report.files) ? undefined : report;
 
   /** A report or refusal belongs to the folder it was asked about, so choosing another one clears it. */
   function chooseDataFolder(key: string) {
     setSelectedKey(key);
     setReport(undefined);
-    setInstalledTarget(undefined);
-    setRestartStep('idle');
     setError(undefined);
-  }
-
-  async function install(target: InstallTarget) {
-    if (busy) {
-      return;
-    }
-    setRunning(true);
-    setError(undefined);
-    setReport(undefined);
-    setInstalledTarget(target);
-    setRestartStep('idle');
-    setConnectedAtInstall(bridgeConnected);
-    try {
-      setReport(
-        await invoke<Mt5InstallReport>('install_to_mt5', {
-          terminalPath: target.terminalPath,
-          mql5Path: target.mql5Path,
-        }),
-      );
-    } catch (failure) {
-      setError(errorText(failure));
-    } finally {
-      setRunning(false);
-    }
   }
 
   /**
-   * The confirmed restart: MT5 closes, so the row reports progress until the backend
-   * answers. A refusal leaves the terminal as it was, which brings the line back with
-   * the reason in the alert below.
+   * One press installs both files; `restart` adds the restart the moment every file
+   * compiled clean, and a report with something to fix ends the run there so the rows
+   * can say what. A refusal leaves the terminal as it was, with only the error to show.
    */
-  async function restart(target: InstallTarget) {
-    setRestartStep('running');
+  async function runInstall(target: InstallTarget, restart: boolean): Promise<void> {
+    if (run !== undefined) {
+      return;
+    }
+    const button: InstallButton = restart ? 'installAndRestart' : 'install';
+    setRun({ button, restarting: false });
     setError(undefined);
+    setReport(undefined);
     try {
-      await invoke<Mt5RestartReport>('restart_mt5_with_ea', {
-        terminalPath: target.terminalPath,
-        mql5Path: target.mql5Path,
-      });
-      setRestartStep('done');
+      const installed = await invoke<Mt5InstallReport>('install_to_mt5', targetArgs(target));
+      setReport(installed);
+      if (!restart || !everyFileCompiledClean(installed.files)) {
+        return;
+      }
+      setRun({ button, restarting: true });
+      await invoke<Mt5RestartReport>('restart_mt5_with_ea', targetArgs(target));
     } catch (failure) {
       setError(errorText(failure));
-      setRestartStep('idle');
+    } finally {
+      setRun(undefined);
     }
-  }
-
-  function cancelRestart() {
-    refocusLink.current = true;
-    setRestartStep('idle');
-  }
-
-  /** The restart phrase only asks: nothing reaches the backend until the confirmation's press. */
-  function openRestart() {
-    setRestartStep('confirm');
   }
 
   return {
@@ -170,20 +117,13 @@ export function useInstallToMt5(): InstallToMt5View {
     targets,
     selected,
     withoutDataFolder,
-    report,
-    cleanReport,
-    doneLine,
-    installedTarget,
-    running,
-    restartStep,
-    busy,
+    results,
+    pressed: run?.button,
+    restarting: run?.restarting ?? false,
+    busy: run !== undefined,
     error,
-    restartLink,
-    restartConfirm,
     chooseDataFolder,
-    install,
-    restart,
-    cancelRestart,
-    openRestart,
+    install: (target: InstallTarget) => runInstall(target, false),
+    installAndRestart: (target: InstallTarget) => runInstall(target, true),
   };
 }

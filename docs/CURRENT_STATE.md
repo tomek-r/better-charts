@@ -40,11 +40,13 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   compiles both with MetaEditor, reporting per file; the UTF-16LE log decides, and
   an indicator with errors stops the run before the EA. The guide's manual steps
   remain the fallback when no installation is found.
-- After an install, the line beside the button names the next step (first install,
-  reload while a bridge is connected, reattach) and offers "restart MT5 with the EA
-  attached": after an in-place confirmation the app closes MT5, writes a temporary
-  UTF-16LE `config/BetterChartsStartup.ini` (no symbol, so MT5 opens its own
-  default chart) and a preset with the bridge token, host and port
+- The install offers two buttons, "Install to MT5" and "Install and restart MT5".
+  A press installs and compiles both files; the restart button then closes MT5 and
+  reopens it with the EA attached, but only once every file compiled with 0 errors
+  and 0 warnings, so a run that needs fixing stops at its per-file rows. A clean run
+  shows no message at all. The restart writes a temporary UTF-16LE
+  `config/BetterChartsStartup.ini` (no symbol, so MT5 opens its own default chart)
+  and a preset with the bridge token, host and port
   (`<MQL5>/Presets/BetterChartsStartup.set`), relaunches `terminal64.exe`
   (`/portable` for the portable layout) and deletes both files once the bridge
   connects, after 120 s, or at the next app start. It never enables Algo Trading,

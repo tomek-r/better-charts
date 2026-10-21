@@ -64,9 +64,12 @@ For development, use `pnpm tauri dev`. `pnpm dev` starts a browser-only preview;
 
 Better Charts can install the two MT5 files itself. Open **App settings** and click
 **How to set up the bridge connection**: the app finds MT5 on Windows, macOS and
-Linux (Wine), copies both sources into the chosen `MQL5` data folder, compiles them
-with MetaEditor, and can restart MT5 with the EA attached. It never enables Algo
-Trading, and both are refused while an order is being sent. The manual steps below
+Linux (Wine) and offers two buttons. "Install to MT5" copies both sources into the
+chosen `MQL5` data folder and compiles them with MetaEditor; "Install and restart
+MT5" does the same and then closes and reopens MT5 with the EA attached, but only
+once every file compiled with 0 errors and 0 warnings. A clean run shows no
+message; anything left to fix is listed per file. It never enables Algo Trading,
+and both are refused while an order is being sent. The manual steps below
 remain the fallback, for example when MT5 is not found.
 
 1. Open MT5's **File → Open Data Folder**. Copy

@@ -97,6 +97,10 @@ export interface TauriStubOptions {
   recordedSnapshotBars?: number;
   /** Holds `save_app_settings` open this long, to observe a dialog while it saves. */
   saveDelayMs?: number;
+  /** Holds `install_to_mt5` open this long, to observe the buttons while the install runs. */
+  installDelayMs?: number;
+  /** Holds `restart_mt5_with_ea` open this long, to observe the buttons while MT5 reopens. */
+  restartDelayMs?: number;
 }
 
 export interface RecordedHistory {
@@ -496,6 +500,12 @@ export async function installTauriStub(
       responses.get_bridge_status = { ...(responses.get_bridge_status as object), partialClose: opts.partialClose };
     }
     const failures: Record<string, string> = { ...opts.failures };
+    /** Commands a test holds open, to observe the UI they block. */
+    const delays: Record<string, number | undefined> = {
+      save_app_settings: opts.saveDelayMs,
+      install_to_mt5: opts.installDelayMs,
+      restart_mt5_with_ea: opts.restartDelayMs,
+    };
 
     const callbacks = new Map<number, (data: unknown) => unknown>();
     const listeners = new Map<string, number[]>();
@@ -754,8 +764,9 @@ export async function installTauriStub(
       if (!Object.prototype.hasOwnProperty.call(responses, cmd)) {
         throw new Error(`E2E Tauri stub has no scripted response for command "${cmd}".`);
       }
-      if (cmd === 'save_app_settings' && opts.saveDelayMs !== undefined) {
-        await new Promise((resolve) => setTimeout(resolve, opts.saveDelayMs));
+      const delayMs = delays[cmd];
+      if (delayMs !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
       if (cmd === 'save_app_settings' && responses[cmd] === 'reactive') {
         const view = responses.get_app_settings as Record<string, unknown>;

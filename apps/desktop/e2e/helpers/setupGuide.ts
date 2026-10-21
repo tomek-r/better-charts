@@ -1,5 +1,10 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import type { Mt5InstallationView, Mt5InstallOutcome, Mt5InstallReport } from '../../src/shared/bridge/types';
+import type {
+  Mt5DataFolderView,
+  Mt5InstallationView,
+  Mt5InstallOutcome,
+  Mt5InstallReport,
+} from '../../src/shared/bridge/types';
 
 /** Host `MQL5` folder of the stub's default portable installation. */
 export const PORTABLE_MQL5_PATH = '/mt5/drive_c/Program Files/MetaTrader 5/MQL5';
@@ -9,6 +14,12 @@ export const DEFAULT_TERMINAL_PATH = 'C:\\Program Files\\MetaTrader 5\\terminal6
 
 /** A `standard` data folder, as a second MT5 data folder of the same installation. */
 export const STANDARD_MQL5_PATH = '/mt5/drive_c/users/demo/AppData/Roaming/MetaQuotes/Terminal/9F2E1A/MQL5';
+
+/** The two folders one installation can offer, so a test can watch the folder select. */
+export const TWO_DATA_FOLDERS: Mt5DataFolderView[] = [
+  { mql5Path: PORTABLE_MQL5_PATH, layout: 'portable' },
+  { mql5Path: STANDARD_MQL5_PATH, layout: 'standard' },
+];
 
 /** One MT5 installation as `list_mt5_installations` reports it; `overrides` changes only what a test cares about. */
 export function mt5Installation(overrides: Partial<Mt5InstallationView> = {}): Mt5InstallationView {
@@ -23,7 +34,7 @@ export function mt5Installation(overrides: Partial<Mt5InstallationView> = {}): M
 
 /**
  * A clean `install_to_mt5` report: both bundled files compiled without a diagnostic,
- * with the outcomes the test cares about (the EA outcome picks the success line).
+ * with the outcomes the test cares about.
  */
 export function cleanInstallReport(
   expertAdvisor: Mt5InstallOutcome,

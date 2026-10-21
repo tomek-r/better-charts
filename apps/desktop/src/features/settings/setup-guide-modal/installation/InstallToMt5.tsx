@@ -1,23 +1,29 @@
 import { DataFolderChoice } from './DataFolderChoice';
 import { InstallResults } from './InstallResults';
-import { MT5_NOT_FOUND_TEXT } from './installText';
-import { RestartWithEa } from './RestartWithEa';
-import { useInstallToMt5 } from './useInstallToMt5';
+import { INSTALLING_TEXT, MT5_NOT_FOUND_TEXT, RESTARTING_TEXT } from './installText';
+import { useInstallToMt5, type InstallButton } from './useInstallToMt5';
+
+/** The running button names its step; the idle one keeps its own label. */
+function installButtonText(pressed: InstallButton | undefined): string {
+  return pressed === 'install' ? INSTALLING_TEXT : 'Install to MT5';
+}
+
+/** A restart press passes through two steps, so this button has two names to report. */
+function restartButtonText(pressed: InstallButton | undefined, restarting: boolean): string {
+  if (pressed !== 'installAndRestart') {
+    return 'Install and restart MT5';
+  }
+  return restarting ? RESTARTING_TEXT : INSTALLING_TEXT;
+}
 
 /**
- * Installs both bundled MQL5 files into a data folder the backend discovered, then
- * shows what MetaEditor made of them. Enabling Algo Trading stays with the user: the
- * app never turns it on. The manual steps below remain the fallback when MT5 is not
- * found or an install is refused.
+ * Installs both bundled MQL5 files into a data folder the backend discovered, and on a
+ * second button installs and then restarts MT5 with the EA attached. Enabling Algo
+ * Trading stays with the user: the app never turns it on. The manual steps below remain
+ * the fallback when MT5 is not found or an install is refused.
  *
- * A run that compiled everything clean reports one short line beside the button, in
- * the row the button already occupies, so the dialog keeps its height; anything left
- * to fix keeps the detailed rows below. That line words the next step from what
- * happened to the EA and from the connection the press found.
- *
- * Where that line offers a restart, the phrase is a button that asks first: the
- * confirmation, the progress line and the result all replace the line inside the same
- * reserved row, and only the confirmed press reaches the backend.
+ * A clean run renders nothing: the buttons return to their labels, since a refusal and
+ * a report with something to fix are the only outcomes worth words.
  */
 export function InstallToMt5() {
   const {
@@ -26,21 +32,14 @@ export function InstallToMt5() {
     targets,
     selected,
     withoutDataFolder,
-    report,
-    cleanReport,
-    doneLine,
-    installedTarget,
-    running,
-    restartStep,
+    results,
+    pressed,
+    restarting,
     busy,
     error,
-    restartLink,
-    restartConfirm,
     chooseDataFolder,
     install,
-    restart,
-    cancelRestart,
-    openRestart,
+    installAndRestart,
   } = useInstallToMt5();
 
   if (!shellAvailable) {
@@ -75,31 +74,27 @@ export function InstallToMt5() {
               disabled={busy}
               onClick={() => void install(selected)}
             >
-              {running ? 'Installing…' : 'Install to MT5'}
+              {installButtonText(pressed)}
             </button>
-            {cleanReport !== undefined && doneLine !== undefined && installedTarget !== undefined && (
-              <RestartWithEa
-                files={cleanReport.files}
-                doneLine={doneLine}
-                restartStep={restartStep}
-                linkRef={restartLink}
-                confirmRef={restartConfirm}
-                onOpen={openRestart}
-                onConfirm={() => void restart(installedTarget)}
-                onCancel={cancelRestart}
-              />
-            )}
+            <button
+              type="button"
+              className="setup-guide-install-run"
+              disabled={busy}
+              onClick={() => void installAndRestart(selected)}
+            >
+              {restartButtonText(pressed, restarting)}
+            </button>
           </div>
           <p className="setup-guide-install-note">
-            If the EA is attached to a chart, MT5 reloads it and the bridge reconnects. Install is refused while an
-            order is being sent.
+            Install and restart MT5 closes MT5 and reopens it with the EA attached. If the EA is attached to a chart,
+            MT5 reloads it and the bridge reconnects. Install is refused while an order is being sent.
           </p>
           {error !== undefined && (
             <p className="setup-guide-install-error" role="alert">
               {error}
             </p>
           )}
-          {report !== undefined && cleanReport === undefined && <InstallResults report={report} />}
+          {results !== undefined && <InstallResults report={results} />}
         </>
       )}
       {withoutDataFolder.map((installation) => (
