@@ -165,8 +165,11 @@ fn write_then_replace(temporary: &Path, destination: &Path, bytes: &[u8]) -> io:
 
 /// Writes `bytes` through a temporary file and renames it over the destination, so
 /// a failure leaves either the previous copy or nothing behind, never a truncated
-/// source. A folder that does not exist yet is created.
-fn write_atomically(destination: &Path, bytes: &[u8]) -> io::Result<()> {
+/// file. A folder that does not exist yet is created.
+///
+/// Shared with `restart`, whose startup ini and preset must never be read
+/// half-written by a terminal that is about to start.
+pub(super) fn write_atomically(destination: &Path, bytes: &[u8]) -> io::Result<()> {
     let folder = destination.parent().ok_or_else(missing_folder_error)?;
     fs::create_dir_all(folder)?;
     let temporary = temporary_path(destination);
@@ -219,8 +222,9 @@ fn install_one(
 /// The order guard. Recompiling an attached expert advisor makes MT5 reload it,
 /// which drops the bridge session; an order in flight at that moment would have an
 /// uncertain outcome, and a queued one would be handed to a session that is about
-/// to disappear. So nothing is written while either exists.
-fn ensure_no_order_pending(queue: &ExecutionQueueView) -> Result<(), InstallError> {
+/// to disappear. So nothing is written while either exists. `restart` reuses the
+/// same guard, because closing the terminal loses an order just as surely.
+pub(super) fn ensure_no_order_pending(queue: &ExecutionQueueView) -> Result<(), InstallError> {
     if queue.pending > 0 || queue.in_flight.is_some() {
         return Err(InstallError::OrderInFlight);
     }

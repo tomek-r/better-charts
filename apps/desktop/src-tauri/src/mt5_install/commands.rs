@@ -1,18 +1,21 @@
-//! The two Tauri commands the setup guide calls: list the MT5 installations this
-//! machine has, and install the bundled MQL5 files into one of their data folders
-//! and compile them.
+//! The Tauri commands the setup guide calls: list the MT5 installations this machine
+//! has, install the bundled MQL5 files into one of their data folders and compile
+//! them, and restart MT5 with the bridge advisor attached.
 //!
-//! Both commands start from the same fresh scan through `discover` and `locate`, so
-//! the terminal and `MQL5` paths the guide just showed are the only paths an install
+//! Every command starts from the same fresh scan through `discover` and `locate`, so
+//! the terminal and `MQL5` paths the guide just showed are the only paths a command
 //! accepts: a path from a stale list, from another machine, or from a different
-//! installation is refused before anything is written. The install and the compile
-//! run on a blocking thread, because MetaEditor takes seconds.
+//! installation is refused before anything is written. The install, the compile, and
+//! the restart run on a blocking thread, because MetaEditor takes seconds and closing
+//! a terminal means waiting for it.
 //!
-//! Security: these commands never start the MT5 terminal, never attach the expert
-//! advisor, and never touch AutoTrading. The only writes are the two `.mq5` files,
-//! MetaEditor's own `.ex5` and `.log` output beside them, and — after a successful
-//! install — the settings paths the user has not set yet.
+//! Security: the install command never starts the MT5 terminal, and none of them ever
+//! touches AutoTrading. The writes are the two `.mq5` files, MetaEditor's own `.ex5`
+//! and `.log` output beside them, and — after a successful install — the settings
+//! paths the user has not set yet. The restart adds the two startup files `restart`
+//! documents, which it deletes again as soon as the terminal has read them.
 
+use std::env;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -23,7 +26,12 @@ use super::compile::{compile_installed, CompileResult, ProcessRunner};
 use super::discover::{discover_this_machine, InstallationSource, Mt5Installation};
 use super::install::{install_bundled_sources, BundledSources, InstallOutcome, InstalledFile};
 use super::locate::{locate_data_folders, DataFolder, Layout, Mql5File};
+use super::restart::{
+    new_session_live, poll_count, remove_startup_files, remove_startup_files_in,
+    restart_with_expert, RestartPolicy, RestartRequest, StartupFiles, SystemTerminal,
+};
 use crate::app_settings::AppSettingsState;
+use crate::bridge::state::{BridgeConnectionState, BridgeState, DEFAULT_ADDR};
 use crate::download_resources::{EXPERT_ADVISOR_RESOURCE, INDICATOR_RESOURCE};
 use crate::execution_adapter::{ExecutionAdapterState, ExecutionQueueView};
 
@@ -80,6 +88,15 @@ impl From<Layout> for ReportedLayout {
 pub(crate) struct Mt5InstallReport {
     /// One entry per installed file, indicator first as the install step writes it.
     pub files: Vec<FileReport>,
+}
+
+/// What a restart did. The terminal is starting again with the bridge advisor
+/// attached; the session itself shows up in the bridge status, which is the one place
+/// that reports it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RestartReport {
+    pub restarted: bool,
 }
 
 /// What happened to one bundled file.
@@ -380,4 +397,109 @@ pub(crate) async fn install_to_mt5(
     app.state::<AppSettingsState>()
         .fill_from_installation(&installation);
     Ok(report)
+}
+
+/// Environment variable of the bridge bind address, read the way `run_server` reads
+/// it, so the startup preset names exactly the address the app listens on.
+const BRIDGE_ADDRESS_VARIABLE: &str = "MT5_BRIDGE_ADDR";
+/// Environment variable of the bridge token the advisor has to present.
+const BRIDGE_TOKEN_VARIABLE: &str = "MT5_BRIDGE_TOKEN";
+
+/// The bridge endpoint a restarted terminal has to reach: the address the bridge
+/// listens on, and the token it expects.
+fn bridge_endpoint() -> (String, String) {
+    let address = env::var(BRIDGE_ADDRESS_VARIABLE).unwrap_or_else(|_| DEFAULT_ADDR.to_string());
+    let token = env::var(BRIDGE_TOKEN_VARIABLE).unwrap_or_default();
+    (address, token)
+}
+
+/// Connection state and session id the bridge reports right now.
+fn bridge_session(bridge: &BridgeState) -> (bool, Option<String>) {
+    let connected = bridge
+        .status
+        .lock()
+        .map(|status| status.state == BridgeConnectionState::Connected)
+        .unwrap_or(false);
+    let session = bridge
+        .current_session
+        .lock()
+        .ok()
+        .and_then(|session| session.clone());
+    (connected, session)
+}
+
+/// Deletes the two startup files once the restarted terminal has read them, because
+/// the preset holds the bridge token. Best effort, and only a *new* bridge session
+/// counts, so the files stay on disk until MT5 has started — even while the session
+/// the restart replaced is still reported as connected.
+fn spawn_startup_cleanup(bridge: BridgeState, files: StartupFiles, replaced: Option<String>) {
+    let policy = RestartPolicy::default();
+    tauri::async_runtime::spawn(async move {
+        let polls = poll_count(policy.cleanup_poll, policy.cleanup_timeout);
+        for _ in 0..polls {
+            let (connected, session) = bridge_session(&bridge);
+            if new_session_live(connected, session.as_deref(), replaced.as_deref()) {
+                break;
+            }
+            tokio::time::sleep(policy.cleanup_poll).await;
+        }
+        remove_startup_files(&files);
+    });
+}
+
+/// Runs [`restart_with_expert`] on a blocking thread: closing the terminal, waiting
+/// for it to be gone, and launching it again are all blocking calls.
+async fn blocking_restart(
+    request: RestartRequest,
+    queue: ExecutionQueueView,
+) -> Result<StartupFiles, String> {
+    let policy = RestartPolicy::default();
+    tauri::async_runtime::spawn_blocking(move || {
+        restart_with_expert(&request, &queue, &SystemTerminal, &policy)
+    })
+    .await
+    .map_err(|error| format!("The MT5 restart did not complete: {error}."))?
+    .map_err(|error| error.to_string())
+}
+
+/// Deletes the startup files an interrupted restart left behind in every installation
+/// this machine has. Run once at app start: the preset holds the bridge token, so
+/// nothing of it may stay on disk. Best effort, and never fails startup.
+pub(crate) fn remove_leftover_startup_files() {
+    for located in installations_on_this_machine() {
+        remove_startup_files_in(&located.installation, &located.data_folders);
+    }
+}
+
+/// Closes MT5 and starts it again with the bridge advisor attached, its inputs taken
+/// from the app's bridge settings.
+///
+/// `terminal_path` and `mql5_path` must be the values [`list_mt5_installations`]
+/// returned for this machine right now, exactly like [`install_to_mt5`]. The advisor
+/// has to be installed and compiled in that data folder first, so a restart never
+/// starts a terminal that could not connect, and a queued or in-flight order refuses
+/// the restart, because closing the terminal would lose it.
+#[tauri::command]
+pub(crate) async fn restart_mt5_with_ea(
+    app: AppHandle,
+    terminal_path: String,
+    mql5_path: String,
+) -> Result<RestartReport, String> {
+    let target = matched_target(&installations_on_this_machine(), &terminal_path, &mql5_path)?;
+    // Sampled before the terminal closes, so the cleanup waits for the session that
+    // replaces this one instead of the one the restart ends.
+    let (_, replaced) = bridge_session(app.state::<BridgeState>().inner());
+    // Sampled right before the restart, so an order submitted while the scan ran still
+    // leaves the terminal untouched.
+    let queue = app.state::<ExecutionAdapterState>().queue_status();
+    let (address, token) = bridge_endpoint();
+    let request = RestartRequest {
+        installation: target.installation,
+        data_folder: target.data_folder,
+        address,
+        token,
+    };
+    let files = blocking_restart(request, queue).await?;
+    spawn_startup_cleanup(app.state::<BridgeState>().inner().clone(), files, replaced);
+    Ok(RestartReport { restarted: true })
 }

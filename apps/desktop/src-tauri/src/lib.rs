@@ -26,7 +26,7 @@ use download_resources::save_bundled_resource;
 use execution_adapter::ExecutionAdapterState;
 use execution_journal::{app_data_dir, ExecutionSafetyState};
 use mt5_backend::Mt5BackendState;
-use mt5_install::commands::{install_to_mt5, list_mt5_installations};
+use mt5_install::commands::{install_to_mt5, list_mt5_installations, restart_mt5_with_ea};
 use std::time::Duration;
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, Runtime, WebviewWindow};
@@ -171,7 +171,8 @@ pub fn run() {
             stop_mt5_backend,
             save_bundled_resource,
             list_mt5_installations,
-            install_to_mt5
+            install_to_mt5,
+            restart_mt5_with_ea
         ])
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Finished && webview.label() == MAIN_WINDOW_LABEL {
@@ -207,6 +208,10 @@ pub fn run() {
                 bridge_state.clone(),
                 adapter,
             ));
+            // A restart that was interrupted by a crash can leave the bridge token in
+            // a preset on disk; deleting those files is best effort and never fails
+            // startup.
+            mt5_install::commands::remove_leftover_startup_files();
             // Saved settings or explicit runtime overrides opt into auto-start.
             // Existing sessions, unknown process state, and missing installation
             // paths suppress startup; failures do not prevent opening settings.

@@ -129,7 +129,7 @@ fn terminal_env(config: &Mt5BackendConfig) -> Vec<(String, String)> {
 /// (missing `pgrep`, permissions, unexpected exit status) is `Unknown` and
 /// biases the caller away from spawning.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProcessCheck {
+pub(crate) enum ProcessCheck {
     Running,
     NotRunning,
     Unknown,
@@ -143,7 +143,7 @@ pub fn is_terminal_running() -> bool {
 
 /// Uses PowerShell `Get-Process` on Windows and `pgrep` from PATH on Unix. Failed
 /// inspection always returns `Unknown`.
-fn inspect_terminal() -> ProcessCheck {
+pub(crate) fn inspect_terminal() -> ProcessCheck {
     inspect_terminal_with(|| {
         #[cfg(windows)]
         {
@@ -184,6 +184,33 @@ where
     F: FnOnce() -> std::io::Result<ProcessCheck>,
 {
     run().unwrap_or(ProcessCheck::Unknown)
+}
+
+/// Stops every running `terminal64.exe` process with `taskkill` on Windows and
+/// `pkill` on Unix; stopping an already-stopped terminal is a no-op success.
+///
+/// The one stop mechanism of the app: the manual `stop` command and the
+/// restart-with-EA command both need it, and a second implementation would drift
+/// from this one.
+pub(crate) fn stop_terminal() -> Result<(), String> {
+    if !is_terminal_running() {
+        return Ok(());
+    }
+    #[cfg(windows)]
+    let output = Command::new("taskkill")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(["/IM", TERMINAL_PROCESS_PATTERN])
+        .output();
+    #[cfg(not(windows))]
+    let output = Command::new("pkill")
+        .args(["-f", TERMINAL_PROCESS_PATTERN])
+        .output();
+    let output = output.map_err(|error| format!("failed to stop MT5 terminal: {error}"))?;
+    if !output.status.success() && is_terminal_running() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("failed to stop MT5 terminal: {}", stderr.trim()));
+    }
+    Ok(())
 }
 
 /// Creates the lockfile exclusively (`O_EXCL|O_CREAT`, mode 0600 on unix).
@@ -449,23 +476,7 @@ impl Mt5BackendState {
     /// Manual control op: uses `taskkill` on Windows, `pkill` on Unix; stopping an
     /// already-stopped backend is a no-op success.
     pub fn stop(&self) -> Result<Mt5BackendStatus, String> {
-        if !is_terminal_running() {
-            return Ok(self.status());
-        }
-        #[cfg(windows)]
-        let output = Command::new("taskkill")
-            .creation_flags(CREATE_NO_WINDOW)
-            .args(["/IM", TERMINAL_PROCESS_PATTERN])
-            .output();
-        #[cfg(not(windows))]
-        let output = Command::new("pkill")
-            .args(["-f", TERMINAL_PROCESS_PATTERN])
-            .output();
-        let output = output.map_err(|error| format!("failed to stop MT5 terminal: {error}"))?;
-        if !output.status.success() && is_terminal_running() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("failed to stop MT5 terminal: {}", stderr.trim()));
-        }
+        stop_terminal()?;
         Ok(self.status())
     }
 

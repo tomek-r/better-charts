@@ -3,13 +3,15 @@ use super::compile::*;
 use super::discover::*;
 use super::install::*;
 use super::locate::*;
+use super::restart::*;
 use crate::execution_adapter::ExecutionQueueView;
-use crate::mt5_backend::{is_configured, Mt5BackendConfig};
-use std::cell::RefCell;
+use crate::mt5_backend::{is_configured, Mt5BackendConfig, ProcessCheck};
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 const TERMINAL_EXE: &str = "C:\\Program Files\\MetaTrader 5\\terminal64.exe";
 const INSTALL_FOLDER_WINDOWS: &str = "C:\\Program Files\\MetaTrader 5";
@@ -1445,4 +1447,565 @@ fn a_compile_result_belongs_to_its_own_file() {
     assert_eq!(report["files"][0]["outcome"], "installed");
     assert_eq!(report["files"][0]["compiled"]["errors"], 0);
     assert_eq!(report["files"][0]["compiled"]["warnings"], 2);
+}
+
+/// Bridge token the restart tests hand to the advisor. Never a real one.
+const TEST_BRIDGE_TOKEN: &str = "test-bridge-token";
+/// Bind address the restart tests write into the preset, the bridge default.
+const TEST_BRIDGE_ADDRESS: &str = "127.0.0.1:8765";
+
+/// Policy a restart test runs with: a stop timeout of a few polls, no sleeping
+/// between them, so the whole sequence stays instant.
+fn test_policy() -> RestartPolicy {
+    RestartPolicy {
+        stop_poll: Duration::from_millis(1),
+        stop_timeout: Duration::from_millis(10),
+        cleanup_poll: Duration::from_millis(1),
+        cleanup_timeout: Duration::from_millis(10),
+    }
+}
+
+/// A portable Wine installation whose data folder holds the advisor and its
+/// compiled copy, which is the state a restart requires.
+fn restartable_installation(fixture: &TempFolder) -> (Mt5Installation, DataFolder) {
+    // The install folder sits where the Wine mapping puts the terminal.
+    let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
+    let mql5 = install_folder.join("MQL5");
+    let advisors = mql5.join("Experts").join("Advisors");
+    create_folder(&advisors);
+    let advisor = advisors.join(EXPERT_ADVISOR_FILE);
+    fs::write(&advisor, BUNDLED_ADVISOR_SOURCE).expect("the advisor copy is writable");
+    fs::write(advisor.with_extension("ex5"), EXECUTABLE_STUB)
+        .expect("the compiled advisor is writable");
+    let wine_prefix = fixture.path().to_string_lossy().into_owned();
+    (
+        discovered_wine_installation(&wine_prefix, MACOS_WINE_BINARY),
+        expected_portable_folder(&mql5),
+    )
+}
+
+/// The same installation without any advisor copy, which is what a data folder
+/// looks like before the install step ran.
+fn installation_without_advisor(fixture: &TempFolder) -> (Mt5Installation, DataFolder) {
+    let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
+    let mql5 = install_folder.join("MQL5");
+    create_folder(&mql5);
+    let wine_prefix = fixture.path().to_string_lossy().into_owned();
+    (
+        discovered_wine_installation(&wine_prefix, MACOS_WINE_BINARY),
+        expected_portable_folder(&mql5),
+    )
+}
+
+/// Restart request against `installation`, with the bridge settings a running
+/// bridge reports.
+fn restart_request(installation: Mt5Installation, data_folder: DataFolder) -> RestartRequest {
+    RestartRequest {
+        installation,
+        data_folder,
+        address: TEST_BRIDGE_ADDRESS.to_string(),
+        token: TEST_BRIDGE_TOKEN.to_string(),
+    }
+}
+
+/// The two startup files a restart of `installation` has to write, at the paths MT5
+/// reads them from.
+fn expected_startup_files(
+    installation: &Mt5Installation,
+    data_folder: &DataFolder,
+) -> StartupFiles {
+    let install_folder = install_dir(installation).expect("the install folder resolves");
+    let mql5 = &data_folder.mql5;
+    StartupFiles {
+        ini: install_folder.join("config").join(STARTUP_INI_FILE),
+        preset: mql5.join("Presets").join(STARTUP_PRESET_FILE),
+    }
+}
+
+/// Session the tests write into the preset.
+fn test_session() -> StartupSession {
+    StartupSession::from_bind_address(TEST_BRIDGE_ADDRESS, TEST_BRIDGE_TOKEN)
+        .expect("the test address is a loopback address")
+}
+
+/// Terminal a restart test drives: the process picture a restart observes and the
+/// commands it issues, with no process started.
+struct FakeTerminal {
+    /// Inspection results in call order; past the last one that result repeats, so a
+    /// terminal that stays running keeps reporting that.
+    inspections: Vec<ProcessCheck>,
+    inspection_index: Cell<usize>,
+    /// Result the close reports.
+    stop_result: Result<(), String>,
+    stops: Cell<u32>,
+    launches: RefCell<Vec<TerminalCommand>>,
+}
+
+impl FakeTerminal {
+    /// Terminal that reports `inspections` in order and repeats the last one.
+    fn reporting(inspections: impl IntoIterator<Item = ProcessCheck>) -> Self {
+        Self {
+            inspections: inspections.into_iter().collect(),
+            inspection_index: Cell::new(0),
+            stop_result: Ok(()),
+            stops: Cell::new(0),
+            launches: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// The same picture, with the close failing.
+    fn stop_failing(mut self) -> Self {
+        self.stop_result = Err("MT5 refused to close".to_string());
+        self
+    }
+
+    fn stop_count(&self) -> u32 {
+        self.stops.get()
+    }
+
+    fn launched(&self) -> Vec<TerminalCommand> {
+        self.launches.borrow().clone()
+    }
+}
+
+impl ProcessControl for FakeTerminal {
+    fn inspect(&self) -> ProcessCheck {
+        let index = self.inspection_index.get();
+        let reported = self.inspections.get(index).or(self.inspections.last());
+        self.inspection_index.set(index + 1);
+        reported.copied().unwrap_or(ProcessCheck::NotRunning)
+    }
+
+    fn stop(&self) -> Result<(), String> {
+        self.stops.set(self.stops.get() + 1);
+        self.stop_result.clone()
+    }
+
+    fn launch(&self, command: &TerminalCommand) -> Result<(), String> {
+        self.launches.borrow_mut().push(command.clone());
+        Ok(())
+    }
+
+    fn pause(&self, _duration: Duration) {}
+}
+
+#[test]
+fn the_startup_files_sit_where_mt5_reads_them() {
+    let fixture = TempFolder::new("restart-file-paths");
+    let install_folder = fixture.path().join(INSTALL_FOLDER_IN_PREFIX);
+    let mql5 = install_folder.join("MQL5");
+    let expected_ini = install_folder.join("config").join(STARTUP_INI_FILE);
+    let expected_preset = mql5.join("Presets").join(STARTUP_PRESET_FILE);
+
+    let files = startup_file_paths(&install_folder, &expected_portable_folder(&mql5));
+
+    // The `/config:` argument is resolved from the install folder, and the preset
+    // sits in the data folder's `MQL5` tree.
+    assert_eq!(files.ini, expected_ini);
+    assert_eq!(files.preset, expected_preset);
+}
+
+#[test]
+fn the_startup_ini_names_the_advisor_and_the_preset() {
+    let bytes = startup_ini_bytes("Advisors\\BetterChartsBridge", STARTUP_PRESET_FILE);
+
+    assert_eq!(
+        bytes,
+        utf16_le_with_bom(
+            "[StartUp]\r\n\
+             Expert=Advisors\\BetterChartsBridge\r\n\
+             ExpertParameters=BetterChartsStartup.set\r\n"
+        )
+    );
+}
+
+#[test]
+fn the_startup_preset_carries_the_bridge_endpoint() {
+    assert_eq!(
+        startup_preset_bytes(&test_session()),
+        utf16_le_with_bom(
+            "InpBridgeToken=test-bridge-token\r\n\
+             InpBridgeHost=127.0.0.1\r\n\
+             InpBridgePort=8765\r\n"
+        )
+    );
+
+    // The bracketed form is the parser's input; the advisor takes the bare address.
+    let ipv6 = StartupSession::from_bind_address("[::1]:9100", TEST_BRIDGE_TOKEN)
+        .expect("a loopback IPv6 address is accepted");
+    assert_eq!(
+        startup_preset_bytes(&ipv6),
+        utf16_le_with_bom(
+            "InpBridgeToken=test-bridge-token\r\n\
+             InpBridgeHost=::1\r\n\
+             InpBridgePort=9100\r\n"
+        )
+    );
+}
+
+#[test]
+fn an_address_the_bridge_cannot_listen_on_is_refused() {
+    let unreachable = StartupSession::from_bind_address("0.0.0.0:8765", TEST_BRIDGE_TOKEN)
+        .expect_err("a non-loopback address is refused");
+    let message = unreachable.to_string();
+    assert!(
+        matches!(unreachable, RestartError::AddressUnusable { .. }),
+        "unexpected error: {message}"
+    );
+
+    let unparsable = StartupSession::from_bind_address("localhost:8765", TEST_BRIDGE_TOKEN)
+        .expect_err("a host name is not a socket address");
+    assert!(matches!(unparsable, RestartError::AddressUnusable { .. }));
+}
+
+#[test]
+fn a_startup_session_never_prints_the_token() {
+    let session = test_session();
+
+    let printed = format!("{session:?}");
+
+    assert!(
+        !printed.contains(TEST_BRIDGE_TOKEN),
+        "the token is redacted: {printed}"
+    );
+    assert!(printed.contains("127.0.0.1") && printed.contains("8765"));
+}
+
+#[test]
+fn the_expert_path_is_the_installed_advisor_below_experts() {
+    let fixture = TempFolder::new("restart-expert-path");
+    let mql5 = fixture.folder("MQL5");
+    let advisors = fixture.folder("MQL5/Experts/Advisors");
+    let advisor = advisors.join(EXPERT_ADVISOR_FILE);
+    fs::write(&advisor, BUNDLED_ADVISOR_SOURCE).expect("the advisor copy is writable");
+    fs::write(advisor.with_extension("ex5"), EXECUTABLE_STUB)
+        .expect("the compiled advisor is writable");
+
+    let startup_path = expert_startup_path(&mql5).expect("an installed advisor resolves");
+
+    assert_eq!(startup_path, "Advisors\\BetterChartsBridge");
+}
+
+#[test]
+fn an_advisor_without_a_compiled_copy_has_no_startup_path() {
+    let fixture = TempFolder::new("restart-expert-uncompiled");
+    let mql5 = fixture.folder("MQL5");
+    let advisors = fixture.folder("MQL5/Experts/Advisors");
+    // A source without the `.ex5` beside it is not an advisor MT5 can load.
+    fs::write(advisors.join(EXPERT_ADVISOR_FILE), BUNDLED_ADVISOR_SOURCE)
+        .expect("the advisor source is writable");
+
+    assert!(matches!(
+        expert_startup_path(&mql5),
+        Err(RestartError::ExpertNotInstalled)
+    ));
+}
+
+#[test]
+fn the_wine_command_starts_the_portable_terminal_with_a_relative_config() {
+    let fixture = TempFolder::new("restart-command-wine");
+    let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
+    let wine_prefix = fixture.path().to_string_lossy().into_owned();
+    let installation = discovered_wine_installation(&wine_prefix, MACOS_WINE_BINARY);
+
+    let command = startup_command(&installation, &install_folder, Layout::Portable)
+        .expect("the portable command is built");
+    let expected_env = vec![("WINEPREFIX".to_string(), wine_prefix)];
+
+    assert_eq!(command.program, PathBuf::from(MACOS_WINE_BINARY));
+    assert_eq!(
+        command.args,
+        vec![
+            "terminal64.exe".to_string(),
+            "/portable".to_string(),
+            "/config:config\\BetterChartsStartup.ini".to_string(),
+        ]
+    );
+    assert_eq!(command.working_directory, install_folder);
+    assert_eq!(command.env, expected_env);
+}
+
+#[test]
+fn the_wine_command_omits_the_portable_option_for_a_standard_folder() {
+    let fixture = TempFolder::new("restart-command-standard");
+    let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
+    let wine_prefix = fixture.path().to_string_lossy().into_owned();
+    let installation = discovered_wine_installation(&wine_prefix, MACOS_WINE_BINARY);
+
+    let command = startup_command(&installation, &install_folder, Layout::Standard)
+        .expect("the standard command is built");
+
+    assert_eq!(
+        command.args,
+        vec![
+            "terminal64.exe".to_string(),
+            "/config:config\\BetterChartsStartup.ini".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn the_windows_command_starts_the_terminal_itself() {
+    let fixture = TempFolder::new("restart-command-windows");
+    let install_folder = fixture.folder("Program Files/MetaTrader 5");
+    let terminal_exe = install_folder.join("terminal64.exe");
+    // A host path stands in for the Windows one: the command builder only joins the
+    // two, so the native form is testable on any host.
+    let installation = discovered_windows_installation(&terminal_exe.to_string_lossy());
+
+    let command = startup_command(&installation, &install_folder, Layout::Standard)
+        .expect("the native command is built");
+
+    assert_eq!(command.program, terminal_exe, "no wine here");
+    assert_eq!(
+        command.args,
+        vec!["/config:config\\BetterChartsStartup.ini".to_string()]
+    );
+    assert_eq!(command.working_directory, install_folder);
+    assert!(command.env.is_empty(), "a native run needs no prefix");
+}
+
+#[test]
+fn a_wine_installation_without_prefix_or_binary_is_refused() {
+    let installation = Mt5Installation {
+        host: HostPlatform::Wine,
+        wine_prefix: None,
+        wine_binary: None,
+        terminal_exe_windows: TERMINAL_EXE.to_string(),
+        source: InstallationSource::Discovered,
+    };
+
+    let refused = startup_command(&installation, Path::new("/tmp/install"), Layout::Standard);
+
+    assert!(matches!(refused, Err(RestartError::WineUnavailable)));
+}
+
+#[test]
+fn a_running_terminal_is_closed_and_started_again_with_the_advisor() {
+    let fixture = TempFolder::new("restart-sequence");
+    let (installation, data_folder) = restartable_installation(&fixture);
+    let expected = expected_startup_files(&installation, &data_folder);
+    let install_folder = install_dir(&installation).expect("the install folder resolves");
+    let terminal = FakeTerminal::reporting([ProcessCheck::Running, ProcessCheck::NotRunning]);
+    let request = restart_request(installation, data_folder);
+
+    let files = restart_with_expert(&request, &idle_queue(), &terminal, &test_policy())
+        .expect("the restart succeeds");
+
+    assert_eq!(files, expected, "both startup files are reported");
+    assert_eq!(terminal.stop_count(), 1, "the close runs once");
+    let launched = terminal.launched();
+    assert_eq!(launched.len(), 1, "the terminal starts once");
+    assert_eq!(
+        launched[0].working_directory, install_folder,
+        "the config argument resolves from the install folder"
+    );
+    assert_eq!(
+        fs::read(&files.ini).expect("the ini is readable"),
+        startup_ini_bytes("Advisors\\BetterChartsBridge", STARTUP_PRESET_FILE)
+    );
+    assert_eq!(
+        fs::read(&files.preset).expect("the preset is readable"),
+        startup_preset_bytes(&test_session())
+    );
+}
+
+#[test]
+fn a_terminal_that_does_not_close_leaves_no_startup_files_behind() {
+    let fixture = TempFolder::new("restart-stop-timeout");
+    let (installation, data_folder) = restartable_installation(&fixture);
+    let expected = expected_startup_files(&installation, &data_folder);
+    // The inspection keeps reporting a running terminal, so the stop times out.
+    let terminal = FakeTerminal::reporting([ProcessCheck::Running]);
+    let request = restart_request(installation, data_folder);
+
+    let error = restart_with_expert(&request, &idle_queue(), &terminal, &test_policy())
+        .expect_err("a terminal that stays running ends the restart");
+
+    let message = error.to_string();
+    assert!(
+        matches!(error, RestartError::StopTimedOut),
+        "unexpected error: {message}"
+    );
+    assert_eq!(terminal.stop_count(), 1, "the close is attempted once");
+    assert!(terminal.launched().is_empty(), "nothing is started");
+    assert!(!expected.ini.exists(), "the ini is deleted again");
+    assert!(!expected.preset.exists(), "the preset is deleted again");
+}
+
+#[test]
+fn an_unknown_process_state_starts_nothing() {
+    let fixture = TempFolder::new("restart-unknown");
+    let (installation, data_folder) = restartable_installation(&fixture);
+    let expected = expected_startup_files(&installation, &data_folder);
+    let terminal = FakeTerminal::reporting([ProcessCheck::Unknown]);
+    let request = restart_request(installation, data_folder);
+
+    let error = restart_with_expert(&request, &idle_queue(), &terminal, &test_policy())
+        .expect_err("a failed inspection ends the restart");
+
+    let message = error.to_string();
+    assert!(
+        matches!(error, RestartError::ProcessStateUnknown),
+        "unexpected error: {message}"
+    );
+    assert_eq!(terminal.stop_count(), 0, "nothing is stopped blindly");
+    assert!(terminal.launched().is_empty(), "nothing is started");
+    assert!(!expected.ini.exists() && !expected.preset.exists());
+}
+
+#[test]
+fn a_terminal_that_cannot_be_closed_keeps_the_token_out_of_the_error() {
+    let fixture = TempFolder::new("restart-stop-failed");
+    let (installation, data_folder) = restartable_installation(&fixture);
+    let expected = expected_startup_files(&installation, &data_folder);
+    let terminal = FakeTerminal::reporting([ProcessCheck::Running]).stop_failing();
+    let request = restart_request(installation, data_folder);
+
+    let error = restart_with_expert(&request, &idle_queue(), &terminal, &test_policy())
+        .expect_err("a failed close ends the restart");
+
+    let message = error.to_string();
+    assert!(
+        matches!(error, RestartError::StopFailed { .. }),
+        "unexpected error: {message}"
+    );
+    assert!(
+        !message.contains(TEST_BRIDGE_TOKEN),
+        "the token stays out of every message: {message}"
+    );
+    assert!(terminal.launched().is_empty(), "nothing is started");
+    assert!(!expected.ini.exists() && !expected.preset.exists());
+}
+
+#[test]
+fn a_pending_or_in_flight_order_refuses_the_restart_before_anything_is_written() {
+    let queues = [
+        ExecutionQueueView {
+            pending: 1,
+            ..idle_queue()
+        },
+        ExecutionQueueView {
+            in_flight: Some("cmd-1".to_string()),
+            ..idle_queue()
+        },
+    ];
+    for queue in queues {
+        let fixture = TempFolder::new("restart-order");
+        let (installation, data_folder) = restartable_installation(&fixture);
+        let expected = expected_startup_files(&installation, &data_folder);
+        let terminal = FakeTerminal::reporting([ProcessCheck::Running]);
+        let request = restart_request(installation, data_folder);
+
+        let error = restart_with_expert(&request, &queue, &terminal, &test_policy())
+            .expect_err("an order in the queue refuses the restart");
+
+        let message = error.to_string();
+        assert!(
+            matches!(error, RestartError::OrderInFlight),
+            "unexpected error: {message}"
+        );
+        assert_eq!(terminal.stop_count(), 0, "the terminal keeps running");
+        assert!(terminal.launched().is_empty(), "nothing is started");
+        assert!(!expected.ini.exists(), "the ini is not written");
+        assert!(!expected.preset.exists(), "the preset is not written");
+    }
+}
+
+#[test]
+fn an_empty_bridge_token_refuses_the_restart_before_anything_is_written() {
+    let fixture = TempFolder::new("restart-token-missing");
+    let (installation, data_folder) = restartable_installation(&fixture);
+    let expected = expected_startup_files(&installation, &data_folder);
+    let request = RestartRequest {
+        token: String::new(),
+        ..restart_request(installation, data_folder)
+    };
+    let terminal = FakeTerminal::reporting([ProcessCheck::Running]);
+
+    let error = restart_with_expert(&request, &idle_queue(), &terminal, &test_policy())
+        .expect_err("an advisor without a token could not connect");
+
+    assert_eq!(
+        error.to_string(),
+        "Set the bridge token in App settings first."
+    );
+    assert_eq!(terminal.stop_count(), 0, "the terminal keeps running");
+    assert!(terminal.launched().is_empty(), "nothing is started");
+    assert!(!expected.ini.exists(), "the ini is not written");
+    assert!(!expected.preset.exists(), "the preset is not written");
+}
+
+#[test]
+fn a_data_folder_without_the_advisor_refuses_the_restart_before_anything_is_written() {
+    let fixture = TempFolder::new("restart-advisor-missing");
+    let (installation, data_folder) = installation_without_advisor(&fixture);
+    let expected = expected_startup_files(&installation, &data_folder);
+    let terminal = FakeTerminal::reporting([ProcessCheck::Running, ProcessCheck::NotRunning]);
+    let request = restart_request(installation, data_folder);
+
+    let error = restart_with_expert(&request, &idle_queue(), &terminal, &test_policy())
+        .expect_err("an installation without the advisor is refused");
+
+    assert_eq!(error.to_string(), "Install the EA first.");
+    assert_eq!(terminal.stop_count(), 0, "the terminal keeps running");
+    assert!(terminal.launched().is_empty(), "nothing is started");
+    assert!(!expected.ini.exists(), "the ini is not written");
+    assert!(!expected.preset.exists(), "the preset is not written");
+}
+
+#[test]
+fn the_cleanup_deletes_both_startup_files() {
+    let fixture = TempFolder::new("restart-cleanup");
+    let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
+    let mql5 = install_folder.join("MQL5");
+    create_folder(&mql5);
+    let files = startup_file_paths(&install_folder, &expected_portable_folder(&mql5));
+    write_atomically(&files.ini, b"leftover ini").expect("the ini is writable");
+    write_atomically(&files.preset, b"leftover preset").expect("the preset is writable");
+
+    remove_startup_files(&files);
+
+    assert!(!files.ini.exists(), "the ini is deleted");
+    assert!(!files.preset.exists(), "the preset is deleted");
+    // The cleanup runs on every path, so a file that is already gone is fine.
+    remove_startup_files(&files);
+}
+
+#[test]
+fn the_startup_cleanup_deletes_what_an_interrupted_restart_left_behind() {
+    let fixture = TempFolder::new("restart-leftovers");
+    let (installation, data_folder) = restartable_installation(&fixture);
+    let files = expected_startup_files(&installation, &data_folder);
+    write_atomically(&files.ini, b"leftover ini").expect("the ini is writable");
+    write_atomically(&files.preset, b"leftover preset").expect("the preset is writable");
+
+    remove_startup_files_in(&installation, std::slice::from_ref(&data_folder));
+
+    assert!(!files.ini.exists(), "the leftover ini is deleted");
+    assert!(!files.preset.exists(), "the leftover preset is deleted");
+    // Only the two startup files are ours: the advisor copy stays.
+    let advisor = existing_copy(&data_folder.mql5, Mql5File::ExpertAdvisor);
+    assert!(advisor.is_some(), "the advisor copy stays");
+}
+
+#[test]
+fn the_cleanup_waits_for_a_session_the_restart_did_not_replace() {
+    // A disconnected bridge says nothing about whether MT5 read the files yet.
+    assert!(!new_session_live(false, None, None));
+    // The session the restart ended keeps the files on disk.
+    assert!(!new_session_live(true, Some("old"), Some("old")));
+    // The restarted terminal has a session of its own.
+    assert!(new_session_live(true, Some("new"), Some("old")));
+    assert!(new_session_live(true, Some("new"), None));
+}
+
+#[test]
+fn the_stop_wait_polls_every_quarter_second_up_to_the_timeout() {
+    let poll = Duration::from_millis(250);
+
+    assert_eq!(poll_count(poll, Duration::from_secs(30)), 120);
+    assert_eq!(poll_count(poll, Duration::from_secs(120)), 480);
+    // A timeout shorter than one interval still observes the state once.
+    assert_eq!(poll_count(poll, Duration::from_millis(10)), 1);
 }
