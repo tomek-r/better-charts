@@ -1,10 +1,10 @@
 import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
 import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../shared/ui/ModalDialog';
-import { Suspense, use, useCallback, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
+import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { SetupGuideModal } from './setup-guide-modal/SetupGuideModal';
-import type { AppSettingsData } from './settingsTypes';
+import type { AppSettingsData, DetectedSettingsField } from './settingsTypes';
 import { FRAME_BYTES } from '../../shared/bridge/limits';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';
 
@@ -13,32 +13,47 @@ type Category = 'MT5 setup' | 'Trading';
 /** Loopback host and port; compiled once rather than on every save. */
 const LOOPBACK_ADDRESS = /^(127(?:\.[0-9]{1,3}){3}|\[::1\]):([0-9]+)$/;
 
+/** Notes that this load filled the field from an MT5 installation found on this computer. */
+function DetectedHint({ detected, field }: { detected: DetectedSettingsField[]; field: DetectedSettingsField }) {
+  if (!detected.includes(field)) {
+    return null;
+  }
+  return <span className="settings-detected-hint">Detected on this computer</span>;
+}
+
 export function AppSettingsDialog({
   settings,
   loadRequest,
   closing,
+  guideOpen,
   loadError,
   onClose,
+  onOpenGuide,
+  onCloseGuide,
   onExited,
   onSaved,
 }: {
   closing: boolean;
   settings: AppSettingsData | undefined;
   loadRequest: Promise<void>;
+  /** The setup guide is opened through the settings store, so other surfaces can open it too. */
+  guideOpen: boolean;
   loadError: string | undefined;
   onClose: () => void;
+  onOpenGuide: () => void;
+  onCloseGuide: () => void;
   onExited: () => void;
   onSaved: (settings: AppSettingsData) => void;
 }) {
   const [editedDraft, setEditedDraft] = useState<MT5BridgeSettings>();
   const draft = editedDraft ?? settings?.mt5BridgeSettings;
+  // Detection hints describe the load, so an edit during the session leaves them as they are.
+  const detectedFields = settings?.detectedFields ?? [];
   const [category, setCategory] = useState<Category>('MT5 setup');
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
   const guideTrigger = useRef<HTMLElement | null>(null);
-  const closeGuide = useCallback(() => setGuideOpen(false), []);
   const backdrop = useRef<HTMLDivElement>(null);
   // Unmounting happens when the backdrop's own exit animation ends; reopening
   // (closing back to false) cancels a pending exit through this cleanup.
@@ -144,7 +159,7 @@ export function AppSettingsDialog({
           </ModalDialogButton>
         </>
       }
-      overlay={guideOpen && <SetupGuideModal onClose={closeGuide} />}
+      overlay={guideOpen && <SetupGuideModal onClose={onCloseGuide} />}
     >
       <nav className="settings-nav" aria-label="Settings categories">
         {(['MT5 setup', 'Trading'] as const).map((item, index) => (
@@ -179,7 +194,7 @@ export function AppSettingsDialog({
                     disabled={saving || closing}
                     onClick={(event) => {
                       guideTrigger.current = event.currentTarget;
-                      setGuideOpen(true);
+                      onOpenGuide();
                     }}
                   >
                     <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
@@ -271,6 +286,7 @@ export function AppSettingsDialog({
                     spellCheck={false}
                     onChange={(event) => change('terminalPath', event.target.value)}
                   />
+                  <DetectedHint detected={detectedFields} field="terminalPath" />
                 </label>
                 {settings?.platform !== 'windows' && (
                   <>
@@ -281,6 +297,7 @@ export function AppSettingsDialog({
                         spellCheck={false}
                         onChange={(event) => change('wineBinary', event.target.value)}
                       />
+                      <DetectedHint detected={detectedFields} field="wineBinary" />
                     </label>
                     <label className="settings-field">
                       Wine prefix path
@@ -289,6 +306,7 @@ export function AppSettingsDialog({
                         spellCheck={false}
                         onChange={(event) => change('winePrefix', event.target.value)}
                       />
+                      <DetectedHint detected={detectedFields} field="winePrefix" />
                     </label>
                   </>
                 )}

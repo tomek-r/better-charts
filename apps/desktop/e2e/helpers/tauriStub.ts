@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import type { BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridge/types';
+import type { BridgeStatus, BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridge/types';
 import { STUB_NOW } from './stubClock';
 
 /**
@@ -104,6 +104,10 @@ export interface TauriStubOptions {
   recordedSnapshotBars?: number;
   /** Holds `save_app_settings` open this long, to observe a dialog while it saves. */
   saveDelayMs?: number;
+  /** Holds `install_to_mt5` open this long, to observe the buttons while the install runs. */
+  installDelayMs?: number;
+  /** Holds `restart_mt5_with_ea` open this long, to observe the buttons while MT5 reopens. */
+  restartDelayMs?: number;
 }
 
 export interface RecordedHistory {
@@ -334,6 +338,7 @@ export async function installTauriStub(
         restartRequired: false,
         platform: 'linux',
         overriddenKeys: [],
+        detectedFields: [],
         configurationError: null,
       },
       save_app_settings: 'reactive',
@@ -435,6 +440,36 @@ export async function installTauriStub(
       cancel_tick_profile: null,
       start_mt5_backend: null,
       stop_mt5_backend: null,
+      // Setup guide: one portable installation on this machine, and a clean report
+      // for installing both bundled files. A test overrides either to script a
+      // machine with no MT5, several data folders, or a compile failure.
+      list_mt5_installations: [
+        {
+          terminalPath: 'C:\\Program Files\\MetaTrader 5\\terminal64.exe',
+          label: 'MetaTrader 5',
+          configured: false,
+          dataFolders: [{ mql5Path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5', layout: 'portable' }],
+        },
+      ],
+      install_to_mt5: {
+        files: [
+          {
+            file: 'indicator',
+            path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5/Indicators/BetterChartsTickHistoryReader.mq5',
+            outcome: 'installed',
+            compiled: { errors: 0, warnings: 0, messages: [] },
+          },
+          {
+            file: 'expertAdvisor',
+            path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/BetterChartsBridge.mq5',
+            outcome: 'updated',
+            compiled: { errors: 0, warnings: 0, messages: [] },
+          },
+        ],
+      },
+      // The terminal always starts again on the scripted machine; a test scripts a
+      // refused restart through `failures` instead.
+      restart_mt5_with_ea: { restarted: true },
       submit_order: null,
       close_position: null,
       cancel_order: null,
@@ -472,6 +507,12 @@ export async function installTauriStub(
       responses.get_bridge_status = { ...(responses.get_bridge_status as object), partialClose: opts.partialClose };
     }
     const failures: Record<string, string> = { ...opts.failures };
+    /** Commands a test holds open, to observe the UI they block. */
+    const delays: Record<string, number | undefined> = {
+      save_app_settings: opts.saveDelayMs,
+      install_to_mt5: opts.installDelayMs,
+      restart_mt5_with_ea: opts.restartDelayMs,
+    };
 
     const callbacks = new Map<number, (data: unknown) => unknown>();
     const listeners = new Map<string, number[]>();
@@ -722,14 +763,29 @@ export async function installTauriStub(
         w.__setupGuideSaves = saves;
         return null;
       }
+      // The setup-guide install command: record the target for assertions, then
+      // answer with the scripted report (a test may script a compile failure).
+      if (cmd === 'install_to_mt5') {
+        const installs = (w.__mt5Installs as Array<Record<string, unknown>> | undefined) ?? [];
+        installs.push({ terminalPath: args.terminalPath, mql5Path: args.mql5Path });
+        w.__mt5Installs = installs;
+      }
+      // The restart records the target the same way and then answers like the backend:
+      // the terminal is starting again (a test scripts a refusal through `failures`).
+      if (cmd === 'restart_mt5_with_ea') {
+        const restarts = (w.__mt5Restarts as Array<Record<string, unknown>> | undefined) ?? [];
+        restarts.push({ terminalPath: args.terminalPath, mql5Path: args.mql5Path });
+        w.__mt5Restarts = restarts;
+      }
       if (Object.prototype.hasOwnProperty.call(failures, cmd)) {
         throw new Error(failures[cmd]);
       }
       if (!Object.prototype.hasOwnProperty.call(responses, cmd)) {
         throw new Error(`E2E Tauri stub has no scripted response for command "${cmd}".`);
       }
-      if (cmd === 'save_app_settings' && opts.saveDelayMs !== undefined) {
-        await new Promise((resolve) => setTimeout(resolve, opts.saveDelayMs));
+      const delayMs = delays[cmd];
+      if (delayMs !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
       if (cmd === 'save_app_settings' && responses[cmd] === 'reactive') {
         const view = responses.get_app_settings as Record<string, unknown>;
@@ -739,6 +795,8 @@ export async function installTauriStub(
           configured: true,
           firstLaunch: false,
           restartRequired: true,
+          // A saved field is the user's own value, so the detection hint clears.
+          detectedFields: [],
         };
         responses.get_app_settings = next;
         return next;
@@ -754,6 +812,8 @@ export async function installTauriStub(
     // The real Tauri runtime sets this; @tauri-apps/api/core isTauri() reads it.
     w.isTauri = true;
     w.__setupGuideSaves = [];
+    w.__mt5Installs = [];
+    w.__mt5Restarts = [];
     w.__TAURI_INTERNALS__ = {
       invoke,
       transformCallback,
@@ -865,6 +925,11 @@ export async function pushEvent(page: Page, event: string, payload: unknown): Pr
     },
     { event, payload },
   );
+}
+
+/** Pushes a `bridge-status` state into the app, exactly as the bridge's own listener receives it. */
+export async function pushBridgeStatus(page: Page, status: BridgeStatus): Promise<void> {
+  await pushEvent(page, 'bridge-status', status);
 }
 
 /** Pushes an `execution-command-update` event into the app's log-only listener. */

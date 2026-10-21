@@ -105,6 +105,11 @@ rejected with `UNSUPPORTED_VERSION` and a user-facing message asking to install
 or update the indicator and reattach the EA; invalid values are never echoed.
 Missing or malformed versions are rejected without echoing arbitrary values.
 Other malformed handshakes include recompile/reattach instructions.
+Both version refusals are also the only ones that mark the Tauri
+`bridge-status` payload with `componentOutdated: true` (camelCase, beside
+`message`); every other status carries `false`, and a successful handshake,
+disconnect or bind retry clears it. The UI acts on that flag — never on the
+message text — and offers the setup guide's automatic install for it.
 
 ### Negotiated capabilities
 

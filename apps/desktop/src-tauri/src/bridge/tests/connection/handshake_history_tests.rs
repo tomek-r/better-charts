@@ -545,3 +545,110 @@ async fn older_ea_reports_required_and_installed_versions_before_schema_validati
     );
     assert!(harness.state.current_session.lock().unwrap().is_none());
 }
+
+/// What a refused handshake left behind: the status the UI reads through the
+/// `get_bridge_status` view and the last `bridge-status` payload it received.
+struct RefusedHandshake {
+    status: BridgeStatus,
+    event: serde_json::Value,
+}
+
+/// Refuses `hello` after `mutate` edits its payload, and waits until the
+/// refusal is published.
+async fn refused_handshake(
+    mutate: impl FnOnce(&mut serde_json::Map<String, serde_json::Value>),
+) -> RefusedHandshake {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let mut hello = valid_hello(None);
+    mutate(hello.payload.as_object_mut().unwrap());
+    client.send(hello).await.unwrap();
+    let reply = client.recv(Duration::from_secs(2)).await.unwrap();
+    assert_eq!(reply.message_type, MessageType::Error);
+    let message = reply.payload["message"].as_str().unwrap().to_owned();
+    assert!(
+        wait_until(Duration::from_secs(1), || {
+            harness.state.status.lock().unwrap().message.as_deref() == Some(message.as_str())
+        })
+        .await,
+        "the refusal reaches the UI"
+    );
+    let status = harness.state.status.lock().unwrap().clone();
+    let event = harness
+        .events
+        .events()
+        .into_iter()
+        .rev()
+        .find(|(name, _)| name == "bridge-status")
+        .map(|(_, payload)| payload)
+        .expect("a refusal publishes the bridge status");
+    RefusedHandshake { status, event }
+}
+
+#[tokio::test]
+async fn outdated_ea_is_flagged_as_an_outdated_component() {
+    let refused = refused_handshake(|payload| {
+        payload.insert("expert_version".into(), serde_json::json!("0.6.0"));
+    })
+    .await;
+    assert!(refused.status.component_outdated);
+    assert_eq!(refused.event["componentOutdated"], true);
+    assert!(refused.event["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("App requires MT5 bridge version"));
+}
+
+#[tokio::test]
+async fn outdated_tick_reader_is_flagged_as_an_outdated_component() {
+    let refused = refused_handshake(|payload| {
+        payload.insert("tick_reader_version".into(), serde_json::json!("0.9"));
+    })
+    .await;
+    assert!(refused.status.component_outdated);
+    assert_eq!(refused.event["componentOutdated"], true);
+    assert!(refused.event["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("App requires MT5 tick reader version"));
+}
+
+#[tokio::test]
+async fn other_refusals_are_not_flagged_as_an_outdated_component() {
+    let refused = refused_handshake(|payload| {
+        payload.insert("token".into(), serde_json::json!("wrong-token"));
+    })
+    .await;
+    assert!(!refused.status.component_outdated);
+    assert_eq!(refused.event["componentOutdated"], false);
+    assert_eq!(refused.event["message"], "authentication failed");
+}
+
+#[tokio::test]
+async fn a_later_valid_handshake_clears_the_outdated_flag() {
+    let state = BridgeState::default();
+    let adapter = ExecutionAdapterState::new(ExecutionSafetyState::unavailable());
+    let refusing = start_bridge(state.clone(), adapter.clone()).await;
+    let mut client = BridgeClient::connect(refusing.addr).await.unwrap();
+    let mut hello = valid_hello(None);
+    hello.payload["expert_version"] = serde_json::json!("0.6.0");
+    client.send(hello).await.unwrap();
+    assert!(client.recv(Duration::from_secs(2)).await.is_some());
+    assert!(
+        wait_until(Duration::from_secs(2), || {
+            state.status.lock().unwrap().component_outdated
+        })
+        .await,
+        "the flag is published with the refusal"
+    );
+
+    // The next connection presents the required versions: the flag must not
+    // outlive the refusal that set it.
+    let accepting = start_bridge(state.clone(), adapter).await;
+    let mut client = BridgeClient::connect(accepting.addr).await.unwrap();
+    complete_handshake(&mut client, &accepting).await;
+    let status = state.status.lock().unwrap().clone();
+    assert_eq!(status.state, BridgeConnectionState::Connected);
+    assert_eq!(status.message, None);
+    assert!(!status.component_outdated);
+}

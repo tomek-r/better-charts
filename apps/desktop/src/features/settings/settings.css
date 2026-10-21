@@ -112,6 +112,13 @@
   line-height: 1.5;
 }
 
+/* Sits inside the field's label, under the input: one small line, no extra block. */
+.settings-detected-hint {
+  color: var(--color-accent);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 @media (max-width: 600px) {
   .settings-body {
     display: flex;

@@ -1,9 +1,18 @@
 //! Private desktop configuration. Saved edits take effect on the next launch.
+//!
+//! Installation paths the user has not set are filled from an MT5 installation
+//! detected on this machine (see `detected_paths`). A value the user set, and any
+//! field an `MT5_*` override supplies, is never replaced, and the auto-start flag is
+//! never touched, so a filled path cannot make the app start MT5 by itself.
+
+mod detected_paths;
 
 use crate::{
     bridge::{connection::validate_bind_address, handshake::configured_transfer_limits},
     execution_journal::app_data_dir,
+    mt5_install::discover::Mt5Installation,
 };
+use detected_paths::{discovered_installation, fill_detected_paths};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -157,6 +166,8 @@ pub(crate) struct AppSettingsView {
     pub restart_required: bool,
     pub platform: &'static str,
     pub overridden_keys: Vec<String>,
+    /// Fields this load filled from an MT5 installation detected on this computer.
+    pub detected_fields: Vec<&'static str>,
     pub configuration_error: Option<String>,
 }
 
@@ -249,7 +260,12 @@ impl AppSettingsState {
             .into_iter()
             .filter_map(|(key, _)| env::var(key).ok().map(|value| (key.to_owned(), value)))
             .collect();
-        let state = Self::resolve(path, overrides, runtime_error);
+        let state = Self::resolve_with_installation(
+            path,
+            overrides,
+            runtime_error,
+            discovered_installation(),
+        );
         let settings = state
             .inner
             .lock()
@@ -277,10 +293,24 @@ impl AppSettingsState {
         state
     }
 
+    /// Test entry point: resolution without an installation to fill paths from.
+    #[cfg(test)]
     fn resolve(
         path: Option<PathBuf>,
         overrides: HashMap<String, String>,
         dotenv_error: Option<String>,
+    ) -> Self {
+        Self::resolve_with_installation(path, overrides, dotenv_error, None)
+    }
+
+    /// Resolution core: reads the settings file, applies the `MT5_*` overrides, fills
+    /// the installation paths the user left unset from `installation`, and stores
+    /// those fills once a settings file that is already there holds valid values.
+    fn resolve_with_installation(
+        path: Option<PathBuf>,
+        overrides: HashMap<String, String>,
+        dotenv_error: Option<String>,
+        installation: Option<Mt5Installation>,
     ) -> Self {
         let saved = path.as_ref().map_or(Ok(None), |path| read_file(path));
         let (base, persisted, mut error) = match saved {
@@ -288,7 +318,14 @@ impl AppSettingsState {
             Ok(None) => (AppSettings::default(), false, None),
             Err(error) => (AppSettings::default(), false, Some(error)),
         };
-        let (mut settings, overridden_keys) = base.with_overrides(&overrides);
+        // Detection fills the file's values before the overrides apply, so an override
+        // value is never written into the file and never replaced by a detected one.
+        let (_, overridden_keys) = base.clone().with_overrides(&overrides);
+        let (stored, detected_fields) = match installation {
+            Some(installation) => fill_detected_paths(&base, &installation, &overridden_keys),
+            None => (base, Vec::new()),
+        };
+        let (mut settings, _) = stored.clone().with_overrides(&overrides);
         let mut validation_settings = settings.clone();
         if validation_settings.token.is_empty() {
             validation_settings.token = "unset-token".into();
@@ -314,6 +351,13 @@ impl AppSettingsState {
             settings.trading_enabled = false;
             settings.auto_start_mt5 = false;
         }
+        // A settings file the user already has takes the detected paths now; without
+        // one the form shows them and the user's first save stores them, because
+        // settings that cannot validate yet (no token) must not reach the disk.
+        let store_detected = persisted && error.is_none() && !detected_fields.is_empty();
+        if let Some(path) = path.as_ref().filter(|_| store_detected) {
+            let _ = persist(path, &stored);
+        }
         let configured = error.is_none() && settings.validate().is_ok();
         let startup_trading_enabled = configured && settings.trading_enabled;
         settings.trading_enabled = startup_trading_enabled;
@@ -337,6 +381,7 @@ impl AppSettingsState {
                         "linux"
                     },
                     overridden_keys,
+                    detected_fields,
                     configuration_error: error,
                 },
             }),
@@ -362,6 +407,8 @@ impl AppSettingsState {
         inner.view.mt5_bridge_settings = settings;
         inner.view.configured = true;
         inner.view.first_launch = false;
+        // The saved values are the user's own, so no field is a detected one any more.
+        inner.view.detected_fields = Vec::new();
         let (effective, _) = inner
             .view
             .mt5_bridge_settings
@@ -370,6 +417,32 @@ impl AppSettingsState {
         inner.view.restart_required = effective != self.startup_settings;
         inner.view.configuration_error = self.runtime_error.clone();
         Ok(inner.view.clone())
+    }
+
+    /// Fills the installation paths the user has not set from the installation an
+    /// install just wrote into, and stores them when a valid settings file exists.
+    ///
+    /// Best effort by design: an install never fails because settings could not be
+    /// filled, the user's own values and `auto_start_mt5` stay exactly as they are,
+    /// and a field an `MT5_*` override supplies is not touched.
+    pub(crate) fn fill_from_installation(&self, installation: &Mt5Installation) {
+        let Ok(mut inner) = self.inner.lock() else {
+            return;
+        };
+        let Some(path) = self.path.as_deref() else {
+            return;
+        };
+        let Ok(Some(saved)) = read_file(path) else {
+            return;
+        };
+        let (filled, detected_fields) =
+            fill_detected_paths(&saved, installation, &inner.view.overridden_keys);
+        if detected_fields.is_empty() || persist(path, &filled).is_err() {
+            return;
+        }
+        let (effective, _) = filled.with_overrides(&self.overrides);
+        inner.view.mt5_bridge_settings = effective;
+        inner.view.detected_fields = detected_fields;
     }
 }
 
