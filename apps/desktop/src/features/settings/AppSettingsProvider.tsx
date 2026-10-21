@@ -10,24 +10,28 @@ import type { AppSettingsData } from './settingsTypes';
 interface AppSettingsHandlers {
   dismissRestartNotice: () => void;
   dismissConfigurationNotice: () => void;
+  closeSetupGuide: () => void;
   close: () => void;
   exited: () => void;
   saved: (settings: AppSettingsData) => void;
 }
 
-export interface AppSettingsViewState extends AppSettingsHandlers {
+export interface AppSettingsActions {
+  openSettings: () => void;
+  /** Opens App settings with the setup guide in front, the same path its info button takes. */
+  openSetupGuide: () => void;
+}
+
+export interface AppSettingsViewState extends AppSettingsHandlers, AppSettingsActions {
   settings: AppSettingsData | undefined;
   loadRequest: Promise<void>;
   isOpen: boolean;
   closing: boolean;
+  setupGuideOpen: boolean;
   loadError: string | undefined;
   notificationRevision: number;
   restartNoticeVisible: boolean;
   configurationNotice: string | null | undefined;
-}
-
-export interface AppSettingsActions {
-  openSettings: () => void;
 }
 
 interface AppSettingsContextValue {
@@ -43,18 +47,22 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
   const actions = useMemo(
     () => ({
       openSettings: settings.open,
+      openSetupGuide: settings.openSetupGuide,
       dismissRestartNotice: settings.dismissRestartNotice,
       dismissConfigurationNotice: settings.dismissConfigurationNotice,
+      closeSetupGuide: settings.closeSetupGuide,
       close: settings.close,
       exited: settings.exited,
       saved: settings.saved,
     }),
     [
       settings.close,
+      settings.closeSetupGuide,
       settings.exited,
       settings.dismissConfigurationNotice,
       settings.dismissRestartNotice,
       settings.open,
+      settings.openSetupGuide,
       settings.saved,
     ],
   );
@@ -75,6 +83,7 @@ export function useAppSettingsView(): AppSettingsViewState {
       loadRequest: state.loadRequest,
       isOpen: state.isOpen,
       closing: state.closing,
+      setupGuideOpen: state.setupGuideOpen,
       loadError: state.loadError,
       notificationRevision: state.notificationRevision,
       restartNoticeVisible: state.restartRequired && !state.restartNoticeDismissed,
@@ -93,5 +102,8 @@ export function useAppSettingsActions(): AppSettingsActions {
     AppSettingsContext,
     'useAppSettingsActions must be used within AppSettingsProvider.',
   );
-  return useMemo(() => ({ openSettings: actions.openSettings }), [actions]);
+  return useMemo(
+    () => ({ openSettings: actions.openSettings, openSetupGuide: actions.openSetupGuide }),
+    [actions.openSettings, actions.openSetupGuide],
+  );
 }

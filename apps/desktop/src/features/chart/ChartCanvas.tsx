@@ -12,7 +12,11 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
   const { hasCandles, symbolLoading, chartError } = useBridgeChartState();
   const showLoadingMessage = !tauriAvailable || !hasCandles || symbolLoading;
   useErrorNotification(chartError);
-  useErrorNotification(status.state === 'protocol_error' ? status.message : undefined);
+  // An outdated EA or tick reader is reported by the header notice instead, which carries the same message
+  // plus the install action.
+  useErrorNotification(
+    status.state === 'protocol_error' && status.componentOutdated !== true ? status.message : undefined,
+  );
 
   return (
     <div className="chart-frame">

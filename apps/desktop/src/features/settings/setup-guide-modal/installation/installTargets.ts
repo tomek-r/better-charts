@@ -1,0 +1,25 @@
+import type { Mt5InstallationView } from '../../../../shared/bridge/types';
+
+/** One installation paired with one of its data folders: exactly what an install request names. */
+export interface InstallTarget {
+  terminalPath: string;
+  label: string;
+  mql5Path: string;
+}
+
+/** Every installation × data folder pair, in the order the backend listed them. */
+export function installTargets(installations: Mt5InstallationView[]): InstallTarget[] {
+  return installations.flatMap(({ terminalPath, label, dataFolders }) =>
+    dataFolders.map((folder) => ({ terminalPath, label, mql5Path: folder.mql5Path })),
+  );
+}
+
+/** Identifies one target in the folder select; a path holds no line break, so the join is unambiguous. */
+export function targetKey(target: InstallTarget): string {
+  return `${target.terminalPath}\n${target.mql5Path}`;
+}
+
+/** The target the folder select currently names, or the first one the backend listed. */
+export function chooseTarget(targets: InstallTarget[], selectedKey: string | undefined): InstallTarget | undefined {
+  return targets.find((target) => targetKey(target) === selectedKey) ?? targets[0];
+}

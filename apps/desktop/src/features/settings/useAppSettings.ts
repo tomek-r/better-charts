@@ -8,6 +8,8 @@ export interface AppSettingsState {
   loadRequest: Promise<void>;
   isOpen: boolean;
   closing: boolean;
+  /** The setup guide sits on top of the settings dialog, which owns the guide's modal frame. */
+  setupGuideOpen: boolean;
   loadError: string | undefined;
   restartRequired: boolean;
   restartNoticeDismissed: boolean;
@@ -20,6 +22,7 @@ export const initialAppSettingsState: AppSettingsState = {
   loadRequest: Promise.resolve(),
   isOpen: false,
   closing: false,
+  setupGuideOpen: false,
   loadError: undefined,
   restartRequired: false,
   restartNoticeDismissed: false,
@@ -76,11 +79,20 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
 
   const open = useCallback(() => {
     store.setField('closing', false);
+    store.setField('setupGuideOpen', false);
     store.setField('dismissedConfigurationError', undefined);
     store.setField('loadError', undefined);
     loadSettings('Could not load app settings. Close and reopen settings to try again.');
     store.setField('isOpen', true);
   }, [loadSettings, store]);
+  // The one way into the setup guide: the dialog hosts it, so opening settings
+  // first is what makes the guide reachable from anywhere (e.g. a connection
+  // error offering to reinstall the bundled MT5 files).
+  const openSetupGuide = useCallback(() => {
+    open();
+    store.setField('setupGuideOpen', true);
+  }, [open, store]);
+  const closeSetupGuide = useCallback(() => store.setField('setupGuideOpen', false), [store]);
   // The dialog keeps its focus trap mounted while the exit animation plays and
   // calls `exited` when it ends (AppSettingsDialog), which finishes the close.
   const close = useCallback(() => {
@@ -91,6 +103,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   const exited = useCallback(() => {
     store.setField('isOpen', false);
     store.setField('closing', false);
+    store.setField('setupGuideOpen', false);
   }, [store]);
   const dismissRestartNotice = useCallback(() => store.setField('restartNoticeDismissed', true), [store]);
   const dismissConfigurationNotice = useCallback(
@@ -112,6 +125,8 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
 
   return {
     open,
+    openSetupGuide,
+    closeSetupGuide,
     close,
     exited,
     saved,

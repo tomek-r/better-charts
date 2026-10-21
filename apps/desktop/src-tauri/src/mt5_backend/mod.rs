@@ -13,7 +13,7 @@ use std::{env, ffi::OsStr};
 use serde::{Deserialize, Serialize};
 
 /// Resolve Wine from PATH unless the user supplies `MT5_WINE_BINARY`.
-const DEFAULT_WINE_BINARY: &str = "wine";
+pub(crate) const DEFAULT_WINE_BINARY: &str = "wine";
 /// Process pattern matched against full command lines for detection and stop.
 const TERMINAL_PROCESS_PATTERN: &str = "terminal64.exe";
 /// Background console helpers must not create windows alongside the GUI app.
@@ -41,10 +41,19 @@ pub struct Mt5BackendConfig {
     pub enabled: bool,
 }
 
+/// Trimmed environment value: a blank variable reads as unset, the rule every
+/// installation setting below follows.
+pub(crate) fn non_empty_env(get: &dyn Fn(&str) -> Option<String>, key: &str) -> Option<String> {
+    get(key)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 impl Mt5BackendConfig {
     /// Reads explicit installation settings from the process environment.
     pub fn from_env() -> Self {
-        Self::resolve(|key| std::env::var(key).ok())
+        let get = |key: &str| std::env::var(key).ok();
+        Self::resolve(&get)
     }
 
     #[cfg(test)]
@@ -52,18 +61,14 @@ impl Mt5BackendConfig {
     where
         F: Fn(&str) -> Option<String>,
     {
-        Self::resolve(get)
+        Self::resolve(&get)
     }
 
-    fn resolve<F>(get: F) -> Self
-    where
-        F: Fn(&str) -> Option<String>,
-    {
-        let non_empty = |key: &str| {
-            get(key)
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-        };
+    /// Explicit settings only: an unset variable stays empty, so nothing is
+    /// discovered here. Installation discovery is a separate module precisely
+    /// because these settings gate the automatic terminal start.
+    pub(crate) fn resolve(get: &dyn Fn(&str) -> Option<String>) -> Self {
+        let non_empty = |key: &str| non_empty_env(get, key);
         let wine_prefix = non_empty("MT5_WINE_PREFIX").map_or_else(PathBuf::new, PathBuf::from);
         let wine_binary = non_empty("MT5_WINE_BINARY")
             .map_or_else(|| PathBuf::from(DEFAULT_WINE_BINARY), PathBuf::from);
@@ -124,7 +129,7 @@ fn terminal_env(config: &Mt5BackendConfig) -> Vec<(String, String)> {
 /// (missing `pgrep`, permissions, unexpected exit status) is `Unknown` and
 /// biases the caller away from spawning.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProcessCheck {
+pub(crate) enum ProcessCheck {
     Running,
     NotRunning,
     Unknown,
@@ -138,7 +143,7 @@ pub fn is_terminal_running() -> bool {
 
 /// Uses PowerShell `Get-Process` on Windows and `pgrep` from PATH on Unix. Failed
 /// inspection always returns `Unknown`.
-fn inspect_terminal() -> ProcessCheck {
+pub(crate) fn inspect_terminal() -> ProcessCheck {
     inspect_terminal_with(|| {
         #[cfg(windows)]
         {
@@ -179,6 +184,33 @@ where
     F: FnOnce() -> std::io::Result<ProcessCheck>,
 {
     run().unwrap_or(ProcessCheck::Unknown)
+}
+
+/// Stops every running `terminal64.exe` process with `taskkill` on Windows and
+/// `pkill` on Unix; stopping an already-stopped terminal is a no-op success.
+///
+/// The one stop mechanism of the app: the manual `stop` command and the
+/// restart-with-EA command both need it, and a second implementation would drift
+/// from this one.
+pub(crate) fn stop_terminal() -> Result<(), String> {
+    if !is_terminal_running() {
+        return Ok(());
+    }
+    #[cfg(windows)]
+    let output = Command::new("taskkill")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(["/IM", TERMINAL_PROCESS_PATTERN])
+        .output();
+    #[cfg(not(windows))]
+    let output = Command::new("pkill")
+        .args(["-f", TERMINAL_PROCESS_PATTERN])
+        .output();
+    let output = output.map_err(|error| format!("failed to stop MT5 terminal: {error}"))?;
+    if !output.status.success() && is_terminal_running() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("failed to stop MT5 terminal: {}", stderr.trim()));
+    }
+    Ok(())
 }
 
 /// Creates the lockfile exclusively (`O_EXCL|O_CREAT`, mode 0600 on unix).
@@ -332,7 +364,7 @@ fn status_with(config: &Mt5BackendConfig, running: bool) -> Mt5BackendStatus {
 }
 
 /// A native executable on Windows, or an explicit Wine installation on Unix.
-fn is_configured(config: &Mt5BackendConfig) -> bool {
+pub(crate) fn is_configured(config: &Mt5BackendConfig) -> bool {
     is_configured_with_path(config, env::var_os("PATH").as_deref())
 }
 
@@ -358,14 +390,27 @@ fn resolve_wine_binary(binary: &Path) -> Option<PathBuf> {
 /// Resolve a bare executable name using the supplied PATH. Explicit paths,
 /// including relative paths containing separators, retain Command's CWD
 /// semantics and are checked directly.
-fn resolve_wine_binary_with_path(binary: &Path, search_path: Option<&OsStr>) -> Option<PathBuf> {
+pub(crate) fn resolve_wine_binary_with_path(
+    binary: &Path,
+    search_path: Option<&OsStr>,
+) -> Option<PathBuf> {
+    resolve_executable_with_path(binary, search_path, Path::is_file)
+}
+
+/// Core of [`resolve_wine_binary_with_path`] with an injected existence check, so
+/// installation discovery resolves `wine` through its own read-only probe.
+pub(crate) fn resolve_executable_with_path(
+    binary: &Path,
+    search_path: Option<&OsStr>,
+    is_file: impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
     let is_bare_name = binary.file_name() == Some(binary.as_os_str()) && !binary.is_absolute();
     if !is_bare_name {
-        return binary.is_file().then(|| binary.to_path_buf());
+        return is_file(binary).then(|| binary.to_path_buf());
     }
     env::split_paths(search_path?)
         .map(|directory| directory.join(binary))
-        .find(|candidate| candidate.is_file())
+        .find(|candidate| is_file(candidate))
 }
 
 /// What the startup hook will do, resolved from injected facts (pure, unit
@@ -431,23 +476,7 @@ impl Mt5BackendState {
     /// Manual control op: uses `taskkill` on Windows, `pkill` on Unix; stopping an
     /// already-stopped backend is a no-op success.
     pub fn stop(&self) -> Result<Mt5BackendStatus, String> {
-        if !is_terminal_running() {
-            return Ok(self.status());
-        }
-        #[cfg(windows)]
-        let output = Command::new("taskkill")
-            .creation_flags(CREATE_NO_WINDOW)
-            .args(["/IM", TERMINAL_PROCESS_PATTERN])
-            .output();
-        #[cfg(not(windows))]
-        let output = Command::new("pkill")
-            .args(["-f", TERMINAL_PROCESS_PATTERN])
-            .output();
-        let output = output.map_err(|error| format!("failed to stop MT5 terminal: {error}"))?;
-        if !output.status.success() && is_terminal_running() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("failed to stop MT5 terminal: {}", stderr.trim()));
-        }
+        stop_terminal()?;
         Ok(self.status())
     }
 

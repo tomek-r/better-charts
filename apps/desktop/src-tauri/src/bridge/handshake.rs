@@ -1,10 +1,10 @@
 use super::{
     bridge_emit, clear_profile_bar_slots, disconnect, invalidate_validated_order_check, now_ms,
-    protocol_error, protocol_error_session, publish, publish_market, publish_reconciliation_status,
-    read_one, reconciliation_request_status, reset_reconciliation, send, send_error,
-    BridgeConnectionState, BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource,
-    MarketSnapshot, PendingReconciliation, ReconciliationStatus, TerminalIdentity,
-    HANDSHAKE_TIMEOUT,
+    protocol_error, protocol_error_component_outdated, protocol_error_session, publish,
+    publish_market, publish_reconciliation_status, read_one, reconciliation_request_status,
+    reset_reconciliation, send, send_error, BridgeConnectionState, BridgeEvents, BridgeState,
+    ExecutionAdapterState, FrameSource, MarketSnapshot, PendingReconciliation,
+    ReconciliationStatus, TerminalIdentity, HANDSHAKE_TIMEOUT,
 };
 use std::{sync::atomic::Ordering, sync::Arc};
 use tokio::net::TcpStream;
@@ -101,7 +101,7 @@ pub(crate) async fn run_handshake(
             &message,
         )
         .await;
-        protocol_error(events, state, message);
+        protocol_error_component_outdated(events, state, message);
         return None;
     }
     // Same reasoning as the EA check: validate before the schema parse, so an
@@ -122,7 +122,7 @@ pub(crate) async fn run_handshake(
             &message,
         )
         .await;
-        protocol_error(events, state, message);
+        protocol_error_component_outdated(events, state, message);
         return None;
     }
     let invalid_hello_message = "MT5 bridge sent an invalid connection handshake. Recompile and reattach BetterChartsBridge in MT5.";
@@ -321,6 +321,8 @@ pub(crate) async fn run_handshake(
         status.account = Some(hello_payload.account_login.clone());
         status.server = Some(hello_payload.broker_server.clone());
         status.message = None;
+        // A successful handshake ends whatever the previous refusal reported.
+        status.component_outdated = false;
         status.market_session = None;
         status.broker_utc_offset_minutes = None;
         status.partial_close = hello_payload.partial_close;

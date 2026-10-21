@@ -19,6 +19,7 @@ const firstLaunch: AppSettingsData = {
   restartRequired: false,
   platform: 'linux',
   overriddenKeys: [],
+  detectedFields: [],
   configurationError: null,
 };
 
@@ -562,6 +563,40 @@ test('Windows startup hides Wine fields and settings fit a small viewport', asyn
     await expect(dialog.getByRole('button', { name: 'MT5 setup', exact: true })).toBeInViewport();
     expect((await dialog.boundingBox())?.height).toBeLessThanOrEqual(480);
   }
+});
+
+/** The detection hint shown under one settings field, found through that field's label. */
+const detectedHint = (dialog: Locator, field: string) =>
+  dialog.getByLabel(field).locator('xpath=..').locator('.settings-detected-hint');
+
+test('detected MT5 paths carry a hint and a path the user set carries none', async ({ page }) => {
+  await gotoWithStub(page, {
+    responses: {
+      get_app_settings: {
+        ...firstLaunch,
+        configured: true,
+        firstLaunch: false,
+        detectedFields: ['terminalPath', 'winePrefix'],
+        mt5BridgeSettings: {
+          ...firstLaunch.mt5BridgeSettings,
+          token: 'demo-settings-token',
+          terminalPath: '/opt/mt5/terminal64.exe',
+          winePrefix: '/home/demo/.mt5',
+          wineBinary: '/usr/bin/wine',
+        },
+      },
+    },
+  });
+  await page.getByRole('button', { name: 'App settings', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'App settings' });
+
+  await expect(dialog.getByLabel('MT5 executable path')).toHaveValue('/opt/mt5/terminal64.exe');
+  await expect(detectedHint(dialog, 'MT5 executable path')).toHaveText('Detected on this computer');
+  await expect(detectedHint(dialog, 'Wine prefix path')).toHaveText('Detected on this computer');
+  // The binary the user chose is theirs, so detection filled nothing there.
+  await expect(dialog.getByLabel('Wine binary path')).toHaveValue('/usr/bin/wine');
+  await expect(detectedHint(dialog, 'Wine binary path')).toHaveCount(0);
+  await expect(dialog.locator('.settings-detected-hint')).toHaveCount(2);
 });
 
 test('configuration errors open settings and remain visible after save', async ({ page }) => {

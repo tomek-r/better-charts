@@ -38,6 +38,33 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   absolute overlay that takes no layout space, so a real or disconnected account
   shows no strip and neither kind moves the bar or the chart; reduced motion shows
   the first sentence once, static and centred.
+- Setup guide's automatic install (App settings -> "How to set up the bridge
+  connection"): finds MT5 on Windows, macOS (the official app with its bundled
+  Wine) and Linux (Wine prefixes `~/.mt5` and `~/.wine`), lists the `MQL5` data
+  folders of each installation (portable and standard layouts), and "Install to
+  MT5" copies `BetterChartsTickHistoryReader.mq5` then `BetterChartsBridge.mq5`
+  (replacing an existing copy in place, for example under `Experts/Advisors`) and
+  compiles both with MetaEditor, reporting per file; the UTF-16LE log decides, and
+  an indicator with errors stops the run before the EA. The guide's manual steps
+  remain the fallback when no installation is found.
+- The install offers two buttons, "Install to MT5" and "Install and restart MT5".
+  A press installs and compiles both files; the restart button then closes MT5 and
+  reopens it with the EA attached, but only once every file compiled with 0 errors
+  and 0 warnings, so a run that needs fixing stops at its per-file rows. A clean run
+  shows no message at all. The restart writes a temporary UTF-16LE
+  `config/BetterChartsStartup.ini` (no symbol, so MT5 opens its own default chart)
+  and a preset with the bridge token, host and port
+  (`<MQL5>/Presets/BetterChartsStartup.set`), relaunches `terminal64.exe`
+  (`/portable` for the portable layout) and deletes both files once the bridge
+  connects, after 120 s, or at the next app start. It never enables Algo Trading,
+  and is refused while an order is queued or in flight, without a token, or before
+  the EA is installed.
+- An outdated EA or tick reader sets `componentOutdated` on the bridge status; the
+  error notice offers "Update in MT5", which opens the setup guide. Detected
+  installation paths fill the App settings fields the user left unset (terminal
+  path, Wine prefix, and the Wine binary while it is still `wine`); user values and
+  `MT5_*` overrides are never replaced, and auto-start stays off unless the user
+  enables it.
 - Money amounts use the MT5 account currency and precision, formatted as
   `100.00 USD`, `100.00 EUR` or `100.00 PLN`. Chart estimates use broker tick
   values converted to account currency; unavailable or mismatched values are omitted.
@@ -150,6 +177,10 @@ permissions. New submissions require an open broker session; modify/close/cancel
 are exempt. No automatic retries; session loss/change drains the queue. Missing
 broker records do not prove non-execution. Preview/check/reconciliation never send orders.
 
+The setup guide's install and restart reuse the same execution queue guard: both
+refuse while an order is queued or in flight, because a recompile drops the bridge
+session and closing the terminal would lose the order.
+
 Trading/MT5 auto-start default off; disabled auto-start skips startup process
 inspection on every platform. Settings apply after restart. Precedence:
 process environment → first applicable `.env` → saved settings; only `MT5_` keys
@@ -190,6 +221,12 @@ in the UI; backend diagnostics and the durable execution journal remain active.
 Earlier MVP was verified on a demo account. Current changes, packaged builds and
 native Windows/Linux behavior need manual verification; browser E2E uses a Tauri
 stub. Real-account testing is unvalidated. See [release checklist](RELEASING.md).
+
+The MetaEditor compile command and the attach-on-restart startup files were
+verified by hand on macOS with the official MT5 application; the in-app restart
+flow still needs a manual check there. Windows and Linux discovery, compile
+commands and launches are covered by unit tests only; the restart closes MT5 with
+`taskkill`/`pkill`, which may close it less gracefully than quitting it.
 
 Pine integration has not started. [Piner](https://github.com/heyphat/piner) 0.13.0
 is preferred for v6 indicators (2026-10-04): targeted Node semantics/browser-bundle
