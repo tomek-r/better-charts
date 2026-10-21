@@ -524,3 +524,9 @@ export interface Mt5InstallReport {
   /** One entry per installed file, indicator first as the install step writes it. */
   files: Mt5FileReport[];
 }
+
+/** `restart_mt5_with_ea` report: the terminal is starting again with the EA attached. */
+export interface Mt5RestartReport {
+  /** True once MT5 was relaunched; the session itself arrives later as a bridge status. */
+  restarted: boolean;
+}

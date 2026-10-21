@@ -47,15 +47,28 @@ export function cleanInstallReport(
   };
 }
 
-/** The target an `install_to_mt5` request named, as the stub recorded it. */
+/** The target an `install_to_mt5` or a `restart_mt5_with_ea` request named, as the stub recorded it. */
 export interface Mt5InstallRequest {
   terminalPath: string;
   mql5Path: string;
 }
 
+/** Every request one setup-guide command recorded on its page global, oldest first. */
+async function recordedTargets(page: Page, key: '__mt5Installs' | '__mt5Restarts'): Promise<Mt5InstallRequest[]> {
+  return page.evaluate(
+    (name) => (window as unknown as Record<string, Mt5InstallRequest[] | undefined>)[name] ?? [],
+    key,
+  );
+}
+
 /** Every `install_to_mt5` request the stub recorded, oldest first. */
 export async function mt5InstallRequests(page: Page): Promise<Mt5InstallRequest[]> {
-  return page.evaluate(() => (window as unknown as { __mt5Installs?: Mt5InstallRequest[] }).__mt5Installs ?? []);
+  return recordedTargets(page, '__mt5Installs');
+}
+
+/** Every `restart_mt5_with_ea` request the stub recorded, oldest first. */
+export async function mt5RestartRequests(page: Page): Promise<Mt5InstallRequest[]> {
+  return recordedTargets(page, '__mt5Restarts');
 }
 
 /** Opens App settings and the setup guide nested inside it, returning the guide dialog. */

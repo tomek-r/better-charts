@@ -1,5 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { errorText } from '../../../shared/errorText';
 import { useBridgeConnectionSelector } from '../../bridge/BridgeSessionProvider';
 import type {
@@ -9,6 +9,7 @@ import type {
   Mt5InstallFile,
   Mt5InstallOutcome,
   Mt5InstallReport,
+  Mt5RestartReport,
 } from '../../../shared/bridge/types';
 
 /** The `.mq5` file each report entry names, as it appears in the MT5 folders. */
@@ -27,15 +28,36 @@ const OUTCOME_WORDS: Record<Mt5InstallOutcome, string> = {
 /** Discovery found nothing: the manual steps below are then the only route. */
 const MT5_NOT_FOUND_TEXT = 'MetaTrader 5 was not found on this computer. Use the manual steps below.';
 
+/** The words of a done line that open the restart confirmation; the line's one clickable part. */
+const RESTART_PHRASE = 'restart MT5 with the EA attached';
+
+/**
+ * A done line that ends on the restart phrase, so a line can never drift from the
+ * words it turns into a button.
+ */
+function restartLine(lead: string): string {
+  return `${lead}${RESTART_PHRASE}.`;
+}
+
 /** A first install leaves the EA off every chart, so the success line names both routes to a connection. */
-const FIRST_INSTALL_DONE_TEXT =
-  'Installed and compiled. Drag BetterChartsBridge onto a chart in MT5 and enter the token, or restart MT5 with the EA attached.';
+const FIRST_INSTALL_DONE_TEXT = restartLine(
+  'Installed and compiled. Drag BetterChartsBridge onto a chart in MT5 and enter the token, or ',
+);
 
 /** An updated EA that a live bridge is attached to: MT5 reloads it and the link returns by itself. */
 const RECONNECT_DONE_TEXT = 'Installed and compiled. MT5 reloads the EA and the bridge reconnects.';
 
 /** An updated EA with no bridge: nothing reloads it, so the user has to reattach it. */
-const REATTACH_DONE_TEXT = 'Installed and compiled. Reattach BetterChartsBridge in MT5.';
+const REATTACH_DONE_TEXT = restartLine('Installed and compiled. Reattach BetterChartsBridge in MT5. Or ');
+
+/** Asked before anything closes: the restart takes MT5 down, so it never starts on a single click. */
+const RESTART_CONFIRM_TEXT = 'MT5 will close and reopen with the EA attached.';
+
+/** The restart is under way and the dialog can do nothing else until the backend answers. */
+const RESTART_RUNNING_TEXT = 'Restarting MT5…';
+
+/** The restart succeeded. Algo Trading is the terminal's own switch, so it stays with the user. */
+const RESTART_DONE_TEXT = 'MT5 is restarting with the EA attached. Enable Algo Trading in MT5 if it is off.';
 
 /** One installation paired with one of its data folders: exactly what an install request names. */
 interface InstallTarget {
@@ -43,6 +65,13 @@ interface InstallTarget {
   label: string;
   mql5Path: string;
 }
+
+/**
+ * Where the done line stands within its optional restart. Only `idle` shows the line
+ * itself; every other step replaces it in the same reserved row, so the dialog keeps
+ * its height.
+ */
+type RestartStep = 'idle' | 'confirm' | 'running' | 'done';
 
 /** Every installation × data folder pair, in the order the backend listed them. */
 function installTargets(installations: Mt5InstallationView[]): InstallTarget[] {
@@ -100,6 +129,70 @@ function installDoneText(files: Mt5FileReport[], bridgeConnected: boolean): stri
     return FIRST_INSTALL_DONE_TEXT;
   }
   return bridgeConnected ? RECONNECT_DONE_TEXT : REATTACH_DONE_TEXT;
+}
+
+/**
+ * A done line split around its restart phrase: `lead` and `trail` stay plain text.
+ * The reconnect line has no phrase, so it has nothing to click and stays text only.
+ */
+function splitAtRestartPhrase(text: string): { lead: string; trail: string } | undefined {
+  const at = text.indexOf(RESTART_PHRASE);
+  return at === -1 ? undefined : { lead: text.slice(0, at), trail: text.slice(at + RESTART_PHRASE.length) };
+}
+
+/** The restart phrase as a button: styled like a link, it only opens the confirmation. */
+function RestartLink({ linkRef, onOpen }: { linkRef: RefObject<HTMLButtonElement | null>; onOpen: () => void }) {
+  return (
+    <button ref={linkRef} type="button" className="setup-guide-install-restart" onClick={onOpen}>
+      {RESTART_PHRASE}
+    </button>
+  );
+}
+
+/** One settled done line: its sentence, with the restart phrase as the only clickable words. */
+function DoneLineText({
+  text,
+  linkRef,
+  onOpen,
+}: {
+  text: string;
+  linkRef: RefObject<HTMLButtonElement | null>;
+  onOpen: () => void;
+}) {
+  const parts = splitAtRestartPhrase(text);
+  if (parts === undefined) {
+    return <>{text}</>;
+  }
+  return (
+    <>
+      {parts.lead}
+      <RestartLink linkRef={linkRef} onOpen={onOpen} />
+      {parts.trail}
+    </>
+  );
+}
+
+/** The confirmation that replaces the done line, in the row it already reserved. */
+function RestartConfirmation({
+  confirmRef,
+  onConfirm,
+  onCancel,
+}: {
+  confirmRef: RefObject<HTMLButtonElement | null>;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <>
+      <span className="setup-guide-install-confirm-text">{RESTART_CONFIRM_TEXT}</span>
+      <button ref={confirmRef} type="button" className="setup-guide-install-confirm" onClick={onConfirm}>
+        Restart MT5
+      </button>
+      <button type="button" className="setup-guide-install-confirm" onClick={onCancel}>
+        Cancel
+      </button>
+    </>
+  );
 }
 
 /** The data folder the install writes into: plain text for one, a select when there is a choice. */
@@ -176,6 +269,10 @@ function InstallResults({ report }: { report: Mt5InstallReport }) {
  * the row the button already occupies, so the dialog keeps its height; anything left
  * to fix keeps the detailed rows below. That line words the next step from what
  * happened to the EA and from the connection the press found.
+ *
+ * Where that line offers a restart, the phrase is a button that asks first: the
+ * confirmation, the progress line and the result all replace the line inside the same
+ * reserved row, and only the confirmed press reaches the backend.
  */
 export function InstallToMt5() {
   const shellAvailable = isTauri();
@@ -184,9 +281,16 @@ export function InstallToMt5() {
   const [selectedKey, setSelectedKey] = useState<string>();
   const [running, setRunning] = useState(false);
   const [report, setReport] = useState<Mt5InstallReport>();
+  /** The folder the report came from: a restart names the target the install wrote into. */
+  const [installedTarget, setInstalledTarget] = useState<InstallTarget>();
   // Captured with the press: the install itself drops the connection while MT5 reloads the EA.
   const [connectedAtInstall, setConnectedAtInstall] = useState(false);
+  const [restartStep, setRestartStep] = useState<RestartStep>('idle');
   const [error, setError] = useState<string>();
+  const restartLink = useRef<HTMLButtonElement>(null);
+  const restartConfirm = useRef<HTMLButtonElement>(null);
+  // Set by Cancel, so the effect below knows the link is back and may take focus again.
+  const refocusLink = useRef(false);
 
   useEffect(() => {
     if (!shellAvailable) {
@@ -209,6 +313,16 @@ export function InstallToMt5() {
     };
   }, [shellAvailable]);
 
+  // A confirmation takes focus as soon as it exists, so a keyboard user confirms or cancels at once.
+  useEffect(() => {
+    if (restartStep === 'confirm') {
+      restartConfirm.current?.focus();
+    } else if (restartStep === 'idle' && refocusLink.current) {
+      refocusLink.current = false;
+      restartLink.current?.focus();
+    }
+  }, [restartStep]);
+
   if (!shellAvailable) {
     return null;
   }
@@ -219,21 +333,28 @@ export function InstallToMt5() {
   // Success has its own one-line report; every other outcome keeps the detailed rows.
   const cleanReport = report !== undefined && everyFileCompiledClean(report.files) ? report : undefined;
   const doneLine = cleanReport === undefined ? undefined : installDoneText(cleanReport.files, connectedAtInstall);
+  const restarting = restartStep === 'running';
+  // One target at a time: the install and the restart both own the terminal while they run.
+  const busy = running || restarting;
 
   /** A report or refusal belongs to the folder it was asked about, so choosing another one clears it. */
   function chooseDataFolder(key: string) {
     setSelectedKey(key);
     setReport(undefined);
+    setInstalledTarget(undefined);
+    setRestartStep('idle');
     setError(undefined);
   }
 
   async function install(target: InstallTarget) {
-    if (running) {
+    if (busy) {
       return;
     }
     setRunning(true);
     setError(undefined);
     setReport(undefined);
+    setInstalledTarget(target);
+    setRestartStep('idle');
     setConnectedAtInstall(bridgeConnected);
     try {
       setReport(
@@ -247,6 +368,31 @@ export function InstallToMt5() {
     } finally {
       setRunning(false);
     }
+  }
+
+  /**
+   * The confirmed restart: MT5 closes, so the row reports progress until the backend
+   * answers. A refusal leaves the terminal as it was, which brings the line back with
+   * the reason in the alert below.
+   */
+  async function restart(target: InstallTarget) {
+    setRestartStep('running');
+    setError(undefined);
+    try {
+      await invoke<Mt5RestartReport>('restart_mt5_with_ea', {
+        terminalPath: target.terminalPath,
+        mql5Path: target.mql5Path,
+      });
+      setRestartStep('done');
+    } catch (failure) {
+      setError(errorText(failure));
+      setRestartStep('idle');
+    }
+  }
+
+  function cancelRestart() {
+    refocusLink.current = true;
+    setRestartStep('idle');
   }
 
   return (
@@ -269,19 +415,33 @@ export function InstallToMt5() {
       )}
       {selected !== undefined && (
         <>
-          <DataFolderChoice targets={targets} selected={selected} disabled={running} onChoose={chooseDataFolder} />
+          <DataFolderChoice targets={targets} selected={selected} disabled={busy} onChoose={chooseDataFolder} />
           <div className="setup-guide-install-actions">
             <button
               type="button"
               className="setup-guide-install-run"
-              disabled={running}
+              disabled={busy}
               onClick={() => void install(selected)}
             >
               {running ? 'Installing…' : 'Install to MT5'}
             </button>
-            {cleanReport !== undefined && doneLine !== undefined && (
-              <p className="setup-guide-install-done" title={`${doneLine} ${outcomeSummary(cleanReport.files)}`}>
-                {doneLine}
+            {cleanReport !== undefined && doneLine !== undefined && installedTarget !== undefined && (
+              <p
+                className={`setup-guide-install-done${restartStep === 'confirm' ? ' is-confirming' : ''}`}
+                title={restartStep === 'idle' ? `${doneLine} ${outcomeSummary(cleanReport.files)}` : undefined}
+              >
+                {restartStep === 'idle' && (
+                  <DoneLineText text={doneLine} linkRef={restartLink} onOpen={() => setRestartStep('confirm')} />
+                )}
+                {restartStep === 'confirm' && (
+                  <RestartConfirmation
+                    confirmRef={restartConfirm}
+                    onConfirm={() => void restart(installedTarget)}
+                    onCancel={cancelRestart}
+                  />
+                )}
+                {restarting && <span role="status">{RESTART_RUNNING_TEXT}</span>}
+                {restartStep === 'done' && RESTART_DONE_TEXT}
               </p>
             )}
           </div>

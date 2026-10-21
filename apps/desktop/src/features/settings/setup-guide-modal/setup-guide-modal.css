@@ -148,7 +148,9 @@
 
 /* Button row: the success line sits beside the button, and this row reserves the two
    text lines it may need (2 × 12px × 1.55 = 37.2px) before the line exists, so the
-   dialog's height stays the same while that line appears, changes or clears. */
+   dialog's height stays the same while that line appears, changes or clears. The
+   restart confirmation and its two small buttons fit that same reserve, so asking,
+   running and reporting never move the row either. */
 .setup-guide-install-actions {
   display: flex;
   align-items: stretch;
@@ -178,7 +180,9 @@
 }
 
 .setup-guide-install-run:focus-visible,
-.setup-guide-install-field select:focus-visible {
+.setup-guide-install-field select:focus-visible,
+.setup-guide-install-restart:focus-visible,
+.setup-guide-install-confirm:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
@@ -248,6 +252,58 @@
   color: var(--color-accent);
   font-size: 12px;
   line-height: 1.55;
+}
+
+/* Inline action of a done line: the line's own words, underlined like a link. No
+   vertical padding, so the phrase adds no height to the line it sits in. */
+.setup-guide-install-restart {
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.setup-guide-install-restart:hover {
+  color: var(--color-text-bright);
+}
+
+/* The confirmation reuses the done line's slot: its prompt wraps in the space left of
+   the two small buttons, so the row keeps the height it reserves for the line. */
+.setup-guide-install-done.is-confirming {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-line-clamp: none;
+  overflow: visible;
+  color: var(--color-text-secondary);
+}
+
+.setup-guide-install-confirm-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Small enough to stay inside the reserved row beside the prompt it answers. */
+.setup-guide-install-confirm {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-well);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.setup-guide-install-confirm:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-bright);
 }
 
 .setup-guide-downloads {

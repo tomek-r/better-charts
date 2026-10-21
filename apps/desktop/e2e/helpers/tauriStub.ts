@@ -456,6 +456,9 @@ export async function installTauriStub(
           },
         ],
       },
+      // The terminal always starts again on the scripted machine; a test scripts a
+      // refused restart through `failures` instead.
+      restart_mt5_with_ea: { restarted: true },
       submit_order: null,
       close_position: null,
       cancel_order: null,
@@ -738,6 +741,13 @@ export async function installTauriStub(
         installs.push({ terminalPath: args.terminalPath, mql5Path: args.mql5Path });
         w.__mt5Installs = installs;
       }
+      // The restart records the target the same way and then answers like the backend:
+      // the terminal is starting again (a test scripts a refusal through `failures`).
+      if (cmd === 'restart_mt5_with_ea') {
+        const restarts = (w.__mt5Restarts as Array<Record<string, unknown>> | undefined) ?? [];
+        restarts.push({ terminalPath: args.terminalPath, mql5Path: args.mql5Path });
+        w.__mt5Restarts = restarts;
+      }
       if (Object.prototype.hasOwnProperty.call(failures, cmd)) {
         throw new Error(failures[cmd]);
       }
@@ -773,6 +783,7 @@ export async function installTauriStub(
     w.isTauri = true;
     w.__setupGuideSaves = [];
     w.__mt5Installs = [];
+    w.__mt5Restarts = [];
     w.__TAURI_INTERNALS__ = {
       invoke,
       transformCallback,

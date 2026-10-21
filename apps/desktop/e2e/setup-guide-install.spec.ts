@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import type { BridgeStatus } from '../src/shared/bridge/types';
 import { gotoWithStub, pushBridgeStatus } from './helpers/tauriStub';
 import {
   DEFAULT_TERMINAL_PATH,
@@ -7,13 +8,21 @@ import {
   STANDARD_MQL5_PATH,
   mt5InstallRequests,
   mt5Installation,
+  mt5RestartRequests,
   openSetupGuide,
 } from './helpers/setupGuide';
 
 const FIRST_INSTALL_LINE =
   'Installed and compiled. Drag BetterChartsBridge onto a chart in MT5 and enter the token, or restart MT5 with the EA attached.';
 const RECONNECT_LINE = 'Installed and compiled. MT5 reloads the EA and the bridge reconnects.';
-const REATTACH_LINE = 'Installed and compiled. Reattach BetterChartsBridge in MT5.';
+const REATTACH_LINE =
+  'Installed and compiled. Reattach BetterChartsBridge in MT5. Or restart MT5 with the EA attached.';
+/** The words a done line turns into the restart button. */
+const RESTART_WORDS = 'restart MT5 with the EA attached';
+/** The confirmation the button opens, before anything closes. */
+const RESTART_CONFIRM_LINE = 'MT5 will close and reopen with the EA attached.';
+/** The line the row reports once the backend has relaunched the terminal. */
+const RESTART_DONE_LINE = 'MT5 is restarting with the EA attached. Enable Algo Trading in MT5 if it is off.';
 /** The stub's default report updates the EA, and its default bridge is connected: the reconnect line. */
 const DONE_LINE = RECONNECT_LINE;
 /** The success line's tooltip: the same sentence, then what each file became. */
@@ -118,6 +127,23 @@ async function runInstall(page: Page, stubOptions: Parameters<typeof gotoWithStu
   return install;
 }
 
+/**
+ * Opens the guide, shows `bridge` as the current connection when a test needs one other
+ * than the stub's connected default, installs once, and returns the dialog with the
+ * install section and the done line it reports.
+ */
+async function installOnce(page: Page, stubOptions: Parameters<typeof gotoWithStub>[1], bridge?: BridgeStatus) {
+  await gotoWithStub(page, stubOptions);
+  const guide = await openSetupGuide(page);
+  if (bridge) {
+    await pushBridgeStatus(page, bridge);
+  }
+  const install = guide.locator('.setup-guide-install');
+  const done = install.locator('.setup-guide-install-actions .setup-guide-install-done');
+  await install.getByRole('button', { name: 'Install to MT5' }).click();
+  return { guide, install, done };
+}
+
 const DONE_LINE_CASES = [
   {
     name: 'a first install names both routes to a connection',
@@ -215,4 +241,78 @@ test('a broken indicator reports its messages and stops short of the done line',
   ]);
   await expect(install.locator('.setup-guide-install-messages li')).toHaveText([indicatorMessage]);
   await expect(install.locator('.setup-guide-install-done')).toHaveCount(0);
+});
+
+test('a first install offers a restart that asks before MT5 closes', async ({ page }) => {
+  const { guide, install, done } = await installOnce(page, {
+    responses: { install_to_mt5: cleanInstallReport('installed') },
+  });
+  await expect(done).toHaveText(FIRST_INSTALL_LINE);
+  const heightWithLink = await layoutHeight(guide);
+  const link = done.getByRole('button', { name: RESTART_WORDS });
+  await expect(link).toBeVisible();
+
+  // The link only asks: nothing reaches the backend until Restart MT5 is pressed, and
+  // the confirmation replaces the line without moving the row.
+  await link.click();
+  await expect(install.locator('.setup-guide-install-confirm-text')).toHaveText(RESTART_CONFIRM_LINE);
+  await expect(install.getByRole('button', { name: 'Restart MT5' })).toBeFocused();
+  expect(await mt5RestartRequests(page)).toEqual([]);
+  expect(await layoutHeight(guide)).toBe(heightWithLink);
+
+  // Cancel puts the line back, with focus on the button it came from.
+  await install.getByRole('button', { name: 'Cancel' }).click();
+  await expect(done).toHaveText(FIRST_INSTALL_LINE);
+  await expect(link).toBeFocused();
+  expect(await mt5RestartRequests(page)).toEqual([]);
+  expect(await layoutHeight(guide)).toBe(heightWithLink);
+
+  // Confirmed: the target the install wrote into goes to the backend, and the row
+  // reports the terminal coming back in the same slot.
+  await link.click();
+  await install.getByRole('button', { name: 'Restart MT5' }).click();
+  await expect(done).toHaveText(RESTART_DONE_LINE);
+  expect(await layoutHeight(guide)).toBe(heightWithLink);
+  expect(await mt5RestartRequests(page)).toEqual([
+    { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: PORTABLE_MQL5_PATH },
+  ]);
+});
+
+test('a refused restart shows the reason and brings the line back', async ({ page }) => {
+  const refusal = 'Set the bridge token in App settings first.';
+  const { install, done } = await installOnce(page, {
+    responses: { install_to_mt5: cleanInstallReport('installed') },
+    failures: { restart_mt5_with_ea: refusal },
+  });
+  await expect(done).toHaveText(FIRST_INSTALL_LINE);
+
+  await done.getByRole('button', { name: RESTART_WORDS }).click();
+  await install.getByRole('button', { name: 'Restart MT5' }).click();
+
+  await expect(install.getByRole('alert')).toHaveText(refusal);
+  await expect(done).toHaveText(FIRST_INSTALL_LINE);
+  await expect(install.getByRole('button', { name: 'Install to MT5' })).toBeEnabled();
+  expect(await mt5RestartRequests(page)).toEqual([
+    { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: PORTABLE_MQL5_PATH },
+  ]);
+});
+
+test('the reconnect line offers no restart, since the bridge returns by itself', async ({ page }) => {
+  const { done } = await installOnce(page, { responses: { install_to_mt5: cleanInstallReport('updated') } });
+
+  await expect(done).toHaveText(RECONNECT_LINE);
+  await expect(done.getByRole('button')).toHaveCount(0);
+});
+
+test('an update with no bridge offers the restart beside the line asking to reattach the EA', async ({ page }) => {
+  const { install, done } = await installOnce(
+    page,
+    { responses: { install_to_mt5: cleanInstallReport('updated') } },
+    { state: 'disconnected' },
+  );
+
+  await expect(done).toHaveText(REATTACH_LINE);
+  await done.getByRole('button', { name: RESTART_WORDS }).click();
+  await expect(install.getByRole('button', { name: 'Restart MT5' })).toBeFocused();
+  expect(await mt5RestartRequests(page)).toEqual([]);
 });
