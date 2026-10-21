@@ -1,8 +1,10 @@
+use super::compile::*;
 use super::discover::*;
 use super::install::*;
 use super::locate::*;
 use crate::execution_adapter::ExecutionQueueView;
 use crate::mt5_backend::{is_configured, Mt5BackendConfig};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -866,4 +868,344 @@ fn a_missing_source_is_reported_before_anything_is_written() {
         other => panic!("unexpected install error: {other:?}"),
     }
     assert!(is_empty_folder(&mql5), "a missing source writes nothing");
+}
+
+/// Lines MetaEditor puts in a compile log: the diagnostics first, the counts last.
+/// The real line adds `, cpu='X64 Regular'` at the end, which the parser ignores.
+const SUCCESS_RESULT_LINE: &str = "Result: 0 errors, 0 warnings, 2806 ms elapsed";
+const ERROR_DIAGNOSTIC: &str =
+    "BetterChartsBridge.mq5(12,9) : error 123: 'lots' - undeclared identifier";
+const WARNING_DIAGNOSTIC: &str = "BetterChartsBridge.mq5(20,3) : warning 42: implicit conversion";
+/// Content of the executable stubs a fixture holds: the command builder only checks
+/// that the editor exists, never what it contains.
+const EXECUTABLE_STUB: &str = "stub\n";
+
+#[test]
+fn a_compile_log_decodes_from_utf16_le_with_and_without_a_bom() {
+    let bytes = utf16_le_with_bom(SUCCESS_RESULT_LINE);
+
+    assert_eq!(decode_log(&bytes), SUCCESS_RESULT_LINE);
+    assert_eq!(
+        decode_log(&bytes[2..]),
+        SUCCESS_RESULT_LINE,
+        "the mark is optional"
+    );
+}
+
+#[test]
+fn a_compile_log_decodes_from_utf8_with_and_without_a_bom() {
+    let mut with_bom = vec![0xef, 0xbb, 0xbf];
+    with_bom.extend_from_slice(SUCCESS_RESULT_LINE.as_bytes());
+
+    assert_eq!(
+        decode_log(SUCCESS_RESULT_LINE.as_bytes()),
+        SUCCESS_RESULT_LINE
+    );
+    assert_eq!(decode_log(&with_bom), SUCCESS_RESULT_LINE);
+}
+
+#[test]
+fn a_compile_log_reports_the_counts_and_the_diagnostics() {
+    let text =
+        format!("{ERROR_DIAGNOSTIC}\r\n{WARNING_DIAGNOSTIC}\r\nResult: 1 errors, 1 warnings\r\n");
+
+    let parsed = parse_compile_log(&text).expect("the log carries a result line");
+
+    assert_eq!(parsed.0, 1);
+    assert_eq!(parsed.1, 1);
+    assert_eq!(
+        parsed.2,
+        vec![ERROR_DIAGNOSTIC.to_string(), WARNING_DIAGNOSTIC.to_string()]
+    );
+}
+
+#[test]
+fn a_compile_log_without_a_result_line_reports_nothing() {
+    // Diagnostics without counts say nothing about whether the file compiled.
+    let text = format!("compiling\r\n{WARNING_DIAGNOSTIC}\r\n");
+
+    assert_eq!(parse_compile_log(&text), None);
+}
+
+#[test]
+fn only_the_first_diagnostics_are_kept() {
+    let diagnostics: String = (0..MAX_MESSAGES + 5)
+        .map(|line| format!("\r\nBetterChartsBridge.mq5({line},1) : warning 42: note"))
+        .collect();
+    let text = format!("{SUCCESS_RESULT_LINE}{diagnostics}");
+
+    let parsed = parse_compile_log(&text).expect("the log carries a result line");
+
+    assert_eq!(parsed.2.len(), MAX_MESSAGES);
+    assert_eq!(
+        parsed.2.first().map(String::as_str),
+        Some("BetterChartsBridge.mq5(0,1) : warning 42: note"),
+        "the first diagnostics name the cause"
+    );
+}
+
+#[test]
+fn a_portable_source_maps_to_a_relative_windows_path() {
+    // The data folder is the install folder, and only the part below it travels to
+    // MetaEditor, so a space in the folders above it is harmless.
+    let data_folder = Path::new(
+        "/Users/trader/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5",
+    );
+    let source = data_folder
+        .join("MQL5/Experts/Advisors")
+        .join(EXPERT_ADVISOR_FILE);
+
+    let relative =
+        relative_windows_path(data_folder, &source).expect("the source is inside the folder");
+
+    assert_eq!(
+        relative,
+        format!(r"MQL5\Experts\Advisors\{EXPERT_ADVISOR_FILE}")
+    );
+}
+
+#[test]
+fn a_source_below_a_folder_with_a_space_is_refused() {
+    let data_folder = Path::new("/tmp/data");
+    let source = data_folder
+        .join("MQL5/My Advisors")
+        .join(EXPERT_ADVISOR_FILE);
+
+    match relative_windows_path(data_folder, &source) {
+        Err(CompileError::PathHasSpace { path }) => assert_eq!(path, source),
+        other => panic!("unexpected compile outcome: {other:?}"),
+    }
+}
+
+#[test]
+fn a_source_outside_the_data_folder_is_refused() {
+    let data_folder = Path::new("/tmp/data");
+    let source = Path::new("/tmp/elsewhere").join(EXPERT_ADVISOR_FILE);
+
+    match relative_windows_path(data_folder, &source) {
+        Err(CompileError::NotInsideDataFolder { path }) => assert_eq!(path, source),
+        other => panic!("unexpected compile outcome: {other:?}"),
+    }
+}
+
+/// Writes the editor stub into `install_folder`.
+fn write_executable_stub(install_folder: &Path) {
+    let editor = install_folder.join(METAEDITOR_EXE_FILE);
+    fs::write(&editor, EXECUTABLE_STUB).expect("the editor stub is writable");
+}
+
+/// A Wine installation rooted in `fixture`, with the `MetaEditor64.exe` that ships
+/// beside the terminal executable. Returns the installation and its install folder,
+/// which the portable layout also uses as the data folder.
+fn wine_installation_with_editor(fixture: &TempFolder) -> (Mt5Installation, PathBuf) {
+    let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
+    write_executable_stub(&install_folder);
+    let wine_prefix = fixture.path().to_string_lossy().into_owned();
+    let installation = discovered_wine_installation(&wine_prefix, MACOS_WINE_BINARY);
+    (installation, install_folder)
+}
+
+/// A native installation whose install folder exists on this host: the Windows
+/// mapping keeps the path unchanged, so a host path stands in for a Windows one.
+/// Only a Windows host has drive-letter temp paths, so only it can run this.
+#[cfg(windows)]
+fn windows_installation_with_editor(fixture: &TempFolder) -> (Mt5Installation, PathBuf) {
+    let install_folder = fixture.folder("Program Files/MetaTrader 5");
+    write_executable_stub(&install_folder);
+    let terminal_exe = install_folder.join("terminal64.exe");
+    let installation = discovered_windows_installation(&terminal_exe.to_string_lossy());
+    (installation, install_folder)
+}
+
+/// A Wine installation with both shipped files installed in the portable layout,
+/// reported the way the install step reports them: indicator first.
+fn portable_install(fixture: &TempFolder) -> (Mt5Installation, PathBuf, Vec<InstalledFile>) {
+    let (installation, install_folder) = wine_installation_with_editor(fixture);
+    let indicator = fixture
+        .folder(&format!("{INSTALL_FOLDER_IN_PREFIX}/MQL5/Indicators"))
+        .join(INDICATOR_FILE);
+    let advisor = fixture
+        .folder(&format!("{INSTALL_FOLDER_IN_PREFIX}/MQL5/Experts/Advisors"))
+        .join(EXPERT_ADVISOR_FILE);
+    let installed = vec![
+        installed_file(Mql5File::Indicator, &indicator, InstallOutcome::Installed),
+        installed_file(Mql5File::ExpertAdvisor, &advisor, InstallOutcome::Installed),
+    ];
+    (installation, install_folder, installed)
+}
+
+/// Runner that stands in for MetaEditor: it records every command and writes the
+/// log that command would have written, so the compile loop runs without starting
+/// anything.
+#[derive(Default)]
+struct FakeRunner {
+    /// Log text per log path; a path that is absent means the run writes nothing.
+    logs: BTreeMap<PathBuf, String>,
+    commands: RefCell<Vec<CompileCommand>>,
+}
+
+impl FakeRunner {
+    fn writing(logs: impl IntoIterator<Item = (PathBuf, String)>) -> Self {
+        Self {
+            logs: logs.into_iter().collect(),
+            commands: RefCell::new(Vec::new()),
+        }
+    }
+
+    fn run_count(&self) -> usize {
+        self.commands.borrow().len()
+    }
+}
+
+impl CommandRunner for FakeRunner {
+    fn run(&self, command: &CompileCommand, log: &Path) -> Result<(), CompileError> {
+        self.commands.borrow_mut().push(command.clone());
+        if let Some(text) = self.logs.get(log) {
+            fs::write(log, text).expect("the fake compile log is writable");
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn the_wine_command_runs_the_editor_relative_to_the_data_folder() {
+    let fixture = TempFolder::new("compile-wine-command");
+    let (installation, install_folder) = wine_installation_with_editor(&fixture);
+    let source = install_folder
+        .join("MQL5/Experts/Advisors")
+        .join(EXPERT_ADVISOR_FILE);
+
+    let command =
+        compile_command(&installation, &install_folder, &source).expect("the command is built");
+
+    let editor = install_folder
+        .join(METAEDITOR_EXE_FILE)
+        .to_string_lossy()
+        .into_owned();
+    let expected_source = format!(r"/compile:MQL5\Experts\Advisors\{EXPERT_ADVISOR_FILE}");
+    assert_eq!(command.program, PathBuf::from(MACOS_WINE_BINARY));
+    assert_eq!(
+        command.args,
+        vec![editor, expected_source, "/log".to_string()]
+    );
+    assert_eq!(command.working_directory, install_folder);
+    let prefix = fixture.path().to_string_lossy().into_owned();
+    assert_eq!(command.env, vec![("WINEPREFIX".to_string(), prefix)]);
+}
+
+#[cfg(windows)]
+#[test]
+fn the_windows_command_runs_the_editor_itself() {
+    let fixture = TempFolder::new("compile-windows-command");
+    let (installation, install_folder) = windows_installation_with_editor(&fixture);
+    let source = install_folder.join("MQL5/Indicators").join(INDICATOR_FILE);
+    let editor = install_folder.join(METAEDITOR_EXE_FILE);
+
+    let command =
+        compile_command(&installation, &install_folder, &source).expect("the command is built");
+
+    let expected_source = format!(r"/compile:MQL5\Indicators\{INDICATOR_FILE}");
+    assert_eq!(command.program, editor, "no wine on native Windows");
+    assert_eq!(command.args, vec![expected_source, "/log".to_string()]);
+    assert_eq!(command.working_directory, install_folder);
+    assert!(command.env.is_empty(), "a native run needs no Wine prefix");
+}
+
+#[test]
+fn a_missing_editor_is_reported_before_the_run() {
+    let fixture = TempFolder::new("compile-editor-missing");
+    let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
+    let wine_prefix = fixture.path().to_string_lossy().into_owned();
+    let installation = discovered_wine_installation(&wine_prefix, MACOS_WINE_BINARY);
+    let source = install_folder
+        .join("MQL5/Experts")
+        .join(EXPERT_ADVISOR_FILE);
+
+    match compile_command(&installation, &install_folder, &source) {
+        Err(CompileError::EditorMissing { path }) => {
+            assert_eq!(path, install_folder.join(METAEDITOR_EXE_FILE));
+        }
+        other => panic!("unexpected compile outcome: {other:?}"),
+    }
+}
+
+#[test]
+fn the_compile_reports_the_installed_files_in_order() {
+    let fixture = TempFolder::new("compile-order");
+    let (installation, data_folder, installed) = portable_install(&fixture);
+    let indicator_warning = format!("{INDICATOR_FILE}(40,5) : warning 42: implicit conversion");
+    let indicator_log = log_path_for(&installed[0].path);
+    let advisor_log = log_path_for(&installed[1].path);
+    let runner = FakeRunner::writing([
+        (
+            indicator_log,
+            format!("{indicator_warning}\r\nResult: 0 errors, 1 warnings\r\n"),
+        ),
+        (advisor_log, SUCCESS_RESULT_LINE.to_string()),
+    ]);
+
+    let results = compile_installed(&installation, &data_folder, &installed, &runner)
+        .expect("both files compile");
+
+    let files: Vec<Mql5File> = results.iter().map(|result| result.file).collect();
+    assert_eq!(files, vec![Mql5File::Indicator, Mql5File::ExpertAdvisor]);
+    assert_eq!(results[0].warnings, 1);
+    assert_eq!(results[0].messages, vec![indicator_warning]);
+    assert_eq!(results[1].errors, 0);
+    assert!(results[1].messages.is_empty());
+    assert_eq!(runner.run_count(), 2);
+}
+
+#[test]
+fn a_broken_indicator_ends_the_run_before_the_advisor() {
+    let fixture = TempFolder::new("compile-indicator-error");
+    let (installation, data_folder, installed) = portable_install(&fixture);
+    let indicator_log = log_path_for(&installed[0].path);
+    let failed_log = "Result: 2 errors, 0 warnings, 800 ms elapsed\r\n";
+    let runner = FakeRunner::writing([(indicator_log, failed_log.to_string())]);
+
+    let results = compile_installed(&installation, &data_folder, &installed, &runner)
+        .expect("a compile with errors is a result, not a failure");
+
+    assert_eq!(results.len(), 1, "the advisor is not compiled");
+    assert_eq!(results[0].file, Mql5File::Indicator);
+    assert_eq!(results[0].errors, 2);
+    assert_eq!(runner.run_count(), 1, "the reader has to compile first");
+}
+
+#[test]
+fn a_run_without_a_log_reports_a_missing_log() {
+    let fixture = TempFolder::new("compile-log-missing");
+    let (installation, data_folder, installed) = portable_install(&fixture);
+    let runner = FakeRunner::default();
+
+    let outcome = compile_installed(&installation, &data_folder, &installed, &runner);
+
+    assert!(matches!(outcome, Err(CompileError::LogMissing { .. })));
+}
+
+#[test]
+fn a_log_without_a_result_line_reports_no_result() {
+    let fixture = TempFolder::new("compile-no-result");
+    let (installation, data_folder, installed) = portable_install(&fixture);
+    let indicator_log = log_path_for(&installed[0].path);
+    let runner = FakeRunner::writing([(indicator_log, WARNING_DIAGNOSTIC.to_string())]);
+
+    let outcome = compile_installed(&installation, &data_folder, &installed, &runner);
+
+    assert!(matches!(outcome, Err(CompileError::NoResultLine)));
+}
+
+#[test]
+fn an_old_log_is_removed_before_the_run() {
+    let fixture = TempFolder::new("compile-stale-log");
+    let (installation, data_folder, installed) = portable_install(&fixture);
+    let log = log_path_for(&installed[0].path);
+    fs::write(&log, SUCCESS_RESULT_LINE).expect("the stale log is writable");
+    let runner = FakeRunner::default();
+
+    let outcome = compile_installed(&installation, &data_folder, &installed, &runner);
+
+    assert!(matches!(outcome, Err(CompileError::LogMissing { .. })));
+    assert!(!log.exists(), "an old log is never this run's result");
 }
