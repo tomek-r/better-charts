@@ -7,6 +7,9 @@
   justify-content: space-between;
   gap: 20px;
   padding: 0 15px 0 6px;
+  /* Containing block for the demo-account notice (demo-notice.css), which overlays the bar's bottom
+     spacing: an absolute child leaves the bar's height and every item in it untouched. */
+  position: relative;
 }
 
 .brand {
