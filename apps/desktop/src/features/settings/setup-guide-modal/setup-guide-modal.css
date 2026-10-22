@@ -96,6 +96,8 @@
   flex-wrap: wrap;
   gap: 6px 18px;
   list-style: none;
+  margin: 0;
+  padding: 0;
   counter-reset: setup-guide-step;
   color: var(--color-muted);
   font-size: 12px;

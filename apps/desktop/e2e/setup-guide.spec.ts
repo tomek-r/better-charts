@@ -29,6 +29,10 @@ test('the guide opens on Find MetaTrader 5 and walks to Install and back', async
   const steps = guideSteps(guide);
 
   await expect(steps).toHaveText(['Find MetaTrader 5', 'Install', 'Connect']);
+  // The step list carries no default list indent: its first step lines up with the step's content.
+  const stepListLeft = (await guide.locator('.setup-guide-progress').boundingBox())?.x;
+  const contentLeft = (await guide.locator('.setup-guide-step').boundingBox())?.x;
+  expect(stepListLeft).toBe(contentLeft);
   const stepNumberContent = await steps.evaluateAll((stepItems) =>
     stepItems.map((stepItem) => getComputedStyle(stepItem, '::before').content),
   );
