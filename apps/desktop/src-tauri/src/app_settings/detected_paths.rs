@@ -6,6 +6,11 @@
 //! variable supplies and any other non-empty value stays exactly as it is, and
 //! `auto_start_mt5` is never touched, so detected paths can never make the app start
 //! MT5 by itself. Nothing else in the settings changes.
+//!
+//! An installation the user picks in the setup guide is an explicit choice, so it
+//! replaces the installation paths instead of filling the unset ones
+//! ([`chosen_installation_paths`]); an override still wins, and the same invariant
+//! holds: nothing but those three paths changes.
 
 use std::path::Path;
 
@@ -40,10 +45,16 @@ fn wine_binary_is_unset(value: &str) -> bool {
     is_blank(value) || value.trim() == DEFAULT_WINE_BINARY
 }
 
-/// Whether `field` may take `detected`: the field is unset, detection found a value,
-/// and no `MT5_*` override supplies the field.
+/// Whether `field` may take `detected`: the installation reports a value, and no
+/// `MT5_*` override supplies the field. A blank value never clears a field.
+fn is_storable(detected: &str, field: &str, overridden: &[String]) -> bool {
+    !is_blank(detected) && !overridden.iter().any(|key| key == field)
+}
+
+/// Whether `field` may be filled with `detected`: the field is unset and the value is
+/// one the settings may take.
 fn is_fillable(unset: bool, detected: &str, field: &str, overridden: &[String]) -> bool {
-    unset && !is_blank(detected) && !overridden.iter().any(|key| key == field)
+    unset && is_storable(detected, field, overridden)
 }
 
 /// Host path of a Wine setting an installation reports; empty when the installation
@@ -90,4 +101,37 @@ pub(crate) fn fill_detected_paths(
         fields.push(WINE_BINARY_FIELD);
     }
     (filled, fields)
+}
+
+/// `settings` with the installation paths replaced by what an installation the user
+/// picked reports, and the names of the fields that changed.
+///
+/// A picked installation is an explicit choice, so it replaces a value the user saved
+/// earlier instead of filling only unset fields. A field an `MT5_*` override supplies is
+/// still not touched, a Wine setting the installation does not report (every
+/// installation on a Windows host) keeps its saved value, and every other field — the
+/// token, the auto-start flag, the startup configuration — is copied through untouched.
+pub(crate) fn chosen_installation_paths(
+    settings: &AppSettings,
+    installation: &Mt5Installation,
+    overridden: &[String],
+) -> (AppSettings, Vec<&'static str>) {
+    let mut chosen = settings.clone();
+    let mut fields = Vec::new();
+    let terminal_path = installation.terminal_exe_windows.trim().to_string();
+    if is_storable(&terminal_path, TERMINAL_PATH_FIELD, overridden) {
+        chosen.terminal_path = terminal_path;
+        fields.push(TERMINAL_PATH_FIELD);
+    }
+    let wine_prefix = wine_path_text(installation.wine_prefix.as_deref());
+    if is_storable(&wine_prefix, WINE_PREFIX_FIELD, overridden) {
+        chosen.wine_prefix = wine_prefix;
+        fields.push(WINE_PREFIX_FIELD);
+    }
+    let wine_binary = wine_path_text(installation.wine_binary.as_deref());
+    if is_storable(&wine_binary, WINE_BINARY_FIELD, overridden) {
+        chosen.wine_binary = wine_binary;
+        fields.push(WINE_BINARY_FIELD);
+    }
+    (chosen, fields)
 }

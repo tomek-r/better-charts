@@ -32,7 +32,7 @@ use crate::mt5_backend::{
 /// Home folder holding the macOS and Linux defaults.
 const HOME_VARIABLE: &str = "HOME";
 /// `PATH`, searched for the `wine` binary on Linux.
-const PATH_VARIABLE: &str = "PATH";
+pub(super) const PATH_VARIABLE: &str = "PATH";
 /// Native Windows variable holding the program folder.
 const PROGRAM_FILES_VARIABLE: &str = "ProgramFiles";
 /// Program folder Windows uses when the variable is unset; the only place MT5
@@ -42,7 +42,7 @@ const DEFAULT_PROGRAM_FILES: &str = r"C:\Program Files";
 /// keep the same name behind their brand (`Acme MetaTrader 5`).
 const METAQUOTES_INSTALL_FOLDER: &str = "MetaTrader 5";
 /// Terminal executable MT5 writes into every install folder.
-const TERMINAL_EXE_FILE: &str = "terminal64.exe";
+pub(super) const TERMINAL_EXE_FILE: &str = "terminal64.exe";
 /// Windows path of a default installation: native on Windows, and inside
 /// `drive_c` of the Wine prefix on macOS and Linux.
 const TERMINAL_EXE_WINDOWS: &str = r"C:\Program Files\MetaTrader 5\terminal64.exe";
@@ -50,7 +50,7 @@ const TERMINAL_EXE_WINDOWS: &str = r"C:\Program Files\MetaTrader 5\terminal64.ex
 /// instead of using one from `PATH`.
 const MACOS_PREFIX_FOLDER: &str = "Library/Application Support/net.metaquotes.wine.metatrader5";
 /// Wine binary inside the official macOS application bundle.
-const MACOS_WINE_BINARY: &str =
+pub(super) const MACOS_WINE_BINARY: &str =
     "/Applications/MetaTrader 5.app/Contents/SharedSupport/wine/bin/wine";
 /// Wine prefixes probed on Linux, most specific first: MetaQuotes' `mt5linux.sh`
 /// installer creates `~/.mt5`, a plain Wine installation uses `~/.wine`.
@@ -72,6 +72,9 @@ pub enum InstallationSource {
     Configured,
     /// A default location on this machine.
     Discovered,
+    /// The `terminal64.exe` the user picked in the setup guide this session, which
+    /// is how a non-default install folder reaches the app.
+    Chosen,
 }
 
 /// One MT5 installation the install feature can target.
@@ -136,7 +139,7 @@ impl InstallProbe for HostProbe {
 }
 
 /// Platform the installation's Windows paths are resolved on.
-fn host_platform(host_os: HostOs) -> HostPlatform {
+pub(super) fn host_platform(host_os: HostOs) -> HostPlatform {
     match host_os {
         HostOs::Windows => HostPlatform::Windows,
         HostOs::MacOs | HostOs::Linux => HostPlatform::Wine,
@@ -189,7 +192,7 @@ fn home_folder(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
 
 /// `wine` from `PATH`, resolved the way the backend resolves a bare
 /// `MT5_WINE_BINARY`.
-fn wine_binary_on_path(
+pub(super) fn wine_binary_on_path(
     env: &dyn Fn(&str) -> Option<String>,
     probe: &impl InstallProbe,
 ) -> Option<PathBuf> {

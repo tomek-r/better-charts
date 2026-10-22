@@ -213,21 +213,43 @@ fn windows_folder_form(folder: &Path) -> String {
     if split_drive(&host_form).is_some() {
         return host_form.into_owned();
     }
-    let parts: Vec<&OsStr> = folder.iter().collect();
-    // The deepest `drive_c` wins, so a prefix stored in a folder that happens to
-    // be called `drive_c` still maps to the right drive.
-    let drive_position = parts
-        .iter()
-        .rposition(|part| part.eq_ignore_ascii_case(WINE_DRIVE_C));
-    let Some(inside_drive) = drive_position else {
+    let Some(drive_position) = drive_c_position(folder) else {
         return host_form.into_owned();
     };
+    windows_form_below(folder, drive_position)
+}
+
+/// Position of the deepest `drive_c` folder of `folder`. The deepest one wins, so a
+/// prefix stored in a folder that happens to be called `drive_c` still maps to the
+/// right drive.
+fn drive_c_position(folder: &Path) -> Option<usize> {
+    let parts: Vec<&OsStr> = folder.iter().collect();
+    parts
+        .iter()
+        .rposition(|part| part.eq_ignore_ascii_case(WINE_DRIVE_C))
+}
+
+/// `folder` below the `drive_c` at `drive_position`, in the Windows form MT5 uses:
+/// drive `C:` followed by every remaining folder.
+fn windows_form_below(folder: &Path, drive_position: usize) -> String {
     let mut windows_form = format!("{}:", WINE_DRIVE.to_ascii_uppercase());
-    for part in &parts[inside_drive + 1..] {
+    for part in folder.iter().skip(drive_position + 1) {
         windows_form.push(WINDOWS_FOLDER_SEPARATOR);
         windows_form.push_str(&part.to_string_lossy());
     }
     windows_form
+}
+
+/// A host path below a Wine prefix's `drive_c`, as the prefix it belongs to and the
+/// Windows path MT5 knows the file by. `None` for a path outside every prefix, which
+/// no Wine installation can address.
+pub(super) fn wine_path_form(path: &Path) -> Option<(PathBuf, String)> {
+    let drive_position = drive_c_position(path)?;
+    let mut wine_prefix = PathBuf::new();
+    for part in path.iter().take(drive_position) {
+        wine_prefix.push(part);
+    }
+    Some((wine_prefix, windows_form_below(path, drive_position)))
 }
 
 /// Comparison form of a Windows folder path: separators are interchangeable,

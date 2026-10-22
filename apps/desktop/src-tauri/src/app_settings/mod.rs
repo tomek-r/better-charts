@@ -3,7 +3,9 @@
 //! Installation paths the user has not set are filled from an MT5 installation
 //! detected on this machine (see `detected_paths`). A value the user set, and any
 //! field an `MT5_*` override supplies, is never replaced, and the auto-start flag is
-//! never touched, so a filled path cannot make the app start MT5 by itself.
+//! never touched, so a filled path cannot make the app start MT5 by itself. An
+//! installation the user picks in the setup guide replaces the installation paths
+//! instead, because that choice is explicit.
 
 mod detected_paths;
 
@@ -12,7 +14,7 @@ use crate::{
     execution_journal::app_data_dir,
     mt5_install::discover::Mt5Installation,
 };
-use detected_paths::{discovered_installation, fill_detected_paths};
+use detected_paths::{chosen_installation_paths, discovered_installation, fill_detected_paths};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -469,23 +471,61 @@ impl AppSettingsState {
     /// filled, the user's own values and `auto_start_mt5` stay exactly as they are,
     /// and a field an `MT5_*` override supplies is not touched.
     pub(crate) fn fill_from_installation(&self, installation: &Mt5Installation) {
+        self.store_installation_paths(|saved, overridden| {
+            fill_detected_paths(saved, installation, overridden)
+        });
+    }
+
+    /// Stores the installation paths of the installation the user picked in the setup
+    /// guide, so the next launch reaches that terminal and nothing has to be picked
+    /// again.
+    ///
+    /// The pick is explicit, so it replaces the saved installation paths instead of
+    /// filling the unset ones; a field an `MT5_*` override supplies keeps the override.
+    /// Best effort like the fill above, and the auto-start flag stays the user's: the
+    /// saved paths never start MT5 by themselves. The view then reports a restart when
+    /// the paths differ from the ones this launch runs with, the same rule `save`
+    /// applies, because the bridge and the environment keep the startup values.
+    pub(crate) fn store_chosen_installation(&self, installation: &Mt5Installation) {
+        if !self.store_installation_paths(|saved, overridden| {
+            chosen_installation_paths(saved, installation, overridden)
+        }) {
+            return;
+        }
         let Ok(mut inner) = self.inner.lock() else {
             return;
         };
+        inner.view.restart_required = inner.view.mt5_bridge_settings != self.startup_settings;
+    }
+
+    /// Stores the settings `paths` derives from the saved file and mirrors them in the
+    /// view, including the fields the installation supplied. Returns whether the file
+    /// now holds them.
+    ///
+    /// Best effort: a settings directory the app has none of, a missing or unreadable
+    /// settings file, no changed field, and a failed write all leave the view as it is
+    /// instead of failing the caller.
+    fn store_installation_paths(
+        &self,
+        paths: impl FnOnce(&AppSettings, &[String]) -> (AppSettings, Vec<&'static str>),
+    ) -> bool {
+        let Ok(mut inner) = self.inner.lock() else {
+            return false;
+        };
         let Some(path) = self.path.as_deref() else {
-            return;
+            return false;
         };
         let Ok(Some(saved)) = read_file(path) else {
-            return;
+            return false;
         };
-        let (filled, detected_fields) =
-            fill_detected_paths(&saved, installation, &inner.view.overridden_keys);
-        if detected_fields.is_empty() || persist(path, &filled).is_err() {
-            return;
+        let (updated, fields) = paths(&saved, &inner.view.overridden_keys);
+        if fields.is_empty() || persist(path, &updated).is_err() {
+            return false;
         }
-        let (effective, _) = filled.with_overrides(&self.overrides);
+        let (effective, _) = updated.with_overrides(&self.overrides);
         inner.view.mt5_bridge_settings = effective;
-        inner.view.detected_fields = detected_fields;
+        inner.view.detected_fields = fields;
+        true
     }
 }
 

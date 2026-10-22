@@ -1,9 +1,11 @@
 //! The Tauri commands the setup guide calls: list the MT5 installations this machine
-//! has, install the bundled MQL5 files into one of their data folders and compile
-//! them, and restart MT5 with the bridge advisor attached.
+//! has, take the one the user picks in a non-default folder into that list, install
+//! the bundled MQL5 files into one of their data folders and compile them, and
+//! restart MT5 with the bridge advisor attached.
 //!
-//! Every command starts from the same fresh scan through `discover` and `locate`, so
-//! the terminal and `MQL5` paths the guide just showed are the only paths a command
+//! Every command starts from the same fresh scan through `discover` and `locate`,
+//! plus the installation the user picked this session through `chosen`, so the
+//! terminal and `MQL5` paths the guide just showed are the only paths a command
 //! accepts: a path from a stale list, from another machine, or from a different
 //! installation is refused before anything is written. The install, the compile, and
 //! the restart run on a blocking thread, because MetaEditor takes seconds and closing
@@ -11,8 +13,9 @@
 //!
 //! Security: the install command never starts the MT5 terminal, and none of them ever
 //! touches AutoTrading. The writes are the two `.mq5` files, MetaEditor's own `.ex5`
-//! and `.log` output beside them, and — after a successful install — the settings
-//! paths the user has not set yet. The restart adds the two startup files `restart`
+//! and `.log` output beside them, and the settings paths — the ones the user has not
+//! set yet after a successful install, and the installation paths of an installation
+//! the user picked. The restart adds the two startup files `restart`
 //! documents, which it deletes again as soon as the terminal has read them.
 
 use std::env;
@@ -22,10 +25,13 @@ use serde::Serialize;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 
+use super::chosen::{installation_from_executable, ChosenInstallation};
 use super::compile::{compile_installed, CompileResult, ProcessRunner};
-use super::discover::{discover_this_machine, InstallationSource, Mt5Installation};
+use super::discover::{discover_this_machine, HostProbe, InstallationSource, Mt5Installation};
 use super::install::{install_bundled_sources, BundledSources, InstallOutcome, InstalledFile};
-use super::locate::{existing_copy, locate_data_folders, DataFolder, Layout, Mql5File};
+use super::locate::{
+    current_host_os, existing_copy, locate_data_folders, DataFolder, Layout, Mql5File,
+};
 use super::restart::{
     new_session_live, poll_count, remove_startup_files, remove_startup_files_in,
     restart_with_expert, RestartPolicy, RestartRequest, StartupFiles, SystemTerminal,
@@ -295,20 +301,42 @@ pub(super) fn matched_target(
 
 /// Every installation on this machine, each with the data folders located under it.
 ///
-/// The scan is repeated per command on purpose: a terminal installed since the window
-/// opened is then offered, and an installation that has disappeared is refused
-/// instead of written into.
-fn installations_on_this_machine() -> Vec<LocatedInstallation> {
-    discover_this_machine()
+/// `chosen` is the installation the user picked in the setup guide this session: it
+/// comes first, and the discovered entry it names is dropped, so the guide offers one
+/// row per terminal. The scan is repeated per command on purpose: a terminal installed
+/// since the window opened is then offered, and an installation that has disappeared
+/// is refused instead of written into.
+fn installations_on_this_machine(chosen: Option<Mt5Installation>) -> Vec<LocatedInstallation> {
+    let discovered: Vec<Mt5Installation> = discover_this_machine()
         .into_iter()
-        .map(|installation| {
-            let data_folders = locate_data_folders(&installation);
-            LocatedInstallation {
-                installation,
-                data_folders,
-            }
-        })
+        .filter(|installation| !stands_for(installation, chosen.as_ref()))
+        .collect();
+    chosen
+        .into_iter()
+        .chain(discovered)
+        .map(located_installation)
         .collect()
+}
+
+/// One installation with the data folders located under it.
+fn located_installation(installation: Mt5Installation) -> LocatedInstallation {
+    let data_folders = locate_data_folders(&installation);
+    LocatedInstallation {
+        installation,
+        data_folders,
+    }
+}
+
+/// Whether `installation` names the same terminal as `chosen`, which the picked
+/// installation then replaces. Paths are compared case-insensitively, because the same
+/// Windows folder can be spelled in either case.
+fn stands_for(installation: &Mt5Installation, chosen: Option<&Mt5Installation>) -> bool {
+    chosen.is_some_and(|chosen| {
+        installation
+            .terminal_exe_windows
+            .eq_ignore_ascii_case(&chosen.terminal_exe_windows)
+            && installation.wine_prefix == chosen.wine_prefix
+    })
 }
 
 /// Host path of a bundled resource, resolved the same way `save_bundled_resource`
@@ -356,10 +384,42 @@ fn install_and_compile(
 }
 
 /// Every MT5 installation on this machine, with the `MQL5` folders it uses, so the
-/// setup guide can offer the choice of where to install.
+/// setup guide can offer the choice of where to install. The installation the user
+/// picked this session is listed first.
 #[tauri::command]
-pub(crate) fn list_mt5_installations() -> Vec<Mt5InstallationView> {
-    installation_views(&installations_on_this_machine())
+pub(crate) fn list_mt5_installations(
+    chosen: tauri::State<'_, ChosenInstallation>,
+) -> Vec<Mt5InstallationView> {
+    installation_views(&installations_on_this_machine(chosen.get()))
+}
+
+/// Adopts the `terminal64.exe` the user picked in the setup guide and reports the
+/// installations of this machine with it included.
+///
+/// A default install folder is found by [`super::discover`], but an MT5 installed
+/// anywhere else is invisible to it, so the guide lets the user point at its
+/// `terminal64.exe` instead of asking for a path to type. The pick applies at once —
+/// the list, the install, and the restart all use it without restarting Better
+/// Charts — and its paths are saved for the next launch.
+///
+/// The pick is validated before it is kept, so a file that is not MT5's terminal, a
+/// path outside a Wine prefix, and a machine without Wine are refused with a message
+/// the guide can show.
+#[tauri::command]
+pub(crate) fn choose_mt5_installation(
+    app: AppHandle,
+    path: String,
+) -> Result<Vec<Mt5InstallationView>, String> {
+    let env: &dyn Fn(&str) -> Option<String> = &|name: &str| env::var(name).ok();
+    let installation =
+        installation_from_executable(Path::new(&path), current_host_os(), env, &HostProbe)
+            .map_err(|error| error.to_string())?;
+    app.state::<ChosenInstallation>().set(installation.clone());
+    app.state::<AppSettingsState>()
+        .store_chosen_installation(&installation);
+    Ok(installation_views(&installations_on_this_machine(Some(
+        installation,
+    ))))
 }
 
 /// Runs [`install_and_compile`] on a blocking thread, because MetaEditor takes
@@ -392,7 +452,8 @@ pub(crate) async fn install_to_mt5(
     terminal_path: String,
     mql5_path: String,
 ) -> Result<Mt5InstallReport, String> {
-    let target = matched_target(&installations_on_this_machine(), &terminal_path, &mql5_path)?;
+    let installations = installations_on_this_machine(app.state::<ChosenInstallation>().get());
+    let target = matched_target(&installations, &terminal_path, &mql5_path)?;
     let installation = target.installation.clone();
     let sources = bundled_sources(&app)?;
     // Sampled right before installing, so an order submitted while the scan ran still
@@ -471,7 +532,7 @@ async fn blocking_restart(
 /// this machine has. Run once at app start: the preset holds the bridge token, so
 /// nothing of it may stay on disk. Best effort, and never fails startup.
 pub(crate) fn remove_leftover_startup_files() {
-    for located in installations_on_this_machine() {
+    for located in installations_on_this_machine(None) {
         remove_startup_files_in(&located.installation, &located.data_folders);
     }
 }
@@ -490,7 +551,8 @@ pub(crate) async fn restart_mt5_with_ea(
     terminal_path: String,
     mql5_path: String,
 ) -> Result<RestartReport, String> {
-    let target = matched_target(&installations_on_this_machine(), &terminal_path, &mql5_path)?;
+    let installations = installations_on_this_machine(app.state::<ChosenInstallation>().get());
+    let target = matched_target(&installations, &terminal_path, &mql5_path)?;
     // Sampled before the terminal closes, so the cleanup waits for the session that
     // replaces this one instead of the one the restart ends.
     let (_, replaced) = bridge_session(app.state::<BridgeState>().inner());

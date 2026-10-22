@@ -230,6 +230,14 @@ fn detected_windows_installation() -> Mt5Installation {
     }
 }
 
+/// The same Wine installation, as the setup guide's file picker reports it.
+fn chosen_wine_installation() -> Mt5Installation {
+    Mt5Installation {
+        source: InstallationSource::Chosen,
+        ..detected_wine_installation()
+    }
+}
+
 #[test]
 fn detection_fills_every_unset_installation_path() {
     let settings = valid();
@@ -401,4 +409,54 @@ fn an_install_keeps_the_generated_first_launch_token() {
     let after = read_file(&fixture.path()).unwrap().unwrap();
     assert_eq!(after.token, token);
     assert_eq!(after.terminal_path, DETECTED_TERMINAL);
+}
+#[test]
+fn a_chosen_installation_replaces_the_saved_paths_and_needs_a_restart() {
+    let fixture = Fixture::new();
+    let mut stored = valid();
+    stored.terminal_path = r"D:\Elsewhere\terminal64.exe".into();
+    stored.wine_prefix = "/home/demo/custom".into();
+    stored.wine_binary = "/home/demo/bin/wine".into();
+    persist(&fixture.path(), &stored).unwrap();
+    let state = AppSettingsState::resolve(Some(fixture.path()), HashMap::new(), None);
+
+    state.store_chosen_installation(&chosen_wine_installation());
+
+    let after = read_file(&fixture.path()).unwrap().unwrap();
+    assert_eq!(after.terminal_path, DETECTED_TERMINAL);
+    assert_eq!(after.wine_prefix, DETECTED_PREFIX);
+    assert_eq!(after.wine_binary, DETECTED_WINE);
+    assert!(!after.auto_start_mt5);
+    let view = state.view().unwrap();
+    assert_eq!(
+        view.detected_fields,
+        vec!["terminalPath", "winePrefix", "wineBinary"]
+    );
+    assert!(view.restart_required);
+}
+#[test]
+fn a_chosen_installation_keeps_a_field_an_override_supplies() {
+    let fixture = Fixture::new();
+    persist(&fixture.path(), &valid()).unwrap();
+    let state = AppSettingsState::resolve(
+        Some(fixture.path()),
+        HashMap::from([(
+            "MT5_TERMINAL_EXE".to_string(),
+            r"D:\Override\terminal64.exe".to_string(),
+        )]),
+        None,
+    );
+
+    state.store_chosen_installation(&chosen_wine_installation());
+
+    let after = read_file(&fixture.path()).unwrap().unwrap();
+    assert_eq!(
+        after.terminal_path, "",
+        "the override stays out of the file"
+    );
+    assert_eq!(after.wine_prefix, DETECTED_PREFIX);
+    assert_eq!(
+        state.view().unwrap().detected_fields,
+        vec!["winePrefix", "wineBinary"]
+    );
 }

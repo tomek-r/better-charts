@@ -48,6 +48,10 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   below `MQL5` untouched, and compiles both with MetaEditor, reporting per file;
   the UTF-16LE log decides, and an indicator with errors stops the run before the
   EA. The guide's manual steps remain the fallback when no installation is found.
+  An MT5 installed in a non-default folder is reached by picking its
+  `terminal64.exe` with the guide's native file picker: that installation is listed,
+  installed into and restartable at once, without restarting Better Charts, and its
+  terminal path, Wine prefix and Wine binary are saved for the next launch.
 - The install offers two buttons, "Install to MT5" and "Install and restart MT5".
   A press installs and compiles both files; the restart button then closes MT5 and
   reopens it with the EA attached (the `Experts/Advisors` copy the install wrote,
