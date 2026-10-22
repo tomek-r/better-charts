@@ -12,6 +12,11 @@ import {
   drawFixedRangeProfileSpinner,
   drawFixedRangeProfileLoadingWash,
   LOADING_WASH_ALPHA,
+  type FixedRangeProfileState,
+  type HandleEdges,
+} from '../src/features/tools/fixedRangeProfile/overlay';
+import {
+  drawProfileLoader,
   LOADER_LINE_MARGIN,
   LOADER_MAX_WIDTH,
   LOADER_MIN_WIDTH,
@@ -19,9 +24,7 @@ import {
   LOADER_ROW_GAP,
   LOADER_ROW_HEIGHT,
   loaderRowWidths,
-  type FixedRangeProfileState,
-  type HandleEdges,
-} from '../src/features/tools/fixedRangeProfile/overlay';
+} from '../src/shared/canvas/profileLoader';
 import type { ProfileResult, TickProfileBin } from '../src/shared/bridge/types';
 import { formatDayMonth, MS_PER_DAY, STUB_NOW } from './helpers/stubClock';
 
@@ -481,6 +484,25 @@ test('the loader bar widths follow the animation helper at the given time', () =
 
 const flatWidths = (t: number) => loaderRowWidths(t).flatMap((row) => [row.bid, row.ask]);
 const sampleTimes = Array.from({ length: 400 }, (_, i) => i * 25);
+
+const LOADER_CENTER_X = 100;
+const LOADER_MIDDLE_Y = 50;
+const LOADER_COLORS = { bid: BID_COLOR, ask: ASK_COLOR, line: palette.textBright };
+
+test('drawProfileLoader mirrors its rows around the given centre', () => {
+  const ops: Op[] = [];
+  drawProfileLoader(recordInto(ops), LOADER_CENTER_X, LOADER_MIDDLE_Y, 0, LOADER_COLORS);
+  const rects = barsOf(ops);
+  expect(rects.filter((r) => r.style === BID_COLOR)).toHaveLength(LOADER_ROW_COUNT);
+  expect(rects.filter((r) => r.style === ASK_COLOR)).toHaveLength(LOADER_ROW_COUNT);
+  // Every bar touches the centre from its own side: bid ends there, ask starts there.
+  for (const rect of rects) {
+    expect(rect.style === BID_COLOR ? rect.maxX : rect.minX).toBe(LOADER_CENTER_X);
+  }
+  // Its dashed centre line runs through that x, too.
+  const [centreLine] = linesOf(ops);
+  expect(centreLine.minX).toBe(LOADER_CENTER_X);
+});
 
 test('loader row widths: five rows, within bounds, deterministic and animated', () => {
   for (const t of [0, 123, 500, 1234, 9999]) {

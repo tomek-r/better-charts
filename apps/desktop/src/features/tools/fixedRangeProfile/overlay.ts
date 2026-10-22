@@ -1,5 +1,6 @@
 import type { RenderViewport } from '../../chart/engine/toolContract';
 import type { ProfileResult, TickProfileBin } from '../../../shared/bridge/types';
+import { drawProfileLoader } from '../../../shared/canvas/profileLoader';
 import { drawSeparatedText } from '../../../shared/canvas/separatedText';
 import { palette } from '../../../shared/theme/palette';
 
@@ -227,18 +228,6 @@ function formatUtcDayMonth(ms: number): string {
   return `${date.getUTCDate()} ${SHORT_MONTHS[date.getUTCMonth()]}`;
 }
 
-export const LOADER_ROW_COUNT = 5;
-export const LOADER_ROW_HEIGHT = 4;
-export const LOADER_ROW_GAP = 2;
-export const LOADER_MIN_WIDTH = 3;
-export const LOADER_MAX_WIDTH = 18;
-/** Vertical overhang of the dashed centre line beyond the first and last row. */
-export const LOADER_LINE_MARGIN = 3;
-/** Each bar holds a step for its own duration, `BASE` plus 0..4 increments of `SPREAD`, so bars never change in sync. */
-const LOADER_STEP_BASE_MS = 350;
-const LOADER_STEP_SPREAD_MS = 50;
-const LOADER_STEP_SPREAD_COUNT = 5;
-const LOADER_LINE_DASH = [4, 3];
 const LOADING_WASH_COLOR = palette.raised;
 /** Translucent enough that candles under the wash stay faintly readable. */
 export const LOADING_WASH_ALPHA = 0.45;
@@ -303,36 +292,6 @@ export function drawFixedRangeProfileLoadingWash(
   ctx.restore();
 }
 
-/** Deterministic integer hash of (bar, step) to [0, 1): a murmur-style finaliser, so targets look random. */
-function hashUnit(bar: number, step: number): number {
-  let h = Math.imul(bar + 1, 0x9e3779b1) ^ Math.imul(step | 0, 0x85ebca6b);
-  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
-  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
-  return ((h ^ (h >>> 16)) >>> 0) / 0x100000000;
-}
-
-function loaderBarWidth(bar: number, nowMs: number): number {
-  const stepMs = LOADER_STEP_BASE_MS + ((bar * 3) % LOADER_STEP_SPREAD_COUNT) * LOADER_STEP_SPREAD_MS;
-  const step = Math.floor(nowMs / stepMs);
-  const progress = nowMs / stepMs - step;
-  const eased = progress * progress * (3 - 2 * progress);
-  const from = hashUnit(bar, step - 1);
-  const to = hashUnit(bar, step);
-  return LOADER_MIN_WIDTH + (LOADER_MAX_WIDTH - LOADER_MIN_WIDTH) * (from + (to - from) * eased);
-}
-
-/**
- * Bar half-widths of the loader's rows at `nowMs`: every bar (row and side) eases with a smoothstep from its
- * previous pseudo-random target to the next one, each on its own step length, so the bars shrink and grow
- * independently. Pure: the targets come from an integer hash, not from `Math.random`.
- */
-export function loaderRowWidths(nowMs: number): Array<{ bid: number; ask: number }> {
-  return Array.from({ length: LOADER_ROW_COUNT }, (_, row) => ({
-    bid: loaderBarWidth(row * 2, nowMs),
-    ask: loaderBarWidth(row * 2 + 1, nowMs),
-  }));
-}
-
 /**
  * Slow-load profile loader: a tiny mirrored BID/ASK profile (dashed centre line, red bars growing left,
  * teal bars right) centred horizontally in the range band (clamped to the visible pane) and vertically in
@@ -352,24 +311,5 @@ export function drawFixedRangeProfileSpinner(
   }
   const { y, height } = viewport.chartRect;
   const centerX = (band.left + band.right) / 2;
-  const totalHeight = LOADER_ROW_COUNT * LOADER_ROW_HEIGHT + (LOADER_ROW_COUNT - 1) * LOADER_ROW_GAP;
-  const top = y + height / 2 - totalHeight / 2;
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = VA_COLOR;
-  ctx.setLineDash(LOADER_LINE_DASH);
-  ctx.beginPath();
-  ctx.moveTo(centerX, top - LOADER_LINE_MARGIN);
-  ctx.lineTo(centerX, top + totalHeight + LOADER_LINE_MARGIN);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  loaderRowWidths(nowMs).forEach((row, index) => {
-    const rowTop = top + index * (LOADER_ROW_HEIGHT + LOADER_ROW_GAP);
-    ctx.fillStyle = BID_COLOR;
-    ctx.fillRect(centerX - row.bid, rowTop, row.bid, LOADER_ROW_HEIGHT);
-    ctx.fillStyle = ASK_COLOR;
-    ctx.fillRect(centerX, rowTop, row.ask, LOADER_ROW_HEIGHT);
-  });
-  ctx.restore();
+  drawProfileLoader(ctx, centerX, y + height / 2, nowMs, { bid: BID_COLOR, ask: ASK_COLOR, line: VA_COLOR });
 }

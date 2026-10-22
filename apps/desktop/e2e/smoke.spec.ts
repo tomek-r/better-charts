@@ -96,11 +96,8 @@ test('shows the setup screen in place of the chart without the bridge', async ({
   await expect(setupScreen).toBeVisible();
   const heading = setupScreen.locator('.loading-message strong');
   await expect(heading).toHaveText('Connect MetaTrader 5');
-  // The shared loader's glyph turns here too, not only in the journal.
-  await expect(setupScreen.locator('.loading-message .overlay-glyph')).toHaveCSS(
-    'animation-name',
-    'loading-glyph-turn',
-  );
+  // The shared loader is the volume profile's loading animation.
+  await expect(setupScreen.locator('.loading-message canvas.loader')).toBeVisible();
   // Hit testing with text enabled detects canvases painted over the message.
   expect(await isTopmostAtCentre(heading)).toBe(true);
   expect(pageErrors).toEqual([]);
