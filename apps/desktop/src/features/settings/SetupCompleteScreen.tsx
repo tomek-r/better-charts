@@ -3,8 +3,29 @@ import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
 import { useAppSettingsView } from './AppSettingsProvider';
 import { SetupCompleteIcon } from './SetupCompleteIcon';
 
+/**
+ * The finished screen usually appears while the user is still in MetaTrader 5, so its entrance waits
+ * for the Better Charts window to come to the front and then plays with the user watching. Once the
+ * window has been in front the entrance has played, so the answer never goes back to false.
+ */
+function useWindowInFront(): boolean {
+  const [inFront, setInFront] = useState(() => document.hasFocus());
+
+  useEffect(() => {
+    if (inFront) {
+      return;
+    }
+    const markWindowInFront = () => setInFront(true);
+    window.addEventListener('focus', markWindowInFront);
+    return () => window.removeEventListener('focus', markWindowInFront);
+  }, [inFront]);
+
+  return inFront;
+}
+
 function SetupCompleteDialog() {
   const { setupCompleteOverSetupScreen, isOpen, dismissSetupComplete } = useAppSettingsView();
+  const windowInFront = useWindowInFront();
   const happyTradingButton = useRef<HTMLButtonElement>(null);
   const screenRoot = useRef<HTMLDivElement>(null);
   const leavingRef = useRef(false);
@@ -40,11 +61,12 @@ function SetupCompleteDialog() {
   }, [leave]);
 
   const overSetupScreenClass = setupCompleteOverSetupScreen ? ' setup-complete-over-screen' : '';
+  const awaitingFrontClass = windowInFront ? '' : ' is-awaiting-front';
   const leavingClass = leaving ? ' is-leaving' : '';
   return (
     <div
       ref={screenRoot}
-      className={`bridge-setup-screen setup-complete-screen${overSetupScreenClass}${leavingClass}`}
+      className={`bridge-setup-screen setup-complete-screen${overSetupScreenClass}${awaitingFrontClass}${leavingClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Setup complete"

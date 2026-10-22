@@ -111,6 +111,18 @@ async function expectSetupCompleteAfterConnect(page: Page, entrance: SetupComple
   await expect(complete).toBeHidden();
 }
 
+/** Loads a waiting bridge, opens the guide from the setup screen and lets the bridge connect; returns the finished screen. */
+async function connectThroughStandaloneGuide(page: Page): Promise<Locator> {
+  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
+  await setupScreen(page).getByRole('button', { name: 'Open setup guide' }).click();
+  await expect(setupGuide(page)).toBeVisible();
+
+  await pushBridgeStatus(page, CONNECTED_STATUS);
+  const complete = setupComplete(page);
+  await expect(complete).toBeVisible();
+  return complete;
+}
+
 test('an unconnected bridge covers the workspace and offers the guide alone', async ({ page }) => {
   await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
   const screen = setupScreen(page);
@@ -162,15 +174,25 @@ test('a guide opened on an already connected bridge stays open', async ({ page }
 
 test('reduced motion shows the finished screen without its entrance animation', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
-  await setupScreen(page).getByRole('button', { name: 'Open setup guide' }).click();
-  await expect(setupGuide(page)).toBeVisible();
-
-  await pushBridgeStatus(page, CONNECTED_STATUS);
-  const complete = setupComplete(page);
-  await expect(complete).toBeVisible();
+  const complete = await connectThroughStandaloneGuide(page);
   await expect(complete.locator('.setup-complete-icon')).toHaveCSS('animation-name', 'none');
   await expect(complete.getByRole('button', { name: 'Happy trading' })).toHaveCSS('animation-name', 'none');
+});
+
+test('the finished screen holds its entrance until the window is in front', async ({ page }) => {
+  // The user is still in MT5 when the bridge answers, so the window has not come to the front yet.
+  await page.addInitScript(() => {
+    Document.prototype.hasFocus = () => false;
+  });
+  const complete = await connectThroughStandaloneGuide(page);
+  const mark = complete.locator('.setup-complete-icon');
+  await expect(complete).toHaveClass(/is-awaiting-front/);
+  await expect(mark).toHaveCSS('animation-play-state', 'paused');
+
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+  await expect(complete).not.toHaveClass(/is-awaiting-front/);
+  await expect(mark).toHaveCSS('animation-play-state', 'running');
 });
 
 test('a token mismatch explains itself on the setup screen without an error toast', async ({ page }) => {

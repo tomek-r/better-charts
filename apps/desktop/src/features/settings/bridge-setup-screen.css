@@ -24,6 +24,13 @@
   animation: none;
 }
 
+/* The finished screen arrives while the user is still in MT5, so its entrance waits for the front. */
+.setup-complete-screen.is-awaiting-front:not(.is-leaving),
+.setup-complete-screen.is-awaiting-front:not(.is-leaving) .setup-complete-icon,
+.setup-complete-screen.is-awaiting-front:not(.is-leaving) .modal-dialog-button {
+  animation-play-state: paused;
+}
+
 /* "Happy trading" leaves in the reverse order the screen arrived: the button sinks first, then the
    mark shrinks away, and only then does the blur lift off the chart. */
 .setup-complete-screen.is-leaving .modal-dialog-button {
