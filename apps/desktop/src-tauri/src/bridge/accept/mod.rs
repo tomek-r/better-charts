@@ -394,6 +394,40 @@ pub(crate) fn protocol_error(
     report_protocol_error(events, state, message, ProtocolErrorCause::Other);
 }
 
+/// Message the status carries while a restart waits for the terminal it launched:
+/// nothing is wrong yet, the freshly installed advisor still has to connect.
+const RESTARTED_TERMINAL_WAITING: &str = "Waiting for the restarted MetaTrader 5 to connect.";
+
+/// Reports that a restart closed the old terminal and launched the new one, so the
+/// app waits for the restarted advisor instead of keeping a refusal it can no
+/// longer explain.
+///
+/// The `tokenMismatch`/`componentOutdated` flags describe the terminal that
+/// presented them; the restart's startup preset carries the current token and the
+/// files it just installed, so a refusal left behind is stale and would send the
+/// user back to an install that already succeeded. Only a refusal (protocol error)
+/// or a disconnect is replaced: a `connected` session is left to [`disconnect`],
+/// which publishes its own status when the restart drops it, and a refusal from the
+/// new terminal is published normally.
+pub(crate) fn expect_restarted_terminal(events: &Arc<dyn BridgeEvents>, state: &BridgeState) {
+    let awaits_terminal = {
+        let status = state.status.lock().expect("bridge status mutex poisoned");
+        matches!(
+            status.state,
+            BridgeConnectionState::Disconnected | BridgeConnectionState::ProtocolError
+        )
+    };
+    if !awaits_terminal {
+        return;
+    }
+    publish(events, state, |status| {
+        status.state = BridgeConnectionState::Connecting;
+        status.message = Some(RESTARTED_TERMINAL_WAITING.to_owned());
+        status.component_outdated = false;
+        status.token_mismatch = false;
+    });
+}
+
 pub(crate) fn disconnect(
     events: &Arc<dyn BridgeEvents>,
     state: &BridgeState,

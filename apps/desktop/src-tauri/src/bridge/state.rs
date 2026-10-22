@@ -201,6 +201,13 @@ impl BridgeEvents for TauriBridgeEvents {
     }
 }
 
+/// The production event sink for `app`: the app's own emitter behind the
+/// [`BridgeEvents`] seam. Commands outside the bridge server reuse it, so a status
+/// they publish reaches the frontend through the same `bridge-status` event.
+pub(crate) fn tauri_events(app: &tauri::AppHandle) -> Arc<dyn BridgeEvents> {
+    Arc::new(TauriBridgeEvents(app.clone()))
+}
+
 /// Typed event emission that does not wait for delivery. Serialization or emit failures are
 /// ignored — exactly what the raw `AppHandle::emit` calls this replaces did.
 pub(crate) fn bridge_emit<T: serde::Serialize + Clone>(

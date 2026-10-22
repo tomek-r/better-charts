@@ -113,7 +113,9 @@ message text — and offers the setup guide's automatic install for it.
 A token refusal marks the same payload with `tokenMismatch: true` instead (never
 together with `componentOutdated`), so the setup screen can say the EA presented
 a different token and point at the guide's install, which hands it the current
-one. It is cleared by the same events.
+one. It is cleared by the same events. A successful restart from the setup guide
+also clears a refusal that belonged to the terminal it just stopped and reports
+`connecting` again, so the flags never describe a terminal that is gone.
 
 ### Negotiated capabilities
 

@@ -41,7 +41,8 @@ use super::restart::{
     restart_with_expert, RestartPolicy, RestartRequest, StartupFiles, SystemTerminal,
 };
 use crate::app_settings::AppSettingsState;
-use crate::bridge::state::{BridgeConnectionState, BridgeState, DEFAULT_ADDR};
+use crate::bridge::accept::expect_restarted_terminal;
+use crate::bridge::state::{tauri_events, BridgeConnectionState, BridgeState, DEFAULT_ADDR};
 use crate::download_resources::{EXPERT_ADVISOR_RESOURCE, INDICATOR_RESOURCE};
 use crate::execution_adapter::{ExecutionAdapterState, ExecutionQueueView};
 
@@ -620,6 +621,11 @@ pub(crate) fn remove_leftover_startup_files() {
 /// has to be installed and compiled in that data folder first, so a restart never
 /// starts a terminal that could not connect, and a queued or in-flight order refuses
 /// the restart, because closing the terminal would lose it.
+///
+/// A successful restart also clears a bridge refusal left by the terminal it just
+/// stopped: that terminal is gone, and the new one starts with the current token and
+/// the freshly installed files, so the bridge reports `connecting` again until the
+/// new session answers. A refused restart changes nothing.
 #[tauri::command]
 pub(crate) async fn restart_mt5_with_ea(
     app: AppHandle,
@@ -642,7 +648,13 @@ pub(crate) async fn restart_mt5_with_ea(
         token,
     };
     let files = blocking_restart(request, queue).await?;
-    spawn_startup_cleanup(app.state::<BridgeState>().inner().clone(), files, replaced);
+    let bridge = app.state::<BridgeState>().inner().clone();
+    // The old terminal is gone and the new one was launched with the freshly
+    // installed advisor and the current token, so a refusal the stopped terminal
+    // left behind is stale: wait for the restarted terminal instead. Only a
+    // successful restart reaches this point, so a refused one keeps its status.
+    expect_restarted_terminal(&tauri_events(&app), &bridge);
+    spawn_startup_cleanup(bridge, files, replaced);
     Ok(RestartReport { restarted: true })
 }
 
