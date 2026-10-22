@@ -106,6 +106,10 @@ test('shows the setup screen in place of the chart without the bridge', async ({
   // The whole chart area is blank: heading (title and quotes) hidden, section background transparent.
   await expect(page.locator('.chart-heading')).toHaveCSS('visibility', 'hidden');
   await expect(page.locator('.chart-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  // The drawing tools go with them: there is no chart to draw on yet.
+  await expect(page.locator('.tool-rail')).toHaveCSS('visibility', 'hidden');
+  await expect(page.getByLabel('Search symbols')).toHaveCSS('visibility', 'hidden');
+  await expect(page.getByLabel('Toggle trade panel')).toHaveCSS('visibility', 'hidden');
   expect(pageErrors).toEqual([]);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
@@ -259,6 +263,10 @@ test('chart chrome nests the connection dot inside the OHLC legend, after its te
   // With candles the waiting state is gone: the heading and the canvas are back on screen.
   await expect(page.locator('.chart-heading')).toHaveCSS('visibility', 'visible');
   await expect(page.locator('.chart-host')).toHaveCSS('visibility', 'visible');
+  // The tool rail is back too: there is a chart to draw on.
+  await expect(page.locator('.tool-rail')).toHaveCSS('visibility', 'visible');
+  await expect(page.getByLabel('Search symbols')).toHaveCSS('visibility', 'visible');
+  await expect(page.getByLabel('Toggle trade panel')).toHaveCSS('visibility', 'visible');
   expect(await isTopmostAtCentre(dot)).toBe(true);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
@@ -267,7 +275,7 @@ test.describe('tool rail', () => {
   test('pointer tools and Fixed range volume profile are the entries; group menu closed by default', async ({
     page,
   }) => {
-    const { pageErrors, consoleErrors } = await gotoCollectingErrors(page);
+    const { pageErrors, consoleErrors } = await gotoWithStub(page);
     const buttons = page.locator('.tool-rail .tool-rail-btn');
     await expect(buttons).toHaveCount(2);
     await expect(buttons.nth(0)).toHaveAttribute('aria-label', 'Pointer tools');
@@ -284,7 +292,7 @@ test.describe('tool rail', () => {
   });
 
   test('Escape cancels the active profile tool and keyboard focus stays accessible', async ({ page }) => {
-    const { pageErrors } = await gotoCollectingErrors(page);
+    const { pageErrors } = await gotoWithStub(page);
     const profile = page.getByRole('button', { name: 'Fixed range volume profile', exact: true });
     const pointer = page.getByRole('button', { name: 'Pointer tools', exact: true });
     await profile.focus();

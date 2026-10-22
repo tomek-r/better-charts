@@ -61,20 +61,18 @@ async function offsetFromWindowCenter(page: Page, ...targets: Locator[]) {
   };
 }
 
+test('the startup loading message is centered on the window', async ({ page }) => {
+  // The Trade button waits out of sight until a chart is drawn, so the startup loader only ever
+  // shows with the trade panel closed.
+  await gotoWithStub(page, { responses: { get_market_snapshot: { complete: false, candles: [] } } });
+  await expect(loadingMessage(page)).toContainText('Loading market data');
+  const offset = await offsetFromWindowCenter(page, loadingMessage(page));
+  expect(offset.x).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
+  expect(offset.y).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
+});
+
 for (const panelOpen of [false, true]) {
   const panelState = panelOpen ? 'open' : 'closed';
-
-  test(`the startup loading message is centered on the window with the trade panel ${panelState}`, async ({ page }) => {
-    // A connected bridge whose snapshot has no candles yet keeps the chart's own loader on screen.
-    await gotoWithStub(page, { responses: { get_market_snapshot: { complete: false, candles: [] } } });
-    if (panelOpen) {
-      await openTradePanel(page);
-    }
-    await expect(loadingMessage(page)).toContainText('Loading market data');
-    const offset = await offsetFromWindowCenter(page, loadingMessage(page));
-    expect(offset.x).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
-    expect(offset.y).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
-  });
 
   test(`the history notice is centered on the window with the trade panel ${panelState}`, async ({ page }) => {
     await startWithUnansweredHistory(page);

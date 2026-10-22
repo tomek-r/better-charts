@@ -288,6 +288,10 @@ test('risk basis keeps equity sizing derived from valid positive account equity'
 
 test('typing in search keeps bridge, ticket, settings and header consumers idle', async ({ page }) => {
   await mountHarness(page);
+  // Search is offered only once a chart is drawn, so load one before counting renders.
+  await page.getByRole('button', { name: 'Load candle' }).click();
+  await expect(page.getByTestId('probe-candle-close')).toHaveText('1.0850');
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Search symbols', exact: true }).click();
   const input = page.getByRole('dialog', { name: 'Search symbols' }).getByPlaceholder('Search symbol — e.g. NAS100');
   await input.fill('EUR');

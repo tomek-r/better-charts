@@ -22,6 +22,11 @@
   background: var(--color-panel);
 }
 
+/* No chart to draw on yet: visibility hides the tools without shifting the layout or leaving them tabbable. */
+.tool-rail-waiting {
+  visibility: hidden;
+}
+
 .tool-rail-btn {
   display: grid;
   place-items: center;

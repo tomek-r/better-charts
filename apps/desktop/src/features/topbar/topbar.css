@@ -58,6 +58,13 @@
   flex-shrink: 0;
 }
 
+/* No chart is drawn yet, so there is no symbol to search for and nothing to trade: both buttons wait
+   out of sight, keeping their place so the bar does not shift when the data arrives. */
+.topbar-actions-waiting .search-trigger,
+.topbar-actions-waiting .panel-toggle {
+  visibility: hidden;
+}
+
 .search-trigger {
   display: flex;
   align-items: center;
