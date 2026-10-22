@@ -16,7 +16,7 @@
 @import './features/partial-close/partial-close.css';
 @import './features/order-ticket/order-ticket.css';
 @import './features/settings/settings.css';
-@import './features/settings/bridge-setup-screen.css';
+@import './features/settings/bridge-screen.css';
 @import './shared/ui/notification.css';
 @import './shared/ui/loading-message.css';
 @import './shared/ui/modal-dialog.css';

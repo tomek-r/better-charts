@@ -144,3 +144,15 @@ export function useSetupCompleted(): boolean {
   );
   return useStore(store, (state) => state.setupCompleted);
 }
+
+/**
+ * Whether the setup guide stands over the window rather than inside App settings, as its own
+ * subscription: only the screens that hold the window for the guide hear about it.
+ */
+export function useStandaloneGuideOpen(): boolean {
+  const { store } = useRequiredContext(
+    AppSettingsContext,
+    'useStandaloneGuideOpen must be used within AppSettingsProvider.',
+  );
+  return useStore(store, (state) => state.setupGuideOpen && !state.isOpen);
+}

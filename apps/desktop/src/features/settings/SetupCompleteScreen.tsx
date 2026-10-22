@@ -84,12 +84,12 @@ function SetupCompleteDialog() {
   return (
     <div
       ref={screenRoot}
-      className={`bridge-setup-screen setup-complete-screen${overSetupScreenClass}${frontClass}${leavingClass}`}
+      className={`bridge-screen setup-complete-screen${overSetupScreenClass}${frontClass}${leavingClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Setup complete"
     >
-      <div className="bridge-setup-screen-content setup-complete-content">
+      <div className="bridge-screen-content setup-complete-content">
         <SetupCompleteIcon />
         <button
           ref={happyTradingButton}

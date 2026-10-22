@@ -35,6 +35,9 @@ const OUTDATED_MESSAGE = 'App requires MT5 bridge version 1.012, but installed b
 /** How long the header waits before it offers the guide back, a little past its 3 s delay. */
 const HEADER_STATUS_REVEAL_MS = 3_100;
 
+/** How long a completed setup waits behind the blurred screen, a little past its 15 s limit. */
+const WAITING_SCREEN_LIMIT_MS = 15_100;
+
 /** Statuses the header names, and the guide step each one opens. */
 const HEADER_STATUSES: { label: string; step: string; status: BridgeStatus }[] = [
   {
@@ -154,9 +157,37 @@ test('a completed setup waits for MetaTrader 5 behind the blurred screen', async
   await expect(screen.locator('.loading-message strong')).toHaveText('Waiting for MetaTrader 5');
   // Without the blur the empty workspace would show through the wait.
   await expect(screen).toHaveCSS('backdrop-filter', /blur/);
+  // The setup is done, so the guide is no longer the way on: the header status is.
+  await expect(screen.getByRole('button', { name: 'Open setup guide' })).toHaveCount(0);
+});
 
-  await screen.getByRole('button', { name: 'Open setup guide' }).click();
-  await expect(setupGuide(page).getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+test('a completed setup that waits too long hands over to a notification', async ({ page }) => {
+  await pausePageClockAhead(page);
+  await markSetupCompleted(page);
+  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
+  await expect(waitingScreen(page)).toBeVisible();
+
+  await page.clock.runFor(WAITING_SCREEN_LIMIT_MS);
+  await expect(waitingScreen(page)).toHaveCount(0);
+  const alert = page.getByRole('alert').filter({ hasText: 'MetaTrader 5 is not sending data' });
+  await expect(alert).toBeVisible();
+
+  // The data arriving answers the problem, so the notification retires itself.
+  await pushBridgeStatus(page, CONNECTED_STATUS);
+  await expect(alert).toHaveCount(0);
+});
+
+test('a completed setup with a token mismatch shows a notification instead of the screen', async ({ page }) => {
+  await markSetupCompleted(page);
+  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
+  await pushBridgeStatus(page, {
+    state: 'protocol_error',
+    message: 'authentication failed',
+    tokenMismatch: true,
+  });
+
+  await expect(waitingScreen(page)).toHaveCount(0);
+  await expect(page.getByRole('alert').filter({ hasText: 'MetaTrader 5 uses a different bridge token' })).toBeVisible();
 });
 
 test('the standalone guide gives way to the setup complete screen once the bridge connects', async ({ page }) => {

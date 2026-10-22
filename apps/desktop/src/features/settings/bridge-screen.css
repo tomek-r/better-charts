@@ -1,7 +1,9 @@
-/* Full-window setup screen: the workspace below stays visible but blurred and inert until the
-   bridge has candles. Above the workspace, below the notifications and the dialogs. */
+/* Full-window blurred screen: the workspace below stays visible but blurred and inert while a first
+   setup waits for the bridge, or a finished setup waits for MetaTrader 5 to send its data. Above
+   the workspace, below the notifications and the dialogs. The finished screen's rules live here
+   too, because it stands on this same backdrop. */
 
-.bridge-setup-screen {
+.bridge-screen {
   position: fixed;
   inset: 0;
   z-index: 90;
@@ -11,6 +13,12 @@
   background: var(--color-overlay);
   backdrop-filter: blur(8px);
   animation: settings-fade-in 180ms ease-out;
+}
+
+/* The Suspense backdrop stands in while the first-run screen's code loads: it blurs the window like
+   that screen, but takes no pointer events, so a slow load blocks nothing behind it. */
+.bridge-screen[aria-hidden='true'] {
+  pointer-events: none;
 }
 
 /* The finished screen eases in far slower than the setup screen it replaces: the blur lifts and the
@@ -60,7 +68,7 @@
   animation: settings-fade-out 600ms ease-in-out 420ms both;
 }
 
-.bridge-setup-screen-content {
+.bridge-screen-content {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -85,20 +93,9 @@
 }
 
 /* The dialog's primary button, reused here: its focus ring lives under `.modal-dialog` there. */
-.bridge-setup-screen-content .modal-dialog-button:focus-visible {
+.bridge-screen-content .modal-dialog-button:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
-}
-
-/* Once the setup is done the screen only waits, so its guide steps back to a quiet text button. */
-.bridge-setup-screen-content .bridge-setup-screen-secondary {
-  background: transparent;
-  color: var(--color-muted-strong);
-}
-
-.bridge-setup-screen-content .bridge-setup-screen-secondary:hover {
-  background: transparent;
-  text-decoration: underline;
 }
 
 @keyframes setup-complete-icon-in {
@@ -140,7 +137,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bridge-setup-screen,
+  .bridge-screen,
   .setup-complete-screen,
   .setup-complete-screen.is-leaving {
     animation: none;
