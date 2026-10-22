@@ -132,7 +132,7 @@ export function SetupGuideModal({
               (right-click &rarr; Show in Data Folder) and <strong>Indicators</strong>.
             </li>
             <li>
-              Copy <code>BetterChartsBridge.mq5</code> into the <code>Experts</code> folder and{' '}
+              Copy <code>BetterChartsBridge.mq5</code> into the <code>{'Experts\\Advisors'}</code> folder and{' '}
               <code>BetterChartsTickHistoryReader.mq5</code> into the <code>Indicators</code> folder.
             </li>
             <li>

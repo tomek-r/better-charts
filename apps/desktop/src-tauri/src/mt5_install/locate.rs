@@ -60,6 +60,9 @@ const UTF16_CODE_UNIT_BYTES: usize = 2;
 /// Prefix of the bundled MQL5 resources; the remainder is the path inside the
 /// data folder's `MQL5` folder.
 const MQL5_RESOURCE_PREFIX: &str = "mql5/";
+/// Sub-folder of `Experts` the advisor is installed into: MT5's own folder for
+/// expert advisors, where MetaQuotes' sample advisors live too.
+pub const EXPERT_ADVISOR_SUB_FOLDER: &str = "Advisors";
 /// The shipped sources sit one or two folders below their MT5 root; the bound
 /// only stops a pathological tree from stalling the caller.
 pub(crate) const MAX_FOLDER_DEPTH: usize = 4;
@@ -405,7 +408,7 @@ pub fn locate_data_folders(installation: &impl InstallationLocation) -> Vec<Data
 /// The MQL5 files the app ships, told apart by the MT5 folder that runs them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mql5File {
-    /// Bridge expert advisor, loaded from `Experts`.
+    /// Bridge expert advisor, loaded from `Experts/Advisors`.
     ExpertAdvisor,
     /// Tick history reader, loaded from `Indicators`.
     Indicator,
@@ -457,10 +460,11 @@ fn matching_files(folder: &Path, file_name: &str) -> Vec<PathBuf> {
 
 /// Every copy of `file` below the data folder's `MQL5` folder, shallowest first.
 ///
-/// MT5 keeps a source wherever the user put it — on the verified installation
-/// the bridge advisor sits in `Experts/Advisors` — so the whole subtree of the
-/// file's own MT5 folder is searched. Only the shipped file name is reported, so
-/// no other expert advisor or indicator can ever be touched.
+/// MT5 keeps a source wherever the user put it — an advisor may sit in the
+/// `Experts` root or in a folder below it, such as the `Experts/Advisors` the
+/// install writes to — so the whole subtree of the file's own MT5 folder is
+/// searched. Only the shipped file name is reported, so no other expert advisor
+/// or indicator can ever be touched.
 pub fn every_copy(mql5: &Path, file: Mql5File) -> Vec<PathBuf> {
     let Some((folder, file_name)) = install_location(file) else {
         return Vec::new();
@@ -474,9 +478,21 @@ pub fn existing_copy(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
     every_copy(mql5, file).into_iter().next()
 }
 
-/// Path MT5 recommends for `file`: its own folder below `MQL5`, for example
-/// `<mql5>/Experts/BetterChartsBridge.mq5`.
+/// Folder below `MQL5` the install writes `file` to: the advisor's own folder
+/// inside `Experts`, the indicator's folder unchanged.
+fn install_folder(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
+    let (folder, _) = install_location(file)?;
+    let shipped_folder = mql5.join(folder);
+    Some(match file {
+        Mql5File::ExpertAdvisor => shipped_folder.join(EXPERT_ADVISOR_SUB_FOLDER),
+        Mql5File::Indicator => shipped_folder,
+    })
+}
+
+/// Path the install writes `file` to: MT5's own folder for it, for example
+/// `<mql5>/Experts/Advisors/BetterChartsBridge.mq5` for the advisor and
+/// `<mql5>/Indicators/BetterChartsTickHistoryReader.mq5` for the indicator.
 pub fn default_path(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
-    let (folder, file_name) = install_location(file)?;
-    Some(mql5.join(folder).join(file_name))
+    let (_, file_name) = install_location(file)?;
+    Some(install_folder(mql5, file)?.join(file_name))
 }

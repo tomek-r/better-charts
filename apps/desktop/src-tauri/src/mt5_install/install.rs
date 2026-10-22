@@ -1,7 +1,8 @@
 //! Copy the bundled MQL5 sources into a data folder's `MQL5` tree.
 //!
 //! Only the two files the app ships are written, and they always go into the
-//! folders MT5 loads them from: `Experts` and `Indicators` below `MQL5`. An older
+//! folders MT5 loads them from: `Experts/Advisors` (the expert advisor) and
+//! `Indicators` (the tick reader) below `MQL5`. An older
 //! copy of the same file name in a sub-folder is removed afterwards, together with
 //! the `.ex5` and `.log` files MT5 wrote beside it, so the terminal lists a single
 //! expert advisor. An identical destination is left untouched, so a repeated

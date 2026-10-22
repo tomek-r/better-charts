@@ -809,7 +809,8 @@ fn fresh_install_writes_both_files_to_the_default_folders() {
     let fixture = TempFolder::new("install-fresh");
     let mql5 = fixture.folder("MQL5");
     let indicator = mql5.join("Indicators").join(INDICATOR_FILE);
-    let advisor = mql5.join("Experts").join(EXPERT_ADVISOR_FILE);
+    let advisors = mql5.join("Experts").join(EXPERT_ADVISOR_SUB_FOLDER);
+    let advisor = advisors.join(EXPERT_ADVISOR_FILE);
 
     let installed = install_bundled_sources(&bundled_sources(&fixture), &mql5, &idle_queue())
         .expect("a fresh install succeeds");
@@ -833,24 +834,27 @@ fn fresh_install_writes_both_files_to_the_default_folders() {
 }
 
 #[test]
-fn an_old_copy_in_a_sub_folder_moves_to_the_default_folder() {
+fn an_old_copy_in_the_experts_root_moves_to_the_advisors_folder() {
     let fixture = TempFolder::new("install-move");
     let mql5 = fixture.folder("MQL5");
-    // The verified installation keeps the advisor one level below `Experts`.
-    let advisors = fixture.folder("MQL5/Experts/Advisors");
-    let old_copy = advisors.join(EXPERT_ADVISOR_FILE);
+    // An older install left the advisor in the `Experts` root, where MT5 keeps the
+    // sources it ships itself.
+    let experts = fixture.folder("MQL5/Experts");
+    let old_copy = experts.join(EXPERT_ADVISOR_FILE);
     fs::write(&old_copy, PREVIOUS_SOURCE).expect("previous advisor copy is writable");
     let compiled = old_copy.with_extension("ex5");
     fs::write(&compiled, "// compiled\n").expect("compiled advisor is writable");
     let log = old_copy.with_extension("log");
     fs::write(&log, "// log\n").expect("advisor log is writable");
-    let unrelated = advisors.join("Other.mq5");
+    let unrelated = experts.join("Other.mq5");
     fs::write(&unrelated, PREVIOUS_SOURCE).expect("unrelated source is writable");
 
     let installed = install_bundled_sources(&bundled_sources(&fixture), &mql5, &idle_queue())
         .expect("the move succeeds");
 
-    let advisor = mql5.join("Experts").join(EXPERT_ADVISOR_FILE);
+    let advisor = experts
+        .join(EXPERT_ADVISOR_SUB_FOLDER)
+        .join(EXPERT_ADVISOR_FILE);
     let installed_advisor = installed.last().expect("the advisor is installed last");
     assert_eq!(installed_advisor.file, Mql5File::ExpertAdvisor);
     assert_eq!(installed_advisor.path, advisor);
@@ -862,7 +866,10 @@ fn an_old_copy_in_a_sub_folder_moves_to_the_default_folder() {
     assert!(!old_copy.exists(), "the older copy is gone");
     assert!(!compiled.exists(), "its compiled sibling is gone");
     assert!(!log.exists(), "its log is gone");
-    assert!(unrelated.exists(), "another source in that folder stays");
+    assert!(
+        unrelated.exists(),
+        "another source in the `Experts` root stays"
+    );
 }
 
 #[test]
@@ -871,7 +878,9 @@ fn identical_content_is_unchanged_and_keeps_its_timestamp() {
     let mql5 = fixture.folder("MQL5");
     let indicator = fixture.folder("MQL5/Indicators").join(INDICATOR_FILE);
     fs::write(&indicator, BUNDLED_INDICATOR_SOURCE).expect("indicator copy is writable");
-    let advisor = fixture.folder("MQL5/Experts").join(EXPERT_ADVISOR_FILE);
+    let advisor = fixture
+        .folder("MQL5/Experts/Advisors")
+        .join(EXPERT_ADVISOR_FILE);
     fs::write(&advisor, BUNDLED_ADVISOR_SOURCE).expect("advisor copy is writable");
     let modified = fs::metadata(&indicator)
         .and_then(|metadata| metadata.modified())
@@ -886,6 +895,31 @@ fn identical_content_is_unchanged_and_keeps_its_timestamp() {
         .and_then(|metadata| metadata.modified())
         .expect("timestamp is readable");
     assert_eq!(rewritten, modified, "an unchanged file is not rewritten");
+}
+
+#[test]
+fn an_identical_copy_in_the_advisors_folder_is_unchanged() {
+    let fixture = TempFolder::new("install-advisor-unchanged");
+    let mql5 = fixture.folder("MQL5");
+    let advisor = fixture
+        .folder("MQL5/Experts/Advisors")
+        .join(EXPERT_ADVISOR_FILE);
+    fs::write(&advisor, BUNDLED_ADVISOR_SOURCE).expect("advisor copy is writable");
+
+    let installed = install_bundled_sources(&bundled_sources(&fixture), &mql5, &idle_queue())
+        .expect("the comparison succeeds");
+
+    // The default path is the copy that gets compared, so a repeated install neither
+    // rewrites it nor adds a second copy in the `Experts` root.
+    let installed_advisor = installed.last().expect("the advisor is installed last");
+    assert_eq!(installed_advisor.file, Mql5File::ExpertAdvisor);
+    assert_eq!(installed_advisor.path, advisor);
+    assert_eq!(installed_advisor.outcome, InstallOutcome::Unchanged);
+    assert_eq!(
+        fs::read_to_string(&advisor).expect("advisor is readable"),
+        BUNDLED_ADVISOR_SOURCE
+    );
+    assert!(!mql5.join("Experts").join(EXPERT_ADVISOR_FILE).exists());
 }
 
 /// The install refuses a queue that still carries work and writes nothing at all.
@@ -1368,8 +1402,8 @@ fn the_list_shows_each_installation_with_the_data_folders_the_locator_found() {
 fn the_list_says_which_data_folder_already_holds_the_advisor() {
     let fixture = TempFolder::new("list-advisor-installed");
     let portable_mql5 = fixture.folder("MQL5");
-    let experts = fixture.folder("MQL5/Experts");
-    fs::write(experts.join(EXPERT_ADVISOR_FILE), BUNDLED_ADVISOR_SOURCE)
+    let advisors = fixture.folder("MQL5/Experts/Advisors");
+    fs::write(advisors.join(EXPERT_ADVISOR_FILE), BUNDLED_ADVISOR_SOURCE)
         .expect("the advisor copy is writable");
     let standard_root = join_relative(fixture.path(), TEST_TERMINALS_ROOT).join(DATA_FOLDER_ID);
     create_folder(&standard_root.join("MQL5"));
@@ -1453,8 +1487,8 @@ fn only_the_exact_listed_form_of_a_data_folder_is_accepted() {
 fn the_report_names_each_file_with_its_outcome_and_compile_result() {
     let indicator_path =
         Path::new("/wine/drive_c/Program Files/MetaTrader 5/MQL5/Indicators").join(INDICATOR_FILE);
-    let advisor_path = Path::new("/wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts")
-        .join(EXPERT_ADVISOR_FILE);
+    let advisors = Path::new("/wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts/Advisors");
+    let advisor_path = advisors.join(EXPERT_ADVISOR_FILE);
     let installed = vec![
         installed_file(
             Mql5File::Indicator,
@@ -1503,8 +1537,8 @@ fn the_report_names_each_file_with_its_outcome_and_compile_result() {
 
 #[test]
 fn a_compile_result_belongs_to_its_own_file() {
-    let advisor_path = Path::new("/wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts")
-        .join(EXPERT_ADVISOR_FILE);
+    let advisors = Path::new("/wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts/Advisors");
+    let advisor_path = advisors.join(EXPERT_ADVISOR_FILE);
     let installed = vec![installed_file(
         Mql5File::ExpertAdvisor,
         &advisor_path,

@@ -43,9 +43,9 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   connection"): finds MT5 on Windows, macOS (the official app with its bundled
   Wine) and Linux (Wine prefixes `~/.mt5` and `~/.wine`), lists the `MQL5` data
   folders of each installation (portable and standard layouts), and "Install to
-  MT5" copies `BetterChartsTickHistoryReader.mq5` then `BetterChartsBridge.mq5`
-  (always into `Experts` and `Indicators`; an older copy of the same file in a
-  sub-folder, with its `.ex5` and `.log`, is removed) and
+  MT5" copies `BetterChartsTickHistoryReader.mq5` into `Indicators` and
+  `BetterChartsBridge.mq5` into `Experts/Advisors` (an older copy of either file
+  anywhere else below `Experts`, with its `.ex5` and `.log`, is removed) and
   compiles both with MetaEditor, reporting per file; the UTF-16LE log decides, and
   an indicator with errors stops the run before the EA. The guide's manual steps
   remain the fallback when no installation is found.
