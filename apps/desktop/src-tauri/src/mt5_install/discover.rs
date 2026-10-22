@@ -48,13 +48,14 @@ pub(super) const TERMINAL_EXE_FILE: &str = "terminal64.exe";
 const TERMINAL_EXE_WINDOWS: &str = r"C:\Program Files\MetaTrader 5\terminal64.exe";
 /// Wine prefix of the official macOS application, which bundles its own Wine build
 /// instead of using one from `PATH`.
-const MACOS_PREFIX_FOLDER: &str = "Library/Application Support/net.metaquotes.wine.metatrader5";
+pub(super) const MACOS_PREFIX_FOLDER: &str =
+    "Library/Application Support/net.metaquotes.wine.metatrader5";
 /// Wine binary inside the official macOS application bundle.
 pub(super) const MACOS_WINE_BINARY: &str =
     "/Applications/MetaTrader 5.app/Contents/SharedSupport/wine/bin/wine";
 /// Wine prefixes probed on Linux, most specific first: MetaQuotes' `mt5linux.sh`
 /// installer creates `~/.mt5`, a plain Wine installation uses `~/.wine`.
-const LINUX_PREFIX_FOLDERS: [&str; 2] = [".mt5", ".wine"];
+pub(super) const LINUX_PREFIX_FOLDERS: [&str; 2] = [".mt5", ".wine"];
 
 /// The operating system discovery keys its defaults on. Passed as data, so the
 /// Windows, macOS, and Linux branches are unit-tested on any host.
@@ -113,6 +114,9 @@ pub trait InstallProbe {
     /// Whether `path` is an existing regular file.
     fn is_file(&self, path: &Path) -> bool;
 
+    /// Whether `path` is an existing folder.
+    fn is_dir(&self, path: &Path) -> bool;
+
     /// Names of the sub-folders of `folder`, in name order so repeated scans
     /// report the same installations.
     fn folder_names(&self, folder: &Path) -> Vec<String>;
@@ -124,6 +128,10 @@ pub struct HostProbe;
 impl InstallProbe for HostProbe {
     fn is_file(&self, path: &Path) -> bool {
         path.is_file()
+    }
+
+    fn is_dir(&self, path: &Path) -> bool {
+        path.is_dir()
     }
 
     fn folder_names(&self, folder: &Path) -> Vec<String> {
@@ -186,7 +194,7 @@ fn configured_installation(
 }
 
 /// The home folder the macOS and Linux defaults are relative to.
-fn home_folder(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+pub(super) fn home_folder(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     non_empty_env(env, HOME_VARIABLE).map(PathBuf::from)
 }
 
@@ -260,7 +268,7 @@ fn linux_installations(
 
 /// `%ProgramFiles%` without a trailing separator, so a folder below it never
 /// joins with two.
-fn program_files_folder(env: &dyn Fn(&str) -> Option<String>) -> String {
+pub(super) fn program_files_folder(env: &dyn Fn(&str) -> Option<String>) -> String {
     let program_files = non_empty_env(env, PROGRAM_FILES_VARIABLE)
         .unwrap_or_else(|| DEFAULT_PROGRAM_FILES.to_string());
     program_files.trim_end_matches(['\\', '/']).to_string()

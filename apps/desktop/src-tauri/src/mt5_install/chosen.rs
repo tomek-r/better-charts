@@ -160,6 +160,10 @@ mod tests {
             self.0.contains(path)
         }
 
+        fn is_dir(&self, _path: &Path) -> bool {
+            false
+        }
+
         fn folder_names(&self, _folder: &Path) -> Vec<String> {
             Vec::new()
         }

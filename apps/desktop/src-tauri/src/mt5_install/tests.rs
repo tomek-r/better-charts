@@ -517,6 +517,10 @@ impl InstallProbe for FakeProbe {
         self.files.contains(path)
     }
 
+    fn is_dir(&self, _path: &Path) -> bool {
+        false
+    }
+
     fn folder_names(&self, folder: &Path) -> Vec<String> {
         self.folders.get(folder).cloned().unwrap_or_default()
     }

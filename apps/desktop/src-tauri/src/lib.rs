@@ -28,7 +28,8 @@ use execution_journal::{app_data_dir, ExecutionSafetyState};
 use mt5_backend::Mt5BackendState;
 use mt5_install::chosen::ChosenInstallation;
 use mt5_install::commands::{
-    choose_mt5_installation, install_to_mt5, list_mt5_installations, restart_mt5_with_ea,
+    choose_mt5_installation, install_to_mt5, list_mt5_installations, mt5_picker_start_folder,
+    restart_mt5_with_ea,
 };
 use std::time::Duration;
 use tauri::webview::PageLoadEvent;
@@ -176,6 +177,7 @@ pub fn run() {
             save_bundled_resource,
             list_mt5_installations,
             choose_mt5_installation,
+            mt5_picker_start_folder,
             install_to_mt5,
             restart_mt5_with_ea
         ])
