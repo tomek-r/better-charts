@@ -3,9 +3,13 @@ import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
 import { useAppSettingsView } from './AppSettingsProvider';
 import { SetupCompleteIcon } from './SetupCompleteIcon';
 
+/** How long the window stays in front before the entrance plays, so the user has settled on it first. */
+const FRONT_ENTRANCE_DELAY_MS = 500;
+
 /**
  * The finished screen usually appears while the user is still in MetaTrader 5, so its entrance waits
- * for the Better Charts window to come to the front and then plays with the user watching. Once the
+ * for the Better Charts window to come to the front, plus a short settle delay, and then plays with
+ * the user watching. Leaving the window again within that delay cancels the entrance. Once the
  * window has been in front the entrance has played, so the answer never goes back to false.
  */
 function useWindowInFront(): boolean {
@@ -15,9 +19,19 @@ function useWindowInFront(): boolean {
     if (inFront) {
       return;
     }
-    const markWindowInFront = () => setInFront(true);
+    let settleTimer: number | undefined;
+    const cancelSettleTimer = () => window.clearTimeout(settleTimer);
+    const markWindowInFront = () => {
+      cancelSettleTimer();
+      settleTimer = window.setTimeout(() => setInFront(true), FRONT_ENTRANCE_DELAY_MS);
+    };
     window.addEventListener('focus', markWindowInFront);
-    return () => window.removeEventListener('focus', markWindowInFront);
+    window.addEventListener('blur', cancelSettleTimer);
+    return () => {
+      window.removeEventListener('focus', markWindowInFront);
+      window.removeEventListener('blur', cancelSettleTimer);
+      cancelSettleTimer();
+    };
   }, [inFront]);
 
   return inFront;
