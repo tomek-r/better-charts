@@ -53,7 +53,7 @@ test('an account switch clears staged drafts and announces the new account in a 
   await expect.poll(() => stagedState(page)).toBe(false);
   await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
   await expect(page.locator('.topbar-actions .account-badge')).toHaveText(/^70001234 Real$/);
-  // Only a real account carries the money icon before its kind word.
+  // Every kind carries the money icon before its word.
   await expect(page.locator('.topbar-actions .account-badge .account-badge-money')).toBeVisible();
 
   // Keyboard: focus lands on Dismiss, Tab stays trapped inside, Enter dismisses.
@@ -213,6 +213,6 @@ test('first connection announces nothing', async ({ page }) => {
   await gotoWithStub(page);
   // The badge lives in the top bar, so the trade panel stays closed here.
   await expect(page.locator('.topbar-actions .account-badge')).toHaveText(/^50123456 Demo$/);
-  await expect(page.locator('.topbar-actions .account-badge .account-badge-money')).toHaveCount(0);
+  await expect(page.locator('.topbar-actions .account-badge .account-badge-money')).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });

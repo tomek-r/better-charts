@@ -19,8 +19,9 @@
   cursor: default;
 }
 
-/* Account icon before the number and money icon before "Real": sized to the text and centred on the line;
-   each takes the colour of the text it sits in (the money icon the kind's colour). */
+/* Account icon before the number and money icon before the kind word: sized to the text and centred on
+   the line; each takes the colour of the text it sits in (every kind has the money icon, so it takes the
+   badge's text colour like the rest of the badge). */
 .account-badge-icon,
 .account-badge-money {
   width: 1.5em;
@@ -46,23 +47,4 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Demo stays an INFO blue on purpose: buy/long borrows the up teal now, so
-   taking the buy tokens would have put Demo and Contest in the same teal on a
-   safety badge. Only the kind word is coloured. */
-.account-badge-kind.demo {
-  color: var(--color-info);
-}
-
-.account-badge-kind.contest {
-  color: var(--color-accent-soft);
-}
-
-.account-badge-kind.real {
-  color: var(--color-warn-text);
-}
-
-.account-badge-kind.unknown {
-  color: var(--color-text-label);
 }

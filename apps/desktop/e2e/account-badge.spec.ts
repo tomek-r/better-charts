@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 import { accountEnvironment } from '../src/features/account-badge/accountEnvironment';
 import { gotoWithStub } from './helpers/tauriStub';
 
@@ -49,4 +49,15 @@ test('the bank icon is absent when the EA reports no company', async ({ page }) 
   const badge = page.locator('.topbar-actions .account-badge');
   await expect(badge.locator('.account-badge-icon')).toBeVisible();
   await expect(badge.locator('.account-badge-bank')).toHaveCount(0);
+});
+
+test('the kind word keeps the badge colour and every kind carries the money icon', async ({ page }) => {
+  await gotoWithStub(page);
+  const badge = page.locator('.topbar-actions .account-badge');
+  // The default stub reports a demo account: the kind word names the environment, it is not coloured by it.
+  const kind = badge.locator('.account-badge-kind');
+  await expect(kind).toHaveText('Demo');
+  await expect(kind.locator('.account-badge-money')).toBeVisible();
+  const colourOf = (locator: Locator) => locator.evaluate((element) => getComputedStyle(element).color);
+  expect(await colourOf(kind)).toBe(await colourOf(badge));
 });

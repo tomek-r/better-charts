@@ -10,8 +10,8 @@
      54px in the 68px bar: the 14px strip sits below every item and covers nothing interactive. */
   height: 14px;
   overflow: hidden;
-  /* The badge's own demo colour, so strip and badge kind read as one signal. */
-  color: var(--color-info);
+  /* Orange, the warning hue, so the strip reads as a caution: no real money is involved here. */
+  color: var(--color-warn);
   /* The strip is the query container for the marquee's cqw offset: the travel depends on the strip's
      width, never on how much text the strip holds. */
   container-type: inline-size;
