@@ -47,7 +47,7 @@ function connectHint(
  * Step 3: waits for the EA, naming what has to be true in MetaTrader 5 for it to
  * answer. The bridge's own connection finishes the setup while this step is open.
  */
-export function ConnectStep({ onBack, onInstallAgain }: { onBack: () => void; onInstallAgain: () => void }) {
+export function ConnectStep({ onInstallAgain }: { onInstallAgain: () => void }) {
   const state = useBridgeConnectionSelector(({ status }) => status.state);
   const refusal = useBridgeConnectionSelector(({ status }) => bridgeRefusal(status));
   const refusalMessage = useBridgeConnectionSelector(({ status }) => status.message);
@@ -75,11 +75,6 @@ export function ConnectStep({ onBack, onInstallAgain }: { onBack: () => void; on
           )}
         </div>
       )}
-      <div className="setup-guide-step-actions">
-        <button type="button" className="setup-guide-secondary setup-guide-install-back" onClick={onBack}>
-          Back
-        </button>
-      </div>
     </section>
   );
 }

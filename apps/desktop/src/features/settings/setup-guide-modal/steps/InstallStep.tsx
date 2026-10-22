@@ -22,7 +22,7 @@ function restartButtonText(pressed: InstallButton | undefined, restarting: boole
  * folded away below it. A refusal and a report with something to fix stay here as
  * inline rows; a clean run hands the guide on to the connection step.
  */
-export function InstallStep({ view, onBack }: { view: InstallToMt5View; onBack: () => void }) {
+export function InstallStep({ view }: { view: InstallToMt5View }) {
   const { selected, busy, pressed, restarting, error, results } = view;
   const installUnavailable = selected === undefined || busy;
 
@@ -59,13 +59,7 @@ export function InstallStep({ view, onBack }: { view: InstallToMt5View; onBack: 
         >
           {installButtonText(pressed)}
         </button>
-        <button type="button" className="setup-guide-secondary setup-guide-install-back" onClick={onBack}>
-          Back
-        </button>
       </div>
-      <p className="setup-guide-install-note">
-        Install and restart MT5 reopens MT5 with the EA attached. Not available while an order is being sent.
-      </p>
       {error !== undefined && <GuideError message={error} />}
       {results !== undefined && <InstallResults report={results} />}
       <ManualInstall />

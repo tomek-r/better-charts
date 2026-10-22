@@ -16,6 +16,12 @@ const GUIDE_STEPS: { step: SetupGuideStep; name: string }[] = [
   { step: SetupGuideStep.Connect, name: 'Connect' },
 ];
 
+/** Where Back goes from a step: nothing before the first one, so it shows no way back. */
+const PREVIOUS_STEP: Partial<Record<SetupGuideStep, SetupGuideStep>> = {
+  [SetupGuideStep.Install]: SetupGuideStep.Find,
+  [SetupGuideStep.Connect]: SetupGuideStep.Install,
+};
+
 /** Where the guide stands: the current step carries `aria-current`, the others only their name. */
 function StepIndicator({ current }: { current: SetupGuideStep }) {
   return (
@@ -53,7 +59,12 @@ export function SetupGuideModal({
   const closingRef = useRef(false);
   const [closing, setClosing] = useState(false);
   const { setupGuideStep, showSetupGuideStep } = useAppSettingsView();
-  const showFindStep = useCallback(() => showSetupGuideStep(SetupGuideStep.Find), [showSetupGuideStep]);
+  const previousStep = PREVIOUS_STEP[setupGuideStep];
+  const goBack = useCallback(() => {
+    if (previousStep !== undefined) {
+      showSetupGuideStep(previousStep);
+    }
+  }, [previousStep, showSetupGuideStep]);
   const showInstallStep = useCallback(() => showSetupGuideStep(SetupGuideStep.Install), [showSetupGuideStep]);
   const finishInstall = useCallback(() => showSetupGuideStep(SetupGuideStep.Connect), [showSetupGuideStep]);
   const install = useInstallToMt5(finishInstall);
@@ -119,12 +130,17 @@ export function SetupGuideModal({
         </div>
 
         <div className="setup-guide-body">
-          <StepIndicator current={setupGuideStep} />
+          <div className="setup-guide-progress-row">
+            <StepIndicator current={setupGuideStep} />
+            {previousStep !== undefined && (
+              <button type="button" className="setup-guide-secondary setup-guide-back" onClick={goBack}>
+                Back
+              </button>
+            )}
+          </div>
           {setupGuideStep === SetupGuideStep.Find && <FindMt5Step view={install} onNext={showInstallStep} />}
-          {setupGuideStep === SetupGuideStep.Install && <InstallStep view={install} onBack={showFindStep} />}
-          {setupGuideStep === SetupGuideStep.Connect && (
-            <ConnectStep onBack={showInstallStep} onInstallAgain={showInstallStep} />
-          )}
+          {setupGuideStep === SetupGuideStep.Install && <InstallStep view={install} />}
+          {setupGuideStep === SetupGuideStep.Connect && <ConnectStep onInstallAgain={showInstallStep} />}
         </div>
       </div>
     </div>

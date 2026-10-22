@@ -44,11 +44,16 @@ test('the guide opens on Find MetaTrader 5 and walks to Install and back', async
   // The detected installation is shown by the folder it lives in.
   await expect(guide.locator('.setup-guide-install-target')).toHaveText(DETECTED_FOLDER_NOTE);
   await expect(guide.getByRole('button', { name: 'Next' })).toBeEnabled();
+  // The first step has nothing to go back to.
+  await expect(guide.getByRole('button', { name: 'Back' })).toHaveCount(0);
 
   await guide.getByRole('button', { name: 'Next' }).click();
 
   await expect(currentGuideStep(guide)).toHaveText('Install');
   await expect(guide.getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
+  // Back belongs to the step indicator row, not to the install step's own actions.
+  await expect(guide.locator('.setup-guide-progress-row').getByRole('button', { name: 'Back' })).toBeVisible();
+  await expect(guide.getByText('reopens MT5 with the EA attached')).toHaveCount(0);
 
   await guide.getByRole('button', { name: 'Back' }).click();
 

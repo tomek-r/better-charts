@@ -79,14 +79,22 @@
 
 /* ── Guide steps ─────────────────────────────────────────────────────── */
 
-/* The three steps share one row; spacing alone separates them, never a glyph. */
+/* The indicator and the way back share one row at the top of the body; spacing alone separates the
+   three step names, never a glyph. */
+.setup-guide-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--color-border-dialog);
+}
+
 .setup-guide-progress {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
-  margin: 0 0 14px;
-  padding: 0 0 12px;
-  border-bottom: 1px solid var(--color-border-dialog);
   list-style: none;
   counter-reset: setup-guide-step;
   color: var(--color-muted);
@@ -197,7 +205,7 @@
   font-size: 12px;
 }
 
-/* The install presses and the way back share the row, at the same height whatever their label says. */
+/* The install presses share the row, at the same height whatever their label says. */
 .setup-guide-install-actions {
   display: flex;
   align-items: stretch;
@@ -220,9 +228,9 @@
   outline-offset: 2px;
 }
 
-/* Secondary actions of the guide — the second install press, the way back, the folder picker and the
-   token copy — keep the row's height without the accent fill, so the primary action stays the one
-   the eye lands on. */
+/* Secondary actions of the guide — the second install press, the folder picker and the token copy —
+   keep the row's height without the accent fill, so the primary action stays the one the eye lands
+   on. */
 .setup-guide-secondary {
   padding: 9px 18px;
   border: 1px solid var(--color-border-strong);
@@ -234,9 +242,11 @@
   font-size: 13px;
 }
 
-/* Pushed to the end of the actions row, so Back never sits between the two install presses. */
-.setup-guide-install-back {
-  margin-left: auto;
+/* Compact enough to sit in the progress row without making it taller than the step names. */
+.setup-guide-back {
+  flex: none;
+  padding: 4px 12px;
+  font-size: 12px;
 }
 
 /* The folder picker stands under the detected installation, on a line of its own. */
