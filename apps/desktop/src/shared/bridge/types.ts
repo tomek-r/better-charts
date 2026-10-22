@@ -493,6 +493,8 @@ export interface Mt5DataFolderView {
   mql5Path: string;
   /** `portable`: inside the install folder; `standard`: in the user profile. */
   layout: 'portable' | 'standard';
+  /** Whether the bridge EA's source is already installed below this folder. */
+  expertAdvisorInstalled: boolean;
 }
 
 /** The bundled file, named by the role it plays in MT5. */

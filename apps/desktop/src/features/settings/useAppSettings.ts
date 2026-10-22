@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import type { Mt5InstallationView } from '../../shared/bridge/types';
 import type { DomainStore } from '../../shared/state/domainStore';
+import { anyDataFolderHoldsTheExpertAdvisor } from './setup-guide-modal/installation/expertAdvisorInstalled';
 import type { AppSettingsData } from './settingsTypes';
 
 export interface AppSettingsState {
@@ -31,6 +33,32 @@ export const initialAppSettingsState: AppSettingsState = {
 };
 
 export type AppSettingsStore = DomainStore<AppSettingsState>;
+
+/**
+ * First launch only: the guide owns the manual steps, so it opens above App settings
+ * unless some data folder already holds the bridge EA's source. An empty listing
+ * (no MetaTrader 5 found) counts as "not installed".
+ */
+function openSetupGuideWhenExpertAdvisorIsMissing(
+  store: AppSettingsStore,
+  settingsLoadGeneration: { readonly current: number },
+): void {
+  // loadSettings runs its callback only for the load that is still current, so the
+  // value read here is this load's generation.
+  const generation = settingsLoadGeneration.current;
+  void invoke<Mt5InstallationView[]>('list_mt5_installations')
+    .then((installations) => {
+      if (generation !== settingsLoadGeneration.current) {
+        return;
+      }
+      if (!anyDataFolderHoldsTheExpertAdvisor(installations)) {
+        store.setField('setupGuideOpen', true);
+      }
+    })
+    .catch(() => {
+      // A failed listing leaves App settings alone: the guide is a convenience, not a gate.
+    });
+}
 
 export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean) {
   const settingsLoadGeneration = useRef(0);
@@ -70,6 +98,9 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
       store.setField('restartRequired', next.restartRequired);
       if (next.firstLaunch || next.configurationError) {
         store.setField('isOpen', true);
+      }
+      if (next.firstLaunch) {
+        openSetupGuideWhenExpertAdvisorIsMissing(store, settingsLoadGeneration);
       }
     });
     return () => {

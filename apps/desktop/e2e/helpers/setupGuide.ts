@@ -17,8 +17,8 @@ export const STANDARD_MQL5_PATH = '/mt5/drive_c/users/demo/AppData/Roaming/MetaQ
 
 /** The two folders one installation can offer, so a test can watch the folder select. */
 export const TWO_DATA_FOLDERS: Mt5DataFolderView[] = [
-  { mql5Path: PORTABLE_MQL5_PATH, layout: 'portable' },
-  { mql5Path: STANDARD_MQL5_PATH, layout: 'standard' },
+  { mql5Path: PORTABLE_MQL5_PATH, layout: 'portable', expertAdvisorInstalled: true },
+  { mql5Path: STANDARD_MQL5_PATH, layout: 'standard', expertAdvisorInstalled: true },
 ];
 
 /** One MT5 installation as `list_mt5_installations` reports it; `overrides` changes only what a test cares about. */
@@ -27,7 +27,7 @@ export function mt5Installation(overrides: Partial<Mt5InstallationView> = {}): M
     terminalPath: DEFAULT_TERMINAL_PATH,
     label: 'MetaTrader 5',
     configured: false,
-    dataFolders: [{ mql5Path: PORTABLE_MQL5_PATH, layout: 'portable' }],
+    dataFolders: [{ mql5Path: PORTABLE_MQL5_PATH, layout: 'portable', expertAdvisorInstalled: true }],
     ...overrides,
   };
 }
