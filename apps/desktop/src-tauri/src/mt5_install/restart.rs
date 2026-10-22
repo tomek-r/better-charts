@@ -4,13 +4,15 @@
 //! ignores `/config:`, so attaching the advisor means closing the terminal and
 //! starting it again with two files this module writes:
 //!
-//! * `<install folder>/config/BetterChartsStartup.ini` — UTF-16LE behind a byte-order
-//!   mark, CRLF, one `[StartUp]` section naming the advisor and the preset. It is
-//!   passed as a *relative* Windows path (`config\BetterChartsStartup.ini`) with the
-//!   install folder as the working folder, because wine re-quotes an absolute path
-//!   whose folders contain a space and MT5 then silently ignores the option. No
-//!   `Symbol=`/`Period=` line, so MT5 opens its own default chart; symbol names are
-//!   broker-specific.
+//! * `config/BetterChartsStartup.ini` — UTF-16LE behind a byte-order mark, CRLF, one
+//!   `[StartUp]` section naming the advisor and the preset. Under wine it sits below
+//!   the install folder and is passed as a *relative* Windows path
+//!   (`config\BetterChartsStartup.ini`) with the install folder as the working folder,
+//!   because wine re-quotes an absolute path whose folders contain a space and MT5
+//!   then silently ignores the option. On native Windows it sits below the data folder
+//!   instead, because `C:\Program Files` is not writable for a normal user, and is
+//!   passed as an absolute path. No `Symbol=`/`Period=` line, so MT5 opens its own
+//!   default chart; symbol names are broker-specific.
 //! * `<data folder MQL5>/Presets/BetterChartsStartup.set` — UTF-16LE behind a
 //!   byte-order mark, CRLF, the three bridge inputs the advisor declares. MT5 has no
 //!   `Presets` folder until it saves one, so the write creates it.
@@ -23,8 +25,9 @@
 //! Verified invocation on the owner's Mac (official MT5 application, Wine): working
 //! folder = the install folder, program = the wine binary with `WINEPREFIX`, arguments
 //! `terminal64.exe /portable /config:config\BetterChartsStartup.ini`; the standard
-//! layout passes the same without `/portable`, and native Windows runs
-//! `terminal64.exe` itself with the same working folder and arguments.
+//! layout passes the same without `/portable`. Native Windows runs `terminal64.exe`
+//! itself with the same working folder and the absolute `/config:<data folder>
+//! \config\BetterChartsStartup.ini`; that form is not yet verified on a real terminal.
 //!
 //! Privacy and safety: nothing else below an MT5 folder is written, AutoTrading is
 //! never enabled, and the token never reaches a log line or an error message. The
@@ -171,10 +174,33 @@ pub(crate) struct StartupFiles {
     pub(crate) preset: PathBuf,
 }
 
-/// Path of the startup ini: `<install folder>/config/`, which is where a
-/// `config\<name>.ini` argument is resolved from, in both data-folder layouts.
-fn ini_path(install_folder: &Path) -> PathBuf {
-    install_folder.join(CONFIG_FOLDER).join(STARTUP_INI_FILE)
+/// Root of a data folder: the folder holding its `MQL5` tree.
+fn data_folder_root(data_folder: &DataFolder) -> &Path {
+    match data_folder.mql5.parent() {
+        Some(root) => root,
+        None => &data_folder.mql5,
+    }
+}
+
+/// `<folder>/config/BetterChartsStartup.ini`. The ini location and the startup cleanup
+/// are both built from this one join, so they cannot drift apart.
+fn config_ini_path(folder: &Path) -> PathBuf {
+    folder.join(CONFIG_FOLDER).join(STARTUP_INI_FILE)
+}
+
+/// Path of the startup ini: below the install folder under wine, because MT5 resolves
+/// the relative `config\BetterChartsStartup.ini` argument from there; below the data
+/// folder on native Windows, because the install folder (`C:\Program Files\MetaTrader
+/// 5`) is not writable for a normal user.
+fn startup_ini_path(
+    host: HostPlatform,
+    install_folder: &Path,
+    data_folder: &DataFolder,
+) -> PathBuf {
+    match host {
+        HostPlatform::Wine => config_ini_path(install_folder),
+        HostPlatform::Windows => config_ini_path(data_folder_root(data_folder)),
+    }
 }
 
 /// Path of the startup preset below the data folder's `MQL5` tree.
@@ -182,9 +208,13 @@ fn preset_path(mql5: &Path) -> PathBuf {
     mql5.join(PRESETS_FOLDER).join(STARTUP_PRESET_FILE)
 }
 
-pub(super) fn startup_file_paths(install_folder: &Path, data_folder: &DataFolder) -> StartupFiles {
+pub(super) fn startup_file_paths(
+    host: HostPlatform,
+    install_folder: &Path,
+    data_folder: &DataFolder,
+) -> StartupFiles {
     StartupFiles {
-        ini: ini_path(install_folder),
+        ini: startup_ini_path(host, install_folder, data_folder),
         preset: preset_path(&data_folder.mql5),
     }
 }
@@ -298,13 +328,18 @@ pub(crate) fn remove_startup_files(files: &StartupFiles) {
 }
 
 /// Deletes whatever an interrupted restart left behind for one installation and the
-/// data folders located under it. Best effort: a folder that cannot be read or
-/// written is not the startup hook's problem, so nothing is reported.
+/// data folders located under it: the ini below the install folder and, per data
+/// folder, the ini below its root's `config` and the preset. Both ini locations are
+/// swept because the host decides which one a restart writes. Best effort: a folder
+/// that cannot be read or written is not the startup hook's problem, so nothing is
+/// reported.
 pub(crate) fn remove_startup_files_in(installation: &Mt5Installation, data_folders: &[DataFolder]) {
     if let Some(install_folder) = install_dir(installation) {
-        remove_file(&ini_path(&install_folder));
+        // The wine location, and where earlier Windows builds also tried to write.
+        remove_file(&config_ini_path(&install_folder));
     }
     for data_folder in data_folders {
+        remove_file(&config_ini_path(data_folder_root(data_folder)));
         remove_file(&preset_path(&data_folder.mql5));
     }
 }
@@ -324,13 +359,17 @@ fn argument_text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-/// The `/config:` argument: a relative Windows path, resolved from the install
-/// folder, which is the only form wine passes through unchanged.
-fn ini_argument() -> String {
-    format!("/config:{CONFIG_FOLDER}\\{STARTUP_INI_FILE}")
+/// The `/config:` argument naming `ini`: a relative Windows path under wine, which is
+/// the only form wine passes through unchanged, and the absolute path on native
+/// Windows, where the ini lives outside the install folder.
+fn ini_argument(host: HostPlatform, ini: &Path) -> String {
+    match host {
+        HostPlatform::Wine => format!("/config:{CONFIG_FOLDER}\\{STARTUP_INI_FILE}"),
+        HostPlatform::Windows => format!("/config:{}", argument_text(ini)),
+    }
 }
 
-/// Command that starts the terminal with the startup ini, for the host the
+/// Command that starts the terminal with the startup ini at `ini`, for the host the
 /// installation's paths are resolved on.
 ///
 /// Under wine the terminal is wine's first argument, at the relative name, with the
@@ -341,6 +380,7 @@ pub(super) fn startup_command(
     installation: &Mt5Installation,
     install_folder: &Path,
     layout: Layout,
+    ini: &Path,
 ) -> Result<TerminalCommand, RestartError> {
     let mut args = Vec::new();
     let (program, env) = match installation.host {
@@ -361,7 +401,7 @@ pub(super) fn startup_command(
     if layout == Layout::Portable {
         args.push(PORTABLE_OPTION.to_string());
     }
-    args.push(ini_argument());
+    args.push(ini_argument(installation.host, ini));
     Ok(TerminalCommand {
         program,
         args,
@@ -544,14 +584,19 @@ pub(crate) fn restart_with_expert(
     // Checked before the first write, so an installation without the advisor keeps its
     // `config` and `Presets` folders untouched.
     let expert_path = expert_startup_path(&request.data_folder.mql5)?;
+    let files = startup_file_paths(
+        request.installation.host,
+        &install_folder,
+        &request.data_folder,
+    );
     // Built before the terminal is closed: a missing wine binary must not leave the
     // user without a running terminal.
     let command = startup_command(
         &request.installation,
         &install_folder,
         request.data_folder.layout,
+        &files.ini,
     )?;
-    let files = startup_file_paths(&install_folder, &request.data_folder);
     write_startup_files(&files, &expert_path, &session)?;
     if let Err(error) = close_terminal(control, policy) {
         remove_startup_files(&files);

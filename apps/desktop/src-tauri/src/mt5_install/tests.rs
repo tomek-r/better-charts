@@ -1625,7 +1625,11 @@ fn the_startup_files_sit_where_mt5_reads_them() {
     let expected_ini = install_folder.join("config").join(STARTUP_INI_FILE);
     let expected_preset = mql5.join("Presets").join(STARTUP_PRESET_FILE);
 
-    let files = startup_file_paths(&install_folder, &expected_portable_folder(&mql5));
+    let files = startup_file_paths(
+        HostPlatform::Wine,
+        &install_folder,
+        &expected_portable_folder(&mql5),
+    );
 
     // The `/config:` argument is resolved from the install folder, and the preset
     // sits in the data folder's `MQL5` tree.
@@ -1736,8 +1740,13 @@ fn the_wine_command_starts_the_portable_terminal_with_a_relative_config() {
     let wine_prefix = fixture.path().to_string_lossy().into_owned();
     let installation = discovered_wine_installation(&wine_prefix, MACOS_WINE_BINARY);
 
-    let command = startup_command(&installation, &install_folder, Layout::Portable)
-        .expect("the portable command is built");
+    let command = startup_command(
+        &installation,
+        &install_folder,
+        Layout::Portable,
+        &install_folder.join("config").join(STARTUP_INI_FILE),
+    )
+    .expect("the portable command is built");
     let expected_env = vec![("WINEPREFIX".to_string(), wine_prefix)];
 
     assert_eq!(command.program, PathBuf::from(MACOS_WINE_BINARY));
@@ -1760,8 +1769,13 @@ fn the_wine_command_omits_the_portable_option_for_a_standard_folder() {
     let wine_prefix = fixture.path().to_string_lossy().into_owned();
     let installation = discovered_wine_installation(&wine_prefix, MACOS_WINE_BINARY);
 
-    let command = startup_command(&installation, &install_folder, Layout::Standard)
-        .expect("the standard command is built");
+    let command = startup_command(
+        &installation,
+        &install_folder,
+        Layout::Standard,
+        &install_folder.join("config").join(STARTUP_INI_FILE),
+    )
+    .expect("the standard command is built");
 
     assert_eq!(
         command.args,
@@ -1780,17 +1794,48 @@ fn the_windows_command_starts_the_terminal_itself() {
     // A host path stands in for the Windows one: the command builder only joins the
     // two, so the native form is testable on any host.
     let installation = discovered_windows_installation(&terminal_exe.to_string_lossy());
+    let data_folder = expected_standard_folder(
+        &fixture.folder("Users/trader/AppData/Roaming/MetaQuotes/Terminal/ABC"),
+    );
+    let files = startup_file_paths(HostPlatform::Windows, &install_folder, &data_folder);
 
-    let command = startup_command(&installation, &install_folder, Layout::Standard)
+    let command = startup_command(&installation, &install_folder, Layout::Standard, &files.ini)
         .expect("the native command is built");
 
     assert_eq!(command.program, terminal_exe, "no wine here");
     assert_eq!(
         command.args,
-        vec!["/config:config\\BetterChartsStartup.ini".to_string()]
+        vec![format!("/config:{}", files.ini.to_string_lossy())]
     );
     assert_eq!(command.working_directory, install_folder);
     assert!(command.env.is_empty(), "a native run needs no prefix");
+}
+
+#[test]
+fn windows_startup_ini_is_written_to_the_data_folder_not_program_files() {
+    let fixture = TempFolder::new("restart-windows-ini");
+    let install_folder = fixture.folder("Program Files/MetaTrader 5");
+    let data_root = fixture.folder("Users/trader/AppData/Roaming/MetaQuotes/Terminal/ABC");
+    let data_folder = expected_standard_folder(&data_root);
+
+    let files = startup_file_paths(HostPlatform::Windows, &install_folder, &data_folder);
+
+    assert_eq!(
+        files.ini,
+        data_root.join("config").join(STARTUP_INI_FILE),
+        "the ini sits below the data folder, where a user may write"
+    );
+    assert!(
+        !files.ini.starts_with(&install_folder),
+        "Program Files is not writable for a normal user"
+    );
+    assert_eq!(
+        files.preset,
+        data_root
+            .join("MQL5")
+            .join("Presets")
+            .join(STARTUP_PRESET_FILE)
+    );
 }
 
 #[test]
@@ -1802,8 +1847,14 @@ fn a_wine_installation_without_prefix_or_binary_is_refused() {
         terminal_exe_windows: TERMINAL_EXE.to_string(),
         source: InstallationSource::Discovered,
     };
+    let install_folder = Path::new("/tmp/install");
 
-    let refused = startup_command(&installation, Path::new("/tmp/install"), Layout::Standard);
+    let refused = startup_command(
+        &installation,
+        install_folder,
+        Layout::Standard,
+        &install_folder.join("config").join(STARTUP_INI_FILE),
+    );
 
     assert!(matches!(refused, Err(RestartError::WineUnavailable)));
 }
@@ -1988,7 +2039,11 @@ fn the_cleanup_deletes_both_startup_files() {
     let install_folder = fixture.folder(INSTALL_FOLDER_IN_PREFIX);
     let mql5 = install_folder.join("MQL5");
     create_folder(&mql5);
-    let files = startup_file_paths(&install_folder, &expected_portable_folder(&mql5));
+    let files = startup_file_paths(
+        HostPlatform::Wine,
+        &install_folder,
+        &expected_portable_folder(&mql5),
+    );
     write_atomically(&files.ini, b"leftover ini").expect("the ini is writable");
     write_atomically(&files.preset, b"leftover preset").expect("the preset is writable");
 
@@ -2005,13 +2060,23 @@ fn the_startup_cleanup_deletes_what_an_interrupted_restart_left_behind() {
     let fixture = TempFolder::new("restart-leftovers");
     let (installation, data_folder) = restartable_installation(&fixture);
     let files = expected_startup_files(&installation, &data_folder);
+    let data_root = data_folder
+        .mql5
+        .parent()
+        .expect("the data folder root sits above MQL5");
+    let data_folder_ini = data_root.join("config").join(STARTUP_INI_FILE);
     write_atomically(&files.ini, b"leftover ini").expect("the ini is writable");
     write_atomically(&files.preset, b"leftover preset").expect("the preset is writable");
+    write_atomically(&data_folder_ini, b"leftover ini").expect("the data folder ini is writable");
 
     remove_startup_files_in(&installation, std::slice::from_ref(&data_folder));
 
     assert!(!files.ini.exists(), "the leftover ini is deleted");
     assert!(!files.preset.exists(), "the leftover preset is deleted");
+    assert!(
+        !data_folder_ini.exists(),
+        "the data folder ini is deleted too"
+    );
     // Only the two startup files are ours: the advisor copy stays.
     let advisor = existing_copy(&data_folder.mql5, Mql5File::ExpertAdvisor);
     assert!(advisor.is_some(), "the advisor copy stays");

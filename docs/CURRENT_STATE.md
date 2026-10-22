@@ -53,13 +53,14 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   reopens it with the EA attached, but only once every file compiled with 0 errors
   and 0 warnings, so a run that needs fixing stops at its per-file rows. A clean run
   shows no message at all. The restart writes a temporary UTF-16LE
-  `config/BetterChartsStartup.ini` (no symbol, so MT5 opens its own default chart)
-  and a preset with the bridge token, host and port
-  (`<MQL5>/Presets/BetterChartsStartup.set`), relaunches `terminal64.exe`
-  (`/portable` for the portable layout) and deletes both files once the bridge
-  connects, after 120 s, or at the next app start. It never enables Algo Trading,
-  and is refused while an order is queued or in flight, without a token, or before
-  the EA is installed.
+  `config/BetterChartsStartup.ini` below the install folder under Wine and below the
+  MT5 data folder on native Windows (passed as an absolute `/config:` path; no
+  symbol, so MT5 opens its own default chart) and a preset with the bridge token,
+  host and port (`<MQL5>/Presets/BetterChartsStartup.set`), relaunches
+  `terminal64.exe` (`/portable` for the portable layout) and deletes both files once
+  the bridge connects, after 120 s, or at the next app start. It never enables Algo
+  Trading, and is refused while an order is queued or in flight, without a token, or
+  before the EA is installed.
 - An outdated EA or tick reader sets `componentOutdated` on the bridge status; the
   error notice offers "Update in MT5", which opens the setup guide. Detected
   installation paths fill the App settings fields the user left unset (terminal
