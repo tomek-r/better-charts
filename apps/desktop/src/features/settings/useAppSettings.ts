@@ -24,6 +24,8 @@ export interface AppSettingsState {
   setupGuideFinishing: boolean;
   /** The bridge connected while the guide was open: the finished screen stands over the chart. */
   setupCompleteShown: boolean;
+  /** The finished screen replaces the blurred setup screen, so its backdrop stands at once instead of fading in. */
+  setupCompleteOverSetupScreen: boolean;
   /** This device finished the setup, so the guide never opens on its own again. */
   setupCompleted: boolean;
   loadError: string | undefined;
@@ -42,6 +44,7 @@ export const initialAppSettingsState: AppSettingsState = {
   setupGuideStep: SetupGuideStep.Find,
   setupGuideFinishing: false,
   setupCompleteShown: false,
+  setupCompleteOverSetupScreen: false,
   setupCompleted: readSetupCompleted(),
   loadError: undefined,
   restartRequired: false,
@@ -147,9 +150,12 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   // The guide never shares the window with that screen, so it takes App settings with it when that
   // dialog sits beneath (its own exit animation still plays).
   const finishSetupGuide = useCallback(() => {
+    const state = store.getState();
+    // Read before the guide goes: only a guide standing on its own hides the blurred setup screen.
+    store.setField('setupCompleteOverSetupScreen', !state.isOpen && !state.setupCompleted);
     store.setField('setupGuideFinishing', false);
     closeSetupGuide();
-    if (store.getState().isOpen) {
+    if (state.isOpen) {
       close();
     }
     showSetupComplete();

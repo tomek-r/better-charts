@@ -1,44 +1,50 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
 import { useAppSettingsView } from './AppSettingsProvider';
 import { SetupCompleteIcon } from './SetupCompleteIcon';
 
-/**
- * The bridge answered while the guide was open: the workspace waits blurred behind the finished
- * screen, whose button takes the screen away and leaves the chart.
- */
-export function SetupCompleteScreen() {
-  const { setupCompleteShown, isOpen, dismissSetupComplete } = useAppSettingsView();
+function SetupCompleteDialog() {
+  const { setupCompleteOverSetupScreen, isOpen, dismissSetupComplete } = useAppSettingsView();
   const happyTradingButton = useRef<HTMLButtonElement>(null);
+  const screenRoot = useRef<HTMLDivElement>(null);
+  const leavingRef = useRef(false);
+  const [leaving, setLeaving] = useState(false);
+
+  // The screen fades out on its own and only leaves the workspace once it is gone; the guard keeps
+  // a held Escape or a double click from starting that exit twice.
+  const leave = useCallback(() => {
+    if (leavingRef.current) {
+      return;
+    }
+    leavingRef.current = true;
+    setLeaving(true);
+    afterExitAnimation(screenRoot.current, dismissSetupComplete);
+  }, [dismissSetupComplete]);
 
   // The settings dialog below plays its exit animation after this screen mounts and hands focus
   // back to its own trigger as it unmounts, so the screen claims the focus once that dialog is gone.
   useEffect(() => {
-    if (setupCompleteShown) {
-      happyTradingButton.current?.focus();
-    }
-  }, [isOpen, setupCompleteShown]);
+    happyTradingButton.current?.focus();
+  }, [isOpen]);
 
   useEffect(() => {
-    if (!setupCompleteShown) {
-      return;
-    }
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') {
         return;
       }
       event.preventDefault();
-      dismissSetupComplete();
+      leave();
     };
     window.addEventListener('keydown', dismissOnEscape, true);
     return () => window.removeEventListener('keydown', dismissOnEscape, true);
-  }, [dismissSetupComplete, setupCompleteShown]);
+  }, [leave]);
 
-  if (!setupCompleteShown) {
-    return null;
-  }
+  const overSetupScreenClass = setupCompleteOverSetupScreen ? ' setup-complete-over-screen' : '';
+  const leavingClass = leaving ? ' is-leaving' : '';
   return (
     <div
-      className="bridge-setup-screen setup-complete-screen"
+      ref={screenRoot}
+      className={`bridge-setup-screen setup-complete-screen${overSetupScreenClass}${leavingClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Setup complete"
@@ -50,11 +56,24 @@ export function SetupCompleteScreen() {
           type="button"
           className="modal-dialog-button primary"
           autoFocus
-          onClick={dismissSetupComplete}
+          onClick={leave}
         >
           Happy trading
         </button>
       </div>
     </div>
   );
+}
+
+/**
+ * The bridge answered while the guide was open: the workspace waits blurred behind the finished
+ * screen, whose button takes the screen away and leaves the chart.
+ */
+export function SetupCompleteScreen() {
+  const { setupCompleteShown } = useAppSettingsView();
+  if (!setupCompleteShown) {
+    return null;
+  }
+  // Mounting the dialog per showing gives every showing a fresh exit state.
+  return <SetupCompleteDialog />;
 }

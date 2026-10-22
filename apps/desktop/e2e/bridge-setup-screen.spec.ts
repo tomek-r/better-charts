@@ -74,19 +74,37 @@ async function revealHeaderStatus(
   return status;
 }
 
+/** How the finished screen enters: over the setup screen's blur, or fading in over the chart. */
+type SetupCompleteEntrance = 'over-setup-screen' | 'fade-in';
+
+/** The entrance animation each kind of finished screen plays. */
+const ENTRANCE_ANIMATION: Record<SetupCompleteEntrance, string> = {
+  'over-setup-screen': 'none',
+  'fade-in': 'settings-fade-in',
+};
+
 /** Pushes the connected status and checks the guide and App settings give way to the finished screen. */
-async function expectSetupCompleteAfterConnect(page: Page): Promise<void> {
+async function expectSetupCompleteAfterConnect(page: Page, entrance: SetupCompleteEntrance): Promise<void> {
   await pushBridgeStatus(page, CONNECTED_STATUS);
   // The guide does not vanish: it fades out first, so its backdrop wears `is-finishing` on the way.
   await expect(page.locator('.setup-guide-backdrop.is-finishing')).toHaveCount(1);
+  if (entrance === 'over-setup-screen') {
+    // The blur stays beneath the fading guide instead of lifting and settling back in.
+    await expect(setupScreen(page)).toHaveCount(1);
+  }
   await expect(setupGuide(page)).toBeHidden();
   await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
   const complete = setupComplete(page);
   await expect(complete).toBeVisible();
+  await expect(setupScreen(page)).toHaveCount(0);
+  await expect(complete).toHaveCSS('animation-name', ENTRANCE_ANIMATION[entrance]);
   await expect(complete.locator('.setup-complete-icon')).toHaveCSS('animation-name', 'setup-complete-icon-in');
   const happyTrading = complete.getByRole('button', { name: 'Happy trading' });
   await expect(happyTrading).toBeFocused();
   await happyTrading.click();
+  // "Happy trading" fades the screen out before it leaves the workspace.
+  await expect(complete).toHaveClass(/is-leaving/);
+  await expect(complete).toHaveCSS('animation-name', 'settings-fade-out');
   await expect(complete).toBeHidden();
 }
 
@@ -115,7 +133,7 @@ test('the standalone guide gives way to the setup complete screen once the bridg
   await setupScreen(page).getByRole('button', { name: 'Open setup guide' }).click();
   await expect(setupGuide(page)).toBeVisible();
 
-  await expectSetupCompleteAfterConnect(page);
+  await expectSetupCompleteAfterConnect(page, 'over-setup-screen');
 });
 
 test('the settings guide closes App settings onto the setup complete screen once the bridge connects', async ({
@@ -125,7 +143,7 @@ test('the settings guide closes App settings onto the setup complete screen once
   await openSetupGuide(page);
   await expect(page.getByRole('dialog', { name: 'App settings' })).toBeVisible();
 
-  await expectSetupCompleteAfterConnect(page);
+  await expectSetupCompleteAfterConnect(page, 'fade-in');
 });
 
 test('a guide opened on an already connected bridge stays open', async ({ page }) => {

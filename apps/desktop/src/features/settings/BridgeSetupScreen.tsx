@@ -38,11 +38,15 @@ function setupNotice(status: BridgeStatus): SetupNotice {
 export function BridgeSetupScreen() {
   const { status, tauriAvailable } = useBridgeConnection();
   const { hasCandles } = useBridgeChartState();
-  const { setupCompleted, openSetupGuide } = useAppSettingsView();
+  const { setupCompleted, setupGuideOpen, isOpen, openSetupGuide } = useAppSettingsView();
   const setupIncomplete = !tauriAvailable || (!hasCandles && status.state !== 'connected');
+  // The guide stands on its own exactly when no App settings dialog sits beneath it.
+  const standaloneGuideOpen = setupGuideOpen && !isOpen;
   // A device that finished the setup keeps the chart: the header status is the only
   // reminder left, and only while the bridge is away.
-  const screenShown = !setupCompleted && setupIncomplete;
+  // A standalone guide keeps the screen until it goes, so the blur never lifts before the
+  // finished screen takes over.
+  const screenShown = !setupCompleted && (setupIncomplete || standaloneGuideOpen);
   // The guide is where this screen leads, so its chunk loads while the screen shows:
   // "Open setup guide" then opens it without waiting for the code.
   useEffect(() => {

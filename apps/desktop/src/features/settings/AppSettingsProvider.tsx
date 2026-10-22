@@ -36,6 +36,7 @@ export interface AppSettingsViewState extends AppSettingsHandlers, AppSettingsAc
   setupGuideStep: SetupGuideStep;
   setupGuideFinishing: boolean;
   setupCompleteShown: boolean;
+  setupCompleteOverSetupScreen: boolean;
   setupCompleted: boolean;
   loadError: string | undefined;
   notificationRevision: number;
@@ -106,6 +107,7 @@ export function useAppSettingsView(): AppSettingsViewState {
       setupGuideStep: state.setupGuideStep,
       setupGuideFinishing: state.setupGuideFinishing,
       setupCompleteShown: state.setupCompleteShown,
+      setupCompleteOverSetupScreen: state.setupCompleteOverSetupScreen,
       setupCompleted: state.setupCompleted,
       loadError: state.loadError,
       notificationRevision: state.notificationRevision,

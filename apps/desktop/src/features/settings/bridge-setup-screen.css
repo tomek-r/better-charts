@@ -19,6 +19,16 @@
   animation: settings-fade-in 900ms ease-out;
 }
 
+/* Over the setup screen the blur is already there, so only the mark and the button animate in. */
+.setup-complete-screen.setup-complete-over-screen {
+  animation: none;
+}
+
+/* "Happy trading" fades the screen out instead of dropping it. */
+.setup-complete-screen.is-leaving {
+  animation: settings-fade-out 600ms ease-in forwards;
+}
+
 .bridge-setup-screen-content {
   display: flex;
   flex-direction: column;
@@ -74,7 +84,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .bridge-setup-screen,
-  .setup-complete-screen {
+  .setup-complete-screen,
+  .setup-complete-screen.is-leaving {
     animation: none;
   }
 
