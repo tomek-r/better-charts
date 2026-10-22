@@ -44,15 +44,15 @@
   top: 0;
   left: 0;
   display: inline-flex;
-  gap: clamp(48px, 8cqw, 240px);
+  gap: clamp(80px, 16cqw, 480px);
   width: max-content;
   font-size: 10px;
   font-weight: 600;
   line-height: 14px;
   white-space: nowrap;
-  /* Three sentences with wide gaps make the row far longer than the old single sentence, so the
+  /* Three sentences with wider gaps make the row far longer than the old single sentence, so the
      longer duration keeps the text crossing the strip at a similar reading speed. */
-  animation: demo-notice-scroll 44s linear infinite;
+  animation: demo-notice-scroll 60s linear infinite;
 }
 
 @keyframes demo-notice-scroll {
