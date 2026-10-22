@@ -1,7 +1,7 @@
 /*
- * The volume profile loader: a tiny mirrored BID/ASK profile (dashed centre line, red bars growing left,
- * teal bars right) whose bars each ease independently. Shared by the fixed range profile tool and the
- * app-wide loading message, so both wait with the same animation.
+ * The app's loader, drawn in the volume profile's look: a tiny mirrored BID/ASK profile (dashed centre line,
+ * red bars growing left, teal bars right) whose bars each ease independently. Shared by the fixed range
+ * profile tool and the app-wide loading message, so both wait with the same animation.
  */
 export const LOADER_ROW_COUNT = 5;
 export const LOADER_ROW_HEIGHT = 4;
@@ -17,12 +17,12 @@ const LOADER_STEP_SPREAD_COUNT = 5;
 const LOADER_LINE_DASH = [4, 3];
 const LOADER_ROWS_HEIGHT = LOADER_ROW_COUNT * LOADER_ROW_HEIGHT + (LOADER_ROW_COUNT - 1) * LOADER_ROW_GAP;
 /** Height of the whole loader in CSS px, centre line overhang included. */
-export const PROFILE_LOADER_HEIGHT = LOADER_ROWS_HEIGHT + 2 * LOADER_LINE_MARGIN;
+export const LOADER_HEIGHT = LOADER_ROWS_HEIGHT + 2 * LOADER_LINE_MARGIN;
 /** Width of the whole loader in CSS px: mirrored halves of at most `LOADER_MAX_WIDTH` each. */
-export const PROFILE_LOADER_WIDTH = 2 * LOADER_MAX_WIDTH;
+export const LOADER_WIDTH = 2 * LOADER_MAX_WIDTH;
 
 /** Colours of the loader's bars and centre line. */
-export interface ProfileLoaderColors {
+export interface LoaderColors {
   bid: string;
   ask: string;
   line: string;
@@ -76,7 +76,7 @@ function fillLoaderRow(
   centerX: number,
   rowTop: number,
   row: { bid: number; ask: number },
-  colors: ProfileLoaderColors,
+  colors: LoaderColors,
 ): void {
   ctx.fillStyle = colors.bid;
   ctx.fillRect(centerX - row.bid, rowTop, row.bid, LOADER_ROW_HEIGHT);
@@ -85,12 +85,12 @@ function fillLoaderRow(
 }
 
 /** Draws the loader centred on (`centerX`, `middleY`); `nowMs` only sets the bar widths. */
-export function drawProfileLoader(
+export function drawLoader(
   ctx: CanvasRenderingContext2D,
   centerX: number,
   middleY: number,
   nowMs: number,
-  colors: ProfileLoaderColors,
+  colors: LoaderColors,
 ): void {
   const top = middleY - LOADER_ROWS_HEIGHT / 2;
   ctx.save();

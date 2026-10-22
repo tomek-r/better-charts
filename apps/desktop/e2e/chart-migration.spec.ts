@@ -5,7 +5,7 @@ import { SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeP
 import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 import { LOADING_WASH_ALPHA } from '../src/features/tools/fixedRangeProfile/overlay';
-import { LOADER_MAX_WIDTH, LOADER_ROW_COUNT, LOADER_ROW_HEIGHT } from '../src/shared/canvas/profileLoader';
+import { LOADER_MAX_WIDTH, LOADER_ROW_COUNT, LOADER_ROW_HEIGHT } from '../src/shared/canvas/loader';
 import { palette } from '../src/shared/theme/palette';
 
 const INTERVAL = 300_000;

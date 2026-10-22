@@ -16,7 +16,7 @@ import {
   type HandleEdges,
 } from '../src/features/tools/fixedRangeProfile/overlay';
 import {
-  drawProfileLoader,
+  drawLoader,
   LOADER_LINE_MARGIN,
   LOADER_MAX_WIDTH,
   LOADER_MIN_WIDTH,
@@ -24,7 +24,7 @@ import {
   LOADER_ROW_GAP,
   LOADER_ROW_HEIGHT,
   loaderRowWidths,
-} from '../src/shared/canvas/profileLoader';
+} from '../src/shared/canvas/loader';
 import type { ProfileResult, TickProfileBin } from '../src/shared/bridge/types';
 import { formatDayMonth, MS_PER_DAY, STUB_NOW } from './helpers/stubClock';
 
@@ -489,9 +489,9 @@ const LOADER_CENTER_X = 100;
 const LOADER_MIDDLE_Y = 50;
 const LOADER_COLORS = { bid: BID_COLOR, ask: ASK_COLOR, line: palette.textBright };
 
-test('drawProfileLoader mirrors its rows around the given centre', () => {
+test('drawLoader mirrors its rows around the given centre', () => {
   const ops: Op[] = [];
-  drawProfileLoader(recordInto(ops), LOADER_CENTER_X, LOADER_MIDDLE_Y, 0, LOADER_COLORS);
+  drawLoader(recordInto(ops), LOADER_CENTER_X, LOADER_MIDDLE_Y, 0, LOADER_COLORS);
   const rects = barsOf(ops);
   expect(rects.filter((r) => r.style === BID_COLOR)).toHaveLength(LOADER_ROW_COUNT);
   expect(rects.filter((r) => r.style === ASK_COLOR)).toHaveLength(LOADER_ROW_COUNT);

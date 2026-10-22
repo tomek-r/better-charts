@@ -1,6 +1,6 @@
 import type { RenderViewport } from '../../chart/engine/toolContract';
 import type { ProfileResult, TickProfileBin } from '../../../shared/bridge/types';
-import { drawProfileLoader } from '../../../shared/canvas/profileLoader';
+import { drawLoader } from '../../../shared/canvas/loader';
 import { drawSeparatedText } from '../../../shared/canvas/separatedText';
 import { palette } from '../../../shared/theme/palette';
 
@@ -311,5 +311,5 @@ export function drawFixedRangeProfileSpinner(
   }
   const { y, height } = viewport.chartRect;
   const centerX = (band.left + band.right) / 2;
-  drawProfileLoader(ctx, centerX, y + height / 2, nowMs, { bid: BID_COLOR, ask: ASK_COLOR, line: VA_COLOR });
+  drawLoader(ctx, centerX, y + height / 2, nowMs, { bid: BID_COLOR, ask: ASK_COLOR, line: VA_COLOR });
 }
