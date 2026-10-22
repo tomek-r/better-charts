@@ -395,6 +395,20 @@ fn wine_terminals_roots_lists_every_user_profile_in_name_order() {
     assert_eq!(roots, vec![first, second]);
 }
 
+#[test]
+fn windows_terminals_root_is_the_metaquotes_folder_directly_below_appdata() {
+    let fixture = TempFolder::new("appdata");
+    // `%APPDATA%` already ends in `AppData\Roaming`; a second `AppData\Roaming`
+    // below it is not where MT5 writes its data folders.
+    fixture.folder("AppData/Roaming/MetaQuotes/Terminal");
+    let app_data = fixture.path().to_path_buf();
+    assert_eq!(windows_terminals_root(Some(app_data.clone())), None);
+
+    let terminals_root = fixture.folder("MetaQuotes/Terminal");
+    assert_eq!(windows_terminals_root(Some(app_data)), Some(terminals_root));
+    assert_eq!(windows_terminals_root(None), None);
+}
+
 #[cfg(not(windows))]
 #[test]
 fn locate_data_folders_follows_the_configured_installation() {

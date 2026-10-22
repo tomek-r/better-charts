@@ -40,8 +40,11 @@ pub(super) const WINDOWS_FOLDER_SEPARATOR: char = '\\';
 const WINE_DRIVE_C: &str = "drive_c";
 /// Folder of a Wine prefix that holds the Windows user profiles.
 const WINE_USERS: &str = "users";
-/// Folder below a Windows user profile that holds the standard data folders.
-const WINDOWS_TERMINALS_ROOT: &str = "AppData/Roaming/MetaQuotes/Terminal";
+/// Folder below a Windows user profile that holds the standard data folders; the
+/// Wine prefix has no `%APPDATA%`, so its profiles are walked from here.
+const PROFILE_TERMINALS_ROOT: &str = "AppData/Roaming/MetaQuotes/Terminal";
+/// The same folder below `%APPDATA%`, which already ends in `AppData\Roaming`.
+const APPDATA_TERMINALS_ROOT: &str = "MetaQuotes/Terminal";
 /// Environment variable of the roaming profile folder on Windows.
 const APPDATA_VARIABLE: &str = "APPDATA";
 /// Folder MT5 keeps terminal-wide data in.
@@ -349,8 +352,8 @@ pub fn data_folders(install_folder: &Path, terminals_root: Option<&Path>) -> Vec
 }
 
 /// `%APPDATA%\MetaQuotes\Terminal`, when that folder exists.
-fn windows_terminals_root(app_data: Option<PathBuf>) -> Option<PathBuf> {
-    let terminals_root = app_data?.join(WINDOWS_TERMINALS_ROOT);
+pub(super) fn windows_terminals_root(app_data: Option<PathBuf>) -> Option<PathBuf> {
+    let terminals_root = app_data?.join(APPDATA_TERMINALS_ROOT);
     terminals_root.is_dir().then_some(terminals_root)
 }
 
@@ -360,7 +363,7 @@ fn wine_terminals_roots(wine_prefix: &Path) -> Vec<PathBuf> {
     let profiles = wine_prefix.join(WINE_DRIVE_C).join(WINE_USERS);
     sorted_folders(&profiles)
         .into_iter()
-        .map(|profile| profile.join(WINDOWS_TERMINALS_ROOT))
+        .map(|profile| profile.join(PROFILE_TERMINALS_ROOT))
         .filter(|terminals_root| terminals_root.is_dir())
         .collect()
 }
