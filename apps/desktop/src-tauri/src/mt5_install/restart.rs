@@ -25,9 +25,14 @@
 //! Verified invocation on the owner's Mac (official MT5 application, Wine): working
 //! folder = the install folder, program = the wine binary with `WINEPREFIX`, arguments
 //! `terminal64.exe /portable /config:config\BetterChartsStartup.ini`; the standard
-//! layout passes the same without `/portable`. Native Windows runs `terminal64.exe`
-//! itself with the same working folder and the absolute `/config:<data folder>
-//! \config\BetterChartsStartup.ini`; that form is not yet verified on a real terminal.
+//! layout passes the same without `/portable`. That plain form was verified; it is now
+//! wrapped as `start /min terminal64.exe …`, because a restarted terminal has to open
+//! minimized, and that wrapper is not yet verified on a real terminal. Native Windows
+//! runs `cmd.exe /C start "" /MIN terminal64.exe` with the same working folder and the
+//! absolute `/config:<data folder>\config\BetterChartsStartup.ini`, and falls back to
+//! starting `terminal64.exe` directly when the path or an argument holds a character
+//! the command processor reads as syntax; neither Windows form is verified on a real
+//! terminal.
 //!
 //! Privacy and safety: nothing else below an MT5 folder is written, AutoTrading is
 //! never enabled, and the token never reaches a log line or an error message. The
@@ -72,6 +77,27 @@ const SOURCE_EXTENSION: &str = ".mq5";
 const COMPILED_EXTENSION: &str = "ex5";
 /// Environment variable that points wine at the prefix holding `drive_c`.
 const WINEPREFIX_VARIABLE: &str = "WINEPREFIX";
+/// Wine's `start` program: it launches another program and can show its window
+/// minimized, which is the only way to ask for a window state without an FFI call.
+const WINE_START_PROGRAM: &str = "start";
+/// Option of wine's `start` that shows the started program minimized.
+const MINIMIZED_OPTION_WINE: &str = "/min";
+/// Command processor of native Windows, whose `start` builtin minimizes a started
+/// program.
+const WINDOWS_SHELL: &str = "cmd.exe";
+/// Option of `cmd.exe` that runs the rest of its command line as a command.
+const WINDOWS_RUN_OPTION: &str = "/C";
+/// The `start` builtin that `cmd.exe` runs.
+const WINDOWS_START_PROGRAM: &str = "start";
+/// Window title argument of `start`. `start` takes a quoted first argument as its
+/// title instead of as the program, so the title has to be passed explicitly; Rust
+/// quotes an empty argument as `""`, which is exactly the empty title `start` needs.
+const EMPTY_WINDOW_TITLE: &str = "";
+/// Option of the Windows `start` builtin that shows the started program minimized.
+const MINIMIZED_OPTION_WINDOWS: &str = "/MIN";
+/// Characters `cmd.exe` reads as syntax rather than as text: a path or argument
+/// holding one would be split or expanded, so such a launch skips the shell.
+const CMD_METACHARACTERS: &[char] = &['&', '|', '<', '>', '^', '%', '!', '"'];
 /// Byte-order mark of the UTF-16LE files MT5 writes and reads.
 const UTF16_LE_BOM: [u8; 2] = [0xff, 0xfe];
 /// Line break both startup files use.
@@ -370,39 +396,97 @@ fn ini_argument(host: HostPlatform, ini: &Path) -> String {
     }
 }
 
-/// Command that starts the terminal with the startup ini at `ini`, for the host the
-/// installation's paths are resolved on.
+/// Whether `text` reaches the started program unchanged through the Windows command
+/// processor: none of its metacharacters may appear.
+fn cmd_safe(text: &str) -> bool {
+    !text.contains(CMD_METACHARACTERS)
+}
+
+/// The arguments the terminal itself receives: the portable option where the layout
+/// asks for it, then the startup ini.
+fn terminal_arguments(host: HostPlatform, layout: Layout, ini: &Path) -> Vec<String> {
+    let mut terminal_args = Vec::new();
+    if layout == Layout::Portable {
+        terminal_args.push(PORTABLE_OPTION.to_string());
+    }
+    terminal_args.push(ini_argument(host, ini));
+    terminal_args
+}
+
+/// Wine arguments that start the terminal minimized: wine's `start` with `/min` in
+/// front of the terminal and its own arguments.
 ///
-/// Under wine the terminal is wine's first argument, at the relative name, with the
-/// prefix in `WINEPREFIX`; on Windows the terminal is the program itself. The working
-/// folder is the install folder in both cases, which is what makes the relative
-/// `/config:` and terminal arguments resolve.
+/// The terminal keeps the relative name, because wine re-quotes an absolute one whose
+/// folders contain a space. Wine's `start` inherits the working folder, so the relative
+/// name and the relative `/config:` resolve as they do for the plain invocation.
+fn wine_minimized_args(terminal_args: Vec<String>) -> Vec<String> {
+    let mut args = vec![
+        WINE_START_PROGRAM.to_string(),
+        MINIMIZED_OPTION_WINE.to_string(),
+        TERMINAL_EXE_FILE.to_string(),
+    ];
+    args.extend(terminal_args);
+    args
+}
+
+/// Program and arguments that start the terminal minimized on native Windows: the
+/// command processor runs `start "" /MIN` with the terminal and its arguments.
+///
+/// A path or argument holding a command processor metacharacter would be split or
+/// expanded by `cmd.exe`, so that launch starts the terminal directly instead: an
+/// unminimized terminal is preferable to a launch that lands somewhere else.
+fn windows_command(terminal: PathBuf, terminal_args: Vec<String>) -> (PathBuf, Vec<String>) {
+    let terminal_text = argument_text(&terminal);
+    let shell_keeps_text =
+        cmd_safe(&terminal_text) && terminal_args.iter().all(|argument| cmd_safe(argument));
+    if !shell_keeps_text {
+        return (terminal, terminal_args);
+    }
+    let mut args = vec![
+        WINDOWS_RUN_OPTION.to_string(),
+        WINDOWS_START_PROGRAM.to_string(),
+        EMPTY_WINDOW_TITLE.to_string(),
+        MINIMIZED_OPTION_WINDOWS.to_string(),
+        terminal_text,
+    ];
+    args.extend(terminal_args);
+    (PathBuf::from(WINDOWS_SHELL), args)
+}
+
+/// Command that starts the terminal minimized with the startup ini at `ini`, for the
+/// host the installation's paths are resolved on.
+///
+/// Under wine the terminal is an argument of wine's `start` program, at the relative
+/// name, with the prefix in `WINEPREFIX`; on native Windows the terminal is an argument
+/// of the shell's `start` builtin. The working folder is the install folder in both
+/// cases, which is what makes the relative `/config:` and terminal arguments resolve. A
+/// Windows path or argument the command processor would split keeps the direct launch
+/// and only loses the minimized window.
 pub(super) fn startup_command(
     installation: &Mt5Installation,
     install_folder: &Path,
     layout: Layout,
     ini: &Path,
 ) -> Result<TerminalCommand, RestartError> {
-    let mut args = Vec::new();
-    let (program, env) = match installation.host {
-        HostPlatform::Windows => (install_folder.join(TERMINAL_EXE_FILE), Vec::new()),
+    let terminal_args = terminal_arguments(installation.host, layout, ini);
+    let (program, args, env) = match installation.host {
+        HostPlatform::Windows => {
+            let terminal = install_folder.join(TERMINAL_EXE_FILE);
+            let (program, args) = windows_command(terminal, terminal_args);
+            (program, args, Vec::new())
+        }
         HostPlatform::Wine => {
-            let binary = installation.wine_binary.clone();
-            let prefix = installation.wine_prefix.clone();
-            let (Some(binary), Some(prefix)) = (binary, prefix) else {
+            let (Some(binary), Some(prefix)) = (
+                installation.wine_binary.clone(),
+                installation.wine_prefix.clone(),
+            ) else {
                 return Err(RestartError::WineUnavailable);
             };
-            // Wine takes the terminal at the relative name, because it re-quotes an
-            // absolute one whose folders contain a space.
-            args.push(TERMINAL_EXE_FILE.to_string());
             let prefix = argument_text(&prefix);
-            (binary, vec![(WINEPREFIX_VARIABLE.to_string(), prefix)])
+            let env = vec![(WINEPREFIX_VARIABLE.to_string(), prefix)];
+            (binary, wine_minimized_args(terminal_args), env)
         }
     };
-    if layout == Layout::Portable {
-        args.push(PORTABLE_OPTION.to_string());
-    }
-    args.push(ini_argument(installation.host, ini));
     Ok(TerminalCommand {
         program,
         args,

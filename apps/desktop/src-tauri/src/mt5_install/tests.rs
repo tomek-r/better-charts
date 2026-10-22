@@ -1862,10 +1862,13 @@ fn the_wine_command_starts_the_portable_terminal_with_a_relative_config() {
     assert_eq!(
         command.args,
         vec![
+            "start".to_string(),
+            "/min".to_string(),
             "terminal64.exe".to_string(),
             "/portable".to_string(),
             "/config:config\\BetterChartsStartup.ini".to_string(),
-        ]
+        ],
+        "wine's start opens the terminal minimized"
     );
     assert_eq!(command.working_directory, install_folder);
     assert_eq!(command.env, expected_env);
@@ -1889,6 +1892,8 @@ fn the_wine_command_omits_the_portable_option_for_a_standard_folder() {
     assert_eq!(
         command.args,
         vec![
+            "start".to_string(),
+            "/min".to_string(),
             "terminal64.exe".to_string(),
             "/config:config\\BetterChartsStartup.ini".to_string(),
         ]
@@ -1896,7 +1901,7 @@ fn the_wine_command_omits_the_portable_option_for_a_standard_folder() {
 }
 
 #[test]
-fn the_windows_command_starts_the_terminal_itself() {
+fn the_windows_command_starts_the_terminal_minimized_through_start() {
     let fixture = TempFolder::new("restart-command-windows");
     let install_folder = fixture.folder("Program Files/MetaTrader 5");
     let terminal_exe = install_folder.join("terminal64.exe");
@@ -1911,10 +1916,49 @@ fn the_windows_command_starts_the_terminal_itself() {
     let command = startup_command(&installation, &install_folder, Layout::Standard, &files.ini)
         .expect("the native command is built");
 
-    assert_eq!(command.program, terminal_exe, "no wine here");
+    assert_eq!(
+        command.program,
+        PathBuf::from("cmd.exe"),
+        "no wine here; the shell provides start"
+    );
     assert_eq!(
         command.args,
-        vec![format!("/config:{}", files.ini.to_string_lossy())]
+        vec![
+            "/C".to_string(),
+            "start".to_string(),
+            String::new(),
+            "/MIN".to_string(),
+            terminal_exe.to_string_lossy().into_owned(),
+            format!("/config:{}", files.ini.to_string_lossy()),
+        ],
+        "the empty title keeps start from taking the terminal path as its title"
+    );
+    assert_eq!(command.working_directory, install_folder);
+    assert!(command.env.is_empty(), "a native run needs no prefix");
+}
+
+#[test]
+fn a_windows_path_with_a_cmd_metacharacter_starts_the_terminal_directly() {
+    let fixture = TempFolder::new("restart-command-windows-metacharacter");
+    let install_folder = fixture.folder("Program Files/A&B MetaTrader 5");
+    let terminal_exe = install_folder.join("terminal64.exe");
+    let installation = discovered_windows_installation(&terminal_exe.to_string_lossy());
+    let data_folder = expected_standard_folder(
+        &fixture.folder("Users/trader/AppData/Roaming/MetaQuotes/Terminal/ABC"),
+    );
+    let files = startup_file_paths(HostPlatform::Windows, &install_folder, &data_folder);
+
+    let command = startup_command(&installation, &install_folder, Layout::Standard, &files.ini)
+        .expect("the native command is built");
+
+    assert_eq!(
+        command.program, terminal_exe,
+        "the shell would split the path at the ampersand"
+    );
+    assert_eq!(
+        command.args,
+        vec![format!("/config:{}", files.ini.to_string_lossy())],
+        "the direct launch gives up the minimized window, not the command"
     );
     assert_eq!(command.working_directory, install_folder);
     assert!(command.env.is_empty(), "a native run needs no prefix");
