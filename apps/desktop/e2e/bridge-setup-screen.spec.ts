@@ -179,7 +179,7 @@ test('reduced motion shows the finished screen without its entrance animation', 
   await expect(complete.getByRole('button', { name: 'Happy trading' })).toHaveCSS('animation-name', 'none');
 });
 
-test('the finished screen holds its entrance until the window has been in front for a moment', async ({ page }) => {
+test('the finished screen holds its entrance until the window is in front, then a moment longer', async ({ page }) => {
   // The user is still in MT5 when the bridge answers, so the window has not come to the front yet.
   await page.addInitScript(() => {
     Document.prototype.hasFocus = () => false;
@@ -191,9 +191,11 @@ test('the finished screen holds its entrance until the window has been in front 
 
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 
-  // The entrance waits a moment after the window comes to the front, so it is still held right away.
-  await expect(complete).toHaveClass(/is-awaiting-front/);
+  // The class changes at once; CSS then adds the settle time to the entrance delays itself.
   await expect(complete).not.toHaveClass(/is-awaiting-front/);
+  await expect(complete).toHaveClass(/is-returning-to-front/);
+  await expect(mark).toHaveCSS('animation-delay', '0.5s');
+  await expect(complete.getByRole('button', { name: 'Happy trading' })).toHaveCSS('animation-delay', '1.4s');
   await expect(mark).toHaveCSS('animation-play-state', 'running');
 });
 

@@ -31,6 +31,21 @@
   animation-play-state: paused;
 }
 
+/* The window has only just come to the front, so CSS holds the entrance a moment longer to settle. */
+.setup-complete-screen.is-returning-to-front:not(.is-leaving) {
+  --setup-complete-front-delay: 500ms;
+  animation-delay: var(--setup-complete-front-delay);
+  animation-fill-mode: backwards;
+}
+
+.setup-complete-screen.is-returning-to-front:not(.is-leaving) .setup-complete-icon {
+  animation-delay: var(--setup-complete-front-delay);
+}
+
+.setup-complete-screen.is-returning-to-front:not(.is-leaving) .modal-dialog-button {
+  animation-delay: calc(var(--setup-complete-front-delay) + var(--setup-complete-button-delay));
+}
+
 /* "Happy trading" leaves in the reverse order the screen arrived: the button sinks first, then the
    mark shrinks away, and only then does the blur lift off the chart. */
 .setup-complete-screen.is-leaving .modal-dialog-button {
@@ -64,8 +79,9 @@
 
 /* The button follows the mark: it waits out the start of the icon's pop, then rises into place. */
 .setup-complete-content .modal-dialog-button {
+  --setup-complete-button-delay: 900ms;
   color: var(--color-text);
-  animation: setup-complete-button-in 1200ms ease-out 900ms both;
+  animation: setup-complete-button-in 1200ms ease-out var(--setup-complete-button-delay) both;
 }
 
 /* The dialog's primary button, reused here: its focus ring lives under `.modal-dialog` there. */

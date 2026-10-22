@@ -3,43 +3,47 @@ import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
 import { useAppSettingsView } from './AppSettingsProvider';
 import { SetupCompleteIcon } from './SetupCompleteIcon';
 
-/** How long the window stays in front before the entrance plays, so the user has settled on it first. */
-const FRONT_ENTRANCE_DELAY_MS = 500;
+type WindowFront = {
+  inFront: boolean;
+  /** The screen mounted while the window was behind, so its entrance waited for the front. */
+  enteredBehind: boolean;
+};
 
 /**
  * The finished screen usually appears while the user is still in MetaTrader 5, so its entrance waits
- * for the Better Charts window to come to the front, plus a short settle delay, and then plays with
- * the user watching. Leaving the window again within that delay cancels the entrance. Once the
- * window has been in front the entrance has played, so the answer never goes back to false.
+ * for the Better Charts window to come to the front; CSS then holds it a further moment, so the user
+ * has settled on the window before it plays. Once the window has been in front the entrance has
+ * played, so the answer never goes back to false.
  */
-function useWindowInFront(): boolean {
-  const [inFront, setInFront] = useState(() => document.hasFocus());
+function useWindowInFront(): WindowFront {
+  const [windowFront, setWindowFront] = useState<WindowFront>(() => {
+    const inFront = document.hasFocus();
+    return { inFront, enteredBehind: !inFront };
+  });
 
   useEffect(() => {
-    if (inFront) {
+    if (windowFront.inFront) {
       return;
     }
-    let settleTimer: number | undefined;
-    const cancelSettleTimer = () => window.clearTimeout(settleTimer);
-    const markWindowInFront = () => {
-      cancelSettleTimer();
-      settleTimer = window.setTimeout(() => setInFront(true), FRONT_ENTRANCE_DELAY_MS);
-    };
+    const markWindowInFront = () => setWindowFront((current) => ({ ...current, inFront: true }));
     window.addEventListener('focus', markWindowInFront);
-    window.addEventListener('blur', cancelSettleTimer);
-    return () => {
-      window.removeEventListener('focus', markWindowInFront);
-      window.removeEventListener('blur', cancelSettleTimer);
-      cancelSettleTimer();
-    };
-  }, [inFront]);
+    return () => window.removeEventListener('focus', markWindowInFront);
+  }, [windowFront.inFront]);
 
-  return inFront;
+  return windowFront;
+}
+
+/** Holds the entrance while the window is behind, then lets CSS add the settle time once it is in front. */
+function entranceFrontClass({ inFront, enteredBehind }: WindowFront): string {
+  if (!inFront) {
+    return ' is-awaiting-front';
+  }
+  return enteredBehind ? ' is-returning-to-front' : '';
 }
 
 function SetupCompleteDialog() {
   const { setupCompleteOverSetupScreen, isOpen, dismissSetupComplete } = useAppSettingsView();
-  const windowInFront = useWindowInFront();
+  const windowFront = useWindowInFront();
   const happyTradingButton = useRef<HTMLButtonElement>(null);
   const screenRoot = useRef<HTMLDivElement>(null);
   const leavingRef = useRef(false);
@@ -75,12 +79,12 @@ function SetupCompleteDialog() {
   }, [leave]);
 
   const overSetupScreenClass = setupCompleteOverSetupScreen ? ' setup-complete-over-screen' : '';
-  const awaitingFrontClass = windowInFront ? '' : ' is-awaiting-front';
+  const frontClass = entranceFrontClass(windowFront);
   const leavingClass = leaving ? ' is-leaving' : '';
   return (
     <div
       ref={screenRoot}
-      className={`bridge-setup-screen setup-complete-screen${overSetupScreenClass}${awaitingFrontClass}${leavingClass}`}
+      className={`bridge-setup-screen setup-complete-screen${overSetupScreenClass}${frontClass}${leavingClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Setup complete"
