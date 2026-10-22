@@ -431,11 +431,13 @@ fn install_location(file: Mql5File) -> Option<(&'static str, &'static str)> {
         .rsplit_once('/')
 }
 
-/// Breadth-first search for `file_name` below `folder`. Breadth first makes the
-/// first match the shallowest one, and every folder is listed in name order, so
-/// repeated scans report the same copy. `DirEntry::file_type` never follows a
-/// symbolic link, so a linked file or folder is neither reported nor searched.
-fn shallowest_file(folder: &Path, file_name: &str) -> Option<PathBuf> {
+/// Every file named `file_name` below `folder`, in traversal order: breadth
+/// first, and every folder listed in name order, so the shallowest copy comes
+/// first and repeated scans report the same copies. `DirEntry::file_type` never
+/// follows a symbolic link, so a linked file or folder is neither reported nor
+/// searched.
+fn matching_files(folder: &Path, file_name: &str) -> Vec<PathBuf> {
+    let mut matches = Vec::new();
     let mut pending = VecDeque::from([(folder.to_path_buf(), 0)]);
     while let Some((current, depth)) = pending.pop_front() {
         for entry in sorted_entries(&current) {
@@ -443,25 +445,38 @@ fn shallowest_file(folder: &Path, file_name: &str) -> Option<PathBuf> {
                 continue;
             };
             if kind.is_file() && entry.file_name().as_os_str() == OsStr::new(file_name) {
-                return Some(entry.path());
+                matches.push(entry.path());
             }
             if kind.is_dir() && depth < MAX_FOLDER_DEPTH {
                 pending.push_back((entry.path(), depth + 1));
             }
         }
     }
-    None
+    matches
+}
+
+/// Every copy of `file` below the data folder's `MQL5` folder, shallowest first.
+///
+/// MT5 keeps a source wherever the user put it — on the verified installation
+/// the bridge advisor sits in `Experts/Advisors` — so the whole subtree of the
+/// file's own MT5 folder is searched. Only the shipped file name is reported, so
+/// no other expert advisor or indicator can ever be touched.
+pub fn every_copy(mql5: &Path, file: Mql5File) -> Vec<PathBuf> {
+    let Some((folder, file_name)) = install_location(file) else {
+        return Vec::new();
+    };
+    matching_files(&mql5.join(folder), file_name)
 }
 
 /// Existing copy of `file` below the data folder's `MQL5` folder, if there is
-/// one.
-///
-/// MT5 keeps a source wherever the user put it — on the verified installation
-/// the bridge advisor sits in `Experts/Advisors` — so the whole `MQL5` subtree is
-/// searched. The shallowest match wins: the copy closest to the MT5-provided
-/// folder is the one a later install step replaces, while deeper copies stay
-/// untouched.
+/// one: the shallowest copy, which is the one MT5 lists first.
 pub fn existing_copy(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
+    every_copy(mql5, file).into_iter().next()
+}
+
+/// Path MT5 recommends for `file`: its own folder below `MQL5`, for example
+/// `<mql5>/Experts/BetterChartsBridge.mq5`.
+pub fn default_path(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
     let (folder, file_name) = install_location(file)?;
-    shallowest_file(&mql5.join(folder), file_name)
+    Some(mql5.join(folder).join(file_name))
 }

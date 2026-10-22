@@ -44,7 +44,8 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   Wine) and Linux (Wine prefixes `~/.mt5` and `~/.wine`), lists the `MQL5` data
   folders of each installation (portable and standard layouts), and "Install to
   MT5" copies `BetterChartsTickHistoryReader.mq5` then `BetterChartsBridge.mq5`
-  (replacing an existing copy in place, for example under `Experts/Advisors`) and
+  (always into `Experts` and `Indicators`; an older copy of the same file in a
+  sub-folder, with its `.ex5` and `.log`, is removed) and
   compiles both with MetaEditor, reporting per file; the UTF-16LE log decides, and
   an indicator with errors stops the run before the EA. The guide's manual steps
   remain the fallback when no installation is found.
@@ -63,7 +64,9 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   before the EA is installed.
 - On first launch, App settings opens, and the setup guide opens on top of it when
   no listed data folder holds `BetterChartsBridge.mq5` yet (including when MT5 is
-  not found); a failed listing leaves only App settings open.
+  not found); a failed listing leaves only App settings open. That first launch
+  generates a random bridge token and saves it, so the bridge, the environment
+  exported at startup and the EA preset share a token nobody had to invent.
 - An outdated EA or tick reader sets `componentOutdated` on the bridge status; the
   error notice offers "Update in MT5", which opens the setup guide. Detected
   installation paths fill the App settings fields the user left unset (terminal

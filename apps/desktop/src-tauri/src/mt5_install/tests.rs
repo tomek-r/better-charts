@@ -337,6 +337,26 @@ fn existing_copy_reports_the_first_folder_in_name_order() {
 }
 
 #[test]
+fn every_copy_reports_all_copies_in_name_order() {
+    let fixture = TempFolder::new("every-copy");
+    let advisors = fixture
+        .folder("MQL5/Experts/Advisors")
+        .join(EXPERT_ADVISOR_FILE);
+    fs::write(&advisors, "// advisors\n").expect("advisor copy is writable");
+    let zulu = fixture
+        .folder("MQL5/Experts/Zulu")
+        .join(EXPERT_ADVISOR_FILE);
+    fs::write(&zulu, "// zulu\n").expect("second copy is writable");
+    let mql5 = fixture.path().join("MQL5");
+
+    assert_eq!(
+        every_copy(&mql5, Mql5File::ExpertAdvisor),
+        vec![advisors, zulu]
+    );
+    assert!(every_copy(&mql5, Mql5File::Indicator).is_empty());
+}
+
+#[test]
 fn existing_copy_reports_nothing_without_a_copy() {
     let fixture = TempFolder::new("no-copy");
     create_folder(&fixture.path().join("MQL5/Experts/Advisors"));
@@ -813,27 +833,36 @@ fn fresh_install_writes_both_files_to_the_default_folders() {
 }
 
 #[test]
-fn an_existing_copy_is_updated_where_it_is() {
-    let fixture = TempFolder::new("install-update");
+fn an_old_copy_in_a_sub_folder_moves_to_the_default_folder() {
+    let fixture = TempFolder::new("install-move");
     let mql5 = fixture.folder("MQL5");
     // The verified installation keeps the advisor one level below `Experts`.
     let advisors = fixture.folder("MQL5/Experts/Advisors");
-    let advisor = advisors.join(EXPERT_ADVISOR_FILE);
-    fs::write(&advisor, PREVIOUS_SOURCE).expect("previous advisor copy is writable");
+    let old_copy = advisors.join(EXPERT_ADVISOR_FILE);
+    fs::write(&old_copy, PREVIOUS_SOURCE).expect("previous advisor copy is writable");
+    let compiled = old_copy.with_extension("ex5");
+    fs::write(&compiled, "// compiled\n").expect("compiled advisor is writable");
+    let log = old_copy.with_extension("log");
+    fs::write(&log, "// log\n").expect("advisor log is writable");
+    let unrelated = advisors.join("Other.mq5");
+    fs::write(&unrelated, PREVIOUS_SOURCE).expect("unrelated source is writable");
 
     let installed = install_bundled_sources(&bundled_sources(&fixture), &mql5, &idle_queue())
-        .expect("the update succeeds");
+        .expect("the move succeeds");
 
-    let updated = installed.last().expect("the advisor is installed last");
-    assert_eq!(updated.file, Mql5File::ExpertAdvisor);
-    assert_eq!(updated.path, advisor);
-    assert_eq!(updated.outcome, InstallOutcome::Updated);
+    let advisor = mql5.join("Experts").join(EXPERT_ADVISOR_FILE);
+    let installed_advisor = installed.last().expect("the advisor is installed last");
+    assert_eq!(installed_advisor.file, Mql5File::ExpertAdvisor);
+    assert_eq!(installed_advisor.path, advisor);
+    assert_eq!(installed_advisor.outcome, InstallOutcome::Installed);
     assert_eq!(
         fs::read_to_string(&advisor).expect("advisor is readable"),
         BUNDLED_ADVISOR_SOURCE
     );
-    // No second copy appears in the MT5-recommended folder.
-    assert!(!mql5.join("Experts").join(EXPERT_ADVISOR_FILE).exists());
+    assert!(!old_copy.exists(), "the older copy is gone");
+    assert!(!compiled.exists(), "its compiled sibling is gone");
+    assert!(!log.exists(), "its log is gone");
+    assert!(unrelated.exists(), "another source in that folder stays");
 }
 
 #[test]

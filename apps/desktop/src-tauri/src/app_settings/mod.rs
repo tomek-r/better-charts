@@ -29,6 +29,8 @@ static FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 const SETTINGS_FILE: &str = "settings.json";
 const MAX_SETTINGS_BYTES: u64 = 64 * 1024;
+/// Bytes of a generated bridge token; its hex form is twice as long.
+const GENERATED_TOKEN_BYTES: usize = 32;
 
 // Deliberately no Debug: this model contains an authentication secret.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -252,6 +254,40 @@ fn persist(path: &Path, settings: &AppSettings) -> Result<(), String> {
     result
 }
 
+/// Random bridge token: [`GENERATED_TOKEN_BYTES`] random bytes as lowercase hex, so
+/// a first launch has a secret nobody has to invent. `None` when the system offers
+/// no randomness, which leaves the token empty exactly as before.
+fn generated_token() -> Option<String> {
+    let mut bytes = [0u8; GENERATED_TOKEN_BYTES];
+    getrandom::fill(&mut bytes).ok()?;
+    let token: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    Some(token)
+}
+
+/// Gives `stored` a generated token when it holds none and no `MT5_BRIDGE_TOKEN`
+/// override supplies one, and writes the settings at once, so the bridge, the
+/// environment exported at startup and the EA preset all carry the same token; a
+/// restart without one is refused, and the user never has to invent it.
+///
+/// Best effort: settings that cannot be written leave the token in use for this
+/// launch anyway.
+fn fill_generated_token(
+    path: Option<&Path>,
+    stored: &mut AppSettings,
+    overrides: &HashMap<String, String>,
+) {
+    if !stored.token.is_empty() || overrides.contains_key("MT5_BRIDGE_TOKEN") {
+        return;
+    }
+    let Some(token) = generated_token() else {
+        return;
+    };
+    stored.token = token;
+    if let Some(path) = path {
+        let _ = persist(path, stored);
+    }
+}
+
 impl AppSettingsState {
     pub(crate) fn load(runtime_error: Option<String>) -> Self {
         let path = app_data_dir().map(|directory| directory.join(SETTINGS_FILE));
@@ -313,11 +349,18 @@ impl AppSettingsState {
         installation: Option<Mt5Installation>,
     ) -> Self {
         let saved = path.as_ref().map_or(Ok(None), |path| read_file(path));
-        let (base, persisted, mut error) = match saved {
+        let (mut base, persisted, mut error) = match saved {
             Ok(Some(settings)) => (settings, true, None),
             Ok(None) => (AppSettings::default(), false, None),
             Err(error) => (AppSettings::default(), false, Some(error)),
         };
+        // Only an absent settings file needs a token invented for it: a stored one
+        // already carries the user's, and an override is never replaced. The token is
+        // stored before the detected paths fill in, so they stay in the form until the
+        // user saves them.
+        if !persisted && error.is_none() {
+            fill_generated_token(path.as_deref(), &mut base, &overrides);
+        }
         // Detection fills the file's values before the overrides apply, so an override
         // value is never written into the file and never replaced by a detected one.
         let (_, overridden_keys) = base.clone().with_overrides(&overrides);
@@ -351,9 +394,9 @@ impl AppSettingsState {
             settings.trading_enabled = false;
             settings.auto_start_mt5 = false;
         }
-        // A settings file the user already has takes the detected paths now; without
-        // one the form shows them and the user's first save stores them, because
-        // settings that cannot validate yet (no token) must not reach the disk.
+        // A settings file the user already has takes the detected paths now; on a first
+        // launch the form carries them until the user saves, so the file the generated
+        // token just created gains no path before that save.
         let store_detected = persisted && error.is_none() && !detected_fields.is_empty();
         if let Some(path) = path.as_ref().filter(|_| store_detected) {
             let _ = persist(path, &stored);
