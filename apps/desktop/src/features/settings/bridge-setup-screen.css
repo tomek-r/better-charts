@@ -90,6 +90,17 @@
   outline-offset: 2px;
 }
 
+/* Once the setup is done the screen only waits, so its guide steps back to a quiet text button. */
+.bridge-setup-screen-content .bridge-setup-screen-secondary {
+  background: transparent;
+  color: var(--color-muted-strong);
+}
+
+.bridge-setup-screen-content .bridge-setup-screen-secondary:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
 @keyframes setup-complete-icon-in {
   from {
     opacity: 0;

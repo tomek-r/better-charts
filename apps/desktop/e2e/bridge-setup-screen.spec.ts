@@ -51,22 +51,24 @@ const HEADER_STATUSES: { label: string; step: string; status: BridgeStatus }[] =
 ];
 
 const setupScreen = (page: Page) => page.getByRole('region', { name: 'MetaTrader 5 setup' });
+const waitingScreen = (page: Page) => page.getByRole('region', { name: 'Waiting for MetaTrader 5' });
 const setupGuide = (page: Page) => page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
 const setupComplete = (page: Page) => page.getByRole('dialog', { name: 'Setup complete' });
 const headerStatus = (page: Page, label: string) =>
   page.getByRole('button', { name: `MetaTrader 5 connection: ${label}` });
 
-/** Loads the app as a completed setup and runs the header's delay, returning the status it now shows. */
+/** Loads the app as a completed setup whose chart is drawn and runs the header's delay, returning its status. */
 async function revealHeaderStatus(
   page: Page,
   label: string,
-  responses: Record<string, unknown> = WAITING_FOR_BRIDGE,
+  responses: Record<string, unknown> = CONNECTING_WITH_CANDLES,
 ): Promise<Locator> {
   await pausePageClockAhead(page);
   await markSetupCompleted(page);
   await gotoWithStub(page, { responses });
 
   await expect(setupScreen(page)).toHaveCount(0);
+  await expect(waitingScreen(page)).toHaveCount(0);
   const status = headerStatus(page, label);
   await expect(status).toHaveCount(0);
   await page.clock.runFor(HEADER_STATUS_REVEAL_MS);
@@ -143,6 +145,20 @@ test('a connected bridge with candles leaves the workspace uncovered', async ({ 
   await expect(page.locator('.chart-connection-dot')).toBeVisible();
 });
 
+test('a completed setup waits for MetaTrader 5 behind the blurred screen', async ({ page }) => {
+  await markSetupCompleted(page);
+  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
+
+  const screen = waitingScreen(page);
+  await expect(screen).toBeVisible();
+  await expect(screen.locator('.loading-message strong')).toHaveText('Waiting for MetaTrader 5');
+  // Without the blur the empty workspace would show through the wait.
+  await expect(screen).toHaveCSS('backdrop-filter', /blur/);
+
+  await screen.getByRole('button', { name: 'Open setup guide' }).click();
+  await expect(setupGuide(page).getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+});
+
 test('the standalone guide gives way to the setup complete screen once the bridge connects', async ({ page }) => {
   await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
   await setupScreen(page).getByRole('button', { name: 'Open setup guide' }).click();
@@ -215,6 +231,10 @@ test('a token mismatch explains itself on the setup screen without an error toas
   ).toBeVisible();
   await expect(screen.getByRole('button', { name: 'Open setup guide' })).toBeVisible();
   await expect(page.getByText('authentication failed')).toHaveCount(0);
+
+  // The install step is what hands the EA the current token.
+  await screen.getByRole('button', { name: 'Open setup guide' }).click();
+  await expect(setupGuide(page).getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
 });
 
 test('Happy trading remembers the setup on the device, so a reload keeps the setup screen away', async ({ page }) => {
@@ -246,7 +266,7 @@ test('Happy trading remembers the setup on the device, so a reload keeps the set
   await expect(setupGuide(page).getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
 });
 
-test('a completed setup shows the header status instead of the setup screen', async ({ page }) => {
+test('a completed setup with a chart shows the header status instead of a screen', async ({ page }) => {
   const status = await revealHeaderStatus(page, 'MT5 not connected');
 
   await status.click();
@@ -260,10 +280,7 @@ test('a completed setup shows the header status instead of the setup screen', as
 
 for (const { label, step, status: bridgeStatus } of HEADER_STATUSES) {
   test(`the header status names ${label} and opens the guide on ${step}`, async ({ page }) => {
-    const status = await revealHeaderStatus(page, label, {
-      get_bridge_status: bridgeStatus,
-      get_market_snapshot: { complete: false, candles: [] },
-    });
+    const status = await revealHeaderStatus(page, label, { get_bridge_status: bridgeStatus });
 
     await status.click();
     await revealLazyGuide(page);
