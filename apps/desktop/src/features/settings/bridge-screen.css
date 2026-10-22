@@ -21,6 +21,18 @@
   pointer-events: none;
 }
 
+/* The first thing a launch shows, so it is simply there rather than fading in. */
+.bridge-screen.bridge-awaiting-screen {
+  animation: none;
+}
+
+/* The wait ended, so the blur lifts off the chart instead of vanishing, and stops taking clicks
+   as it goes. */
+.bridge-screen.bridge-awaiting-screen.is-leaving {
+  animation: settings-fade-out 400ms ease-in forwards;
+  pointer-events: none;
+}
+
 /* The finished screen eases in far slower than the setup screen it replaces: the blur lifts and the
    mark pops over whole seconds, so arriving at the chart feels landed rather than switched. */
 .setup-complete-screen {
@@ -138,6 +150,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .bridge-screen,
+  .bridge-screen.bridge-awaiting-screen.is-leaving,
   .setup-complete-screen,
   .setup-complete-screen.is-leaving {
     animation: none;

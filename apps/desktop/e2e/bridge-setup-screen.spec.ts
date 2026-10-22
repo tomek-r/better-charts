@@ -32,6 +32,13 @@ const CONNECTED_STATUS: BridgeStatus = {
 /** The bridge version refusal, worded as the Rust handshake words it. */
 const OUTDATED_MESSAGE = 'App requires MT5 bridge version 1.012, but installed bridge version is 1.006.';
 
+/** The token refusal the bridge reports when the EA holds a token the app does not know. */
+const TOKEN_MISMATCH_STATUS: BridgeStatus = {
+  state: 'protocol_error',
+  message: 'authentication failed',
+  tokenMismatch: true,
+};
+
 /** How long the header waits before it offers the guide back, a little past its 3 s delay. */
 const HEADER_STATUS_REVEAL_MS = 3_100;
 
@@ -40,11 +47,7 @@ const WAITING_SCREEN_LIMIT_MS = 15_100;
 
 /** Statuses the header names, and the guide step each one opens. */
 const HEADER_STATUSES: { label: string; step: string; status: BridgeStatus }[] = [
-  {
-    label: 'Token mismatch',
-    step: 'Install',
-    status: { state: 'protocol_error', message: 'authentication failed', tokenMismatch: true },
-  },
+  { label: 'Token mismatch', step: 'Install', status: TOKEN_MISMATCH_STATUS },
   {
     label: 'EA outdated',
     step: 'Install',
@@ -128,6 +131,22 @@ async function connectThroughStandaloneGuide(page: Page): Promise<Locator> {
   return complete;
 }
 
+/**
+ * Opens the awaiting screen of a completed setup, ends the wait with `endingStatus`, and returns the
+ * screen while its fade-out is still playing.
+ */
+async function endAwaitingScreen(page: Page, endingStatus: BridgeStatus): Promise<Locator> {
+  await markSetupCompleted(page);
+  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
+  const screen = waitingScreen(page);
+  await expect(screen).toBeVisible();
+
+  await pushBridgeStatus(page, endingStatus);
+  // The screen does not vanish: it fades out, so it is still there wearing `is-leaving`.
+  await expect(screen).toHaveClass(/is-leaving/);
+  return screen;
+}
+
 test('an unconnected bridge covers the workspace and offers the guide alone', async ({ page }) => {
   await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
   const screen = setupScreen(page);
@@ -157,8 +176,17 @@ test('a completed setup waits for MetaTrader 5 behind the blurred screen', async
   await expect(screen.locator('.loading-message strong')).toHaveText('Waiting for MetaTrader 5');
   // Without the blur the empty workspace would show through the wait.
   await expect(screen).toHaveCSS('backdrop-filter', /blur/);
+  // The launch shows it at once, so it has no fade-in to sit through.
+  await expect(screen).toHaveCSS('animation-name', 'none');
   // The setup is done, so the guide is no longer the way on: the header status is.
   await expect(screen.getByRole('button', { name: 'Open setup guide' })).toHaveCount(0);
+});
+
+test('the awaiting screen fades out when the data arrives', async ({ page }) => {
+  const screen = await endAwaitingScreen(page, CONNECTED_STATUS);
+
+  await expect(screen).toHaveCSS('animation-name', 'settings-fade-out');
+  await expect(screen).toHaveCount(0);
 });
 
 test('a completed setup that waits too long hands over to a notification', async ({ page }) => {
@@ -178,15 +206,9 @@ test('a completed setup that waits too long hands over to a notification', async
 });
 
 test('a completed setup with a token mismatch shows a notification instead of the screen', async ({ page }) => {
-  await markSetupCompleted(page);
-  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
-  await pushBridgeStatus(page, {
-    state: 'protocol_error',
-    message: 'authentication failed',
-    tokenMismatch: true,
-  });
+  const screen = await endAwaitingScreen(page, TOKEN_MISMATCH_STATUS);
 
-  await expect(waitingScreen(page)).toHaveCount(0);
+  await expect(screen).toHaveCount(0);
   await expect(page.getByRole('alert').filter({ hasText: 'MetaTrader 5 uses a different bridge token' })).toBeVisible();
 });
 
@@ -248,11 +270,7 @@ test('the finished screen holds its entrance until the window is in front, then 
 
 test('a token mismatch explains itself on the setup screen without an error toast', async ({ page }) => {
   await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
-  await pushBridgeStatus(page, {
-    state: 'protocol_error',
-    message: 'authentication failed',
-    tokenMismatch: true,
-  });
+  await pushBridgeStatus(page, TOKEN_MISMATCH_STATUS);
   const screen = setupScreen(page);
   await expect(screen.locator('.loading-message strong')).toHaveText('Bridge token does not match');
   await expect(
