@@ -10,7 +10,7 @@ export interface AppSettingsState {
   loadRequest: Promise<void>;
   isOpen: boolean;
   closing: boolean;
-  /** The setup guide sits on top of the settings dialog, which owns the guide's modal frame. */
+  /** The setup guide is open: over the settings dialog when that is open, over the window otherwise. */
   setupGuideOpen: boolean;
   loadError: string | undefined;
   restartRequired: boolean;
@@ -35,14 +35,11 @@ export const initialAppSettingsState: AppSettingsState = {
 export type AppSettingsStore = DomainStore<AppSettingsState>;
 
 /**
- * First launch only: the guide owns the manual steps, so it opens above App settings
- * unless some data folder already holds the bridge EA's source. An empty listing
- * (no MetaTrader 5 found) counts as "not installed".
+ * First launch: the guide owns the manual steps, so it opens alone unless some data folder
+ * already holds the bridge EA's source. An empty listing (no MetaTrader 5 found) counts as
+ * "not installed"; a failed listing falls back to App settings.
  */
-function openSetupGuideWhenExpertAdvisorIsMissing(
-  store: AppSettingsStore,
-  settingsLoadGeneration: { readonly current: number },
-): void {
+function openFirstLaunchView(store: AppSettingsStore, settingsLoadGeneration: { readonly current: number }): void {
   // loadSettings runs its callback only for the load that is still current, so the
   // value read here is this load's generation.
   const generation = settingsLoadGeneration.current;
@@ -51,12 +48,16 @@ function openSetupGuideWhenExpertAdvisorIsMissing(
       if (generation !== settingsLoadGeneration.current) {
         return;
       }
-      if (!anyDataFolderHoldsTheExpertAdvisor(installations)) {
-        store.setField('setupGuideOpen', true);
+      if (anyDataFolderHoldsTheExpertAdvisor(installations)) {
+        store.setField('isOpen', true);
+        return;
       }
+      store.setField('setupGuideOpen', true);
     })
     .catch(() => {
-      // A failed listing leaves App settings alone: the guide is a convenience, not a gate.
+      if (generation === settingsLoadGeneration.current) {
+        store.setField('isOpen', true);
+      }
     });
 }
 
@@ -96,11 +97,12 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     }
     loadSettings('Could not load app settings. Reopen settings to try again.', (next) => {
       store.setField('restartRequired', next.restartRequired);
-      if (next.firstLaunch || next.configurationError) {
+      if (next.configurationError) {
         store.setField('isOpen', true);
+        return;
       }
       if (next.firstLaunch) {
-        openSetupGuideWhenExpertAdvisorIsMissing(store, settingsLoadGeneration);
+        openFirstLaunchView(store, settingsLoadGeneration);
       }
     });
     return () => {
@@ -116,13 +118,10 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     loadSettings('Could not load app settings. Close and reopen settings to try again.');
     store.setField('isOpen', true);
   }, [loadSettings, store]);
-  // The one way into the setup guide: the dialog hosts it, so opening settings
-  // first is what makes the guide reachable from anywhere (e.g. a connection
-  // error offering to reinstall the bundled MT5 files).
-  const openSetupGuide = useCallback(() => {
-    open();
-    store.setField('setupGuideOpen', true);
-  }, [open, store]);
+  // The guide stands on its own window, so any surface can open it without App settings
+  // beneath it (e.g. a connection error offering to reinstall the bundled MT5 files);
+  // App settings renders it nested when that dialog is already open.
+  const openSetupGuide = useCallback(() => store.setField('setupGuideOpen', true), [store]);
   const closeSetupGuide = useCallback(() => store.setField('setupGuideOpen', false), [store]);
   // The dialog keeps its focus trap mounted while the exit animation plays and
   // calls `exited` when it ends (AppSettingsDialog), which finishes the close.

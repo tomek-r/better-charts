@@ -24,6 +24,8 @@ test.describe('outdated MT5 bridge components', () => {
 
     const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
     await expect(guide).toBeVisible();
+    // The guide stands on its own window: no App settings dialog opens beneath it.
+    await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
     await expect(guide.getByRole('heading', { name: 'Install automatically' })).toBeVisible();
     await expect(guide.getByRole('button', { name: 'Install to MT5' })).toBeVisible();
     expectNoErrors(errors);

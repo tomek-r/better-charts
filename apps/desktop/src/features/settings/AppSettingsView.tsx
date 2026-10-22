@@ -1,10 +1,15 @@
 import { AppSettingsDialog } from './AppSettingsDialog';
 import { useAppSettingsView } from './AppSettingsProvider';
+import { SetupGuideModal } from './setup-guide-modal/SetupGuideModal';
 
 export function AppSettingsView() {
   const settings = useAppSettingsView();
   if (!settings.isOpen) {
-    return null;
+    // The guide also opens on its own (a first launch without the EA, or a notice offering the
+    // install), with no settings dialog underneath it.
+    return settings.setupGuideOpen ? (
+      <SetupGuideModal standalone onClose={settings.closeSetupGuide} onFinish={settings.closeSetupGuide} />
+    ) : null;
   }
 
   return (

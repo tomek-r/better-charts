@@ -1,13 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { answerSymbolSearch, chooseSearchResult, openSymbolSearch, openTradePanel } from './helpers/panel';
-import {
-  brokerSymbolFixture,
-  gotoCollectingErrors,
-  gotoWithStub,
-  pausePageClockAhead,
-  pushEvent,
-  windowCandles,
-} from './helpers/tauriStub';
+import { brokerSymbolFixture, gotoWithStub, pausePageClockAhead, pushEvent, windowCandles } from './helpers/tauriStub';
 
 /** The EA's synchronization deadline is 10 s; the notice shows for the last 5 s of it. */
 const NEVER_ANSWERED_MS = 600_000;
@@ -72,10 +65,12 @@ for (const panelOpen of [false, true]) {
   const panelState = panelOpen ? 'open' : 'closed';
 
   test(`the startup loading message is centered on the window with the trade panel ${panelState}`, async ({ page }) => {
-    await gotoCollectingErrors(page);
+    // A connected bridge whose snapshot has no candles yet keeps the chart's own loader on screen.
+    await gotoWithStub(page, { responses: { get_market_snapshot: { complete: false, candles: [] } } });
     if (panelOpen) {
       await openTradePanel(page);
     }
+    await expect(loadingMessage(page)).toContainText('Loading market data');
     const offset = await offsetFromWindowCenter(page, loadingMessage(page));
     expect(offset.x).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
     expect(offset.y).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);

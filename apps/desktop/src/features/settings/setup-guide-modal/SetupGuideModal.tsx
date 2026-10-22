@@ -1,6 +1,7 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { isTauri, invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useBridgeConnection } from '../../bridge/BridgeSessionProvider';
 import { afterExitAnimation } from '../../../shared/ui/afterExitAnimation';
 import { DownloadIcon } from '../../../shared/ui/DownloadIcon';
 import { InstallToMt5 } from './installation/InstallToMt5';
@@ -34,23 +35,39 @@ async function downloadResource(resourcePath: string, fileName: string): Promise
 }
 
 /**
- * A simple overlay that sits on top of the open settings content. The automatic
- * install comes first, with the manual steps below it as the fallback.
+ * A simple overlay that sits on top of the open settings content, or over the whole window when
+ * standalone. The automatic install comes first, with the manual steps below it as the fallback.
  */
-export function SetupGuideModal({ onClose }: { onClose: () => void }) {
+export function SetupGuideModal({
+  onClose,
+  onFinish,
+  standalone,
+}: {
+  onClose: () => void;
+  /** The bridge reached "connected": the guide has nothing left to do. */
+  onFinish: () => void;
+  /** No settings dialog below, so the guide owns the window instead of sitting inside it. */
+  standalone?: boolean;
+}) {
   const closeButton = useRef<HTMLButtonElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const closingRef = useRef(false);
   const [closing, setClosing] = useState(false);
   const shellAvailable = isTauri();
-  const requestClose = useCallback(() => {
+  const { status } = useBridgeConnection();
+  const playExit = useCallback((afterExit: () => void) => {
     if (closingRef.current) {
       return;
     }
     closingRef.current = true;
     setClosing(true);
-    afterExitAnimation(backdrop.current, onClose);
-  }, [onClose]);
+    afterExitAnimation(backdrop.current, afterExit);
+  }, []);
+  const requestClose = useCallback(() => playExit(onClose), [onClose, playExit]);
+  const finish = useCallback(() => playExit(onFinish), [onFinish, playExit]);
+  const backdropClassName = `setup-guide-backdrop${standalone ? ' setup-guide-backdrop-standalone' : ''}${
+    closing ? ' is-closing' : ''
+  }`;
 
   useEffect(() => {
     closeButton.current?.focus();
@@ -68,7 +85,7 @@ export function SetupGuideModal({ onClose }: { onClose: () => void }) {
   }, [requestClose]);
 
   return (
-    <div ref={backdrop} className={`setup-guide-backdrop${closing ? ' is-closing' : ''}`}>
+    <div ref={backdrop} className={backdropClassName}>
       <div className="setup-guide" role="dialog" aria-modal="true" aria-labelledby="setup-guide-title" data-setup-guide>
         <div className="setup-guide-header">
           <h2 id="setup-guide-title">Set up the MT5 bridge</h2>
@@ -92,6 +109,14 @@ export function SetupGuideModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="setup-guide-body">
+          {status.state === 'connected' && (
+            <div className="setup-guide-connected">
+              <p className="setup-guide-connected-note">MetaTrader 5 is connected.</p>
+              <button type="button" className="setup-guide-install-run" onClick={finish}>
+                Happy trading
+              </button>
+            </div>
+          )}
           <InstallToMt5 />
           <h3 className="setup-guide-title setup-guide-manual-title">Or install manually</h3>
           <ol className="setup-guide-steps">

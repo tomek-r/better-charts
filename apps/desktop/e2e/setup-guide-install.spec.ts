@@ -54,9 +54,8 @@ test('Install to MT5 installs both files and says nothing on a clean compile', a
   const guide = await openSetupGuide(page);
   const install = guide.locator('.setup-guide-install');
 
-  // One target: shown as text, with no folder select to ask about, and both actions offered.
-  await expect(install.locator('.setup-guide-install-target')).toContainText('MetaTrader 5');
-  await expect(install.locator('code')).toHaveText(PORTABLE_MQL5_PATH);
+  // One target: named in words, with no folder select to ask about and no path on screen.
+  await expect(install.locator('.setup-guide-install-target')).toHaveText('Installs into MetaTrader 5.');
   await expect(install.getByRole('combobox')).toHaveCount(0);
   await expect(install.getByRole('button')).toHaveText([INSTALL_BUTTON, INSTALL_AND_RESTART_BUTTON]);
   expect(await mt5InstallRequests(page)).toEqual([]);
@@ -91,12 +90,13 @@ test('two data folders ask which one to install into and send its path', async (
   const guide = await openSetupGuide(page);
   const install = guide.locator('.setup-guide-install');
 
+  // The options name the layout, never the folder path.
   const folder = install.getByLabel('MetaTrader 5 data folder');
   await expect(folder.locator('option')).toHaveText([
-    `MetaTrader 5: ${PORTABLE_MQL5_PATH}`,
-    `MetaTrader 5: ${STANDARD_MQL5_PATH}`,
+    'MetaTrader 5 — portable data folder',
+    'MetaTrader 5 — user data folder',
   ]);
-  await folder.selectOption({ label: `MetaTrader 5: ${STANDARD_MQL5_PATH}` });
+  await folder.selectOption({ label: 'MetaTrader 5 — user data folder' });
   await install.getByRole('button', { name: INSTALL_BUTTON }).click();
 
   expect(await mt5InstallRequests(page)).toEqual([
@@ -190,7 +190,7 @@ test('both buttons and the folder select wait out the install and the restart', 
   const install = guide.locator('.setup-guide-install');
   const folder = install.getByLabel('MetaTrader 5 data folder');
   const buttons = install.locator('.setup-guide-install-run');
-  await folder.selectOption({ label: `MetaTrader 5: ${STANDARD_MQL5_PATH}` });
+  await folder.selectOption({ label: 'MetaTrader 5 — user data folder' });
 
   await buttons.last().click();
 

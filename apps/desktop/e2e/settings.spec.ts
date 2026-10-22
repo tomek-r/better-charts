@@ -489,16 +489,18 @@ const installationsWithoutExpertAdvisor = () => [
   }),
 ];
 
-test('first launch without the EA installed opens the setup guide', async ({ page }) => {
+test('first launch without the EA installed opens only the setup guide', async ({ page }) => {
   await gotoWithStub(page, {
     responses: { get_app_settings: firstLaunch, list_mt5_installations: installationsWithoutExpertAdvisor() },
   });
   await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
 });
 
-test('first launch without MetaTrader 5 opens the setup guide', async ({ page }) => {
+test('first launch without MetaTrader 5 opens only the setup guide', async ({ page }) => {
   await gotoWithStub(page, { responses: { get_app_settings: firstLaunch, list_mt5_installations: [] } });
   await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
 });
 
 test('first launch with the EA installed opens only App settings', async ({ page }) => {

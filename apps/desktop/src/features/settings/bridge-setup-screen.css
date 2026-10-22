@@ -1,0 +1,33 @@
+/* Full-window setup screen: the workspace below stays visible but blurred and inert until the
+   bridge has candles. Above the workspace, below the notifications and the dialogs. */
+
+.bridge-setup-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--color-overlay);
+  backdrop-filter: blur(8px);
+  animation: settings-fade-in 180ms ease-out;
+}
+
+.bridge-setup-screen-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+/* The dialog's primary button, reused here: its focus ring lives under `.modal-dialog` there. */
+.bridge-setup-screen-content .modal-dialog-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bridge-setup-screen {
+    animation: none;
+  }
+}

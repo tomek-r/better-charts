@@ -11,6 +11,12 @@
   animation: settings-fade-in 180ms ease-out;
 }
 
+/* Standalone: no settings dialog below, so the guide fills the window above the setup screen. */
+.setup-guide-backdrop-standalone {
+  position: fixed;
+  z-index: 110;
+}
+
 .setup-guide {
   width: min(560px, 100%);
   max-height: 100%;
@@ -69,6 +75,22 @@
 
 .setup-guide-manual-title {
   margin-top: 18px;
+}
+
+/* The bridge answered while the guide was open: its work is done, so it offers the way out. */
+.setup-guide-connected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.setup-guide-connected-note {
+  margin: 0;
+  color: var(--color-text-bright);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .setup-guide-steps {

@@ -18,7 +18,7 @@ interface AppSettingsHandlers {
 
 export interface AppSettingsActions {
   openSettings: () => void;
-  /** Opens App settings with the setup guide in front, the same path its info button takes. */
+  /** Opens the setup guide on its own; inside the open settings dialog it sits on top of that. */
   openSetupGuide: () => void;
 }
 

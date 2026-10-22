@@ -249,6 +249,11 @@
   background: var(--color-accent-ring-soft);
 }
 
+/* No chart on screen yet, so a dot describing its data would only blink over an empty pane. */
+.chart-frame-waiting .chart-connection-dot {
+  display: none;
+}
+
 .chart-connection-connected {
   background: var(--color-accent);
   box-shadow: 0 0 0 3px var(--color-accent-ring-soft);

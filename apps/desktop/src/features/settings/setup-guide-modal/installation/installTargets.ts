@@ -1,16 +1,17 @@
-import type { Mt5InstallationView } from '../../../../shared/bridge/types';
+import type { Mt5DataFolderView, Mt5InstallationView } from '../../../../shared/bridge/types';
 
 /** One installation paired with one of its data folders: exactly what an install request names. */
 export interface InstallTarget {
   terminalPath: string;
   label: string;
+  layout: Mt5DataFolderView['layout'];
   mql5Path: string;
 }
 
 /** Every installation × data folder pair, in the order the backend listed them. */
 export function installTargets(installations: Mt5InstallationView[]): InstallTarget[] {
   return installations.flatMap(({ terminalPath, label, dataFolders }) =>
-    dataFolders.map((folder) => ({ terminalPath, label, mql5Path: folder.mql5Path })),
+    dataFolders.map((folder) => ({ terminalPath, label, layout: folder.layout, mql5Path: folder.mql5Path })),
   );
 }
 

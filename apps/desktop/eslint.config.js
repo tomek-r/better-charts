@@ -107,7 +107,7 @@ export default defineConfig(
       'css/use-baseline': [
         'error',
         {
-          allowProperties: ['scrollbar-width', 'accent-color'],
+          allowProperties: ['scrollbar-width', 'accent-color', 'backdrop-filter'],
           allowPropertyValues: { 'font-family': ['ui-sans-serif'] },
         },
       ],

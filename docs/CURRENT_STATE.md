@@ -62,11 +62,22 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   the bridge connects, after 120 s, or at the next app start. It never enables Algo
   Trading, and is refused while an order is queued or in flight, without a token, or
   before the EA is installed.
-- On first launch, App settings opens, and the setup guide opens on top of it when
-  no listed data folder holds `BetterChartsBridge.mq5` yet (including when MT5 is
-  not found); a failed listing leaves only App settings open. That first launch
-  generates a random bridge token and saves it, so the bridge, the environment
-  exported at startup and the EA preset share a token nobody had to invent.
+- While no chart can be drawn — the bridge is unreachable or still without candles —
+  a full-window blurred setup screen replaces the workspace: it names the missing
+  MetaTrader 5 connection, keeps the notifications and the dialogs above it, and
+  its "Open setup guide" button opens the guide on its own window, with no App
+  settings dialog beneath it (the "Update in MT5" notice opens the same standalone
+  guide). Once the bridge connects, the guide offers "Happy trading", which closes
+  it and, when it was opened from there, App settings too. The chart's connection
+  dot appears only once a chart is rendered, and the install section names the data
+  folder in words ("Installs into MetaTrader 5." or a portable/user folder choice)
+  instead of showing its path.
+- On first launch, the setup guide opens on its own when no listed data folder
+  holds `BetterChartsBridge.mq5` yet (including when MT5 is not found); App settings
+  opens alone when the EA is already installed or the listing failed. That first
+  launch generates a random bridge token and saves it, so the bridge, the
+  environment exported at startup and the EA preset share a token nobody had to
+  invent.
 - An outdated EA or tick reader sets `componentOutdated` on the bridge status; the
   error notice offers "Update in MT5", which opens the setup guide. Detected
   installation paths fill the App settings fields the user left unset (terminal

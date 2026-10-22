@@ -1,6 +1,7 @@
 import { useTauriAvailable } from '../bridge/BridgeSessionProvider';
 import { AppSettingsProvider } from '../settings/AppSettingsProvider';
 import { AppSettingsView } from '../settings/AppSettingsView';
+import { BridgeSetupScreen } from '../settings/BridgeSetupScreen';
 import { AppHeaderView } from './AppHeaderView';
 import { AppNotificationsView } from './AppNotificationsView';
 
@@ -12,6 +13,7 @@ export function AppHeaderFeature() {
     <AppSettingsProvider tauriAvailable={tauriAvailable}>
       <AppHeaderView />
       <AppNotificationsView />
+      <BridgeSetupScreen />
       <AppSettingsView />
     </AppSettingsProvider>
   );
