@@ -44,7 +44,7 @@ use thiserror::Error;
 use super::compile::relative_windows_path;
 use super::discover::Mt5Installation;
 use super::install::{ensure_no_order_pending, write_atomically};
-use super::locate::{existing_copy, install_dir, DataFolder, HostPlatform, Layout, Mql5File};
+use super::locate::{default_path, install_dir, DataFolder, HostPlatform, Layout, Mql5File};
 use crate::bridge::connection::validate_bind_address;
 use crate::execution_adapter::ExecutionQueueView;
 use crate::mt5_backend::{inspect_terminal, stop_terminal, ProcessCheck};
@@ -274,17 +274,18 @@ fn without_source_extension(path: &str) -> &str {
     }
 }
 
-/// `Expert=` value: the installed advisor's path below `MQL5\Experts` without its
-/// extension, e.g. `Advisors\BetterChartsBridge`.
+/// `Expert=` value: the path of the advisor the install wrote, below `MQL5\Experts`
+/// and without its extension, e.g. `Advisors\BetterChartsBridge`.
 ///
-/// Refuses when no copy is installed or its compiled `.ex5` is missing next to it:
-/// MT5 would start without the advisor, which reports nothing and looks like a bridge
-/// that cannot connect.
+/// Refuses when that copy or the compiled `.ex5` beside it is missing: an older copy
+/// elsewhere below `Experts` is not the one the install wrote, and MT5 would start
+/// without the advisor, which reports nothing and looks like a bridge that cannot
+/// connect.
 pub(super) fn expert_startup_path(mql5: &Path) -> Result<String, RestartError> {
-    let Some(installed) = existing_copy(mql5, Mql5File::ExpertAdvisor) else {
+    let Some(installed) = default_path(mql5, Mql5File::ExpertAdvisor) else {
         return Err(RestartError::ExpertNotInstalled);
     };
-    if !installed.with_extension(COMPILED_EXTENSION).is_file() {
+    if !installed.is_file() || !installed.with_extension(COMPILED_EXTENSION).is_file() {
         return Err(RestartError::ExpertNotInstalled);
     }
     let experts = mql5.join(EXPERTS_FOLDER);

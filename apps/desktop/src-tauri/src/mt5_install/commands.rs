@@ -63,7 +63,9 @@ pub(crate) struct DataFolderView {
     /// Host path of the folder, which the install command accepts back verbatim.
     pub mql5_path: String,
     pub layout: ReportedLayout,
-    /// Whether the bridge advisor's source is already installed below this folder.
+    /// Whether a copy of the bridge advisor's source already exists anywhere below
+    /// this folder: an older copy counts too, so a first launch does not force the
+    /// guide's install step.
     pub expert_advisor_installed: bool,
 }
 

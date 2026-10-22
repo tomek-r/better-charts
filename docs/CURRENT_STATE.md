@@ -44,16 +44,16 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   Wine) and Linux (Wine prefixes `~/.mt5` and `~/.wine`), lists the `MQL5` data
   folders of each installation (portable and standard layouts), and "Install to
   MT5" copies `BetterChartsTickHistoryReader.mq5` into `Indicators` and
-  `BetterChartsBridge.mq5` into `Experts/Advisors` (an older copy of either file
-  anywhere else below `Experts`, with its `.ex5` and `.log`, is removed) and
-  compiles both with MetaEditor, reporting per file; the UTF-16LE log decides, and
-  an indicator with errors stops the run before the EA. The guide's manual steps
-  remain the fallback when no installation is found.
+  `BetterChartsBridge.mq5` into `Experts/Advisors`, leaves older copies elsewhere
+  below `MQL5` untouched, and compiles both with MetaEditor, reporting per file;
+  the UTF-16LE log decides, and an indicator with errors stops the run before the
+  EA. The guide's manual steps remain the fallback when no installation is found.
 - The install offers two buttons, "Install to MT5" and "Install and restart MT5".
   A press installs and compiles both files; the restart button then closes MT5 and
-  reopens it with the EA attached, but only once every file compiled with 0 errors
-  and 0 warnings, so a run that needs fixing stops at its per-file rows. A clean run
-  shows no message at all. The restart writes a temporary UTF-16LE
+  reopens it with the EA attached (the `Experts/Advisors` copy the install wrote,
+  never an older copy left elsewhere), but only once every file compiled with 0
+  errors and 0 warnings, so a run that needs fixing stops at its per-file rows. A
+  clean run shows no message at all. The restart writes a temporary UTF-16LE
   `config/BetterChartsStartup.ini` below the install folder under Wine and below the
   MT5 data folder on native Windows (passed as an absolute `/config:` path; no
   symbol, so MT5 opens its own default chart) and a preset with the bridge token,

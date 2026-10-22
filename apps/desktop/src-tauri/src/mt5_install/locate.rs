@@ -458,24 +458,18 @@ fn matching_files(folder: &Path, file_name: &str) -> Vec<PathBuf> {
     matches
 }
 
-/// Every copy of `file` below the data folder's `MQL5` folder, shallowest first.
+/// Existing copy of `file` below the data folder's `MQL5` folder, if there is one:
+/// the shallowest copy, because [`matching_files`] reports breadth first.
 ///
-/// MT5 keeps a source wherever the user put it — an advisor may sit in the
-/// `Experts` root or in a folder below it, such as the `Experts/Advisors` the
-/// install writes to — so the whole subtree of the file's own MT5 folder is
-/// searched. Only the shipped file name is reported, so no other expert advisor
-/// or indicator can ever be touched.
-pub fn every_copy(mql5: &Path, file: Mql5File) -> Vec<PathBuf> {
-    let Some((folder, file_name)) = install_location(file) else {
-        return Vec::new();
-    };
-    matching_files(&mql5.join(folder), file_name)
-}
-
-/// Existing copy of `file` below the data folder's `MQL5` folder, if there is
-/// one: the shallowest copy, which is the one MT5 lists first.
+/// An older install may have left a copy anywhere below the file's own MT5 folder,
+/// in the `Experts` root or in a folder such as the `Experts/Advisors` the install
+/// writes to, so the whole subtree is searched. Only the shipped file name is
+/// reported, so no other expert advisor or indicator can ever be matched.
 pub fn existing_copy(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
-    every_copy(mql5, file).into_iter().next()
+    let (folder, file_name) = install_location(file)?;
+    matching_files(&mql5.join(folder), file_name)
+        .into_iter()
+        .next()
 }
 
 /// Folder below `MQL5` the install writes `file` to: the advisor's own folder
