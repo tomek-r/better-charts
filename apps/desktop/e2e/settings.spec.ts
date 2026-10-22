@@ -1,5 +1,4 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { mt5Installation, PORTABLE_MQL5_PATH } from './helpers/setupGuide';
 import { gotoWithStub, stubInvocations, type StubInternals } from './helpers/tauriStub';
 import type { AppSettingsData } from '../src/features/settings/settingsTypes';
 
@@ -426,15 +425,8 @@ test('notification reduced motion skips animation and removes immediately on dis
   await expect(notice).toHaveCount(0);
 });
 
-test('first launch opens connection setup, validates and saves all settings', async ({ page }) => {
-  // A bridge still connecting keeps the guide from finishing the setup while this test walks App settings.
-  await gotoWithStub(page, {
-    responses: { get_app_settings: firstLaunch, get_bridge_status: { state: 'connecting' } },
-  });
-  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
-  await expect(guide).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(guide).toBeHidden();
+test('first launch App settings welcomes, validates and saves all settings', async ({ page }) => {
+  await gotoWithStub(page, { responses: { get_app_settings: firstLaunch } });
   await page.getByRole('button', { name: 'App settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await expect(dialog).toBeVisible();
@@ -490,29 +482,18 @@ test('first launch opens connection setup, validates and saves all settings', as
   expect(await page.evaluate(() => Object.values(localStorage).join(' '))).not.toContain('private-demo-token');
 });
 
-/** A stub listing for a machine whose MT5 data folder holds no bridge EA source yet. */
-const installationsWithoutExpertAdvisor = () => [
-  mt5Installation({
-    dataFolders: [{ mql5Path: PORTABLE_MQL5_PATH, layout: 'portable', expertAdvisorInstalled: false }],
-  }),
-];
-
-test('first launch opens only the setup guide, even with the EA installed', async ({ page }) => {
-  await gotoWithStub(page, { responses: { get_app_settings: firstLaunch } });
-  await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
-});
-
-test('a later launch without the EA opens neither dialog', async ({ page }) => {
-  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
+test('first launch opens no dialog; the setup screen offers the guide', async ({ page }) => {
   await gotoWithStub(page, {
     responses: {
-      get_app_settings: { ...firstLaunch, firstLaunch: false },
-      list_mt5_installations: installationsWithoutExpertAdvisor(),
+      get_app_settings: firstLaunch,
+      get_bridge_status: { state: 'connecting' },
+      get_market_snapshot: { complete: false, candles: [] },
     },
   });
-  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
-  await expect(guide).toBeHidden();
+  const setupScreen = page.getByRole('region', { name: 'MetaTrader 5 setup' });
+  await expect(setupScreen.getByRole('button', { name: 'Open setup guide' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'App settings' })).toHaveCount(0);
 });
 
 test('gear opens layout, traps focus, ignores chart shortcuts and cancel keeps settings', async ({ page }) => {

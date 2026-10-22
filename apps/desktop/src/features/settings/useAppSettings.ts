@@ -40,7 +40,8 @@ export type AppSettingsStore = DomainStore<AppSettingsState>;
 
 /**
  * First launch: the app has just generated the bridge token, so an EA already attached in MT5
- * cannot know it. The guide therefore opens alone; its install hands the EA the new token.
+ * cannot know it. No dialog opens by itself; the setup screen's guide, once the user opens it,
+ * hands the EA the new token.
  */
 export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean) {
   const settingsLoadGeneration = useRef(0);
@@ -80,10 +81,6 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
       store.setField('restartRequired', next.restartRequired);
       if (next.configurationError) {
         store.setField('isOpen', true);
-        return;
-      }
-      if (next.firstLaunch) {
-        store.setField('setupGuideOpen', true);
       }
     });
     return () => {
