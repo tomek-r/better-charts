@@ -484,23 +484,40 @@ async fn streamed_multi_day_profile_reaches_ui_without_truncation_or_session_res
             limits.max_frame_bytes as usize,
         )
         .unwrap();
+        let emitted_before = harness.events.events().len();
+        let reports_page = |event: &str, payload: &serde_json::Value| {
+            event == "tick-profile-progress" && payload["completedPages"] == page_index + 1
+        };
         client.stream.write_all(&frame).await.unwrap();
-        assert!(
-            wait_until(Duration::from_secs(3), || harness
-                .events
-                .events()
-                .iter()
-                .any(|(event, payload)| {
-                    event == "tick-profile-progress" && payload["completedPages"] == page_index + 1
-                }))
-            .await
+        // The bridge's own heartbeat deadline ends a stalled session, so a slow page fails only
+        // when the product itself would drop it.
+        let (event, payload) = tokio::time::timeout(
+            HANG_GUARD,
+            harness.events.first_from(emitted_before, |event, payload| {
+                reports_page(event, payload) || reports_session_end(event, payload)
+            }),
+        )
+        .await
+        .unwrap_or_else(|_| panic!("the bridge task hung on page {}", page_index + 1));
+        assert_eq!(
+            event,
+            "tick-profile-progress",
+            "the session ended before page {} was reported: {payload}",
+            page_index + 1
         );
     }
-    assert!(
-        wait_until(Duration::from_secs(3), || harness
-            .events
-            .has_event("tick-profile"))
-        .await
+    // The session stayed connected through every page, so no session end precedes the profile.
+    let (event, payload) = tokio::time::timeout(
+        HANG_GUARD,
+        harness.events.first_from(0, |event, payload| {
+            event == "tick-profile" || reports_session_end(event, payload)
+        }),
+    )
+    .await
+    .unwrap_or_else(|_| panic!("the bridge task hung before the profile arrived"));
+    assert_eq!(
+        event, "tick-profile",
+        "the session ended before the profile arrived: {payload}"
     );
     let (_, profile) = harness
         .events
