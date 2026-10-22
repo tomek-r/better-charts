@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { useBridgeChartState, useBridgeConnection } from '../bridge/BridgeSessionProvider';
 import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
 import type { BridgeStatus } from '../../shared/bridge/types';
 import { LoadingMessage } from '../../shared/ui/LoadingMessage';
 import { useAppSettingsView } from './AppSettingsProvider';
+import { preloadSetupGuide } from './setup-guide-modal/LazySetupGuideModal';
 import { SetupGuideStep } from './useAppSettings';
 
 interface SetupNotice {
@@ -37,13 +39,18 @@ export function BridgeSetupScreen() {
   const { status, tauriAvailable } = useBridgeConnection();
   const { hasCandles } = useBridgeChartState();
   const { setupCompleted, openSetupGuide } = useAppSettingsView();
+  const setupIncomplete = !tauriAvailable || (!hasCandles && status.state !== 'connected');
   // A device that finished the setup keeps the chart: the header status is the only
   // reminder left, and only while the bridge is away.
-  if (setupCompleted) {
-    return null;
-  }
-  const setupIncomplete = !tauriAvailable || (!hasCandles && status.state !== 'connected');
-  if (!setupIncomplete) {
+  const screenShown = !setupCompleted && setupIncomplete;
+  // The guide is where this screen leads, so its chunk loads while the screen shows:
+  // "Open setup guide" then opens it without waiting for the code.
+  useEffect(() => {
+    if (screenShown) {
+      preloadSetupGuide();
+    }
+  }, [screenShown]);
+  if (!screenShown) {
     return null;
   }
   const notice = setupNotice(status);

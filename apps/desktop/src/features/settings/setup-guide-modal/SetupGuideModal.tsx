@@ -7,6 +7,8 @@ import { ConnectStep } from './steps/ConnectStep';
 import { FindMt5Step } from './steps/FindMt5Step';
 import { InstallStep } from './steps/InstallStep';
 
+import './setup-guide-modal.css';
+
 /** The three steps in order, named the way the indicator and their headings name them. */
 const GUIDE_STEPS: { step: SetupGuideStep; name: string }[] = [
   { step: SetupGuideStep.Find, name: 'Find MetaTrader 5' },

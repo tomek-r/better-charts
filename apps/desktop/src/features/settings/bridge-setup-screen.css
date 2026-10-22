@@ -72,6 +72,17 @@
   }
 }
 
+/* The guide's own styles arrive with its lazy chunk, so the scrim the fallback wears while that chunk
+   loads is defined here, in the main bundle that painted the press. */
+.setup-guide-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  background: var(--color-scrim);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bridge-setup-screen,
   .setup-complete-screen {

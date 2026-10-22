@@ -92,29 +92,71 @@ export function currentGuideStep(guide: Locator): Locator {
   return guide.locator('.setup-guide-progress li[aria-current="step"]');
 }
 
-/** Opens App settings and the setup guide nested inside it, returning the guide dialog. */
-export async function openSetupGuide(page: Page): Promise<Locator> {
+/** React reveals the lazily loaded guide after a short timer, which a paused page clock only fires when advanced. */
+export const LAZY_GUIDE_REVEAL_MS = 500;
+
+/** Runs a paused page clock far enough for React to reveal the lazily loaded guide dialog. */
+export async function revealLazyGuide(page: Page): Promise<void> {
+  await page.clock.runFor(LAZY_GUIDE_REVEAL_MS);
+}
+
+/** Clicks App settings and the guide trigger inside it, handing back the guide dialog to assert. */
+async function clickGuideOpeners(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'App settings', exact: true }).click();
   await page.getByRole('button', { name: 'How to set up the bridge connection' }).click();
-  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
+  return page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
+}
+
+/** Asserts the guide dialog reached the screen and returns it. */
+async function expectGuideShown(guide: Locator): Promise<Locator> {
   await expect(guide).toBeVisible();
   return guide;
 }
 
-/** Opens the guide and moves on to its Install step, returning the guide dialog. */
-export async function openInstallStep(page: Page): Promise<Locator> {
-  const guide = await openSetupGuide(page);
+/** Moves the open guide on to its Install step and returns the guide dialog. */
+async function showInstallStep(guide: Locator): Promise<Locator> {
   await guide.getByRole('button', { name: 'Next' }).click();
   await expect(guide.getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
   return guide;
 }
 
-/** Opens the guide and moves on to its Connect step, returning the guide dialog. */
-export async function openConnectStep(page: Page): Promise<Locator> {
-  const guide = await openInstallStep(page);
+/** Moves the open guide on to its Connect step and returns the guide dialog. */
+async function showConnectStep(guide: Locator): Promise<Locator> {
   await guide.getByRole('button', { name: 'Install only' }).click();
   await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
   return guide;
+}
+
+/** Opens App settings and the setup guide nested inside it, returning the guide dialog. */
+export async function openSetupGuide(page: Page): Promise<Locator> {
+  return expectGuideShown(await clickGuideOpeners(page));
+}
+
+/** Opens the guide under a paused page clock, running the clock so React reveals its lazy dialog. */
+export async function openSetupGuideUnderPausedClock(page: Page): Promise<Locator> {
+  const guide = await clickGuideOpeners(page);
+  await revealLazyGuide(page);
+  return expectGuideShown(guide);
+}
+
+/** Opens the guide and moves on to its Install step, returning the guide dialog. */
+export async function openInstallStep(page: Page): Promise<Locator> {
+  return showInstallStep(await openSetupGuide(page));
+}
+
+/** Opens the guide under a paused page clock and moves on to its Install step. */
+async function openInstallStepUnderPausedClock(page: Page): Promise<Locator> {
+  return showInstallStep(await openSetupGuideUnderPausedClock(page));
+}
+
+/** Opens the guide and moves on to its Connect step, returning the guide dialog. */
+export async function openConnectStep(page: Page): Promise<Locator> {
+  return showConnectStep(await openInstallStep(page));
+}
+
+/** Opens the guide under a paused page clock and moves on to its Connect step. */
+export async function openConnectStepUnderPausedClock(page: Page): Promise<Locator> {
+  return showConnectStep(await openInstallStepUnderPausedClock(page));
 }
 
 /** The options the guide's native file picker opened with. */

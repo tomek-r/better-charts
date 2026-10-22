@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { currentGuideStep, openConnectStep } from './helpers/setupGuide';
+import { currentGuideStep, openConnectStep, openConnectStepUnderPausedClock } from './helpers/setupGuide';
 import { gotoWithStub, pausePageClockAhead, pushBridgeStatus } from './helpers/tauriStub';
 
 /** A bridge that keeps waiting for its first EA for the whole test. */
@@ -35,7 +35,7 @@ test('the connect step names what to do after 20 s without an EA', async ({ page
   await pausePageClockAhead(page);
   await gotoWithStub(page, { responses: CONNECTING_BRIDGE });
   await page.clock.runFor(100);
-  const guide = await openConnectStep(page);
+  const guide = await openConnectStepUnderPausedClock(page);
   const hint = guide.getByText(NO_CONNECTION_HINT);
 
   await expect(hint).toHaveCount(0);

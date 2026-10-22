@@ -1,12 +1,13 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { BridgeStatus } from '../src/shared/bridge/types';
 import {
   SETUP_COMPLETED_KEY,
   cleanInstallReport,
   currentGuideStep,
   markSetupCompleted,
-  openInstallStep,
+  openConnectStepUnderPausedClock,
   openSetupGuide,
+  revealLazyGuide,
 } from './helpers/setupGuide';
 import { gotoWithStub, pausePageClockAhead, pushBridgeStatus } from './helpers/tauriStub';
 
@@ -54,6 +55,24 @@ const setupGuide = (page: Page) => page.getByRole('dialog', { name: 'Set up the 
 const setupComplete = (page: Page) => page.getByRole('dialog', { name: 'Setup complete' });
 const headerStatus = (page: Page, label: string) =>
   page.getByRole('button', { name: `MetaTrader 5 connection: ${label}` });
+
+/** Loads the app as a completed setup and runs the header's delay, returning the status it now shows. */
+async function revealHeaderStatus(
+  page: Page,
+  label: string,
+  responses: Record<string, unknown> = WAITING_FOR_BRIDGE,
+): Promise<Locator> {
+  await pausePageClockAhead(page);
+  await markSetupCompleted(page);
+  await gotoWithStub(page, { responses });
+
+  await expect(setupScreen(page)).toHaveCount(0);
+  const status = headerStatus(page, label);
+  await expect(status).toHaveCount(0);
+  await page.clock.runFor(HEADER_STATUS_REVEAL_MS);
+  await expect(status).toHaveText(label);
+  return status;
+}
 
 /** Pushes the connected status and checks the guide and App settings give way to the finished screen. */
 async function expectSetupCompleteAfterConnect(page: Page): Promise<void> {
@@ -156,9 +175,7 @@ test('Happy trading remembers the setup on the device, so a reload keeps the set
   await gotoWithStub(page, {
     responses: { ...CONNECTING_WITH_CANDLES, install_to_mt5: cleanInstallReport('updated') },
   });
-  const guide = await openInstallStep(page);
-  await guide.getByRole('button', { name: 'Install only' }).click();
-  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+  await openConnectStepUnderPausedClock(page);
 
   await pushBridgeStatus(page, CONNECTED_STATUS);
   const complete = setupComplete(page);
@@ -178,21 +195,15 @@ test('Happy trading remembers the setup on the device, so a reload keeps the set
   await expect(status).toBeVisible();
 
   await status.click();
+  await revealLazyGuide(page);
   await expect(setupGuide(page).getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
 });
 
 test('a completed setup shows the header status instead of the setup screen', async ({ page }) => {
-  await pausePageClockAhead(page);
-  await markSetupCompleted(page);
-  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
-
-  await expect(setupScreen(page)).toHaveCount(0);
-  const status = headerStatus(page, 'MT5 not connected');
-  await expect(status).toHaveCount(0);
-  await page.clock.runFor(HEADER_STATUS_REVEAL_MS);
-  await expect(status).toHaveText('MT5 not connected');
+  const status = await revealHeaderStatus(page, 'MT5 not connected');
 
   await status.click();
+  await revealLazyGuide(page);
 
   const guide = setupGuide(page);
   await expect(guide).toBeVisible();
@@ -200,21 +211,28 @@ test('a completed setup shows the header status instead of the setup screen', as
   await expect(currentGuideStep(guide)).toHaveText('Connect');
 });
 
+test('the header status shows the loader while the guide loads', async ({ page }) => {
+  const status = await revealHeaderStatus(page, 'MT5 not connected');
+
+  await status.click();
+  const loading = page.getByRole('status', { name: 'Loading setup guide' });
+  await expect(loading).toBeVisible();
+  await expect(loading.locator('canvas.loader')).toBeVisible();
+
+  await revealLazyGuide(page);
+  await expect(setupGuide(page)).toBeVisible();
+  await expect(loading).toHaveCount(0);
+});
+
 for (const { label, step, status: bridgeStatus } of HEADER_STATUSES) {
   test(`the header status names ${label} and opens the guide on ${step}`, async ({ page }) => {
-    await pausePageClockAhead(page);
-    await markSetupCompleted(page);
-    await gotoWithStub(page, {
-      responses: { get_bridge_status: bridgeStatus, get_market_snapshot: { complete: false, candles: [] } },
+    const status = await revealHeaderStatus(page, label, {
+      get_bridge_status: bridgeStatus,
+      get_market_snapshot: { complete: false, candles: [] },
     });
 
-    await expect(setupScreen(page)).toHaveCount(0);
-    const status = headerStatus(page, label);
-    await expect(status).toHaveCount(0);
-    await page.clock.runFor(HEADER_STATUS_REVEAL_MS);
-    await expect(status).toHaveText(label);
-
     await status.click();
+    await revealLazyGuide(page);
 
     await expect(setupGuide(page).getByRole('heading', { name: step, exact: true })).toBeVisible();
   });

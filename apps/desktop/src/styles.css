@@ -17,7 +17,6 @@
 @import './features/order-ticket/order-ticket.css';
 @import './features/settings/settings.css';
 @import './features/settings/bridge-setup-screen.css';
-@import './features/settings/setup-guide-modal/setup-guide-modal.css';
 @import './shared/ui/notification.css';
 @import './shared/ui/loading-message.css';
 @import './shared/ui/modal-dialog.css';

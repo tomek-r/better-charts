@@ -3,7 +3,7 @@ import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../shared/ui/ModalDialog';
 import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { SetupGuideModal } from './setup-guide-modal/SetupGuideModal';
+import { LazySetupGuideModal } from './setup-guide-modal/LazySetupGuideModal';
 import type { AppSettingsData, DetectedSettingsField } from './settingsTypes';
 import { FRAME_BYTES } from '../../shared/bridge/limits';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';
@@ -166,7 +166,9 @@ export function AppSettingsDialog({
         </>
       }
       overlay={
-        guideOpen && <SetupGuideModal onClose={onCloseGuide} onFinished={onGuideFinished} finishing={guideFinishing} />
+        guideOpen && (
+          <LazySetupGuideModal onClose={onCloseGuide} onFinished={onGuideFinished} finishing={guideFinishing} />
+        )
       }
     >
       <nav className="settings-nav" aria-label="Settings categories">
