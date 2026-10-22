@@ -105,6 +105,9 @@ async function expectSetupCompleteAfterConnect(page: Page, entrance: SetupComple
   // "Happy trading" fades the screen out before it leaves the workspace.
   await expect(complete).toHaveClass(/is-leaving/);
   await expect(complete).toHaveCSS('animation-name', 'settings-fade-out');
+  // The exit mirrors the entrance: the button and the mark leave before the blur.
+  await expect(happyTrading).toHaveCSS('animation-name', 'setup-complete-button-out');
+  await expect(complete.locator('.setup-complete-icon')).toHaveCSS('animation-name', 'setup-complete-icon-out');
   await expect(complete).toBeHidden();
 }
 

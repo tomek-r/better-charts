@@ -24,9 +24,18 @@
   animation: none;
 }
 
-/* "Happy trading" fades the screen out instead of dropping it. */
+/* "Happy trading" leaves in the reverse order the screen arrived: the button sinks first, then the
+   mark shrinks away, and only then does the blur lift off the chart. */
+.setup-complete-screen.is-leaving .modal-dialog-button {
+  animation: setup-complete-button-out 280ms ease-in both;
+}
+
+.setup-complete-screen.is-leaving .setup-complete-icon {
+  animation: setup-complete-icon-out 420ms ease-in 160ms both;
+}
+
 .setup-complete-screen.is-leaving {
-  animation: settings-fade-out 600ms ease-in forwards;
+  animation: settings-fade-out 600ms ease-in-out 420ms both;
 }
 
 .bridge-setup-screen-content {
@@ -82,6 +91,20 @@
   }
 }
 
+@keyframes setup-complete-icon-out {
+  to {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes setup-complete-button-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bridge-setup-screen,
   .setup-complete-screen,
@@ -90,7 +113,9 @@
   }
 
   .setup-complete-icon,
-  .setup-complete-content .modal-dialog-button {
+  .setup-complete-content .modal-dialog-button,
+  .setup-complete-screen.is-leaving .setup-complete-icon,
+  .setup-complete-screen.is-leaving .modal-dialog-button {
     animation: none;
   }
 }
