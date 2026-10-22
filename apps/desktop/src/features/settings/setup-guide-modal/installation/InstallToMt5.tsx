@@ -86,8 +86,7 @@ export function InstallToMt5() {
             </button>
           </div>
           <p className="setup-guide-install-note">
-            Install and restart MT5 closes MT5 and reopens it with the EA attached. If the EA is attached to a chart,
-            MT5 reloads it and the bridge reconnects. Install is refused while an order is being sent.
+            Install and restart MT5 reopens MT5 with the EA attached. Not available while an order is being sent.
           </p>
           {error !== undefined && (
             <p className="setup-guide-install-error" role="alert">

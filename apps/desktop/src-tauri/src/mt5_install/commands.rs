@@ -25,7 +25,7 @@ use tauri::{AppHandle, Manager};
 use super::compile::{compile_installed, CompileResult, ProcessRunner};
 use super::discover::{discover_this_machine, InstallationSource, Mt5Installation};
 use super::install::{install_bundled_sources, BundledSources, InstallOutcome, InstalledFile};
-use super::locate::{locate_data_folders, DataFolder, Layout, Mql5File};
+use super::locate::{existing_copy, locate_data_folders, DataFolder, Layout, Mql5File};
 use super::restart::{
     new_session_live, poll_count, remove_startup_files, remove_startup_files_in,
     restart_with_expert, RestartPolicy, RestartRequest, StartupFiles, SystemTerminal,
@@ -63,6 +63,8 @@ pub(crate) struct DataFolderView {
     /// Host path of the folder, which the install command accepts back verbatim.
     pub mql5_path: String,
     pub layout: ReportedLayout,
+    /// Whether the bridge advisor's source is already installed below this folder.
+    pub expert_advisor_installed: bool,
 }
 
 /// Where MT5 keeps a data folder, as the form asks the user to choose.
@@ -185,6 +187,7 @@ fn data_folder_view(folder: &DataFolder) -> DataFolderView {
     DataFolderView {
         mql5_path: host_path_text(&folder.mql5),
         layout: folder.layout.into(),
+        expert_advisor_installed: existing_copy(&folder.mql5, Mql5File::ExpertAdvisor).is_some(),
     }
 }
 

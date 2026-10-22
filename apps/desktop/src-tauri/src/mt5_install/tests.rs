@@ -1316,10 +1316,12 @@ fn the_list_shows_each_installation_with_the_data_folders_the_locator_found() {
                 {
                     "mql5Path": metaquotes_mql5().display().to_string(),
                     "layout": "portable",
+                    "expertAdvisorInstalled": false,
                 },
                 {
                     "mql5Path": standard_root.join("MQL5").display().to_string(),
                     "layout": "standard",
+                    "expertAdvisorInstalled": false,
                 },
             ],
         },
@@ -1331,6 +1333,33 @@ fn the_list_shows_each_installation_with_the_data_folders_the_locator_found() {
         },
     ]);
     assert_eq!(views, expected);
+}
+
+#[test]
+fn the_list_says_which_data_folder_already_holds_the_advisor() {
+    let fixture = TempFolder::new("list-advisor-installed");
+    let portable_mql5 = fixture.folder("MQL5");
+    let experts = fixture.folder("MQL5/Experts");
+    fs::write(experts.join(EXPERT_ADVISOR_FILE), BUNDLED_ADVISOR_SOURCE)
+        .expect("the advisor copy is writable");
+    let standard_root = join_relative(fixture.path(), TEST_TERMINALS_ROOT).join(DATA_FOLDER_ID);
+    create_folder(&standard_root.join("MQL5"));
+    let installations = vec![located_installation(
+        discovered_windows_installation(TERMINAL_EXE),
+        vec![
+            expected_portable_folder(&portable_mql5),
+            expected_standard_folder(&standard_root),
+        ],
+    )];
+
+    let views =
+        serde_json::to_value(installation_views(&installations)).expect("the list serializes");
+
+    // The guide opens its setup instructions on first launch when no data folder
+    // holds the advisor yet, so the list has to say which ones do.
+    let folders = &views[0]["dataFolders"];
+    assert_eq!(folders[0]["expertAdvisorInstalled"].as_bool(), Some(true));
+    assert_eq!(folders[1]["expertAdvisorInstalled"].as_bool(), Some(false));
 }
 
 #[test]

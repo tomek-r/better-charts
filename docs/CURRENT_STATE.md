@@ -61,6 +61,9 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   the bridge connects, after 120 s, or at the next app start. It never enables Algo
   Trading, and is refused while an order is queued or in flight, without a token, or
   before the EA is installed.
+- On first launch, App settings opens, and the setup guide opens on top of it when
+  no listed data folder holds `BetterChartsBridge.mq5` yet (including when MT5 is
+  not found); a failed listing leaves only App settings open.
 - An outdated EA or tick reader sets `componentOutdated` on the bridge status; the
   error notice offers "Update in MT5", which opens the setup guide. Detected
   installation paths fill the App settings fields the user left unset (terminal

@@ -448,7 +448,13 @@ export async function installTauriStub(
           terminalPath: 'C:\\Program Files\\MetaTrader 5\\terminal64.exe',
           label: 'MetaTrader 5',
           configured: false,
-          dataFolders: [{ mql5Path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5', layout: 'portable' }],
+          dataFolders: [
+            {
+              mql5Path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5',
+              layout: 'portable',
+              expertAdvisorInstalled: true,
+            },
+          ],
         },
       ],
       install_to_mt5: {
