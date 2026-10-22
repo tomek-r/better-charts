@@ -490,10 +490,9 @@ test('gear opens layout, traps focus, ignores chart shortcuts and cancel keeps s
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Close settings' })).toBeFocused();
-  await expect.poll(async () => Math.round((await dialog.boundingBox())?.height ?? 0)).toBe(860);
+  await expect.poll(async () => (await dialog.boundingBox())?.height).toBe(860);
   const initialBox = await dialog.boundingBox();
   expect(initialBox).not.toBeNull();
-  expect(initialBox?.height).toBe(860);
   await page.setViewportSize({ width: 1280, height: 800 });
   expect((await dialog.boundingBox())?.height).toBe(776);
   await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeInViewport();
