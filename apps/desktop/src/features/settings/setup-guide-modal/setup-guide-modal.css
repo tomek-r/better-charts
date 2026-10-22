@@ -166,6 +166,11 @@
   color: var(--color-muted-strong);
 }
 
+/* The folder path gets its own line, so a long path never splits the label. */
+.setup-guide-install-path {
+  display: block;
+}
+
 .setup-guide-install-error {
   color: var(--color-danger-text);
 }

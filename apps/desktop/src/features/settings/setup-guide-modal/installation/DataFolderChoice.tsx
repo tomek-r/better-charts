@@ -8,7 +8,11 @@ const LAYOUT_NAMES: Record<InstallTarget['layout'], string> = {
 
 /** The folder the installation lives in, so the user can tell two installations apart by where they sit. */
 function InstallationFolder({ target }: { target: InstallTarget }) {
-  return <p className="setup-guide-install-target">MetaTrader 5 folder: {installationFolder(target.terminalPath)}</p>;
+  return (
+    <p className="setup-guide-install-target">
+      MetaTrader 5 folder: <span className="setup-guide-install-path">{installationFolder(target.terminalPath)}</span>
+    </p>
+  );
 }
 
 /** Where the install writes, named by the folder the chosen installation lives in. */
