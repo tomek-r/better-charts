@@ -1,4 +1,4 @@
-import { targetKey, type InstallTarget } from './installTargets';
+import { installationFolder, targetKey, type InstallTarget } from './installTargets';
 
 /** The two MQL5 folder layouts named the way a user knows them, never by path. */
 const LAYOUT_NAMES: Record<InstallTarget['layout'], string> = {
@@ -6,7 +6,16 @@ const LAYOUT_NAMES: Record<InstallTarget['layout'], string> = {
   standard: 'user data folder',
 };
 
-/** The data folder the install writes into: plain text for one, a select when there is a choice. */
+/** The folder the installation lives in, so the user can tell two installations apart by where they sit. */
+function InstallationFolder({ target }: { target: InstallTarget }) {
+  return (
+    <p className="setup-guide-install-target">
+      MetaTrader 5 folder: <code>{installationFolder(target.terminalPath)}</code>
+    </p>
+  );
+}
+
+/** Where the install writes, named by the folder the chosen installation lives in. */
 export function DataFolderChoice({
   targets,
   selected,
@@ -19,18 +28,21 @@ export function DataFolderChoice({
   onChoose: (key: string) => void;
 }) {
   if (targets.length === 1) {
-    return <p className="setup-guide-install-target">Installs into {selected.label}.</p>;
+    return <InstallationFolder target={selected} />;
   }
   return (
-    <label className="setup-guide-install-field">
-      MetaTrader 5 data folder
-      <select value={targetKey(selected)} disabled={disabled} onChange={(event) => onChoose(event.target.value)}>
-        {targets.map((target) => (
-          <option key={targetKey(target)} value={targetKey(target)}>
-            {target.label} — {LAYOUT_NAMES[target.layout]}
-          </option>
-        ))}
-      </select>
-    </label>
+    <>
+      <label className="setup-guide-install-field">
+        MetaTrader 5 data folder
+        <select value={targetKey(selected)} disabled={disabled} onChange={(event) => onChoose(event.target.value)}>
+          {targets.map((target) => (
+            <option key={targetKey(target)} value={targetKey(target)}>
+              {target.label} — {LAYOUT_NAMES[target.layout]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <InstallationFolder target={selected} />
+    </>
   );
 }

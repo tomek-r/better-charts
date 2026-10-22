@@ -20,6 +20,15 @@ export function targetKey(target: InstallTarget): string {
   return `${target.terminalPath}\n${target.mql5Path}`;
 }
 
+/** Where the installation lives: the folder holding `terminal64.exe`. */
+export function installationFolder(terminalPath: string): string {
+  const lastSeparator = Math.max(terminalPath.lastIndexOf('\\'), terminalPath.lastIndexOf('/'));
+  if (lastSeparator === -1) {
+    return terminalPath;
+  }
+  return terminalPath.slice(0, lastSeparator);
+}
+
 /** The target the folder select currently names, or the first one the backend listed. */
 export function chooseTarget(targets: InstallTarget[], selectedKey: string | undefined): InstallTarget | undefined {
   return targets.find((target) => targetKey(target) === selectedKey) ?? targets[0];

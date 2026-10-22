@@ -17,6 +17,10 @@ type SetupGuideSave = { resource: string; destination: string };
 const PICKED_TERMINAL = 'D:\\Trading\\MetaTrader 5\\terminal64.exe';
 const PICKED_INSTALLATION = mt5Installation({ terminalPath: PICKED_TERMINAL, label: 'MT5 Trading' });
 
+/** The install note names the folder an installation lives in, so two installations read apart. */
+const DETECTED_FOLDER_NOTE = 'MetaTrader 5 folder: C:\\Program Files\\MetaTrader 5';
+const PICKED_FOLDER_NOTE = 'MetaTrader 5 folder: D:\\Trading\\MetaTrader 5';
+
 const MT5_NOT_FOUND_NOTE = 'MetaTrader 5 was not found. Use Choose folder… or the manual steps.';
 
 test('the guide opens on Find MetaTrader 5 and walks to Install and back', async ({ page }) => {
@@ -25,10 +29,20 @@ test('the guide opens on Find MetaTrader 5 and walks to Install and back', async
   const steps = guideSteps(guide);
 
   await expect(steps).toHaveText(['Find MetaTrader 5', 'Install', 'Connect']);
+  const stepNumberContent = await steps.evaluateAll((stepItems) =>
+    stepItems.map((stepItem) => getComputedStyle(stepItem, '::before').content),
+  );
+  expect(stepNumberContent).toHaveLength(3);
+  for (const content of stepNumberContent) {
+    expect(content).toContain('counter(setup-guide-step)');
+  }
   await expect(currentGuideStep(guide)).toHaveText('Find MetaTrader 5');
-  await expect(guide.getByRole('heading', { name: 'Find MetaTrader 5' })).toBeVisible();
-  // The detected installation is named in words, never by its path.
-  await expect(guide.locator('.setup-guide-install-target')).toHaveText('Installs into MetaTrader 5.');
+  // The step name lives in the indicator only: its heading stays for assistive tech, hidden on screen.
+  const stepTitle = guide.getByRole('heading', { name: 'Find MetaTrader 5' });
+  await expect(stepTitle).toBeVisible();
+  await expect(stepTitle).toHaveCSS('position', 'absolute');
+  // The detected installation is shown by the folder it lives in.
+  await expect(guide.locator('.setup-guide-install-target')).toHaveText(DETECTED_FOLDER_NOTE);
   await expect(guide.getByRole('button', { name: 'Next' })).toBeEnabled();
 
   await guide.getByRole('button', { name: 'Next' }).click();
@@ -89,7 +103,7 @@ test('Choose folder points the guide at a terminal outside the detected folders'
   await scriptPickedTerminal(page, PICKED_TERMINAL);
   await guide.getByRole('button', { name: 'Choose folder…' }).click();
 
-  await expect(guide.locator('.setup-guide-install-target')).toHaveText('Installs into MT5 Trading.');
+  await expect(guide.locator('.setup-guide-install-target')).toHaveText(PICKED_FOLDER_NOTE);
   await expect(guide.getByRole('button', { name: 'Next' })).toBeEnabled();
   expect(await mt5Choices(page)).toEqual([PICKED_TERMINAL]);
   expect(await pickerOptions(page)).toEqual({
@@ -109,7 +123,7 @@ test('a refused pick shows its reason inline', async ({ page }) => {
   await guide.getByRole('button', { name: 'Choose folder…' }).click();
 
   await expect(guide.getByRole('alert')).toHaveText(refusal);
-  await expect(guide.locator('.setup-guide-install-target')).toHaveText('Installs into MetaTrader 5.');
+  await expect(guide.locator('.setup-guide-install-target')).toHaveText(DETECTED_FOLDER_NOTE);
 });
 
 test('a cancelled pick changes nothing', async ({ page }) => {
@@ -120,7 +134,7 @@ test('a cancelled pick changes nothing', async ({ page }) => {
   await guide.getByRole('button', { name: 'Choose folder…' }).click();
 
   await expect.poll(() => pickerOptions(page)).toBeDefined();
-  await expect(guide.locator('.setup-guide-install-target')).toHaveText('Installs into MetaTrader 5.');
+  await expect(guide.locator('.setup-guide-install-target')).toHaveText(DETECTED_FOLDER_NOTE);
   await expect(guide.getByRole('button', { name: 'Next' })).toBeEnabled();
   await expect(guide.getByRole('alert')).toHaveCount(0);
   expect(await mt5Choices(page)).toEqual([]);
