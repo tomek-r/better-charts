@@ -35,6 +35,9 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          # A failed run still saves its build, so one failure does not cost the next run a full compile.
+          cache-on-failure: true
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
