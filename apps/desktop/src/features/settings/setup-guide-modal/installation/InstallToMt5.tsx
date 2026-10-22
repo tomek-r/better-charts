@@ -1,3 +1,4 @@
+import { useAppSettingsView } from '../../AppSettingsProvider';
 import { DataFolderChoice } from './DataFolderChoice';
 import { InstallResults } from './InstallResults';
 import { INSTALLING_TEXT, MT5_NOT_FOUND_TEXT, RESTARTING_TEXT } from './installText';
@@ -26,6 +27,7 @@ function restartButtonText(pressed: InstallButton | undefined, restarting: boole
  * a report with something to fix are the only outcomes worth words.
  */
 export function InstallToMt5() {
+  const { completeSetup } = useAppSettingsView();
   const {
     shellAvailable,
     installations,
@@ -40,7 +42,7 @@ export function InstallToMt5() {
     chooseDataFolder,
     install,
     installAndRestart,
-  } = useInstallToMt5();
+  } = useInstallToMt5(completeSetup);
 
   if (!shellAvailable) {
     return null;

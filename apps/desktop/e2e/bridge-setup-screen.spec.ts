@@ -32,6 +32,7 @@ async function expectSetupCompleteAfterConnect(page: Page): Promise<void> {
   await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
   const complete = setupComplete(page);
   await expect(complete).toBeVisible();
+  await expect(complete.locator('.setup-complete-icon')).toHaveCSS('animation-name', 'setup-complete-icon-in');
   const happyTrading = complete.getByRole('button', { name: 'Happy trading' });
   await expect(happyTrading).toBeFocused();
   await happyTrading.click();
@@ -84,4 +85,17 @@ test('a guide opened on an already connected bridge stays open', async ({ page }
   await pushBridgeStatus(page, CONNECTED_STATUS);
   await expect(setupGuide(page)).toBeVisible();
   await expect(setupComplete(page)).toHaveCount(0);
+});
+
+test('reduced motion shows the finished screen without its entrance animation', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
+  await setupScreen(page).getByRole('button', { name: 'Open setup guide' }).click();
+  await expect(setupGuide(page)).toBeVisible();
+
+  await pushBridgeStatus(page, CONNECTED_STATUS);
+  const complete = setupComplete(page);
+  await expect(complete).toBeVisible();
+  await expect(complete.locator('.setup-complete-icon')).toHaveCSS('animation-name', 'none');
+  await expect(complete.getByRole('button', { name: 'Happy trading' })).toHaveCSS('animation-name', 'none');
 });

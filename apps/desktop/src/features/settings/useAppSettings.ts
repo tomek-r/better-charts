@@ -141,6 +141,15 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   const dismissRestartNotice = useCallback(() => store.setField('restartNoticeDismissed', true), [store]);
   const showSetupComplete = useCallback(() => store.setField('setupCompleteShown', true), [store]);
   const dismissSetupComplete = useCallback(() => store.setField('setupCompleteShown', false), [store]);
+  // The guide is done: it never shares the window with the finished screen, so it closes first and
+  // takes App settings with it when that dialog sits beneath (its exit animation still plays).
+  const completeSetup = useCallback(() => {
+    closeSetupGuide();
+    if (store.getState().isOpen) {
+      close();
+    }
+    showSetupComplete();
+  }, [close, closeSetupGuide, showSetupComplete, store]);
   const dismissConfigurationNotice = useCallback(
     () => store.setField('dismissedConfigurationError', store.getState().settings?.configurationError ?? undefined),
     [store],
@@ -169,5 +178,6 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     dismissConfigurationNotice,
     showSetupComplete,
     dismissSetupComplete,
+    completeSetup,
   };
 }

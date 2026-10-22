@@ -106,19 +106,37 @@ test('two data folders ask which one to install into and send its path', async (
   await expect(install.locator('.setup-guide-install-file')).toHaveCount(0);
 });
 
-test('Install and restart MT5 installs, then reopens the same target with nothing else shown', async ({ page }) => {
+test('Install and restart MT5 installs, reopens the same target, and finishes the setup', async ({ page }) => {
   await gotoWithStub(page, { responses: { install_to_mt5: cleanInstallReport('installed') } });
   const guide = await openSetupGuide(page);
   const install = guide.locator('.setup-guide-install');
 
   await install.getByRole('button', { name: INSTALL_AND_RESTART_BUTTON }).click();
 
-  // The restart names the folder the install wrote into, and a clean run adds no words.
+  // The restart names the folder the install wrote into, and its success needs nothing else
+  // from the user: the guide gives way to the finished screen while the bridge is still away.
   expect(await mt5InstallRequests(page)).toEqual([PORTABLE_TARGET]);
   expect(await mt5RestartRequests(page)).toEqual([PORTABLE_TARGET]);
-  await expect(install.getByRole('button')).toHaveText([INSTALL_BUTTON, INSTALL_AND_RESTART_BUTTON]);
-  await expect(install.locator('.setup-guide-install-file')).toHaveCount(0);
-  await expect(install.locator('.setup-guide-install-error')).toHaveCount(0);
+  await expect(guide).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Setup complete' })).toBeVisible();
+});
+
+test('a plain Install to MT5 leaves the guide open with no finished screen', async ({ page }) => {
+  await gotoWithStub(page, { responses: { install_to_mt5: cleanInstallReport('installed') } });
+  const guide = await openSetupGuide(page);
+  const install = guide.locator('.setup-guide-install');
+  const buttons = install.locator('.setup-guide-install-run');
+
+  await buttons.first().click();
+
+  await expect.poll(async () => mt5InstallRequests(page)).toHaveLength(1);
+  // The run is over once the buttons are back to their idle labels and enabled.
+  await expect(buttons.first()).toBeEnabled();
+  await expect(buttons).toHaveText([INSTALL_BUTTON, INSTALL_AND_RESTART_BUTTON]);
+  expect(await mt5RestartRequests(page)).toEqual([]);
+  await expect(guide).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Setup complete' })).toHaveCount(0);
 });
 
 test('a compile with a warning is not clean, so the restart button stops at the rows', async ({ page }) => {
@@ -207,7 +225,7 @@ test('both buttons and the folder select wait out the install and the restart', 
   expect(await mt5RestartRequests(page)).toEqual([
     { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: STANDARD_MQL5_PATH },
   ]);
-  await expect(buttons.last()).toHaveText(INSTALL_AND_RESTART_BUTTON);
-  await expect(buttons.first()).toBeEnabled();
-  await expect(folder).toBeEnabled();
+  // A successful restart ends the section's work: the guide closes onto the finished screen.
+  await expect(guide).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Setup complete' })).toBeVisible();
 });

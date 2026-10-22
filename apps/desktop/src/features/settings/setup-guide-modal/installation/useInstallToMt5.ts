@@ -39,9 +39,10 @@ function targetArgs(target: InstallTarget): { terminalPath: string; mql5Path: st
 /**
  * The install section's state: the folders the backend listed, the last report and the
  * one in-flight call at a time. The list, install and restart commands are the section's
- * only ways to reach the backend.
+ * only ways to reach the backend. `onRestarted` runs once MT5 reopened with the EA attached,
+ * which is the moment the setup has nothing left to ask of the user.
  */
-export function useInstallToMt5(): InstallToMt5View {
+export function useInstallToMt5(onRestarted: () => void): InstallToMt5View {
   const shellAvailable = isTauri();
   const [installations, setInstallations] = useState<Mt5InstallationView[]>();
   const [selectedKey, setSelectedKey] = useState<string>();
@@ -87,6 +88,8 @@ export function useInstallToMt5(): InstallToMt5View {
    * One press installs both files; `restart` adds the restart the moment every file
    * compiled clean, and a report with something to fix ends the run there so the rows
    * can say what. A refusal leaves the terminal as it was, with only the error to show.
+   * Only the restart that actually reopened MT5 finishes the setup: a plain install may
+   * still need the EA attached, which the connect trigger of a reloaded EA covers.
    */
   async function runInstall(target: InstallTarget, restart: boolean): Promise<void> {
     if (run !== undefined) {
@@ -104,6 +107,7 @@ export function useInstallToMt5(): InstallToMt5View {
       }
       setRun({ button, restarting: true });
       await invoke<Mt5RestartReport>('restart_mt5_with_ea', targetArgs(target));
+      onRestarted();
     } catch (failure) {
       setError(errorText(failure));
     } finally {

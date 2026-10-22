@@ -5,12 +5,12 @@ import { useAppSettingsView } from './AppSettingsProvider';
 
 /**
  * The guide has nothing left to do once the bridge answers, so reaching "connected" while it is
- * open closes it (and App settings beneath it) onto the finished screen. Only a state change
+ * open finishes the setup exactly as a clean "Install and restart MT5" does. Only a state change
  * during the guide counts: a guide opened on an already connected bridge stays open.
  */
 export function useCompleteSetupOnConnect(): void {
   const { status } = useBridgeConnection();
-  const { setupGuideOpen, isOpen, closeSetupGuide, close, showSetupComplete } = useAppSettingsView();
+  const { setupGuideOpen, completeSetup } = useAppSettingsView();
   const stateWhileGuideOpen = useRef<BridgeState | undefined>(undefined);
 
   useEffect(() => {
@@ -21,11 +21,7 @@ export function useCompleteSetupOnConnect(): void {
     const previousState = stateWhileGuideOpen.current;
     stateWhileGuideOpen.current = status.state;
     if (previousState !== undefined && previousState !== 'connected' && status.state === 'connected') {
-      closeSetupGuide();
-      if (isOpen) {
-        close();
-      }
-      showSetupComplete();
+      completeSetup();
     }
-  }, [close, closeSetupGuide, isOpen, setupGuideOpen, showSetupComplete, status.state]);
+  }, [completeSetup, setupGuideOpen, status.state]);
 }

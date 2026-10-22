@@ -16,6 +16,7 @@ interface AppSettingsHandlers {
   saved: (settings: AppSettingsData) => void;
   showSetupComplete: () => void;
   dismissSetupComplete: () => void;
+  completeSetup: () => void;
 }
 
 export interface AppSettingsActions {
@@ -59,6 +60,7 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
       saved: settings.saved,
       showSetupComplete: settings.showSetupComplete,
       dismissSetupComplete: settings.dismissSetupComplete,
+      completeSetup: settings.completeSetup,
     }),
     [
       settings.close,
@@ -71,6 +73,7 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
       settings.saved,
       settings.showSetupComplete,
       settings.dismissSetupComplete,
+      settings.completeSetup,
     ],
   );
   const contextValue = useMemo(() => ({ store, actions }), [actions, store]);
