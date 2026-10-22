@@ -61,8 +61,8 @@
   line-height: 1;
 }
 
-/* One scroll region for the automatic install and the manual steps, so a long
-   result list never pushes the numbered steps out of reach on a short window. */
+/* One scroll region for the current step, so a long result list never pushes the
+   actions out of reach on a short window. */
 .setup-guide-body {
   flex: 1;
   min-height: 0;
@@ -77,8 +77,23 @@
   font-weight: 500;
 }
 
-.setup-guide-manual-title {
-  margin-top: 18px;
+/* ── Guide steps ─────────────────────────────────────────────────────── */
+
+/* The three steps share one row; spacing alone separates them, never a glyph. */
+.setup-guide-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0 0 14px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--color-border-dialog);
+  list-style: none;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.setup-guide-progress li[aria-current='step'] {
+  color: var(--color-accent);
 }
 
 .setup-guide-steps {
@@ -107,12 +122,11 @@
   overflow-wrap: anywhere;
 }
 
-/* ── Automatic install ───────────────────────────────────────────────── */
+/* ── Install steps ───────────────────────────────────────────────────── */
 
-.setup-guide-install {
+.setup-guide-step {
   min-width: 0;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--color-border-dialog);
+  padding-bottom: 4px;
 }
 
 /* Long Windows paths and compiler lines wrap instead of widening the panel. */
@@ -156,7 +170,7 @@
   font-size: 12px;
 }
 
-/* Both install actions share the row, at the same height whatever their label says. */
+/* The install presses and the way back share the row, at the same height whatever their label says. */
 .setup-guide-install-actions {
   display: flex;
   align-items: stretch;
@@ -188,6 +202,98 @@
 .setup-guide-install-field select:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+/* Secondary actions of the guide — the second install press, the way back, the folder picker and the
+   token copy — keep the row's height without the accent fill, so the primary action stays the one
+   the eye lands on. */
+.setup-guide-secondary {
+  padding: 9px 18px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  background: transparent;
+  color: var(--color-text-label);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+/* Pushed to the end of the actions row, so Back never sits between the two install presses. */
+.setup-guide-install-back {
+  margin-left: auto;
+}
+
+/* The folder picker stands under the detected installation, on a line of its own. */
+.setup-guide-choose-folder {
+  display: block;
+  margin-top: 12px;
+}
+
+.setup-guide-secondary:hover:not(:disabled) {
+  border-color: currentColor;
+  color: var(--color-text-secondary);
+}
+
+.setup-guide-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.setup-guide-secondary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.setup-guide-step-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* The manual route stays folded away, so the automatic install is what the step offers first. */
+.setup-guide-manual {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border-dialog);
+}
+
+.setup-guide-manual summary {
+  color: var(--color-text-label);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.setup-guide-manual[open] summary {
+  margin-bottom: 4px;
+  color: var(--color-text-secondary);
+}
+
+.setup-guide-token {
+  margin-top: 10px;
+}
+
+/* The connect step's checklist and its status-specific hint. */
+.setup-guide-checklist {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  color: var(--color-text-label);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.setup-guide-connect-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.setup-guide-connect-hint p {
+  margin: 0;
+  color: var(--color-warn-text);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .setup-guide-install-results {

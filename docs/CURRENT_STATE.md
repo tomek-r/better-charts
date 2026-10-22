@@ -39,25 +39,29 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   that takes no layout space, so a real or disconnected account shows no strip and
   neither kind moves the bar or the chart; reduced motion shows the first sentence
   once, static and centred.
-- Setup guide's automatic install (App settings -> "How to set up the bridge
-  connection"): finds MT5 on Windows, macOS (the official app with its bundled
-  Wine) and Linux (Wine prefixes `~/.mt5` and `~/.wine`), lists the `MQL5` data
-  folders of each installation (portable and standard layouts), and "Install to
-  MT5" copies `BetterChartsTickHistoryReader.mq5` into `Indicators` and
+- Setup guide: three steps. "Find MetaTrader 5" lists the installations and data
+  folders detection found (Windows, macOS's official app with its bundled Wine,
+  Linux prefixes `~/.mt5` and `~/.wine`) and offers "Choose folder…", a native
+  file picker for `terminal64.exe` that starts in the most likely MT5 folder and
+  turns the picked file into an installation listed, installed into and
+  restartable at once, without restarting Better Charts; its terminal path, Wine
+  prefix and Wine binary are saved for the next launch. When detection found
+  nothing, the step says so and points at "Choose folder…" or the manual steps.
+  "Install" copies `BetterChartsTickHistoryReader.mq5` into `Indicators` and
   `BetterChartsBridge.mq5` into `Experts/Advisors`, leaves older copies elsewhere
   below `MQL5` untouched, and compiles both with MetaEditor, reporting per file;
   the UTF-16LE log decides, and an indicator with errors stops the run before the
-  EA. The guide's manual steps remain the fallback when no installation is found.
-  An MT5 installed in a non-default folder is reached by picking its
-  `terminal64.exe` with the guide's native file picker: that installation is listed,
-  installed into and restartable at once, without restarting Better Charts, and its
-  terminal path, Wine prefix and Wine binary are saved for the next launch.
-- The install offers two buttons, "Install to MT5" and "Install and restart MT5".
-  A press installs and compiles both files; the restart button then closes MT5 and
+  EA. "Connect" waits for the EA with a short checklist, names what to do after
+  20 s without one, and points a token mismatch or an outdated component back at
+  the install. The manual steps stay folded away under "Install manually instead",
+  with the file download buttons and a "Copy token" button.
+- The install offers "Install and restart MT5" and "Install only". A press
+  installs and compiles both files; the restart button then closes MT5 and
   reopens it with the EA attached (the `Experts/Advisors` copy the install wrote,
   never an older copy left elsewhere), but only once every file compiled with 0
   errors and 0 warnings, so a run that needs fixing stops at its per-file rows. A
-  clean run shows no message at all. The restart writes a temporary UTF-16LE
+  clean run of either button moves the guide on to "Connect". The restart writes a
+  temporary UTF-16LE
   `config/BetterChartsStartup.ini` below the install folder under Wine and below the
   MT5 data folder on native Windows (passed as an absolute `/config:` path; no
   symbol, so MT5 opens its own default chart) and a preset with the bridge token,
@@ -67,28 +71,31 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   Trading, and is refused while an order is queued or in flight, without a token, or
   before the EA is installed.
 - While no chart can be drawn — the bridge is unreachable or still without candles —
-  a full-window blurred setup screen replaces the workspace: it names the missing
-  MetaTrader 5 connection, keeps the notifications and the dialogs above it, and
-  its "Open setup guide" button opens the guide on its own window, with no App
-  settings dialog beneath it (the "Update in MT5" notice opens the same standalone
-  guide). When "Install and restart MT5" finishes cleanly, or the bridge connects
-  while the guide is open, the guide closes (App settings too, when it sits
-  beneath) and a full-window blurred "setup complete" screen takes over: a check
-  mark and a "Happy trading" button enter with a short animation, and the button
-  drops the screen and shows the chart. A plain "Install to MT5" leaves the guide
-  open, since the EA may not be attached yet, and a guide opened on an already
-  connected bridge stays open. Once a plain install compiles every file clean, its
-  two buttons give way to one "All installed. Close" button, which finishes the
-  setup exactly like a clean "Install and restart MT5". The chart's connection dot appears only once a chart is rendered, and the
+  a full-window blurred setup screen replaces the workspace until the setup is
+  completed on this device: it names the missing MetaTrader 5 connection, keeps the
+  notifications and the dialogs above it, and its "Open setup guide" button opens the
+  guide at "Find MetaTrader 5". When the bridge connects while the guide is open, the
+  guide closes (App settings too, when it sits beneath) and a full-window blurred
+  "setup complete" screen takes over: a check mark and a "Happy trading" button enter
+  with a short animation, and the button drops the screen and shows the chart. "Happy
+  trading" also records the finished setup in localStorage
+  (`better-charts.setup-completed`), so the setup screen never returns on later
+  launches, connected or not. A compact header status then shows only while the bridge
+  is away, after it has been away for 3 s: "MT5 not connected", "MT5 error", "Token
+  mismatch" or "EA outdated", and pressing it opens the guide at "Install" for the two
+  refusals and at "Connect" otherwise. A guide opened on an already connected bridge
+  stays open. The chart's connection dot appears only once a chart is rendered, and the
   install section names the data folder in words ("Installs into MetaTrader 5." or
   a portable/user folder choice) instead of showing its path.
 - On first launch no dialog opens by itself: the setup screen stands in for the
-  chart and its "Open setup guide" button leads on. That launch generates a random
+  chart (until the setup is completed) and its "Open setup guide" button leads on.
+  That launch generates a random
   bridge token and saves it, so an EA already attached in MT5 cannot know it until
   the guide's install hands it over. The bridge, the environment exported at
   startup and the EA preset then share a token nobody had to invent.
 - An outdated EA or tick reader sets `componentOutdated` on the bridge status; the
-  error notice offers "Update in MT5", which opens the setup guide. A token
+  error notice offers "Update in MT5", which opens the setup guide at its Install
+  step. A token
   mismatch sets `tokenMismatch` instead: the setup screen says the token differs
   and points at the guide's install, and no error notice is shown for it. Detected
   installation paths fill the App settings fields the user left unset (terminal

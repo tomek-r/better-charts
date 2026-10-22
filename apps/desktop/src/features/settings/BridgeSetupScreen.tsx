@@ -1,7 +1,9 @@
 import { useBridgeChartState, useBridgeConnection } from '../bridge/BridgeSessionProvider';
+import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
 import type { BridgeStatus } from '../../shared/bridge/types';
 import { LoadingMessage } from '../../shared/ui/LoadingMessage';
-import { useAppSettingsActions } from './AppSettingsProvider';
+import { useAppSettingsView } from './AppSettingsProvider';
+import { SetupGuideStep } from './useAppSettings';
 
 interface SetupNotice {
   title: string;
@@ -20,7 +22,7 @@ const TOKEN_MISMATCH_NOTICE: SetupNotice = {
 
 /** A token refusal is fixed by the guide's install, which hands the EA the current token. */
 function setupNotice(status: BridgeStatus): SetupNotice {
-  if (status.state === 'protocol_error' && status.tokenMismatch === true) {
+  if (bridgeRefusal(status) === BridgeRefusal.TokenMismatch) {
     return TOKEN_MISMATCH_NOTICE;
   }
   return CONNECT_NOTICE;
@@ -34,7 +36,12 @@ function setupNotice(status: BridgeStatus): SetupNotice {
 export function BridgeSetupScreen() {
   const { status, tauriAvailable } = useBridgeConnection();
   const { hasCandles } = useBridgeChartState();
-  const { openSetupGuide } = useAppSettingsActions();
+  const { setupCompleted, openSetupGuide } = useAppSettingsView();
+  // A device that finished the setup keeps the chart: the header status is the only
+  // reminder left, and only while the bridge is away.
+  if (setupCompleted) {
+    return null;
+  }
   const setupIncomplete = !tauriAvailable || (!hasCandles && status.state !== 'connected');
   if (!setupIncomplete) {
     return null;
@@ -44,7 +51,11 @@ export function BridgeSetupScreen() {
     <div className="bridge-setup-screen" role="region" aria-label="MetaTrader 5 setup">
       <div className="bridge-setup-screen-content">
         <LoadingMessage title={notice.title} hint={notice.hint} />
-        <button type="button" className="modal-dialog-button primary" onClick={openSetupGuide}>
+        <button
+          type="button"
+          className="modal-dialog-button primary"
+          onClick={() => openSetupGuide(SetupGuideStep.Find)}
+        >
           Open setup guide
         </button>
       </div>

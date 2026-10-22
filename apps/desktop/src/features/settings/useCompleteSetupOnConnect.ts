@@ -5,8 +5,8 @@ import { useAppSettingsView } from './AppSettingsProvider';
 
 /**
  * The guide has nothing left to do once the bridge answers, so reaching "connected" while it is
- * open finishes the setup exactly as a clean "Install and restart MT5" does. Only a state change
- * during the guide counts: a guide opened on an already connected bridge stays open.
+ * open finishes the setup and shows the finished screen. Only a state change during the guide
+ * counts: a guide opened on an already connected bridge stays open.
  */
 export function useCompleteSetupOnConnect(): void {
   const { status } = useBridgeConnection();

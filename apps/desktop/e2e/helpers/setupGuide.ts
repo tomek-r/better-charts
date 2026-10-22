@@ -82,6 +82,16 @@ export async function mt5RestartRequests(page: Page): Promise<Mt5InstallRequest[
   return recordedTargets(page, '__mt5Restarts');
 }
 
+/** The guide's step indicator items, in order. */
+export function guideSteps(guide: Locator): Locator {
+  return guide.locator('.setup-guide-progress li');
+}
+
+/** The step the guide currently marks as the one on screen. */
+export function currentGuideStep(guide: Locator): Locator {
+  return guide.locator('.setup-guide-progress li[aria-current="step"]');
+}
+
 /** Opens App settings and the setup guide nested inside it, returning the guide dialog. */
 export async function openSetupGuide(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'App settings', exact: true }).click();
@@ -89,4 +99,55 @@ export async function openSetupGuide(page: Page): Promise<Locator> {
   const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
   await expect(guide).toBeVisible();
   return guide;
+}
+
+/** Opens the guide and moves on to its Install step, returning the guide dialog. */
+export async function openInstallStep(page: Page): Promise<Locator> {
+  const guide = await openSetupGuide(page);
+  await guide.getByRole('button', { name: 'Next' }).click();
+  await expect(guide.getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
+  return guide;
+}
+
+/** Opens the guide and moves on to its Connect step, returning the guide dialog. */
+export async function openConnectStep(page: Page): Promise<Locator> {
+  const guide = await openInstallStep(page);
+  await guide.getByRole('button', { name: 'Install only' }).click();
+  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+  return guide;
+}
+
+/** The options the guide's native file picker opened with. */
+export interface PickerOptions {
+  defaultPath?: string;
+  multiple?: boolean;
+  directory?: boolean;
+  filters?: { name: string; extensions: string[] }[];
+}
+
+/** Scripts the terminal `terminal64.exe` the native file picker returns; `null` is the user cancelling. */
+export async function scriptPickedTerminal(page: Page, path: string | null): Promise<void> {
+  await page.evaluate((picked) => {
+    (window as unknown as { __pickerPath?: string | null }).__pickerPath = picked;
+  }, path);
+}
+
+/** The options the native file picker was last opened with, or undefined when it never opened. */
+export async function pickerOptions(page: Page): Promise<PickerOptions | undefined> {
+  return page.evaluate(() => (window as unknown as { __pickerOptions?: PickerOptions }).__pickerOptions);
+}
+
+/** Every `terminal64.exe` path a `choose_mt5_installation` call named, oldest first. */
+export async function mt5Choices(page: Page): Promise<string[]> {
+  return page.evaluate(() => (window as unknown as { __mt5Choices?: string[] }).__mt5Choices ?? []);
+}
+
+/** The localStorage key the app stores a finished setup under. */
+export const SETUP_COMPLETED_KEY = 'better-charts.setup-completed';
+
+/** Marks the setup completed for this context, as "Happy trading" does, so later loads skip it. */
+export async function markSetupCompleted(page: Page): Promise<void> {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, 'true');
+  }, SETUP_COMPLETED_KEY);
 }

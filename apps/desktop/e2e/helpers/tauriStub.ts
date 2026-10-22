@@ -318,6 +318,22 @@ export async function installTauriStub(
     const primary = opts.recordedHistory?.[0];
     const primaryLast = primary?.candles.at(-1);
 
+    /** The one installation the stub machine reports, at the MetaQuotes default folder. */
+    const defaultInstallations = [
+      {
+        terminalPath: 'C:\\Program Files\\MetaTrader 5\\terminal64.exe',
+        label: 'MetaTrader 5',
+        configured: false,
+        dataFolders: [
+          {
+            mql5Path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5',
+            layout: 'portable',
+            expertAdvisorInstalled: true,
+          },
+        ],
+      },
+    ];
+
     const responses: Record<string, unknown> = {
       get_app_settings: {
         mt5BridgeSettings: {
@@ -440,23 +456,13 @@ export async function installTauriStub(
       cancel_tick_profile: null,
       start_mt5_backend: null,
       stop_mt5_backend: null,
-      // Setup guide: one portable installation on this machine, and a clean report
-      // for installing both bundled files. A test overrides either to script a
-      // machine with no MT5, several data folders, or a compile failure.
-      list_mt5_installations: [
-        {
-          terminalPath: 'C:\\Program Files\\MetaTrader 5\\terminal64.exe',
-          label: 'MetaTrader 5',
-          configured: false,
-          dataFolders: [
-            {
-              mql5Path: '/mt5/drive_c/Program Files/MetaTrader 5/MQL5',
-              layout: 'portable',
-              expertAdvisorInstalled: true,
-            },
-          ],
-        },
-      ],
+      // Setup guide: one portable installation on this machine, the folder its picker
+      // starts in, and a clean report for installing both bundled files. A test
+      // overrides any of them to script a machine with no MT5, a non-default folder,
+      // several data folders, or a compile failure.
+      list_mt5_installations: defaultInstallations,
+      choose_mt5_installation: defaultInstallations,
+      mt5_picker_start_folder: 'C:\\Program Files',
       install_to_mt5: {
         files: [
           {
@@ -762,6 +768,12 @@ export async function installTauriStub(
         const options = args.options as { defaultPath?: string } | undefined;
         return `/chosen/${options?.defaultPath ?? 'file.mq5'}`;
       }
+      // Native "Open" dialog: answers with the path a test scripted, records the
+      // options it opened with, and returns null (a cancel) when nothing was scripted.
+      if (cmd === 'plugin:dialog|open') {
+        w.__pickerOptions = args.options;
+        return w.__pickerPath ?? null;
+      }
       // The setup-guide save command: record the request for assertions.
       if (cmd === 'save_bundled_resource') {
         const saves = (w.__setupGuideSaves as Array<Record<string, unknown>> | undefined) ?? [];
@@ -782,6 +794,12 @@ export async function installTauriStub(
         const restarts = (w.__mt5Restarts as Array<Record<string, unknown>> | undefined) ?? [];
         restarts.push({ terminalPath: args.terminalPath, mql5Path: args.mql5Path });
         w.__mt5Restarts = restarts;
+      }
+      // The folder pick's chosen terminal, recorded for assertions.
+      if (cmd === 'choose_mt5_installation') {
+        const choices = (w.__mt5Choices as string[] | undefined) ?? [];
+        choices.push(String(args.path));
+        w.__mt5Choices = choices;
       }
       if (Object.prototype.hasOwnProperty.call(failures, cmd)) {
         throw new Error(failures[cmd]);
@@ -820,6 +838,9 @@ export async function installTauriStub(
     w.__setupGuideSaves = [];
     w.__mt5Installs = [];
     w.__mt5Restarts = [];
+    w.__mt5Choices = [];
+    w.__pickerPath = null;
+    w.__pickerOptions = undefined;
     w.__TAURI_INTERNALS__ = {
       invoke,
       transformCallback,

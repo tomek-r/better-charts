@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { DomainStore } from '../../shared/state/domainStore';
+import { readSetupCompleted, saveSetupCompleted } from './setupCompletion';
 import type { AppSettingsData } from './settingsTypes';
+
+/** The three steps of the setup guide, in the order it walks them. */
+export enum SetupGuideStep {
+  Find = 'find',
+  Install = 'install',
+  Connect = 'connect',
+}
 
 export interface AppSettingsState {
   settings: AppSettingsData | undefined;
@@ -10,10 +18,14 @@ export interface AppSettingsState {
   closing: boolean;
   /** The setup guide is open: over the settings dialog when that is open, over the window otherwise. */
   setupGuideOpen: boolean;
+  /** The step of the guide on screen; the other steps keep their own state while it is elsewhere. */
+  setupGuideStep: SetupGuideStep;
   /** The setup completed while the guide was open: it is playing its slow exit before it goes. */
   setupGuideFinishing: boolean;
   /** The bridge connected while the guide was open: the finished screen stands over the chart. */
   setupCompleteShown: boolean;
+  /** This device finished the setup, so the guide never opens on its own again. */
+  setupCompleted: boolean;
   loadError: string | undefined;
   restartRequired: boolean;
   restartNoticeDismissed: boolean;
@@ -27,8 +39,10 @@ export const initialAppSettingsState: AppSettingsState = {
   isOpen: false,
   closing: false,
   setupGuideOpen: false,
+  setupGuideStep: SetupGuideStep.Find,
   setupGuideFinishing: false,
   setupCompleteShown: false,
+  setupCompleted: readSetupCompleted(),
   loadError: undefined,
   restartRequired: false,
   restartNoticeDismissed: false,
@@ -99,7 +113,14 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   // The guide stands on its own window, so any surface can open it without App settings
   // beneath it (e.g. a connection error offering to reinstall the bundled MT5 files);
   // App settings renders it nested when that dialog is already open.
-  const openSetupGuide = useCallback(() => store.setField('setupGuideOpen', true), [store]);
+  const openSetupGuide = useCallback(
+    (step: SetupGuideStep = SetupGuideStep.Find) => {
+      store.setField('setupGuideStep', step);
+      store.setField('setupGuideOpen', true);
+    },
+    [store],
+  );
+  const showSetupGuideStep = useCallback((step: SetupGuideStep) => store.setField('setupGuideStep', step), [store]);
   const closeSetupGuide = useCallback(() => store.setField('setupGuideOpen', false), [store]);
   // The dialog keeps its focus trap mounted while the exit animation plays and
   // calls `exited` when it ends (AppSettingsDialog), which finishes the close.
@@ -115,7 +136,13 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   }, [store]);
   const dismissRestartNotice = useCallback(() => store.setField('restartNoticeDismissed', true), [store]);
   const showSetupComplete = useCallback(() => store.setField('setupCompleteShown', true), [store]);
-  const dismissSetupComplete = useCallback(() => store.setField('setupCompleteShown', false), [store]);
+  // "Happy trading" is the one place the setup counts as done: this device remembers it,
+  // so the setup screen and the guide stay away from then on, connected or not.
+  const dismissSetupComplete = useCallback(() => {
+    saveSetupCompleted();
+    store.setField('setupCompleted', true);
+    store.setField('setupCompleteShown', false);
+  }, [store]);
   // The guide has played its exit animation: it goes, and the finished screen takes the window.
   // The guide never shares the window with that screen, so it takes App settings with it when that
   // dialog sits beneath (its own exit animation still plays).
@@ -156,6 +183,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   return {
     open,
     openSetupGuide,
+    showSetupGuideStep,
     closeSetupGuide,
     close,
     exited,

@@ -1,41 +1,36 @@
-import { save } from '@tauri-apps/plugin-dialog';
-import { isTauri, invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { afterExitAnimation } from '../../../shared/ui/afterExitAnimation';
-import { DownloadIcon } from '../../../shared/ui/DownloadIcon';
-import { InstallToMt5 } from './installation/InstallToMt5';
+import { useAppSettingsView } from '../AppSettingsProvider';
+import { SetupGuideStep } from '../useAppSettings';
+import { useInstallToMt5 } from './installation/useInstallToMt5';
+import { ConnectStep } from './steps/ConnectStep';
+import { FindMt5Step } from './steps/FindMt5Step';
+import { InstallStep } from './steps/InstallStep';
 
-// The EA and tick-history reader already ship with the app as Tauri resources
-// (see tauri.conf.json). The guide downloads them to a folder the user picks:
-// the dialog plugin opens a native "Save As" dialog, then a command copies the
-// bundled file to the chosen path.
-const BUNDLED_RESOURCES = [
-  {
-    resourcePath: 'mql5/Experts/BetterChartsBridge.mq5',
-    fileName: 'BetterChartsBridge.mq5',
-    kind: 'Expert Advisor (EA)',
-  },
-  {
-    resourcePath: 'mql5/Indicators/BetterChartsTickHistoryReader.mq5',
-    fileName: 'BetterChartsTickHistoryReader.mq5',
-    kind: 'Tick-history indicator',
-  },
-] as const;
+/** The three steps in order, named the way the indicator and their headings name them. */
+const GUIDE_STEPS: { step: SetupGuideStep; name: string }[] = [
+  { step: SetupGuideStep.Find, name: 'Find MetaTrader 5' },
+  { step: SetupGuideStep.Install, name: 'Install' },
+  { step: SetupGuideStep.Connect, name: 'Connect' },
+];
 
-/** Open a native "Save As" dialog, then copy the bundled resource to the path. */
-async function downloadResource(resourcePath: string, fileName: string): Promise<void> {
-  const destination = await save({
-    defaultPath: fileName,
-    filters: [{ name: 'MQL5 source', extensions: ['mq5'] }],
-  });
-  if (destination) {
-    await invoke('save_bundled_resource', { resource: resourcePath, destination });
-  }
+/** Where the guide stands: the current step carries `aria-current`, the others only their name. */
+function StepIndicator({ current }: { current: SetupGuideStep }) {
+  return (
+    <ol className="setup-guide-progress" aria-label="Setup steps">
+      {GUIDE_STEPS.map(({ step, name }) => (
+        <li key={step} aria-current={step === current ? 'step' : undefined}>
+          {name}
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 /**
  * A simple overlay that sits on top of the open settings content, or over the whole window when
- * standalone. The automatic install comes first, with the manual steps below it as the fallback.
+ * standalone. It walks three steps — find MT5, install the EA, wait for the connection — and keeps
+ * the install state across them, so going back never repeats the discovery.
  */
 export function SetupGuideModal({
   onClose,
@@ -55,7 +50,11 @@ export function SetupGuideModal({
   const backdrop = useRef<HTMLDivElement>(null);
   const closingRef = useRef(false);
   const [closing, setClosing] = useState(false);
-  const shellAvailable = isTauri();
+  const { setupGuideStep, showSetupGuideStep } = useAppSettingsView();
+  const showFindStep = useCallback(() => showSetupGuideStep(SetupGuideStep.Find), [showSetupGuideStep]);
+  const showInstallStep = useCallback(() => showSetupGuideStep(SetupGuideStep.Install), [showSetupGuideStep]);
+  const finishInstall = useCallback(() => showSetupGuideStep(SetupGuideStep.Connect), [showSetupGuideStep]);
+  const install = useInstallToMt5(finishInstall);
   const playExit = useCallback((afterExit: () => void) => {
     if (closingRef.current) {
       return;
@@ -118,45 +117,12 @@ export function SetupGuideModal({
         </div>
 
         <div className="setup-guide-body">
-          <InstallToMt5 />
-          <h3 className="setup-guide-title setup-guide-manual-title">Or install manually</h3>
-          <ol className="setup-guide-steps">
-            <li>
-              Download the files below — a save dialog lets you choose the folder.
-              <div className="setup-guide-downloads">
-                {BUNDLED_RESOURCES.map((resource) => (
-                  <button
-                    key={resource.resourcePath}
-                    type="button"
-                    className="setup-guide-download"
-                    data-resource={resource.resourcePath}
-                    disabled={!shellAvailable}
-                    onClick={() => {
-                      void downloadResource(resource.resourcePath, resource.fileName);
-                    }}
-                  >
-                    <DownloadIcon />
-                    <span className="setup-guide-download-file">{resource.fileName}</span>
-                    <span className="setup-guide-download-kind">{resource.kind}</span>
-                  </button>
-                ))}
-              </div>
-            </li>
-            <li>
-              In MetaTrader 5, open <strong>MQL5</strong> in the Navigator tree, then <strong>Expert Advisors</strong>{' '}
-              (right-click &rarr; Show in Data Folder) and <strong>Indicators</strong>.
-            </li>
-            <li>
-              Copy <code>BetterChartsBridge.mq5</code> into the <code>{'Experts\\Advisors'}</code> folder and{' '}
-              <code>BetterChartsTickHistoryReader.mq5</code> into the <code>Indicators</code> folder.
-            </li>
-            <li>
-              Press <strong>F7</strong> in MetaEditor to compile both (aim for 0 errors) and attach the EA to any chart.
-            </li>
-            <li>
-              Back here, the connection switches to <strong>connected</strong> — the bridge is ready.
-            </li>
-          </ol>
+          <StepIndicator current={setupGuideStep} />
+          {setupGuideStep === SetupGuideStep.Find && <FindMt5Step view={install} onNext={showInstallStep} />}
+          {setupGuideStep === SetupGuideStep.Install && <InstallStep view={install} onBack={showFindStep} />}
+          {setupGuideStep === SetupGuideStep.Connect && (
+            <ConnectStep onBack={showInstallStep} onInstallAgain={showInstallStep} />
+          )}
         </div>
       </div>
     </div>

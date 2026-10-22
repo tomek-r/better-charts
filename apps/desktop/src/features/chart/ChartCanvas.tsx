@@ -1,6 +1,7 @@
 import { useBridgeChartState, useBridgeConnection } from '../bridge/BridgeSessionProvider';
 import { useChartResources } from './ChartWorkspaceProvider';
 import type { ReactNode } from 'react';
+import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
 import type { BridgeStatus } from '../../shared/bridge/types';
 import { useErrorNotification } from '../../shared/ui/ErrorNotifications';
 import { LoadingMessage } from '../../shared/ui/LoadingMessage';
@@ -9,10 +10,7 @@ import { HistoryWaitNotice } from './HistoryWaitNotice';
 /** A protocol error nothing else explains is the only thing worth a toast: the header notice covers an outdated
  * component and the setup screen below covers a token mismatch. */
 function protocolErrorToNotify(status: BridgeStatus): string | undefined {
-  if (status.state !== 'protocol_error') {
-    return undefined;
-  }
-  if (status.componentOutdated === true || status.tokenMismatch === true) {
+  if (bridgeRefusal(status) !== BridgeRefusal.Other) {
     return undefined;
   }
   return status.message;

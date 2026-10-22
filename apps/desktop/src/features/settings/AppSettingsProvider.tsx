@@ -3,13 +3,14 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { createDomainStore } from '../../shared/state/domainStore';
 import { useRequiredContext } from '../../shared/state/useRequiredContext';
-import { useAppSettings, initialAppSettingsState, type AppSettingsStore } from './useAppSettings';
+import { useAppSettings, initialAppSettingsState, type AppSettingsStore, type SetupGuideStep } from './useAppSettings';
 import type { AppSettingsData } from './settingsTypes';
 
 /** The handlers the settings dialog and header notices call; stable across state changes. */
 interface AppSettingsHandlers {
   dismissRestartNotice: () => void;
   dismissConfigurationNotice: () => void;
+  showSetupGuideStep: (step: SetupGuideStep) => void;
   closeSetupGuide: () => void;
   close: () => void;
   exited: () => void;
@@ -22,8 +23,8 @@ interface AppSettingsHandlers {
 
 export interface AppSettingsActions {
   openSettings: () => void;
-  /** Opens the setup guide on its own; inside the open settings dialog it sits on top of that. */
-  openSetupGuide: () => void;
+  /** Opens the setup guide on its own, at `step`; inside the open settings dialog it sits on top of that. */
+  openSetupGuide: (step?: SetupGuideStep) => void;
 }
 
 export interface AppSettingsViewState extends AppSettingsHandlers, AppSettingsActions {
@@ -32,8 +33,10 @@ export interface AppSettingsViewState extends AppSettingsHandlers, AppSettingsAc
   isOpen: boolean;
   closing: boolean;
   setupGuideOpen: boolean;
+  setupGuideStep: SetupGuideStep;
   setupGuideFinishing: boolean;
   setupCompleteShown: boolean;
+  setupCompleted: boolean;
   loadError: string | undefined;
   notificationRevision: number;
   restartNoticeVisible: boolean;
@@ -56,6 +59,7 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
       openSetupGuide: settings.openSetupGuide,
       dismissRestartNotice: settings.dismissRestartNotice,
       dismissConfigurationNotice: settings.dismissConfigurationNotice,
+      showSetupGuideStep: settings.showSetupGuideStep,
       closeSetupGuide: settings.closeSetupGuide,
       close: settings.close,
       exited: settings.exited,
@@ -73,6 +77,7 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
       settings.dismissRestartNotice,
       settings.open,
       settings.openSetupGuide,
+      settings.showSetupGuideStep,
       settings.saved,
       settings.showSetupComplete,
       settings.dismissSetupComplete,
@@ -98,8 +103,10 @@ export function useAppSettingsView(): AppSettingsViewState {
       isOpen: state.isOpen,
       closing: state.closing,
       setupGuideOpen: state.setupGuideOpen,
+      setupGuideStep: state.setupGuideStep,
       setupGuideFinishing: state.setupGuideFinishing,
       setupCompleteShown: state.setupCompleteShown,
+      setupCompleted: state.setupCompleted,
       loadError: state.loadError,
       notificationRevision: state.notificationRevision,
       restartNoticeVisible: state.restartRequired && !state.restartNoticeDismissed,
@@ -122,4 +129,16 @@ export function useAppSettingsActions(): AppSettingsActions {
     () => ({ openSettings: actions.openSettings, openSetupGuide: actions.openSetupGuide }),
     [actions.openSettings, actions.openSetupGuide],
   );
+}
+
+/**
+ * Whether this device finished the setup, as its own subscription: a settings change reaches
+ * only the components that ask for it, never the whole header.
+ */
+export function useSetupCompleted(): boolean {
+  const { store } = useRequiredContext(
+    AppSettingsContext,
+    'useSetupCompleted must be used within AppSettingsProvider.',
+  );
+  return useStore(store, (state) => state.setupCompleted);
 }

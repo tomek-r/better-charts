@@ -1,7 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { BridgeStatus } from '../src/shared/bridge/types';
-import { openSetupGuide } from './helpers/setupGuide';
-import { gotoWithStub, pushBridgeStatus } from './helpers/tauriStub';
+import {
+  SETUP_COMPLETED_KEY,
+  cleanInstallReport,
+  currentGuideStep,
+  markSetupCompleted,
+  openInstallStep,
+  openSetupGuide,
+} from './helpers/setupGuide';
+import { gotoWithStub, pausePageClockAhead, pushBridgeStatus } from './helpers/tauriStub';
 
 /** A bridge that has not connected yet and holds no candles, so the setup screen stands in for the chart. */
 const WAITING_FOR_BRIDGE = {
@@ -21,9 +28,32 @@ const CONNECTED_STATUS: BridgeStatus = {
   message: 'Bridge connected.',
 };
 
+/** The bridge version refusal, worded as the Rust handshake words it. */
+const OUTDATED_MESSAGE = 'App requires MT5 bridge version 1.012, but installed bridge version is 1.006.';
+
+/** How long the header waits before it offers the guide back, a little past its 3 s delay. */
+const HEADER_STATUS_REVEAL_MS = 3_100;
+
+/** Statuses the header names, and the guide step each one opens. */
+const HEADER_STATUSES: { label: string; step: string; status: BridgeStatus }[] = [
+  {
+    label: 'Token mismatch',
+    step: 'Install',
+    status: { state: 'protocol_error', message: 'authentication failed', tokenMismatch: true },
+  },
+  {
+    label: 'EA outdated',
+    step: 'Install',
+    status: { state: 'protocol_error', message: OUTDATED_MESSAGE, componentOutdated: true },
+  },
+  { label: 'MT5 error', step: 'Connect', status: { state: 'protocol_error', message: 'bridge bind failed' } },
+];
+
 const setupScreen = (page: Page) => page.getByRole('region', { name: 'MetaTrader 5 setup' });
 const setupGuide = (page: Page) => page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
 const setupComplete = (page: Page) => page.getByRole('dialog', { name: 'Setup complete' });
+const headerStatus = (page: Page, label: string) =>
+  page.getByRole('button', { name: `MetaTrader 5 connection: ${label}` });
 
 /** Pushes the connected status and checks the guide and App settings give way to the finished screen. */
 async function expectSetupCompleteAfterConnect(page: Page): Promise<void> {
@@ -51,6 +81,7 @@ test('an unconnected bridge covers the workspace and offers the guide alone', as
 
   await screen.getByRole('button', { name: 'Open setup guide' }).click();
   await expect(setupGuide(page)).toBeVisible();
+  await expect(setupGuide(page).getByRole('heading', { name: 'Find MetaTrader 5' })).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
 });
 
@@ -119,3 +150,72 @@ test('a token mismatch explains itself on the setup screen without an error toas
   await expect(screen.getByRole('button', { name: 'Open setup guide' })).toBeVisible();
   await expect(page.getByText('authentication failed')).toHaveCount(0);
 });
+
+test('Happy trading remembers the setup on the device, so a reload keeps the setup screen away', async ({ page }) => {
+  await pausePageClockAhead(page);
+  await gotoWithStub(page, {
+    responses: { ...CONNECTING_WITH_CANDLES, install_to_mt5: cleanInstallReport('updated') },
+  });
+  const guide = await openInstallStep(page);
+  await guide.getByRole('button', { name: 'Install only' }).click();
+  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+
+  await pushBridgeStatus(page, CONNECTED_STATUS);
+  const complete = setupComplete(page);
+  await expect(complete).toBeVisible();
+  await complete.getByRole('button', { name: 'Happy trading' }).click();
+  await expect(complete).toBeHidden();
+  expect(await page.evaluate((key) => localStorage.getItem(key), SETUP_COMPLETED_KEY)).toBe('true');
+
+  await page.reload();
+  // Wait for the reloaded window to stand before judging what is missing from it.
+  await expect(page.locator('main.dashboard')).toBeVisible();
+  await expect(page.locator('header.topbar')).toBeVisible();
+  await expect(setupScreen(page)).toHaveCount(0);
+  // The header waits out the start before it offers the guide back.
+  const status = headerStatus(page, 'MT5 not connected');
+  await page.clock.runFor(HEADER_STATUS_REVEAL_MS);
+  await expect(status).toBeVisible();
+
+  await status.click();
+  await expect(setupGuide(page).getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+});
+
+test('a completed setup shows the header status instead of the setup screen', async ({ page }) => {
+  await pausePageClockAhead(page);
+  await markSetupCompleted(page);
+  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
+
+  await expect(setupScreen(page)).toHaveCount(0);
+  const status = headerStatus(page, 'MT5 not connected');
+  await expect(status).toHaveCount(0);
+  await page.clock.runFor(HEADER_STATUS_REVEAL_MS);
+  await expect(status).toHaveText('MT5 not connected');
+
+  await status.click();
+
+  const guide = setupGuide(page);
+  await expect(guide).toBeVisible();
+  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+  await expect(currentGuideStep(guide)).toHaveText('Connect');
+});
+
+for (const { label, step, status: bridgeStatus } of HEADER_STATUSES) {
+  test(`the header status names ${label} and opens the guide on ${step}`, async ({ page }) => {
+    await pausePageClockAhead(page);
+    await markSetupCompleted(page);
+    await gotoWithStub(page, {
+      responses: { get_bridge_status: bridgeStatus, get_market_snapshot: { complete: false, candles: [] } },
+    });
+
+    await expect(setupScreen(page)).toHaveCount(0);
+    const status = headerStatus(page, label);
+    await expect(status).toHaveCount(0);
+    await page.clock.runFor(HEADER_STATUS_REVEAL_MS);
+    await expect(status).toHaveText(label);
+
+    await status.click();
+
+    await expect(setupGuide(page).getByRole('heading', { name: step, exact: true })).toBeVisible();
+  });
+}
