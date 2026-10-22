@@ -29,17 +29,46 @@ mod transfer_profile_tests;
 /// Records events the server would emit to the frontend.
 struct RecordingEvents {
     emitted: Mutex<Vec<(String, serde_json::Value)>>,
+    /// Wakes `first_from` waiters after each emit.
+    emitted_signal: tokio::sync::Notify,
 }
 
 impl RecordingEvents {
     fn new() -> Arc<Self> {
         Arc::new(Self {
             emitted: Mutex::new(Vec::new()),
+            emitted_signal: tokio::sync::Notify::new(),
         })
     }
 
     fn events(&self) -> Vec<(String, serde_json::Value)> {
         self.emitted.lock().expect("events mutex poisoned").clone()
+    }
+
+    /// The first event at or after index `from` that `accepts` takes, awaited
+    /// on emits rather than polled against a clock.
+    async fn first_from(
+        &self,
+        from: usize,
+        accepts: impl Fn(&str, &serde_json::Value) -> bool,
+    ) -> (String, serde_json::Value) {
+        loop {
+            // Register before scanning, so an emit between the scan and the await is not lost.
+            let emission = self.emitted_signal.notified();
+            tokio::pin!(emission);
+            emission.as_mut().enable();
+
+            if let Some(accepted) = self
+                .events()
+                .into_iter()
+                .skip(from)
+                .find(|(event, payload)| accepts(event.as_str(), payload))
+            {
+                return accepted;
+            }
+
+            emission.await;
+        }
     }
 
     fn has_event(&self, name: &str) -> bool {
@@ -60,7 +89,17 @@ impl BridgeEvents for RecordingEvents {
             .lock()
             .expect("events mutex poisoned")
             .push((event.to_owned(), payload.clone()));
+        self.emitted_signal.notify_waiters();
     }
+}
+
+/// A `bridge-status` that reports the session gone.
+fn reports_session_end(event: &str, payload: &serde_json::Value) -> bool {
+    event == "bridge-status"
+        && matches!(
+            payload["state"].as_str(),
+            Some("disconnected" | "protocol_error")
+        )
 }
 
 /// Minimal EA-side client over the framed protocol.
@@ -233,6 +272,10 @@ async fn complete_handshake_with_hello(client: &mut BridgeClient, hello: Envelop
         transfer_limits: payload.transfer_limits,
     }
 }
+
+/// Upper bound for event-driven waits. It only stops a wedged server task from
+/// hanging the run; pass/fail comes from the awaited event, never from it.
+const HANG_GUARD: Duration = Duration::from_secs(60);
 
 /// The bridge server runs in a spawned task on the single-threaded test
 /// runtime, so it only makes progress while the test awaits. Poll the
