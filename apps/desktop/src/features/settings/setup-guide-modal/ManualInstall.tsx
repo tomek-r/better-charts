@@ -99,7 +99,8 @@ export function ManualInstall() {
           Press <strong>F7</strong> in MetaEditor to compile both (aim for 0 errors) and attach the EA to any chart.
         </li>
         <li>
-          Give the EA this app's bridge token, either in its inputs or with the copy button below.
+          Attach the EA to a chart, open its <strong>Inputs</strong> tab and paste this app's bridge token into{' '}
+          <strong>InpBridgeToken</strong>.
           <div className="setup-guide-token">
             <button type="button" className="setup-guide-secondary" disabled={!token} onClick={() => void copyToken()}>
               {copied ? 'Token copied' : 'Copy token'}
