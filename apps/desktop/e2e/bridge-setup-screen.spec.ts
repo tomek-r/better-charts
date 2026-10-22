@@ -3,7 +3,6 @@ import type { BridgeStatus } from '../src/shared/bridge/types';
 import {
   SETUP_COMPLETED_KEY,
   cleanInstallReport,
-  currentGuideStep,
   markSetupCompleted,
   openConnectStepUnderPausedClock,
   openSetupGuide,
@@ -17,7 +16,7 @@ const WAITING_FOR_BRIDGE = {
   get_market_snapshot: { complete: false, candles: [] },
 };
 
-/** A bridge still connecting but already holding candles, so the header stays reachable. */
+/** A bridge still connecting but already holding candles, so the workspace draws its chart. */
 const CONNECTING_WITH_CANDLES = {
   get_bridge_status: { state: 'connecting' },
 };
@@ -29,9 +28,6 @@ const CONNECTED_STATUS: BridgeStatus = {
   message: 'Bridge connected.',
 };
 
-/** The bridge version refusal, worded as the Rust handshake words it. */
-const OUTDATED_MESSAGE = 'App requires MT5 bridge version 1.012, but installed bridge version is 1.006.';
-
 /** The token refusal the bridge reports when the EA holds a token the app does not know. */
 const TOKEN_MISMATCH_STATUS: BridgeStatus = {
   state: 'protocol_error',
@@ -39,47 +35,71 @@ const TOKEN_MISMATCH_STATUS: BridgeStatus = {
   tokenMismatch: true,
 };
 
-/** How long the header waits before it offers the guide back, a little past its 3 s delay. */
-const HEADER_STATUS_REVEAL_MS = 3_100;
+/** A protocol error the EA words itself, the one refusal no other notice explains. */
+const OTHER_REFUSAL_MESSAGE = 'Bridge bind failed';
+
+/** How long a drawn chart waits for its bridge before the not-connected notice shows, a little past its 3 s delay. */
+const NOT_CONNECTED_NOTICE_REVEAL_MS = 3_100;
 
 /** How long a completed setup waits behind the blurred screen, a little past its 15 s limit. */
 const WAITING_SCREEN_LIMIT_MS = 15_100;
 
-/** Statuses the header names, and the guide step each one opens. */
-const HEADER_STATUSES: { label: string; step: string; status: BridgeStatus }[] = [
-  { label: 'Token mismatch', step: 'Install', status: TOKEN_MISMATCH_STATUS },
+/** One problem of a completed setup: the notice it shows, its fix button and the guide step that button opens. */
+interface BridgeProblemNotice {
+  message: string;
+  action: string;
+  step: string;
+  status: BridgeStatus;
+}
+
+/** Every problem a completed setup reports bottom right, with the fix its notice offers. */
+const BRIDGE_PROBLEM_NOTICES: BridgeProblemNotice[] = [
   {
-    label: 'EA outdated',
-    step: 'Install',
-    status: { state: 'protocol_error', message: OUTDATED_MESSAGE, componentOutdated: true },
+    message: 'MetaTrader 5 is not connected.',
+    action: 'Open setup guide',
+    step: 'Connect',
+    status: { state: 'connecting' },
   },
-  { label: 'MT5 error', step: 'Connect', status: { state: 'protocol_error', message: 'bridge bind failed' } },
+  {
+    message: 'MetaTrader 5 uses a different bridge token.',
+    action: 'Install again',
+    step: 'Install',
+    status: TOKEN_MISMATCH_STATUS,
+  },
+  {
+    message: OTHER_REFUSAL_MESSAGE,
+    action: 'Open setup guide',
+    step: 'Connect',
+    status: { state: 'protocol_error', message: OTHER_REFUSAL_MESSAGE },
+  },
 ];
 
 const setupScreen = (page: Page) => page.getByRole('region', { name: 'MetaTrader 5 setup' });
 const waitingScreen = (page: Page) => page.getByRole('region', { name: 'Waiting for MetaTrader 5' });
 const setupGuide = (page: Page) => page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
 const setupComplete = (page: Page) => page.getByRole('dialog', { name: 'Setup complete' });
-const headerStatus = (page: Page, label: string) =>
-  page.getByRole('button', { name: `MetaTrader 5 connection: ${label}` });
 
-/** Loads the app as a completed setup whose chart is drawn and runs the header's delay, returning its status. */
-async function revealHeaderStatus(
-  page: Page,
-  label: string,
-  responses: Record<string, unknown> = CONNECTING_WITH_CANDLES,
-): Promise<Locator> {
+/** Loads a completed setup whose chart is drawn, with no blurred screen and no top bar status over it. */
+async function openCompletedSetupWithCandles(page: Page): Promise<void> {
   await pausePageClockAhead(page);
   await markSetupCompleted(page);
-  await gotoWithStub(page, { responses });
+  await gotoWithStub(page, { responses: CONNECTING_WITH_CANDLES });
 
   await expect(setupScreen(page)).toHaveCount(0);
   await expect(waitingScreen(page)).toHaveCount(0);
-  const status = headerStatus(page, label);
-  await expect(status).toHaveCount(0);
-  await page.clock.runFor(HEADER_STATUS_REVEAL_MS);
-  await expect(status).toHaveText(label);
-  return status;
+  // Bridge problems are notices at the bottom right, so the top bar carries no status button.
+  await expect(page.locator('.bridge-header-status')).toHaveCount(0);
+  // The chart is drawn, so the bridge's silence only becomes a notice once its delay has passed.
+  await expect(page.getByRole('alert')).toHaveCount(0);
+}
+
+/** The notice reporting `message`, once the clock passed the delay it holds its problem for. */
+async function expectBridgeNotice(page: Page, message: string): Promise<Locator> {
+  await page.clock.runFor(NOT_CONNECTED_NOTICE_REVEAL_MS);
+  const notice = page.getByRole('alert').filter({ hasText: message });
+  await expect(notice).toBeVisible();
+  await expect(notice.locator('span')).toHaveText(message);
+  return notice;
 }
 
 /** How the finished screen enters: over the setup screen's blur, or fading in over the chart. */
@@ -178,7 +198,7 @@ test('a completed setup waits for MetaTrader 5 behind the blurred screen', async
   await expect(screen).toHaveCSS('backdrop-filter', /blur/);
   // The launch shows it at once, so it has no fade-in to sit through.
   await expect(screen).toHaveCSS('animation-name', 'none');
-  // The setup is done, so the guide is no longer the way on: the header status is.
+  // The setup is done, so the guide is no longer the way on: the notices below the chart are.
   await expect(screen.getByRole('button', { name: 'Open setup guide' })).toHaveCount(0);
 });
 
@@ -189,7 +209,9 @@ test('the awaiting screen fades out when the data arrives', async ({ page }) => 
   await expect(screen).toHaveCount(0);
 });
 
-test('a completed setup that waits too long hands over to a notification', async ({ page }) => {
+test('a completed setup that waits too long hands over to a notice that opens the guide on Connect', async ({
+  page,
+}) => {
   await pausePageClockAhead(page);
   await markSetupCompleted(page);
   await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
@@ -197,19 +219,28 @@ test('a completed setup that waits too long hands over to a notification', async
 
   await page.clock.runFor(WAITING_SCREEN_LIMIT_MS);
   await expect(waitingScreen(page)).toHaveCount(0);
-  const alert = page.getByRole('alert').filter({ hasText: 'MetaTrader 5 is not sending data' });
-  await expect(alert).toBeVisible();
+  const notice = page.getByRole('alert').filter({ hasText: 'MetaTrader 5 is not sending data' });
+  await expect(notice).toBeVisible();
 
-  // The data arriving answers the problem, so the notification retires itself.
+  await notice.getByRole('button', { name: 'Open setup guide' }).click();
+  await revealLazyGuide(page);
+  await expect(setupGuide(page).getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+
+  // The data arriving answers the problem, so the notice retires itself.
   await pushBridgeStatus(page, CONNECTED_STATUS);
-  await expect(alert).toHaveCount(0);
+  await expect(notice).toHaveCount(0);
 });
 
-test('a completed setup with a token mismatch shows a notification instead of the screen', async ({ page }) => {
+test('a completed setup with a token mismatch offers the install notice instead of the screen', async ({ page }) => {
   const screen = await endAwaitingScreen(page, TOKEN_MISMATCH_STATUS);
 
   await expect(screen).toHaveCount(0);
-  await expect(page.getByRole('alert').filter({ hasText: 'MetaTrader 5 uses a different bridge token' })).toBeVisible();
+  const notice = page.getByRole('alert').filter({ hasText: 'MetaTrader 5 uses a different bridge token' });
+  await expect(notice.locator('span')).toHaveText('MetaTrader 5 uses a different bridge token.');
+
+  // Installing again is what hands the EA the token the app knows.
+  await notice.getByRole('button', { name: 'Install again' }).click();
+  await expect(setupGuide(page).getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
 });
 
 test('the standalone guide gives way to the setup complete screen once the bridge connects', async ({ page }) => {
@@ -305,33 +336,23 @@ test('Happy trading remembers the setup on the device, so a reload keeps the set
   await expect(page.locator('main.dashboard')).toBeVisible();
   await expect(page.locator('header.topbar')).toBeVisible();
   await expect(setupScreen(page)).toHaveCount(0);
-  // The header waits out the start before it offers the guide back.
-  const status = headerStatus(page, 'MT5 not connected');
-  await page.clock.runFor(HEADER_STATUS_REVEAL_MS);
-  await expect(status).toBeVisible();
+  // The reloaded device waits out its start before the notice offers the guide back.
+  const notice = await expectBridgeNotice(page, 'MetaTrader 5 is not connected.');
 
-  await status.click();
+  await notice.getByRole('button', { name: 'Open setup guide' }).click();
   await revealLazyGuide(page);
   await expect(setupGuide(page).getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
 });
 
-test('a completed setup with a chart shows the header status instead of a screen', async ({ page }) => {
-  const status = await revealHeaderStatus(page, 'MT5 not connected');
+for (const { message, action, step, status: problemStatus } of BRIDGE_PROBLEM_NOTICES) {
+  test(`a completed setup reports "${message}" in a notice whose ${action} button opens the guide on ${step}`, async ({
+    page,
+  }) => {
+    await openCompletedSetupWithCandles(page);
+    await pushBridgeStatus(page, problemStatus);
 
-  await status.click();
-  await revealLazyGuide(page);
-
-  const guide = setupGuide(page);
-  await expect(guide).toBeVisible();
-  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
-  await expect(currentGuideStep(guide)).toHaveText('Connect');
-});
-
-for (const { label, step, status: bridgeStatus } of HEADER_STATUSES) {
-  test(`the header status names ${label} and opens the guide on ${step}`, async ({ page }) => {
-    const status = await revealHeaderStatus(page, label, { get_bridge_status: bridgeStatus });
-
-    await status.click();
+    const notice = await expectBridgeNotice(page, message);
+    await notice.getByRole('button', { name: action }).click();
     await revealLazyGuide(page);
 
     await expect(setupGuide(page).getByRole('heading', { name: step, exact: true })).toBeVisible();

@@ -20,7 +20,7 @@ import {
   BridgeSessionProvider,
   useTauriAvailable,
 } from '../../src/features/bridge/BridgeSessionProvider';
-import { BridgeAwaitingScreen } from '../../src/features/bridge/BridgeAwaitingScreen';
+import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../../src/features/bridge/BridgeAwaitingScreen';
 import { BridgeScreen } from '../../src/features/settings/BridgeScreen';
 import { ChartWorkspaceProvider, useChartResources } from '../../src/features/chart/ChartWorkspaceProvider';
 import { ChartTitle } from '../../src/features/chart/ChartTitle';
@@ -474,6 +474,12 @@ function SettingsControls() {
   );
 }
 
+/** The awaiting screen as the app mounts it: its own measurement of the wait, so its renders are real. */
+function AwaitingScreenProbe() {
+  const { screenShown } = useAwaitingBridgeData();
+  return <BridgeAwaitingScreen screenShown={screenShown} />;
+}
+
 function HeaderProbes() {
   const tauriAvailable = useTauriAvailable();
   return (
@@ -492,7 +498,7 @@ function HeaderProbes() {
           <BridgeScreen />
         </Probe>
         <Probe id="bridge-awaiting">
-          <BridgeAwaitingScreen />
+          <AwaitingScreenProbe />
         </Probe>
       </div>
     </AppSettingsProvider>

@@ -24,7 +24,11 @@ export function BridgeComponentOutdatedNotice() {
   return (
     <Notification.Alert>
       <Notification.Message>{message}</Notification.Message>
-      <button type="button" className="notification-action" onClick={() => openSetupGuide(SetupGuideStep.Install)}>
+      <button
+        type="button"
+        className="primary-button notification-action"
+        onClick={() => openSetupGuide(SetupGuideStep.Install)}
+      >
         Update in MT5
       </button>
       <Notification.Dismiss label="Dismiss error notification" onDismiss={() => setDismissed(message)} />

@@ -12,6 +12,7 @@
 @import './features/trade-panel/trade-panel.css';
 @import './features/execution/execution.css';
 @import './shared/ui/action-button.css';
+@import './shared/ui/primary-button.css';
 @import './features/portfolio/portfolio.css';
 @import './features/partial-close/partial-close.css';
 @import './features/order-ticket/order-ticket.css';

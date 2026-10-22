@@ -54,37 +54,8 @@
 /* Top bar buttons never shrink: the account badge beside them absorbs any shortage. */
 .search-trigger,
 .panel-toggle,
-.settings-trigger,
-.bridge-header-status {
+.settings-trigger {
   flex-shrink: 0;
-}
-
-/* The connection status that replaces the full-window setup screen once setup is done: it appears
-   only while the bridge is away, so the header stays quiet on a connected app. */
-.bridge-header-status {
-  padding: 8px 10px;
-  border: 1px solid currentColor;
-  border-radius: var(--border-radius);
-  background: var(--color-panel);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.bridge-header-status[data-tone='warn'] {
-  color: var(--color-warn-text);
-}
-
-.bridge-header-status[data-tone='danger'] {
-  color: var(--color-danger-text);
-}
-
-.bridge-header-status:hover {
-  color: var(--color-text-secondary);
-}
-
-.bridge-header-status:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
 }
 
 .search-trigger {

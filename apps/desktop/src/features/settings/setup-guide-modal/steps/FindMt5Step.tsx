@@ -88,7 +88,12 @@ export function FindMt5Step({ view, onNext }: { view: InstallToMt5View; onNext: 
       )}
       {pick.error !== undefined && <GuideError message={pick.error} />}
       <div className="setup-guide-step-actions">
-        <button type="button" className="setup-guide-install-run" disabled={selected === undefined} onClick={onNext}>
+        <button
+          type="button"
+          className="primary-button setup-guide-install-run"
+          disabled={selected === undefined}
+          onClick={onNext}
+        >
           Next
         </button>
       </div>

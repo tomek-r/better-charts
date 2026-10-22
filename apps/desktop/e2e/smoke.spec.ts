@@ -64,7 +64,8 @@ test('chart host element is mounted in the chart frame', async ({ page }) => {
   const { pageErrors } = await gotoCollectingErrors(page);
   // Stable selector: App.tsx renders <div ref={chartHost} className="chart-host">.
   const chartHost = page.locator('.chart-host');
-  await expect(chartHost).toBeVisible();
+  // Without candles the empty chart is hidden, but it stays mounted.
+  await expect(chartHost).toBeAttached();
   await expect(chartHost).toHaveAttribute('aria-label', 'Market chart');
   expect(pageErrors).toEqual([]);
 });
@@ -100,6 +101,8 @@ test('shows the setup screen in place of the chart without the bridge', async ({
   await expect(setupScreen.locator('.loading-message canvas.loader')).toBeVisible();
   // Hit testing with text enabled detects canvases painted over the message.
   expect(await isTopmostAtCentre(heading)).toBe(true);
+  // Without candles the empty chart (axis borders, attribution logo) stays hidden behind the wait.
+  await expect(page.locator('.chart-host')).toHaveCSS('visibility', 'hidden');
   expect(pageErrors).toEqual([]);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });

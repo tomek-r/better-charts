@@ -37,7 +37,7 @@ export function InstallStep({ view, onBack }: { view: InstallToMt5View; onBack: 
       <div className="setup-guide-install-actions">
         <button
           type="button"
-          className="setup-guide-install-run"
+          className="primary-button setup-guide-install-run"
           disabled={installUnavailable}
           onClick={() => {
             if (selected !== undefined) {

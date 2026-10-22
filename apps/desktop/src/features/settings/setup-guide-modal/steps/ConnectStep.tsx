@@ -69,7 +69,7 @@ export function ConnectStep({ onBack, onInstallAgain }: { onBack: () => void; on
         <div className="setup-guide-connect-hint">
           <p role="status">{hint.message}</p>
           {hint.kind !== 'waiting' && (
-            <button type="button" className="setup-guide-install-run" onClick={onInstallAgain}>
+            <button type="button" className="primary-button setup-guide-install-run" onClick={onInstallAgain}>
               Install again
             </button>
           )}

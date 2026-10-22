@@ -7,8 +7,8 @@ import { useErrorNotification } from '../../shared/ui/ErrorNotifications';
 import { LoadingMessage } from '../../shared/ui/LoadingMessage';
 import { HistoryWaitNotice } from './HistoryWaitNotice';
 
-/** A protocol error nothing else explains is the only thing worth a toast: the header notice covers an outdated
- * component and the setup screen below covers a token mismatch. */
+/** A protocol error nothing else explains is the only thing worth a toast: the setup screen below covers a token
+ * mismatch, an outdated component has its own notice, and a completed setup adds its fix to this same toast. */
 function protocolErrorToNotify(status: BridgeStatus): string | undefined {
   if (bridgeRefusal(status) !== BridgeRefusal.Other) {
     return undefined;

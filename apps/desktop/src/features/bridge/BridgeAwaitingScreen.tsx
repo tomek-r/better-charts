@@ -1,22 +1,36 @@
 import { useEffect, useMemo, useRef, useState, type Ref, type RefObject } from 'react';
 import { useBridgeConnectionSelector } from './BridgeSessionProvider';
 import { useChartCannotBeDrawn } from './useChartCannotBeDrawn';
-import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
+import { bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
 import { useDelayedReveal } from '../../shared/hooks/useDelayedReveal';
 import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
-import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
 import { LoadingMessage } from '../../shared/ui/LoadingMessage';
 
-/** How long the screen waits before it hands the problem to a notification and the top bar status. */
-const WAITING_SCREEN_LIMIT_MS = 15_000;
-
-const NOT_SENDING_DATA_MESSAGE =
-  'MetaTrader 5 is not sending data. Check that it is running with the Better Charts EA attached and Algo Trading on.';
-
-const TOKEN_MISMATCH_MESSAGE =
-  'MetaTrader 5 uses a different bridge token. Use Token mismatch in the top bar to install the EA again.';
+/** How long the screen keeps the window before the notices beside it take the problem over. */
+const AWAITING_DATA_LIMIT_MS = 15_000;
 
 const AWAITING_REGION_LABEL = 'Waiting for MetaTrader 5';
+
+/** The wait of a completed setup, as both of its surfaces need it: the screen, and its notice. */
+export interface AwaitingBridgeData {
+  /** No chart can be drawn yet and the bridge has not refused: the blurred screen stands in for the chart. */
+  screenShown: boolean;
+  /** The wait outlasted its limit, so the screen goes and a notice says what to check. */
+  waitingTooLong: boolean;
+}
+
+/**
+ * Measures the wait once for its two surfaces, so its limit is never timed twice. Every part is a
+ * primitive subscription, so a heartbeat that keeps the same state reaches neither of them.
+ */
+export function useAwaitingBridgeData(): AwaitingBridgeData {
+  const noChartToDraw = useChartCannotBeDrawn();
+  // The refusal kind alone; each surface names the refusal it reports.
+  const refusal = useBridgeConnectionSelector(({ status }) => bridgeRefusal(status));
+  const awaitingData = noChartToDraw && refusal === undefined;
+  const waitingTooLong = useDelayedReveal(awaitingData, AWAITING_DATA_LIMIT_MS);
+  return { screenShown: awaitingData && !waitingTooLong, waitingTooLong };
+}
 
 /** Identity of one stretch of the screen's visibility, so an exit cannot outlive the stretch it began in. */
 interface ShownStretch {
@@ -73,29 +87,14 @@ function AwaitingScreen({ leaving, screenRef }: { leaving: boolean; screenRef: R
 
 /**
  * After the device's setup: stands in for the workspace while no chart can be drawn, so the user
- * waits on a blurred window instead of an empty one. It waits only so long — a refusal, or a
- * silence past the limit, fades the screen out and leaves the problem to the notifications and to
- * the top bar status. Those outlive the screen and retire by themselves once the data arrives. A
- * plain protocol error already toasts from the chart and an outdated EA has its own notice, so
- * neither gets a second one here.
+ * waits on a blurred window instead of an empty one. It waits only so long — a refusal, or a silence
+ * past the limit, fades the screen out and leaves the problem to the notices beside it, which outlive
+ * the screen and retire by themselves once the data arrives.
  */
-export function BridgeAwaitingScreen() {
-  const awaitingChart = useChartCannotBeDrawn();
-  // The refusal kind alone, so a status heartbeat that keeps the same state never reaches this screen.
-  const refusal = useBridgeConnectionSelector(({ status }) => bridgeRefusal(status));
-  const bridgeError = refusal !== undefined;
-  const waitingTooLong = useDelayedReveal(awaitingChart && !bridgeError, WAITING_SCREEN_LIMIT_MS);
-  const screenShown = awaitingChart && !bridgeError && !waitingTooLong;
+export function BridgeAwaitingScreen({ screenShown }: { screenShown: boolean }) {
   const { rendered: screenRendered, leaving, screenRef } = useExitPresence(screenShown);
-  const tokenMismatch = refusal === BridgeRefusal.TokenMismatch;
-  return (
-    <>
-      <ErrorNotification
-        noticeKey="mt5-not-sending-data"
-        message={waitingTooLong ? NOT_SENDING_DATA_MESSAGE : undefined}
-      />
-      <ErrorNotification noticeKey="mt5-token-mismatch" message={tokenMismatch ? TOKEN_MISMATCH_MESSAGE : undefined} />
-      {screenRendered && <AwaitingScreen leaving={leaving} screenRef={screenRef} />}
-    </>
-  );
+  if (!screenRendered) {
+    return null;
+  }
+  return <AwaitingScreen leaving={leaving} screenRef={screenRef} />;
 }

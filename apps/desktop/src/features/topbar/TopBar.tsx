@@ -1,6 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { AccountBadge } from '../account-badge/AccountBadge';
-import { BridgeHeaderStatus } from '../bridge/BridgeHeaderStatus';
 import { DemoAccountNotice } from '../demo-notice/DemoAccountNotice';
 
 /** Static brand mark: hoisted so a re-render reuses the same element. */
@@ -50,7 +49,6 @@ export function TopBar({
         <small>v{__APP_VERSION__}</small>
       </div>
       <div className="topbar-actions">
-        <BridgeHeaderStatus />
         <AccountBadge />
         <button className="search-trigger" onClick={() => setSearchOpen(true)} aria-label="Search symbols">
           <span className="search-trigger-label">
