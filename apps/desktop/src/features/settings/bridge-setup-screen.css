@@ -13,6 +13,12 @@
   animation: settings-fade-in 180ms ease-out;
 }
 
+/* The finished screen eases in far slower than the setup screen it replaces: the blur lifts and the
+   mark pops over whole seconds, so arriving at the chart feels landed rather than switched. */
+.setup-complete-screen {
+  animation: settings-fade-in 900ms ease-out;
+}
+
 .bridge-setup-screen-content {
   display: flex;
   flex-direction: column;
@@ -27,13 +33,13 @@
 
 .setup-complete-icon {
   color: var(--color-accent);
-  animation: setup-complete-icon-in 720ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: setup-complete-icon-in 1600ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 /* The button follows the mark: it waits out the start of the icon's pop, then rises into place. */
 .setup-complete-content .modal-dialog-button {
   color: var(--color-text);
-  animation: setup-complete-button-in 560ms ease-out 400ms both;
+  animation: setup-complete-button-in 1200ms ease-out 900ms both;
 }
 
 /* The dialog's primary button, reused here: its focus ring lives under `.modal-dialog` there. */
@@ -67,7 +73,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bridge-setup-screen {
+  .bridge-setup-screen,
+  .setup-complete-screen {
     animation: none;
   }
 

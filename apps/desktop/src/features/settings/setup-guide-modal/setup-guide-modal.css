@@ -296,11 +296,23 @@
   animation: settings-panel-out 180ms ease-in forwards;
 }
 
+/* A completed setup takes the same exit slowly, so the hand-over to the finished screen reads as a
+   fade rather than a cut. Both rules sit after `is-closing`, which is set alongside them. */
+.setup-guide-backdrop.is-finishing {
+  animation: settings-fade-out 900ms ease-in-out forwards;
+}
+
+.setup-guide-backdrop.is-finishing .setup-guide {
+  animation: settings-panel-out 900ms ease-in-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .setup-guide-backdrop,
   .setup-guide,
   .setup-guide-backdrop.is-closing,
-  .setup-guide-backdrop.is-closing .setup-guide {
+  .setup-guide-backdrop.is-closing .setup-guide,
+  .setup-guide-backdrop.is-finishing,
+  .setup-guide-backdrop.is-finishing .setup-guide {
     animation: none;
   }
 }

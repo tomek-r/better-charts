@@ -39,9 +39,15 @@ async function downloadResource(resourcePath: string, fileName: string): Promise
  */
 export function SetupGuideModal({
   onClose,
+  onFinished,
+  finishing,
   standalone,
 }: {
   onClose: () => void;
+  /** The setup completed: the exit animation announced by `finishing` has ended. */
+  onFinished: () => void;
+  /** The setup completed: the guide fades out slowly and only then goes. */
+  finishing: boolean;
   /** No settings dialog below, so the guide owns the window instead of sitting inside it. */
   standalone?: boolean;
 }) {
@@ -59,9 +65,16 @@ export function SetupGuideModal({
     afterExitAnimation(backdrop.current, afterExit);
   }, []);
   const requestClose = useCallback(() => playExit(onClose), [onClose, playExit]);
+  // A completed setup takes the same exit route as a manual close, only slower and without asking
+  // the store for it: the store unmounts the guide once this fade's `animationend` arrives.
+  useEffect(() => {
+    if (finishing) {
+      playExit(onFinished);
+    }
+  }, [finishing, onFinished, playExit]);
   const backdropClassName = `setup-guide-backdrop${standalone ? ' setup-guide-backdrop-standalone' : ''}${
     closing ? ' is-closing' : ''
-  }`;
+  }${finishing ? ' is-finishing' : ''}`;
 
   useEffect(() => {
     closeButton.current?.focus();

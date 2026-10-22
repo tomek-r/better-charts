@@ -17,6 +17,7 @@ interface AppSettingsHandlers {
   showSetupComplete: () => void;
   dismissSetupComplete: () => void;
   completeSetup: () => void;
+  finishSetupGuide: () => void;
 }
 
 export interface AppSettingsActions {
@@ -31,6 +32,7 @@ export interface AppSettingsViewState extends AppSettingsHandlers, AppSettingsAc
   isOpen: boolean;
   closing: boolean;
   setupGuideOpen: boolean;
+  setupGuideFinishing: boolean;
   setupCompleteShown: boolean;
   loadError: string | undefined;
   notificationRevision: number;
@@ -61,6 +63,7 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
       showSetupComplete: settings.showSetupComplete,
       dismissSetupComplete: settings.dismissSetupComplete,
       completeSetup: settings.completeSetup,
+      finishSetupGuide: settings.finishSetupGuide,
     }),
     [
       settings.close,
@@ -74,6 +77,7 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
       settings.showSetupComplete,
       settings.dismissSetupComplete,
       settings.completeSetup,
+      settings.finishSetupGuide,
     ],
   );
   const contextValue = useMemo(() => ({ store, actions }), [actions, store]);
@@ -94,6 +98,7 @@ export function useAppSettingsView(): AppSettingsViewState {
       isOpen: state.isOpen,
       closing: state.closing,
       setupGuideOpen: state.setupGuideOpen,
+      setupGuideFinishing: state.setupGuideFinishing,
       setupCompleteShown: state.setupCompleteShown,
       loadError: state.loadError,
       notificationRevision: state.notificationRevision,

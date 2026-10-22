@@ -28,6 +28,8 @@ const setupComplete = (page: Page) => page.getByRole('dialog', { name: 'Setup co
 /** Pushes the connected status and checks the guide and App settings give way to the finished screen. */
 async function expectSetupCompleteAfterConnect(page: Page): Promise<void> {
   await pushBridgeStatus(page, CONNECTED_STATUS);
+  // The guide does not vanish: it fades out first, so its backdrop wears `is-finishing` on the way.
+  await expect(page.locator('.setup-guide-backdrop.is-finishing')).toHaveCount(1);
   await expect(setupGuide(page)).toBeHidden();
   await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
   const complete = setupComplete(page);

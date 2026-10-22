@@ -12,6 +12,8 @@ export interface AppSettingsState {
   closing: boolean;
   /** The setup guide is open: over the settings dialog when that is open, over the window otherwise. */
   setupGuideOpen: boolean;
+  /** The setup completed while the guide was open: it is playing its slow exit before it goes. */
+  setupGuideFinishing: boolean;
   /** The bridge connected while the guide was open: the finished screen stands over the chart. */
   setupCompleteShown: boolean;
   loadError: string | undefined;
@@ -27,6 +29,7 @@ export const initialAppSettingsState: AppSettingsState = {
   isOpen: false,
   closing: false,
   setupGuideOpen: false,
+  setupGuideFinishing: false,
   setupCompleteShown: false,
   loadError: undefined,
   restartRequired: false,
@@ -141,15 +144,26 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   const dismissRestartNotice = useCallback(() => store.setField('restartNoticeDismissed', true), [store]);
   const showSetupComplete = useCallback(() => store.setField('setupCompleteShown', true), [store]);
   const dismissSetupComplete = useCallback(() => store.setField('setupCompleteShown', false), [store]);
-  // The guide is done: it never shares the window with the finished screen, so it closes first and
-  // takes App settings with it when that dialog sits beneath (its exit animation still plays).
-  const completeSetup = useCallback(() => {
+  // The guide has played its exit animation: it goes, and the finished screen takes the window.
+  // The guide never shares the window with that screen, so it takes App settings with it when that
+  // dialog sits beneath (its own exit animation still plays).
+  const finishSetupGuide = useCallback(() => {
+    store.setField('setupGuideFinishing', false);
     closeSetupGuide();
     if (store.getState().isOpen) {
       close();
     }
     showSetupComplete();
   }, [close, closeSetupGuide, showSetupComplete, store]);
+  // The guide fades out first and `finishSetupGuide` runs once it is gone; with no guide on screen
+  // there is nothing to fade, so the finish runs straight away.
+  const completeSetup = useCallback(() => {
+    if (store.getState().setupGuideOpen) {
+      store.setField('setupGuideFinishing', true);
+      return;
+    }
+    finishSetupGuide();
+  }, [finishSetupGuide, store]);
   const dismissConfigurationNotice = useCallback(
     () => store.setField('dismissedConfigurationError', store.getState().settings?.configurationError ?? undefined),
     [store],
@@ -179,5 +193,6 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     showSetupComplete,
     dismissSetupComplete,
     completeSetup,
+    finishSetupGuide,
   };
 }

@@ -37,7 +37,12 @@ export function SetupCompleteScreen() {
     return null;
   }
   return (
-    <div className="bridge-setup-screen" role="dialog" aria-modal="true" aria-label="Setup complete">
+    <div
+      className="bridge-setup-screen setup-complete-screen"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Setup complete"
+    >
       <div className="bridge-setup-screen-content setup-complete-content">
         <SetupCompleteIcon />
         <button

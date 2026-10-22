@@ -26,10 +26,12 @@ export function AppSettingsDialog({
   loadRequest,
   closing,
   guideOpen,
+  guideFinishing,
   loadError,
   onClose,
   onOpenGuide,
   onCloseGuide,
+  onGuideFinished,
   onExited,
   onSaved,
 }: {
@@ -38,10 +40,14 @@ export function AppSettingsDialog({
   loadRequest: Promise<void>;
   /** The setup guide is opened through the settings store, so other surfaces can open it too. */
   guideOpen: boolean;
+  /** The setup completed: the guide fades out slowly before it goes. */
+  guideFinishing: boolean;
   loadError: string | undefined;
   onClose: () => void;
   onOpenGuide: () => void;
   onCloseGuide: () => void;
+  /** The guide's exit animation ended, so the finished screen may take the window. */
+  onGuideFinished: () => void;
   onExited: () => void;
   onSaved: (settings: AppSettingsData) => void;
 }) {
@@ -159,7 +165,9 @@ export function AppSettingsDialog({
           </ModalDialogButton>
         </>
       }
-      overlay={guideOpen && <SetupGuideModal onClose={onCloseGuide} />}
+      overlay={
+        guideOpen && <SetupGuideModal onClose={onCloseGuide} onFinished={onGuideFinished} finishing={guideFinishing} />
+      }
     >
       <nav className="settings-nav" aria-label="Settings categories">
         {(['MT5 setup', 'Trading'] as const).map((item, index) => (
