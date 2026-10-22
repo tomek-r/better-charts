@@ -1,6 +1,7 @@
+import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { StarIcon } from '../../shared/ui/StarIcon';
 import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
-import type { Dispatch, SetStateAction } from 'react';
+import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
 import type { BrokerSymbol } from '../../shared/bridge/types';
 
 function SymbolResultRow({
@@ -37,6 +38,7 @@ function SymbolResultRow({
 export function SymbolSearchDialog({
   closing,
   onClose,
+  onExited,
   searchQuery,
   setSearchQuery,
   searchResults,
@@ -50,6 +52,8 @@ export function SymbolSearchDialog({
 }: {
   closing: boolean;
   onClose: () => void;
+  /** The backdrop's exit animation ended: the view can unmount the dialog now. */
+  onExited: () => void;
   searchQuery: string;
   setSearchQuery: Dispatch<SetStateAction<string>>;
   searchResults: BrokerSymbol[];
@@ -61,12 +65,21 @@ export function SymbolSearchDialog({
   chooseSymbol: (item: BrokerSymbol) => Promise<void>;
   toggleFavorite: (item: BrokerSymbol) => void;
 }) {
+  const backdrop = useRef<HTMLDivElement>(null);
+  // The fade is the backdrop's own animation, so its `animationend` decides when to unmount.
+  useEffect(() => {
+    if (!closing) {
+      return;
+    }
+    return afterExitAnimation(backdrop.current, onExited);
+  }, [closing, onExited]);
   const favoriteSymbols = new Set(favorites.map((item) => item.symbol));
   const recentOnly = recent.filter((item) => !favoriteSymbols.has(item.symbol));
   const firstResult = searchQuery.trim() ? searchResults[0] : (favorites[0] ?? recentOnly[0]);
 
   return (
     <div
+      ref={backdrop}
       className={`search-backdrop${closing ? ' is-closing' : ''}`}
       role="presentation"
       onMouseDown={(event) => {

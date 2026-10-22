@@ -1,4 +1,5 @@
 import { createContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { afterExitAnimation } from './afterExitAnimation';
 import { useRequiredContext } from '../state/useRequiredContext';
 
 const DismissContext = createContext<{ closing: boolean; dismiss: (action: () => void) => void } | null>(null);
@@ -13,22 +14,19 @@ function Region({ children }: { children: ReactNode }) {
 
 function Frame({ children, role }: { children: ReactNode; role: 'status' | 'alert' }) {
   const [closing, setClosing] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const frame = useRef<HTMLDivElement>(null);
+  const cancelExit = useRef<(() => void) | undefined>(undefined);
+  useEffect(() => () => cancelExit.current?.(), []);
   const dismiss = (action: () => void) => {
-    if (timer.current !== undefined) {
-      return;
-    }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      action();
+    if (cancelExit.current !== undefined) {
       return;
     }
     setClosing(true);
-    timer.current = setTimeout(action, 180);
+    cancelExit.current = afterExitAnimation(frame.current, action);
   };
   return (
     <DismissContext value={{ closing, dismiss }}>
-      <div className={`notification notification-${role}${closing ? ' is-closing' : ''}`} role={role}>
+      <div ref={frame} className={`notification notification-${role}${closing ? ' is-closing' : ''}`} role={role}>
         <svg
           className={`notification-icon notification-icon-${role === 'alert' ? 'error' : 'info'}`}
           width="20"

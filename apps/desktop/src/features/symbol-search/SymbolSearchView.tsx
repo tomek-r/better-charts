@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { SymbolSearchDialog } from './SymbolSearchDialog';
@@ -14,32 +14,19 @@ export function SymbolSearchView() {
   const searchOpen = useSymbolSearchOpen();
   const { setSearchOpen } = useSymbolSearchControls();
   const [searchClosing, setSearchClosing] = useState(false);
-  const searchCloseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // Fade the panel out like the settings modal, then unmount (skipped under reduced motion).
+  const finishClose = useCallback(() => {
+    setSearchOpen(false);
+    setSearchClosing(false);
+  }, [setSearchOpen]);
+  // Fade the panel out like the settings modal, then unmount: the dialog reports the end of its
+  // backdrop animation, so the CSS alone decides how long the fade lasts. Escape reaches this even
+  // with the dialog unmounted, so a closed search has nothing to fade.
   const requestClose = useCallback(() => {
-    if (searchCloseTimer.current !== undefined) {
-      return;
-    }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setSearchOpen(false);
-      setSearchClosing(false);
+    if (!searchOpen || searchClosing) {
       return;
     }
     setSearchClosing(true);
-    searchCloseTimer.current = setTimeout(() => {
-      searchCloseTimer.current = undefined;
-      setSearchOpen(false);
-      setSearchClosing(false);
-    }, 180);
-  }, [setSearchOpen, setSearchClosing]);
-  useEffect(
-    () => () => {
-      if (searchCloseTimer.current !== undefined) {
-        clearTimeout(searchCloseTimer.current);
-      }
-    },
-    [],
-  );
+  }, [searchOpen, searchClosing]);
   const search = useSymbolSearch();
   const { chooseSymbol } = useBridgeActions();
   const { status } = useBridgeConnection();
@@ -188,6 +175,7 @@ export function SymbolSearchView() {
     <SymbolSearchDialog
       closing={searchClosing}
       onClose={requestClose}
+      onExited={finishClose}
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
       searchResults={searchResults}
