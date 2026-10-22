@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { profileBoundaries as boundaries, profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
-import { SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeProfile/loader';
+import { SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeProfile/requester';
 import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 import { LOADING_WASH_ALPHA } from '../src/features/tools/fixedRangeProfile/overlay';

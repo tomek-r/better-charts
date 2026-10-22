@@ -13,7 +13,7 @@ export interface FixedRangeProfileState {
   range?: { fromMs: number; toMs: number } | null;
   /** Profile computed for exactly `range` (Rust side, wire types). */
   profile?: ProfileResult;
-  /** The awaited profile request is slow: the overlay veils the range and draws a spinner. Written only by the loader. */
+  /** The awaited profile request is slow: the overlay veils the range and draws a spinner. Written only by the requester. */
   loadingIndicator?: boolean;
   /** A boundary preview hides the result until release or cancellation. */
   previewing?: boolean;
@@ -295,7 +295,7 @@ export function drawFixedRangeProfileLoadingWash(
 /**
  * Slow-load profile loader: a tiny mirrored BID/ASK profile (dashed centre line, red bars growing left,
  * teal bars right) centred horizontally in the range band (clamped to the visible pane) and vertically in
- * the pane. Nothing is drawn while the band is wholly off screen, the loader reports no slow load, or a
+ * the pane. Nothing is drawn while the band is wholly off screen, the requester reports no slow load, or a
  * boundary preview is active. `nowMs` only sets the bar widths.
  */
 export function drawFixedRangeProfileSpinner(

@@ -23,7 +23,7 @@ const SPINNER_REPAINT_MS = 33;
  * does not belong to the request still awaited. `expected` is the stale guard: every
  * path that abandons a request clears it, and a new request replaces it.
  */
-export class FixedRangeProfileLoader {
+export class FixedRangeProfileRequester {
   private expected: ExpectedFixedRangeProfile | undefined;
   private lastSentAt = 0;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;

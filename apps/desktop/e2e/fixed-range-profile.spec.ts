@@ -569,7 +569,7 @@ test('a band partly off screen centres the loader on its visible part', () => {
   expect(linesOf(ops)[0].minX).toBe(59.5);
 });
 
-test('the loader paints nothing unless the loader flagged a slow load', () => {
+test('the loader paints nothing unless the requester flagged a slow load', () => {
   expect(paintSpinner(spinnerState({ loadingIndicator: false }))).toEqual([]);
   expect(paintSpinner(spinnerState({ range: null }))).toEqual([]);
   expect(paintSpinner(spinnerState({ previewing: true }))).toEqual([]);
