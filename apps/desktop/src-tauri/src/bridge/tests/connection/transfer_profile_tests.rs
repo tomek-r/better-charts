@@ -485,8 +485,10 @@ async fn streamed_multi_day_profile_reaches_ui_without_truncation_or_session_res
         )
         .unwrap();
         client.stream.write_all(&frame).await.unwrap();
+        // Decoding a 65,535-tick page in an unoptimised build takes seconds on a loaded CI runner; the wait
+        // stays under the 6 s heartbeat deadline, so a stalled page still fails here, not as a session drop.
         assert!(
-            wait_until(Duration::from_secs(3), || harness
+            wait_until(Duration::from_secs(5), || harness
                 .events
                 .events()
                 .iter()
