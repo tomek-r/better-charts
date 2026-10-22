@@ -103,6 +103,9 @@ test('shows the setup screen in place of the chart without the bridge', async ({
   expect(await isTopmostAtCentre(heading)).toBe(true);
   // Without candles the empty chart (axis borders, attribution logo) stays hidden behind the wait.
   await expect(page.locator('.chart-host')).toHaveCSS('visibility', 'hidden');
+  // The whole chart area is blank: heading (title and quotes) hidden, section background transparent.
+  await expect(page.locator('.chart-heading')).toHaveCSS('visibility', 'hidden');
+  await expect(page.locator('.chart-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   expect(pageErrors).toEqual([]);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
@@ -253,6 +256,9 @@ test('chart chrome nests the connection dot inside the OHLC legend, after its te
   await expect(dot).toHaveAttribute('aria-label', /^MT5 /);
   // The dot only shows once the stub's candles have rendered a chart.
   await expect(dot).toBeVisible();
+  // With candles the waiting state is gone: the heading and the canvas are back on screen.
+  await expect(page.locator('.chart-heading')).toHaveCSS('visibility', 'visible');
+  await expect(page.locator('.chart-host')).toHaveCSS('visibility', 'visible');
   expect(await isTopmostAtCentre(dot)).toBe(true);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });

@@ -21,16 +21,13 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
   const { chartHost } = useChartResources();
   const { status, tauriAvailable } = useBridgeConnection();
   const { hasCandles, symbolLoading, chartError } = useBridgeChartState();
-  // Candles on screen are the chart; without them the connection dot has nothing to describe.
-  const chartRendered = tauriAvailable && hasCandles;
   // A connected bridge is the only one with candles on the way; a missing one is the setup screen's case.
   const showLoadingMessage = symbolLoading || (tauriAvailable && status.state === 'connected' && !hasCandles);
-  const frameClassName = chartRendered ? 'chart-frame' : 'chart-frame chart-frame-waiting';
   useErrorNotification(chartError);
   useErrorNotification(protocolErrorToNotify(status));
 
   return (
-    <div className={frameClassName}>
+    <div className="chart-frame">
       <div ref={chartHost} className="chart-host" aria-label="Market chart" tabIndex={0} />
       {children}
       {showLoadingMessage && <div className="chart-overlay" />}
