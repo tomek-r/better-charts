@@ -14,14 +14,22 @@ interface InstallRun {
   restarting: boolean;
 }
 
+/** The last finished install with the button that started it, so the section knows what it may offer next. */
+interface LastInstall {
+  button: InstallButton;
+  report: Mt5InstallReport;
+}
+
 /** Everything the install section renders: the folders, the step in flight and the last report. */
-interface InstallToMt5View {
+export interface InstallToMt5View {
   shellAvailable: boolean;
   installations: Mt5InstallationView[] | undefined;
   targets: InstallTarget[];
   selected: InstallTarget | undefined;
   withoutDataFolder: Mt5InstallationView[];
   results: Mt5InstallReport | undefined;
+  /** True once a plain install compiled every file clean: the section then offers the closing button. */
+  installedClean: boolean;
   pressed: InstallButton | undefined;
   restarting: boolean;
   busy: boolean;
@@ -47,7 +55,7 @@ export function useInstallToMt5(onRestarted: () => void): InstallToMt5View {
   const [installations, setInstallations] = useState<Mt5InstallationView[]>();
   const [selectedKey, setSelectedKey] = useState<string>();
   const [run, setRun] = useState<InstallRun>();
-  const [report, setReport] = useState<Mt5InstallReport>();
+  const [lastInstall, setLastInstall] = useState<LastInstall>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -75,12 +83,14 @@ export function useInstallToMt5(onRestarted: () => void): InstallToMt5View {
   const selected = chooseTarget(targets, selectedKey);
   const withoutDataFolder = (installations ?? []).filter((installation) => installation.dataFolders.length === 0);
   // A clean run says nothing and shows no rows; anything left to fix keeps the detailed rows below the buttons.
-  const results = report !== undefined && everyFileCompiledClean(report.files) ? undefined : report;
+  const results =
+    lastInstall !== undefined && everyFileCompiledClean(lastInstall.report.files) ? undefined : lastInstall?.report;
+  const installedClean = lastInstall?.button === 'install' && everyFileCompiledClean(lastInstall.report.files);
 
   /** A report or refusal belongs to the folder it was asked about, so choosing another one clears it. */
   function chooseDataFolder(key: string) {
     setSelectedKey(key);
-    setReport(undefined);
+    setLastInstall(undefined);
     setError(undefined);
   }
 
@@ -88,8 +98,8 @@ export function useInstallToMt5(onRestarted: () => void): InstallToMt5View {
    * One press installs both files; `restart` adds the restart the moment every file
    * compiled clean, and a report with something to fix ends the run there so the rows
    * can say what. A refusal leaves the terminal as it was, with only the error to show.
-   * Only the restart that actually reopened MT5 finishes the setup: a plain install may
-   * still need the EA attached, which the connect trigger of a reloaded EA covers.
+   * Only the restart that actually reopened MT5 finishes the setup here; a clean plain
+   * install instead offers the closing button, which finishes the setup the same way.
    */
   async function runInstall(target: InstallTarget, restart: boolean): Promise<void> {
     if (run !== undefined) {
@@ -98,10 +108,10 @@ export function useInstallToMt5(onRestarted: () => void): InstallToMt5View {
     const button: InstallButton = restart ? 'installAndRestart' : 'install';
     setRun({ button, restarting: false });
     setError(undefined);
-    setReport(undefined);
+    setLastInstall(undefined);
     try {
       const installed = await invoke<Mt5InstallReport>('install_to_mt5', targetArgs(target));
-      setReport(installed);
+      setLastInstall({ button, report: installed });
       if (!restart || !everyFileCompiledClean(installed.files)) {
         return;
       }
@@ -122,6 +132,7 @@ export function useInstallToMt5(onRestarted: () => void): InstallToMt5View {
     selected,
     withoutDataFolder,
     results,
+    installedClean,
     pressed: run?.button,
     restarting: run?.restarting ?? false,
     busy: run !== undefined,

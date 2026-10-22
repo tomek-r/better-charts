@@ -17,6 +17,9 @@ import {
 const INSTALL_BUTTON = 'Install to MT5';
 const INSTALL_AND_RESTART_BUTTON = 'Install and restart MT5';
 
+/** The one press a clean plain install leaves: it finishes the setup as a clean restart does. */
+const ALL_INSTALLED_BUTTON = 'All installed. Close';
+
 /** The target the stub's default installation resolves to, as both commands name it. */
 const PORTABLE_TARGET: Mt5InstallRequest = { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: PORTABLE_MQL5_PATH };
 
@@ -49,7 +52,7 @@ function reportWithIndicator(indicatorCompiled: { errors: number; warnings: numb
   };
 }
 
-test('Install to MT5 installs both files and says nothing on a clean compile', async ({ page }) => {
+test('Install to MT5 installs both files and offers to close on a clean compile', async ({ page }) => {
   await gotoWithStub(page, { responses: { install_to_mt5: cleanInstallReport('updated') } });
   const guide = await openSetupGuide(page);
   const install = guide.locator('.setup-guide-install');
@@ -64,8 +67,9 @@ test('Install to MT5 installs both files and says nothing on a clean compile', a
 
   expect(await mt5InstallRequests(page)).toEqual([PORTABLE_TARGET]);
   expect(await mt5RestartRequests(page)).toEqual([]);
-  // Success has no words of its own: the actions row holds its two buttons and nothing else.
-  await expect(install.locator('.setup-guide-install-actions > *')).toHaveCount(2);
+  // Nothing is left to ask: the actions row holds the closing button and nothing else.
+  await expect(install.getByRole('button')).toHaveText([ALL_INSTALLED_BUTTON]);
+  await expect(install.locator('.setup-guide-install-actions > *')).toHaveCount(1);
   await expect(install.locator('.setup-guide-install-file')).toHaveCount(0);
   await expect(install.getByRole('alert')).toHaveCount(0);
   await expect(install.getByRole('status')).toHaveCount(0);
@@ -104,6 +108,11 @@ test('two data folders ask which one to install into and send its path', async (
   ]);
   await expect(folder).toBeEnabled();
   await expect(install.locator('.setup-guide-install-file')).toHaveCount(0);
+  await expect(install.getByRole('button')).toHaveText([ALL_INSTALLED_BUTTON]);
+
+  // Choosing another folder clears the finished run and brings both presses back.
+  await folder.selectOption({ label: 'MetaTrader 5 — portable data folder' });
+  await expect(install.getByRole('button')).toHaveText([INSTALL_BUTTON, INSTALL_AND_RESTART_BUTTON]);
 });
 
 test('Install and restart MT5 installs, reopens the same target, and finishes the setup', async ({ page }) => {
@@ -122,7 +131,7 @@ test('Install and restart MT5 installs, reopens the same target, and finishes th
   await expect(page.getByRole('dialog', { name: 'Setup complete' })).toBeVisible();
 });
 
-test('a plain Install to MT5 leaves the guide open with no finished screen', async ({ page }) => {
+test('a clean plain Install to MT5 offers All installed. Close, which finishes the setup', async ({ page }) => {
   await gotoWithStub(page, { responses: { install_to_mt5: cleanInstallReport('installed') } });
   const guide = await openSetupGuide(page);
   const install = guide.locator('.setup-guide-install');
@@ -131,12 +140,18 @@ test('a plain Install to MT5 leaves the guide open with no finished screen', asy
   await buttons.first().click();
 
   await expect.poll(async () => mt5InstallRequests(page)).toHaveLength(1);
-  // The run is over once the buttons are back to their idle labels and enabled.
+  // The run is over once the two presses give way to the enabled closing button, with no restart
+  // asked for and the guide still open.
+  await expect(install.getByRole('button')).toHaveText([ALL_INSTALLED_BUTTON]);
   await expect(buttons.first()).toBeEnabled();
-  await expect(buttons).toHaveText([INSTALL_BUTTON, INSTALL_AND_RESTART_BUTTON]);
   expect(await mt5RestartRequests(page)).toEqual([]);
   await expect(guide).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Setup complete' })).toHaveCount(0);
+
+  await buttons.first().click();
+
+  await expect(guide).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Setup complete' })).toBeVisible();
 });
 
 test('a compile with a warning is not clean, so the restart button stops at the rows', async ({ page }) => {
