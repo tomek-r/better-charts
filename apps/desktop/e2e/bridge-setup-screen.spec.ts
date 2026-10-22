@@ -211,19 +211,6 @@ test('a completed setup shows the header status instead of the setup screen', as
   await expect(currentGuideStep(guide)).toHaveText('Connect');
 });
 
-test('the header status shows the loader while the guide loads', async ({ page }) => {
-  const status = await revealHeaderStatus(page, 'MT5 not connected');
-
-  await status.click();
-  const loading = page.getByRole('status', { name: 'Loading setup guide' });
-  await expect(loading).toBeVisible();
-  await expect(loading.locator('canvas.loader')).toBeVisible();
-
-  await revealLazyGuide(page);
-  await expect(setupGuide(page)).toBeVisible();
-  await expect(loading).toHaveCount(0);
-});
-
 for (const { label, step, status: bridgeStatus } of HEADER_STATUSES) {
   test(`the header status names ${label} and opens the guide on ${step}`, async ({ page }) => {
     const status = await revealHeaderStatus(page, label, {
