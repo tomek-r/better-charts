@@ -18,7 +18,8 @@ test.describe('bridge connection setup guide', () => {
     const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
     await expect(guide).toBeVisible();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    await expect(guide.getByRole('button', { name: 'Close setup guide' })).toBeFocused();
+    await expect(guide).toBeFocused();
+    await expect(guide.getByRole('button', { name: 'Close setup guide' })).not.toBeFocused();
 
     // The five numbered steps.
     await expect(guide.locator('.setup-guide-steps li')).toHaveCount(5);

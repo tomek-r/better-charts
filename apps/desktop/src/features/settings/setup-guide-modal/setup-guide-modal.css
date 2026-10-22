@@ -28,8 +28,12 @@
   color: var(--color-text-tertiary);
   box-shadow: 0 24px 70px #000b;
   overflow: hidden;
-  outline: none;
   animation: settings-panel-in 180ms ease-out;
+}
+
+/* The guide takes focus only to receive keys; its controls keep their own focus rings. */
+.setup-guide:focus {
+  outline: none;
 }
 
 .setup-guide-header {

@@ -51,7 +51,7 @@ export function SetupGuideModal({
   /** No settings dialog below, so the guide owns the window instead of sitting inside it. */
   standalone?: boolean;
 }) {
-  const closeButton = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const closingRef = useRef(false);
   const [closing, setClosing] = useState(false);
@@ -77,7 +77,7 @@ export function SetupGuideModal({
   }${finishing ? ' is-finishing' : ''}`;
 
   useEffect(() => {
-    closeButton.current?.focus();
+    dialog.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -93,16 +93,18 @@ export function SetupGuideModal({
 
   return (
     <div ref={backdrop} className={backdropClassName}>
-      <div className="setup-guide" role="dialog" aria-modal="true" aria-labelledby="setup-guide-title" data-setup-guide>
+      <div
+        ref={dialog}
+        className="setup-guide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="setup-guide-title"
+        data-setup-guide
+        tabIndex={-1}
+      >
         <div className="setup-guide-header">
           <h2 id="setup-guide-title">Set up the MT5 bridge</h2>
-          <button
-            ref={closeButton}
-            type="button"
-            className="setup-guide-close"
-            onClick={requestClose}
-            aria-label="Close setup guide"
-          >
+          <button type="button" className="setup-guide-close" onClick={requestClose} aria-label="Close setup guide">
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
               <path
                 d="M5.2 5.2l7.6 7.6M12.8 5.2L5.2 12.8"
