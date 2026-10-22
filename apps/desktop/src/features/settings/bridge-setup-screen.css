@@ -27,12 +27,13 @@
 
 .setup-complete-icon {
   color: var(--color-accent);
-  animation: setup-complete-icon-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: setup-complete-icon-in 720ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 /* The button follows the mark: it waits out the start of the icon's pop, then rises into place. */
 .setup-complete-content .modal-dialog-button {
-  animation: setup-complete-button-in 280ms ease-out 180ms both;
+  color: var(--color-text);
+  animation: setup-complete-button-in 560ms ease-out 400ms both;
 }
 
 /* The dialog's primary button, reused here: its focus ring lives under `.modal-dialog` there. */
