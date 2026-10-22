@@ -1,18 +1,25 @@
 import { expect, test } from '@playwright/test';
 import { expectNoErrors, gotoWithStub, pushCommandError, pushEvent } from './helpers/tauriStub';
 
-test('bridge errors appear at bottom right and remain dismissible after recovery', async ({ page }) => {
+test('bridge errors appear at bottom right, are dismissible, and retire once the bridge recovers', async ({ page }) => {
   const errors = await gotoWithStub(page);
-  await pushEvent(page, 'bridge-status', { state: 'protocol_error', message: 'invalid account snapshot' });
+  const refusal = { state: 'protocol_error', message: 'invalid account snapshot' };
+  const recovered = { state: 'connected', message: 'Bridge connected.' };
+  await pushEvent(page, 'bridge-status', refusal);
   const notice = page.locator('.notification-region [role=alert]').filter({ hasText: 'Invalid account snapshot' });
   await expect(notice).toBeVisible();
   const bounds = await notice.boundingBox();
   const viewport = page.viewportSize()!;
   expect(bounds!.x + bounds!.width).toBeGreaterThan(viewport.width - 30);
   expect(bounds!.y + bounds!.height).toBeGreaterThan(viewport.height - 30);
-  await pushEvent(page, 'bridge-status', { state: 'connected', message: 'Bridge connected.' });
-  await expect(notice).toBeVisible();
   await notice.getByRole('button', { name: 'Dismiss error notification' }).click();
+  await expect(notice).toBeHidden();
+  // The bridge recovers and fails again: a new occurrence shows its notice again.
+  await pushEvent(page, 'bridge-status', recovered);
+  await pushEvent(page, 'bridge-status', refusal);
+  await expect(notice).toBeVisible();
+  // A recovered bridge retires its own error notice.
+  await pushEvent(page, 'bridge-status', recovered);
   await expect(notice).toBeHidden();
   expectNoErrors(errors);
 });

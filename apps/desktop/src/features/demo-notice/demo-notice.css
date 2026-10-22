@@ -6,21 +6,13 @@
   right: 0;
   bottom: 0;
   left: 0;
-  /* Everything in the bar is vertically centred and at most 40px tall (the brand mark), so it ends at
-     54px in the 68px bar: the 14px strip sits below every item and covers nothing interactive. */
   height: 14px;
   overflow: hidden;
-  /* Orange, the warning hue, so the strip reads as a caution: no real money is involved here. */
   color: var(--color-warn);
-  /* The strip is the query container for the marquee's cqw offset: the travel depends on the strip's
-     width, never on how much text the strip holds. */
   container-type: inline-size;
-  /* Chrome, not a control: nothing in the strip may take a click or the keyboard. */
   pointer-events: none;
 }
 
-/* All sentences for assistive tech; they must not take visual space in the thin strip. The animated
-   copy beside them is aria-hidden, so each sentence is announced once. */
 .demo-notice-readable {
   position: absolute;
   width: 1px;
@@ -33,12 +25,6 @@
   white-space: nowrap;
 }
 
-/* One moving copy holding every sentence on a single row: it enters just past the strip's right edge
-   and leaves just past the left one, so the loop has no gap or jump at any window width. The flex gap
-   is the only separation between sentences; no separator glyph belongs in the text. Line-height is
-   the strip height, which centres the text vertically while the animation keeps ownership of the
-   transform. max-content width measures the travel against the whole sentence row, not against a
-   strip-wide box, so the row's tail still clears the left edge on a narrow window. */
 .demo-notice-text {
   position: absolute;
   top: 0;
@@ -50,8 +36,6 @@
   font-weight: 600;
   line-height: 14px;
   white-space: nowrap;
-  /* Three sentences with wider gaps make the row far longer than the old single sentence, so the
-     longer duration keeps the text crossing the strip at a similar reading speed. */
   animation: demo-notice-scroll 60s linear infinite;
 }
 

@@ -300,27 +300,12 @@
   margin-top: 10px;
 }
 
-/* The connect step's checklist and its status-specific hint. */
+/* What has to be true in MT5 for the EA to answer; the step says nothing about the bridge itself. */
 .setup-guide-checklist {
   margin: 16px 0 0;
   padding-left: 20px;
   color: var(--color-text-label);
   font-size: 13px;
-  line-height: 1.55;
-}
-
-.setup-guide-connect-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.setup-guide-connect-hint p {
-  margin: 0;
-  color: var(--color-warn-text);
-  font-size: 12px;
   line-height: 1.55;
 }
 

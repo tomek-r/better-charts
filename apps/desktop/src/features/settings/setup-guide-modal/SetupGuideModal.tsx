@@ -140,7 +140,7 @@ export function SetupGuideModal({
           </div>
           {setupGuideStep === SetupGuideStep.Find && <FindMt5Step view={install} onNext={showInstallStep} />}
           {setupGuideStep === SetupGuideStep.Install && <InstallStep view={install} />}
-          {setupGuideStep === SetupGuideStep.Connect && <ConnectStep onInstallAgain={showInstallStep} />}
+          {setupGuideStep === SetupGuideStep.Connect && <ConnectStep />}
         </div>
       </div>
     </div>
