@@ -198,6 +198,7 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
         partial_close: false,
         trading_enabled: false,
         component_outdated: false,
+        token_mismatch: false,
     };
     let account = AccountSnapshot {
         account_login: "123".into(),

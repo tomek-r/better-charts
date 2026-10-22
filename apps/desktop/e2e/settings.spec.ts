@@ -427,7 +427,15 @@ test('notification reduced motion skips animation and removes immediately on dis
 });
 
 test('first launch opens connection setup, validates and saves all settings', async ({ page }) => {
-  await gotoWithStub(page, { responses: { get_app_settings: firstLaunch } });
+  // A bridge still connecting keeps the guide from finishing the setup while this test walks App settings.
+  await gotoWithStub(page, {
+    responses: { get_app_settings: firstLaunch, get_bridge_status: { state: 'connecting' } },
+  });
+  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
+  await expect(guide).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(guide).toBeHidden();
+  await page.getByRole('button', { name: 'App settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Welcome to Better Charts.', { exact: false })).toBeVisible();
@@ -489,26 +497,14 @@ const installationsWithoutExpertAdvisor = () => [
   }),
 ];
 
-test('first launch without the EA installed opens only the setup guide', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: { get_app_settings: firstLaunch, list_mt5_installations: installationsWithoutExpertAdvisor() },
-  });
-  await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
-});
-
-test('first launch without MetaTrader 5 opens only the setup guide', async ({ page }) => {
-  await gotoWithStub(page, { responses: { get_app_settings: firstLaunch, list_mt5_installations: [] } });
-  await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
-});
-
-test('first launch with the EA installed opens only App settings', async ({ page }) => {
-  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
+test('first launch opens only the setup guide, even with the EA installed', async ({ page }) => {
   await gotoWithStub(page, { responses: { get_app_settings: firstLaunch } });
-  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeVisible();
-  await expect(guide).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
+});
 
+test('a later launch without the EA opens neither dialog', async ({ page }) => {
+  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
   await gotoWithStub(page, {
     responses: {
       get_app_settings: { ...firstLaunch, firstLaunch: false },
@@ -579,7 +575,10 @@ test('failed save stays open and preserves input', async ({ page }) => {
 
 test('Windows startup hides Wine fields and settings fit a small viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 780 });
-  await gotoWithStub(page, { responses: { get_app_settings: { ...firstLaunch, platform: 'windows' } } });
+  await gotoWithStub(page, {
+    responses: { get_app_settings: { ...firstLaunch, firstLaunch: false, platform: 'windows' } },
+  });
+  await page.getByRole('button', { name: 'App settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await dialog.getByRole('button', { name: 'MT5 setup', exact: true }).click();
   await expect(dialog.getByLabel('Wine binary path')).toHaveCount(0);

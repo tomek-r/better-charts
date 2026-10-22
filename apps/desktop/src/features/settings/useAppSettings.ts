@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { Mt5InstallationView } from '../../shared/bridge/types';
 import type { DomainStore } from '../../shared/state/domainStore';
-import { anyDataFolderHoldsTheExpertAdvisor } from './setup-guide-modal/installation/expertAdvisorInstalled';
 import type { AppSettingsData } from './settingsTypes';
 
 export interface AppSettingsState {
@@ -41,32 +39,9 @@ export const initialAppSettingsState: AppSettingsState = {
 export type AppSettingsStore = DomainStore<AppSettingsState>;
 
 /**
- * First launch: the guide owns the manual steps, so it opens alone unless some data folder
- * already holds the bridge EA's source. An empty listing (no MetaTrader 5 found) counts as
- * "not installed"; a failed listing falls back to App settings.
+ * First launch: the app has just generated the bridge token, so an EA already attached in MT5
+ * cannot know it. The guide therefore opens alone; its install hands the EA the new token.
  */
-function openFirstLaunchView(store: AppSettingsStore, settingsLoadGeneration: { readonly current: number }): void {
-  // loadSettings runs its callback only for the load that is still current, so the
-  // value read here is this load's generation.
-  const generation = settingsLoadGeneration.current;
-  void invoke<Mt5InstallationView[]>('list_mt5_installations')
-    .then((installations) => {
-      if (generation !== settingsLoadGeneration.current) {
-        return;
-      }
-      if (anyDataFolderHoldsTheExpertAdvisor(installations)) {
-        store.setField('isOpen', true);
-        return;
-      }
-      store.setField('setupGuideOpen', true);
-    })
-    .catch(() => {
-      if (generation === settingsLoadGeneration.current) {
-        store.setField('isOpen', true);
-      }
-    });
-}
-
 export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean) {
   const settingsLoadGeneration = useRef(0);
 
@@ -108,7 +83,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
         return;
       }
       if (next.firstLaunch) {
-        openFirstLaunchView(store, settingsLoadGeneration);
+        store.setField('setupGuideOpen', true);
       }
     });
     return () => {

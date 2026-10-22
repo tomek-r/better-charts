@@ -1,10 +1,11 @@
 use super::{
     bridge_emit, clear_profile_bar_slots, disconnect, invalidate_validated_order_check, now_ms,
-    protocol_error, protocol_error_component_outdated, protocol_error_session, publish,
-    publish_market, publish_reconciliation_status, read_one, reconciliation_request_status,
-    reset_reconciliation, send, send_error, BridgeConnectionState, BridgeEvents, BridgeState,
-    ExecutionAdapterState, FrameSource, MarketSnapshot, PendingReconciliation,
-    ReconciliationStatus, TerminalIdentity, HANDSHAKE_TIMEOUT,
+    protocol_error, protocol_error_component_outdated, protocol_error_session,
+    protocol_error_token_mismatch, publish, publish_market, publish_reconciliation_status,
+    read_one, reconciliation_request_status, reset_reconciliation, send, send_error,
+    BridgeConnectionState, BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource,
+    MarketSnapshot, PendingReconciliation, ReconciliationStatus, TerminalIdentity,
+    HANDSHAKE_TIMEOUT,
 };
 use std::{sync::atomic::Ordering, sync::Arc};
 use tokio::net::TcpStream;
@@ -152,7 +153,7 @@ pub(crate) async fn run_handshake(
             "authentication failed",
         )
         .await;
-        protocol_error(events, state, "authentication failed");
+        protocol_error_token_mismatch(events, state, "authentication failed");
         return None;
     }
     let supported_timeframes =
@@ -323,6 +324,7 @@ pub(crate) async fn run_handshake(
         status.message = None;
         // A successful handshake ends whatever the previous refusal reported.
         status.component_outdated = false;
+        status.token_mismatch = false;
         status.market_session = None;
         status.broker_utc_offset_minutes = None;
         status.partial_close = hello_payload.partial_close;

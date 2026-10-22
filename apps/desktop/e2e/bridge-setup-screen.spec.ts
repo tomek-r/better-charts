@@ -101,3 +101,21 @@ test('reduced motion shows the finished screen without its entrance animation', 
   await expect(complete.locator('.setup-complete-icon')).toHaveCSS('animation-name', 'none');
   await expect(complete.getByRole('button', { name: 'Happy trading' })).toHaveCSS('animation-name', 'none');
 });
+
+test('a token mismatch explains itself on the setup screen without an error toast', async ({ page }) => {
+  await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
+  await pushBridgeStatus(page, {
+    state: 'protocol_error',
+    message: 'authentication failed',
+    tokenMismatch: true,
+  });
+  const screen = setupScreen(page);
+  await expect(screen.locator('.loading-message strong')).toHaveText('Bridge token does not match');
+  await expect(
+    screen.getByText(
+      'MetaTrader 5 uses a different bridge token. Open the setup guide and choose Install and restart MT5.',
+    ),
+  ).toBeVisible();
+  await expect(screen.getByRole('button', { name: 'Open setup guide' })).toBeVisible();
+  await expect(page.getByText('authentication failed')).toHaveCount(0);
+});

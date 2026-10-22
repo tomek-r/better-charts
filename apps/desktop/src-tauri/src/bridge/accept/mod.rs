@@ -310,17 +310,19 @@ pub(crate) fn reset_reconciliation(
     publish_reconciliation_status(events, state, status);
 }
 
-/// Why a protocol error was reported. Only `ComponentOutdated` is actionable
-/// from inside the app (reinstall the bundled MT5 files), so only it sets the
-/// `componentOutdated` flag the UI reads.
+/// Why a protocol error was reported. `ComponentOutdated` is fixed by
+/// reinstalling the bundled MT5 files, `TokenMismatch` by installing them
+/// through the setup guide, so each sets its own flag the UI reads;
+/// `Other` sets neither.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProtocolErrorCause {
     ComponentOutdated,
+    TokenMismatch,
     Other,
 }
 
 /// Publishes the protocol-error status. The caller has already decided that no
-/// session is live; the cause rides along as a machine-readable flag so no UI
+/// session is live; the cause rides along as machine-readable flags so no UI
 /// code has to read `message`.
 fn report_protocol_error(
     events: &Arc<dyn BridgeEvents>,
@@ -347,6 +349,7 @@ fn report_protocol_error(
         status.state = BridgeConnectionState::ProtocolError;
         status.message = Some(message.into());
         status.component_outdated = cause == ProtocolErrorCause::ComponentOutdated;
+        status.token_mismatch = cause == ProtocolErrorCause::TokenMismatch;
         status.market_session = None;
         status.broker_utc_offset_minutes = None;
         status.partial_close = false;
@@ -373,6 +376,14 @@ pub(crate) fn protocol_error_component_outdated(
         message,
         ProtocolErrorCause::ComponentOutdated,
     );
+}
+
+pub(crate) fn protocol_error_token_mismatch(
+    events: &Arc<dyn BridgeEvents>,
+    state: &BridgeState,
+    message: impl Into<String>,
+) {
+    report_protocol_error(events, state, message, ProtocolErrorCause::TokenMismatch);
 }
 
 pub(crate) fn protocol_error(
@@ -403,6 +414,7 @@ pub(crate) fn disconnect(
             status.state = BridgeConnectionState::Disconnected;
             status.message = None;
             status.component_outdated = false;
+            status.token_mismatch = false;
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;
@@ -505,6 +517,7 @@ pub(crate) fn protocol_error_session(
             // A session-level error is never a version mismatch: both are
             // checked before a session exists.
             status.component_outdated = false;
+            status.token_mismatch = false;
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;

@@ -145,6 +145,11 @@ pub(crate) struct BridgeStatus {
     /// `message` is.
     #[serde(rename = "componentOutdated", default)]
     pub component_outdated: bool,
+    /// True only when the EA presented a token other than the one in App
+    /// settings, so the UI can point at the setup guide instead of the message.
+    /// False for every other error, and cleared wherever `message` is.
+    #[serde(rename = "tokenMismatch", default)]
+    pub token_mismatch: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -172,6 +177,7 @@ impl Default for BridgeStatus {
             partial_close: false,
             trading_enabled: false,
             component_outdated: false,
+            token_mismatch: false,
         }
     }
 }

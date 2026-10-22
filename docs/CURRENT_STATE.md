@@ -76,14 +76,15 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   connected bridge stays open. The chart's connection dot appears only once a chart is rendered, and the
   install section names the data folder in words ("Installs into MetaTrader 5." or
   a portable/user folder choice) instead of showing its path.
-- On first launch, the setup guide opens on its own when no listed data folder
-  holds `BetterChartsBridge.mq5` yet (including when MT5 is not found); App settings
-  opens alone when the EA is already installed or the listing failed. That first
-  launch generates a random bridge token and saves it, so the bridge, the
-  environment exported at startup and the EA preset share a token nobody had to
-  invent.
+- On first launch, the setup guide always opens on its own, even when a listed data
+  folder already holds `BetterChartsBridge.mq5`: that launch generates a random
+  bridge token and saves it, so an EA already attached in MT5 cannot know it, and
+  only the guide's install hands it over. The bridge, the environment exported at
+  startup and the EA preset then share a token nobody had to invent.
 - An outdated EA or tick reader sets `componentOutdated` on the bridge status; the
-  error notice offers "Update in MT5", which opens the setup guide. Detected
+  error notice offers "Update in MT5", which opens the setup guide. A token
+  mismatch sets `tokenMismatch` instead: the setup screen says the token differs
+  and points at the guide's install, and no error notice is shown for it. Detected
   installation paths fill the App settings fields the user left unset (terminal
   path, Wine prefix, and the Wine binary while it is still `wine`); user values and
   `MT5_*` overrides are never replaced, and auto-start stays off unless the user

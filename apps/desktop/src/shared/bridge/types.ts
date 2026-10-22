@@ -33,6 +33,8 @@ export interface BridgeStatus {
    * requires, so reinstalling the bundled files fixes it. Absent or false for every other error.
    */
   componentOutdated?: boolean;
+  /** The EA presented a token other than the one in App settings; installing through the guide hands it the current one. */
+  tokenMismatch?: boolean;
 }
 
 export interface ExecutionSafetyStatus {

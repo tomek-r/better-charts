@@ -1,9 +1,22 @@
 import { useBridgeChartState, useBridgeConnection } from '../bridge/BridgeSessionProvider';
 import { useChartResources } from './ChartWorkspaceProvider';
 import type { ReactNode } from 'react';
+import type { BridgeStatus } from '../../shared/bridge/types';
 import { useErrorNotification } from '../../shared/ui/ErrorNotifications';
 import { LoadingMessage } from '../../shared/ui/LoadingMessage';
 import { HistoryWaitNotice } from './HistoryWaitNotice';
+
+/** A protocol error nothing else explains is the only thing worth a toast: the header notice covers an outdated
+ * component and the setup screen below covers a token mismatch. */
+function protocolErrorToNotify(status: BridgeStatus): string | undefined {
+  if (status.state !== 'protocol_error') {
+    return undefined;
+  }
+  if (status.componentOutdated === true || status.tokenMismatch === true) {
+    return undefined;
+  }
+  return status.message;
+}
 
 /** `children` are DOM overlays hung over the canvas (positioned against the chart frame). */
 export function ChartCanvas({ children }: { children?: ReactNode }) {
@@ -16,11 +29,7 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
   const showLoadingMessage = symbolLoading || (tauriAvailable && status.state === 'connected' && !hasCandles);
   const frameClassName = chartRendered ? 'chart-frame' : 'chart-frame chart-frame-waiting';
   useErrorNotification(chartError);
-  // An outdated EA or tick reader is reported by the header notice instead, which carries the same message
-  // plus the install action.
-  useErrorNotification(
-    status.state === 'protocol_error' && status.componentOutdated !== true ? status.message : undefined,
-  );
+  useErrorNotification(protocolErrorToNotify(status));
 
   return (
     <div className={frameClassName}>
