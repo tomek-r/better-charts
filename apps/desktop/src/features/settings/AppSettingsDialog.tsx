@@ -159,17 +159,7 @@ export function AppSettingsDialog({
           </ModalDialogButton>
         </>
       }
-      overlay={
-        guideOpen && (
-          <SetupGuideModal
-            onClose={onCloseGuide}
-            onFinish={() => {
-              onCloseGuide();
-              onClose();
-            }}
-          />
-        )
-      }
+      overlay={guideOpen && <SetupGuideModal onClose={onCloseGuide} />}
     >
       <nav className="settings-nav" aria-label="Settings categories">
         {(['MT5 setup', 'Trading'] as const).map((item, index) => (

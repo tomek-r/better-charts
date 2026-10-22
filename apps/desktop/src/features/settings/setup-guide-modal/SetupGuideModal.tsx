@@ -1,7 +1,6 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { isTauri, invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBridgeConnection } from '../../bridge/BridgeSessionProvider';
 import { afterExitAnimation } from '../../../shared/ui/afterExitAnimation';
 import { DownloadIcon } from '../../../shared/ui/DownloadIcon';
 import { InstallToMt5 } from './installation/InstallToMt5';
@@ -40,12 +39,9 @@ async function downloadResource(resourcePath: string, fileName: string): Promise
  */
 export function SetupGuideModal({
   onClose,
-  onFinish,
   standalone,
 }: {
   onClose: () => void;
-  /** The bridge reached "connected": the guide has nothing left to do. */
-  onFinish: () => void;
   /** No settings dialog below, so the guide owns the window instead of sitting inside it. */
   standalone?: boolean;
 }) {
@@ -54,7 +50,6 @@ export function SetupGuideModal({
   const closingRef = useRef(false);
   const [closing, setClosing] = useState(false);
   const shellAvailable = isTauri();
-  const { status } = useBridgeConnection();
   const playExit = useCallback((afterExit: () => void) => {
     if (closingRef.current) {
       return;
@@ -64,7 +59,6 @@ export function SetupGuideModal({
     afterExitAnimation(backdrop.current, afterExit);
   }, []);
   const requestClose = useCallback(() => playExit(onClose), [onClose, playExit]);
-  const finish = useCallback(() => playExit(onFinish), [onFinish, playExit]);
   const backdropClassName = `setup-guide-backdrop${standalone ? ' setup-guide-backdrop-standalone' : ''}${
     closing ? ' is-closing' : ''
   }`;
@@ -109,14 +103,6 @@ export function SetupGuideModal({
         </div>
 
         <div className="setup-guide-body">
-          {status.state === 'connected' && (
-            <div className="setup-guide-connected">
-              <p className="setup-guide-connected-note">MetaTrader 5 is connected.</p>
-              <button type="button" className="setup-guide-install-run" onClick={finish}>
-                Happy trading
-              </button>
-            </div>
-          )}
           <InstallToMt5 />
           <h3 className="setup-guide-title setup-guide-manual-title">Or install manually</h3>
           <ol className="setup-guide-steps">

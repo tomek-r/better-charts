@@ -20,6 +20,15 @@
   gap: 18px;
 }
 
+/* The finished-setup mark stands further from its button than the setup screen's rows. */
+.setup-complete-content {
+  gap: 28px;
+}
+
+.setup-complete-icon {
+  color: var(--color-accent);
+}
+
 /* The dialog's primary button, reused here: its focus ring lives under `.modal-dialog` there. */
 .bridge-setup-screen-content .modal-dialog-button:focus-visible {
   outline: 2px solid var(--color-accent);

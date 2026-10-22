@@ -67,11 +67,13 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   MetaTrader 5 connection, keeps the notifications and the dialogs above it, and
   its "Open setup guide" button opens the guide on its own window, with no App
   settings dialog beneath it (the "Update in MT5" notice opens the same standalone
-  guide). Once the bridge connects, the guide offers "Happy trading", which closes
-  it and, when it was opened from there, App settings too. The chart's connection
-  dot appears only once a chart is rendered, and the install section names the data
-  folder in words ("Installs into MetaTrader 5." or a portable/user folder choice)
-  instead of showing its path.
+  guide). Once the bridge connects while the guide is open, the guide closes (App
+  settings too, when it sits beneath) and a full-window blurred "setup complete"
+  screen takes over: a check mark over a "Happy trading" button that drops the
+  screen and shows the chart. A guide opened on an already connected bridge stays
+  open. The chart's connection dot appears only once a chart is rendered, and the
+  install section names the data folder in words ("Installs into MetaTrader 5." or
+  a portable/user folder choice) instead of showing its path.
 - On first launch, the setup guide opens on its own when no listed data folder
   holds `BetterChartsBridge.mq5` yet (including when MT5 is not found); App settings
   opens alone when the EA is already installed or the listing failed. That first

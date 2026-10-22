@@ -12,6 +12,8 @@ export interface AppSettingsState {
   closing: boolean;
   /** The setup guide is open: over the settings dialog when that is open, over the window otherwise. */
   setupGuideOpen: boolean;
+  /** The bridge connected while the guide was open: the finished screen stands over the chart. */
+  setupCompleteShown: boolean;
   loadError: string | undefined;
   restartRequired: boolean;
   restartNoticeDismissed: boolean;
@@ -25,6 +27,7 @@ export const initialAppSettingsState: AppSettingsState = {
   isOpen: false,
   closing: false,
   setupGuideOpen: false,
+  setupCompleteShown: false,
   loadError: undefined,
   restartRequired: false,
   restartNoticeDismissed: false,
@@ -136,6 +139,8 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     store.setField('setupGuideOpen', false);
   }, [store]);
   const dismissRestartNotice = useCallback(() => store.setField('restartNoticeDismissed', true), [store]);
+  const showSetupComplete = useCallback(() => store.setField('setupCompleteShown', true), [store]);
+  const dismissSetupComplete = useCallback(() => store.setField('setupCompleteShown', false), [store]);
   const dismissConfigurationNotice = useCallback(
     () => store.setField('dismissedConfigurationError', store.getState().settings?.configurationError ?? undefined),
     [store],
@@ -162,5 +167,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     saved,
     dismissRestartNotice,
     dismissConfigurationNotice,
+    showSetupComplete,
+    dismissSetupComplete,
   };
 }
