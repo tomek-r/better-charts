@@ -26,14 +26,8 @@ function Frame({ children, role }: { children: ReactNode; role: 'status' | 'aler
   };
   return (
     <DismissContext value={{ closing, dismiss }}>
-      <div ref={frame} className={`notification notification-${role}${closing ? ' is-closing' : ''}`} role={role}>
-        <svg
-          className={`notification-icon notification-icon-${role === 'alert' ? 'error' : 'info'}`}
-          width="20"
-          height="20"
-          viewBox="0 0 20 20"
-          aria-hidden="true"
-        >
+      <div ref={frame} className={`notification${closing ? ' is-closing' : ''}`} role={role}>
+        <svg className="notification-icon" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
           <circle cx="10" cy="10" r="8" />
           <path d={role === 'alert' ? 'M10 5.5v5M10 14v.5' : 'M10 6v.5M10 9v5'} />
         </svg>

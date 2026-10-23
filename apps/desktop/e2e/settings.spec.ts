@@ -166,7 +166,7 @@ test('saving settings shows a dark shadowed notification without moving the char
   const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
   await expect(notice).toHaveCSS('background-color', 'rgb(18, 25, 35)');
   await expect(notice).not.toHaveCSS('box-shadow', 'none');
-  await expect(notice.locator('.notification-icon-info')).toBeVisible();
+  await expect(notice.locator('.notification-icon')).toBeVisible();
   const typography = (locator: typeof notice) =>
     locator.evaluate((element) => {
       const style = getComputedStyle(element);
@@ -175,14 +175,6 @@ test('saving settings shows a dark shadowed notification without moving the char
   const statusType = await typography(notice);
   expect(statusType.fontSize).toBe('13px');
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.evaluate(() => {
-    const probe = document.createElement('div');
-    probe.className = 'notification notification-alert';
-    probe.id = 'type-probe';
-    document.body.append(probe);
-  });
-  expect(await typography(page.locator('#type-probe'))).toEqual(statusType);
-  await page.locator('#type-probe').evaluate((element) => element.remove());
   expect(await chart.boundingBox()).toEqual(before);
   await page.getByRole('button', { name: 'App settings', exact: true }).click();
   await expect(dialog).toBeVisible();

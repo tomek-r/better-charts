@@ -31,8 +31,8 @@ test('broker errors are capitalized, prominent and keyboard dismissible at deskt
   await pushCommandError(page, { code: 'invalid_volume', message: 'normalized volume is below broker minimum' });
   const notice = page.locator('.notification-region [role=alert]');
   await expect(notice).toHaveText('Normalized volume is below broker minimum');
-  await expect(notice.locator('.notification-icon-error')).toBeVisible();
-  // Errors sit on the same neutral panel as every notification; only the icon is red.
+  await expect(notice.locator('.notification-icon')).toBeVisible();
+  // Errors sit on the same neutral panel as every notification.
   await expect(notice).toHaveCSS('background-color', 'rgb(18, 25, 35)');
   await expect(notice).toHaveCSS('font-size', '13px');
   await expect(notice).toHaveCSS('color', 'rgb(242, 245, 250)');
