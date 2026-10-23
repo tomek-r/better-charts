@@ -194,13 +194,6 @@
   box-shadow: 0 0 0 3px var(--color-sell-wash);
 }
 
-/* Hover-revealed right price-scale toggles (A = auto scale, L = logarithmic).
-   Position is here, not in the controller: `bottom` is the time axis height, so
-   the row sits on the pane's bottom edge above it, and `right: 0` keeps it in
-   the axis column. Only its width is set from the chart, because the axis
-   width is runtime geometry. The fill is the price scale canvas's own, so the
-   labels behind the row are masked; the container never takes pointer events
-   (axis dragging must keep working), only the revealed buttons do. */
 .price-scale-controls {
   position: absolute;
   right: 0;
@@ -213,6 +206,7 @@
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.12s ease;
+  padding-top: 5px;
 }
 
 .price-scale-controls-revealed,
