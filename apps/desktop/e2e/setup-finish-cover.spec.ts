@@ -1,6 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { BridgeStatus, MarketSnapshot } from '../src/shared/bridge/types';
-import { markSetupCompleted, openStandaloneSetupGuide, walkGuideToConnectStep } from './helpers/setupGuide';
+import type { MarketSnapshot } from '../src/shared/bridge/types';
+import { CONNECTED_STATUS, WAITING_FOR_BRIDGE } from './helpers/bridgeStates';
+import {
+  markSetupCompleted,
+  openSetupGuide,
+  openStandaloneSetupGuide,
+  setupCompleteDialog,
+  waitingScreen,
+  walkGuideToConnectStep,
+} from './helpers/setupGuide';
 import { gotoWithStub, pushBridgeStatus, pushEvent, waitForBridgeListeners, windowCandles } from './helpers/tauriStub';
 
 /**
@@ -10,19 +18,6 @@ import { gotoWithStub, pushBridgeStatus, pushEvent, waitForBridgeListeners, wind
  * `.bridge-screen` — the first-run screen, the wait after the setup, or the finished screen — covers
  * the workspace here, and every frame of the hand-over is judged on both kinds of device.
  */
-
-/** A bridge that has not connected yet and holds no candles, so a blurred screen stands in for the chart. */
-const WAITING_FOR_BRIDGE = {
-  get_bridge_status: { state: 'connecting' },
-  get_market_snapshot: { complete: false, candles: [] },
-};
-
-/** The status the stub pushes once the bridge answers, worded like the real one. */
-const CONNECTED_STATUS: BridgeStatus = {
-  state: 'connected',
-  supportedTimeframes: ['M1'],
-  message: 'Bridge connected.',
-};
 
 /** The connected session's first window before the EA answers: the bridge publishes it empty. */
 const AWAITING_HISTORY: MarketSnapshot = { complete: false, candles: [] };
@@ -43,9 +38,6 @@ const SAMPLE_WINDOW_MS = 2_500;
 
 /** How many uncovered frames the failure message names before it counts the rest. */
 const GAP_FRAMES_REPORTED = 8;
-
-const setupComplete = (page: Page) => page.getByRole('dialog', { name: 'Setup complete' });
-const waitingScreen = (page: Page) => page.getByRole('region', { name: 'Waiting for MetaTrader 5' });
 
 /** One blurred screen of a frame: the workspace counts as covered while one of them covers it. */
 interface CoverLayer {
@@ -191,7 +183,7 @@ async function expectCoverThroughHandOver(page: Page): Promise<void> {
 
   await deliverConnection(page);
   // The finished screen stands on the blur the guide left, so it arrives whole instead of fading in.
-  const complete = setupComplete(page);
+  const complete = setupCompleteDialog(page);
   await expect(complete).toBeVisible();
   await expect(complete).toHaveClass(/setup-complete-over-screen/);
   await waitForSamplerDone(page);
@@ -218,12 +210,8 @@ async function openCompletedSetupGuideAtConnect(page: Page): Promise<void> {
   await gotoWithStub(page, { responses: WAITING_FOR_BRIDGE });
   await expect(waitingScreen(page)).toBeVisible();
 
-  // The blurred wait makes the window inert, so App settings takes a direct click, not a pointer one.
-  const gear = page.getByRole('button', { name: 'App settings', exact: true });
-  await gear.evaluate((button) => (button as HTMLButtonElement).click());
-  await page.getByRole('button', { name: 'How to set up the bridge connection' }).click();
-  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
-  await expect(guide).toBeVisible();
+  // The blurred wait makes the window inert, so App settings takes a direct press, not a pointer one.
+  const guide = await openSetupGuide(page, 'direct');
   await walkGuideToConnectStep(guide);
 }
 

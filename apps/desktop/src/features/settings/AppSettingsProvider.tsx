@@ -3,31 +3,20 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { createDomainStore } from '../../shared/state/domainStore';
 import { useRequiredContext } from '../../shared/state/useRequiredContext';
-import { useAppSettings, initialAppSettingsState, type AppSettingsStore, type SetupGuideStep } from './useAppSettings';
+import {
+  useAppSettings,
+  initialAppSettingsState,
+  type AppSettingsHandlers,
+  type AppSettingsState,
+  type AppSettingsStore,
+  type SetupGuideStep,
+} from './useAppSettings';
 import type { AppSettingsData } from './settingsTypes';
 
-/** The handlers the settings dialog and header notices call; stable across state changes. */
-interface AppSettingsHandlers {
-  dismissRestartNotice: () => void;
-  dismissConfigurationNotice: () => void;
-  showSetupGuideStep: (step: SetupGuideStep) => void;
-  closeSetupGuide: () => void;
-  close: () => void;
-  exited: () => void;
-  saved: (settings: AppSettingsData) => void;
-  showSetupComplete: () => void;
-  dismissSetupComplete: () => void;
-  completeSetup: () => void;
-  finishSetupGuide: () => void;
-}
+/** The two ways into the setup surfaces, which the header and the notices call. */
+type AppSettingsActions = Pick<AppSettingsHandlers, 'openSettings' | 'openSetupGuide'>;
 
-export interface AppSettingsActions {
-  openSettings: () => void;
-  /** Opens the setup guide on its own, at `step`; inside the open settings dialog it sits on top of that. */
-  openSetupGuide: (step?: SetupGuideStep) => void;
-}
-
-export interface AppSettingsViewState extends AppSettingsHandlers, AppSettingsActions {
+export type AppSettingsViewState = AppSettingsHandlers & {
   settings: AppSettingsData | undefined;
   loadRequest: Promise<void>;
   isOpen: boolean;
@@ -42,60 +31,34 @@ export interface AppSettingsViewState extends AppSettingsHandlers, AppSettingsAc
   notificationRevision: number;
   restartNoticeVisible: boolean;
   configurationNotice: string | null | undefined;
-}
+};
 
 interface AppSettingsContextValue {
   store: AppSettingsStore;
-  actions: AppSettingsActions & AppSettingsHandlers;
+  actions: AppSettingsHandlers;
 }
 
 const AppSettingsContext = createContext<AppSettingsContextValue | null>(null);
 
+/** One message per caller, so a hook used outside the provider names itself in its error. */
+function useSettingsContext(hookName: string): AppSettingsContextValue {
+  return useRequiredContext(AppSettingsContext, `${hookName} must be used within AppSettingsProvider.`);
+}
+
+function useSettingsStore(hookName: string): AppSettingsStore {
+  return useSettingsContext(hookName).store;
+}
+
 export function AppSettingsProvider({ children, tauriAvailable }: { children: ReactNode; tauriAvailable: boolean }) {
   const [store] = useState(() => createDomainStore(initialAppSettingsState));
-  const settings = useAppSettings(store, tauriAvailable);
-  const actions = useMemo(
-    () => ({
-      openSettings: settings.open,
-      openSetupGuide: settings.openSetupGuide,
-      dismissRestartNotice: settings.dismissRestartNotice,
-      dismissConfigurationNotice: settings.dismissConfigurationNotice,
-      showSetupGuideStep: settings.showSetupGuideStep,
-      closeSetupGuide: settings.closeSetupGuide,
-      close: settings.close,
-      exited: settings.exited,
-      saved: settings.saved,
-      showSetupComplete: settings.showSetupComplete,
-      dismissSetupComplete: settings.dismissSetupComplete,
-      completeSetup: settings.completeSetup,
-      finishSetupGuide: settings.finishSetupGuide,
-    }),
-    [
-      settings.close,
-      settings.closeSetupGuide,
-      settings.exited,
-      settings.dismissConfigurationNotice,
-      settings.dismissRestartNotice,
-      settings.open,
-      settings.openSetupGuide,
-      settings.showSetupGuideStep,
-      settings.saved,
-      settings.showSetupComplete,
-      settings.dismissSetupComplete,
-      settings.completeSetup,
-      settings.finishSetupGuide,
-    ],
-  );
-  const contextValue = useMemo(() => ({ store, actions }), [actions, store]);
+  const handlers = useAppSettings(store, tauriAvailable);
+  const contextValue = useMemo(() => ({ store, actions: handlers }), [handlers, store]);
 
   return <AppSettingsContext value={contextValue}>{children}</AppSettingsContext>;
 }
 
 export function useAppSettingsView(): AppSettingsViewState {
-  const { store, actions } = useRequiredContext(
-    AppSettingsContext,
-    'useAppSettingsView must be used within AppSettingsProvider.',
-  );
+  const { store, actions } = useSettingsContext('useAppSettingsView');
   const view = useStore(
     store,
     useShallow((state) => ({
@@ -122,75 +85,50 @@ export function useAppSettingsView(): AppSettingsViewState {
   return { ...view, ...actions };
 }
 
+/** The handlers object is stable, so its identity never changes and no consumer re-renders through it. */
 export function useAppSettingsActions(): AppSettingsActions {
-  const { actions } = useRequiredContext(
-    AppSettingsContext,
-    'useAppSettingsActions must be used within AppSettingsProvider.',
-  );
-  return useMemo(
-    () => ({ openSettings: actions.openSettings, openSetupGuide: actions.openSetupGuide }),
-    [actions.openSettings, actions.openSetupGuide],
-  );
+  return useSettingsContext('useAppSettingsActions').actions;
 }
 
 /**
- * Whether this device finished the setup, as its own subscription: a settings change reaches
- * only the components that ask for it, never the whole header.
+ * One primitive subscription to the settings store per hook below, so a settings change reaches only
+ * the components that ask for it, never the whole header.
  */
+function useSettingsSelector<T>(hookName: string, selector: (state: AppSettingsState) => T): T {
+  const store = useSettingsStore(hookName);
+  return useStore(store, selector);
+}
+
+/** Whether this device finished the setup, so the guide never opens on its own again. */
 export function useSetupCompleted(): boolean {
-  const { store } = useRequiredContext(
-    AppSettingsContext,
-    'useSetupCompleted must be used within AppSettingsProvider.',
-  );
-  return useStore(store, (state) => state.setupCompleted);
+  return useSettingsSelector('useSetupCompleted', (state) => state.setupCompleted);
 }
 
-/**
- * Whether the setup guide stands over the window rather than inside App settings, as its own
- * subscription: only the screens that hold the window for the guide hear about it.
- */
+/** Whether the setup guide stands over the window rather than inside App settings. */
 export function useStandaloneGuideOpen(): boolean {
-  const { store } = useRequiredContext(
-    AppSettingsContext,
-    'useStandaloneGuideOpen must be used within AppSettingsProvider.',
-  );
-  return useStore(store, (state) => state.setupGuideOpen && !state.isOpen);
+  return useSettingsSelector('useStandaloneGuideOpen', (state) => state.setupGuideOpen && !state.isOpen);
 }
 
 /**
- * Whether the setup guide plays its exit because the bridge connected, as its own subscription:
- * the screens beneath it keep their blur until the finished screen takes it over.
+ * Whether the guide's exit keeps an already blurred screen on the window until the finished screen
+ * takes it over; the finish itself never brings a blur in.
  */
-export function useSetupGuideFinishing(): boolean {
-  const { store } = useRequiredContext(
-    AppSettingsContext,
-    'useSetupGuideFinishing must be used within AppSettingsProvider.',
+export function useBlurHeldWhileGuideFinishes(): boolean {
+  return useSettingsSelector(
+    'useBlurHeldWhileGuideFinishes',
+    (state) => state.setupGuideFinishing && state.blurredScreenShown,
   );
-  return useStore(store, (state) => state.setupGuideFinishing);
 }
 
 /**
- * Whether the setup guide, its exit or its finished screen holds the window, as its own subscription:
- * the notices that send the user back to the guide stay away while it is up.
+ * Whether the setup guide, its exit or its finished screen holds the window, so the notices that
+ * send the user back to the guide stay away while it is up.
  */
 export function useSetupFlowOnScreen(): boolean {
-  const { store } = useRequiredContext(
-    AppSettingsContext,
-    'useSetupFlowOnScreen must be used within AppSettingsProvider.',
+  return useSettingsSelector(
+    'useSetupFlowOnScreen',
+    (state) => state.setupGuideOpen || state.setupGuideFinishing || state.setupCompleteShown,
   );
-  return useStore(store, (state) => state.setupGuideOpen || state.setupGuideFinishing || state.setupCompleteShown);
-}
-
-/**
- * Whether a blurred screen is on the window right now, as its own subscription: a screen already up
- * holds on while the guide finishes, but the finish never brings one in.
- */
-export function useBlurredScreenShown(): boolean {
-  const { store } = useRequiredContext(
-    AppSettingsContext,
-    'useBlurredScreenShown must be used within AppSettingsProvider.',
-  );
-  return useStore(store, (state) => state.blurredScreenShown);
 }
 
 /**
@@ -198,10 +136,7 @@ export function useBlurredScreenShown(): boolean {
  * whether it replaces a blur or has to fade its own in.
  */
 export function useReportBlurredScreen(shown: boolean): void {
-  const { store } = useRequiredContext(
-    AppSettingsContext,
-    'useReportBlurredScreen must be used within AppSettingsProvider.',
-  );
+  const store = useSettingsStore('useReportBlurredScreen');
   useEffect(() => {
     store.setField('blurredScreenShown', shown);
     return () => store.setField('blurredScreenShown', false);

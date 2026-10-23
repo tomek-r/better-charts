@@ -4,7 +4,7 @@ import { useDelayedReveal } from '../../shared/hooks/useDelayedReveal';
 import { ErrorNotification, type NoticeAction } from '../../shared/ui/ErrorNotifications';
 import { useAppSettingsActions, useSetupFlowOnScreen } from '../settings/AppSettingsProvider';
 import { SetupGuideStep } from '../settings/useAppSettings';
-import { useBridgeConnectionSelector, useBridgeMarketSelector } from './BridgeSessionProvider';
+import { useBridgeConnectionSelector, useHasCandles } from './BridgeSessionProvider';
 
 /** How long a drawn chart may sit without a connected bridge before its notice shows. */
 const DISCONNECTED_NOTICE_DELAY_MS = 3_000;
@@ -41,9 +41,7 @@ export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
   const refusalMessage = useBridgeConnectionSelector(({ status }) =>
     bridgeRefusal(status) === BridgeRefusal.Other ? status.message : undefined,
   );
-  const hasCandles = useBridgeMarketSelector(
-    (market) => market.snapshot.candles.length > 0 || market.latestCandle !== undefined,
-  );
+  const hasCandles = useHasCandles();
   const disconnectedNoticeShown = useDelayedReveal(
     hasCandles && bridgeState !== 'connected' && refusal === undefined && !setupFlowOnScreen,
     DISCONNECTED_NOTICE_DELAY_MS,
@@ -65,9 +63,9 @@ export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
         message={disconnectedNoticeShown ? NOT_CONNECTED_MESSAGE : undefined}
         action={connectGuideAction}
       />
-      {/* The chart already toasts this refusal for every device, keyed by its own message. Using that
-          message as the key too keeps it one notice: a completed setup adds the fix to the toast. */}
-      {/* A bridge error is fixed from the install step. */}
+      {/* The chart already toasts this refusal for every device, keyed by its own message, so using that
+          message as the key here too keeps it one notice: a completed setup adds its fix, the install
+          step, to the toast. */}
       <ErrorNotification noticeKey={refusalMessage} message={refusalMessage} action={installGuideAction} />
     </>
   );

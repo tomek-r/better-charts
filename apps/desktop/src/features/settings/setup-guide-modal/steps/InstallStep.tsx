@@ -28,7 +28,7 @@ export function InstallStep({ view }: { view: InstallToMt5View }) {
 
   return (
     <section className="setup-guide-step" aria-labelledby="setup-guide-install-title">
-      <h3 className="setup-guide-title" id="setup-guide-install-title">
+      <h3 className="setup-guide-title visually-hidden" id="setup-guide-install-title">
         Install
       </h3>
       <p className="setup-guide-install-note">
@@ -37,25 +37,17 @@ export function InstallStep({ view }: { view: InstallToMt5View }) {
       <div className="setup-guide-install-actions">
         <button
           type="button"
-          className="primary-button setup-guide-install-run"
+          className="primary-button setup-guide-action"
           disabled={installUnavailable}
-          onClick={() => {
-            if (selected !== undefined) {
-              void view.installAndRestart(selected);
-            }
-          }}
+          onClick={() => void view.installAndRestart()}
         >
           {restartButtonText(pressed, restarting)}
         </button>
         <button
           type="button"
-          className="setup-guide-install-run setup-guide-secondary"
+          className="setup-guide-action setup-guide-secondary"
           disabled={installUnavailable}
-          onClick={() => {
-            if (selected !== undefined) {
-              void view.install(selected);
-            }
-          }}
+          onClick={() => void view.install()}
         >
           {installButtonText(pressed)}
         </button>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
+import { useExitAnimation } from '../../shared/hooks/useExitAnimation';
 import { useAppSettingsView } from './AppSettingsProvider';
 import { SetupCompleteIcon } from './SetupCompleteIcon';
 
@@ -46,19 +46,10 @@ function SetupCompleteDialog() {
   const windowFront = useWindowInFront();
   const happyTradingButton = useRef<HTMLButtonElement>(null);
   const screenRoot = useRef<HTMLDivElement>(null);
-  const leavingRef = useRef(false);
-  const [leaving, setLeaving] = useState(false);
+  const { exiting: leaving, startExit } = useExitAnimation(screenRoot);
 
-  // The screen fades out on its own and only leaves the workspace once it is gone; the guard keeps
-  // a held Escape or a double click from starting that exit twice.
-  const leave = useCallback(() => {
-    if (leavingRef.current) {
-      return;
-    }
-    leavingRef.current = true;
-    setLeaving(true);
-    afterExitAnimation(screenRoot.current, dismissSetupComplete);
-  }, [dismissSetupComplete]);
+  // The screen fades out on its own and only leaves the workspace once it is gone.
+  const leave = useCallback(() => startExit(dismissSetupComplete), [dismissSetupComplete, startExit]);
 
   // The settings dialog below plays its exit animation after this screen mounts and hands focus
   // back to its own trigger as it unmounts, so the screen claims the focus once that dialog is gone.

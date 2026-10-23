@@ -1,4 +1,3 @@
-/** Bold check mark inside eight short rays; the accent colour comes from `.setup-complete-icon`. */
 const CENTRE = 36;
 const CHECK_PATH = 'M24 37 L33 46 L49 28';
 const CHECK_STROKE_WIDTH = 8;
@@ -27,6 +26,7 @@ function rayPath(index: number): string {
 
 const RAY_PATHS = Array.from({ length: RAY_COUNT }, (_, index) => rayPath(index));
 
+/** Bold check mark inside eight short rays; the accent colour comes from `.setup-complete-icon`. */
 export function SetupCompleteIcon() {
   return (
     <svg

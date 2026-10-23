@@ -28,8 +28,9 @@ export interface InstallToMt5View {
   error: string | undefined;
   chooseDataFolder: (key: string) => void;
   adoptInstallations: (found: Mt5InstallationView[]) => void;
-  install: (target: InstallTarget) => Promise<void>;
-  installAndRestart: (target: InstallTarget) => Promise<void>;
+  /** Both presses install into the selected folder; without a selection they do nothing. */
+  install: () => Promise<void>;
+  installAndRestart: () => Promise<void>;
 }
 
 /** Both commands name the same folder: the install writes it and the restart reopens that terminal on it. */
@@ -97,17 +98,18 @@ export function useInstallToMt5(onCleanInstall: () => void): InstallToMt5View {
    * One press installs both files; the restart button adds the restart once every
    * file compiled clean. A report with something to fix ends the run there, so the
    * rows can say what; a refusal leaves the terminal as it was, with only the error.
-   * A clean run of either button hands the guide on to the connection step.
+   * A clean run of either button hands the guide on to the connection step. Without
+   * a selected folder there is nothing to install into, so the press does nothing.
    */
-  async function runInstall(target: InstallTarget, button: InstallButton): Promise<void> {
-    if (run !== undefined) {
+  async function runInstall(button: InstallButton): Promise<void> {
+    if (run !== undefined || selected === undefined) {
       return;
     }
     setRun({ button, restarting: false });
     setError(undefined);
     setReport(undefined);
     try {
-      const installed = await invoke<Mt5InstallReport>('install_to_mt5', targetArgs(target));
+      const installed = await invoke<Mt5InstallReport>('install_to_mt5', targetArgs(selected));
       setReport(installed);
       if (!everyFileCompiledClean(installed.files)) {
         return;
@@ -117,7 +119,7 @@ export function useInstallToMt5(onCleanInstall: () => void): InstallToMt5View {
         return;
       }
       setRun({ button, restarting: true });
-      await invoke<Mt5RestartReport>('restart_mt5_with_ea', targetArgs(target));
+      await invoke<Mt5RestartReport>('restart_mt5_with_ea', targetArgs(selected));
       onCleanInstall();
     } catch (failure) {
       setError(errorText(failure));
@@ -139,7 +141,7 @@ export function useInstallToMt5(onCleanInstall: () => void): InstallToMt5View {
     error,
     chooseDataFolder,
     adoptInstallations,
-    install: (target: InstallTarget) => runInstall(target, 'install'),
-    installAndRestart: (target: InstallTarget) => runInstall(target, 'installAndRestart'),
+    install: () => runInstall('install'),
+    installAndRestart: () => runInstall('installAndRestart'),
   };
 }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { currentGuideStep } from './helpers/setupGuide';
+import { expectGuideOnStep, setupGuideDialog } from './helpers/setupGuide';
 import { expectNoErrors, gotoWithStub, pushBridgeStatus } from './helpers/tauriStub';
 
 /** The bridge version refusal, worded as the Rust handshake words it. */
@@ -18,12 +18,11 @@ test('a version refusal opens the setup guide at its install step', async ({ pag
 
   await notice.getByRole('button', { name: 'Update in MT5' }).click();
 
-  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
+  const guide = setupGuideDialog(page);
   await expect(guide).toBeVisible();
   // The guide stands on its own window: no App settings dialog opens beneath it.
   await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
-  await expect(guide.getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
-  await expect(currentGuideStep(guide)).toHaveText('Install');
+  await expectGuideOnStep(guide, 'Install', { marksIndicator: true });
   await expect(guide.getByRole('button', { name: 'Install and restart MT5' })).toBeVisible();
   expectNoErrors(errors);
 });
@@ -38,6 +37,6 @@ test('another refusal keeps the plain error notice without the install action', 
   const notice = page.locator('.notification-region [role=alert]');
   await expect(notice).toContainText('Bridge bind failed: address already in use; retrying in 1s');
   await expect(page.getByRole('button', { name: 'Update in MT5' })).toHaveCount(0);
-  await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toHaveCount(0);
+  await expect(setupGuideDialog(page)).toHaveCount(0);
   expectNoErrors(errors);
 });

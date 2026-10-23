@@ -3,6 +3,8 @@
  * red bars growing left, teal bars right) whose bars each ease independently. Shared by the fixed range
  * profile tool and the app-wide loading message, so both wait with the same animation.
  */
+import { palette } from '../theme/palette';
+
 export const LOADER_ROW_COUNT = 5;
 export const LOADER_ROW_HEIGHT = 4;
 export const LOADER_ROW_GAP = 2;
@@ -27,6 +29,13 @@ export interface LoaderColors {
   ask: string;
   line: string;
 }
+
+/** The palette's loader colours: the bid bars red, the ask bars teal, the centre line bright. */
+export const DEFAULT_LOADER_COLORS: LoaderColors = {
+  bid: palette.sell,
+  ask: palette.buy,
+  line: palette.textBright,
+};
 
 /** Deterministic integer hash of (bar, step) to [0, 1): a murmur-style finaliser, so targets look random. */
 function hashUnit(bar: number, step: number): number {

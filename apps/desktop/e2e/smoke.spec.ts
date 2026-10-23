@@ -1,5 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { openTradePanel } from './helpers/panel';
+import { setupScreen } from './helpers/setupGuide';
 import { gotoCollectingErrors, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
 
 // Without the Tauri shell, every `invoke()` call fails (window.__TAURI_INTERNALS__
@@ -23,6 +24,15 @@ async function isTopmostAtCentre(locator: Locator): Promise<boolean> {
       element.style.pointerEvents = previous;
     }
   });
+}
+
+/** Asserts the chart's chrome — host, heading, tool rail and the topbar toggles — reads `visibility`. */
+async function expectChartChrome(page: Page, visibility: 'hidden' | 'visible'): Promise<void> {
+  await expect(page.locator('.chart-host')).toHaveCSS('visibility', visibility);
+  await expect(page.locator('.chart-heading')).toHaveCSS('visibility', visibility);
+  await expect(page.locator('.tool-rail')).toHaveCSS('visibility', visibility);
+  await expect(page.getByLabel('Search symbols')).toHaveCSS('visibility', visibility);
+  await expect(page.getByLabel('Toggle trade panel')).toHaveCSS('visibility', visibility);
 }
 
 test('page loads with the Better Charts title and no uncaught errors', async ({ page }) => {
@@ -93,23 +103,18 @@ test('shows the setup screen in place of the chart without the bridge', async ({
   await expect(page.locator('.runtime-label')).toHaveCount(0);
   await expect(page.locator('.app-footer')).toHaveCount(0);
   // Without a bridge the full-window setup screen stands in for the chart and its loader.
-  const setupScreen = page.getByRole('region', { name: 'MetaTrader 5 setup' });
-  await expect(setupScreen).toBeVisible();
-  const heading = setupScreen.locator('.loading-message strong');
+  const screen = setupScreen(page);
+  await expect(screen).toBeVisible();
+  const heading = screen.locator('.loading-message strong');
   await expect(heading).toHaveText('Connect MetaTrader 5');
   // The shared loader is the volume profile's loading animation.
-  await expect(setupScreen.locator('.loading-message canvas.loader')).toBeVisible();
+  await expect(screen.locator('.loading-message canvas.loader')).toBeVisible();
   // Hit testing with text enabled detects canvases painted over the message.
   expect(await isTopmostAtCentre(heading)).toBe(true);
-  // Without candles the empty chart (axis borders, attribution logo) stays hidden behind the wait.
-  await expect(page.locator('.chart-host')).toHaveCSS('visibility', 'hidden');
+  // Without candles the chart chrome stays hidden behind the wait.
+  await expectChartChrome(page, 'hidden');
   // The whole chart area is blank: heading (title and quotes) hidden, section background transparent.
-  await expect(page.locator('.chart-heading')).toHaveCSS('visibility', 'hidden');
   await expect(page.locator('.chart-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  // The drawing tools go with them: there is no chart to draw on yet.
-  await expect(page.locator('.tool-rail')).toHaveCSS('visibility', 'hidden');
-  await expect(page.getByLabel('Search symbols')).toHaveCSS('visibility', 'hidden');
-  await expect(page.getByLabel('Toggle trade panel')).toHaveCSS('visibility', 'hidden');
   expect(pageErrors).toEqual([]);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
@@ -260,13 +265,8 @@ test('chart chrome nests the connection dot inside the OHLC legend, after its te
   await expect(dot).toHaveAttribute('aria-label', /^MT5 /);
   // The dot only shows once the stub's candles have rendered a chart.
   await expect(dot).toBeVisible();
-  // With candles the waiting state is gone: the heading and the canvas are back on screen.
-  await expect(page.locator('.chart-heading')).toHaveCSS('visibility', 'visible');
-  await expect(page.locator('.chart-host')).toHaveCSS('visibility', 'visible');
-  // The tool rail is back too: there is a chart to draw on.
-  await expect(page.locator('.tool-rail')).toHaveCSS('visibility', 'visible');
-  await expect(page.getByLabel('Search symbols')).toHaveCSS('visibility', 'visible');
-  await expect(page.getByLabel('Toggle trade panel')).toHaveCSS('visibility', 'visible');
+  // With candles the waiting state is gone: the chart chrome is back on screen.
+  await expectChartChrome(page, 'visible');
   expect(await isTopmostAtCentre(dot)).toBe(true);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
@@ -339,7 +339,7 @@ test('an outdated MT5 bridge shows the update instructions while waiting for dat
     },
   });
   // No chart yet: the setup screen stands where the chart would be, and the notice keeps the refusal.
-  await expect(page.getByRole('region', { name: 'MetaTrader 5 setup' })).toBeVisible();
+  await expect(setupScreen(page)).toBeVisible();
   await expect(page.getByText('Connect MetaTrader 5', { exact: true })).toBeVisible();
   await expect(page.getByText(message, { exact: true })).toBeVisible();
 });

@@ -2,10 +2,9 @@ import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../bridge/BridgeAwa
 import { BridgeNotices } from '../bridge/BridgeNotices';
 import { useChartCannotBeDrawn } from '../bridge/useChartCannotBeDrawn';
 import {
-  useBlurredScreenShown,
+  useBlurHeldWhileGuideFinishes,
   useReportBlurredScreen,
   useSetupCompleted,
-  useSetupGuideFinishing,
   useStandaloneGuideOpen,
 } from './AppSettingsProvider';
 import { LazyBridgeSetupScreen } from './LazyBridgeSetupScreen';
@@ -22,11 +21,8 @@ function FirstRunBridge() {
   // The guide stands on its own exactly when no App settings dialog sits beneath it: the screen
   // then holds on a moment longer, so the blur never lifts before the finished screen takes over.
   const standaloneGuideOpen = useStandaloneGuideOpen();
-  // A blur already on the window stays while the guide plays its exit, until the finished screen
-  // takes it over; the finish never brings one in.
-  const guideFinishing = useSetupGuideFinishing();
-  const blurredScreenShown = useBlurredScreenShown();
-  const screenShown = noChartToDraw || standaloneGuideOpen || (guideFinishing && blurredScreenShown);
+  const blurHeldWhileGuideFinishes = useBlurHeldWhileGuideFinishes();
+  const screenShown = noChartToDraw || standaloneGuideOpen || blurHeldWhileGuideFinishes;
   useReportBlurredScreen(screenShown);
   return (
     <>
@@ -42,14 +38,11 @@ function FirstRunBridge() {
  */
 function CompletedSetupBridge() {
   const { screenShown, waitingTooLong } = useAwaitingBridgeData();
-  // A blur already on the window stays while the guide plays its exit, until the finished screen
-  // takes it over; the finish never brings one in.
-  const guideFinishing = useSetupGuideFinishing();
-  const blurredScreenShown = useBlurredScreenShown();
+  const blurHeldWhileGuideFinishes = useBlurHeldWhileGuideFinishes();
   return (
     <>
       <BridgeNotices waitingTooLong={waitingTooLong} />
-      <BridgeAwaitingScreen screenShown={screenShown || (guideFinishing && blurredScreenShown)} />
+      <BridgeAwaitingScreen screenShown={screenShown || blurHeldWhileGuideFinishes} />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { DomainStore } from '../../shared/state/domainStore';
 import { readSetupCompleted, saveSetupCompleted } from './setupCompletion';
@@ -61,7 +61,8 @@ export type AppSettingsStore = DomainStore<AppSettingsState>;
 /**
  * First launch: the app has just generated the bridge token, so an EA already attached in MT5
  * cannot know it. No dialog opens by itself; the setup screen's guide, once the user opens it,
- * hands the EA the new token.
+ * hands the EA the new token. Every handler is stable, and so is the object carrying them, so the
+ * provider hands the same identity to every consumer.
  */
 export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean) {
   const settingsLoadGeneration = useRef(0);
@@ -108,7 +109,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     };
   }, [loadSettings, store, tauriAvailable]);
 
-  const open = useCallback(() => {
+  const openSettings = useCallback(() => {
     store.setField('closing', false);
     store.setField('setupGuideOpen', false);
     store.setField('dismissedConfigurationError', undefined);
@@ -189,19 +190,37 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     [close, store],
   );
 
-  return {
-    open,
-    openSetupGuide,
-    showSetupGuideStep,
-    closeSetupGuide,
-    close,
-    exited,
-    saved,
-    dismissRestartNotice,
-    dismissConfigurationNotice,
-    showSetupComplete,
-    dismissSetupComplete,
-    completeSetup,
-    finishSetupGuide,
-  };
+  return useMemo(
+    () => ({
+      openSettings,
+      openSetupGuide,
+      showSetupGuideStep,
+      closeSetupGuide,
+      close,
+      exited,
+      saved,
+      dismissRestartNotice,
+      dismissConfigurationNotice,
+      dismissSetupComplete,
+      completeSetup,
+      finishSetupGuide,
+    }),
+    [
+      openSettings,
+      openSetupGuide,
+      showSetupGuideStep,
+      closeSetupGuide,
+      close,
+      exited,
+      saved,
+      dismissRestartNotice,
+      dismissConfigurationNotice,
+      dismissSetupComplete,
+      completeSetup,
+      finishSetupGuide,
+    ],
+  );
 }
+
+/** The handlers the settings dialog, the header notices and the setup flow call, stable across state changes. */
+export type AppSettingsHandlers = ReturnType<typeof useAppSettings>;

@@ -1,8 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
-import { drawLoader, LOADER_HEIGHT, LOADER_WIDTH } from '../canvas/loader';
-import { palette } from '../theme/palette';
+import { DEFAULT_LOADER_COLORS, drawLoader, LOADER_HEIGHT, LOADER_WIDTH } from '../canvas/loader';
 
-const LOADER_COLORS = { bid: palette.sell, ask: palette.buy, line: palette.textBright };
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
 /** Falling back to 1 keeps the loader drawn if a context reports no ratio. */
@@ -33,7 +31,7 @@ function prefersReducedMotion(): boolean {
 /** One frame: the canvas cleared, then the loader redrawn centred at `nowMs`. */
 function paintFrame(ctx: CanvasRenderingContext2D, nowMs: number): void {
   ctx.clearRect(0, 0, LOADER_WIDTH, LOADER_HEIGHT);
-  drawLoader(ctx, LOADER_WIDTH / 2, LOADER_HEIGHT / 2, nowMs, LOADER_COLORS);
+  drawLoader(ctx, LOADER_WIDTH / 2, LOADER_HEIGHT / 2, nowMs, DEFAULT_LOADER_COLORS);
 }
 
 /**

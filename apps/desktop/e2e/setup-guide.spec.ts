@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
   currentGuideStep,
+  expectGuideOnStep,
   guideSteps,
   mt5Choices,
   mt5Installation,
@@ -8,6 +9,7 @@ import {
   openSetupGuide,
   pickerOptions,
   scriptPickedTerminal,
+  setupGuideDialog,
 } from './helpers/setupGuide';
 import { gotoWithStub } from './helpers/tauriStub';
 
@@ -54,8 +56,7 @@ test('the guide opens on Find MetaTrader 5 and walks to Install and back', async
 
   await guide.getByRole('button', { name: 'Next' }).click();
 
-  await expect(currentGuideStep(guide)).toHaveText('Install');
-  await expect(guide.getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
+  await expectGuideOnStep(guide, 'Install', { marksIndicator: true });
   // Back belongs to the step indicator row, not to the install step's own actions.
   await expect(guide.locator('.setup-guide-progress-row').getByRole('button', { name: 'Back' })).toBeVisible();
   await expect(guide.getByText('reopens MT5 with the EA attached')).toHaveCount(0);
@@ -159,7 +160,7 @@ test('Escape and the close button dismiss only the guide; focus returns to the t
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   await trigger.click();
 
-  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
+  const guide = setupGuideDialog(page);
   await expect(guide).toBeVisible();
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
   await expect(guide).toBeFocused();

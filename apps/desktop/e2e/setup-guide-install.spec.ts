@@ -1,15 +1,18 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { CONNECTING_BRIDGE } from './helpers/bridgeStates';
 import {
   DEFAULT_TERMINAL_PATH,
   PORTABLE_MQL5_PATH,
   STANDARD_MQL5_PATH,
   TWO_DATA_FOLDERS,
   cleanInstallReport,
+  expectGuideOnStep,
   mt5Installation,
   mt5InstallRequests,
   mt5RestartRequests,
   openInstallStep,
   openSetupGuide,
+  setupCompleteDialog,
   type Mt5InstallRequest,
 } from './helpers/setupGuide';
 import { gotoWithStub, pushBridgeStatus, type TauriStubOptions } from './helpers/tauriStub';
@@ -20,9 +23,6 @@ const INSTALL_AND_RESTART_BUTTON = 'Install and restart MT5';
 
 /** The target the stub's default installation resolves to, as both commands name it. */
 const PORTABLE_TARGET: Mt5InstallRequest = { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: PORTABLE_MQL5_PATH };
-
-/** A bridge that is still connecting while the guide installs, with candles so no screen covers the chart. */
-const CONNECTING_BRIDGE = { get_bridge_status: { state: 'connecting' } };
 
 /** The label the data-folder select gives the installation's user data folder. */
 const USER_DATA_FOLDER = 'MetaTrader 5 — user data folder';
@@ -90,7 +90,7 @@ test('two data folders ask which one to install into, and Install only sends its
   await guide.getByRole('button', { name: 'Next' }).click();
   await guide.getByRole('button', { name: INSTALL_ONLY_BUTTON }).click();
 
-  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+  await expectGuideOnStep(guide, 'Connect');
   expect(await mt5InstallRequests(page)).toEqual([
     { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: STANDARD_MQL5_PATH },
   ]);
@@ -103,7 +103,7 @@ test('a clean Install only moves on to the connection step', async ({ page }) =>
 
   await guide.getByRole('button', { name: INSTALL_ONLY_BUTTON }).click();
 
-  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+  await expectGuideOnStep(guide, 'Connect');
   await expect(guide.locator('.loading-message strong')).toHaveText('Waiting for the EA to connect…');
   await expect(guide.getByText('BetterChartsBridge is attached to a chart')).toBeVisible();
   await expect(guide.locator('.setup-guide-install-file')).toHaveCount(0);
@@ -116,14 +116,14 @@ test('a clean Install and restart moves on to Connect, and the connection finish
 
   await guide.getByRole('button', { name: INSTALL_AND_RESTART_BUTTON }).click();
 
-  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+  await expectGuideOnStep(guide, 'Connect');
   expect(await mt5InstallRequests(page)).toEqual([PORTABLE_TARGET]);
   expect(await mt5RestartRequests(page)).toEqual([PORTABLE_TARGET]);
 
   await pushBridgeStatus(page, { state: 'connected', message: 'Bridge connected.' });
 
   await expect(guide).toBeHidden();
-  await expect(page.getByRole('dialog', { name: 'Setup complete' })).toBeVisible();
+  await expect(setupCompleteDialog(page)).toBeVisible();
 });
 
 test('a compile with a warning is not clean, so the restart button stops at the rows', async ({ page }) => {
@@ -135,7 +135,7 @@ test('a compile with a warning is not clean, so the restart button stops at the 
     '0 errors, 1 warning',
     'Compiled, 0 errors',
   ]);
-  await expect(guide.getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
+  await expectGuideOnStep(guide, 'Install');
   expect(await mt5InstallRequests(page)).toEqual([PORTABLE_TARGET]);
   expect(await mt5RestartRequests(page)).toEqual([]);
 });
@@ -160,7 +160,7 @@ test('a refused install shows the reason inline and never restarts MT5', async (
   const refusal = 'An order is being sent to MT5; install after it settles.';
   const guide = await pressInstall(page, INSTALL_AND_RESTART_BUTTON, { failures: { install_to_mt5: refusal } });
 
-  await expect(guide.getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
+  await expectGuideOnStep(guide, 'Install');
   await expect(guide.getByRole('alert')).toHaveText(refusal);
   await expect(guide.locator('.setup-guide-install-file')).toHaveCount(0);
   expect(await mt5RestartRequests(page)).toEqual([]);
@@ -175,7 +175,7 @@ test('a refused restart shows the reason and leaves no rows behind', async ({ pa
 
   await expect(guide.getByRole('alert')).toHaveText(refusal);
   await expect(guide.locator('.setup-guide-install-file')).toHaveCount(0);
-  await expect(guide.getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
+  await expectGuideOnStep(guide, 'Install');
   expect(await mt5RestartRequests(page)).toEqual([PORTABLE_TARGET]);
 });
 
@@ -190,7 +190,7 @@ test('both buttons wait out the install and the restart', async ({ page }) => {
   await installAndRestart.click();
 
   // The pressed button names its step; the other keeps its label, and nothing else can be used.
-  const installButtons = guide.locator('.setup-guide-install-run');
+  const installButtons = guide.locator('.setup-guide-action');
   await expect(installButtons.first()).toHaveText('Installing…');
   await expect(installButtons.nth(1)).toHaveText(INSTALL_ONLY_BUTTON);
   await expect(installButtons.first()).toBeDisabled();
@@ -203,6 +203,6 @@ test('both buttons wait out the install and the restart', async ({ page }) => {
     { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: STANDARD_MQL5_PATH },
   ]);
   // A clean restart hands the guide on to the connection step.
-  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'Setup complete' })).toHaveCount(0);
+  await expectGuideOnStep(guide, 'Connect');
+  await expect(setupCompleteDialog(page)).toHaveCount(0);
 });

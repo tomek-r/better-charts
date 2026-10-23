@@ -82,6 +82,26 @@ export async function mt5RestartRequests(page: Page): Promise<Mt5InstallRequest[
   return recordedTargets(page, '__mt5Restarts');
 }
 
+/** The guide dialog, whichever surface opened it. */
+export function setupGuideDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
+}
+
+/** The first-run screen that stands in for the chart until the device finishes its setup. */
+export function setupScreen(page: Page): Locator {
+  return page.getByRole('region', { name: 'MetaTrader 5 setup' });
+}
+
+/** The blurred wait that stands in for the chart after the setup, while no chart can be drawn. */
+export function waitingScreen(page: Page): Locator {
+  return page.getByRole('region', { name: 'Waiting for MetaTrader 5' });
+}
+
+/** The finished screen the bridge leaves behind when it connects during the guide. */
+export function setupCompleteDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Setup complete' });
+}
+
 /** The guide's step indicator items, in order. */
 export function guideSteps(guide: Locator): Locator {
   return guide.locator('.setup-guide-progress li');
@@ -92,6 +112,21 @@ export function currentGuideStep(guide: Locator): Locator {
   return guide.locator('.setup-guide-progress li[aria-current="step"]');
 }
 
+/**
+ * Asserts the guide's heading shows `step`; `marksIndicator` also asserts that the step indicator
+ * marks the same step.
+ */
+export async function expectGuideOnStep(
+  guide: Locator,
+  step: string,
+  { marksIndicator = false }: { marksIndicator?: boolean } = {},
+): Promise<void> {
+  await expect(guide.getByRole('heading', { name: step, exact: true })).toBeVisible();
+  if (marksIndicator) {
+    await expect(currentGuideStep(guide)).toHaveText(step);
+  }
+}
+
 /** React reveals the lazily loaded guide after a short timer, which a paused page clock only fires when advanced. */
 export const LAZY_GUIDE_REVEAL_MS = 500;
 
@@ -100,11 +135,19 @@ export async function revealLazyGuide(page: Page): Promise<void> {
   await page.clock.runFor(LAZY_GUIDE_REVEAL_MS);
 }
 
+/** How App settings is pressed: a pointer click, or a direct one when a blurred screen makes the window inert. */
+export type OpenerPress = 'pointer' | 'direct';
+
 /** Clicks App settings and the guide trigger inside it, handing back the guide dialog to assert. */
-async function clickGuideOpeners(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: 'App settings', exact: true }).click();
+async function clickGuideOpeners(page: Page, press: OpenerPress = 'pointer'): Promise<Locator> {
+  const gear = page.getByRole('button', { name: 'App settings', exact: true });
+  if (press === 'direct') {
+    await gear.evaluate((button) => (button as HTMLButtonElement).click());
+  } else {
+    await gear.click();
+  }
   await page.getByRole('button', { name: 'How to set up the bridge connection' }).click();
-  return page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
+  return setupGuideDialog(page);
 }
 
 /** Asserts the guide dialog reached the screen and returns it. */
@@ -116,29 +159,26 @@ async function expectGuideShown(guide: Locator): Promise<Locator> {
 /** Moves the open guide on to its Install step and returns the guide dialog. */
 async function showInstallStep(guide: Locator): Promise<Locator> {
   await guide.getByRole('button', { name: 'Next' }).click();
-  await expect(guide.getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
+  await expectGuideOnStep(guide, 'Install');
   return guide;
 }
 
 /** Moves the open guide on to its Connect step and returns the guide dialog. */
 async function showConnectStep(guide: Locator): Promise<Locator> {
   await guide.getByRole('button', { name: 'Install only' }).click();
-  await expect(guide.getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+  await expectGuideOnStep(guide, 'Connect');
   return guide;
 }
 
 /** Opens App settings and the setup guide nested inside it, returning the guide dialog. */
-export async function openSetupGuide(page: Page): Promise<Locator> {
-  return expectGuideShown(await clickGuideOpeners(page));
+export async function openSetupGuide(page: Page, press: OpenerPress = 'pointer'): Promise<Locator> {
+  return expectGuideShown(await clickGuideOpeners(page, press));
 }
 
 /** Opens the standalone guide from the first-run setup screen, returning the guide dialog. */
 export async function openStandaloneSetupGuide(page: Page): Promise<Locator> {
-  await page
-    .getByRole('region', { name: 'MetaTrader 5 setup' })
-    .getByRole('button', { name: 'Open setup guide' })
-    .click();
-  return expectGuideShown(page.getByRole('dialog', { name: 'Set up the MT5 bridge' }));
+  await setupScreen(page).getByRole('button', { name: 'Open setup guide' }).click();
+  return expectGuideShown(setupGuideDialog(page));
 }
 
 /** Moves the open guide on to its Connect step, whichever surface opened it, returning its dialog. */

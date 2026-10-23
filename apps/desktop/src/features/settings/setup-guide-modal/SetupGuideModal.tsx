@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { afterExitAnimation } from '../../../shared/ui/afterExitAnimation';
+import { useCallback, useEffect, useRef } from 'react';
+import { useExitAnimation } from '../../../shared/hooks/useExitAnimation';
 import { useAppSettingsView } from '../AppSettingsProvider';
 import { SetupGuideStep } from '../useAppSettings';
 import { useInstallToMt5 } from './installation/useInstallToMt5';
@@ -56,8 +56,7 @@ export function SetupGuideModal({
 }) {
   const dialog = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
-  const closingRef = useRef(false);
-  const [closing, setClosing] = useState(false);
+  const { exiting: closing, startExit } = useExitAnimation(backdrop);
   const { setupGuideStep, showSetupGuideStep } = useAppSettingsView();
   const previousStep = PREVIOUS_STEP[setupGuideStep];
   const goBack = useCallback(() => {
@@ -68,22 +67,14 @@ export function SetupGuideModal({
   const showInstallStep = useCallback(() => showSetupGuideStep(SetupGuideStep.Install), [showSetupGuideStep]);
   const finishInstall = useCallback(() => showSetupGuideStep(SetupGuideStep.Connect), [showSetupGuideStep]);
   const install = useInstallToMt5(finishInstall);
-  const playExit = useCallback((afterExit: () => void) => {
-    if (closingRef.current) {
-      return;
-    }
-    closingRef.current = true;
-    setClosing(true);
-    afterExitAnimation(backdrop.current, afterExit);
-  }, []);
-  const requestClose = useCallback(() => playExit(onClose), [onClose, playExit]);
+  const requestClose = useCallback(() => startExit(onClose), [onClose, startExit]);
   // A completed setup takes the same exit route as a manual close, only slower and without asking
   // the store for it: the store unmounts the guide once this fade's `animationend` arrives.
   useEffect(() => {
     if (finishing) {
-      playExit(onFinished);
+      startExit(onFinished);
     }
-  }, [finishing, onFinished, playExit]);
+  }, [finishing, onFinished, startExit]);
   const backdropClassName = `setup-guide-backdrop${standalone ? ' setup-guide-backdrop-standalone' : ''}${
     closing ? ' is-closing' : ''
   }${finishing ? ' is-finishing' : ''}`;

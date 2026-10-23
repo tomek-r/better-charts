@@ -1,6 +1,5 @@
 import { Suspense, lazy } from 'react';
 
-// Devices that finished the setup never show this screen again, so its code loads on first need.
 const BridgeSetupScreenChunk = lazy(() =>
   import('./BridgeSetupScreen').then((module) => ({ default: module.BridgeSetupScreen })),
 );

@@ -15,7 +15,7 @@ const CONNECT_CHECKLIST = [
 export function ConnectStep() {
   return (
     <section className="setup-guide-step" aria-labelledby="setup-guide-connect-title">
-      <h3 className="setup-guide-title" id="setup-guide-connect-title">
+      <h3 className="setup-guide-title visually-hidden" id="setup-guide-connect-title">
         Connect
       </h3>
       <LoadingMessage title="Waiting for the EA to connect…" hint="The chart appears as soon as the EA answers." />

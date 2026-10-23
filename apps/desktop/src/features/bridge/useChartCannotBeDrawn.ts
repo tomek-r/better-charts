@@ -1,4 +1,4 @@
-import { useBridgeConnectionSelector, useBridgeMarketSelector } from './BridgeSessionProvider';
+import { useBridgeConnectionSelector, useHasCandles } from './BridgeSessionProvider';
 
 /**
  * Whether the workspace has no chart to draw: without Tauri the bridge is unreachable, and without
@@ -11,9 +11,7 @@ export function useChartCannotBeDrawn(): boolean {
     tauriAvailable,
     connected: status.state === 'connected',
   }));
-  const hasCandles = useBridgeMarketSelector(
-    (market) => market.snapshot.candles.length > 0 || market.latestCandle !== undefined,
-  );
+  const hasCandles = useHasCandles();
   if (!tauriAvailable) {
     return true;
   }

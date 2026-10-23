@@ -58,7 +58,7 @@ export function FindMt5Step({ view, onNext }: { view: InstallToMt5View; onNext: 
 
   return (
     <section className="setup-guide-step" aria-labelledby="setup-guide-find-title">
-      <h3 className="setup-guide-title" id="setup-guide-find-title">
+      <h3 className="setup-guide-title visually-hidden" id="setup-guide-find-title">
         Find MetaTrader 5
       </h3>
       {installations === undefined && error === undefined && (
@@ -90,7 +90,7 @@ export function FindMt5Step({ view, onNext }: { view: InstallToMt5View; onNext: 
       <div className="setup-guide-step-actions">
         <button
           type="button"
-          className="primary-button setup-guide-install-run"
+          className="primary-button setup-guide-action"
           disabled={selected === undefined}
           onClick={onNext}
         >

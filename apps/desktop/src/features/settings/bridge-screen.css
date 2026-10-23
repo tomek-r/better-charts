@@ -152,10 +152,7 @@
   .bridge-screen,
   .bridge-screen.bridge-awaiting-screen.is-leaving,
   .setup-complete-screen,
-  .setup-complete-screen.is-leaving {
-    animation: none;
-  }
-
+  .setup-complete-screen.is-leaving,
   .setup-complete-icon,
   .setup-complete-content .modal-dialog-button,
   .setup-complete-screen.is-leaving .setup-complete-icon,

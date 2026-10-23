@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
+import { setupGuideDialog, setupScreen } from './helpers/setupGuide';
 import { gotoWithStub, stubInvocations, type StubInternals } from './helpers/tauriStub';
 import type { AppSettingsData } from '../src/features/settings/settingsTypes';
 
@@ -490,9 +491,9 @@ test('first launch opens no dialog; the setup screen offers the guide', async ({
       get_market_snapshot: { complete: false, candles: [] },
     },
   });
-  const setupScreen = page.getByRole('region', { name: 'MetaTrader 5 setup' });
-  await expect(setupScreen.getByRole('button', { name: 'Open setup guide' })).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toHaveCount(0);
+  const screen = setupScreen(page);
+  await expect(screen.getByRole('button', { name: 'Open setup guide' })).toBeVisible();
+  await expect(setupGuideDialog(page)).toHaveCount(0);
   await expect(page.getByRole('dialog', { name: 'App settings' })).toHaveCount(0);
 });
 

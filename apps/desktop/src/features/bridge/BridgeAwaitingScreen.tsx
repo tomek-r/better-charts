@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type Ref, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useBridgeConnectionSelector } from './BridgeSessionProvider';
 import { useChartCannotBeDrawn } from './useChartCannotBeDrawn';
 import { useReportBlurredScreen } from '../settings/AppSettingsProvider';
@@ -10,7 +10,8 @@ import { LoadingMessage } from '../../shared/ui/LoadingMessage';
 /** How long the screen keeps the window before the notices beside it take the problem over. */
 const AWAITING_DATA_LIMIT_MS = 15_000;
 
-const AWAITING_REGION_LABEL = 'Waiting for MetaTrader 5';
+/** The wait's one name: the region's label and the title of the message it holds. */
+const AWAITING_MT5_LABEL = 'Waiting for MetaTrader 5';
 
 /** The wait of a completed setup, as both of its surfaces need it: the screen, and its notice. */
 export interface AwaitingBridgeData {
@@ -68,24 +69,6 @@ function useExitPresence(shown: boolean): ExitPresence {
   return { rendered, leaving: !shown && rendered, screenRef };
 }
 
-function AwaitingScreen({ leaving, screenRef }: { leaving: boolean; screenRef: Ref<HTMLDivElement> }) {
-  return (
-    <div
-      className={`bridge-screen bridge-awaiting-screen${leaving ? ' is-leaving' : ''}`}
-      ref={screenRef}
-      role="region"
-      aria-label={AWAITING_REGION_LABEL}
-    >
-      <div className="bridge-screen-content">
-        <LoadingMessage
-          title="Waiting for MetaTrader 5"
-          hint="The chart appears as soon as MetaTrader 5 sends its data."
-        />
-      </div>
-    </div>
-  );
-}
-
 /**
  * After the device's setup: stands in for the workspace while no chart can be drawn, so the user
  * waits on a blurred window instead of an empty one. It waits only so long — a refusal, or a silence
@@ -99,5 +82,16 @@ export function BridgeAwaitingScreen({ screenShown }: { screenShown: boolean }) 
   if (!screenRendered) {
     return null;
   }
-  return <AwaitingScreen leaving={leaving} screenRef={screenRef} />;
+  return (
+    <div
+      className={`bridge-screen bridge-awaiting-screen${leaving ? ' is-leaving' : ''}`}
+      ref={screenRef}
+      role="region"
+      aria-label={AWAITING_MT5_LABEL}
+    >
+      <div className="bridge-screen-content">
+        <LoadingMessage title={AWAITING_MT5_LABEL} hint="The chart appears as soon as MetaTrader 5 sends its data." />
+      </div>
+    </div>
+  );
 }
