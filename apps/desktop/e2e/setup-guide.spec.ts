@@ -32,7 +32,8 @@ test('the guide opens on Find MetaTrader 5 and walks to Install and back', async
   // The step list carries no default list indent: its first step lines up with the step's content.
   const stepListLeft = (await guide.locator('.setup-guide-progress').boundingBox())?.x;
   const contentLeft = (await guide.locator('.setup-guide-step').boundingBox())?.x;
-  expect(stepListLeft).toBe(contentLeft);
+  // Sub-pixel layout rounding differs between machines; a default list indent would be ~40 px off.
+  expect(Math.abs((stepListLeft ?? 0) - (contentLeft ?? Number.NaN))).toBeLessThan(1);
   const stepNumberContent = await steps.evaluateAll((stepItems) =>
     stepItems.map((stepItem) => getComputedStyle(stepItem, '::before').content),
   );
