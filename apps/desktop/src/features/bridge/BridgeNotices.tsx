@@ -65,7 +65,8 @@ export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
       />
       {/* The chart already toasts this refusal for every device, keyed by its own message. Using that
           message as the key too keeps it one notice: a completed setup adds the fix to the toast. */}
-      <ErrorNotification noticeKey={refusalMessage} message={refusalMessage} action={connectGuideAction} />
+      {/* A bridge error is fixed from the install step. */}
+      <ErrorNotification noticeKey={refusalMessage} message={refusalMessage} action={installGuideAction} />
     </>
   );
 }

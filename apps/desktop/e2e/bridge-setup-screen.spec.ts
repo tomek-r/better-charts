@@ -68,8 +68,8 @@ const BRIDGE_PROBLEM_NOTICES: BridgeProblemNotice[] = [
   },
   {
     message: OTHER_REFUSAL_MESSAGE,
-    action: 'Open setup guide',
-    step: 'Connect',
+    action: 'Install again',
+    step: 'Install',
     status: { state: 'protocol_error', message: OTHER_REFUSAL_MESSAGE },
   },
 ];
