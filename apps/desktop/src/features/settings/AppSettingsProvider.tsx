@@ -1,4 +1,4 @@
-import { createContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { createDomainStore } from '../../shared/state/domainStore';
@@ -155,4 +155,43 @@ export function useStandaloneGuideOpen(): boolean {
     'useStandaloneGuideOpen must be used within AppSettingsProvider.',
   );
   return useStore(store, (state) => state.setupGuideOpen && !state.isOpen);
+}
+
+/**
+ * Whether the setup guide plays its exit because the bridge connected, as its own subscription:
+ * the screens beneath it keep their blur until the finished screen takes it over.
+ */
+export function useSetupGuideFinishing(): boolean {
+  const { store } = useRequiredContext(
+    AppSettingsContext,
+    'useSetupGuideFinishing must be used within AppSettingsProvider.',
+  );
+  return useStore(store, (state) => state.setupGuideFinishing);
+}
+
+/**
+ * Whether a blurred screen is on the window right now, as its own subscription: a screen already up
+ * holds on while the guide finishes, but the finish never brings one in.
+ */
+export function useBlurredScreenShown(): boolean {
+  const { store } = useRequiredContext(
+    AppSettingsContext,
+    'useBlurredScreenShown must be used within AppSettingsProvider.',
+  );
+  return useStore(store, (state) => state.blurredScreenShown);
+}
+
+/**
+ * Tells the settings store that a blurred screen sits on the window, so the finished screen knows
+ * whether it replaces a blur or has to fade its own in.
+ */
+export function useReportBlurredScreen(shown: boolean): void {
+  const { store } = useRequiredContext(
+    AppSettingsContext,
+    'useReportBlurredScreen must be used within AppSettingsProvider.',
+  );
+  useEffect(() => {
+    store.setField('blurredScreenShown', shown);
+    return () => store.setField('blurredScreenShown', false);
+  }, [shown, store]);
 }

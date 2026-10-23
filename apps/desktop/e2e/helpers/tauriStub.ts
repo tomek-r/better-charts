@@ -959,6 +959,23 @@ export async function pushBridgeStatus(page: Page, status: BridgeStatus): Promis
   await pushEvent(page, 'bridge-status', status);
 }
 
+type StubListenerProbe = { __E2E_TAURI_STUB__: { listenerCount: (event: string) => number } };
+
+/** How many listeners the app has registered for one bridge event. */
+export async function listenerCount(page: Page, event: string): Promise<number> {
+  return page.evaluate((name) => {
+    const stub = (window as unknown as StubListenerProbe).__E2E_TAURI_STUB__;
+    return stub.listenerCount(name);
+  }, event);
+}
+
+/** Waits for the app's bridge listeners, so an event a test pushes cannot land before them. */
+export async function waitForBridgeListeners(page: Page): Promise<void> {
+  for (const event of ['bridge-status', 'market-snapshot']) {
+    await expect.poll(() => listenerCount(page, event)).toBeGreaterThan(0);
+  }
+}
+
 /** Pushes an `execution-command-update` event into the app's log-only listener. */
 export async function pushCommandUpdate(page: Page, update: CommandUpdateInput): Promise<void> {
   await pushEvent(page, 'execution-command-update', {

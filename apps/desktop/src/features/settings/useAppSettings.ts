@@ -26,6 +26,8 @@ export interface AppSettingsState {
   setupCompleteShown: boolean;
   /** The finished screen replaces the blurred setup screen, so its backdrop stands at once instead of fading in. */
   setupCompleteOverSetupScreen: boolean;
+  /** A blurred screen (the first-run setup screen or the after-setup waiting screen) is on the window right now. */
+  blurredScreenShown: boolean;
   /** This device finished the setup, so the guide never opens on its own again. */
   setupCompleted: boolean;
   loadError: string | undefined;
@@ -45,6 +47,7 @@ export const initialAppSettingsState: AppSettingsState = {
   setupGuideFinishing: false,
   setupCompleteShown: false,
   setupCompleteOverSetupScreen: false,
+  blurredScreenShown: false,
   setupCompleted: readSetupCompleted(),
   loadError: undefined,
   restartRequired: false,
@@ -151,8 +154,8 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   // dialog sits beneath (its own exit animation still plays).
   const finishSetupGuide = useCallback(() => {
     const state = store.getState();
-    // Read before the guide goes: only a guide standing on its own hides the blurred setup screen.
-    store.setField('setupCompleteOverSetupScreen', !state.isOpen && !state.setupCompleted);
+    // The finished screen takes the blur over at once when a blurred screen is still beneath it.
+    store.setField('setupCompleteOverSetupScreen', state.blurredScreenShown);
     store.setField('setupGuideFinishing', false);
     closeSetupGuide();
     if (state.isOpen) {

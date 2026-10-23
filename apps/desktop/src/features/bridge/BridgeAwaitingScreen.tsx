@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type Ref, type RefObject } from 'react';
 import { useBridgeConnectionSelector } from './BridgeSessionProvider';
 import { useChartCannotBeDrawn } from './useChartCannotBeDrawn';
+import { useReportBlurredScreen } from '../settings/AppSettingsProvider';
 import { bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
 import { useDelayedReveal } from '../../shared/hooks/useDelayedReveal';
 import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
@@ -93,6 +94,8 @@ function AwaitingScreen({ leaving, screenRef }: { leaving: boolean; screenRef: R
  */
 export function BridgeAwaitingScreen({ screenShown }: { screenShown: boolean }) {
   const { rendered: screenRendered, leaving, screenRef } = useExitPresence(screenShown);
+  // Rendered rather than shown: the blur stays until the fade-out ends, so it never blinks off.
+  useReportBlurredScreen(screenRendered);
   if (!screenRendered) {
     return null;
   }

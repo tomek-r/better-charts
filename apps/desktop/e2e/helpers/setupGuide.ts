@@ -132,6 +132,20 @@ export async function openSetupGuide(page: Page): Promise<Locator> {
   return expectGuideShown(await clickGuideOpeners(page));
 }
 
+/** Opens the standalone guide from the first-run setup screen, returning the guide dialog. */
+export async function openStandaloneSetupGuide(page: Page): Promise<Locator> {
+  await page
+    .getByRole('region', { name: 'MetaTrader 5 setup' })
+    .getByRole('button', { name: 'Open setup guide' })
+    .click();
+  return expectGuideShown(page.getByRole('dialog', { name: 'Set up the MT5 bridge' }));
+}
+
+/** Moves the open guide on to its Connect step, whichever surface opened it, returning its dialog. */
+export async function walkGuideToConnectStep(guide: Locator): Promise<Locator> {
+  return showConnectStep(await showInstallStep(guide));
+}
+
 /** Opens the guide under a paused page clock, running the clock so React reveals its lazy dialog. */
 export async function openSetupGuideUnderPausedClock(page: Page): Promise<Locator> {
   const guide = await clickGuideOpeners(page);
@@ -151,7 +165,7 @@ async function openInstallStepUnderPausedClock(page: Page): Promise<Locator> {
 
 /** Opens the guide and moves on to its Connect step, returning the guide dialog. */
 export async function openConnectStep(page: Page): Promise<Locator> {
-  return showConnectStep(await openInstallStep(page));
+  return walkGuideToConnectStep(await openSetupGuide(page));
 }
 
 /** Opens the guide under a paused page clock and moves on to its Connect step. */
