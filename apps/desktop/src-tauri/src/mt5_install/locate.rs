@@ -1,5 +1,5 @@
-//! Locate the MQL5 data folders of an MT5 installation, and any existing copy of
-//! the two MQL5 files the app ships.
+//! Locate the MQL5 data folders of an MT5 installation, and the folders the two
+//! MQL5 files the app ships are installed into.
 //!
 //! MT5 supports two data-folder layouts:
 //!
@@ -20,7 +20,6 @@
 //! an unexpected encoding yields "nothing found" instead of a guessed path, so a
 //! later install step can never write into the wrong folder.
 
-use std::collections::VecDeque;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
@@ -63,9 +62,6 @@ const MQL5_RESOURCE_PREFIX: &str = "mql5/";
 /// Sub-folder of `Experts` the advisor is installed into: MT5's own folder for
 /// expert advisors, where MetaQuotes' sample advisors live too.
 pub const EXPERT_ADVISOR_SUB_FOLDER: &str = "Advisors";
-/// The shipped sources sit one or two folders below their MT5 root; the bound
-/// only stops a pathological tree from stalling the caller.
-pub(crate) const MAX_FOLDER_DEPTH: usize = 4;
 
 /// Host a Windows path is resolved on. Passed as data so the native and the Wine
 /// mapping are both unit-tested on any operating system.
@@ -450,41 +446,6 @@ fn install_location(file: Mql5File) -> Option<(&'static str, &'static str)> {
         .rsplit_once('/')
 }
 
-/// First file named `file_name` below `folder`, in traversal order: breadth
-/// first, and every folder listed in name order, so the shallowest copy comes
-/// first and repeated scans report the same copy. `DirEntry::file_type` never
-/// follows a symbolic link, so a linked file or folder is neither reported nor
-/// searched.
-fn first_matching_file(folder: &Path, file_name: &str) -> Option<PathBuf> {
-    let mut pending = VecDeque::from([(folder.to_path_buf(), 0)]);
-    while let Some((current, depth)) = pending.pop_front() {
-        for entry in sorted_entries(&current) {
-            let Ok(kind) = entry.file_type() else {
-                continue;
-            };
-            if kind.is_file() && entry.file_name().as_os_str() == OsStr::new(file_name) {
-                return Some(entry.path());
-            }
-            if kind.is_dir() && depth < MAX_FOLDER_DEPTH {
-                pending.push_back((entry.path(), depth + 1));
-            }
-        }
-    }
-    None
-}
-
-/// Existing copy of `file` below the data folder's `MQL5` folder, if there is one:
-/// the shallowest copy, because [`first_matching_file`] searches breadth first.
-///
-/// An older install may have left a copy anywhere below the file's own MT5 folder,
-/// in the `Experts` root or in a folder such as the `Experts/Advisors` the install
-/// writes to, so the whole subtree is searched. Only the shipped file name is
-/// reported, so no other expert advisor or indicator can ever be matched.
-pub fn existing_copy(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
-    let (folder, file_name) = install_location(file)?;
-    first_matching_file(&mql5.join(folder), file_name)
-}
-
 /// Folder below `MQL5` the install writes `file` to: the advisor's own folder
 /// inside `Experts`, the indicator's folder unchanged.
 fn install_folder(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
@@ -502,4 +463,13 @@ fn install_folder(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
 pub fn default_path(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
     let (_, file_name) = install_location(file)?;
     Some(install_folder(mql5, file)?.join(file_name))
+}
+
+/// Whether `file` is installed where the install writes it and MT5 loads it from
+/// (see [`default_path`]). A copy elsewhere below `MQL5` does not count, because
+/// restart attaches the advisor from that one folder. A symbolic link is never
+/// followed, so a linked file does not count either.
+pub fn is_installed(mql5: &Path, file: Mql5File) -> bool {
+    default_path(mql5, file)
+        .is_some_and(|path| fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file()))
 }

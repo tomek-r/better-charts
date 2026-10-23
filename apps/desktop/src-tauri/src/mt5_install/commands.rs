@@ -34,7 +34,7 @@ use super::discover::{
 };
 use super::install::{install_bundled_sources, BundledSources, InstallOutcome, InstalledFile};
 use super::locate::{
-    current_host_os, existing_copy, install_dir, joined, locate_data_folders, DataFolder, Layout,
+    current_host_os, install_dir, is_installed, joined, locate_data_folders, DataFolder, Layout,
     Mql5File, WINE_DRIVE_C,
 };
 use super::restart::{
@@ -75,9 +75,9 @@ pub(crate) struct DataFolderView {
     /// Host path of the folder, which the install command accepts back verbatim.
     pub mql5_path: String,
     pub layout: ReportedLayout,
-    /// Whether a copy of the bridge advisor's source already exists anywhere below
-    /// this folder: an older copy counts too, so a first launch does not force the
-    /// guide's install step.
+    /// Whether the bridge advisor's source sits in this folder's `Experts/Advisors`,
+    /// where the install writes it and restart loads it from; a copy anywhere else
+    /// does not count.
     pub expert_advisor_installed: bool,
 }
 
@@ -201,7 +201,7 @@ fn data_folder_view(folder: &DataFolder) -> DataFolderView {
     DataFolderView {
         mql5_path: host_path_text(&folder.mql5),
         layout: folder.layout.into(),
-        expert_advisor_installed: existing_copy(&folder.mql5, Mql5File::ExpertAdvisor).is_some(),
+        expert_advisor_installed: is_installed(&folder.mql5, Mql5File::ExpertAdvisor),
     }
 }
 

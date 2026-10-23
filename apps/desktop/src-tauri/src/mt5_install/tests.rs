@@ -288,99 +288,61 @@ fn standard_layout_matches_a_windows_install_folder() {
     assert_eq!(found, vec![expected_standard_folder(&data_folder)]);
 }
 
+/// Writes a copy of the shipped advisor into `folder`, returning its path, so a
+/// test can place one where an older install or another tool left it.
+fn write_advisor_copy(folder: &Path, content: &str) -> PathBuf {
+    let copy = folder.join(EXPERT_ADVISOR_FILE);
+    fs::write(&copy, content).expect("advisor copy is writable");
+    copy
+}
+
 #[test]
-fn existing_copy_finds_the_shipped_files_in_sub_folders() {
-    let fixture = TempFolder::new("existing-copy");
-    // The verified installation keeps the advisor one level below `Experts`.
-    let advisor = fixture
-        .folder("MQL5/Experts/Advisors")
-        .join(EXPERT_ADVISOR_FILE);
-    fs::write(&advisor, "// advisor\n").expect("advisor copy is writable");
+fn is_installed_finds_the_shipped_files_in_their_install_folders() {
+    let fixture = TempFolder::new("installed");
+    write_advisor_copy(&fixture.folder("MQL5/Experts/Advisors"), "// advisor\n");
     let indicator = fixture.folder("MQL5/Indicators").join(INDICATOR_FILE);
     fs::write(&indicator, "// indicator\n").expect("indicator copy is writable");
     let mql5 = fixture.path().join("MQL5");
 
-    assert_eq!(existing_copy(&mql5, Mql5File::ExpertAdvisor), Some(advisor));
-    assert_eq!(existing_copy(&mql5, Mql5File::Indicator), Some(indicator));
+    assert!(is_installed(&mql5, Mql5File::ExpertAdvisor));
+    assert!(is_installed(&mql5, Mql5File::Indicator));
 }
 
 #[test]
-fn existing_copy_prefers_the_shallowest_copy() {
-    let fixture = TempFolder::new("shallowest");
-    let shallow = fixture.folder("MQL5/Experts").join(EXPERT_ADVISOR_FILE);
-    fs::write(&shallow, "// shallow\n").expect("shallow copy is writable");
-    let deeper = fixture
-        .folder("MQL5/Experts/Advisors")
-        .join(EXPERT_ADVISOR_FILE);
-    fs::write(&deeper, "// deeper\n").expect("deeper copy is writable");
+fn a_copy_outside_the_install_folder_is_not_installed() {
+    let fixture = TempFolder::new("not-installed");
+    write_advisor_copy(&fixture.folder("MQL5/Experts"), "// experts root\n");
+    write_advisor_copy(&fixture.folder("MQL5/Experts/Zulu"), "// zulu\n");
+    write_advisor_copy(&fixture.folder("MQL5/Files"), "// files\n");
     let mql5 = fixture.path().join("MQL5");
 
-    assert_eq!(existing_copy(&mql5, Mql5File::ExpertAdvisor), Some(shallow));
+    // Restart attaches the advisor from `Experts/Advisors` alone, so a copy in
+    // another folder cannot stand in for the installed one.
+    assert!(!is_installed(&mql5, Mql5File::ExpertAdvisor));
+    assert!(!is_installed(&mql5, Mql5File::Indicator));
 }
 
 #[test]
-fn existing_copy_reports_the_first_folder_in_name_order() {
-    let fixture = TempFolder::new("name-order");
-    let advisors = fixture
-        .folder("MQL5/Experts/Advisors")
-        .join(EXPERT_ADVISOR_FILE);
-    fs::write(&advisors, "// advisors\n").expect("advisor copy is writable");
-    let zulu = fixture
-        .folder("MQL5/Experts/Zulu")
-        .join(EXPERT_ADVISOR_FILE);
-    fs::write(&zulu, "// zulu\n").expect("second copy is writable");
-    let mql5 = fixture.path().join("MQL5");
-
-    assert_eq!(
-        existing_copy(&mql5, Mql5File::ExpertAdvisor),
-        Some(advisors)
-    );
-}
-
-#[test]
-fn existing_copy_reports_nothing_without_a_copy() {
+fn is_installed_reports_nothing_without_a_copy() {
     let fixture = TempFolder::new("no-copy");
     create_folder(&fixture.path().join("MQL5/Experts/Advisors"));
-    let elsewhere = fixture.folder("MQL5/Files").join(EXPERT_ADVISOR_FILE);
-    fs::write(&elsewhere, "// elsewhere\n").expect("copy is writable");
     let mql5 = fixture.path().join("MQL5");
 
-    // The search stays inside its own MT5 folder: the same name in `MQL5/Files`
-    // is not a copy MT5 would load.
-    assert_eq!(existing_copy(&mql5, Mql5File::ExpertAdvisor), None);
-    assert_eq!(existing_copy(&mql5, Mql5File::Indicator), None);
-}
-
-#[test]
-fn existing_copy_stops_at_the_depth_bound() {
-    let fixture = TempFolder::new("depth-bound");
-    let mut deepest = fixture.folder("MQL5/Experts");
-    for level in 1..=MAX_FOLDER_DEPTH + 1 {
-        deepest = deepest.join(format!("Level{level}"));
-    }
-    create_folder(&deepest);
-    let copy = deepest.join(EXPERT_ADVISOR_FILE);
-    fs::write(&copy, "// beyond the bound\n").expect("deep copy is writable");
-    let mql5 = fixture.path().join("MQL5");
-
-    assert_eq!(existing_copy(&mql5, Mql5File::ExpertAdvisor), None);
+    assert!(!is_installed(&mql5, Mql5File::ExpertAdvisor));
+    assert!(!is_installed(&mql5, Mql5File::Indicator));
 }
 
 #[cfg(unix)]
 #[test]
-fn existing_copy_does_not_follow_symlinks() {
+fn is_installed_does_not_follow_symlinks() {
     let fixture = TempFolder::new("symlink");
-    let outside = fixture.folder("Outside");
-    let outside_copy = outside.join(EXPERT_ADVISOR_FILE);
-    fs::write(&outside_copy, "// outside\n").expect("outside copy is writable");
-    let experts = fixture.folder("MQL5/Experts");
-    let linked_folder = experts.join("Linked");
-    std::os::unix::fs::symlink(&outside, &linked_folder).expect("folder link is allowed");
-    std::os::unix::fs::symlink(&outside_copy, experts.join(EXPERT_ADVISOR_FILE))
+    let outside_copy = write_advisor_copy(&fixture.folder("Outside"), "// outside\n");
+    let advisors = fixture.folder("MQL5/Experts/Advisors");
+    std::os::unix::fs::symlink(outside_copy, advisors.join(EXPERT_ADVISOR_FILE))
         .expect("file link is allowed");
     let mql5 = fixture.path().join("MQL5");
 
-    assert_eq!(existing_copy(&mql5, Mql5File::ExpertAdvisor), None);
+    assert!(!is_installed(&mql5, Mql5File::ExpertAdvisor));
 }
 
 #[cfg(not(windows))]
@@ -2135,8 +2097,10 @@ fn the_startup_cleanup_deletes_what_an_interrupted_restart_left_behind() {
         "the data folder ini is deleted too"
     );
     // Only the two startup files are ours: the advisor copy stays.
-    let advisor = existing_copy(&data_folder.mql5, Mql5File::ExpertAdvisor);
-    assert!(advisor.is_some(), "the advisor copy stays");
+    assert!(
+        is_installed(&data_folder.mql5, Mql5File::ExpertAdvisor),
+        "the advisor copy stays"
+    );
 }
 
 #[test]
