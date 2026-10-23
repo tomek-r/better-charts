@@ -317,12 +317,17 @@ test('a token mismatch explains itself on the setup screen without an error toas
   await expect(setupGuide(page).getByRole('heading', { name: 'Install', exact: true })).toBeVisible();
 });
 
-test('Happy trading remembers the setup on the device, so a reload keeps the setup screen away', async ({ page }) => {
-  await pausePageClockAhead(page);
+/** Opens the guide's Connect step from App settings under the paused clock, its install already done. */
+async function openConnectStepWithUpdatedInstall(page: Page): Promise<void> {
   await gotoWithStub(page, {
     responses: { ...CONNECTING_WITH_CANDLES, install_to_mt5: cleanInstallReport('updated') },
   });
   await openConnectStepUnderPausedClock(page);
+}
+
+test('Happy trading remembers the setup on the device, so a reload keeps the setup screen away', async ({ page }) => {
+  await pausePageClockAhead(page);
+  await openConnectStepWithUpdatedInstall(page);
 
   await pushBridgeStatus(page, CONNECTED_STATUS);
   const complete = setupComplete(page);
@@ -342,6 +347,25 @@ test('Happy trading remembers the setup on the device, so a reload keeps the set
   await notice.getByRole('button', { name: 'Open setup guide' }).click();
   await revealLazyGuide(page);
   await expect(setupGuide(page).getByRole('heading', { name: 'Connect', exact: true })).toBeVisible();
+});
+
+// Install and restart MT5 drops the bridge for a moment, so its silence must not raise a notice
+// that sends the user back to the guide they are already in.
+test('a completed setup keeps the guide notices away while the guide and its finished screen hold the window', async ({
+  page,
+}) => {
+  await pausePageClockAhead(page);
+  await markSetupCompleted(page);
+  await openConnectStepWithUpdatedInstall(page);
+
+  await page.clock.runFor(NOT_CONNECTED_NOTICE_REVEAL_MS);
+  await expect(page.getByRole('alert').filter({ hasText: 'MetaTrader 5 is not connected.' })).toHaveCount(0);
+
+  await pushBridgeStatus(page, CONNECTED_STATUS);
+  await expect(setupComplete(page)).toBeVisible();
+
+  await page.clock.runFor(NOT_CONNECTED_NOTICE_REVEAL_MS);
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 for (const { message, action, step, status: problemStatus } of BRIDGE_PROBLEM_NOTICES) {

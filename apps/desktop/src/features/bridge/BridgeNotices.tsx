@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
 import { useDelayedReveal } from '../../shared/hooks/useDelayedReveal';
 import { ErrorNotification, type NoticeAction } from '../../shared/ui/ErrorNotifications';
-import { useAppSettingsActions } from '../settings/AppSettingsProvider';
+import { useAppSettingsActions, useSetupFlowOnScreen } from '../settings/AppSettingsProvider';
 import { SetupGuideStep } from '../settings/useAppSettings';
 import { useBridgeConnectionSelector, useBridgeMarketSelector } from './BridgeSessionProvider';
 
@@ -19,10 +19,12 @@ const NOT_CONNECTED_MESSAGE = 'MetaTrader 5 is not connected.';
 /**
  * Every problem of a completed setup, as one notice each at the bottom right. Each retires by itself
  * once its condition ends: the data arriving, the bridge connecting, or the refusal lifting. A
- * refusal another surface already reports is left to it, an outdated EA being that case.
+ * refusal another surface already reports is left to it, an outdated EA being that case. While the
+ * guide or its finished screen holds the window, the notices sending the user back to it stay away.
  */
 export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
   const { openSetupGuide } = useAppSettingsActions();
+  const setupFlowOnScreen = useSetupFlowOnScreen();
   // One stable action per fix: the notice store compares a notice's button by its label, so a fresh
   // object on every render would still be idle, but a memoised one keeps the effect from re-running.
   const connectGuideAction = useMemo<NoticeAction>(
@@ -43,7 +45,7 @@ export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
     (market) => market.snapshot.candles.length > 0 || market.latestCandle !== undefined,
   );
   const disconnectedNoticeShown = useDelayedReveal(
-    hasCandles && bridgeState !== 'connected' && refusal === undefined,
+    hasCandles && bridgeState !== 'connected' && refusal === undefined && !setupFlowOnScreen,
     DISCONNECTED_NOTICE_DELAY_MS,
   );
   return (
@@ -55,7 +57,7 @@ export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
       />
       <ErrorNotification
         noticeKey="mt5-not-sending-data"
-        message={waitingTooLong ? NOT_SENDING_DATA_MESSAGE : undefined}
+        message={waitingTooLong && !setupFlowOnScreen ? NOT_SENDING_DATA_MESSAGE : undefined}
         action={connectGuideAction}
       />
       <ErrorNotification

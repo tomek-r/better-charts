@@ -170,6 +170,18 @@ export function useSetupGuideFinishing(): boolean {
 }
 
 /**
+ * Whether the setup guide, its exit or its finished screen holds the window, as its own subscription:
+ * the notices that send the user back to the guide stay away while it is up.
+ */
+export function useSetupFlowOnScreen(): boolean {
+  const { store } = useRequiredContext(
+    AppSettingsContext,
+    'useSetupFlowOnScreen must be used within AppSettingsProvider.',
+  );
+  return useStore(store, (state) => state.setupGuideOpen || state.setupGuideFinishing || state.setupCompleteShown);
+}
+
+/**
  * Whether a blurred screen is on the window right now, as its own subscription: a screen already up
  * holds on while the guide finishes, but the finish never brings one in.
  */
