@@ -26,7 +26,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::discover::HostOs;
+use super::discover::{host_platform, HostOs};
 use crate::download_resources::{EXPERT_ADVISOR_RESOURCE, INDICATOR_RESOURCE};
 use crate::mt5_backend::Mt5BackendConfig;
 
@@ -37,7 +37,7 @@ const WINE_DRIVE: char = 'c';
 /// Separator of the Windows paths the configuration and `origin.txt` carry.
 pub(super) const WINDOWS_FOLDER_SEPARATOR: char = '\\';
 /// Folder a Wine prefix maps to drive `C:`.
-const WINE_DRIVE_C: &str = "drive_c";
+pub(super) const WINE_DRIVE_C: &str = "drive_c";
 /// Folder of a Wine prefix that holds the Windows user profiles.
 const WINE_USERS: &str = "users";
 /// Folder below a Windows user profile that holds the standard data folders; the
@@ -91,10 +91,7 @@ pub(super) fn current_host_os() -> HostOs {
 
 /// The host a Windows path is resolved on for this operating system.
 fn current_host() -> HostPlatform {
-    match current_host_os() {
-        HostOs::Windows => HostPlatform::Windows,
-        HostOs::MacOs | HostOs::Linux => HostPlatform::Wine,
-    }
+    host_platform(current_host_os())
 }
 
 /// What the locator needs to know about an installation. Implemented by the
@@ -245,10 +242,7 @@ fn windows_form_below(folder: &Path, drive_position: usize) -> String {
 /// no Wine installation can address.
 pub(super) fn wine_path_form(path: &Path) -> Option<(PathBuf, String)> {
     let drive_position = drive_c_position(path)?;
-    let mut wine_prefix = PathBuf::new();
-    for part in path.iter().take(drive_position) {
-        wine_prefix.push(part);
-    }
+    let wine_prefix = path.iter().take(drive_position).collect();
     Some((wine_prefix, windows_form_below(path, drive_position)))
 }
 
@@ -379,7 +373,7 @@ pub fn data_folders(install_folder: &Path, terminals_root: Option<&Path>) -> Vec
 /// `base` with `folders` pushed one by one, so each separator the path gains is
 /// the host's own: `PathBuf::join` would keep a separator embedded in a longer
 /// folder string verbatim on Windows.
-fn joined(base: &Path, folders: &[&str]) -> PathBuf {
+pub(super) fn joined(base: &Path, folders: &[&str]) -> PathBuf {
     let mut path = base.to_path_buf();
     for &folder in folders {
         path.push(folder);
@@ -456,13 +450,12 @@ fn install_location(file: Mql5File) -> Option<(&'static str, &'static str)> {
         .rsplit_once('/')
 }
 
-/// Every file named `file_name` below `folder`, in traversal order: breadth
+/// First file named `file_name` below `folder`, in traversal order: breadth
 /// first, and every folder listed in name order, so the shallowest copy comes
-/// first and repeated scans report the same copies. `DirEntry::file_type` never
+/// first and repeated scans report the same copy. `DirEntry::file_type` never
 /// follows a symbolic link, so a linked file or folder is neither reported nor
 /// searched.
-fn matching_files(folder: &Path, file_name: &str) -> Vec<PathBuf> {
-    let mut matches = Vec::new();
+fn first_matching_file(folder: &Path, file_name: &str) -> Option<PathBuf> {
     let mut pending = VecDeque::from([(folder.to_path_buf(), 0)]);
     while let Some((current, depth)) = pending.pop_front() {
         for entry in sorted_entries(&current) {
@@ -470,18 +463,18 @@ fn matching_files(folder: &Path, file_name: &str) -> Vec<PathBuf> {
                 continue;
             };
             if kind.is_file() && entry.file_name().as_os_str() == OsStr::new(file_name) {
-                matches.push(entry.path());
+                return Some(entry.path());
             }
             if kind.is_dir() && depth < MAX_FOLDER_DEPTH {
                 pending.push_back((entry.path(), depth + 1));
             }
         }
     }
-    matches
+    None
 }
 
 /// Existing copy of `file` below the data folder's `MQL5` folder, if there is one:
-/// the shallowest copy, because [`matching_files`] reports breadth first.
+/// the shallowest copy, because [`first_matching_file`] searches breadth first.
 ///
 /// An older install may have left a copy anywhere below the file's own MT5 folder,
 /// in the `Experts` root or in a folder such as the `Experts/Advisors` the install
@@ -489,9 +482,7 @@ fn matching_files(folder: &Path, file_name: &str) -> Vec<PathBuf> {
 /// reported, so no other expert advisor or indicator can ever be matched.
 pub fn existing_copy(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
     let (folder, file_name) = install_location(file)?;
-    matching_files(&mql5.join(folder), file_name)
-        .into_iter()
-        .next()
+    first_matching_file(&mql5.join(folder), file_name)
 }
 
 /// Folder below `MQL5` the install writes `file` to: the advisor's own folder

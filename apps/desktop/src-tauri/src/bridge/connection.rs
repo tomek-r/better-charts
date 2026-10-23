@@ -240,8 +240,7 @@ pub(crate) async fn bind_listener(
                 publish(events, state, |status| {
                     status.state = BridgeConnectionState::Connecting;
                     status.message = Some("Waiting for MT5 bridge to connect.".into());
-                    status.component_outdated = false;
-                    status.token_mismatch = false;
+                    status.clear_refusal_flags();
                 });
                 return listener;
             }
@@ -252,8 +251,7 @@ pub(crate) async fn bind_listener(
                         "bridge bind failed: {error}; retrying in {}s",
                         delay.as_secs()
                     ));
-                    status.component_outdated = false;
-                    status.token_mismatch = false;
+                    status.clear_refusal_flags();
                 });
                 tokio::time::sleep(delay).await;
                 delay = (delay * 2).min(std::time::Duration::from_secs(10));

@@ -378,6 +378,9 @@ pub(crate) fn protocol_error_component_outdated(
     );
 }
 
+/// A rejection the setup guide fixes: the EA presented a token other than the one in
+/// App settings. Marks the status so the UI can point at the guide instead of asking
+/// the user to read the message.
 pub(crate) fn protocol_error_token_mismatch(
     events: &Arc<dyn BridgeEvents>,
     state: &BridgeState,
@@ -396,7 +399,8 @@ pub(crate) fn protocol_error(
 
 /// Message the status carries while a restart waits for the terminal it launched:
 /// nothing is wrong yet, the freshly installed advisor still has to connect.
-const RESTARTED_TERMINAL_WAITING: &str = "Waiting for the restarted MetaTrader 5 to connect.";
+pub(crate) const RESTARTED_TERMINAL_WAITING: &str =
+    "Waiting for the restarted MetaTrader 5 to connect.";
 
 /// Reports that a restart closed the old terminal and launched the new one, so the
 /// app waits for the restarted advisor instead of keeping a refusal it can no
@@ -423,8 +427,7 @@ pub(crate) fn expect_restarted_terminal(events: &Arc<dyn BridgeEvents>, state: &
     publish(events, state, |status| {
         status.state = BridgeConnectionState::Connecting;
         status.message = Some(RESTARTED_TERMINAL_WAITING.to_owned());
-        status.component_outdated = false;
-        status.token_mismatch = false;
+        status.clear_refusal_flags();
     });
 }
 
@@ -447,8 +450,7 @@ pub(crate) fn disconnect(
         publish(events, state, |status| {
             status.state = BridgeConnectionState::Disconnected;
             status.message = None;
-            status.component_outdated = false;
-            status.token_mismatch = false;
+            status.clear_refusal_flags();
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;
@@ -548,10 +550,9 @@ pub(crate) fn protocol_error_session(
         publish(events, state, |status| {
             status.state = BridgeConnectionState::ProtocolError;
             status.message = Some(message.to_string());
-            // A session-level error is never a version mismatch: both are
+            // A session-level error is never a version or token mismatch: both are
             // checked before a session exists.
-            status.component_outdated = false;
-            status.token_mismatch = false;
+            status.clear_refusal_flags();
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;

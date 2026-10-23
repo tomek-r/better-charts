@@ -34,7 +34,8 @@ use super::discover::{
 };
 use super::install::{install_bundled_sources, BundledSources, InstallOutcome, InstalledFile};
 use super::locate::{
-    current_host_os, existing_copy, install_dir, locate_data_folders, DataFolder, Layout, Mql5File,
+    current_host_os, existing_copy, install_dir, joined, locate_data_folders, DataFolder, Layout,
+    Mql5File, WINE_DRIVE_C,
 };
 use super::restart::{
     new_session_live, poll_count, remove_startup_files, remove_startup_files_in,
@@ -344,6 +345,17 @@ fn stands_for(installation: &Mt5Installation, chosen: Option<&Mt5Installation>) 
     })
 }
 
+/// Matches the paths a command was given against a fresh scan of this machine,
+/// including the installation the user picked this session.
+fn resolve_target(
+    app: &AppHandle,
+    terminal_path: &str,
+    mql5_path: &str,
+) -> Result<InstallTarget, String> {
+    let installations = installations_on_this_machine(app.state::<ChosenInstallation>().get());
+    matched_target(&installations, terminal_path, mql5_path)
+}
+
 /// Host path of a bundled resource, resolved the same way `save_bundled_resource`
 /// resolves it.
 fn resolve_bundled_resource(app: &AppHandle, resource: &str) -> Result<PathBuf, String> {
@@ -398,14 +410,12 @@ pub(crate) fn list_mt5_installations(
     installation_views(&installations_on_this_machine(chosen.get()))
 }
 
-/// Parts of a Wine prefix that hold the folder MT5 installs into by default.
-const WINE_PROGRAM_FILES_FOLDER: [&str; 2] = ["drive_c", "Program Files"];
+/// Folder below a Wine prefix that MT5 installs into by default.
+const WINE_PROGRAM_FILES_FOLDER: &str = "Program Files";
 
 /// `drive_c/Program Files` of a Wine prefix.
 fn wine_program_files(wine_prefix: &Path) -> PathBuf {
-    WINE_PROGRAM_FILES_FOLDER
-        .iter()
-        .fold(wine_prefix.to_path_buf(), |folder, part| folder.join(part))
+    joined(wine_prefix, &[WINE_DRIVE_C, WINE_PROGRAM_FILES_FOLDER])
 }
 
 /// The first of `prefix_folders` below `$HOME` whose `Program Files` exists.
@@ -444,12 +454,10 @@ fn picker_start_folder(
     probe: &impl InstallProbe,
     first_installation: Option<&Mt5Installation>,
 ) -> Option<String> {
-    let install_folder = first_installation.and_then(install_dir);
-    let start_folder = match install_folder {
-        Some(folder) => Some(folder),
-        None => default_program_folder(env, host_os, probe),
-    };
-    start_folder.map(|folder| folder.to_string_lossy().into_owned())
+    first_installation
+        .and_then(install_dir)
+        .or_else(|| default_program_folder(env, host_os, probe))
+        .map(|folder| folder.to_string_lossy().into_owned())
 }
 
 /// Folder the setup guide's native file picker for `terminal64.exe` starts in, so
@@ -528,8 +536,7 @@ pub(crate) async fn install_to_mt5(
     terminal_path: String,
     mql5_path: String,
 ) -> Result<Mt5InstallReport, String> {
-    let installations = installations_on_this_machine(app.state::<ChosenInstallation>().get());
-    let target = matched_target(&installations, &terminal_path, &mql5_path)?;
+    let target = resolve_target(&app, &terminal_path, &mql5_path)?;
     let installation = target.installation.clone();
     let sources = bundled_sources(&app)?;
     // Sampled right before installing, so an order submitted while the scan ran still
@@ -632,8 +639,7 @@ pub(crate) async fn restart_mt5_with_ea(
     terminal_path: String,
     mql5_path: String,
 ) -> Result<RestartReport, String> {
-    let installations = installations_on_this_machine(app.state::<ChosenInstallation>().get());
-    let target = matched_target(&installations, &terminal_path, &mql5_path)?;
+    let target = resolve_target(&app, &terminal_path, &mql5_path)?;
     // Sampled before the terminal closes, so the cleanup waits for the session that
     // replaces this one instead of the one the restart ends.
     let (_, replaced) = bridge_session(app.state::<BridgeState>().inner());
@@ -660,8 +666,7 @@ pub(crate) async fn restart_mt5_with_ea(
 
 #[cfg(test)]
 mod picker_tests {
-    use std::collections::HashSet;
-
+    use super::super::test_support::{env_map, FakeProbe};
     use super::*;
     use crate::mt5_install::locate::HostPlatform;
 
@@ -673,43 +678,6 @@ mod picker_tests {
     const LINUX_HOME: &str = "/home/demo";
     const LINUX_MT5_PROGRAM_FILES: &str = "/home/demo/.mt5/drive_c/Program Files";
     const LINUX_WINE_PROGRAM_FILES: &str = "/home/demo/.wine/drive_c/Program Files";
-
-    /// A filesystem that holds exactly the given folders.
-    struct FolderProbe(HashSet<PathBuf>);
-
-    impl FolderProbe {
-        fn holding(folders: &[&str]) -> Self {
-            Self(folders.iter().map(PathBuf::from).collect())
-        }
-    }
-
-    impl InstallProbe for FolderProbe {
-        fn is_file(&self, _path: &Path) -> bool {
-            false
-        }
-
-        fn is_dir(&self, path: &Path) -> bool {
-            self.0.contains(path)
-        }
-
-        fn folder_names(&self, _folder: &Path) -> Vec<String> {
-            Vec::new()
-        }
-    }
-
-    /// An environment holding exactly `variables`.
-    fn env_with(variables: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
-        let variables: Vec<(String, String)> = variables
-            .iter()
-            .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
-            .collect();
-        move |name: &str| {
-            variables
-                .iter()
-                .find(|(variable, _)| variable == name)
-                .map(|(_, value)| value.clone())
-        }
-    }
 
     /// A Wine installation whose terminal sits in the default folder of `prefix`.
     fn wine_installation(prefix: &str) -> Mt5Installation {
@@ -724,8 +692,8 @@ mod picker_tests {
 
     #[test]
     fn macos_starts_in_the_official_application_program_folder() {
-        let env = env_with(&[("HOME", MACOS_HOME)]);
-        let probe = FolderProbe::holding(&[MACOS_PROGRAM_FILES]);
+        let env = env_map(&[("HOME", MACOS_HOME)]);
+        let probe = FakeProbe::with_folders([MACOS_PROGRAM_FILES]);
 
         assert_eq!(
             default_program_folder(&env, HostOs::MacOs, &probe),
@@ -735,18 +703,18 @@ mod picker_tests {
 
     #[test]
     fn macos_without_the_application_starts_nowhere() {
-        let env = env_with(&[("HOME", MACOS_HOME)]);
+        let env = env_map(&[("HOME", MACOS_HOME)]);
 
         assert_eq!(
-            default_program_folder(&env, HostOs::MacOs, &FolderProbe::holding(&[])),
+            default_program_folder(&env, HostOs::MacOs, &FakeProbe::default()),
             None
         );
     }
 
     #[test]
     fn linux_starts_in_the_first_existing_prefix() {
-        let env = env_with(&[("HOME", LINUX_HOME)]);
-        let both = FolderProbe::holding(&[LINUX_MT5_PROGRAM_FILES, LINUX_WINE_PROGRAM_FILES]);
+        let env = env_map(&[("HOME", LINUX_HOME)]);
+        let both = FakeProbe::with_folders([LINUX_MT5_PROGRAM_FILES, LINUX_WINE_PROGRAM_FILES]);
 
         assert_eq!(
             default_program_folder(&env, HostOs::Linux, &both),
@@ -757,7 +725,7 @@ mod picker_tests {
             default_program_folder(
                 &env,
                 HostOs::Linux,
-                &FolderProbe::holding(&[LINUX_WINE_PROGRAM_FILES])
+                &FakeProbe::with_folders([LINUX_WINE_PROGRAM_FILES])
             ),
             Some(PathBuf::from(LINUX_WINE_PROGRAM_FILES))
         );
@@ -765,38 +733,38 @@ mod picker_tests {
 
     #[test]
     fn linux_without_a_wine_prefix_starts_nowhere() {
-        let env = env_with(&[("HOME", LINUX_HOME)]);
+        let env = env_map(&[("HOME", LINUX_HOME)]);
 
         assert_eq!(
-            default_program_folder(&env, HostOs::Linux, &FolderProbe::holding(&[])),
+            default_program_folder(&env, HostOs::Linux, &FakeProbe::default()),
             None
         );
     }
 
     #[test]
     fn windows_uses_the_program_files_variable() {
-        let env = env_with(&[("ProgramFiles", WINDOWS_PROGRAM_FILES)]);
+        let env = env_map(&[("ProgramFiles", WINDOWS_PROGRAM_FILES)]);
 
         assert_eq!(
-            default_program_folder(&env, HostOs::Windows, &FolderProbe::holding(&[])),
+            default_program_folder(&env, HostOs::Windows, &FakeProbe::default()),
             Some(PathBuf::from(WINDOWS_PROGRAM_FILES))
         );
     }
 
     #[test]
     fn windows_without_the_variable_uses_the_default_program_folder() {
-        let env = env_with(&[]);
+        let env = env_map(&[]);
 
         assert_eq!(
-            default_program_folder(&env, HostOs::Windows, &FolderProbe::holding(&[])),
+            default_program_folder(&env, HostOs::Windows, &FakeProbe::default()),
             Some(PathBuf::from(WINDOWS_DEFAULT_PROGRAM_FILES))
         );
     }
 
     #[test]
     fn the_first_listed_installation_wins_over_the_default_folder() {
-        let env = env_with(&[("HOME", MACOS_HOME)]);
-        let probe = FolderProbe::holding(&[MACOS_PROGRAM_FILES]);
+        let env = env_map(&[("HOME", MACOS_HOME)]);
+        let probe = FakeProbe::with_folders([MACOS_PROGRAM_FILES]);
         let installation = wine_installation("/Volumes/Trading/prefix");
         let expected = Path::new("/Volumes/Trading/prefix")
             .join("drive_c")
@@ -812,12 +780,7 @@ mod picker_tests {
     #[test]
     fn with_no_installation_and_no_default_folder_the_picker_starts_nowhere() {
         assert_eq!(
-            picker_start_folder(
-                &env_with(&[]),
-                HostOs::MacOs,
-                &FolderProbe::holding(&[]),
-                None
-            ),
+            picker_start_folder(&env_map(&[]), HostOs::MacOs, &FakeProbe::default(), None),
             None
         );
     }
@@ -835,9 +798,9 @@ mod picker_tests {
 
         assert_eq!(
             picker_start_folder(
-                &env_with(&[]),
+                &env_map(&[]),
                 HostOs::Windows,
-                &FolderProbe::holding(&[]),
+                &FakeProbe::default(),
                 Some(&installation)
             ),
             Some(r"C:\MT5".to_string())

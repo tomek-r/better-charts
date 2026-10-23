@@ -161,6 +161,15 @@ pub(crate) enum BridgeConnectionState {
     ProtocolError,
 }
 
+impl BridgeStatus {
+    /// Clears both refusal flags: the status no longer reports that the installed
+    /// MT5 files or the presented token have to be fixed.
+    pub(crate) fn clear_refusal_flags(&mut self) {
+        self.component_outdated = false;
+        self.token_mismatch = false;
+    }
+}
+
 impl Default for BridgeStatus {
     fn default() -> Self {
         Self {

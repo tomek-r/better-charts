@@ -32,4 +32,6 @@ pub(crate) mod locate;
 pub(crate) mod restart;
 
 #[cfg(test)]
+mod test_support;
+#[cfg(test)]
 mod tests;

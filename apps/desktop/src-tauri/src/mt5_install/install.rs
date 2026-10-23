@@ -81,6 +81,10 @@ pub enum InstallError {
     SourceUnreadable { file: Mql5File, reason: String },
     #[error("the MQL5 file at {} cannot be written: {reason}", path.display())]
     DestinationUnwritable { path: PathBuf, reason: String },
+    /// The shipped source sits outside the bundled `mql5/` tree, so the folder MT5
+    /// loads it from cannot be derived. Nothing is guessed: the install stops.
+    #[error("the MQL5 folder for {file:?} is unknown; reinstall Better Charts and try again.")]
+    UnknownDestination { file: Mql5File },
 }
 
 /// Bytes of a bundled source. This reads the app's own resource file, never an MT5
@@ -212,8 +216,10 @@ pub(super) fn ensure_no_order_pending(queue: &ExecutionQueueView) -> Result<(), 
 /// name elsewhere below `MQL5` is left where it is.
 ///
 /// Refuses with [`InstallError::OrderInFlight`] before the first write while an
-/// order is queued or in flight. Stops at the first error; the files written
-/// before it are complete, because every write is a rename into place.
+/// order is queued or in flight, and with [`InstallError::UnknownDestination`] when
+/// the folder a shipped file belongs in cannot be derived. Stops at the first error;
+/// the files written before it are complete, because every write is a rename into
+/// place.
 pub fn install_bundled_sources(
     sources: &BundledSources,
     mql5: &Path,
@@ -222,11 +228,8 @@ pub fn install_bundled_sources(
     ensure_no_order_pending(queue)?;
     let mut installed = Vec::with_capacity(INSTALL_ORDER.len());
     for file in INSTALL_ORDER {
-        // Both bundled resources live in the shipped `mql5/` tree, so a default
-        // path exists for each of them.
-        let Some(destination) = default_path(mql5, file) else {
-            continue;
-        };
+        let destination =
+            default_path(mql5, file).ok_or(InstallError::UnknownDestination { file })?;
         installed.push(install_one(file, sources.source_of(file), &destination)?);
     }
     Ok(installed)

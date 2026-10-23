@@ -23,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Mutex,
+        Mutex, MutexGuard,
     },
 };
 
@@ -471,6 +471,7 @@ impl AppSettingsState {
     /// filled, the user's own values and `auto_start_mt5` stay exactly as they are,
     /// and a field an `MT5_*` override supplies is not touched.
     pub(crate) fn fill_from_installation(&self, installation: &Mt5Installation) {
+        // The guard ends the lock section here: a fill leaves the restart hint alone.
         self.store_installation_paths(|saved, overridden| {
             fill_detected_paths(saved, installation, overridden)
         });
@@ -487,20 +488,18 @@ impl AppSettingsState {
     /// the paths differ from the ones this launch runs with, the same rule `save`
     /// applies, because the bridge and the environment keep the startup values.
     pub(crate) fn store_chosen_installation(&self, installation: &Mt5Installation) {
-        if !self.store_installation_paths(|saved, overridden| {
+        let Some(mut inner) = self.store_installation_paths(|saved, overridden| {
             chosen_installation_paths(saved, installation, overridden)
-        }) {
-            return;
-        }
-        let Ok(mut inner) = self.inner.lock() else {
+        }) else {
             return;
         };
         inner.view.restart_required = inner.view.mt5_bridge_settings != self.startup_settings;
     }
 
     /// Stores the settings `paths` derives from the saved file and mirrors them in the
-    /// view, including the fields the installation supplied. Returns whether the file
-    /// now holds them.
+    /// view, including the fields the installation supplied. Returns the guard of the
+    /// view when the file now holds them, so the caller can adjust the view inside the
+    /// same lock section.
     ///
     /// Best effort: a settings directory the app has none of, a missing or unreadable
     /// settings file, no changed field, and a failed write all leave the view as it is
@@ -508,24 +507,20 @@ impl AppSettingsState {
     fn store_installation_paths(
         &self,
         paths: impl FnOnce(&AppSettings, &[String]) -> (AppSettings, Vec<&'static str>),
-    ) -> bool {
-        let Ok(mut inner) = self.inner.lock() else {
-            return false;
-        };
-        let Some(path) = self.path.as_deref() else {
-            return false;
-        };
+    ) -> Option<MutexGuard<'_, StoredSettings>> {
+        let mut inner = self.inner.lock().ok()?;
+        let path = self.path.as_deref()?;
         let Ok(Some(saved)) = read_file(path) else {
-            return false;
+            return None;
         };
         let (updated, fields) = paths(&saved, &inner.view.overridden_keys);
         if fields.is_empty() || persist(path, &updated).is_err() {
-            return false;
+            return None;
         }
         let (effective, _) = updated.with_overrides(&self.overrides);
         inner.view.mt5_bridge_settings = effective;
         inner.view.detected_fields = fields;
-        true
+        Some(inner)
     }
 }
 

@@ -5,9 +5,7 @@
 //! the bridge has to wait again instead of keeping `tokenMismatch` /
 //! `componentOutdated` on screen until the new session answers.
 use super::*;
-
-/// Message the restart publishes while it waits for the new terminal.
-const WAITING_MESSAGE: &str = "Waiting for the restarted MetaTrader 5 to connect.";
+use crate::bridge::accept::RESTARTED_TERMINAL_WAITING;
 
 /// A status the stopped terminal left behind. `refusal` names the flag it carried.
 fn status_after(refusal: &str) -> BridgeStatus {
@@ -55,7 +53,7 @@ fn a_restart_clears_the_refusal_of_the_terminal_it_stopped() {
             !status.component_outdated,
             "the {refusal} status clears the outdated flag"
         );
-        assert_eq!(status.message.as_deref(), Some(WAITING_MESSAGE));
+        assert_eq!(status.message.as_deref(), Some(RESTARTED_TERMINAL_WAITING));
 
         let emitted = recorded.events();
         assert_eq!(
@@ -67,7 +65,7 @@ fn a_restart_clears_the_refusal_of_the_terminal_it_stopped() {
         assert_eq!(emitted[0].1["state"], "connecting");
         assert_eq!(emitted[0].1["tokenMismatch"], false);
         assert_eq!(emitted[0].1["componentOutdated"], false);
-        assert_eq!(emitted[0].1["message"], WAITING_MESSAGE);
+        assert_eq!(emitted[0].1["message"], RESTARTED_TERMINAL_WAITING);
     }
 }
 

@@ -127,9 +127,8 @@ fn wine_binary_for(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::super::discover::PATH_VARIABLE;
+    use super::super::test_support::{env_map, FakeProbe};
     use super::*;
 
     /// Folder the fake `PATH` holds, and the `wine` inside it.
@@ -146,47 +145,15 @@ mod tests {
     /// the check reads, and these tests run on every operating system.
     const WINDOWS_PICKED_TERMINAL: &str = "/opt/Acme MT5/TERMINAL64.EXE";
 
-    /// A filesystem that holds exactly the given files.
-    struct FakeProbe(HashSet<PathBuf>);
-
-    impl FakeProbe {
-        fn holding(files: &[&str]) -> Self {
-            Self(files.iter().map(PathBuf::from).collect())
-        }
-    }
-
-    impl InstallProbe for FakeProbe {
-        fn is_file(&self, path: &Path) -> bool {
-            self.0.contains(path)
-        }
-
-        fn is_dir(&self, _path: &Path) -> bool {
-            false
-        }
-
-        fn folder_names(&self, _folder: &Path) -> Vec<String> {
-            Vec::new()
-        }
-    }
-
-    /// An environment whose `PATH` holds [`TEST_PATH_FOLDER`].
-    fn env_with_path(name: &str) -> Option<String> {
-        (name == PATH_VARIABLE).then_some(TEST_PATH_FOLDER.to_string())
-    }
-
-    /// An environment without `PATH`, which therefore finds no `wine`.
-    fn env_without_path(_name: &str) -> Option<String> {
-        None
-    }
-
     #[test]
     fn a_picked_windows_terminal_is_the_path_as_given() {
-        let probe = FakeProbe::holding(&[WINDOWS_PICKED_TERMINAL]);
+        let probe = FakeProbe::with_files([WINDOWS_PICKED_TERMINAL]);
+        let env = env_map(&[]);
 
         let installation = installation_from_executable(
             Path::new(WINDOWS_PICKED_TERMINAL),
             HostOs::Windows,
-            &env_without_path,
+            &env,
             &probe,
         )
         .expect("a terminal64.exe that exists is accepted");
@@ -201,43 +168,34 @@ mod tests {
     #[test]
     fn a_file_that_is_not_terminal64_exe_is_refused() {
         let executable = "/Users/x/prefix/drive_c/Brokers/Acme MT5/terminal.exe";
-        let probe = FakeProbe::holding(&[executable]);
+        let probe = FakeProbe::with_files([executable]);
+        let env = env_map(&[]);
 
-        let chosen = installation_from_executable(
-            Path::new(executable),
-            HostOs::Windows,
-            &env_without_path,
-            &probe,
-        );
+        let chosen =
+            installation_from_executable(Path::new(executable), HostOs::Windows, &env, &probe);
 
         assert!(matches!(chosen, Err(ChooseError::NotTerminal)));
     }
 
     #[test]
     fn a_terminal_that_does_not_exist_is_refused() {
-        let probe = FakeProbe::holding(&[]);
+        let probe = FakeProbe::default();
+        let env = env_map(&[]);
 
-        let chosen = installation_from_executable(
-            Path::new(PICKED_TERMINAL),
-            HostOs::Windows,
-            &env_without_path,
-            &probe,
-        );
+        let chosen =
+            installation_from_executable(Path::new(PICKED_TERMINAL), HostOs::Windows, &env, &probe);
 
         assert!(matches!(chosen, Err(ChooseError::NotTerminal)));
     }
 
     #[test]
     fn a_picked_terminal_inside_a_wine_prefix_maps_to_its_prefix() {
-        let probe = FakeProbe::holding(&[PICKED_TERMINAL, MACOS_WINE_BINARY]);
+        let probe = FakeProbe::with_files([PICKED_TERMINAL, MACOS_WINE_BINARY]);
+        let env = env_map(&[]);
 
-        let installation = installation_from_executable(
-            Path::new(PICKED_TERMINAL),
-            HostOs::MacOs,
-            &env_without_path,
-            &probe,
-        )
-        .expect("a terminal below drive_c is accepted");
+        let installation =
+            installation_from_executable(Path::new(PICKED_TERMINAL), HostOs::MacOs, &env, &probe)
+                .expect("a terminal below drive_c is accepted");
 
         assert_eq!(installation.host, HostPlatform::Wine);
         assert_eq!(installation.wine_prefix, Some(PathBuf::from(PICKED_PREFIX)));
@@ -252,29 +210,23 @@ mod tests {
     #[test]
     fn a_picked_terminal_outside_a_wine_prefix_is_refused() {
         let executable = "/Users/x/Brokers/Acme MT5/terminal64.exe";
-        let probe = FakeProbe::holding(&[executable, MACOS_WINE_BINARY]);
+        let probe = FakeProbe::with_files([executable, MACOS_WINE_BINARY]);
+        let env = env_map(&[(PATH_VARIABLE, TEST_PATH_FOLDER)]);
 
-        let chosen = installation_from_executable(
-            Path::new(executable),
-            HostOs::MacOs,
-            &env_with_path,
-            &probe,
-        );
+        let chosen =
+            installation_from_executable(Path::new(executable), HostOs::MacOs, &env, &probe);
 
         assert!(matches!(chosen, Err(ChooseError::OutsideWinePrefix)));
     }
 
     #[test]
     fn macos_falls_back_to_the_wine_on_path() {
-        let probe = FakeProbe::holding(&[PICKED_TERMINAL, WINE_ON_TEST_PATH]);
+        let probe = FakeProbe::with_files([PICKED_TERMINAL, WINE_ON_TEST_PATH]);
+        let env = env_map(&[(PATH_VARIABLE, TEST_PATH_FOLDER)]);
 
-        let installation = installation_from_executable(
-            Path::new(PICKED_TERMINAL),
-            HostOs::MacOs,
-            &env_with_path,
-            &probe,
-        )
-        .expect("a terminal below drive_c is accepted");
+        let installation =
+            installation_from_executable(Path::new(PICKED_TERMINAL), HostOs::MacOs, &env, &probe)
+                .expect("a terminal below drive_c is accepted");
 
         assert_eq!(
             installation.wine_binary,
@@ -284,14 +236,11 @@ mod tests {
 
     #[test]
     fn linux_without_wine_on_path_reports_the_missing_wine() {
-        let probe = FakeProbe::holding(&[PICKED_TERMINAL]);
+        let probe = FakeProbe::with_files([PICKED_TERMINAL]);
+        let env = env_map(&[]);
 
-        let chosen = installation_from_executable(
-            Path::new(PICKED_TERMINAL),
-            HostOs::Linux,
-            &env_without_path,
-            &probe,
-        );
+        let chosen =
+            installation_from_executable(Path::new(PICKED_TERMINAL), HostOs::Linux, &env, &probe);
 
         assert!(matches!(chosen, Err(ChooseError::WineMissing)));
     }

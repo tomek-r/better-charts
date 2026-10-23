@@ -323,8 +323,7 @@ pub(crate) async fn run_handshake(
         status.server = Some(hello_payload.broker_server.clone());
         status.message = None;
         // A successful handshake ends whatever the previous refusal reported.
-        status.component_outdated = false;
-        status.token_mismatch = false;
+        status.clear_refusal_flags();
         status.market_session = None;
         status.broker_utc_offset_minutes = None;
         status.partial_close = hello_payload.partial_close;

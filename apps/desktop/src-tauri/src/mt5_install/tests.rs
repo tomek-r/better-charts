@@ -4,10 +4,11 @@ use super::discover::*;
 use super::install::*;
 use super::locate::*;
 use super::restart::*;
+use super::test_support::*;
 use crate::execution_adapter::ExecutionQueueView;
 use crate::mt5_backend::{is_configured, Mt5BackendConfig, ProcessCheck};
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -447,20 +448,6 @@ const PROGRAM_FILES: &str = r"C:\Program Files";
 const ACME_TERMINAL_EXE: &str = r"C:\Program Files\Acme MetaTrader 5\terminal64.exe";
 const ZULU_TERMINAL_EXE: &str = r"C:\Program Files\Zulu MetaTrader 5\terminal64.exe";
 
-/// Environment lookup over `pairs`; every other variable reads as unset.
-fn env_map(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
-    let pairs: Vec<(String, String)> = pairs
-        .iter()
-        .map(|(key, value)| (key.to_string(), value.to_string()))
-        .collect();
-    move |key: &str| {
-        pairs
-            .iter()
-            .find(|(name, _)| name == key)
-            .map(|(_, value)| value.clone())
-    }
-}
-
 /// Host path of the default terminal inside a Wine prefix.
 fn terminal_exe_in_prefix(wine_prefix: &str) -> PathBuf {
     windows_path_on_host(TERMINAL_EXE, HostPlatform::Wine, Path::new(wine_prefix))
@@ -484,45 +471,6 @@ fn discovered_windows_installation(terminal_exe_windows: &str) -> Mt5Installatio
         wine_binary: None,
         terminal_exe_windows: terminal_exe_windows.to_string(),
         source: InstallationSource::Discovered,
-    }
-}
-
-/// Probe over a fixed picture of the disk, so all three operating systems are
-/// tested on any host.
-#[derive(Default)]
-struct FakeProbe {
-    files: BTreeSet<PathBuf>,
-    folders: BTreeMap<PathBuf, Vec<String>>,
-}
-
-impl FakeProbe {
-    /// Probe where exactly `files` exist and no folder is listed.
-    fn with_files(files: impl IntoIterator<Item = PathBuf>) -> Self {
-        Self {
-            files: files.into_iter().collect(),
-            folders: BTreeMap::new(),
-        }
-    }
-
-    /// Adds `folder`, listing `names` in the name order the real probe produces.
-    fn listing(mut self, folder: &str, names: &[&str]) -> Self {
-        let names = names.iter().map(|name| (*name).to_string()).collect();
-        self.folders.insert(PathBuf::from(folder), names);
-        self
-    }
-}
-
-impl InstallProbe for FakeProbe {
-    fn is_file(&self, path: &Path) -> bool {
-        self.files.contains(path)
-    }
-
-    fn is_dir(&self, _path: &Path) -> bool {
-        false
-    }
-
-    fn folder_names(&self, folder: &Path) -> Vec<String> {
-        self.folders.get(folder).cloned().unwrap_or_default()
     }
 }
 
