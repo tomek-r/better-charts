@@ -17,6 +17,9 @@ import {
 } from './helpers/setupGuide';
 import { gotoWithStub, pausePageClockAhead, pushBridgeStatus } from './helpers/tauriStub';
 
+/** The heading of the guide's first step, which every entry point opens. */
+const SETUP_GUIDE_FIRST_STEP = 'Find MetaTrader 5';
+
 /** A protocol error the EA words itself, the one refusal no other notice explains. */
 const OTHER_REFUSAL_MESSAGE = 'Bridge bind failed';
 
@@ -26,11 +29,10 @@ const NOT_CONNECTED_NOTICE_REVEAL_MS = 3_100;
 /** How long a completed setup waits behind the blurred screen, a little past its 15 s limit. */
 const WAITING_SCREEN_LIMIT_MS = 15_100;
 
-/** One problem of a completed setup: the notice it shows, its fix button and the guide step that button opens. */
+/** One problem of a completed setup: the notice it shows and the fix button it offers. */
 interface BridgeProblemNotice {
   message: string;
   action: string;
-  step: string;
   status: BridgeStatus;
 }
 
@@ -39,19 +41,16 @@ const BRIDGE_PROBLEM_NOTICES: BridgeProblemNotice[] = [
   {
     message: 'MetaTrader 5 is not connected.',
     action: 'Open setup guide',
-    step: 'Connect',
     status: { state: 'connecting' },
   },
   {
     message: 'MetaTrader 5 uses a different bridge token.',
     action: 'Install again',
-    step: 'Install',
     status: TOKEN_MISMATCH_STATUS,
   },
   {
     message: OTHER_REFUSAL_MESSAGE,
     action: 'Install again',
-    step: 'Install',
     status: { state: 'protocol_error', message: OTHER_REFUSAL_MESSAGE },
   },
 ];
@@ -154,7 +153,7 @@ test('an unconnected bridge covers the workspace and offers the guide alone', as
 
   await screen.getByRole('button', { name: 'Open setup guide' }).click();
   await expect(setupGuideDialog(page)).toBeVisible();
-  await expect(setupGuideDialog(page).getByRole('heading', { name: 'Find MetaTrader 5' })).toBeVisible();
+  await expect(setupGuideDialog(page).getByRole('heading', { name: SETUP_GUIDE_FIRST_STEP })).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
 });
 
@@ -186,7 +185,7 @@ test('the awaiting screen fades out when the data arrives', async ({ page }) => 
   await expect(screen).toHaveCount(0);
 });
 
-test('a completed setup that waits too long hands over to a notice that opens the guide on Connect', async ({
+test('a completed setup that waits too long hands over to a notice that opens the guide at its first step', async ({
   page,
 }) => {
   await pausePageClockAhead(page);
@@ -201,7 +200,7 @@ test('a completed setup that waits too long hands over to a notice that opens th
 
   await notice.getByRole('button', { name: 'Open setup guide' }).click();
   await revealLazyGuide(page);
-  await expectGuideOnStep(setupGuideDialog(page), 'Connect');
+  await expectGuideOnStep(setupGuideDialog(page), SETUP_GUIDE_FIRST_STEP);
 
   // The data arriving answers the problem, so the notice retires itself.
   await pushBridgeStatus(page, CONNECTED_STATUS);
@@ -217,7 +216,7 @@ test('a completed setup with a token mismatch offers the install notice instead 
 
   // Installing again is what hands the EA the token the app knows.
   await notice.getByRole('button', { name: 'Install again' }).click();
-  await expectGuideOnStep(setupGuideDialog(page), 'Install');
+  await expectGuideOnStep(setupGuideDialog(page), SETUP_GUIDE_FIRST_STEP);
 });
 
 test('the standalone guide gives way to the setup complete screen once the bridge connects', async ({ page }) => {
@@ -289,9 +288,9 @@ test('a token mismatch explains itself on the setup screen without an error toas
   await expect(screen.getByRole('button', { name: 'Open setup guide' })).toBeVisible();
   await expect(page.getByText('authentication failed')).toHaveCount(0);
 
-  // The install step is what hands the EA the current token.
+  // The hint names Install and restart MT5, but the guide still opens at its first step.
   await screen.getByRole('button', { name: 'Open setup guide' }).click();
-  await expectGuideOnStep(setupGuideDialog(page), 'Install');
+  await expectGuideOnStep(setupGuideDialog(page), SETUP_GUIDE_FIRST_STEP);
 });
 
 /** Opens the guide's Connect step from App settings under the paused clock, its install already done. */
@@ -323,7 +322,7 @@ test('Happy trading remembers the setup on the device, so a reload keeps the set
 
   await notice.getByRole('button', { name: 'Open setup guide' }).click();
   await revealLazyGuide(page);
-  await expectGuideOnStep(setupGuideDialog(page), 'Connect');
+  await expectGuideOnStep(setupGuideDialog(page), SETUP_GUIDE_FIRST_STEP);
 });
 
 // Install and restart MT5 drops the bridge for a moment, so its silence must not raise a notice
@@ -345,8 +344,8 @@ test('a completed setup keeps the guide notices away while the guide and its fin
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-for (const { message, action, step, status: problemStatus } of BRIDGE_PROBLEM_NOTICES) {
-  test(`a completed setup reports "${message}" in a notice whose ${action} button opens the guide on ${step}`, async ({
+for (const { message, action, status: problemStatus } of BRIDGE_PROBLEM_NOTICES) {
+  test(`a completed setup reports "${message}" in a notice whose ${action} button opens the first step`, async ({
     page,
   }) => {
     await openCompletedSetupWithCandles(page);
@@ -356,6 +355,6 @@ for (const { message, action, step, status: problemStatus } of BRIDGE_PROBLEM_NO
     await notice.getByRole('button', { name: action }).click();
     await revealLazyGuide(page);
 
-    await expectGuideOnStep(setupGuideDialog(page), step);
+    await expectGuideOnStep(setupGuideDialog(page), SETUP_GUIDE_FIRST_STEP);
   });
 }

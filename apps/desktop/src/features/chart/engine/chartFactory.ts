@@ -18,6 +18,21 @@ export interface ChartSurface {
   future: ISeriesApi<'Line'>;
 }
 
+const FALLBACK_CHART_LOCALE = 'en-GB';
+
+// Linux WebKitGTK reports navigator.language as 'C' under LANG=C, which is not a language
+// tag: the library's toLocaleString(locale) throws on it and aborts the whole paint.
+function chartLocale(): string {
+  try {
+    if (Intl.DateTimeFormat.supportedLocalesOf(navigator.language).length > 0) {
+      return navigator.language;
+    }
+  } catch {
+    // supportedLocalesOf throws a RangeError on a malformed tag.
+  }
+  return FALLBACK_CHART_LOCALE;
+}
+
 /**
  * Builds the chart and the three series it owns. This is the only module that
  * creates the chart and its series, so the visual configuration lives here rather
@@ -39,6 +54,7 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
       fontSize: 11,
       attributionLogo: true,
     },
+    localization: { locale: chartLocale() },
     grid: { vertLines: { color: palette.borderSubtle }, horzLines: { color: palette.borderSubtle } },
     crosshair: {
       mode: CrosshairMode.Hidden,

@@ -3,7 +3,6 @@ import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal'
 import { useDelayedReveal } from '../../shared/hooks/useDelayedReveal';
 import { ErrorNotification, type NoticeAction } from '../../shared/ui/ErrorNotifications';
 import { useAppSettingsActions, useSetupFlowOnScreen } from '../settings/AppSettingsProvider';
-import { SetupGuideStep } from '../settings/useAppSettings';
 import { useBridgeConnectionSelector, useHasCandles } from './BridgeSessionProvider';
 
 /** How long a drawn chart may sit without a connected bridge before its notice shows. */
@@ -28,11 +27,11 @@ export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
   // One stable action per fix: the notice store compares a notice's button by its label, so a fresh
   // object on every render would still be idle, but a memoised one keeps the effect from re-running.
   const connectGuideAction = useMemo<NoticeAction>(
-    () => ({ label: 'Open setup guide', run: () => openSetupGuide(SetupGuideStep.Connect) }),
+    () => ({ label: 'Open setup guide', run: () => openSetupGuide() }),
     [openSetupGuide],
   );
   const installGuideAction = useMemo<NoticeAction>(
-    () => ({ label: 'Install again', run: () => openSetupGuide(SetupGuideStep.Install) }),
+    () => ({ label: 'Install again', run: () => openSetupGuide() }),
     [openSetupGuide],
   );
   const refusal = useBridgeConnectionSelector(({ status }) => bridgeRefusal(status));
@@ -64,8 +63,7 @@ export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
         action={connectGuideAction}
       />
       {/* The chart already toasts this refusal for every device, keyed by its own message, so using that
-          message as the key here too keeps it one notice: a completed setup adds its fix, the install
-          step, to the toast. */}
+          message as the key here too keeps it one notice: a completed setup adds its fix to the toast. */}
       <ErrorNotification noticeKey={refusalMessage} message={refusalMessage} action={installGuideAction} />
     </>
   );

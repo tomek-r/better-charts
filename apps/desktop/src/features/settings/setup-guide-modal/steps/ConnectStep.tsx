@@ -2,7 +2,8 @@ import { LoadingMessage } from '../../../../shared/ui/LoadingMessage';
 
 const CONNECT_CHECKLIST = [
   'BetterChartsBridge is attached to a chart',
-  'Algo Trading is on in MetaTrader 5',
+  'The Algo Trading button in the MetaTrader 5 toolbar is on',
+  '127.0.0.1 is listed in MetaTrader 5 Tools → Options → Expert Advisors → "Allow WebRequest for listed URL"',
   "The EA uses this app's token (Install and restart MT5 sets it)",
 ] as const;
 

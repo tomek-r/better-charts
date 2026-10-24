@@ -48,7 +48,7 @@ test('a token mismatch leaves the guide silent and offers Install again in the b
   await notice.getByRole('button', { name: 'Install again' }).click();
 
   const reopenedGuide = setupGuideDialog(page);
-  await expectGuideOnStep(reopenedGuide, 'Install', { marksIndicator: true });
+  await expectGuideOnStep(reopenedGuide, 'Find MetaTrader 5', { marksIndicator: true });
 });
 
 test('an outdated component keeps its Update in MT5 notice and leaves the guide silent', async ({ page }) => {
@@ -75,6 +75,13 @@ test('the connect step keeps reporting only its wait after 20 s without an EA', 
   await page.clock.runFor(PATIENCE_MS);
 
   await expectConnectStepSilent(guide);
+});
+
+test('the connect step tells the user to allow 127.0.0.1 in MetaTrader 5', async ({ page }) => {
+  await gotoWithStub(page, { responses: CONNECTING_BRIDGE });
+  const guide = await openConnectStep(page);
+
+  await expect(guide.getByRole('listitem').filter({ hasText: '127.0.0.1 is listed in MetaTrader 5' })).toBeVisible();
 });
 
 test('Back leaves the connect step for the install step', async ({ page }) => {

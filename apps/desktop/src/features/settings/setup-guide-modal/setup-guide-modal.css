@@ -84,6 +84,11 @@
 /* The indicator and the way back share one row at the top of the body; spacing alone separates the
    three step names, never a glyph. */
 .setup-guide-progress-row {
+  /* The Back button exists from step 2 on: a row as tall as it on every step keeps the content below
+     from jumping. Content-box, so the height excludes the row's own padding and border. */
+  --setup-guide-back-height: 24px;
+  box-sizing: content-box;
+  min-height: var(--setup-guide-back-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -232,10 +237,12 @@
   font-size: 13px;
 }
 
-/* Compact enough to sit in the progress row without making it taller than the step names. */
+/* A fixed height, the one the progress row reserves, so showing the button never changes the row. */
 .setup-guide-back {
   flex: none;
-  padding: 4px 12px;
+  height: var(--setup-guide-back-height);
+  padding: 0 12px;
+  line-height: 1;
   font-size: 12px;
 }
 
