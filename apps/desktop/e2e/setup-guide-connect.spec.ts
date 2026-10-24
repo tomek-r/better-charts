@@ -48,7 +48,7 @@ test('a token mismatch leaves the guide silent and offers Install again in the b
   await notice.getByRole('button', { name: 'Install again' }).click();
 
   const reopenedGuide = setupGuideDialog(page);
-  await expectGuideOnStep(reopenedGuide, 'Install', { marksIndicator: true });
+  await expectGuideOnStep(reopenedGuide, 'Find MetaTrader 5', { marksIndicator: true });
 });
 
 test('an outdated component keeps its Update in MT5 notice and leaves the guide silent', async ({ page }) => {

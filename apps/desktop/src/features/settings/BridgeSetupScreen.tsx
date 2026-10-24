@@ -4,13 +4,10 @@ import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal'
 import { LoadingMessage } from '../../shared/ui/LoadingMessage';
 import { useAppSettingsActions } from './AppSettingsProvider';
 import { preloadSetupGuide } from './setup-guide-modal/LazySetupGuideModal';
-import { SetupGuideStep } from './useAppSettings';
 
 interface SetupScreenNotice {
   title: string;
   hint: string;
-  /** The guide step the notice's button opens. */
-  guideStep: SetupGuideStep;
 }
 
 const SETUP_REGION_LABEL = 'MetaTrader 5 setup';
@@ -18,17 +15,15 @@ const SETUP_REGION_LABEL = 'MetaTrader 5 setup';
 const CONNECT_NOTICE: SetupScreenNotice = {
   title: 'Connect MetaTrader 5',
   hint: 'Install the Better Charts EA in MetaTrader 5 and attach it to a chart.',
-  guideStep: SetupGuideStep.Find,
 };
 
-/** A token refusal is fixed by the guide's install, which hands the EA the current token. */
+/** A token refusal is fixed by installing again, which hands the EA the token this app knows. */
 const TOKEN_MISMATCH_NOTICE: SetupScreenNotice = {
   title: 'Bridge token does not match',
   hint: 'MetaTrader 5 uses a different bridge token. Open the setup guide and choose Install and restart MT5.',
-  guideStep: SetupGuideStep.Install,
 };
 
-/** The notice of an unfinished setup: a token refusal leads to the install step, anything else to the find step. */
+/** The notice of an unfinished setup: a token refusal words itself differently from any other problem. */
 function setupScreenNotice(refusal: BridgeRefusal | undefined): SetupScreenNotice {
   if (refusal === BridgeRefusal.TokenMismatch) {
     return TOKEN_MISMATCH_NOTICE;
@@ -42,7 +37,7 @@ function SetupScreen({ notice }: { notice: SetupScreenNotice }) {
     <div className="bridge-screen" role="region" aria-label={SETUP_REGION_LABEL}>
       <div className="bridge-screen-content">
         <LoadingMessage title={notice.title} hint={notice.hint} />
-        <button type="button" className="modal-dialog-button primary" onClick={() => openSetupGuide(notice.guideStep)}>
+        <button type="button" className="modal-dialog-button primary" onClick={() => openSetupGuide()}>
           Open setup guide
         </button>
       </div>

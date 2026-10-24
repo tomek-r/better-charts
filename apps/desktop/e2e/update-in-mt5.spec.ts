@@ -6,7 +6,7 @@ import { expectNoErrors, gotoWithStub, pushBridgeStatus } from './helpers/tauriS
 const OUTDATED_BRIDGE_MESSAGE =
   'App requires MT5 bridge version 1.012, but installed bridge version is 1.006. Update and reattach BetterChartsBridge in MT5.';
 
-test('a version refusal opens the setup guide at its install step', async ({ page }) => {
+test('a version refusal opens the setup guide at its first step', async ({ page }) => {
   const errors = await gotoWithStub(page);
   await pushBridgeStatus(page, { state: 'protocol_error', message: OUTDATED_BRIDGE_MESSAGE, componentOutdated: true });
 
@@ -22,8 +22,8 @@ test('a version refusal opens the setup guide at its install step', async ({ pag
   await expect(guide).toBeVisible();
   // The guide stands on its own window: no App settings dialog opens beneath it.
   await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
-  await expectGuideOnStep(guide, 'Install', { marksIndicator: true });
-  await expect(guide.getByRole('button', { name: 'Install and restart MT5' })).toBeVisible();
+  await expectGuideOnStep(guide, 'Find MetaTrader 5', { marksIndicator: true });
+
   expectNoErrors(errors);
 });
 
