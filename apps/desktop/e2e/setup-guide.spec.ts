@@ -68,6 +68,8 @@ test('the guide opens on Find MetaTrader 5 and walks to Install and back', async
 });
 
 test('the progress row keeps its height when the Back button appears', async ({ page }) => {
+  // The opening animation scales the dialog, and the bounding box would include that scale.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await gotoWithStub(page);
   const guide = await openSetupGuide(page);
   const progressRow = guide.locator('.setup-guide-progress-row');
