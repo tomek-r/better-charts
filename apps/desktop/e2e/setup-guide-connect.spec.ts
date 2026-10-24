@@ -77,6 +77,13 @@ test('the connect step keeps reporting only its wait after 20 s without an EA', 
   await expectConnectStepSilent(guide);
 });
 
+test('the connect step tells the user to allow 127.0.0.1 in MetaTrader 5', async ({ page }) => {
+  await gotoWithStub(page, { responses: CONNECTING_BRIDGE });
+  const guide = await openConnectStep(page);
+
+  await expect(guide.getByRole('listitem').filter({ hasText: '127.0.0.1 is listed in MetaTrader 5' })).toBeVisible();
+});
+
 test('Back leaves the connect step for the install step', async ({ page }) => {
   await gotoWithStub(page, { responses: CONNECTING_BRIDGE });
   const guide = await openConnectStep(page);
