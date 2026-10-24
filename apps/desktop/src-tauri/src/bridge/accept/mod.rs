@@ -310,17 +310,19 @@ pub(crate) fn reset_reconciliation(
     publish_reconciliation_status(events, state, status);
 }
 
-/// Why a protocol error was reported. Only `ComponentOutdated` is actionable
-/// from inside the app (reinstall the bundled MT5 files), so only it sets the
-/// `componentOutdated` flag the UI reads.
+/// Why a protocol error was reported. `ComponentOutdated` is fixed by
+/// reinstalling the bundled MT5 files, `TokenMismatch` by installing them
+/// through the setup guide, so each sets its own flag the UI reads;
+/// `Other` sets neither.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProtocolErrorCause {
     ComponentOutdated,
+    TokenMismatch,
     Other,
 }
 
 /// Publishes the protocol-error status. The caller has already decided that no
-/// session is live; the cause rides along as a machine-readable flag so no UI
+/// session is live; the cause rides along as machine-readable flags so no UI
 /// code has to read `message`.
 fn report_protocol_error(
     events: &Arc<dyn BridgeEvents>,
@@ -347,6 +349,7 @@ fn report_protocol_error(
         status.state = BridgeConnectionState::ProtocolError;
         status.message = Some(message.into());
         status.component_outdated = cause == ProtocolErrorCause::ComponentOutdated;
+        status.token_mismatch = cause == ProtocolErrorCause::TokenMismatch;
         status.market_session = None;
         status.broker_utc_offset_minutes = None;
         status.partial_close = false;
@@ -375,12 +378,57 @@ pub(crate) fn protocol_error_component_outdated(
     );
 }
 
+/// A rejection the setup guide fixes: the EA presented a token other than the one in
+/// App settings. Marks the status so the UI can point at the guide instead of asking
+/// the user to read the message.
+pub(crate) fn protocol_error_token_mismatch(
+    events: &Arc<dyn BridgeEvents>,
+    state: &BridgeState,
+    message: impl Into<String>,
+) {
+    report_protocol_error(events, state, message, ProtocolErrorCause::TokenMismatch);
+}
+
 pub(crate) fn protocol_error(
     events: &Arc<dyn BridgeEvents>,
     state: &BridgeState,
     message: impl Into<String>,
 ) {
     report_protocol_error(events, state, message, ProtocolErrorCause::Other);
+}
+
+/// Message the status carries while a restart waits for the terminal it launched:
+/// nothing is wrong yet, the freshly installed advisor still has to connect.
+pub(crate) const RESTARTED_TERMINAL_WAITING: &str =
+    "Waiting for the restarted MetaTrader 5 to connect.";
+
+/// Reports that a restart closed the old terminal and launched the new one, so the
+/// app waits for the restarted advisor instead of keeping a refusal it can no
+/// longer explain.
+///
+/// The `tokenMismatch`/`componentOutdated` flags describe the terminal that
+/// presented them; the restart's startup preset carries the current token and the
+/// files it just installed, so a refusal left behind is stale and would send the
+/// user back to an install that already succeeded. Only a refusal (protocol error)
+/// or a disconnect is replaced: a `connected` session is left to [`disconnect`],
+/// which publishes its own status when the restart drops it, and a refusal from the
+/// new terminal is published normally.
+pub(crate) fn expect_restarted_terminal(events: &Arc<dyn BridgeEvents>, state: &BridgeState) {
+    let awaits_terminal = {
+        let status = state.status.lock().expect("bridge status mutex poisoned");
+        matches!(
+            status.state,
+            BridgeConnectionState::Disconnected | BridgeConnectionState::ProtocolError
+        )
+    };
+    if !awaits_terminal {
+        return;
+    }
+    publish(events, state, |status| {
+        status.state = BridgeConnectionState::Connecting;
+        status.message = Some(RESTARTED_TERMINAL_WAITING.to_owned());
+        status.clear_refusal_flags();
+    });
 }
 
 pub(crate) fn disconnect(
@@ -402,7 +450,7 @@ pub(crate) fn disconnect(
         publish(events, state, |status| {
             status.state = BridgeConnectionState::Disconnected;
             status.message = None;
-            status.component_outdated = false;
+            status.clear_refusal_flags();
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;
@@ -502,9 +550,9 @@ pub(crate) fn protocol_error_session(
         publish(events, state, |status| {
             status.state = BridgeConnectionState::ProtocolError;
             status.message = Some(message.to_string());
-            // A session-level error is never a version mismatch: both are
+            // A session-level error is never a version or token mismatch: both are
             // checked before a session exists.
-            status.component_outdated = false;
+            status.clear_refusal_flags();
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;

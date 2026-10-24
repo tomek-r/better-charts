@@ -145,6 +145,11 @@ pub(crate) struct BridgeStatus {
     /// `message` is.
     #[serde(rename = "componentOutdated", default)]
     pub component_outdated: bool,
+    /// True only when the EA presented a token other than the one in App
+    /// settings, so the UI can point at the setup guide instead of the message.
+    /// False for every other error, and cleared wherever `message` is.
+    #[serde(rename = "tokenMismatch", default)]
+    pub token_mismatch: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -154,6 +159,15 @@ pub(crate) enum BridgeConnectionState {
     Connecting,
     Connected,
     ProtocolError,
+}
+
+impl BridgeStatus {
+    /// Clears both refusal flags: the status no longer reports that the installed
+    /// MT5 files or the presented token have to be fixed.
+    pub(crate) fn clear_refusal_flags(&mut self) {
+        self.component_outdated = false;
+        self.token_mismatch = false;
+    }
 }
 
 impl Default for BridgeStatus {
@@ -172,6 +186,7 @@ impl Default for BridgeStatus {
             partial_close: false,
             trading_enabled: false,
             component_outdated: false,
+            token_mismatch: false,
         }
     }
 }
@@ -193,6 +208,13 @@ impl BridgeEvents for TauriBridgeEvents {
     fn emit_value(&self, event: &str, payload: &serde_json::Value) {
         let _ = self.0.emit(event, payload);
     }
+}
+
+/// The production event sink for `app`: the app's own emitter behind the
+/// [`BridgeEvents`] seam. Commands outside the bridge server reuse it, so a status
+/// they publish reaches the frontend through the same `bridge-status` event.
+pub(crate) fn tauri_events(app: &tauri::AppHandle) -> Arc<dyn BridgeEvents> {
+    Arc::new(TauriBridgeEvents(app.clone()))
 }
 
 /// Typed event emission that does not wait for delivery. Serialization or emit failures are

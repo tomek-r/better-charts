@@ -34,15 +34,38 @@ fn valid() -> AppSettings {
     }
 }
 #[test]
-fn first_launch_defaults_are_read_only_and_never_start_mt5() {
+fn first_launch_generates_a_bridge_token_and_never_starts_mt5() {
     let fixture = Fixture::new();
     let state = AppSettingsState::resolve(Some(fixture.path()), HashMap::new(), None);
     let view = state.view().unwrap();
     assert!(view.first_launch);
-    assert!(!view.configured);
+    assert!(view.configured);
     assert!(!state.startup_trading_enabled());
     assert!(!view.mt5_bridge_settings.auto_start_mt5);
     assert!(view.configuration_error.is_none());
+    let token = &view.mt5_bridge_settings.token;
+    assert_eq!(token.len(), 64, "32 random bytes as lowercase hex");
+    let is_lowercase_hex = token
+        .chars()
+        .all(|character| matches!(character, '0'..='9' | 'a'..='f'));
+    assert!(is_lowercase_hex, "the generated token is lowercase hex");
+    // The token reaches the file at once, so the next launch exports the same one.
+    let stored = read_file(&fixture.path()).unwrap().unwrap();
+    assert_eq!(stored.token, *token);
+}
+#[test]
+fn an_empty_token_override_is_never_replaced_by_a_generated_one() {
+    let fixture = Fixture::new();
+    let state = AppSettingsState::resolve(
+        Some(fixture.path()),
+        HashMap::from([("MT5_BRIDGE_TOKEN".into(), String::new())]),
+        None,
+    );
+    let view = state.view().unwrap();
+    assert_eq!(view.mt5_bridge_settings.token, "");
+    assert!(!view.configured);
+    // Nothing is invented for a token the operator deliberately left empty.
+    assert!(!fixture.path().exists());
 }
 #[test]
 fn environment_configuration_still_prompts_on_first_desktop_launch() {
@@ -207,6 +230,14 @@ fn detected_windows_installation() -> Mt5Installation {
     }
 }
 
+/// The same Wine installation, as the setup guide's file picker reports it.
+fn chosen_wine_installation() -> Mt5Installation {
+    Mt5Installation {
+        source: InstallationSource::Chosen,
+        ..detected_wine_installation()
+    }
+}
+
 #[test]
 fn detection_fills_every_unset_installation_path() {
     let settings = valid();
@@ -279,7 +310,7 @@ fn detection_never_changes_the_auto_start_flag() {
     assert!(!default_filled.auto_start_mt5);
 }
 #[test]
-fn a_first_launch_shows_detected_paths_without_writing_a_settings_file() {
+fn a_first_launch_shows_detected_paths_without_storing_them() {
     let fixture = Fixture::new();
     let path = fixture.path();
 
@@ -298,8 +329,11 @@ fn a_first_launch_shows_detected_paths_without_writing_a_settings_file() {
         view.detected_fields,
         vec!["terminalPath", "winePrefix", "wineBinary"]
     );
-    // A settings file without a token cannot validate, so the first save stores it.
-    assert!(!path.exists());
+    // The first launch stores its generated token at once, but the detected paths
+    // stay in the form until the user saves them.
+    let stored = read_file(&path).unwrap().unwrap();
+    assert_eq!(stored.token.len(), 64);
+    assert_eq!(stored.terminal_path, "");
 }
 #[test]
 fn an_existing_settings_file_receives_the_detected_paths() {
@@ -365,11 +399,64 @@ fn an_install_fills_the_unset_paths_and_keeps_the_rest() {
     );
 }
 #[test]
-fn an_install_without_a_settings_file_writes_nothing() {
+fn an_install_keeps_the_generated_first_launch_token() {
     let fixture = Fixture::new();
     let state = AppSettingsState::resolve(Some(fixture.path()), HashMap::new(), None);
+    let token = read_file(&fixture.path()).unwrap().unwrap().token;
 
     state.fill_from_installation(&detected_wine_installation());
 
-    assert!(!fixture.path().exists());
+    let after = read_file(&fixture.path()).unwrap().unwrap();
+    assert_eq!(after.token, token);
+    assert_eq!(after.terminal_path, DETECTED_TERMINAL);
+}
+#[test]
+fn a_chosen_installation_replaces_the_saved_paths_and_needs_a_restart() {
+    let fixture = Fixture::new();
+    let mut stored = valid();
+    stored.terminal_path = r"D:\Elsewhere\terminal64.exe".into();
+    stored.wine_prefix = "/home/demo/custom".into();
+    stored.wine_binary = "/home/demo/bin/wine".into();
+    persist(&fixture.path(), &stored).unwrap();
+    let state = AppSettingsState::resolve(Some(fixture.path()), HashMap::new(), None);
+
+    state.store_chosen_installation(&chosen_wine_installation());
+
+    let after = read_file(&fixture.path()).unwrap().unwrap();
+    assert_eq!(after.terminal_path, DETECTED_TERMINAL);
+    assert_eq!(after.wine_prefix, DETECTED_PREFIX);
+    assert_eq!(after.wine_binary, DETECTED_WINE);
+    assert!(!after.auto_start_mt5);
+    let view = state.view().unwrap();
+    assert_eq!(
+        view.detected_fields,
+        vec!["terminalPath", "winePrefix", "wineBinary"]
+    );
+    assert!(view.restart_required);
+}
+#[test]
+fn a_chosen_installation_keeps_a_field_an_override_supplies() {
+    let fixture = Fixture::new();
+    persist(&fixture.path(), &valid()).unwrap();
+    let state = AppSettingsState::resolve(
+        Some(fixture.path()),
+        HashMap::from([(
+            "MT5_TERMINAL_EXE".to_string(),
+            r"D:\Override\terminal64.exe".to_string(),
+        )]),
+        None,
+    );
+
+    state.store_chosen_installation(&chosen_wine_installation());
+
+    let after = read_file(&fixture.path()).unwrap().unwrap();
+    assert_eq!(
+        after.terminal_path, "",
+        "the override stays out of the file"
+    );
+    assert_eq!(after.wine_prefix, DETECTED_PREFIX);
+    assert_eq!(
+        state.view().unwrap().detected_fields,
+        vec!["winePrefix", "wineBinary"]
+    );
 }

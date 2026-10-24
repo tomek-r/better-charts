@@ -28,9 +28,9 @@ export function AccountBadge() {
         <AccountIcon className="account-badge-icon" />
         {accountNumber}
       </span>{' '}
-      {/* Only the kind word carries the environment colour; the rest reads like the other top bar text. */}
+      {/* The kind reads like the rest of the badge; the word itself names the environment. */}
       <span className={`account-badge-part account-badge-kind ${environment.kind}`}>
-        {environment.kind === 'real' ? <MoneyIcon className="account-badge-money" /> : null}
+        <MoneyIcon className="account-badge-money" />
         {kindLabel}
       </span>
     </span>

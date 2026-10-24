@@ -112,6 +112,7 @@ version = "0.0.4"
 dependencies = [
  "dotenvy",
  "fs2",
+ "getrandom 0.3.4",
  "rust_decimal",
  "serde",
  "serde_json",

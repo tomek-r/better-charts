@@ -1,16 +1,16 @@
 //! Copy the bundled MQL5 sources into a data folder's `MQL5` tree.
 //!
-//! Only the two files the app ships are written, and they go where MT5 already
-//! loads them: the shallowest existing copy of the same file name, so an update
-//! never leaves a second copy behind, or the folder MT5 recommends when there is
-//! none. An identical destination is left untouched, so a repeated install does
-//! not disturb MT5's compile state; a changed one is replaced through a temporary
-//! file in the same folder and a rename, so MT5 never reads a half-written source.
+//! Only the two files the app ships are written, and they always go into the
+//! folders MT5 loads them from: `Experts/Advisors` (the expert advisor) and
+//! `Indicators` (the tick reader) below `MQL5`. Nothing else below an MT5 folder is
+//! written or deleted, so an older copy of the same file name elsewhere stays where
+//! it is. An identical destination is left untouched, so a repeated install does not
+//! disturb MT5's compile state; a changed one is replaced through a temporary file in
+//! the same folder and a rename, so MT5 never reads a half-written source.
 //!
 //! Privacy: below an MT5 folder the only file this module reads is the destination
-//! copy of one of our own two `.mq5` files, which the identical-content check
-//! needs. Nothing else is opened; `locate` documents the same rule for
-//! `origin.txt`.
+//! copy of one of our own two `.mq5` files, which the identical-content check needs.
+//! Nothing else is opened; `locate` documents the same rule for `origin.txt`.
 //!
 //! Nothing here compiles anything or talks to MT5, and nothing locks the execution
 //! adapter: the queue view arrives as plain data, so the decision stays pure and
@@ -23,22 +23,17 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use super::locate::{existing_copy, Mql5File};
-use crate::download_resources::{EXPERT_ADVISOR_RESOURCE, INDICATOR_RESOURCE};
+use super::locate::{default_path, Mql5File};
 use crate::execution_adapter::ExecutionQueueView;
 
 /// Suffix of the temporary file every write goes through, so a failed write never
 /// leaves a truncated source for MT5 to compile.
 const TEMPORARY_SUFFIX: &str = ".install-tmp";
 
-/// The shipped files in install order, each with the bundled resource that
-/// provides its source. The indicator comes first because the expert advisor
-/// loads it through `iCustom("BetterChartsTickHistoryReader")`: MT5 has to be able
-/// to compile the reader before the advisor that calls it.
-const INSTALL_ORDER: [(Mql5File, &str); 2] = [
-    (Mql5File::Indicator, INDICATOR_RESOURCE),
-    (Mql5File::ExpertAdvisor, EXPERT_ADVISOR_RESOURCE),
-];
+/// The shipped files in install order. The indicator comes first because the
+/// expert advisor loads it through `iCustom("BetterChartsTickHistoryReader")`: MT5
+/// has to be able to compile the reader before the advisor that calls it.
+const INSTALL_ORDER: [Mql5File; 2] = [Mql5File::Indicator, Mql5File::ExpertAdvisor];
 
 /// The real files behind the bundled resources. The caller resolves the Tauri
 /// resource paths; nothing here guesses them.
@@ -63,9 +58,9 @@ impl BundledSources {
 pub enum InstallOutcome {
     /// The destination did not exist and was written.
     Installed,
-    /// An existing copy had different content and was replaced in place.
+    /// The destination held different content and was replaced.
     Updated,
-    /// An existing copy already held the same content and was not touched.
+    /// The destination already held the same content and was not touched.
     Unchanged,
 }
 
@@ -86,27 +81,10 @@ pub enum InstallError {
     SourceUnreadable { file: Mql5File, reason: String },
     #[error("the MQL5 file at {} cannot be written: {reason}", path.display())]
     DestinationUnwritable { path: PathBuf, reason: String },
-}
-
-/// Path of a bundled resource inside the data folder's `MQL5` folder. The
-/// resource path mirrors that tree, so dropping its first segment keeps the
-/// shipped file names defined once, in `download_resources`:
-/// `mql5/Experts/BetterChartsBridge.mq5` becomes `Experts/BetterChartsBridge.mq5`.
-fn relative_resource_path(resource: &str) -> &str {
-    let Some((_mql5_folder, relative)) = resource.split_once('/') else {
-        return resource;
-    };
-    relative
-}
-
-/// Destination of `file`: the shallowest existing copy, so an update replaces the
-/// file MT5 already loads instead of adding a second one; otherwise the folder MT5
-/// recommends, which [`write_atomically`] creates when missing.
-fn destination_for(mql5: &Path, file: Mql5File, resource: &str) -> PathBuf {
-    match existing_copy(mql5, file) {
-        Some(existing) => existing,
-        None => mql5.join(relative_resource_path(resource)),
-    }
+    /// The shipped source sits outside the bundled `mql5/` tree, so the folder MT5
+    /// loads it from cannot be derived. Nothing is guessed: the install stops.
+    #[error("the MQL5 folder for {file:?} is unknown; reinstall Better Charts and try again.")]
+    UnknownDestination { file: Mql5File },
 }
 
 /// Bytes of a bundled source. This reads the app's own resource file, never an MT5
@@ -234,9 +212,14 @@ pub(super) fn ensure_no_order_pending(queue: &ExecutionQueueView) -> Result<(), 
 /// Copies the bundled sources into the data folder behind `mql5` and reports where
 /// each file went, indicator first.
 ///
+/// Each file lands in the default folder MT5 loads it from; a copy of the same file
+/// name elsewhere below `MQL5` is left where it is.
+///
 /// Refuses with [`InstallError::OrderInFlight`] before the first write while an
-/// order is queued or in flight. Stops at the first error; the files written
-/// before it are complete, because every write is a rename into place.
+/// order is queued or in flight, and with [`InstallError::UnknownDestination`] when
+/// the folder a shipped file belongs in cannot be derived. Stops at the first error;
+/// the files written before it are complete, because every write is a rename into
+/// place.
 pub fn install_bundled_sources(
     sources: &BundledSources,
     mql5: &Path,
@@ -244,8 +227,9 @@ pub fn install_bundled_sources(
 ) -> Result<Vec<InstalledFile>, InstallError> {
     ensure_no_order_pending(queue)?;
     let mut installed = Vec::with_capacity(INSTALL_ORDER.len());
-    for &(file, resource) in &INSTALL_ORDER {
-        let destination = destination_for(mql5, file, resource);
+    for file in INSTALL_ORDER {
+        let destination =
+            default_path(mql5, file).ok_or(InstallError::UnknownDestination { file })?;
         installed.push(install_one(file, sources.source_of(file), &destination)?);
     }
     Ok(installed)

@@ -12,9 +12,9 @@ use super::{
     order_check_error, order_check_result, order_command_error, order_command_update,
     portfolio_snapshot, protocol_error, protocol_error_session, publish, quote_update, read_one,
     reconcile_error, reconcile_snapshot, risk_quote_error, risk_quote_result, run_handshake,
-    send_error, symbol_info, symbol_search, tick_history, tick_history_error, tick_price_history,
-    BridgeConnectionState, BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource,
-    TauriBridgeEvents, DEFAULT_ADDR, HEARTBEAT_TIMEOUT,
+    send_error, symbol_info, symbol_search, tauri_events, tick_history, tick_history_error,
+    tick_price_history, BridgeConnectionState, BridgeEvents, BridgeState, ExecutionAdapterState,
+    FrameSource, DEFAULT_ADDR, HEARTBEAT_TIMEOUT,
 };
 use std::{env, net::SocketAddr, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
@@ -240,7 +240,7 @@ pub(crate) async fn bind_listener(
                 publish(events, state, |status| {
                     status.state = BridgeConnectionState::Connecting;
                     status.message = Some("Waiting for MT5 bridge to connect.".into());
-                    status.component_outdated = false;
+                    status.clear_refusal_flags();
                 });
                 return listener;
             }
@@ -251,7 +251,7 @@ pub(crate) async fn bind_listener(
                         "bridge bind failed: {error}; retrying in {}s",
                         delay.as_secs()
                     ));
-                    status.component_outdated = false;
+                    status.clear_refusal_flags();
                 });
                 tokio::time::sleep(delay).await;
                 delay = (delay * 2).min(std::time::Duration::from_secs(10));
@@ -265,7 +265,7 @@ pub(crate) async fn run_server(
     state: BridgeState,
     adapter: ExecutionAdapterState,
 ) {
-    let events: Arc<dyn BridgeEvents> = Arc::new(TauriBridgeEvents(app.clone()));
+    let events = tauri_events(&app);
     let address = env::var("MT5_BRIDGE_ADDR").unwrap_or_else(|_| DEFAULT_ADDR.into());
     let address = match validate_bind_address(&address) {
         Ok(address) => address,

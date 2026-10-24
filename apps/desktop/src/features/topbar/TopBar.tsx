@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { AccountBadge } from '../account-badge/AccountBadge';
 import { DemoAccountNotice } from '../demo-notice/DemoAccountNotice';
+import { useChartDrawn } from '../chart/useChartDrawn';
 
 /** Static brand mark: hoisted so a re-render reuses the same element. */
 const brandMark = (
@@ -41,6 +42,7 @@ export function TopBar({
   setPanelOpen: Dispatch<SetStateAction<boolean>>;
   setSearchOpen: Dispatch<SetStateAction<boolean>>;
 }) {
+  const chartDrawn = useChartDrawn();
   return (
     <header className="topbar">
       <div className="brand">
@@ -48,7 +50,7 @@ export function TopBar({
         <span>Better Charts</span>
         <small>v{__APP_VERSION__}</small>
       </div>
-      <div className="topbar-actions">
+      <div className={chartDrawn ? 'topbar-actions' : 'topbar-actions topbar-actions-waiting'}>
         <AccountBadge />
         <button className="search-trigger" onClick={() => setSearchOpen(true)} aria-label="Search symbols">
           <span className="search-trigger-label">

@@ -23,6 +23,7 @@ rust_decimal = "1"
 thiserror = "1"
 fs2 = "0.4"
 dotenvy = "0.15.7"
+getrandom = "0.3"
 
 [lints]
 workspace = true

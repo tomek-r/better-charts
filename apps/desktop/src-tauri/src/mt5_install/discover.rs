@@ -32,7 +32,7 @@ use crate::mt5_backend::{
 /// Home folder holding the macOS and Linux defaults.
 const HOME_VARIABLE: &str = "HOME";
 /// `PATH`, searched for the `wine` binary on Linux.
-const PATH_VARIABLE: &str = "PATH";
+pub(super) const PATH_VARIABLE: &str = "PATH";
 /// Native Windows variable holding the program folder.
 const PROGRAM_FILES_VARIABLE: &str = "ProgramFiles";
 /// Program folder Windows uses when the variable is unset; the only place MT5
@@ -42,19 +42,20 @@ const DEFAULT_PROGRAM_FILES: &str = r"C:\Program Files";
 /// keep the same name behind their brand (`Acme MetaTrader 5`).
 const METAQUOTES_INSTALL_FOLDER: &str = "MetaTrader 5";
 /// Terminal executable MT5 writes into every install folder.
-const TERMINAL_EXE_FILE: &str = "terminal64.exe";
+pub(super) const TERMINAL_EXE_FILE: &str = "terminal64.exe";
 /// Windows path of a default installation: native on Windows, and inside
 /// `drive_c` of the Wine prefix on macOS and Linux.
 const TERMINAL_EXE_WINDOWS: &str = r"C:\Program Files\MetaTrader 5\terminal64.exe";
 /// Wine prefix of the official macOS application, which bundles its own Wine build
 /// instead of using one from `PATH`.
-const MACOS_PREFIX_FOLDER: &str = "Library/Application Support/net.metaquotes.wine.metatrader5";
+pub(super) const MACOS_PREFIX_FOLDER: &str =
+    "Library/Application Support/net.metaquotes.wine.metatrader5";
 /// Wine binary inside the official macOS application bundle.
-const MACOS_WINE_BINARY: &str =
+pub(super) const MACOS_WINE_BINARY: &str =
     "/Applications/MetaTrader 5.app/Contents/SharedSupport/wine/bin/wine";
 /// Wine prefixes probed on Linux, most specific first: MetaQuotes' `mt5linux.sh`
 /// installer creates `~/.mt5`, a plain Wine installation uses `~/.wine`.
-const LINUX_PREFIX_FOLDERS: [&str; 2] = [".mt5", ".wine"];
+pub(super) const LINUX_PREFIX_FOLDERS: [&str; 2] = [".mt5", ".wine"];
 
 /// The operating system discovery keys its defaults on. Passed as data, so the
 /// Windows, macOS, and Linux branches are unit-tested on any host.
@@ -72,6 +73,9 @@ pub enum InstallationSource {
     Configured,
     /// A default location on this machine.
     Discovered,
+    /// The `terminal64.exe` the user picked in the setup guide this session, which
+    /// is how a non-default install folder reaches the app.
+    Chosen,
 }
 
 /// One MT5 installation the install feature can target.
@@ -110,6 +114,9 @@ pub trait InstallProbe {
     /// Whether `path` is an existing regular file.
     fn is_file(&self, path: &Path) -> bool;
 
+    /// Whether `path` is an existing folder.
+    fn is_dir(&self, path: &Path) -> bool;
+
     /// Names of the sub-folders of `folder`, in name order so repeated scans
     /// report the same installations.
     fn folder_names(&self, folder: &Path) -> Vec<String>;
@@ -121,6 +128,10 @@ pub struct HostProbe;
 impl InstallProbe for HostProbe {
     fn is_file(&self, path: &Path) -> bool {
         path.is_file()
+    }
+
+    fn is_dir(&self, path: &Path) -> bool {
+        path.is_dir()
     }
 
     fn folder_names(&self, folder: &Path) -> Vec<String> {
@@ -136,7 +147,7 @@ impl InstallProbe for HostProbe {
 }
 
 /// Platform the installation's Windows paths are resolved on.
-fn host_platform(host_os: HostOs) -> HostPlatform {
+pub(super) fn host_platform(host_os: HostOs) -> HostPlatform {
     match host_os {
         HostOs::Windows => HostPlatform::Windows,
         HostOs::MacOs | HostOs::Linux => HostPlatform::Wine,
@@ -183,13 +194,13 @@ fn configured_installation(
 }
 
 /// The home folder the macOS and Linux defaults are relative to.
-fn home_folder(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+pub(super) fn home_folder(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     non_empty_env(env, HOME_VARIABLE).map(PathBuf::from)
 }
 
 /// `wine` from `PATH`, resolved the way the backend resolves a bare
 /// `MT5_WINE_BINARY`.
-fn wine_binary_on_path(
+pub(super) fn wine_binary_on_path(
     env: &dyn Fn(&str) -> Option<String>,
     probe: &impl InstallProbe,
 ) -> Option<PathBuf> {
@@ -257,7 +268,7 @@ fn linux_installations(
 
 /// `%ProgramFiles%` without a trailing separator, so a folder below it never
 /// joins with two.
-fn program_files_folder(env: &dyn Fn(&str) -> Option<String>) -> String {
+pub(super) fn program_files_folder(env: &dyn Fn(&str) -> Option<String>) -> String {
     let program_files = non_empty_env(env, PROGRAM_FILES_VARIABLE)
         .unwrap_or_else(|| DEFAULT_PROGRAM_FILES.to_string());
     program_files.trim_end_matches(['\\', '/']).to_string()

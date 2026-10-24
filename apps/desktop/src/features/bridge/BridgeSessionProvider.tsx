@@ -212,6 +212,16 @@ export function useBridgeMarket(): BridgeMarket {
   return useBridgeMarketSelector((market) => market);
 }
 
+/** A history window or a live candle is a chart: either one gives the workspace something to draw. */
+export function marketHasCandles(market: BridgeMarket): boolean {
+  return market.snapshot.candles.length > 0 || market.latestCandle !== undefined;
+}
+
+/** As its own primitive subscription, so a candle tick that leaves the answer unchanged reaches no screen. */
+export function useHasCandles(): boolean {
+  return useBridgeMarketSelector(marketHasCandles);
+}
+
 export function useBridgeQuoteSelector<T>(selector: (quote: QuoteSnapshot | undefined) => T): T {
   const stores = useStores('useBridgeQuoteSelector');
   return useStore(stores.quote, (state) => selector(state.quote));
@@ -229,7 +239,7 @@ export function useBridgeChartState(): BridgeChartState {
       timeframe: market.snapshot.timeframe,
       description: market.instrument?.symbol === symbol ? market.instrument?.description : undefined,
       symbolLoading: market.symbolLoading,
-      hasCandles: market.snapshot.candles.length > 0 || market.latestCandle !== undefined,
+      hasCandles: marketHasCandles(market),
       chartError: market.chartError,
     };
   });

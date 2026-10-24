@@ -3,10 +3,12 @@ import { ChartQuotes } from './ChartQuotes';
 import { ChartTimeframes } from './timeframes/ChartTimeframes';
 import { ChartCanvas } from './ChartCanvas';
 import { ChartPartialClose } from './ChartPartialClose';
+import { useChartDrawn } from './useChartDrawn';
 
 export function ChartWorkspaceView() {
+  const chartDrawn = useChartDrawn();
   return (
-    <section className="chart-section">
+    <section className={chartDrawn ? 'chart-section' : 'chart-section chart-section-waiting'}>
       <div className="chart-heading">
         <ChartTitle />
         <ChartQuotes />

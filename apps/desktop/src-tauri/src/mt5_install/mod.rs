@@ -3,9 +3,11 @@
 //! those copies once they are installed.
 //!
 //! `discover` finds installations on Windows, macOS, and Linux when no `MT5_*`
-//! variable is set (the variables stay overrides), `locate` documents the two MT5
-//! data-folder layouts and the Wine path mapping, `install` copies the bundled
-//! sources into a data folder without disturbing a running order, `compile` runs
+//! variable is set (the variables stay overrides), `chosen` turns a `terminal64.exe`
+//! the user picks in the setup guide into an installation for the rest of the
+//! session, `locate` documents the two MT5 data-folder layouts and the Wine path
+//! mapping, `install` copies the bundled sources into a data folder without
+//! disturbing a running order, `compile` runs
 //! MetaEditor over the installed copies and reads the log it writes back, `restart`
 //! closes the terminal and starts it again with the bridge advisor attached, and
 //! `commands` exposes the Tauri commands the setup guide calls, which act on the
@@ -21,6 +23,7 @@
 //! else is opened, because those folders also hold account state, logs, and
 //! journal files that are private to the user.
 
+pub(crate) mod chosen;
 pub(crate) mod commands;
 mod compile;
 pub(crate) mod discover;
@@ -28,5 +31,7 @@ mod install;
 pub(crate) mod locate;
 pub(crate) mod restart;
 
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 mod tests;

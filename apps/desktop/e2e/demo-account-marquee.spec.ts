@@ -40,7 +40,7 @@ async function expectOneMovingNotice(strip: Locator): Promise<Locator> {
   await expect(marquee).toHaveCSS('white-space', 'nowrap');
   await expect(marquee).toHaveCSS('font-size', '10px');
   await expect(marquee).toHaveCSS('animation-name', 'demo-notice-scroll');
-  await expect(marquee).toHaveCSS('animation-duration', '44s');
+  await expect(marquee).toHaveCSS('animation-duration', '60s');
   const playStates = await marquee.evaluate((element) => element.getAnimations().map(({ playState }) => playState));
   expect(playStates).toEqual(['running']);
   return marquee;
@@ -81,7 +81,7 @@ test('at a 2000px wide window the sentences still cycle in one moving copy', asy
   const marquee = await expectOneMovingNotice(strip);
   const band = (await strip.boundingBox())!;
   expect(band.width).toBeGreaterThan(1900);
-  expect(await columnGap(marquee)).toBeGreaterThan(140);
+  expect(await columnGap(marquee)).toBeGreaterThan(300);
   // Exactly one moving element, not a track repeated until it fills the window.
   await expect(strip.locator('.demo-notice-text')).toHaveCount(1);
   // Still animating at that width, not stalled in a start or end state.
@@ -93,7 +93,7 @@ test('at an 800px wide window the sentences sit closer together', async ({ page 
   await page.setViewportSize({ width: 800, height: 900 });
   await gotoWithStub(page);
   const marquee = await expectOneMovingNotice(noticeStrip(page));
-  expect(await columnGap(marquee)).toBeLessThan(100);
+  expect(await columnGap(marquee)).toBeLessThan(140);
 });
 
 test('the strip takes no layout space for a real or a demo account', async ({ page }) => {

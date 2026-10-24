@@ -1,13 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { answerSymbolSearch, chooseSearchResult, openSymbolSearch, openTradePanel } from './helpers/panel';
-import {
-  brokerSymbolFixture,
-  gotoCollectingErrors,
-  gotoWithStub,
-  pausePageClockAhead,
-  pushEvent,
-  windowCandles,
-} from './helpers/tauriStub';
+import { brokerSymbolFixture, gotoWithStub, pausePageClockAhead, pushEvent, windowCandles } from './helpers/tauriStub';
 
 /** The EA's synchronization deadline is 10 s; the notice shows for the last 5 s of it. */
 const NEVER_ANSWERED_MS = 600_000;
@@ -68,18 +61,18 @@ async function offsetFromWindowCenter(page: Page, ...targets: Locator[]) {
   };
 }
 
+test('the startup loading message is centered on the window', async ({ page }) => {
+  // The Trade button waits out of sight until a chart is drawn, so the startup loader only ever
+  // shows with the trade panel closed.
+  await gotoWithStub(page, { responses: { get_market_snapshot: { complete: false, candles: [] } } });
+  await expect(loadingMessage(page)).toContainText('Loading market data');
+  const offset = await offsetFromWindowCenter(page, loadingMessage(page));
+  expect(offset.x).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
+  expect(offset.y).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
+});
+
 for (const panelOpen of [false, true]) {
   const panelState = panelOpen ? 'open' : 'closed';
-
-  test(`the startup loading message is centered on the window with the trade panel ${panelState}`, async ({ page }) => {
-    await gotoCollectingErrors(page);
-    if (panelOpen) {
-      await openTradePanel(page);
-    }
-    const offset = await offsetFromWindowCenter(page, loadingMessage(page));
-    expect(offset.x).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
-    expect(offset.y).toBeLessThanOrEqual(CENTER_TOLERANCE_PX);
-  });
 
   test(`the history notice is centered on the window with the trade panel ${panelState}`, async ({ page }) => {
     await startWithUnansweredHistory(page);

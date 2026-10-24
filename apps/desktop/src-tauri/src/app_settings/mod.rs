@@ -3,7 +3,9 @@
 //! Installation paths the user has not set are filled from an MT5 installation
 //! detected on this machine (see `detected_paths`). A value the user set, and any
 //! field an `MT5_*` override supplies, is never replaced, and the auto-start flag is
-//! never touched, so a filled path cannot make the app start MT5 by itself.
+//! never touched, so a filled path cannot make the app start MT5 by itself. An
+//! installation the user picks in the setup guide replaces the installation paths
+//! instead, because that choice is explicit.
 
 mod detected_paths;
 
@@ -12,7 +14,7 @@ use crate::{
     execution_journal::app_data_dir,
     mt5_install::discover::Mt5Installation,
 };
-use detected_paths::{discovered_installation, fill_detected_paths};
+use detected_paths::{chosen_installation_paths, discovered_installation, fill_detected_paths};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -21,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Mutex,
+        Mutex, MutexGuard,
     },
 };
 
@@ -29,6 +31,8 @@ static FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 const SETTINGS_FILE: &str = "settings.json";
 const MAX_SETTINGS_BYTES: u64 = 64 * 1024;
+/// Bytes of a generated bridge token; its hex form is twice as long.
+const GENERATED_TOKEN_BYTES: usize = 32;
 
 // Deliberately no Debug: this model contains an authentication secret.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -252,6 +256,40 @@ fn persist(path: &Path, settings: &AppSettings) -> Result<(), String> {
     result
 }
 
+/// Random bridge token: [`GENERATED_TOKEN_BYTES`] random bytes as lowercase hex, so
+/// a first launch has a secret nobody has to invent. `None` when the system offers
+/// no randomness, which leaves the token empty exactly as before.
+fn generated_token() -> Option<String> {
+    let mut bytes = [0u8; GENERATED_TOKEN_BYTES];
+    getrandom::fill(&mut bytes).ok()?;
+    let token: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    Some(token)
+}
+
+/// Gives `stored` a generated token when it holds none and no `MT5_BRIDGE_TOKEN`
+/// override supplies one, and writes the settings at once, so the bridge, the
+/// environment exported at startup and the EA preset all carry the same token; a
+/// restart without one is refused, and the user never has to invent it.
+///
+/// Best effort: settings that cannot be written leave the token in use for this
+/// launch anyway.
+fn fill_generated_token(
+    path: Option<&Path>,
+    stored: &mut AppSettings,
+    overrides: &HashMap<String, String>,
+) {
+    if !stored.token.is_empty() || overrides.contains_key("MT5_BRIDGE_TOKEN") {
+        return;
+    }
+    let Some(token) = generated_token() else {
+        return;
+    };
+    stored.token = token;
+    if let Some(path) = path {
+        let _ = persist(path, stored);
+    }
+}
+
 impl AppSettingsState {
     pub(crate) fn load(runtime_error: Option<String>) -> Self {
         let path = app_data_dir().map(|directory| directory.join(SETTINGS_FILE));
@@ -313,11 +351,18 @@ impl AppSettingsState {
         installation: Option<Mt5Installation>,
     ) -> Self {
         let saved = path.as_ref().map_or(Ok(None), |path| read_file(path));
-        let (base, persisted, mut error) = match saved {
+        let (mut base, persisted, mut error) = match saved {
             Ok(Some(settings)) => (settings, true, None),
             Ok(None) => (AppSettings::default(), false, None),
             Err(error) => (AppSettings::default(), false, Some(error)),
         };
+        // Only an absent settings file needs a token invented for it: a stored one
+        // already carries the user's, and an override is never replaced. The token is
+        // stored before the detected paths fill in, so they stay in the form until the
+        // user saves them.
+        if !persisted && error.is_none() {
+            fill_generated_token(path.as_deref(), &mut base, &overrides);
+        }
         // Detection fills the file's values before the overrides apply, so an override
         // value is never written into the file and never replaced by a detected one.
         let (_, overridden_keys) = base.clone().with_overrides(&overrides);
@@ -351,9 +396,9 @@ impl AppSettingsState {
             settings.trading_enabled = false;
             settings.auto_start_mt5 = false;
         }
-        // A settings file the user already has takes the detected paths now; without
-        // one the form shows them and the user's first save stores them, because
-        // settings that cannot validate yet (no token) must not reach the disk.
+        // A settings file the user already has takes the detected paths now; on a first
+        // launch the form carries them until the user saves, so the file the generated
+        // token just created gains no path before that save.
         let store_detected = persisted && error.is_none() && !detected_fields.is_empty();
         if let Some(path) = path.as_ref().filter(|_| store_detected) {
             let _ = persist(path, &stored);
@@ -426,23 +471,56 @@ impl AppSettingsState {
     /// filled, the user's own values and `auto_start_mt5` stay exactly as they are,
     /// and a field an `MT5_*` override supplies is not touched.
     pub(crate) fn fill_from_installation(&self, installation: &Mt5Installation) {
-        let Ok(mut inner) = self.inner.lock() else {
+        // The guard ends the lock section here: a fill leaves the restart hint alone.
+        self.store_installation_paths(|saved, overridden| {
+            fill_detected_paths(saved, installation, overridden)
+        });
+    }
+
+    /// Stores the installation paths of the installation the user picked in the setup
+    /// guide, so the next launch reaches that terminal and nothing has to be picked
+    /// again.
+    ///
+    /// The pick is explicit, so it replaces the saved installation paths instead of
+    /// filling the unset ones; a field an `MT5_*` override supplies keeps the override.
+    /// Best effort like the fill above, and the auto-start flag stays the user's: the
+    /// saved paths never start MT5 by themselves. The view then reports a restart when
+    /// the paths differ from the ones this launch runs with, the same rule `save`
+    /// applies, because the bridge and the environment keep the startup values.
+    pub(crate) fn store_chosen_installation(&self, installation: &Mt5Installation) {
+        let Some(mut inner) = self.store_installation_paths(|saved, overridden| {
+            chosen_installation_paths(saved, installation, overridden)
+        }) else {
             return;
         };
-        let Some(path) = self.path.as_deref() else {
-            return;
-        };
+        inner.view.restart_required = inner.view.mt5_bridge_settings != self.startup_settings;
+    }
+
+    /// Stores the settings `paths` derives from the saved file and mirrors them in the
+    /// view, including the fields the installation supplied. Returns the guard of the
+    /// view when the file now holds them, so the caller can adjust the view inside the
+    /// same lock section.
+    ///
+    /// Best effort: a settings directory the app has none of, a missing or unreadable
+    /// settings file, no changed field, and a failed write all leave the view as it is
+    /// instead of failing the caller.
+    fn store_installation_paths(
+        &self,
+        paths: impl FnOnce(&AppSettings, &[String]) -> (AppSettings, Vec<&'static str>),
+    ) -> Option<MutexGuard<'_, StoredSettings>> {
+        let mut inner = self.inner.lock().ok()?;
+        let path = self.path.as_deref()?;
         let Ok(Some(saved)) = read_file(path) else {
-            return;
+            return None;
         };
-        let (filled, detected_fields) =
-            fill_detected_paths(&saved, installation, &inner.view.overridden_keys);
-        if detected_fields.is_empty() || persist(path, &filled).is_err() {
-            return;
+        let (updated, fields) = paths(&saved, &inner.view.overridden_keys);
+        if fields.is_empty() || persist(path, &updated).is_err() {
+            return None;
         }
-        let (effective, _) = filled.with_overrides(&self.overrides);
+        let (effective, _) = updated.with_overrides(&self.overrides);
         inner.view.mt5_bridge_settings = effective;
-        inner.view.detected_fields = detected_fields;
+        inner.view.detected_fields = fields;
+        Some(inner)
     }
 }
 

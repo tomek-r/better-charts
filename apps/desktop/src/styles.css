@@ -12,11 +12,13 @@
 @import './features/trade-panel/trade-panel.css';
 @import './features/execution/execution.css';
 @import './shared/ui/action-button.css';
+@import './shared/ui/primary-button.css';
+@import './shared/ui/visually-hidden.css';
 @import './features/portfolio/portfolio.css';
 @import './features/partial-close/partial-close.css';
 @import './features/order-ticket/order-ticket.css';
 @import './features/settings/settings.css';
-@import './features/settings/setup-guide-modal/setup-guide-modal.css';
+@import './features/settings/bridge-screen.css';
 @import './shared/ui/notification.css';
 @import './shared/ui/loading-message.css';
 @import './shared/ui/modal-dialog.css';

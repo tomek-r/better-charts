@@ -26,7 +26,11 @@ use download_resources::save_bundled_resource;
 use execution_adapter::ExecutionAdapterState;
 use execution_journal::{app_data_dir, ExecutionSafetyState};
 use mt5_backend::Mt5BackendState;
-use mt5_install::commands::{install_to_mt5, list_mt5_installations, restart_mt5_with_ea};
+use mt5_install::chosen::ChosenInstallation;
+use mt5_install::commands::{
+    choose_mt5_installation, install_to_mt5, list_mt5_installations, mt5_picker_start_folder,
+    restart_mt5_with_ea,
+};
 use std::time::Duration;
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, Runtime, WebviewWindow};
@@ -140,6 +144,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(app_settings)
+        .manage(ChosenInstallation::default())
         .manage(bridge_state.clone())
         .manage(mt5_backend.clone())
         .invoke_handler(tauri::generate_handler![
@@ -171,6 +176,8 @@ pub fn run() {
             stop_mt5_backend,
             save_bundled_resource,
             list_mt5_installations,
+            choose_mt5_installation,
+            mt5_picker_start_folder,
             install_to_mt5,
             restart_mt5_with_ea
         ])

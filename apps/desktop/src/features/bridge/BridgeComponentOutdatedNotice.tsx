@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
 import { Notification } from '../../shared/ui/Notification';
 import { useAppSettingsActions } from '../settings/AppSettingsProvider';
+import { SetupGuideStep } from '../settings/useAppSettings';
 import { useBridgeConnectionSelector } from './BridgeSessionProvider';
 
 /**
@@ -12,7 +14,7 @@ import { useBridgeConnectionSelector } from './BridgeSessionProvider';
  */
 export function BridgeComponentOutdatedNotice() {
   const message = useBridgeConnectionSelector(({ status }) =>
-    status.state === 'protocol_error' && status.componentOutdated === true ? status.message : undefined,
+    bridgeRefusal(status) === BridgeRefusal.ComponentOutdated ? status.message : undefined,
   );
   const { openSetupGuide } = useAppSettingsActions();
   const [dismissed, setDismissed] = useState<string>();
@@ -22,7 +24,11 @@ export function BridgeComponentOutdatedNotice() {
   return (
     <Notification.Alert>
       <Notification.Message>{message}</Notification.Message>
-      <button type="button" className="notification-action" onClick={openSetupGuide}>
+      <button
+        type="button"
+        className="primary-button notification-action"
+        onClick={() => openSetupGuide(SetupGuideStep.Install)}
+      >
         Update in MT5
       </button>
       <Notification.Dismiss label="Dismiss error notification" onDismiss={() => setDismissed(message)} />

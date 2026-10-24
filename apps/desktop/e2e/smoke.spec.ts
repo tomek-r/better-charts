@@ -1,5 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { openTradePanel } from './helpers/panel';
+import { setupScreen } from './helpers/setupGuide';
 import { gotoCollectingErrors, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
 
 // Without the Tauri shell, every `invoke()` call fails (window.__TAURI_INTERNALS__
@@ -9,6 +10,29 @@ const EXPECTED_CONSOLE_NOISE = /tauri|invoke/i;
 
 function unexpectedConsoleErrors(consoleErrors: string[]) {
   return consoleErrors.filter((text) => !EXPECTED_CONSOLE_NOISE.test(text));
+}
+
+/** Whether `locator` is the topmost element at its own centre, so nothing is painted over it. */
+async function isTopmostAtCentre(locator: Locator): Promise<boolean> {
+  return locator.evaluate((element: HTMLElement) => {
+    const previous = element.style.pointerEvents;
+    element.style.pointerEvents = 'auto';
+    try {
+      const bounds = element.getBoundingClientRect();
+      return document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2) === element;
+    } finally {
+      element.style.pointerEvents = previous;
+    }
+  });
+}
+
+/** Asserts the chart's chrome — host, heading, tool rail and the topbar toggles — reads `visibility`. */
+async function expectChartChrome(page: Page, visibility: 'hidden' | 'visible'): Promise<void> {
+  await expect(page.locator('.chart-host')).toHaveCSS('visibility', visibility);
+  await expect(page.locator('.chart-heading')).toHaveCSS('visibility', visibility);
+  await expect(page.locator('.tool-rail')).toHaveCSS('visibility', visibility);
+  await expect(page.getByLabel('Search symbols')).toHaveCSS('visibility', visibility);
+  await expect(page.getByLabel('Toggle trade panel')).toHaveCSS('visibility', visibility);
 }
 
 test('page loads with the Better Charts title and no uncaught errors', async ({ page }) => {
@@ -25,7 +49,8 @@ test('page loads with the Better Charts title and no uncaught errors', async ({ 
 });
 
 test('sidebar keeps the trading surfaces and drops the status/account/profile cards', async ({ page }) => {
-  const { pageErrors } = await gotoCollectingErrors(page);
+  // The shared setup screen covers the window without a bridge, so the panel needs a connected stub.
+  const { pageErrors } = await gotoWithStub(page);
   // The panel is a slide-out drawer now (closed by default) — open it first.
   await openTradePanel(page);
   const sidebar = page.locator('aside.trade-panel');
@@ -49,13 +74,15 @@ test('chart host element is mounted in the chart frame', async ({ page }) => {
   const { pageErrors } = await gotoCollectingErrors(page);
   // Stable selector: App.tsx renders <div ref={chartHost} className="chart-host">.
   const chartHost = page.locator('.chart-host');
-  await expect(chartHost).toBeVisible();
+  // Without candles the empty chart is hidden, but it stays mounted.
+  await expect(chartHost).toBeAttached();
   await expect(chartHost).toHaveAttribute('aria-label', 'Market chart');
   expect(pageErrors).toEqual([]);
 });
 
 test('order ticket renders with SL off by default', async ({ page }) => {
-  const { pageErrors, consoleErrors } = await gotoCollectingErrors(page);
+  // The ticket's drawer opens from the topbar, which the setup screen covers without a bridge.
+  const { pageErrors, consoleErrors } = await gotoWithStub(page);
   // The ticket lives in the slide-out drawer (closed by default) — open it.
   await openTradePanel(page);
   // The TV ticket renders with SL off by default (optional at placement)
@@ -70,27 +97,24 @@ test('order ticket renders with SL off by default', async ({ page }) => {
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
 
-test('shows the no-bridge fallback state without crashing', async ({ page }) => {
+test('shows the setup screen in place of the chart without the bridge', async ({ page }) => {
   const { pageErrors, consoleErrors } = await gotoCollectingErrors(page);
   // Runtime label and footer are gone from the UI (owner).
   await expect(page.locator('.runtime-label')).toHaveCount(0);
   await expect(page.locator('.app-footer')).toHaveCount(0);
-  // Chart area falls back to its waiting overlay instead of crashing.
-  await expect(page.locator('.loading-message strong')).toHaveText('Waiting for market data');
-  // The shared loader's glyph turns here too, not only in the journal.
-  await expect(page.locator('.loading-message .overlay-glyph')).toHaveCSS('animation-name', 'loading-glyph-turn');
+  // Without a bridge the full-window setup screen stands in for the chart and its loader.
+  const screen = setupScreen(page);
+  await expect(screen).toBeVisible();
+  const heading = screen.locator('.loading-message strong');
+  await expect(heading).toHaveText('Connect MetaTrader 5');
+  // The shared loader is the volume profile's loading animation.
+  await expect(screen.locator('.loading-message canvas.loader')).toBeVisible();
   // Hit testing with text enabled detects canvases painted over the message.
-  const overlayTextOnTop = await page.locator('.loading-message strong').evaluate((heading) => {
-    const previous = heading.style.pointerEvents;
-    heading.style.pointerEvents = 'auto';
-    try {
-      const bounds = heading.getBoundingClientRect();
-      return document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2) === heading;
-    } finally {
-      heading.style.pointerEvents = previous;
-    }
-  });
-  expect(overlayTextOnTop).toBe(true);
+  expect(await isTopmostAtCentre(heading)).toBe(true);
+  // Without candles the chart chrome stays hidden behind the wait.
+  await expectChartChrome(page, 'hidden');
+  // The whole chart area is blank: heading (title and quotes) hidden, section background transparent.
+  await expect(page.locator('.chart-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   expect(pageErrors).toEqual([]);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
@@ -137,7 +161,8 @@ test.describe('drawer regression (fullscreen chart layout)', () => {
   });
 
   test('opening the drawer shows the panel and narrows the chart frame', async ({ page }) => {
-    const { pageErrors, consoleErrors } = await gotoCollectingErrors(page);
+    // The toggle lives in the topbar, so the page needs a chart behind the stub, not the setup screen.
+    const { pageErrors, consoleErrors } = await gotoWithStub(page);
     const closedWidth = (await page.locator('.chart-frame').boundingBox())!.width;
     const toggle = page.getByLabel('Toggle trade panel');
     await toggle.click();
@@ -154,7 +179,7 @@ test.describe('drawer regression (fullscreen chart layout)', () => {
   });
 
   test('closing the drawer hides the panel and restores the full-width chart frame', async ({ page }) => {
-    const { pageErrors, consoleErrors } = await gotoCollectingErrors(page);
+    const { pageErrors, consoleErrors } = await gotoWithStub(page);
     const closedWidth = (await page.locator('.chart-frame').boundingBox())!.width;
     const toggle = page.getByLabel('Toggle trade panel');
     await toggle.click();
@@ -229,7 +254,8 @@ test.describe('portfolio card overflow regression', () => {
 });
 
 test('chart chrome nests the connection dot inside the OHLC legend, after its text', async ({ page }) => {
-  const { consoleErrors } = await gotoCollectingErrors(page);
+  // The dot belongs to a rendered chart, so load one: a connected stub serves the candles.
+  const { consoleErrors } = await gotoWithStub(page);
   await expect(page.locator('.chart-legend')).toHaveAttribute('aria-label', 'Candle OHLC');
   // Exactly two spans, and the dot is the last of them, so the text comes first.
   await expect(page.locator('.chart-legend > span')).toHaveCount(2);
@@ -237,17 +263,11 @@ test('chart chrome nests the connection dot inside the OHLC legend, after its te
   await expect(dot).toHaveClass(/chart-connection-dot/);
   await expect(dot).toHaveAttribute('role', 'status');
   await expect(dot).toHaveAttribute('aria-label', /^MT5 /);
-  const dotOnTop = await dot.evaluate((element) => {
-    const previous = element.style.pointerEvents;
-    element.style.pointerEvents = 'auto';
-    try {
-      const bounds = element.getBoundingClientRect();
-      return document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2) === element;
-    } finally {
-      element.style.pointerEvents = previous;
-    }
-  });
-  expect(dotOnTop).toBe(true);
+  // The dot only shows once the stub's candles have rendered a chart.
+  await expect(dot).toBeVisible();
+  // With candles the waiting state is gone: the chart chrome is back on screen.
+  await expectChartChrome(page, 'visible');
+  expect(await isTopmostAtCentre(dot)).toBe(true);
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
 
@@ -255,7 +275,7 @@ test.describe('tool rail', () => {
   test('pointer tools and Fixed range volume profile are the entries; group menu closed by default', async ({
     page,
   }) => {
-    const { pageErrors, consoleErrors } = await gotoCollectingErrors(page);
+    const { pageErrors, consoleErrors } = await gotoWithStub(page);
     const buttons = page.locator('.tool-rail .tool-rail-btn');
     await expect(buttons).toHaveCount(2);
     await expect(buttons.nth(0)).toHaveAttribute('aria-label', 'Pointer tools');
@@ -272,7 +292,7 @@ test.describe('tool rail', () => {
   });
 
   test('Escape cancels the active profile tool and keyboard focus stays accessible', async ({ page }) => {
-    const { pageErrors } = await gotoCollectingErrors(page);
+    const { pageErrors } = await gotoWithStub(page);
     const profile = page.getByRole('button', { name: 'Fixed range volume profile', exact: true });
     const pointer = page.getByRole('button', { name: 'Pointer tools', exact: true });
     await profile.focus();
@@ -318,6 +338,8 @@ test('an outdated MT5 bridge shows the update instructions while waiting for dat
       get_market_snapshot: { complete: false, candles: [] },
     },
   });
-  await expect(page.getByText('Waiting for market data', { exact: true })).toBeVisible();
+  // No chart yet: the setup screen stands where the chart would be, and the notice keeps the refusal.
+  await expect(setupScreen(page)).toBeVisible();
+  await expect(page.getByText('Connect MetaTrader 5', { exact: true })).toBeVisible();
   await expect(page.getByText(message, { exact: true })).toBeVisible();
 });

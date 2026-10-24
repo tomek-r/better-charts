@@ -11,6 +11,12 @@
   animation: settings-fade-in 180ms ease-out;
 }
 
+/* Standalone: no settings dialog below, so the guide fills the window above the setup screen. */
+.setup-guide-backdrop-standalone {
+  position: fixed;
+  z-index: 110;
+}
+
 .setup-guide {
   width: min(560px, 100%);
   max-height: 100%;
@@ -22,8 +28,12 @@
   color: var(--color-text-tertiary);
   box-shadow: 0 24px 70px #000b;
   overflow: hidden;
-  outline: none;
   animation: settings-panel-in 180ms ease-out;
+}
+
+/* The guide takes focus only to receive keys; its controls keep their own focus rings. */
+.setup-guide:focus {
+  outline: none;
 }
 
 .setup-guide-header {
@@ -51,8 +61,8 @@
   line-height: 1;
 }
 
-/* One scroll region for the automatic install and the manual steps, so a long
-   result list never pushes the numbered steps out of reach on a short window. */
+/* One scroll region for the current step, so a long result list never pushes the
+   actions out of reach on a short window. */
 .setup-guide-body {
   flex: 1;
   min-height: 0;
@@ -60,6 +70,8 @@
   padding: 18px 22px 20px;
 }
 
+/* The step name stays the progress indicator's job: the heading still names the section for assistive
+   tech and the tests, but takes no room on screen (see the .visually-hidden utility). */
 .setup-guide-title {
   margin: 0 0 10px;
   color: var(--color-text-bright);
@@ -67,8 +79,41 @@
   font-weight: 500;
 }
 
-.setup-guide-manual-title {
-  margin-top: 18px;
+/* ── Guide steps ─────────────────────────────────────────────────────── */
+
+/* The indicator and the way back share one row at the top of the body; spacing alone separates the
+   three step names, never a glyph. */
+.setup-guide-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--color-border-dialog);
+}
+
+.setup-guide-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: setup-guide-step;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+/* The step number is drawn by the counter, never written into the DOM: the list keeps exactly the
+   three step names as its text. */
+.setup-guide-progress li::before {
+  counter-increment: setup-guide-step;
+  content: counter(setup-guide-step) '. ';
+}
+
+.setup-guide-progress li[aria-current='step'] {
+  color: var(--color-accent);
 }
 
 .setup-guide-steps {
@@ -97,12 +142,11 @@
   overflow-wrap: anywhere;
 }
 
-/* ── Automatic install ───────────────────────────────────────────────── */
+/* ── Install steps ───────────────────────────────────────────────────── */
 
-.setup-guide-install {
+.setup-guide-step {
   min-width: 0;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--color-border-dialog);
+  padding-bottom: 4px;
 }
 
 /* Long Windows paths and compiler lines wrap instead of widening the panel. */
@@ -118,6 +162,11 @@
 
 .setup-guide-install-note {
   color: var(--color-muted-strong);
+}
+
+/* The folder path gets its own line, so a long path never splits the label. */
+.setup-guide-install-path {
+  display: block;
 }
 
 .setup-guide-install-error {
@@ -146,7 +195,7 @@
   font-size: 12px;
 }
 
-/* Both install actions share the row, at the same height whatever their label says. */
+/* The install presses share the row, at the same height whatever their label says. */
 .setup-guide-install-actions {
   display: flex;
   align-items: stretch;
@@ -155,29 +204,97 @@
   margin-top: 12px;
 }
 
-/* Primary actions of the guide: the accent fill the dialogs use for their main button. */
-.setup-guide-install-run {
+/* The guide's main action owns only its size and weight: the accent fill, the disabled dimming and
+   the focus ring come from the shared primary-button look. */
+.setup-guide-action {
   flex: none;
   padding: 9px 18px;
-  border: 1px solid var(--color-accent);
-  border-radius: var(--border-radius);
-  background: var(--color-accent);
-  color: var(--color-root);
-  cursor: pointer;
-  font: inherit;
   font-size: 13px;
   font-weight: 500;
 }
 
-.setup-guide-install-run:disabled {
+.setup-guide-install-field select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Secondary actions of the guide — the second install press, the folder picker and the token copy —
+   keep the row's height without the accent fill, so the primary action stays the one the eye lands
+   on. */
+.setup-guide-secondary {
+  padding: 9px 18px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  background: transparent;
+  color: var(--color-text-label);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+/* Compact enough to sit in the progress row without making it taller than the step names. */
+.setup-guide-back {
+  flex: none;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* The folder picker stands under the detected installation, on a line of its own. */
+.setup-guide-choose-folder {
+  display: block;
+  margin-top: 12px;
+}
+
+.setup-guide-secondary:hover:not(:disabled) {
+  border-color: currentColor;
+  color: var(--color-text-secondary);
+}
+
+.setup-guide-secondary:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-.setup-guide-install-run:focus-visible,
-.setup-guide-install-field select:focus-visible {
+.setup-guide-secondary:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+.setup-guide-step-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* The manual route stays folded away, so the automatic install is what the step offers first. */
+.setup-guide-manual {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border-dialog);
+}
+
+.setup-guide-manual summary {
+  color: var(--color-text-label);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.setup-guide-manual[open] summary {
+  margin-bottom: 4px;
+  color: var(--color-text-secondary);
+}
+
+.setup-guide-token {
+  margin-top: 10px;
+}
+
+/* What has to be true in MT5 for the EA to answer; the step says nothing about the bridge itself. */
+.setup-guide-checklist {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  color: var(--color-text-label);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .setup-guide-install-results {
@@ -290,11 +407,23 @@
   animation: settings-panel-out 180ms ease-in forwards;
 }
 
+/* A completed setup takes the same exit slowly, so the hand-over to the finished screen reads as a
+   fade rather than a cut. Both rules sit after `is-closing`, which is set alongside them. */
+.setup-guide-backdrop.is-finishing {
+  animation: settings-fade-out 900ms ease-in-out forwards;
+}
+
+.setup-guide-backdrop.is-finishing .setup-guide {
+  animation: settings-panel-out 900ms ease-in-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .setup-guide-backdrop,
   .setup-guide,
   .setup-guide-backdrop.is-closing,
-  .setup-guide-backdrop.is-closing .setup-guide {
+  .setup-guide-backdrop.is-closing .setup-guide,
+  .setup-guide-backdrop.is-finishing,
+  .setup-guide-backdrop.is-finishing .setup-guide {
     animation: none;
   }
 }

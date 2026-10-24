@@ -1,4 +1,4 @@
-import { Profiler, type ProfilerOnRenderCallback } from 'react';
+import { Profiler, useRef, type ProfilerOnRenderCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ErrorNotificationsProvider } from '../../src/shared/ui/ErrorNotifications';
 import type { ReactNode } from 'react';
@@ -11,6 +11,7 @@ import {
 } from '../../src/features/app-header/PanelVisibilityProvider';
 import {
   useBridgeAccount,
+  useBridgeConnectionSelector,
   useBridgeMarket,
   useBridgeQuote,
   useBridgePortfolio,
@@ -19,6 +20,8 @@ import {
   BridgeSessionProvider,
   useTauriAvailable,
 } from '../../src/features/bridge/BridgeSessionProvider';
+import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../../src/features/bridge/BridgeAwaitingScreen';
+import { BridgeScreen } from '../../src/features/settings/BridgeScreen';
 import { ChartWorkspaceProvider, useChartResources } from '../../src/features/chart/ChartWorkspaceProvider';
 import { ChartTitle } from '../../src/features/chart/ChartTitle';
 import { ChartQuotes } from '../../src/features/chart/ChartQuotes';
@@ -147,6 +150,12 @@ function AccountProbe() {
   return <output data-testid="probe-account">{account?.balance ?? 'none'}</output>;
 }
 
+/** The heartbeat stamp the bridge moves on every status update, so the spec can wait for one to land. */
+function BridgeHeartbeatProbe() {
+  const lastHeartbeat = useBridgeConnectionSelector(({ status }) => status.lastHeartbeat);
+  return <output data-testid="probe-heartbeat">{String(lastHeartbeat ?? 'none')}</output>;
+}
+
 function PortfolioProbe() {
   const portfolio = useBridgePortfolio();
   return <output data-testid="probe-portfolio">{portfolio?.capturedAtMs ?? 'none'}</output>;
@@ -203,6 +212,7 @@ function EnvironmentBadgeProbe() {
 
 function BridgeControls() {
   const session = useBridgeSessionRuntime();
+  const heartbeatStamps = useRef(0);
   const updateQuote = () => {
     const quote: QuoteSnapshot = {
       symbol: 'EURUSD',
@@ -233,6 +243,12 @@ function BridgeControls() {
     session.setLatestCandle((candle) => (candle ? { ...candle, close: '1.0852' } : candle));
   };
   const setBridgeStatus = () => session.setStatus({ state: 'connected', message: 'Harness bridge is connected.' });
+  // A heartbeat keeps the state the bridge reports and only moves its stamp, as the live bridge does.
+  const refreshHeartbeat = () => {
+    heartbeatStamps.current += 1;
+    const lastHeartbeat = heartbeatStamps.current;
+    session.setStatus((status) => ({ ...status, lastHeartbeat }));
+  };
   const loadedCandle = {
     timeMs: stubNowMs(),
     open: '1.0846',
@@ -259,6 +275,9 @@ function BridgeControls() {
       </button>
       <button type="button" onClick={setBridgeStatus}>
         Set test bridge status
+      </button>
+      <button type="button" onClick={refreshHeartbeat}>
+        Refresh bridge heartbeat
       </button>
       <button type="button" onClick={() => session.setTauriAvailable(false)}>
         Mark Tauri unavailable
@@ -455,6 +474,12 @@ function SettingsControls() {
   );
 }
 
+/** The awaiting screen as the app mounts it: its own measurement of the wait, so its renders are real. */
+function AwaitingScreenProbe() {
+  const { screenShown } = useAwaitingBridgeData();
+  return <BridgeAwaitingScreen screenShown={screenShown} />;
+}
+
 function HeaderProbes() {
   const tauriAvailable = useTauriAvailable();
   return (
@@ -466,6 +491,16 @@ function HeaderProbes() {
         <SettingsProbe />
       </Probe>
       <SettingsControls />
+      {/* The blurred screens are fixed full-window overlays that take the pointer events, so the harness
+          keeps them off the layout: they still commit, and their renders still count. */}
+      <div data-testid="blurred-screens" style={{ display: 'none' }}>
+        <Probe id="bridge-screen">
+          <BridgeScreen />
+        </Probe>
+        <Probe id="bridge-awaiting">
+          <AwaitingScreenProbe />
+        </Probe>
+      </div>
     </AppSettingsProvider>
   );
 }
@@ -495,6 +530,7 @@ function WorkspaceProbes() {
           <Probe id="market">
             <MarketProbe />
           </Probe>
+          <BridgeHeartbeatProbe />
           <ChartHeaderProbes />
           <Probe id="account">
             <AccountProbe />

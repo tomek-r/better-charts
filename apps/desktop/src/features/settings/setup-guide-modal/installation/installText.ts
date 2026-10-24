@@ -18,8 +18,8 @@ export const OUTCOME_WORDS: Record<Mt5InstallOutcome, string> = {
   unchanged: 'Already up to date',
 };
 
-/** Discovery found nothing: the manual steps below are then the only route. */
-export const MT5_NOT_FOUND_TEXT = 'MetaTrader 5 was not found on this computer. Use the manual steps below.';
+/** Discovery found nothing: the guide then offers the folder picker and the manual steps. */
+export const MT5_NOT_FOUND_TEXT = 'MetaTrader 5 was not found. Use Choose folder… or the manual steps.';
 
 /** The pressed button's label while the install runs; the other button keeps its own. */
 export const INSTALLING_TEXT = 'Installing…';

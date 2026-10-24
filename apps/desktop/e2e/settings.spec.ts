@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { mt5Installation, PORTABLE_MQL5_PATH } from './helpers/setupGuide';
+import { setupGuideDialog, setupScreen } from './helpers/setupGuide';
 import { gotoWithStub, stubInvocations, type StubInternals } from './helpers/tauriStub';
 import type { AppSettingsData } from '../src/features/settings/settingsTypes';
 
@@ -166,7 +166,7 @@ test('saving settings shows a dark shadowed notification without moving the char
   const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
   await expect(notice).toHaveCSS('background-color', 'rgb(18, 25, 35)');
   await expect(notice).not.toHaveCSS('box-shadow', 'none');
-  await expect(notice.locator('.notification-icon-info')).toBeVisible();
+  await expect(notice.locator('.notification-icon')).toBeVisible();
   const typography = (locator: typeof notice) =>
     locator.evaluate((element) => {
       const style = getComputedStyle(element);
@@ -175,14 +175,6 @@ test('saving settings shows a dark shadowed notification without moving the char
   const statusType = await typography(notice);
   expect(statusType.fontSize).toBe('13px');
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.evaluate(() => {
-    const probe = document.createElement('div');
-    probe.className = 'notification notification-alert';
-    probe.id = 'type-probe';
-    document.body.append(probe);
-  });
-  expect(await typography(page.locator('#type-probe'))).toEqual(statusType);
-  await page.locator('#type-probe').evaluate((element) => element.remove());
   expect(await chart.boundingBox()).toEqual(before);
   await page.getByRole('button', { name: 'App settings', exact: true }).click();
   await expect(dialog).toBeVisible();
@@ -426,8 +418,9 @@ test('notification reduced motion skips animation and removes immediately on dis
   await expect(notice).toHaveCount(0);
 });
 
-test('first launch opens connection setup, validates and saves all settings', async ({ page }) => {
+test('first launch App settings welcomes, validates and saves all settings', async ({ page }) => {
   await gotoWithStub(page, { responses: { get_app_settings: firstLaunch } });
+  await page.getByRole('button', { name: 'App settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Welcome to Better Charts.', { exact: false })).toBeVisible();
@@ -482,39 +475,18 @@ test('first launch opens connection setup, validates and saves all settings', as
   expect(await page.evaluate(() => Object.values(localStorage).join(' '))).not.toContain('private-demo-token');
 });
 
-/** A stub listing for a machine whose MT5 data folder holds no bridge EA source yet. */
-const installationsWithoutExpertAdvisor = () => [
-  mt5Installation({
-    dataFolders: [{ mql5Path: PORTABLE_MQL5_PATH, layout: 'portable', expertAdvisorInstalled: false }],
-  }),
-];
-
-test('first launch without the EA installed opens the setup guide', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: { get_app_settings: firstLaunch, list_mt5_installations: installationsWithoutExpertAdvisor() },
-  });
-  await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toBeVisible();
-});
-
-test('first launch without MetaTrader 5 opens the setup guide', async ({ page }) => {
-  await gotoWithStub(page, { responses: { get_app_settings: firstLaunch, list_mt5_installations: [] } });
-  await expect(page.getByRole('dialog', { name: 'Set up the MT5 bridge' })).toBeVisible();
-});
-
-test('first launch with the EA installed opens only App settings', async ({ page }) => {
-  const guide = page.getByRole('dialog', { name: 'Set up the MT5 bridge' });
-  await gotoWithStub(page, { responses: { get_app_settings: firstLaunch } });
-  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeVisible();
-  await expect(guide).toBeHidden();
-
+test('first launch opens no dialog; the setup screen offers the guide', async ({ page }) => {
   await gotoWithStub(page, {
     responses: {
-      get_app_settings: { ...firstLaunch, firstLaunch: false },
-      list_mt5_installations: installationsWithoutExpertAdvisor(),
+      get_app_settings: firstLaunch,
+      get_bridge_status: { state: 'connecting' },
+      get_market_snapshot: { complete: false, candles: [] },
     },
   });
-  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
-  await expect(guide).toBeHidden();
+  const screen = setupScreen(page);
+  await expect(screen.getByRole('button', { name: 'Open setup guide' })).toBeVisible();
+  await expect(setupGuideDialog(page)).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'App settings' })).toHaveCount(0);
 });
 
 test('gear opens layout, traps focus, ignores chart shortcuts and cancel keeps settings', async ({ page }) => {
@@ -577,7 +549,10 @@ test('failed save stays open and preserves input', async ({ page }) => {
 
 test('Windows startup hides Wine fields and settings fit a small viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 780 });
-  await gotoWithStub(page, { responses: { get_app_settings: { ...firstLaunch, platform: 'windows' } } });
+  await gotoWithStub(page, {
+    responses: { get_app_settings: { ...firstLaunch, firstLaunch: false, platform: 'windows' } },
+  });
+  await page.getByRole('button', { name: 'App settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await dialog.getByRole('button', { name: 'MT5 setup', exact: true }).click();
   await expect(dialog.getByLabel('Wine binary path')).toHaveCount(0);

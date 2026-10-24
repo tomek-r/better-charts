@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChartToolPlugin } from './chartToolPlugin';
 import { CHART_TOOL_PLUGINS, type ChartToolId } from './registry';
 import { DrawingToolIcon } from './DrawingToolIcon';
+import { useChartDrawn } from '../chart/useChartDrawn';
 
 /** A registered plugin, with its id narrowed to the known tool ids. */
 type RegisteredToolPlugin = ChartToolPlugin<ChartToolId>;
@@ -55,6 +56,8 @@ export function DrawingToolRail({
   activeChartToolId: ChartToolId;
   onPick: (tool: ChartToolId) => void;
 }) {
+  /** Hidden while no chart is drawn: the tools would have nothing to act on. */
+  const chartDrawn = useChartDrawn();
   /** The group whose flyout is open, if any. */
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   /**
@@ -106,7 +109,7 @@ export function DrawingToolRail({
     };
   }, [openGroupId]);
   return (
-    <nav className="tool-rail" aria-label="Drawing tools" ref={railRef}>
+    <nav className={`tool-rail${chartDrawn ? '' : ' tool-rail-waiting'}`} aria-label="Drawing tools" ref={railRef}>
       {RAIL_LAYOUT.groups.map((group) => {
         // The member the group's button represents: the active one, else the
         // group's first — so the icon always names what it is while the group

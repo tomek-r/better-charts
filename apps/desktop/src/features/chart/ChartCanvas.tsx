@@ -1,22 +1,30 @@
 import { useBridgeChartState, useBridgeConnection } from '../bridge/BridgeSessionProvider';
 import { useChartResources } from './ChartWorkspaceProvider';
 import type { ReactNode } from 'react';
+import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
+import type { BridgeStatus } from '../../shared/bridge/types';
 import { useErrorNotification } from '../../shared/ui/ErrorNotifications';
 import { LoadingMessage } from '../../shared/ui/LoadingMessage';
 import { HistoryWaitNotice } from './HistoryWaitNotice';
+
+/** A protocol error nothing else explains is the only thing worth a toast: the setup screen below covers a token
+ * mismatch, an outdated component has its own notice, and a completed setup adds its fix to this same toast. */
+function protocolErrorToNotify(status: BridgeStatus): string | undefined {
+  if (bridgeRefusal(status) !== BridgeRefusal.Other) {
+    return undefined;
+  }
+  return status.message;
+}
 
 /** `children` are DOM overlays hung over the canvas (positioned against the chart frame). */
 export function ChartCanvas({ children }: { children?: ReactNode }) {
   const { chartHost } = useChartResources();
   const { status, tauriAvailable } = useBridgeConnection();
   const { hasCandles, symbolLoading, chartError } = useBridgeChartState();
-  const showLoadingMessage = !tauriAvailable || !hasCandles || symbolLoading;
+  // A connected bridge is the only one with candles on the way; a missing one is the setup screen's case.
+  const showLoadingMessage = symbolLoading || (tauriAvailable && status.state === 'connected' && !hasCandles);
   useErrorNotification(chartError);
-  // An outdated EA or tick reader is reported by the header notice instead, which carries the same message
-  // plus the install action.
-  useErrorNotification(
-    status.state === 'protocol_error' && status.componentOutdated !== true ? status.message : undefined,
-  );
+  useErrorNotification(protocolErrorToNotify(status));
 
   return (
     <div className="chart-frame">
@@ -25,12 +33,7 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
       {showLoadingMessage && <div className="chart-overlay" />}
       {/* Centered on the window, not on the chart frame, so it reads the same with the trade panel open or closed. */}
       <div className="viewport-center-layer">
-        {showLoadingMessage && (
-          <LoadingMessage
-            title={symbolLoading ? 'Loading market data' : 'Waiting for market data'}
-            hint="Connect MT5 bridge to load candles."
-          />
-        )}
+        {showLoadingMessage && <LoadingMessage title="Loading market data" hint="Loading candles from MetaTrader 5." />}
         <HistoryWaitNotice />
       </div>
     </div>

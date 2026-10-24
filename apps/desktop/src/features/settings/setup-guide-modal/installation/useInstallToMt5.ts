@@ -5,7 +5,7 @@ import type { Mt5InstallationView, Mt5InstallReport, Mt5RestartReport } from '..
 import { chooseTarget, installTargets, type InstallTarget } from './installTargets';
 import { everyFileCompiledClean } from './installText';
 
-/** The two presses the section offers: the plain install, and the install that then restarts MT5. */
+/** The two presses the guide offers: the plain install, and the install that then restarts MT5. */
 export type InstallButton = 'install' | 'installAndRestart';
 
 /** The call in flight: which button started it, and whether it has reached the restart. */
@@ -14,8 +14,8 @@ interface InstallRun {
   restarting: boolean;
 }
 
-/** Everything the install section renders: the folders, the step in flight and the last report. */
-interface InstallToMt5View {
+/** Everything the install steps render: the folders, the step in flight and the last report. */
+export interface InstallToMt5View {
   shellAvailable: boolean;
   installations: Mt5InstallationView[] | undefined;
   targets: InstallTarget[];
@@ -27,8 +27,10 @@ interface InstallToMt5View {
   busy: boolean;
   error: string | undefined;
   chooseDataFolder: (key: string) => void;
-  install: (target: InstallTarget) => Promise<void>;
-  installAndRestart: (target: InstallTarget) => Promise<void>;
+  adoptInstallations: (found: Mt5InstallationView[]) => void;
+  /** Both presses install into the selected folder; without a selection they do nothing. */
+  install: () => Promise<void>;
+  installAndRestart: () => Promise<void>;
 }
 
 /** Both commands name the same folder: the install writes it and the restart reopens that terminal on it. */
@@ -37,11 +39,12 @@ function targetArgs(target: InstallTarget): { terminalPath: string; mql5Path: st
 }
 
 /**
- * The install section's state: the folders the backend listed, the last report and the
- * one in-flight call at a time. The list, install and restart commands are the section's
- * only ways to reach the backend.
+ * The install state, kept by the guide rather than by one of its steps so the folders,
+ * the selection and the last report survive moving between them. The list, install and
+ * restart commands are its only ways to reach the backend. `onCleanInstall` runs once
+ * either button has left nothing to fix: the guide then asks for the connection.
  */
-export function useInstallToMt5(): InstallToMt5View {
+export function useInstallToMt5(onCleanInstall: () => void): InstallToMt5View {
   const shellAvailable = isTauri();
   const [installations, setInstallations] = useState<Mt5InstallationView[]>();
   const [selectedKey, setSelectedKey] = useState<string>();
@@ -83,27 +86,41 @@ export function useInstallToMt5(): InstallToMt5View {
     setError(undefined);
   }
 
+  /** The list a folder pick produced: the picked installation comes first, so it is the selected one. */
+  function adoptInstallations(found: Mt5InstallationView[]) {
+    setInstallations(found);
+    setSelectedKey(undefined);
+    setReport(undefined);
+    setError(undefined);
+  }
+
   /**
-   * One press installs both files; `restart` adds the restart the moment every file
-   * compiled clean, and a report with something to fix ends the run there so the rows
-   * can say what. A refusal leaves the terminal as it was, with only the error to show.
+   * One press installs both files; the restart button adds the restart once every
+   * file compiled clean. A report with something to fix ends the run there, so the
+   * rows can say what; a refusal leaves the terminal as it was, with only the error.
+   * A clean run of either button hands the guide on to the connection step. Without
+   * a selected folder there is nothing to install into, so the press does nothing.
    */
-  async function runInstall(target: InstallTarget, restart: boolean): Promise<void> {
-    if (run !== undefined) {
+  async function runInstall(button: InstallButton): Promise<void> {
+    if (run !== undefined || selected === undefined) {
       return;
     }
-    const button: InstallButton = restart ? 'installAndRestart' : 'install';
     setRun({ button, restarting: false });
     setError(undefined);
     setReport(undefined);
     try {
-      const installed = await invoke<Mt5InstallReport>('install_to_mt5', targetArgs(target));
+      const installed = await invoke<Mt5InstallReport>('install_to_mt5', targetArgs(selected));
       setReport(installed);
-      if (!restart || !everyFileCompiledClean(installed.files)) {
+      if (!everyFileCompiledClean(installed.files)) {
+        return;
+      }
+      if (button === 'install') {
+        onCleanInstall();
         return;
       }
       setRun({ button, restarting: true });
-      await invoke<Mt5RestartReport>('restart_mt5_with_ea', targetArgs(target));
+      await invoke<Mt5RestartReport>('restart_mt5_with_ea', targetArgs(selected));
+      onCleanInstall();
     } catch (failure) {
       setError(errorText(failure));
     } finally {
@@ -123,7 +140,8 @@ export function useInstallToMt5(): InstallToMt5View {
     busy: run !== undefined,
     error,
     chooseDataFolder,
-    install: (target: InstallTarget) => runInstall(target, false),
-    installAndRestart: (target: InstallTarget) => runInstall(target, true),
+    adoptInstallations,
+    install: () => runInstall('install'),
+    installAndRestart: () => runInstall('installAndRestart'),
   };
 }

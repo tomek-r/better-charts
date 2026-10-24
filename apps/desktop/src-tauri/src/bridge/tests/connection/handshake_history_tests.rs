@@ -593,6 +593,7 @@ async fn outdated_ea_is_flagged_as_an_outdated_component() {
     .await;
     assert!(refused.status.component_outdated);
     assert_eq!(refused.event["componentOutdated"], true);
+    assert_eq!(refused.event["tokenMismatch"], false);
     assert!(refused.event["message"]
         .as_str()
         .unwrap()
@@ -625,6 +626,17 @@ async fn other_refusals_are_not_flagged_as_an_outdated_component() {
 }
 
 #[tokio::test]
+async fn token_mismatch_is_flagged_as_a_token_mismatch() {
+    let refused = refused_handshake(|payload| {
+        payload.insert("token".into(), serde_json::json!("wrong-token"));
+    })
+    .await;
+    assert!(refused.status.token_mismatch);
+    assert_eq!(refused.event["tokenMismatch"], true);
+    assert_eq!(refused.event["componentOutdated"], false);
+}
+
+#[tokio::test]
 async fn a_later_valid_handshake_clears_the_outdated_flag() {
     let state = BridgeState::default();
     let adapter = ExecutionAdapterState::new(ExecutionSafetyState::unavailable());
@@ -651,4 +663,5 @@ async fn a_later_valid_handshake_clears_the_outdated_flag() {
     assert_eq!(status.state, BridgeConnectionState::Connected);
     assert_eq!(status.message, None);
     assert!(!status.component_outdated);
+    assert!(!status.token_mismatch);
 }

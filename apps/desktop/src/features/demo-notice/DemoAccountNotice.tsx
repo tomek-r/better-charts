@@ -26,8 +26,9 @@ export function DemoAccountNotice() {
   // account snapshot moves neither the bar's own items nor the chart below it.
   return (
     <div className="demo-notice">
-      {/* Assistive tech reads the sentences once; the scrolling copy beside it is decoration. */}
-      <span className="demo-notice-readable">{NOTICE_SENTENCES.join(' ')}</span>
+      {/* Assistive tech reads the sentences once; the scrolling copy beside it is decoration. The
+          `demo-notice-readable` class names this copy for the marquee test, which reads its text. */}
+      <span className="demo-notice-readable visually-hidden">{NOTICE_SENTENCES.join(' ')}</span>
       <span className="demo-notice-text" aria-hidden="true">
         {NOTICE_SENTENCES.map((sentence) => (
           <span key={sentence} className="demo-notice-sentence">

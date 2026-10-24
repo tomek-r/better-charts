@@ -10,7 +10,7 @@ import {
   type ChartToolResetReason,
 } from '../../chart/engine/toolContract';
 import { palette } from '../../../shared/theme/palette';
-import { FixedRangeProfileLoader } from './loader';
+import { FixedRangeProfileRequester } from './requester';
 import {
   drawFixedRangeProfile,
   drawFixedRangeProfileLoadingWash,
@@ -35,16 +35,16 @@ export interface FixedRangeProfileTestApi {
 }
 
 /**
- * The Fixed Range Volume Profile tool: the gesture, its painter and its profile loader.
+ * The Fixed Range Volume Profile tool: the gesture, its painter and its profile requester.
  * The gesture: two clicks place the range, and dragging either boundary edits it
- * with a live preview. A placed or edited range is handed to the loader, which
+ * with a live preview. A placed or edited range is handed to the requester, which
  * requests its profile. The end may sit in the empty area right of the newest bar;
  * the start is always a real bar.
  *
  * Which tool is active is not decided here: once the range is placed the tool asks the
  * host to return to the default tool. `state` is the overlay's state: this tool is the only writer of
  * `previewing`, and the only writer that clears `range` and `profile`. The
- * `FixedRangeProfileLoader` also writes `range` and `profile` when it issues a
+ * `FixedRangeProfileRequester` also writes `range` and `profile` when it issues a
  * request or accepts a result, which is why that object is shared by design.
  */
 export class FixedRangeProfileTool implements ChartTool {
@@ -63,10 +63,10 @@ export class FixedRangeProfileTool implements ChartTool {
   } | null = null;
 
   private readonly state: FixedRangeProfileState = { range: null, hit: {} };
-  private readonly loader: FixedRangeProfileLoader;
+  private readonly requester: FixedRangeProfileRequester;
 
   constructor(private readonly host: ChartToolHost) {
-    this.loader = new FixedRangeProfileLoader(host, this.state, () => this.selection);
+    this.requester = new FixedRangeProfileRequester(host, this.state, () => this.selection);
   }
 
   /** Whether a click-drag is mid-gesture, which the owner must cancel on a tool switch. */
@@ -163,7 +163,7 @@ export class FixedRangeProfileTool implements ChartTool {
           this.markPlaced(placed);
           this.first = this.hover = null;
           this.host.returnToDefaultTool();
-          this.loader.requestProfile(placed);
+          this.requester.requestProfile(placed);
         }
       }
       this.host.requestRepaint();
@@ -178,7 +178,7 @@ export class FixedRangeProfileTool implements ChartTool {
     if (commit && !sameRange(current.original, current.preview)) {
       this.selection = current.preview;
       this.markPlaced(current.preview);
-      this.loader.requestProfile(current.preview);
+      this.requester.requestProfile(current.preview);
     }
     this.host.requestRepaint();
     return true;
@@ -193,7 +193,7 @@ export class FixedRangeProfileTool implements ChartTool {
   /**
    * Reports a range whose last slot has not yet been passed by the newest bar.
    * Reported on every change, not only on a new bar, because ticks inside the
-   * forming bar belong to the profile too; the loader throttles the refresh. The
+   * forming bar belong to the profile too; the requester throttles the refresh. The
    * change in which a bar opens at or after `endMs` is reported once more, as the
    * final refresh, and later changes are not. The end itself never moves, so the
    * range is re-evaluated against whatever the newest bar is, e.g. after a
@@ -212,14 +212,14 @@ export class FixedRangeProfileTool implements ChartTool {
       // The profile is timeframe-independent, so "was open" on the previous timeframe's bars is no reason for a
       // final refresh. A request still unsettled is renewed rather than waited for; a loaded profile stays.
       this.lastTimeframe = timeframe;
-      this.loader.renewUnsettledRequest(selection);
+      this.requester.renewUnsettledRequest(selection);
       if (this.wasOpenAtLastBarsChange) {
-        this.loader.requestThrottledRefresh(selection);
+        this.requester.requestThrottledRefresh(selection);
       }
       return;
     }
     if (wasOpen || this.wasOpenAtLastBarsChange) {
-      this.loader.requestThrottledRefresh(selection);
+      this.requester.requestThrottledRefresh(selection);
     }
   }
 
@@ -243,7 +243,7 @@ export class FixedRangeProfileTool implements ChartTool {
       return false;
     }
     this.clearSelection();
-    this.loader.cancelRequest();
+    this.requester.cancelRequest();
     return true;
   }
 
@@ -323,14 +323,14 @@ export class FixedRangeProfileTool implements ChartTool {
     const hadSelection = this.selection !== null;
     this.clearSelection();
     if (reason === 'symbol' && hadSelection) {
-      this.loader.cancelRequest();
+      this.requester.cancelRequest();
     } else {
-      this.loader.abandonPendingRequest();
+      this.requester.abandonPendingRequest();
     }
   }
 
   dispose(): void {
-    this.loader.dispose();
+    this.requester.dispose();
   }
 
   testApi(): FixedRangeProfileTestApi {

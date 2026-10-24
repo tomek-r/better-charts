@@ -1,5 +1,5 @@
-//! Locate the MQL5 data folders of an MT5 installation, and any existing copy of
-//! the two MQL5 files the app ships.
+//! Locate the MQL5 data folders of an MT5 installation, and the folders the two
+//! MQL5 files the app ships are installed into.
 //!
 //! MT5 supports two data-folder layouts:
 //!
@@ -20,13 +20,12 @@
 //! an unexpected encoding yields "nothing found" instead of a guessed path, so a
 //! later install step can never write into the wrong folder.
 
-use std::collections::VecDeque;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::discover::HostOs;
+use super::discover::{host_platform, HostOs};
 use crate::download_resources::{EXPERT_ADVISOR_RESOURCE, INDICATOR_RESOURCE};
 use crate::mt5_backend::Mt5BackendConfig;
 
@@ -37,7 +36,7 @@ const WINE_DRIVE: char = 'c';
 /// Separator of the Windows paths the configuration and `origin.txt` carry.
 pub(super) const WINDOWS_FOLDER_SEPARATOR: char = '\\';
 /// Folder a Wine prefix maps to drive `C:`.
-const WINE_DRIVE_C: &str = "drive_c";
+pub(super) const WINE_DRIVE_C: &str = "drive_c";
 /// Folder of a Wine prefix that holds the Windows user profiles.
 const WINE_USERS: &str = "users";
 /// Folder below a Windows user profile that holds the standard data folders; the
@@ -60,9 +59,9 @@ const UTF16_CODE_UNIT_BYTES: usize = 2;
 /// Prefix of the bundled MQL5 resources; the remainder is the path inside the
 /// data folder's `MQL5` folder.
 const MQL5_RESOURCE_PREFIX: &str = "mql5/";
-/// The shipped sources sit one or two folders below their MT5 root; the bound
-/// only stops a pathological tree from stalling the caller.
-pub(crate) const MAX_FOLDER_DEPTH: usize = 4;
+/// Sub-folder of `Experts` the advisor is installed into: MT5's own folder for
+/// expert advisors, where MetaQuotes' sample advisors live too.
+pub const EXPERT_ADVISOR_SUB_FOLDER: &str = "Advisors";
 
 /// Host a Windows path is resolved on. Passed as data so the native and the Wine
 /// mapping are both unit-tested on any operating system.
@@ -88,10 +87,7 @@ pub(super) fn current_host_os() -> HostOs {
 
 /// The host a Windows path is resolved on for this operating system.
 fn current_host() -> HostPlatform {
-    match current_host_os() {
-        HostOs::Windows => HostPlatform::Windows,
-        HostOs::MacOs | HostOs::Linux => HostPlatform::Wine,
-    }
+    host_platform(current_host_os())
 }
 
 /// What the locator needs to know about an installation. Implemented by the
@@ -210,21 +206,40 @@ fn windows_folder_form(folder: &Path) -> String {
     if split_drive(&host_form).is_some() {
         return host_form.into_owned();
     }
-    let parts: Vec<&OsStr> = folder.iter().collect();
-    // The deepest `drive_c` wins, so a prefix stored in a folder that happens to
-    // be called `drive_c` still maps to the right drive.
-    let drive_position = parts
-        .iter()
-        .rposition(|part| part.eq_ignore_ascii_case(WINE_DRIVE_C));
-    let Some(inside_drive) = drive_position else {
+    let Some(drive_position) = drive_c_position(folder) else {
         return host_form.into_owned();
     };
+    windows_form_below(folder, drive_position)
+}
+
+/// Position of the deepest `drive_c` folder of `folder`. The deepest one wins, so a
+/// prefix stored in a folder that happens to be called `drive_c` still maps to the
+/// right drive.
+fn drive_c_position(folder: &Path) -> Option<usize> {
+    let parts: Vec<&OsStr> = folder.iter().collect();
+    parts
+        .iter()
+        .rposition(|part| part.eq_ignore_ascii_case(WINE_DRIVE_C))
+}
+
+/// `folder` below the `drive_c` at `drive_position`, in the Windows form MT5 uses:
+/// drive `C:` followed by every remaining folder.
+fn windows_form_below(folder: &Path, drive_position: usize) -> String {
     let mut windows_form = format!("{}:", WINE_DRIVE.to_ascii_uppercase());
-    for part in &parts[inside_drive + 1..] {
+    for part in folder.iter().skip(drive_position + 1) {
         windows_form.push(WINDOWS_FOLDER_SEPARATOR);
         windows_form.push_str(&part.to_string_lossy());
     }
     windows_form
+}
+
+/// A host path below a Wine prefix's `drive_c`, as the prefix it belongs to and the
+/// Windows path MT5 knows the file by. `None` for a path outside every prefix, which
+/// no Wine installation can address.
+pub(super) fn wine_path_form(path: &Path) -> Option<(PathBuf, String)> {
+    let drive_position = drive_c_position(path)?;
+    let wine_prefix = path.iter().take(drive_position).collect();
+    Some((wine_prefix, windows_form_below(path, drive_position)))
 }
 
 /// Comparison form of a Windows folder path: separators are interchangeable,
@@ -354,7 +369,7 @@ pub fn data_folders(install_folder: &Path, terminals_root: Option<&Path>) -> Vec
 /// `base` with `folders` pushed one by one, so each separator the path gains is
 /// the host's own: `PathBuf::join` would keep a separator embedded in a longer
 /// folder string verbatim on Windows.
-fn joined(base: &Path, folders: &[&str]) -> PathBuf {
+pub(super) fn joined(base: &Path, folders: &[&str]) -> PathBuf {
     let mut path = base.to_path_buf();
     for &folder in folders {
         path.push(folder);
@@ -405,7 +420,7 @@ pub fn locate_data_folders(installation: &impl InstallationLocation) -> Vec<Data
 /// The MQL5 files the app ships, told apart by the MT5 folder that runs them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mql5File {
-    /// Bridge expert advisor, loaded from `Experts`.
+    /// Bridge expert advisor, loaded from `Experts/Advisors`.
     ExpertAdvisor,
     /// Tick history reader, loaded from `Indicators`.
     Indicator,
@@ -431,37 +446,30 @@ fn install_location(file: Mql5File) -> Option<(&'static str, &'static str)> {
         .rsplit_once('/')
 }
 
-/// Breadth-first search for `file_name` below `folder`. Breadth first makes the
-/// first match the shallowest one, and every folder is listed in name order, so
-/// repeated scans report the same copy. `DirEntry::file_type` never follows a
-/// symbolic link, so a linked file or folder is neither reported nor searched.
-fn shallowest_file(folder: &Path, file_name: &str) -> Option<PathBuf> {
-    let mut pending = VecDeque::from([(folder.to_path_buf(), 0)]);
-    while let Some((current, depth)) = pending.pop_front() {
-        for entry in sorted_entries(&current) {
-            let Ok(kind) = entry.file_type() else {
-                continue;
-            };
-            if kind.is_file() && entry.file_name().as_os_str() == OsStr::new(file_name) {
-                return Some(entry.path());
-            }
-            if kind.is_dir() && depth < MAX_FOLDER_DEPTH {
-                pending.push_back((entry.path(), depth + 1));
-            }
-        }
-    }
-    None
+/// Folder below `MQL5` the install writes `file` to: the advisor's own folder
+/// inside `Experts`, the indicator's folder unchanged.
+fn install_folder(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
+    let (folder, _) = install_location(file)?;
+    let shipped_folder = mql5.join(folder);
+    Some(match file {
+        Mql5File::ExpertAdvisor => shipped_folder.join(EXPERT_ADVISOR_SUB_FOLDER),
+        Mql5File::Indicator => shipped_folder,
+    })
 }
 
-/// Existing copy of `file` below the data folder's `MQL5` folder, if there is
-/// one.
-///
-/// MT5 keeps a source wherever the user put it — on the verified installation
-/// the bridge advisor sits in `Experts/Advisors` — so the whole `MQL5` subtree is
-/// searched. The shallowest match wins: the copy closest to the MT5-provided
-/// folder is the one a later install step replaces, while deeper copies stay
-/// untouched.
-pub fn existing_copy(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
-    let (folder, file_name) = install_location(file)?;
-    shallowest_file(&mql5.join(folder), file_name)
+/// Path the install writes `file` to: MT5's own folder for it, for example
+/// `<mql5>/Experts/Advisors/BetterChartsBridge.mq5` for the advisor and
+/// `<mql5>/Indicators/BetterChartsTickHistoryReader.mq5` for the indicator.
+pub fn default_path(mql5: &Path, file: Mql5File) -> Option<PathBuf> {
+    let (_, file_name) = install_location(file)?;
+    Some(install_folder(mql5, file)?.join(file_name))
+}
+
+/// Whether `file` is installed where the install writes it and MT5 loads it from
+/// (see [`default_path`]). A copy elsewhere below `MQL5` does not count, because
+/// restart attaches the advisor from that one folder. A symbolic link is never
+/// followed, so a linked file does not count either.
+pub fn is_installed(mql5: &Path, file: Mql5File) -> bool {
+    default_path(mql5, file)
+        .is_some_and(|path| fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file()))
 }

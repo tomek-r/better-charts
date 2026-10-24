@@ -184,6 +184,34 @@ test('candle updates keep quote and unchanged chart-identity consumers idle', as
   expect(counts['chart-canvas'] ?? 0).toBe(0);
 });
 
+test('a bridge heartbeat or a candle tick leaves the blurred screens idle', async ({ page }) => {
+  await mountHarness(page);
+  // The first-run screen loads its own chunk: let it land before counting renders.
+  await expect(page.getByTestId('blurred-screens').locator('[aria-label="MetaTrader 5 setup"]')).toHaveCount(1);
+  await resetProbeCounts(page);
+
+  await page.getByRole('button', { name: 'Refresh bridge heartbeat' }).click();
+  await expect(page.getByTestId('probe-heartbeat')).toHaveText('1');
+  expect((await probeCounts(page))['bridge-screen'] ?? 0).toBe(0);
+
+  // With candles on the bridge both blurred screens have settled, so their own waits are quiet too.
+  await page.getByRole('button', { name: 'Load candle' }).click();
+  await expect(page.getByTestId('probe-candle-close')).toHaveText('1.0850');
+  await resetProbeCounts(page);
+  await page.getByRole('button', { name: 'Refresh bridge heartbeat' }).click();
+  await expect(page.getByTestId('probe-heartbeat')).toHaveText('2');
+  const settledCounts = await probeCounts(page);
+  expect(settledCounts['bridge-screen'] ?? 0).toBe(0);
+  expect(settledCounts['bridge-awaiting'] ?? 0).toBe(0);
+
+  await resetProbeCounts(page);
+  await page.getByRole('button', { name: 'Update candle' }).click();
+  await expect(page.getByTestId('probe-candle-close')).toHaveText('1.0852');
+  const candleCounts = await probeCounts(page);
+  expect(candleCounts['bridge-screen'] ?? 0).toBe(0);
+  expect(candleCounts['bridge-awaiting'] ?? 0).toBe(0);
+});
+
 test('irrelevant account fields stay out of ticket views while currency changes reach sizing', async ({ page }) => {
   await mountHarness(page);
   await page.getByRole('button', { name: 'Set test account' }).click();
@@ -260,6 +288,10 @@ test('risk basis keeps equity sizing derived from valid positive account equity'
 
 test('typing in search keeps bridge, ticket, settings and header consumers idle', async ({ page }) => {
   await mountHarness(page);
+  // Search is offered only once a chart is drawn, so load one before counting renders.
+  await page.getByRole('button', { name: 'Load candle' }).click();
+  await expect(page.getByTestId('probe-candle-close')).toHaveText('1.0850');
+  await resetProbeCounts(page);
   await page.getByRole('button', { name: 'Search symbols', exact: true }).click();
   const input = page.getByRole('dialog', { name: 'Search symbols' }).getByPlaceholder('Search symbol — e.g. NAS100');
   await input.fill('EUR');
