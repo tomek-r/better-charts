@@ -67,6 +67,20 @@ test('the guide opens on Find MetaTrader 5 and walks to Install and back', async
   await expect(guide.getByRole('heading', { name: 'Find MetaTrader 5' })).toBeVisible();
 });
 
+test('the progress row keeps its height when the Back button appears', async ({ page }) => {
+  await gotoWithStub(page);
+  const guide = await openSetupGuide(page);
+  const progressRow = guide.locator('.setup-guide-progress-row');
+  const heightOnFirstStep = (await progressRow.boundingBox())?.height ?? Number.NaN;
+
+  await guide.getByRole('button', { name: 'Next' }).click();
+
+  await expect(guide.getByRole('button', { name: 'Back' })).toBeVisible();
+  const heightWithBack = (await progressRow.boundingBox())?.height ?? Number.NaN;
+  // Content below the row must not jump between steps; 0.5 px absorbs sub-pixel rounding.
+  expect(Math.abs(heightWithBack - heightOnFirstStep)).toBeLessThanOrEqual(0.5);
+});
+
 test('Install manually instead folds out the steps, the downloads and a token copy', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await gotoWithStub(page);
