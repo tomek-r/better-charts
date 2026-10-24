@@ -271,6 +271,17 @@ test('chart chrome nests the connection dot inside the OHLC legend, after its te
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });
 
+test('the chart paints when the webview reports the invalid language tag "C" (Linux WebKitGTK)', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'language', { get: () => 'C' });
+    Object.defineProperty(Navigator.prototype, 'languages', { get: () => ['C'] });
+  });
+  const { pageErrors } = await gotoWithStub(page);
+  await expectChartChrome(page, 'visible');
+  await expect.poll(() => page.evaluate(() => window.__chartTest?.data().length ?? 0)).toBeGreaterThan(0);
+  expect(pageErrors).toEqual([]);
+});
+
 test.describe('tool rail', () => {
   test('pointer tools and Fixed range volume profile are the entries; group menu closed by default', async ({
     page,
