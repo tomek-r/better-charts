@@ -1,7 +1,8 @@
-import type { ProfileResult } from '../../../shared/bridge/types';
-import type { ChartToolHost } from '../../chart/engine/tools/toolContract';
-import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from './overlay';
-import type { FixedRangeProfileRange } from './range';
+import type { ProfileResult } from '../../../../shared/bridge/types';
+import type { MarketDataPort } from '../../../bridge/marketDataPort';
+import type { ChartToolHost } from '../../../chart/engine/tools/toolContract';
+import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from '../overlay';
+import type { FixedRangeProfileRange } from '../range';
 
 const LIVE_PROFILE_REFRESH_MS = 2000;
 /**
@@ -22,6 +23,10 @@ const SPINNER_REPAINT_MS = 33;
  * behind a committed range, keeps an open range fresh and drops every result that
  * does not belong to the request still awaited. `expected` is the stale guard: every
  * path that abandons a request clears it, and a new request replaces it.
+ *
+ * `port` is the port of the one drawing this requester belongs to: it may be the bridge
+ * itself or the turn-taking queue every drawing shares, which is what keeps the backend
+ * to one load at a time.
  */
 export class FixedRangeProfileRequester {
   private expected: ExpectedFixedRangeProfile | undefined;
@@ -34,10 +39,10 @@ export class FixedRangeProfileRequester {
 
   constructor(
     private readonly host: ChartToolHost,
+    private readonly port: MarketDataPort,
     private readonly state: FixedRangeProfileState,
     private readonly committedRange: () => FixedRangeProfileRange | null,
   ) {
-    const port = host.marketDataPort;
     this.unsubscribe = [
       port.onTickProfile((profile) => this.acceptProfileResult(profile)),
       port.onTickProfileCancelled((event) => {
@@ -63,7 +68,7 @@ export class FixedRangeProfileRequester {
   /** The range was deleted: abandon the request and stop the backend work behind it. */
   cancelRequest(): void {
     this.abandonPendingRequest();
-    this.host.marketDataPort.cancelTickProfile();
+    this.port.cancelTickProfile();
   }
 
   dispose(): void {
@@ -110,7 +115,7 @@ export class FixedRangeProfileRequester {
     }
     this.host.requestRepaint();
     if (!nothingToRequest) {
-      this.host.marketDataPort.requestTickProfile({ symbol, fromMs, endMs: requestEnd, rows: PROFILE_ROWS });
+      this.port.requestTickProfile({ symbol, fromMs, endMs: requestEnd, rows: PROFILE_ROWS });
     }
   }
 

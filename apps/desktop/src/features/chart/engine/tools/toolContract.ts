@@ -1,7 +1,9 @@
 import { timeframeBarOffset, timeframeBarTime } from '../../../../shared/bridge/timeframes';
 import type { QuoteSnapshot } from '../../../../shared/bridge/types';
 import type { MarketDataPort } from '../../../bridge/marketDataPort';
+import type { ChartToolDrawingRecord } from '../drawings/drawingRecord';
 import type { RenderViewport } from '../surface/overlayTypes';
+import type { ToolInputDefinition, ToolInputValues } from '../drawings/toolInputs';
 
 export type { RenderViewport };
 import type { TimeModel } from '../viewport/viewportController';
@@ -124,16 +126,31 @@ export interface ChartTool {
   pointerLeave?(): void;
   /** Drops an in-progress gesture and restores the committed drawing. */
   cancelGesture?(): void;
-  /** Removes the tool's drawing at the user's request; false when it had none. */
-  deleteDrawing?(): boolean;
+  /** Removes one drawing at the user's request; false when the tool has no drawing with that id. */
+  deleteDrawing?(drawingId: string): boolean;
+  /** Id of this tool's topmost drawing under the pane point, null when none. */
+  drawingAt?(x: number, y: number): string | null;
+  /** Paints the highlight on the given drawing; null means none of this tool's drawings is selected. */
+  setSelectedDrawing?(drawingId: string | null): void;
+  /** A locked drawing ignores edit gestures; false when the tool has no drawing with that id. */
+  setDrawingLocked?(drawingId: string, locked: boolean): boolean;
+  /** Replaces one drawing's settings; false when the tool has no drawing with that id. */
+  setDrawingInputs?(drawingId: string, inputs: ToolInputValues): boolean;
+  /** Every drawing of this tool, for the app to save. */
+  exportDrawings?(): ChartToolDrawingRecord[];
+  /**
+   * Replaces every drawing of the tool. The tool validates geometry and inputs and drops
+   * invalid records; it reports nothing through the host, because nothing was placed.
+   */
+  importDrawings?(records: readonly ChartToolDrawingRecord[]): void;
   /** Paints the tool's content for one layer pass (see `ChartDrawLayer`, `ChartDrawTarget`). */
   draw?(target: ChartDrawTarget): void;
   /** The bar series changed: a live bar update, a new bar or a replaced history. */
   barsChanged?(): void;
   /**
-   * Drops state tied to the instrument, session or connection that went away.
-   * `symbol`: the drawing is instrument-specific and goes, together with any
-   * backend work behind it. `disconnect` and `session`: state is cleared locally.
+   * Drops state tied to the instrument, session or connection that went away. Every reason
+   * removes the tool's drawings from the chart, because the app re-imports the saved ones;
+   * `symbol` also stops any backend work behind them.
    */
   reset?(reason: ChartToolResetReason): void;
   dispose?(): void;
@@ -167,7 +184,14 @@ export interface ChartToolHost {
   marketDataPort: MarketDataPort;
   /** Surfaces a failure to the user. */
   notifyError(message: string): void;
+  /** A new drawing was committed: the set selects it and reports a change. Never called from reset or import. */
+  drawingPlaced(drawingId: string): void;
+  /** A user edit changed a committed drawing; reported for saving. Never called from reset or import. */
+  drawingsChanged(): void;
 }
+
+/** What the owner of a tool set supplies; the set adds the two drawing callbacks. */
+export type ChartToolHostBase = Omit<ChartToolHost, 'drawingPlaced' | 'drawingsChanged'>;
 
 /** Why the host resets its tools. */
 export type ChartToolResetReason = 'symbol' | 'disconnect' | 'session';
@@ -186,6 +210,11 @@ export interface ChartToolDefinition {
    * overlays. Pointer tools stay active until another is picked.
    */
   readonly placesDrawings: boolean;
+  /**
+   * The settings every drawing of this tool carries, in Pine Script v6 `input.*` kinds;
+   * omitted means the tool's drawings have no settings.
+   */
+  readonly inputs?: readonly ToolInputDefinition[];
   /** The engine builds the tool once per chart with `new toolClass(host)`. */
   readonly toolClass: new (host: ChartToolHost) => ChartTool;
 }

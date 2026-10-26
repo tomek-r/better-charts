@@ -1,4 +1,5 @@
 import type { PriceScaleMode } from 'lightweight-charts';
+import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import type { RenderBar } from '../bars/mt5DataAdapter';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
 import type { ViewportChangeRecord } from '../viewport/viewportDiagnostics';
@@ -23,6 +24,10 @@ export interface DevTestApi {
   clearViewportChanges(): void;
   timeToX(timeMs: number): number;
   tool(id: string): unknown;
+  /** Every drawing the tools hold, in registry order, each stamped with its tool id. */
+  drawings(): ChartDrawingRecord[];
+  /** The drawing the user has selected and whether it is locked; null when none. */
+  selectedDrawing(): ChartDrawingSelection | null;
   /** The pointer's time/price labels, shown for every tool; null while no pointer is over the pane. */
   pointerReadout(): PointerReadout | null;
   priceScale(): {

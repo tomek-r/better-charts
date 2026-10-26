@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { withFakeClock } from './helpers/fakeClock';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
-import type { ChartToolHost, ChartToolResetReason } from '../src/features/chart/engine/tools/toolContract';
+import { createFakeToolHost } from './helpers/fakeToolHost';
+import type { ChartToolResetReason } from '../src/features/chart/engine/tools/toolContract';
 import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/tool';
 
 /**
@@ -10,37 +11,18 @@ import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/t
  */
 
 const BAR_SECONDS = 60;
-const SLOT_WIDTH = 10;
 
 function createToolWithPlacedRange() {
   const market = createFakeMarketDataPort();
-  const bars = Array.from({ length: 10 }, (_, index) => ({ time: 1_000 + index * BAR_SECONDS }));
-  const barSeries = { bars, timeframe: 'M1', intervalSeconds: BAR_SECONDS };
-  let quote: { symbol: string; timeMs: number } | undefined;
-  const host = {
-    barSeries,
-    geometry: {
-      viewport: () => ({ chartRect: { width: 600, height: 400 } }),
-      slotAt: (x: number) => Math.floor(x / SLOT_WIDTH),
-      timeToX: (timeMs: number) => ((timeMs / 1000 - 1_000) / BAR_SECONDS) * SLOT_WIDTH,
-    },
-    currentMarket: { symbol: () => 'DEMO.TEST', quote: () => quote },
-    marketDataPort: market.port,
-    requestRepaint: () => undefined,
-    returnToDefaultTool: () => undefined,
-    notifyError: () => undefined,
-  } as unknown as ChartToolHost;
-  const tool = new FixedRangeProfileTool(host);
+  const fakeHost = createFakeToolHost(market.port);
+  const tool = new FixedRangeProfileTool(fakeHost.host);
   const placeRange = () => {
     for (const x of [25, 65]) {
       tool.pointerDown(x, 50, 'startNewDrawing');
       tool.pointerUp('released');
     }
   };
-  const setQuoteTime = (timeMs: number) => {
-    quote = { symbol: 'DEMO.TEST', timeMs };
-  };
-  return { tool, market, placeRange, barSeries, setQuoteTime };
+  return { tool, market, placeRange, barSeries: fakeHost.barSeries, setQuoteTime: fakeHost.setQuoteTime };
 }
 
 for (const [reason, placed, expectedCancels] of [

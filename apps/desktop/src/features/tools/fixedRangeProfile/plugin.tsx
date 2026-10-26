@@ -1,5 +1,5 @@
 import type { ChartToolPlugin } from '../chartToolPlugin';
-import { FixedRangeProfileTool } from './tool';
+import { FIXED_RANGE_PROFILE_INPUTS, FixedRangeProfileTool } from './tool';
 
 export const fixedRangeProfilePlugin: ChartToolPlugin<'fixedRangeProfile'> = {
   id: 'fixedRangeProfile',
@@ -20,5 +20,6 @@ export const fixedRangeProfilePlugin: ChartToolPlugin<'fixedRangeProfile'> = {
   },
   cursor: 'crosshair',
   placesDrawings: true,
+  inputs: FIXED_RANGE_PROFILE_INPUTS,
   toolClass: FixedRangeProfileTool,
 };

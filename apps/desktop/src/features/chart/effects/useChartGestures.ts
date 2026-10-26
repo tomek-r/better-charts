@@ -291,7 +291,7 @@ export function useChartWorkspacePointerEffects(
         selectChartTool(DEFAULT_CHART_TOOL_ID);
         event.preventDefault();
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
-        chart.current?.deleteDrawings();
+        chart.current?.drawings.deleteSelected();
         event.preventDefault();
       }
     };

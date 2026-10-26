@@ -19,9 +19,11 @@ import type {
   ChartPointerUpOutcome,
   ChartToolDefinition,
   ChartToolHost,
+  ChartToolHostBase,
   ChartToolResetReason,
 } from '../tools/toolContract';
 import { ChartToolSet } from '../tools/toolSet';
+import { ChartDrawings } from '../drawings/chartDrawings';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installDevTestApi, removeDevTestApi } from './devTestApi';
 import { initialHistoryWindow } from '../bars/initialHistoryWindow';
@@ -81,6 +83,8 @@ export class ChartController {
   private readonly liveCandleHold: PointerCandleHold;
   private readonly view: ViewportController;
   private readonly tools: ChartToolSet;
+  /** Selection, user commands and saved records of the chart's drawings. */
+  readonly drawings: ChartDrawings;
   // Set once the broker's page came back short, or a page held nothing older
   // than the cache. Cleared by a new window, which is a new history.
   private olderHistoryExhausted = false;
@@ -106,7 +110,7 @@ export class ChartController {
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
     this.view = new ViewportController(this.chart, this.candles, this.future, this.data, () => this.removed);
     const { toolDefinitions, defaultToolId, ...hostOptions } = options;
-    const toolHost: ChartToolHost = {
+    const toolHost: ChartToolHostBase = {
       ...hostOptions,
       barSeries: this.data,
       geometry: this.view,
@@ -116,9 +120,14 @@ export class ChartController {
         this.onToolRelease?.();
       },
     };
-    this.tools = new ChartToolSet(toolDefinitions, defaultToolId, toolHost, (cursor) => {
-      this.host.style.cursor = cursor ?? '';
+    this.tools = new ChartToolSet(toolDefinitions, defaultToolId, toolHost, {
+      cursorChanged: (cursor) => {
+        this.host.style.cursor = cursor ?? '';
+      },
+      selectionChanged: (selection) => this.drawings.selectionChanged(selection),
+      drawingsChanged: () => this.drawings.drawingsChanged(),
     });
+    this.drawings = new ChartDrawings(this.tools, () => this.refreshOverlays());
     this.countdown = new CountdownController(this.countdownPrimitive, {
       symbol: () => this.symbol,
       timeframe: () => this.data.timeframe,
@@ -156,6 +165,8 @@ export class ChartController {
         clearViewportChanges: clearViewportChangeLog,
         timeToX: (timeMs) => this.timeToX(timeMs),
         tool: (id) => this.toolTestApi(id),
+        drawings: () => this.drawings.exportRecords(),
+        selectedDrawing: () => this.drawings.selected(),
         pointerReadout: () => this.pointerReadout.readout(),
         priceScale: () => {
           const scale = this.chart.priceScale('right');
@@ -438,9 +449,6 @@ export class ChartController {
   }
   cancelToolGestures(): void {
     this.tools.cancelGestures();
-  }
-  deleteDrawings(): boolean {
-    return this.tools.deleteDrawings();
   }
   drawTools(target: ChartDrawTarget): void {
     this.tools.draw(target);

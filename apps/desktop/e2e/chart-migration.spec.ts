@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
-import { profileBoundaries as boundaries, profileSelection } from './helpers/chartTest';
+import { profileBoundaries as boundaries, profileDrawings, profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
-import { SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeProfile/requester';
+import { SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
 import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 import { LOADING_WASH_ALPHA } from '../src/features/tools/fixedRangeProfile/overlay';
@@ -253,7 +253,7 @@ for (const boundary of ['fromX', 'toX'] as const) {
   });
 }
 
-test('FRVP cancelled drag restores range and result without requesting; Delete cancels the profile', async ({
+test('FRVP cancelled drag restores range and result without requesting; Delete removes the drawing', async ({
   page,
 }) => {
   await commitProfile(page);
@@ -270,11 +270,11 @@ test('FRVP cancelled drag restores range and result without requesting; Delete c
   expect(await requests(page)).toHaveLength(1);
   await page.locator('.chart-host').focus();
   await page.keyboard.press('Delete');
-  await expect.poll(async () => (await profileState(page)).range).toBeNull();
+  await expect.poll(async () => profileDrawings(page)).toEqual([]);
+  expect((await profileState(page)).range).toBeNull();
   expect((await profileState(page)).hasProfile).toBe(false);
-  await expect
-    .poll(async () => (await stubInvocations(page)).filter((entry) => entry.cmd === 'cancel_tick_profile').length)
-    .toBeGreaterThan(0);
+  // The profile had already answered, so the delete found no backend load to stop.
+  expect((await stubInvocations(page)).filter((entry) => entry.cmd === 'cancel_tick_profile')).toHaveLength(0);
 });
 
 test('history and realtime use seconds, reject old or malformed bars, and mount one event listener', async ({
