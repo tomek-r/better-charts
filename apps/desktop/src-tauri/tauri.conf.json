@@ -15,7 +15,8 @@
         "title": "Better Charts",
         "backgroundColor": "#0b0e14",
         "maximized": true,
-        "visible": false
+        "visible": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {
