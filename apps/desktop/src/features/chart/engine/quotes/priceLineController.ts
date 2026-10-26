@@ -1,5 +1,5 @@
 import { LineStyle, type IPriceLine, type ISeriesApi } from 'lightweight-charts';
-import type { ChartOverlayState } from '../trading/overlays';
+import type { ChartOverlayState } from '../surface/buildChartPlugins';
 import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
 import type { PriceAxisTagsPrimitive } from './priceAxisTagsPrimitive';
 import { palette } from '../../../../shared/theme/palette';

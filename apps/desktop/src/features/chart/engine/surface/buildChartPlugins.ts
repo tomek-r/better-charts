@@ -1,8 +1,8 @@
-import type { TradingLabelLayoutState } from './labelLayout';
-import { createTradingLabelsOverlay } from './tradingLabelsOverlay';
-import type { OverlayRenderer } from '../surface/overlayTypes';
-import { createPositionOverlay, type PositionOverlayState } from './positionOverlay';
-import { createStagedOrderOverlay, type StagedOrderState } from './stagedOrderOverlay';
+import type { TradingLabelLayoutState } from '../trading/labelLayout';
+import { createTradingLabelsOverlay } from '../trading/tradingLabelsOverlay';
+import type { OverlayRenderer } from './overlayTypes';
+import { createPositionOverlay, type PositionOverlayState } from '../trading/positionOverlay';
+import { createStagedOrderOverlay, type StagedOrderState } from '../trading/stagedOrderOverlay';
 import { createPriceLinesOverlay, type PriceLinesState } from '../quotes/priceLinesOverlay';
 
 /** Live state holders App feeds the chart overlays with (refs). */

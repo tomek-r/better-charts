@@ -4,7 +4,7 @@ import type {
   ISeriesPrimitive,
   SeriesAttachedParameter,
 } from 'lightweight-charts';
-import { buildChartPlugins, type ChartOverlayState } from '../trading/overlays';
+import { buildChartPlugins, type ChartOverlayState } from './buildChartPlugins';
 import { createDrawTarget, PANE_BELOW_TRADING_OVERLAYS, PRICE_AXIS_BELOW_TRADING_OVERLAYS } from './drawTarget';
 import type { ChartDrawTarget, RenderViewport } from '../tools/toolContract';
 

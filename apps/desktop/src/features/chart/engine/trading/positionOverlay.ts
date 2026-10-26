@@ -153,7 +153,7 @@ export function createPositionOverlay(
   const pnlColumnWidths = new Map<string, number>();
   return {
     // `ui` layer: row widgets render over the chart. Two-pass z-order (`lines`
-    // before `labels`, features/chart/engine/trading/overlays.ts) keeps risk zones beneath row labels;
+    // before `labels`, features/chart/engine/surface/buildChartPlugins.ts) keeps risk zones beneath row labels;
     // native price lines and their axis labels render below this primitive.
     descriptor: { id: `position-overlay-${pass}`, name: `Positions & Orders (${pass})`, layer: 'ui' },
     render(ctx, { viewport }) {

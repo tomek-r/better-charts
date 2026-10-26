@@ -1,7 +1,7 @@
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { BridgeState, Candle, QuoteSnapshot } from '../../../../shared/bridge/types';
 import { toRenderBar, type RenderBar } from '../bars/mt5DataAdapter';
-import type { ChartOverlayState } from '../trading/overlays';
+import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayTypes';
 import { createChartSurface } from './chartFactory';
 import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
