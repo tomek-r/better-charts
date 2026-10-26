@@ -1,4 +1,4 @@
-import { timeframeBarTime } from '../../../shared/bridge/timeframes';
+import { timeframeBarOffset, timeframeBarTime } from '../../../shared/bridge/timeframes';
 import { anchorAtBar, reanchorToCurrentBars, type BarAnchor } from '../../chart/engine/tools/toolContract';
 import type { TimeModel } from '../../chart/engine/viewport/viewportController';
 
@@ -76,4 +76,46 @@ export function rangeEndingAtAnchor(barSeries: TimeModel, fromMs: number, anchor
     interval = bars[bars.length - 1].time - bars[bars.length - 2].time;
   }
   return { fromMs, endMs: (bars[end].time + Math.max(0.001, interval)) * 1000, lastSlotOpenMs: anchor.timeMs };
+}
+
+/**
+ * The open time of the slot that holds the instant `endMs - 1`, for a window that ends at `endMs`:
+ * the last bar that opened at or before it, or, past the newest bar, the future slot the timeframe
+ * steps to. A restored drawing derives its handle this way, because a slot is only known against
+ * the bars of the moment. Undefined while no bar opened that early: the window predates the loaded
+ * history.
+ */
+export function lastSlotOpenBefore(barSeries: TimeModel, endMs: number): number | undefined {
+  const { bars, timeframe } = barSeries;
+  if (bars.length === 0) {
+    return undefined;
+  }
+  const lastInstantSeconds = (endMs - 1) / 1000;
+  const newest = bars[bars.length - 1].time;
+  if (newest > lastInstantSeconds) {
+    const index = lastBarOpenedAtOrBefore(barSeries, lastInstantSeconds);
+    return index === undefined ? undefined : bars[index].time * 1000;
+  }
+  const steps = Math.floor(timeframeBarOffset(timeframe, newest, lastInstantSeconds));
+  return timeframeBarTime(timeframe, newest, steps) * 1000;
+}
+
+/** The index of the newest bar that opened at or before `timeSeconds`; undefined when every bar is later. */
+function lastBarOpenedAtOrBefore(barSeries: TimeModel, timeSeconds: number): number | undefined {
+  const { bars } = barSeries;
+  if (bars[0].time > timeSeconds) {
+    return undefined;
+  }
+  // The newest bar at or before the instant, found by bisection: history can be thousands of bars long.
+  let low = 0;
+  let high = bars.length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (bars[middle].time <= timeSeconds) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return low;
 }

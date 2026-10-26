@@ -1,12 +1,19 @@
 import { test, expect } from '@playwright/test';
 import { ChartDrawings, type ChartDrawingCommands } from '../src/features/chart/engine/drawings/chartDrawings';
-import type { ChartDrawingRecord, ChartDrawingSelection } from '../src/features/chart/engine/drawings/drawingRecord';
+import type {
+  ChartDrawingPoint,
+  ChartDrawingRecord,
+  ChartDrawingSelection,
+} from '../src/features/chart/engine/drawings/drawingRecord';
 import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
 
 /**
  * What the chart's drawings delegate to the command port and what they report back to the app,
  * with a fake port that records every call. The class is DOM-free, so no browser is needed.
  */
+
+/** One anchor point of a stored drawing; these commands pass it through untouched. */
+const ANCHOR: ChartDrawingPoint = { timeMs: 1_700_000_000_000, price: null };
 
 /** What the fake commands answer with; a test changes them to steer the drawings. */
 interface CommandAnswers {
@@ -62,6 +69,13 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
   };
 }
 
+/** Records one change subscriber that pushes its label to the timeline; answers its unsubscribe. */
+function recordChanges(drawings: ChartDrawings, timeline: string[], label = 'change'): () => void {
+  return drawings.subscribeChanges(() => {
+    timeline.push(label);
+  });
+}
+
 function buildHarness(): Harness {
   const calls: CommandCall[] = [];
   const timeline: string[] = [];
@@ -70,13 +84,11 @@ function buildHarness(): Harness {
   const drawings = new ChartDrawings(commandsFor(answers, calls), () => {
     timeline.push('repaint');
   });
-  drawings.onSelectionChange = (selection) => {
+  drawings.subscribeSelection((selection) => {
     timeline.push('selection');
     selections.push(selection);
-  };
-  drawings.onChange = () => {
-    timeline.push('change');
-  };
+  });
+  recordChanges(drawings, timeline);
   return { drawings, answers, calls, timeline, selections };
 }
 
@@ -112,7 +124,7 @@ test('new settings reach the commands with the same arguments and repaint once',
 test('replacing the records hands the same records to the commands and repaints once', () => {
   const { drawings, calls, timeline } = buildHarness();
   const records: ChartDrawingRecord[] = [
-    { id: 'line-1', toolId: 'trend-line', locked: false, inputs: {}, geometry: null },
+    { id: 'line-1', toolId: 'trend-line', locked: false, visible: true, inputs: {}, points: [ANCHOR] },
   ];
   drawings.replaceRecords(records);
   expect(calls).toEqual([{ name: 'replaceDrawings', args: [records] }]);
@@ -123,7 +135,7 @@ test('reading the selection and the records answers from the commands without re
   const harness = buildHarness();
   const selection: ChartDrawingSelection = { toolId: 'trend-line', drawingId: 'line-1', locked: true };
   const records: ChartDrawingRecord[] = [
-    { id: 'line-1', toolId: 'trend-line', locked: true, inputs: {}, geometry: null },
+    { id: 'line-1', toolId: 'trend-line', locked: true, visible: false, inputs: {}, points: [ANCHOR] },
   ];
   harness.answers.selection = selection;
   harness.answers.records = records;
@@ -144,4 +156,16 @@ test('a changed drawing set asks the app to save without repainting', () => {
   const { drawings, timeline } = buildHarness();
   drawings.drawingsChanged();
   expect(timeline).toEqual(['change']);
+});
+
+test('one change reaches every subscriber and stops reaching an unsubscribed one', () => {
+  const { drawings, timeline } = buildHarness();
+  const stopsSecond = recordChanges(drawings, timeline, 'second');
+  const stopsThird = recordChanges(drawings, timeline, 'third');
+  stopsThird();
+  drawings.drawingsChanged();
+  expect(timeline).toEqual(['change', 'second']);
+  stopsSecond();
+  drawings.drawingsChanged();
+  expect(timeline).toEqual(['change', 'second', 'change']);
 });

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { ChartToolSet } from '../src/features/chart/engine/tools/toolSet';
 import type {
+  ChartDrawingPoint,
   ChartDrawingRecord,
   ChartDrawingSelection,
   ChartToolDrawingRecord,
@@ -20,6 +21,9 @@ import type {
  * call they receive and keep their drawings in memory. The set is DOM-free, so no
  * browser is needed.
  */
+
+/** One anchor point, which the fake tools keep unchanged: the set routes them, it never reads them. */
+const ORIGIN_POINT: ChartDrawingPoint = { timeMs: 0, price: null };
 
 /** One fake tool's drawings, with the pane x a press hits each of them at. */
 interface FakeDrawings {
@@ -109,7 +113,13 @@ function buildToolSet(toolIds = ['a', 'b', 'c'], placementToolIds: readonly stri
         private commitDrawing(x: number): void {
           const drawingId = `drawing-${id}-${this.placedCount}`;
           this.placedCount += 1;
-          state.records.push({ id: drawingId, locked: false, inputs: {}, geometry: { x } });
+          state.records.push({
+            id: drawingId,
+            locked: false,
+            visible: true,
+            inputs: {},
+            points: [ORIGIN_POINT],
+          });
           state.hitAtX.set(x, drawingId);
           this.host.drawingPlaced(drawingId);
         }
@@ -157,7 +167,7 @@ function seedDrawing(harness: Harness, toolId: string, drawingId: string, x: num
   if (state === undefined) {
     throw new Error(`No fake tool "${toolId}"`);
   }
-  state.records.push({ id: drawingId, locked: false, inputs: {}, geometry: null });
+  state.records.push({ id: drawingId, locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] });
   state.hitAtX.set(x, drawingId);
 }
 
@@ -325,9 +335,9 @@ test('importing hands each tool only its own records, drops unknown tools and re
   harness.selections.length = 0;
   harness.reports.drawingsChanged = 0;
   const records: ChartDrawingRecord[] = [
-    { id: 'a-1', toolId: 'a', locked: false, inputs: {}, geometry: null },
-    { id: 'b-1', toolId: 'b', locked: true, inputs: { period: 20 }, geometry: { from: 1 } },
-    { id: 'c-1', toolId: 'c', locked: false, inputs: {}, geometry: null },
+    { id: 'a-1', toolId: 'a', locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] },
+    { id: 'b-1', toolId: 'b', locked: true, visible: false, inputs: { period: 20 }, points: [ORIGIN_POINT] },
+    { id: 'c-1', toolId: 'c', locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] },
   ];
   harness.tools.replaceDrawings(records);
   expect(harness.tools.selectedDrawing()).toBeNull();

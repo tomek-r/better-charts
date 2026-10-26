@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
 import { createFakeToolHost, oneMinuteBars, SLOT_WIDTH_PX, FAKE_SYMBOL } from './helpers/fakeToolHost';
 import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/tool';
-import { readFixedRangeProfileGeometry } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfileGeometry';
+import { readFixedRangeProfilePoints } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfilePoints';
 
 /**
  * Many independent drawings of one tool: two placements no longer replace each other, each drawing has
@@ -131,16 +131,38 @@ test('an export imports into a fresh tool that asks for each profile without rep
   expect(target.fakeHost.changeCount()).toBe(0);
   expect(target.market.requests).toHaveLength(1);
   answerInFlight(target);
-  const restoredFrom = records.map((record) => readFixedRangeProfileGeometry(record.geometry)?.fromMs);
+  const restoredFrom = records.map((record) => readFixedRangeProfilePoints(record.points)?.fromMs);
   expect(target.market.requests.map((request) => request.fromMs)).toEqual(restoredFrom);
 });
 
-test('an import drops a record whose stored geometry is not a range', () => {
+test('a stored drawing exports the points, the lock and the visibility it arrived with', () => {
+  const source = createSession();
+  source.place(FIRST_CLICKS);
+  const [record] = source.tool.exportDrawings();
+  expect(record.visible).toBe(true);
+  expect(record.points).toEqual([
+    { timeMs: 1_120_000, price: null },
+    { timeMs: 1_420_000, price: null },
+  ]);
+
+  const target = createSession();
+  target.tool.importDrawings([{ ...record, visible: false }]);
+
+  expect(target.tool.exportDrawings()).toEqual([{ ...record, visible: false }]);
+});
+
+test('an import drops a record whose points do not name a window', () => {
   const source = createSession();
   source.place(FIRST_CLICKS);
   const [record] = source.tool.exportDrawings();
   const target = createSession();
-  target.tool.importDrawings([record, { ...record, id: 'broken', geometry: { fromMs: 'noon' } }]);
+  const [start, end] = record.points;
+  target.tool.importDrawings([
+    record,
+    { ...record, id: 'reversed', points: [end, start] },
+    { ...record, id: 'priced', points: [{ ...start, price: '1.0850' }, end] },
+  ]);
+
   expect(
     target.tool
       .testApi()

@@ -1,91 +1,35 @@
 import { test, expect, type Page } from '@playwright/test';
-import { profileBoundaries as boundaries, profileDrawings, profileSelection } from './helpers/chartTest';
+import { profileBoundaries as boundaries, profileDrawings } from './helpers/chartTest';
+import {
+  commitProfile,
+  data,
+  position,
+  profileState,
+  ready,
+  requestProfile,
+  requests,
+  respond,
+  select,
+} from './helpers/fixedRangeProfilePage';
 import { openTradePanel } from './helpers/panel';
 import { SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
-import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
+import {
+  eurusdFormingBar,
+  eurusdQuote,
+  gotoWithStub,
+  pushEvent,
+  STUB_M5_INTERVAL_MS,
+  STUB_NOW,
+  stubInvocations,
+} from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
 import { LOADING_WASH_ALPHA } from '../src/features/tools/fixedRangeProfile/overlay';
 import { LOADER_MAX_WIDTH, LOADER_ROW_COUNT, LOADER_ROW_HEIGHT } from '../src/shared/canvas/loader';
 import { palette } from '../src/shared/theme/palette';
 
-const INTERVAL = 300_000;
+const INTERVAL = STUB_M5_INTERVAL_MS;
 /** The loader paints one red and one teal bar per row in every frame. */
 const BARS_PER_LOADER = LOADER_ROW_COUNT * 2;
-async function data(page: Page) {
-  return page.evaluate(() => window.__chartTest?.data() ?? []);
-}
-async function profileState(page: Page) {
-  return (await profileSelection(page))!;
-}
-async function requests(page: Page) {
-  return (await stubInvocations(page)).filter((entry) => entry.cmd === 'request_tick_profile');
-}
-async function position(page: Page, index: number) {
-  const x = await page.evaluate(
-    (timeMs) => {
-      const x = window.__chartTest?.timeToX(timeMs);
-      if (x === undefined || Number.isNaN(x)) {
-        throw new Error('Expected real candle coordinate');
-      }
-      return x;
-    },
-    STUB_NOW - (10 - index) * INTERVAL,
-  );
-  const host = (await page.locator('.chart-host').boundingBox())!;
-  return { x: host.x + x, y: host.y + host.height * 0.3 };
-}
-async function ready(page: Page) {
-  await expect.poll(async () => (await data(page)).length).toBe(10);
-  // Keep every real candle visible for real pointer interactions.
-  await page.evaluate(() => window.__chartTest?.scrollToRange({ from: -2, to: 14 }));
-}
-async function select(page: Page, first = 2, second = 6) {
-  await page.getByRole('button', { name: 'Fixed range volume profile', exact: true }).click();
-  const from = await position(page, first);
-  const to = await position(page, second);
-  await page.mouse.click(from.x, from.y);
-  await page.mouse.click(to.x, to.y);
-  await expect(page.getByRole('button', { name: 'Pointer tools', exact: true })).toHaveClass(/active/);
-}
-async function respond(page: Page, requestIndex = 0, complete = true) {
-  const request = (await requests(page))[requestIndex];
-  await pushEvent(page, 'tick-profile', {
-    source: 'ticks',
-    barTimeframe: null,
-    coveredFromMs: null,
-    symbol: request.args.symbol,
-    fromMs: request.args.fromMs,
-    endMs: request.args.endMs,
-    complete,
-    rejectedTicks: 0,
-    actualRows: 2,
-    totalWeight: 4,
-    poc: '1.0850',
-    vah: '1.0855',
-    val: '1.0845',
-    bidLevels: null,
-    askLevels: null,
-    bins: [
-      { low: '1.0845', high: '1.0850', total: '2', bid: '1', ask: '1' },
-      { low: '1.0850', high: '1.0855', total: '2', bid: '1', ask: '1' },
-    ],
-  });
-}
-
-/** Loads the app, draws the default FRVP range and waits until its profile request left the app. */
-async function requestProfile(page: Page) {
-  await gotoWithStub(page);
-  await ready(page);
-  await select(page);
-  await expect.poll(async () => (await requests(page)).length).toBe(1);
-}
-
-/** As `requestProfile`, then answers it so the profile is committed. */
-async function commitProfile(page: Page) {
-  await requestProfile(page);
-  await respond(page);
-  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
-}
 
 for (const higher of [
   { wire: 'M5', label: '5m', intervalMs: 300_000 },

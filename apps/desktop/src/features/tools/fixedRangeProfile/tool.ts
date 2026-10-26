@@ -15,9 +15,15 @@ import {
   type ToolInputValues,
 } from '../../chart/engine/drawings/toolInputs';
 import { FixedRangeProfileDrawing } from './drawing/fixedRangeProfileDrawing';
-import { readFixedRangeProfileGeometry } from './drawing/fixedRangeProfileGeometry';
+import { readFixedRangeProfilePoints } from './drawing/fixedRangeProfilePoints';
 import { TickProfileRequestQueue } from './requests/tickProfileRequestQueue';
-import { sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './range';
+import {
+  lastSlotOpenBefore,
+  sameRange,
+  spanBetweenAnchors,
+  type FixedRangeProfileRange,
+  type PlacedFixedRangeProfile,
+} from './range';
 
 /**
  * The FRVP's settings; empty until its inputs are designed. Every drawing still stores resolved
@@ -38,6 +44,15 @@ interface BoundaryDrag {
   readonly side: 'from' | 'end';
   readonly original: PlacedFixedRangeProfile;
   preview: PlacedFixedRangeProfile;
+}
+
+/**
+ * A stored drawing that arrived before the series had bars: the record itself, and the window its
+ * points name. Its handle sits on a slot of the bars, so the drawing is only built once they exist.
+ */
+interface PendingRestore {
+  readonly record: ChartToolDrawingRecord;
+  readonly window: FixedRangeProfileRange;
 }
 
 /** What the e2e suite reads through `window.__chartTest.tool('fixedRangeProfile')` (dev builds only). */
@@ -71,8 +86,8 @@ export class FixedRangeProfileTool implements ChartTool {
   private drag: BoundaryDrag | null = null;
   /** Paint order: the last drawing sits on top and is the first one a hit test finds. */
   private readonly drawings: FixedRangeProfileDrawing[] = [];
-  /** Restored drawings imported before the series had bars: their profiles are requested on the first bar. */
-  private awaitingBars: FixedRangeProfileDrawing[] = [];
+  /** Stored drawings that arrived before the series had bars: they are built on the first bar. */
+  private awaitingBars: PendingRestore[] = [];
   private selectedId: string | null = null;
   private readonly queue: TickProfileRequestQueue;
 
@@ -150,7 +165,6 @@ export class FixedRangeProfileTool implements ChartTool {
     if (this.selectedId === drawingId) {
       this.selectedId = null;
     }
-    this.awaitingBars = this.awaitingBars.filter((waiting) => waiting !== drawing);
     drawing.cancelRequest();
     drawing.dispose();
     this.host.requestRepaint();
@@ -178,29 +192,36 @@ export class FixedRangeProfileTool implements ChartTool {
   }
 
   exportDrawings(): ChartToolDrawingRecord[] {
+    // Drawings still waiting for bars are exported exactly as they arrived, so a save triggered
+    // from elsewhere never drops them; they and `drawings` are never both filled.
+    if (this.awaitingBars.length > 0) {
+      return this.awaitingBars.map(({ record }) => record);
+    }
     return this.drawings.map((drawing) => drawing.toRecord());
   }
 
-  /** Replaces every drawing with the stored ones, dropping unreadable geometry; nothing is reported to the host. */
+  /** Replaces every drawing with the stored ones, dropping unreadable points; nothing is reported to the host. */
   importDrawings(records: readonly ChartToolDrawingRecord[]): void {
     this.dropEveryDrawing();
     for (const record of records) {
-      const geometry = readFixedRangeProfileGeometry(record.geometry);
-      if (geometry) {
-        this.drawings.push(this.restoredDrawing(record, geometry));
+      const window = readFixedRangeProfilePoints(record.points);
+      if (!window) {
+        continue;
       }
+      if (this.host.barSeries.bars.length === 0) {
+        this.awaitingBars.push({ record, window });
+        continue;
+      }
+      this.restore(record, window);
     }
-    this.requestRestoredProfiles();
+    // Every drawing here was imported, so this requests the restored profiles and nothing else.
+    this.drawings.forEach((drawing) => drawing.requestProfile());
     this.host.requestRepaint();
   }
 
-  /** The profiles of the imported drawings, then the live refresh every open range needs. */
+  /** Places the drawings imported before the series had bars and requests their profiles. */
   barsChanged(): void {
-    if (this.awaitingBars.length > 0 && this.host.barSeries.bars.length > 0) {
-      const restored = this.awaitingBars;
-      this.awaitingBars = [];
-      restored.forEach((drawing) => drawing.requestProfile());
-    }
+    this.restoreAwaitingDrawings();
     // A boundary drag owns its range until it is released or cancelled.
     this.drawings.filter((drawing) => drawing !== this.drag?.drawing).forEach((drawing) => drawing.barsChanged());
   }
@@ -339,24 +360,37 @@ export class FixedRangeProfileTool implements ChartTool {
     return { range, hasProfile: drawing?.hasProfile() ?? false };
   }
 
-  /** The drawing built from a stored record whose geometry the tool could read. */
-  private restoredDrawing(record: ChartToolDrawingRecord, geometry: PlacedFixedRangeProfile): FixedRangeProfileDrawing {
-    return FixedRangeProfileDrawing.restored(this.host, this.queue, {
+  /** The drawing built from a stored record whose points the tool could read. */
+  private restore(
+    record: ChartToolDrawingRecord,
+    window: FixedRangeProfileRange,
+  ): FixedRangeProfileDrawing | undefined {
+    const lastSlotOpenMs = lastSlotOpenBefore(this.host.barSeries, window.endMs);
+    if (lastSlotOpenMs === undefined) {
+      // The window predates the loaded history, so there is no slot to put its handle on.
+      return undefined;
+    }
+    const drawing = FixedRangeProfileDrawing.restored(this.host, this.queue, {
       id: record.id,
       locked: record.locked,
+      visible: record.visible,
       inputs: resolveToolInputValues(FIXED_RANGE_PROFILE_INPUTS, record.inputs),
-      range: geometry,
+      range: { ...window, lastSlotOpenMs },
     });
+    this.drawings.push(drawing);
+    return drawing;
   }
 
-  /** Requests the imported profiles now that the series has bars; before that they wait for the first bar. */
-  private requestRestoredProfiles(): void {
-    if (this.host.barSeries.bars.length === 0) {
-      this.awaitingBars = [...this.drawings];
+  /** Places the drawings that waited for bars, and asks for their profiles now that the slots are known. */
+  private restoreAwaitingDrawings(): void {
+    if (this.awaitingBars.length === 0 || this.host.barSeries.bars.length === 0) {
       return;
     }
+    const awaiting = this.awaitingBars;
     this.awaitingBars = [];
-    this.drawings.forEach((drawing) => drawing.requestProfile());
+    for (const { record, window } of awaiting) {
+      this.restore(record, window)?.requestProfile();
+    }
   }
 
   /** Forgets every drawing, its requests and the selection; the backend is not touched. */

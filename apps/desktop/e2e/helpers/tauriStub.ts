@@ -108,7 +108,21 @@ export interface TauriStubOptions {
   installDelayMs?: number;
   /** Holds `restart_mt5_with_ea` open this long, to observe the buttons while MT5 reopens. */
   restartDelayMs?: number;
+  /**
+   * Drawings the backend already holds, keyed by `chartDrawingScopeKey(accountKey, symbol)`
+   * as an earlier run of the app saved them. Written before the app loads; a reload in
+   * the same test keeps whatever the app saved afterwards.
+   */
+  chartDrawings?: Record<string, unknown[]>;
+  /**
+   * Scopes whose saved file the backend cannot read: `load_chart_drawings` rejects for
+   * them, the way a corrupt file does.
+   */
+  unreadableChartDrawings?: string[];
 }
+
+/** Session key of the drawings the stub's backend holds, so a page reload keeps them. */
+const STUB_CHART_DRAWINGS_KEY = '__stubChartDrawings';
 
 export interface RecordedHistory {
   symbol: string;
@@ -256,9 +270,15 @@ export async function installTauriStub(
   page: Pick<Page, 'addInitScript'>,
   options: TauriStubOptions = {},
 ): Promise<void> {
-  const stubArgument = { opts: options, now: STUB_NOW };
-  await page.addInitScript(({ opts, now: NOW }: typeof stubArgument) => {
+  const stubArgument = { opts: options, now: STUB_NOW, chartDrawingsKey: STUB_CHART_DRAWINGS_KEY };
+  await page.addInitScript(({ opts, now: NOW, chartDrawingsKey }: typeof stubArgument) => {
     const w = window as unknown as Record<string, unknown>;
+
+    // A test seeds the drawings an earlier run saved. Filling only an empty store
+    // keeps a reload in the same test on what the app has saved since.
+    if (opts.chartDrawings && sessionStorage.getItem(chartDrawingsKey) === null) {
+      sessionStorage.setItem(chartDrawingsKey, JSON.stringify(opts.chartDrawings));
+    }
 
     const safety = {
       journalState: 'ready',
@@ -531,6 +551,27 @@ export async function installTauriStub(
     const invocations: Array<{ cmd: string; args: Record<string, unknown> }> = [];
     let nextCallbackId = 1;
 
+    /** The drawings the stub's backend holds right now, keyed `${accountKey}\n${symbol}`. */
+    function storedChartDrawings(): Record<string, unknown[]> {
+      const raw = sessionStorage.getItem(chartDrawingsKey);
+      if (raw === null) {
+        return {};
+      }
+      try {
+        return JSON.parse(raw) as Record<string, unknown[]>;
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) {
+          throw error;
+        }
+        return {};
+      }
+    }
+
+    /** The one list the drawing commands address: the account and the symbol, kept apart. */
+    function chartDrawingKey(args: Record<string, unknown>): string {
+      return `${String(args.accountKey)}\n${String(args.symbol)}`;
+    }
+
     /** Candle deliveries (snapshots and older pages), for harnesses that verify data volume. */
     const deliveries: Array<{ event: string; symbol: unknown; timeframe: unknown; candles: number }> = [];
 
@@ -801,6 +842,27 @@ export async function installTauriStub(
         choices.push(String(args.path));
         w.__mt5Choices = choices;
       }
+      // Saved chart drawings: one list per account and symbol, answered from the page's
+      // own store so a reload in the same test still sees what the app saved. A seeded
+      // unreadable scope rejects exactly like a corrupt file behind the real backend.
+      if (cmd === 'load_chart_drawings' || cmd === 'save_chart_drawings') {
+        const key = chartDrawingKey(args);
+        if (cmd === 'load_chart_drawings' && opts.unreadableChartDrawings?.includes(key)) {
+          throw new Error('Saved drawings could not be read');
+        }
+        const stored = storedChartDrawings();
+        if (cmd === 'load_chart_drawings') {
+          return stored[key] ?? [];
+        }
+        const records = (args.records as unknown[] | undefined) ?? [];
+        if (records.length === 0) {
+          delete stored[key];
+        } else {
+          stored[key] = records;
+        }
+        sessionStorage.setItem(chartDrawingsKey, JSON.stringify(stored));
+        return null;
+      }
       if (Object.prototype.hasOwnProperty.call(failures, cmd)) {
         throw new Error(failures[cmd]);
       }
@@ -940,6 +1002,32 @@ export async function stubInvocations(page: Page): Promise<RecordedInvoke[]> {
 export async function wasInvoked(page: Page, cmd: string): Promise<RecordedInvoke | undefined> {
   const all = await stubInvocations(page);
   return all.find((entry) => entry.cmd === cmd);
+}
+
+/** The key one scope's drawings are stored under, as the stub's backend addresses them. */
+export function chartDrawingScopeKey(accountKey: string, symbol: string): string {
+  return `${accountKey}\n${symbol}`;
+}
+
+/** The drawing lists the stub's backend holds right now, keyed like `TauriStubOptions.chartDrawings`. */
+export async function stubChartDrawings(page: Page): Promise<Record<string, unknown[]>> {
+  return page.evaluate(
+    (key) => JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, unknown[]>,
+    STUB_CHART_DRAWINGS_KEY,
+  );
+}
+
+/** The ids of one scope's saved drawings, in the order the backend keeps them. */
+export async function storedDrawingIds(page: Page, accountKey: string, symbol: string): Promise<string[]> {
+  const stored = await stubChartDrawings(page);
+  const records = (stored[chartDrawingScopeKey(accountKey, symbol)] ?? []) as Array<{ id?: unknown }>;
+  return records.map((record) => String(record.id));
+}
+
+/** How many `save_chart_drawings` calls the app sent, so a save that must not happen is visible. */
+export async function chartDrawingSaveCount(page: Page): Promise<number> {
+  const all = await stubInvocations(page);
+  return all.filter((entry) => entry.cmd === 'save_chart_drawings').length;
 }
 
 /** Pushes a bridge event through the same registry `listen()` wrote into. */

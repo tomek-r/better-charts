@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { readChartDrawingRecord } from '../src/features/chart/engine/drawings/drawingRecord';
+import {
+  formatPointPrice,
+  parsePointPrice,
+  readChartDrawingRecord,
+} from '../src/features/chart/engine/drawings/drawingRecord';
 import {
   defaultToolInputValues,
   isValidToolInputValue,
@@ -211,9 +215,18 @@ const STORED_DRAWING = {
   id: 'drawing-1',
   toolId: 'fixedRangeProfile',
   locked: false,
+  visible: true,
   inputs: { period: 20, filled: true, basis: 'hlc3' },
-  geometry: { from: { index: 4 }, to: { index: 9 } },
+  points: [
+    { timeMs: 1_700_000_000_000, price: null },
+    { timeMs: null, price: '1.08505' },
+  ],
 };
+
+/** The stored drawing with one point replaced, so a rejection names the single broken rule. */
+function withPoint(value: unknown): Record<string, unknown> {
+  return { ...STORED_DRAWING, points: [value] };
+}
 
 function withoutKey(record: Record<string, unknown>, key: string): Record<string, unknown> {
   return Object.fromEntries(Object.entries(record).filter(([entryKey]) => entryKey !== key));
@@ -223,8 +236,23 @@ test('a well-formed stored drawing is read back unchanged', () => {
   expect(readChartDrawingRecord(STORED_DRAWING)).toEqual(STORED_DRAWING);
 });
 
+test('a point may carry a time, a price, or both', () => {
+  const both = withPoint({ timeMs: 1_700_000_000_000, price: '-2.5' });
+  expect(readChartDrawingRecord(both)?.points).toEqual([{ timeMs: 1_700_000_000_000, price: '-2.5' }]);
+});
+
 const REJECTED_DRAWINGS: ReadonlyArray<{ name: string; value: unknown }> = [
-  { name: 'a drawing without geometry', value: withoutKey(STORED_DRAWING, 'geometry') },
+  { name: 'a drawing without points', value: withoutKey(STORED_DRAWING, 'points') },
+  { name: 'a drawing with no point at all', value: { ...STORED_DRAWING, points: [] } },
+  { name: 'a drawing whose visible flag is not a boolean', value: { ...STORED_DRAWING, visible: 'yes' } },
+  { name: 'a point with neither a time nor a price', value: withPoint({ timeMs: null, price: null }) },
+  { name: 'a point time that is not whole milliseconds', value: withPoint({ timeMs: 1.5, price: null }) },
+  { name: 'a point price in exponent form', value: withPoint({ timeMs: null, price: '1e5' }) },
+  { name: 'a point that is not a record', value: withPoint('1.085') },
+  {
+    name: 'a drawing with more points than a drawing keeps',
+    value: { ...STORED_DRAWING, points: Array.from({ length: 2001 }, () => ({ timeMs: 0, price: null })) },
+  },
   { name: 'a drawing with an empty id', value: { ...STORED_DRAWING, id: '' } },
   { name: 'a drawing with an empty tool id', value: { ...STORED_DRAWING, toolId: '' } },
   { name: 'a drawing whose lock flag is not a boolean', value: { ...STORED_DRAWING, locked: 'no' } },
@@ -237,3 +265,19 @@ for (const { name, value } of REJECTED_DRAWINGS) {
     expect(readChartDrawingRecord(value)).toBeUndefined();
   });
 }
+
+test('a price is stored as decimal text and read back as the same digits', () => {
+  for (const price of [1.08505, 1.1, -2.5, 0, 1e-7]) {
+    const text = formatPointPrice(price);
+    expect(parsePointPrice(text)).toBe(price);
+  }
+  expect(formatPointPrice(1.1)).toBe('1.1');
+  expect(formatPointPrice(1e-7)).toBe('0.0000001');
+  expect(parsePointPrice('1.08505')).toBe(1.08505);
+});
+
+test('a text that is not decimal price text parses to NaN', () => {
+  for (const text of ['', '1e5', '1,5', '.5', '1.', '1.2.3', ' 1']) {
+    expect(parsePointPrice(text)).toBeNaN();
+  }
+});

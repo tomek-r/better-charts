@@ -139,7 +139,7 @@ export interface ChartTool {
   /** Every drawing of this tool, for the app to save. */
   exportDrawings?(): ChartToolDrawingRecord[];
   /**
-   * Replaces every drawing of the tool. The tool validates geometry and inputs and drops
+   * Replaces every drawing of the tool. The tool validates the points and the inputs and drops
    * invalid records; it reports nothing through the host, because nothing was placed.
    */
   importDrawings?(records: readonly ChartToolDrawingRecord[]): void;

@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "apps/desktop/src-tauri",
+  "crates/sqlite-store",
   "crates/trading-core",
 ]
 resolver = "2"

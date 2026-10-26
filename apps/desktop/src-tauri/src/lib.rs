@@ -2,6 +2,7 @@
 
 mod app_settings;
 mod bridge;
+mod chart_drawings;
 mod download_resources;
 mod execution_adapter;
 mod execution_journal;
@@ -22,6 +23,7 @@ use bridge::commands::{
 };
 use bridge::connection::run_server;
 use bridge::state::BridgeState;
+use chart_drawings::{load_chart_drawings, save_chart_drawings, ChartDrawingsState};
 use download_resources::save_bundled_resource;
 use execution_adapter::ExecutionAdapterState;
 use execution_journal::{app_data_dir, ExecutionSafetyState};
@@ -139,17 +141,23 @@ pub fn run() {
         .map(|error| format!("{error}; fix or remove the runtime .env file and restart"));
     let app_settings = AppSettingsState::load(runtime_error);
     let trading_enabled = app_settings.startup_trading_enabled();
+    // Saved drawings live under the same app data folder as the journal; without one
+    // their store refuses every call instead of losing what the user drew.
+    let chart_drawings = ChartDrawingsState::open(app_data_dir());
     let bridge_state = BridgeState::default();
     let mt5_backend = Mt5BackendState::from_env();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(app_settings)
+        .manage(chart_drawings)
         .manage(ChosenInstallation::default())
         .manage(bridge_state.clone())
         .manage(mt5_backend.clone())
         .invoke_handler(tauri::generate_handler![
             get_app_settings,
             save_app_settings,
+            load_chart_drawings,
+            save_chart_drawings,
             get_execution_safety_status,
             get_execution_recovery_snapshot,
             get_execution_queue_status,

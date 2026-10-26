@@ -18,7 +18,7 @@ import {
 import { isRangeOpen, rangeEndingAtAnchor, type PlacedFixedRangeProfile } from '../range';
 import { FixedRangeProfileRequester } from '../requests/fixedRangeProfileRequester';
 import type { TickProfileRequestQueue } from '../requests/tickProfileRequestQueue';
-import { fixedRangeProfileGeometry } from './fixedRangeProfileGeometry';
+import { fixedRangeProfilePoints } from './fixedRangeProfilePoints';
 
 /** How close to a handle a press or a hit test counts as that handle, in pane CSS px. */
 export const HANDLE_HIT_PX = 7;
@@ -31,11 +31,12 @@ const HANDLE_DASH_PX = [4, 3];
 export interface FixedRangeProfileDrawingSpec {
   readonly id: string;
   readonly locked: boolean;
+  readonly visible: boolean;
   readonly inputs: ToolInputValues;
   readonly range: PlacedFixedRangeProfile;
 }
 
-/** What a fresh placement carries: the tool resolved its settings, the drawing starts unlocked. */
+/** What a fresh placement carries: the tool resolved its settings, the drawing starts unlocked and painted. */
 export interface FixedRangeProfilePlacement {
   readonly id: string;
   readonly range: PlacedFixedRangeProfile;
@@ -67,6 +68,8 @@ export interface FixedRangeProfileDrawingSummary {
 export class FixedRangeProfileDrawing {
   readonly id: string;
   locked: boolean;
+  /** Stored and exported as it arrived; hiding the drawing arrives with its own behaviour later. */
+  visible: boolean;
   inputs: ToolInputValues;
   /** The overlay's state: this drawing's range, its profile and the flags the requester and the tool write. */
   readonly state: FixedRangeProfileState = { range: null, hit: {} };
@@ -85,21 +88,22 @@ export class FixedRangeProfileDrawing {
   ) {
     this.id = spec.id;
     this.locked = spec.locked;
+    this.visible = spec.visible;
     this.inputs = spec.inputs;
     this.range = spec.range;
     this.requester = new FixedRangeProfileRequester(host, queue.portFor(spec.id), this.state, () => this.range);
   }
 
-  /** A drawing the user just placed: unlocked, with the tool's resolved settings. */
+  /** A drawing the user just placed: unlocked, painted, with the tool's resolved settings. */
   static placed(
     host: ChartToolHost,
     queue: TickProfileRequestQueue,
     placement: FixedRangeProfilePlacement,
   ): FixedRangeProfileDrawing {
-    return new FixedRangeProfileDrawing(host, queue, { ...placement, locked: false });
+    return new FixedRangeProfileDrawing(host, queue, { ...placement, locked: false, visible: true });
   }
 
-  /** A drawing read back from the app's storage: its geometry and settings were validated by the caller. */
+  /** A drawing read back from the app's storage: its points and settings were validated by the caller. */
   static restored(
     host: ChartToolHost,
     queue: TickProfileRequestQueue,
@@ -279,7 +283,13 @@ export class FixedRangeProfileDrawing {
 
   /** This drawing as the app saves it: no reference into the live state. */
   toRecord(): ChartToolDrawingRecord {
-    return { id: this.id, locked: this.locked, inputs: this.inputs, geometry: fixedRangeProfileGeometry(this.range) };
+    return {
+      id: this.id,
+      locked: this.locked,
+      visible: this.visible,
+      inputs: this.inputs,
+      points: fixedRangeProfilePoints(this.range),
+    };
   }
 
   /** The drawing was deleted: abandon its request and stop the backend work behind it. */
