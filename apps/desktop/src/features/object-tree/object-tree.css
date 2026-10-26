@@ -8,13 +8,6 @@
   font-weight: 600;
 }
 
-.object-tree-empty {
-  margin: 0;
-  padding: 8px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-}
-
 .object-tree-list {
   margin: 0;
   padding: 0;
