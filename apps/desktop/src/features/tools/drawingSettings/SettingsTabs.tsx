@@ -27,7 +27,15 @@ interface SettingsTabsProps extends SettingsPanelProps {
  * The tablist and the panel of the selected tab. Selection follows focus, so an arrow key both moves
  * to and opens the next tab; only the selected tab sits in the tab order.
  */
-export function SettingsTabs({ tabs, values, onChange, coordinates, selectedId, onSelect }: SettingsTabsProps) {
+export function SettingsTabs({
+  tabs,
+  values,
+  onChange,
+  coordinates,
+  timeframeVisibility,
+  selectedId,
+  onSelect,
+}: SettingsTabsProps) {
   const idPrefix = useId();
   const selected = tabs.find((tab) => tab.id === selectedId) ?? tabs[0];
 
@@ -66,7 +74,7 @@ export function SettingsTabs({ tabs, values, onChange, coordinates, selectedId, 
         role="tabpanel"
         aria-labelledby={`${idPrefix}-tab-${selected.id}`}
       >
-        {selected.render({ values, onChange, coordinates })}
+        {selected.render({ values, onChange, coordinates, timeframeVisibility })}
       </div>
     </>
   );

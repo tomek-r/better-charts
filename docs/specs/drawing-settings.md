@@ -20,6 +20,10 @@ full set.
    - Minutes 1-30 (1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30) and Hours 1-12 (1, 2, 3, 4, 6, 8, 12) as snapping range
      sliders.
    - Days, Weeks and Months as checkboxes.
+   - Stored per drawing as `timeframeVisibility` (`minutes` and `hours` as `{ shown, from, to }` counts, plus
+     `days`, `weeks`, `months` flags). A record without it shows everywhere. The tool set owns it like
+     `belowBars`, stamps it on export and applies it in the paint and hit passes; the drawing keeps its own
+     `visible` flag. The Rust store keeps it as JSON text in a column added by migration v3.
 4. `profile-request-params`: rows layout and value area percent in the Rust profile request.
 5. `fixed-range-profile-settings`: the tool declares its inputs and styles.
 

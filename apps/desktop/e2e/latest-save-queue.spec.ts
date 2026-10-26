@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { ChartDrawingRecord } from '../src/features/chart/engine/drawings/drawingRecord';
+import { DEFAULT_TIMEFRAME_VISIBILITY } from '../src/features/chart/engine/drawings/timeframeVisibility';
 import { LatestSaveQueue } from '../src/features/chart/drawingPersistence/latestSaveQueue';
 
 /**
@@ -55,6 +56,7 @@ function drawingList(...ids: string[]): ChartDrawingRecord[] {
     locked: false,
     visible: true,
     belowBars: false,
+    timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
     inputs: {},
     points: [{ timeMs: 0, price: null }],
   }));

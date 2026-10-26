@@ -6,6 +6,7 @@ use super::{
     error::ChartDrawingError,
     record::{ChartDrawingPoint, ChartDrawingRecord},
     store::{ChartDrawingStore, DrawingScope, MAX_DRAWINGS_PER_SCOPE},
+    timeframe_visibility::TimeframeVisibility,
 };
 use serde_json::Value;
 use sqlite_store::rusqlite;
@@ -25,6 +26,8 @@ const APPLICATION_ID: i32 = 0x4243_4131;
 const SCHEMA_VERSION: u32 = 1;
 /// The version that records whether a drawing is stacked below the price bars.
 const BELOW_BARS_VERSION: u32 = 2;
+/// The version that records on which timeframes a drawing paints.
+const TIMEFRAME_VISIBILITY_VERSION: u32 = 3;
 
 /// The schema of the drawings database: one drawing, then its ordered points.
 const CREATE_SCHEMA: &str = "\
@@ -53,8 +56,15 @@ const ADD_BELOW_BARS_COLUMN: &str = "\
 ALTER TABLE chart_drawings
   ADD COLUMN is_below_bars INTEGER NOT NULL DEFAULT 0 CHECK (is_below_bars IN (0,1))";
 
+/// The timeframe setting as the JSON text the frontend sends; a drawing stored before it was kept
+/// shows on every timeframe, which is exactly the default below (a test pins the two together).
+const ADD_TIMEFRAME_VISIBILITY_COLUMN: &str = "\
+ALTER TABLE chart_drawings
+  ADD COLUMN timeframe_visibility TEXT NOT NULL DEFAULT
+  '{\"minutes\":{\"shown\":true,\"from\":1,\"to\":30},\"hours\":{\"shown\":true,\"from\":1,\"to\":12},\"days\":true,\"weeks\":true,\"months\":true}'";
+
 const SELECT_SCOPE_DRAWINGS: &str = "\
-SELECT drawing_id, tool_id, is_locked, is_visible, is_below_bars, inputs
+SELECT drawing_id, tool_id, is_locked, is_visible, is_below_bars, inputs, timeframe_visibility
 FROM chart_drawings
 WHERE account_key = ?1 AND symbol = ?2
 ORDER BY position";
@@ -71,8 +81,9 @@ const DELETE_SCOPE_DRAWINGS: &str =
 
 const INSERT_DRAWING: &str = "\
 INSERT INTO chart_drawings
-  (drawing_id, account_key, symbol, position, tool_id, is_locked, is_visible, is_below_bars, inputs)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
+  (drawing_id, account_key, symbol, position, tool_id, is_locked, is_visible, is_below_bars, inputs,
+   timeframe_visibility)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)";
 
 const INSERT_POINT: &str = "\
 INSERT INTO chart_drawing_points (drawing_id, point_index, time_ms, price)
@@ -88,6 +99,10 @@ const MIGRATIONS: &[Migration] = &[
         target_version: BELOW_BARS_VERSION,
         apply: add_below_bars_column,
     },
+    Migration {
+        target_version: TIMEFRAME_VISIBILITY_VERSION,
+        apply: add_timeframe_visibility_column,
+    },
 ];
 
 fn create_schema(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
@@ -96,6 +111,10 @@ fn create_schema(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
 
 fn add_below_bars_column(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     transaction.execute_batch(ADD_BELOW_BARS_COLUMN)
+}
+
+fn add_timeframe_visibility_column(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(ADD_TIMEFRAME_VISIBILITY_COLUMN)
 }
 
 /// The drawings of this installation, kept in one SQLite file.
@@ -178,6 +197,7 @@ fn read_scope(connection: &Connection, scope: &DrawingScope) -> Outcome<Vec<Char
     let mut records = Vec::new();
     while let Some(row) = rows.next()? {
         let inputs: String = row.get(5)?;
+        let timeframe_visibility: String = row.get(6)?;
         let id: String = row.get(0)?;
         let points = take_points(&mut stored_points, &id)?;
         records.push(ChartDrawingRecord {
@@ -186,6 +206,8 @@ fn read_scope(connection: &Connection, scope: &DrawingScope) -> Outcome<Vec<Char
             locked: row.get(2)?,
             visible: row.get(3)?,
             below_bars: row.get(4)?,
+            timeframe_visibility: serde_json::from_str(&timeframe_visibility)
+                .map_err(|_| StoreError::Corrupt)?,
             inputs: serde_json::from_str(&inputs).map_err(|_| StoreError::Corrupt)?,
             points,
         });
@@ -247,6 +269,7 @@ fn replace_scope(
             record.visible,
             record.below_bars,
             inputs_text(&record.inputs)?,
+            timeframe_visibility_text(&record.timeframe_visibility)?,
         ])?;
         insert_points(&mut insert_point, record)?;
     }
@@ -268,6 +291,11 @@ fn insert_points(insert_point: &mut Statement<'_>, record: &ChartDrawingRecord) 
 /// The inputs map of one drawing as the JSON text the frontend sent.
 fn inputs_text(inputs: &BTreeMap<String, Value>) -> Outcome<String> {
     serde_json::to_string(inputs).map_err(|_| StoreError::WriteFailed.into())
+}
+
+/// The timeframe setting of one drawing as JSON text, the shape the column's default also has.
+fn timeframe_visibility_text(visibility: &TimeframeVisibility) -> Outcome<String> {
+    serde_json::to_string(visibility).map_err(|_| StoreError::WriteFailed.into())
 }
 
 /// A list index as the integer column that keeps the order.

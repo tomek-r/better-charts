@@ -285,8 +285,9 @@ export class FixedRangeProfileTool implements ChartTool {
   private unlockedHandleAt(x: number): { drawing: FixedRangeProfileDrawing; side: 'from' | 'end' } | null {
     const entries = this.drawings.entries();
     for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const { drawing, locked, visible } = entries[index];
-      const side = locked || !visible ? null : drawing.handleAt(x);
+      const { id, drawing, locked, visible } = entries[index];
+      const grabbable = !locked && visible && this.host.drawingShownOnTimeframe(id);
+      const side = grabbable ? drawing.handleAt(x) : null;
       if (side !== null) {
         return { drawing, side };
       }

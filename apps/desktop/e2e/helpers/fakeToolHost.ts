@@ -67,6 +67,7 @@ export function createFakeToolHost(marketDataPort: MarketDataPort): FakeToolHost
     notifyError: (message: string) => {
       errors.push(message);
     },
+    drawingShownOnTimeframe: () => true,
     drawingPlaced: (drawingId: string) => {
       placedIds.push(drawingId);
     },

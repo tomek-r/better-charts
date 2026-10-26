@@ -5,9 +5,12 @@ import type { ToolSettingsSchema } from '../../chart/engine/drawings/toolSetting
 import { CoordinatesTab, type CoordinateEditing } from './CoordinatesTab';
 import { InputsTab } from './InputsTab';
 import { StyleTab } from './StyleTab';
+import { VisibilityTab, type TimeframeVisibilityEditing } from './VisibilityTab';
 
 /** The id of the Coordinates tab, which the dialog opens when the tool refuses the saved anchors. */
 export const COORDINATES_TAB_ID = 'coordinates';
+
+const VISIBILITY_TAB_ID = 'visibility';
 
 /** What a tool declares for its dialog: its settings and the anchors each drawing holds. */
 export interface DrawingSettingsSchema extends ToolSettingsSchema {
@@ -19,9 +22,10 @@ export interface SettingsPanelProps {
   readonly values: ToolInputValues;
   readonly onChange: (key: string, value: ToolInputValue) => void;
   readonly coordinates: CoordinateEditing;
+  readonly timeframeVisibility: TimeframeVisibilityEditing;
 }
 
-/** One tab of the dialog; a later tab (Visibility) is one more entry in `buildSettingsTabs`. */
+/** One tab of the dialog; another tab is one more entry in `buildSettingsTabs`. */
 export interface SettingsTab {
   readonly id: string;
   readonly title: string;
@@ -50,6 +54,12 @@ export function buildSettingsTabs({ inputs = [], styles = [], points }: DrawingS
       id: COORDINATES_TAB_ID,
       title: 'Coordinates',
       render: ({ coordinates }) => <CoordinatesTab anchor={points.anchor} {...coordinates} />,
+    });
+    // A tool that anchors drawings places them, and every placed drawing can be hidden per timeframe.
+    tabs.push({
+      id: VISIBILITY_TAB_ID,
+      title: 'Visibility',
+      render: ({ timeframeVisibility }) => <VisibilityTab {...timeframeVisibility} />,
     });
   }
   return tabs;

@@ -251,6 +251,100 @@
   min-width: 0;
 }
 
+/* Visibility tab: a checkbox with its label, the first count, a two-thumb slider and the last count. */
+.drawing-settings-range-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.drawing-settings-range-row {
+  display: grid;
+  grid-template-columns: 110px 64px 1fr 64px;
+  align-items: center;
+  gap: 12px;
+}
+
+.drawing-settings-range-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-text-label);
+  font-size: 13px;
+}
+
+.drawing-settings-range-field {
+  text-align: center;
+}
+
+.drawing-settings-range-slider {
+  position: relative;
+  height: 20px;
+}
+
+.drawing-settings-range-slider[data-disabled='true'] {
+  opacity: 0.5;
+}
+
+.drawing-settings-range-track {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.drawing-settings-range-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
+
+/* Both inputs span the track; only their thumbs take pointer events, so either thumb can be grabbed. */
+.drawing-settings-range-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  appearance: none;
+}
+
+.drawing-settings-range-slider[data-front='from'] [data-thumb='from'],
+.drawing-settings-range-slider[data-front='to'] [data-thumb='to'] {
+  z-index: 1;
+}
+
+.drawing-settings-range-thumb::-webkit-slider-runnable-track {
+  background: none;
+}
+
+.drawing-settings-range-thumb::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-accent);
+  border-radius: 50%;
+  background: var(--color-surface);
+  pointer-events: auto;
+  appearance: none;
+  cursor: pointer;
+}
+
+.drawing-settings-range-thumb:focus-visible {
+  outline: none;
+}
+
+.drawing-settings-range-thumb:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
 .drawing-settings-error {
   margin: 0;
   color: var(--color-sell-border);

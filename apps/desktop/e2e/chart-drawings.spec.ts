@@ -6,6 +6,10 @@ import type {
   ChartDrawingRecord,
   ChartDrawingSelection,
 } from '../src/features/chart/engine/drawings/drawingRecord';
+import {
+  DEFAULT_TIMEFRAME_VISIBILITY,
+  type DrawingTimeframeVisibility,
+} from '../src/features/chart/engine/drawings/timeframeVisibility';
 import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
 
 /**
@@ -86,6 +90,9 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
     setDrawingInputs: (toolId, drawingId, inputs) => {
       calls.push({ name: 'setDrawingInputs', args: [toolId, drawingId, inputs] });
     },
+    setDrawingTimeframeVisibility: (toolId, drawingId, visibility) => {
+      calls.push({ name: 'setDrawingTimeframeVisibility', args: [toolId, drawingId, visibility] });
+    },
     setDrawingPoints: (toolId, drawingId, points) => {
       calls.push({ name: 'setDrawingPoints', args: [toolId, drawingId, points] });
       return answers.acceptsPoints;
@@ -110,7 +117,16 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
 
 /** One stored drawing under the id, with the flags the list carries through. */
 function recordOf(id: string): ChartDrawingRecord {
-  return { id, toolId: TOOL_ID, locked: false, visible: true, belowBars: false, inputs: {}, points: [ANCHOR] };
+  return {
+    id,
+    toolId: TOOL_ID,
+    locked: false,
+    visible: true,
+    belowBars: false,
+    timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
+    inputs: {},
+    points: [ANCHOR],
+  };
 }
 
 /** One stack entry naming a drawing of these cases' tool. */
@@ -224,6 +240,14 @@ test('new settings reach the commands with the same arguments and repaint once',
   const inputs: ToolInputValues = { period: 30 };
   drawings.setInputs('trend-line', 'line-1', inputs);
   expect(calls).toEqual([{ name: 'setDrawingInputs', args: ['trend-line', 'line-1', inputs] }]);
+  expect(timeline).toEqual(['repaint']);
+});
+
+test('a new timeframe setting reaches the commands with the same arguments and repaints once', () => {
+  const { drawings, calls, timeline } = buildHarness();
+  const visibility: DrawingTimeframeVisibility = { ...DEFAULT_TIMEFRAME_VISIBILITY, weeks: false };
+  drawings.setTimeframeVisibility('trend-line', 'line-1', visibility);
+  expect(calls).toEqual([{ name: 'setDrawingTimeframeVisibility', args: ['trend-line', 'line-1', visibility] }]);
   expect(timeline).toEqual(['repaint']);
 });
 

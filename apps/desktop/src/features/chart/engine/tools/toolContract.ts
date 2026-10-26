@@ -190,14 +190,19 @@ export interface ChartToolHost {
   marketDataPort: MarketDataPort;
   /** Surfaces a failure to the user. */
   notifyError(message: string): void;
+  /**
+   * Whether the chart's current timeframe lets that drawing of this tool paint and be grabbed. A drawing
+   * the timeframe hides must not answer a press, exactly like a hidden one.
+   */
+  drawingShownOnTimeframe: (drawingId: string) => boolean;
   /** A new drawing was committed: the set selects it and reports a change. Never called from reset or import. */
   drawingPlaced(drawingId: string): void;
   /** A user edit changed a committed drawing; reported for saving. Never called from reset or import. */
   drawingsChanged(): void;
 }
 
-/** What the owner of a tool set supplies; the set adds the two drawing callbacks. */
-export type ChartToolHostBase = Omit<ChartToolHost, 'drawingPlaced' | 'drawingsChanged'>;
+/** What the owner of a tool set supplies; the set adds the drawing callbacks and the timeframe check. */
+export type ChartToolHostBase = Omit<ChartToolHost, 'drawingShownOnTimeframe' | 'drawingPlaced' | 'drawingsChanged'>;
 
 /** Why the host resets its tools. */
 export type ChartToolResetReason = 'symbol' | 'disconnect' | 'session';

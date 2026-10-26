@@ -1,4 +1,5 @@
 import type { ChartDrawingPoint, ChartDrawingRecord, ChartDrawingSelection } from './drawingRecord';
+import type { DrawingTimeframeVisibility } from './timeframeVisibility';
 import type { ToolInputValues } from './toolInputs';
 import type { ChartToolSet } from '../tools/toolSet';
 
@@ -11,6 +12,7 @@ export type ChartDrawingCommands = Pick<
   | 'setDrawingLocked'
   | 'setDrawingVisible'
   | 'setDrawingInputs'
+  | 'setDrawingTimeframeVisibility'
   | 'setDrawingPoints'
   | 'exportDrawings'
   | 'replaceDrawings'
@@ -168,6 +170,12 @@ export class ChartDrawings {
 
   setInputs(toolId: string, drawingId: string, inputs: ToolInputValues): void {
     this.commands.setDrawingInputs(toolId, drawingId, inputs);
+    this.repaint();
+  }
+
+  /** Sets on which timeframes one drawing of any tool paints; the drawing keeps its own visible flag. */
+  setTimeframeVisibility(toolId: string, drawingId: string, visibility: DrawingTimeframeVisibility): void {
+    this.commands.setDrawingTimeframeVisibility(toolId, drawingId, visibility);
     this.repaint();
   }
 

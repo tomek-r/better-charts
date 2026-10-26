@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chartDrawings, savedDrawings, TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL } from './helpers/drawingToolbarPage';
-import { savedProfile } from './helpers/savedProfile';
-import { chartDrawingScopeKey, gotoWithStub, STUB_M5_INTERVAL_MS, STUB_NOW } from './helpers/tauriStub';
+import { chartDrawings, savedDrawings } from './helpers/drawingToolbarPage';
+import { openSavedProfileSettings } from './helpers/savedProfileSettings';
+import { STUB_M5_INTERVAL_MS, STUB_NOW } from './helpers/tauriStub';
 
 /**
  * The Coordinates tab of a saved fixed range volume profile on the real app: one row per anchor with its
@@ -34,16 +34,7 @@ function okButton(page: Page) {
 
 /** Boots the app with one saved profile and opens its settings from the object tree, on the Coordinates tab. */
 async function openSavedProfileCoordinates(page: Page): Promise<void> {
-  const scopeKey = chartDrawingScopeKey(TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL);
-  const seeded = savedProfile('seeded', { locked: false, visible: true });
-  await gotoWithStub(page, { chartDrawings: { [scopeKey]: [seeded] } });
-  await expect.poll(async () => (await chartDrawings(page)).length).toBe(1);
-  await page.getByRole('button', { name: 'Object tree', exact: true }).click();
-  await page
-    .getByRole('list', { name: 'Drawings' })
-    .getByRole('button', { name: 'Fixed range volume profile', exact: true })
-    .dblclick();
-  await page.getByRole('tab', { name: 'Coordinates', exact: true }).click();
+  await openSavedProfileSettings(page, 'Coordinates');
 }
 
 /** Types a UTC instant into the date and time fields of one anchor row. */
@@ -56,7 +47,7 @@ async function editAnchor(page: Page, label: string, timeMs: number): Promise<vo
 test('the Coordinates tab lists the two anchors with their UTC date and time and no price', async ({ page }) => {
   await openSavedProfileCoordinates(page);
 
-  await expect(page.getByRole('tab')).toHaveText(['Coordinates']);
+  await expect(page.getByRole('tab')).toHaveText(['Coordinates', 'Visibility']);
   await expect(page.getByRole('tabpanel').getByRole('group')).toHaveCount(2);
   for (const [label, timeMs] of [
     ['#1', WINDOW_START_MS],

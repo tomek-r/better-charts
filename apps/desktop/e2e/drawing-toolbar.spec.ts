@@ -94,7 +94,7 @@ test('remove deletes the drawing, hides the toolbar, saves the empty set and fre
   await expect.poll(async () => savedDrawings(page)).toEqual([]);
 });
 
-test('settings opens the drawing dialog, which has only its Coordinates tab, and Escape closes it', async ({
+test('settings opens the drawing dialog, which has its Coordinates and Visibility tabs, and Escape closes it', async ({
   page,
 }) => {
   await placeProfileWithToolbar(page);
@@ -103,7 +103,7 @@ test('settings opens the drawing dialog, which has only its Coordinates tab, and
 
   const dialog = page.getByRole('dialog', { name: 'Fixed range volume profile settings' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('tab')).toHaveText(['Coordinates']);
+  await expect(dialog.getByRole('tab')).toHaveText(['Coordinates', 'Visibility']);
 
   await page.keyboard.press('Escape');
 
