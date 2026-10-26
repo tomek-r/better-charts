@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { accountSnapshotFixture, connectBridgeSession } from './helpers/bridgeConnect';
-import { profileState, ready, requests, respond, select } from './helpers/fixedRangeProfilePage';
+import { drawingToolbar } from './helpers/drawingToolbarPage';
+import { position, profileState, ready, requests, respond, select } from './helpers/fixedRangeProfilePage';
 import { chooseSearchResult, openSymbolSearch } from './helpers/panel';
 import {
   brokerSymbolFixture,
@@ -40,19 +41,32 @@ async function savedSymbols(page: Page): Promise<string[]> {
   return saves.map((entry) => String(entry.args.symbol));
 }
 
-/** A saved drawing over bars 2..6 of the stub's ten-bar window, in the shape the tool exports. */
-function savedProfile(id: string, locked: boolean) {
+/** The flags a seeded record carries: a locked drawing ignores gestures, a hidden one is never painted. */
+interface SavedProfileFlags {
+  readonly locked: boolean;
+  readonly visible: boolean;
+}
+
+/** A saved drawing over bars 2..7 of the stub's ten-bar window, in the shape the tool exports. */
+function savedProfile(id: string, { locked, visible }: SavedProfileFlags) {
   return {
     id,
     toolId: 'fixedRangeProfile',
     locked,
-    visible: true,
+    visible,
     inputs: {},
     points: [
       { timeMs: STUB_NOW - 8 * STUB_M5_INTERVAL_MS, price: null },
       { timeMs: STUB_NOW - 3 * STUB_M5_INTERVAL_MS, price: null },
     ],
   };
+}
+
+/** Boots the app with one seeded drawing saved under the drawing account and symbol. */
+async function gotoWithSavedProfile(page: Page, record: ReturnType<typeof savedProfile>): Promise<void> {
+  await gotoWithStub(page, {
+    chartDrawings: { [chartDrawingScopeKey(ACCOUNT_KEY, 'EURUSD')]: [record] },
+  });
 }
 
 /** Commits one profile drawing on the default window through real pointer events. */
@@ -102,15 +116,28 @@ test('a placed drawing returns with its id and points after a reload of the same
 });
 
 test('a drawing saved as locked comes back locked, with its points and settings', async ({ page }) => {
-  const locked = savedProfile('locked-profile', true);
-  await gotoWithStub(page, {
-    chartDrawings: { [chartDrawingScopeKey(ACCOUNT_KEY, 'EURUSD')]: [locked] },
-  });
+  const locked = savedProfile('locked-profile', { locked: true, visible: true });
+  await gotoWithSavedProfile(page, locked);
 
   await expect.poll(async () => (await drawings(page)).length).toBe(1);
   const [restored] = await drawings(page);
   expect(restored).toMatchObject({ id: 'locked-profile', toolId: 'fixedRangeProfile', locked: true, inputs: {} });
   expect(restored.points).toEqual(locked.points);
+});
+
+test('a drawing saved as hidden comes back hidden, and the chart picks nothing where it lies', async ({ page }) => {
+  const hidden = savedProfile('hidden-profile', { locked: false, visible: false });
+  await gotoWithSavedProfile(page, hidden);
+  await ready(page);
+
+  await expect.poll(async () => (await drawings(page)).length).toBe(1);
+  expect((await drawings(page))[0].visible).toBe(false);
+
+  const spot = await position(page, 4);
+  await page.mouse.click(spot.x, spot.y);
+
+  await expect(drawingToolbar(page)).toHaveCount(0);
+  expect((await drawings(page)).map((record) => record.id)).toEqual(['hidden-profile']);
 });
 
 test('a symbol switch hides the drawings of the symbol left and brings them back on return', async ({ page }) => {

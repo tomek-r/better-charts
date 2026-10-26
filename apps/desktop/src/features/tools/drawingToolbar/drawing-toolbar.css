@@ -1,0 +1,70 @@
+/* Floating toolbar of the selected drawing (DrawingToolbar): a dark panel of 32px icon buttons. */
+
+.drawing-toolbar {
+  position: absolute;
+  /* Over the loading veil (3) and the window-centred message layer (4), inside the chart frame. */
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-panel);
+  box-shadow: 0 6px 18px var(--color-scrim);
+}
+
+.drawing-toolbar-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius);
+  color: var(--color-muted-strong);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    border-color 120ms ease-out;
+}
+
+.drawing-toolbar-button:hover {
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+  background: var(--color-raised);
+}
+
+.drawing-toolbar-button:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
+/* The drawing is locked: the button stays lit, like a held toggle. */
+.drawing-toolbar-button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-fill);
+}
+
+.drawing-toolbar-grip {
+  cursor: grab;
+}
+
+.drawing-toolbar-grip:active {
+  cursor: grabbing;
+}
+
+.drawing-toolbar-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawing-toolbar-button {
+    transition: none;
+  }
+}

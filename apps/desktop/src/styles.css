@@ -14,6 +14,8 @@
 @import './features/chart/timeframes/timeframes.css';
 @import './features/chart/timeframes/menu/timeframe-menu.css';
 @import './features/tools/tool-rail.css';
+@import './features/tools/drawingToolbar/drawing-toolbar.css';
+@import './features/tools/drawingSettings/drawing-settings.css';
 @import './features/symbol-search/search.css';
 @import './features/trade-panel/trade-panel.css';
 @import './features/execution/execution.css';

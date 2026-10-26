@@ -206,6 +206,34 @@ Not implemented: break even, multiple charts or Pine Script execution.
 
 Check corresponding E2E regressions before changing these decisions.
 
+## Chart drawings
+
+Drawings belong to one account and symbol and are kept by the Rust side in the local
+SQLite database `better-charts.sqlite3` (under the app data folder): one list per
+account and symbol, loaded when that window opens and saved again on every committed
+change. A record holds only vector data — the shared fields (id, tool id, lock,
+visibility, settings) plus the ordered anchor points a tool placed, each a time, a
+price, or both, with prices kept as decimal text. No candle, tick or profile data is
+stored; a tool asks for what it paints from the chart again. An unreadable list is
+reported and never overwritten by the empty chart.
+
+Pressing a drawing selects it (the drawing is highlighted), and a floating toolbar
+appears over the chart: a drag grip that moves the toolbar inside the chart frame,
+Settings, Lock/Unlock and Remove. Lock makes the drawing ignore edit gestures, and
+Delete/Backspace removes the selected drawing even while it is locked. The toolbar is
+built once against the shared drawing interface (`ChartDrawings`, the selection it
+reports, and each tool's declarations), so every tool that places drawings gets it
+without its own code; the Arrow and Crosshair pointers place no drawings and therefore
+never show it.
+
+Settings are the tool's typed Pine Script v6-style inputs (`int`, `float`, `bool`,
+`string`, `textArea`, `color`, `source`, `timeframe`, `symbol`, `session`, `price`,
+`time`, `enum`), rendered generically from the definitions a tool declares, one control
+per kind, grouped in fieldsets as the definitions ask, and OK stays disabled while a
+value fails its kind's rule. The Fixed Range Volume Profile declares no inputs yet, so
+its dialog says so. Hidden drawings are supported by the engine and by the stored
+`visible` flag, but the toolbar has no hide control yet.
+
 ## Execution and configuration
 
 `DISPATCH_ENABLED=true`; dispatch also needs app trading permission, handshake
