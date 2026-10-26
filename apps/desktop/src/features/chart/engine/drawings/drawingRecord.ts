@@ -31,6 +31,11 @@ export interface ChartToolDrawingRecord {
 /** What the app stores: one tool's drawing, stamped with the tool that owns it. */
 export interface ChartDrawingRecord extends ChartToolDrawingRecord {
   readonly toolId: string;
+  /**
+   * Whether the drawing is stacked below the price bars; drawings keep their list order on both
+   * sides of the bars.
+   */
+  readonly belowBars: boolean;
 }
 
 /** The drawing the user picked: which tool owns it, and whether it is locked and shown. */
@@ -71,15 +76,27 @@ export function readChartDrawingRecord(value: unknown): ChartDrawingRecord | und
   if (!isPlainRecord(value)) {
     return undefined;
   }
-  const { id, toolId, locked, visible, inputs, points } = value;
+  const { id, toolId, locked, visible, belowBars, inputs, points } = value;
   if (!isPresentString(id) || !isPresentString(toolId)) {
     return undefined;
   }
   if (typeof locked !== 'boolean' || typeof visible !== 'boolean' || !isToolInputValues(inputs)) {
     return undefined;
   }
+  const below = readBelowBars(belowBars);
   const anchors = readPoints(points);
-  return anchors === undefined ? undefined : { id, toolId, locked, visible, inputs, points: anchors };
+  if (below === undefined || anchors === undefined) {
+    return undefined;
+  }
+  return { id, toolId, locked, visible, belowBars: below, inputs, points: anchors };
+}
+
+/** Whether the drawing sits below the bars; a payload stored before the flag existed means false. */
+function readBelowBars(value: unknown): boolean | undefined {
+  if (value === undefined) {
+    return false;
+  }
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 /** An ordered point list, or undefined when it is not one: a drawing always anchors once. */

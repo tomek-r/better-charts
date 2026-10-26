@@ -216,6 +216,7 @@ const STORED_DRAWING = {
   toolId: 'fixedRangeProfile',
   locked: false,
   visible: true,
+  belowBars: false,
   inputs: { period: 20, filled: true, basis: 'hlc3' },
   points: [
     { timeMs: 1_700_000_000_000, price: null },
@@ -234,6 +235,13 @@ function withoutKey(record: Record<string, unknown>, key: string): Record<string
 
 test('a well-formed stored drawing is read back unchanged', () => {
   expect(readChartDrawingRecord(STORED_DRAWING)).toEqual(STORED_DRAWING);
+});
+
+test('a drawing stored before the below-bars flag reads as standing above the bars', () => {
+  const withoutFlag = withoutKey(STORED_DRAWING, 'belowBars');
+
+  expect(readChartDrawingRecord(withoutFlag)?.belowBars).toBe(false);
+  expect(readChartDrawingRecord({ ...STORED_DRAWING, belowBars: true })?.belowBars).toBe(true);
 });
 
 test('a point may carry a time, a price, or both', () => {
@@ -256,6 +264,7 @@ const REJECTED_DRAWINGS: ReadonlyArray<{ name: string; value: unknown }> = [
   { name: 'a drawing with an empty id', value: { ...STORED_DRAWING, id: '' } },
   { name: 'a drawing with an empty tool id', value: { ...STORED_DRAWING, toolId: '' } },
   { name: 'a drawing whose lock flag is not a boolean', value: { ...STORED_DRAWING, locked: 'no' } },
+  { name: 'a drawing whose below-bars flag is not a boolean', value: { ...STORED_DRAWING, belowBars: 'below' } },
   { name: 'a drawing with an object as an input value', value: { ...STORED_DRAWING, inputs: { period: {} } } },
   { name: 'a drawing that is not a record at all', value: 'drawing-1' },
 ];

@@ -54,6 +54,7 @@ function drawingList(...ids: string[]): ChartDrawingRecord[] {
     toolId: 'fixedRangeProfile',
     locked: false,
     visible: true,
+    belowBars: false,
     inputs: {},
     points: [{ timeMs: 0, price: null }],
   }));

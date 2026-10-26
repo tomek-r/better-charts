@@ -242,8 +242,13 @@ export class ChartToolSet {
 
   /** Every tool's drawings in registry order, each stamped with the tool that owns it. */
   exportDrawings(): ChartDrawingRecord[] {
+    // Stacking below the bars belongs to the tool set, not to a tool; every drawing starts above.
     return this.entries.flatMap(({ definition, tool }) =>
-      (tool.drawings?.exportRecords() ?? []).map((record) => ({ ...record, toolId: definition.id })),
+      (tool.drawings?.exportRecords() ?? []).map((record) => ({
+        ...record,
+        toolId: definition.id,
+        belowBars: false,
+      })),
     );
   }
 

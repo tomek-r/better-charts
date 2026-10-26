@@ -60,6 +60,10 @@ pub(crate) struct ChartDrawingRecord {
     pub(crate) locked: bool,
     /// Whether the drawing is painted; hiding is stored but not yet acted on by the tools.
     pub(crate) visible: bool,
+    /// Whether the drawing is stacked below the price bars; drawings keep their list order on
+    /// both sides of the bars. Absent in older payloads, which carry every drawing above them.
+    #[serde(default)]
+    pub(crate) below_bars: bool,
     pub(crate) inputs: BTreeMap<String, Value>,
     /// The anchors of the drawing, in paint order.
     pub(crate) points: Vec<ChartDrawingPoint>,
@@ -164,6 +168,7 @@ mod tests {
             tool_id: "fixedRangeProfile".into(),
             locked: false,
             visible: true,
+            below_bars: false,
             inputs: BTreeMap::from([("rows".into(), json!(128))]),
             points: vec![point(Some(1), None), point(Some(2), None)],
         }

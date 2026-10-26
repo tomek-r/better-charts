@@ -88,7 +88,7 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
 
 /** One stored drawing under the id, with the flags the list carries through. */
 function recordOf(id: string): ChartDrawingRecord {
-  return { id, toolId: 'trend-line', locked: false, visible: true, inputs: {}, points: [ANCHOR] };
+  return { id, toolId: 'trend-line', locked: false, visible: true, belowBars: false, inputs: {}, points: [ANCHOR] };
 }
 
 /** Records one change subscriber that pushes its label to the timeline; answers its unsubscribe. */
@@ -187,9 +187,7 @@ test('new settings reach the commands with the same arguments and repaint once',
 
 test('replacing the records hands the same records to the commands and repaints once', () => {
   const { drawings, calls, timeline } = buildHarness();
-  const records: ChartDrawingRecord[] = [
-    { id: 'line-1', toolId: 'trend-line', locked: false, visible: true, inputs: {}, points: [ANCHOR] },
-  ];
+  const records: ChartDrawingRecord[] = [recordOf('line-1')];
   drawings.replaceRecords(records);
   expect(calls).toEqual([{ name: 'replaceDrawings', args: [records] }]);
   expect(timeline).toEqual(['repaint']);
@@ -198,9 +196,7 @@ test('replacing the records hands the same records to the commands and repaints 
 test('reading the selection and the records answers from the commands without repainting', () => {
   const harness = buildHarness();
   const selection: ChartDrawingSelection = { toolId: 'trend-line', drawingId: 'line-1', locked: true, visible: true };
-  const records: ChartDrawingRecord[] = [
-    { id: 'line-1', toolId: 'trend-line', locked: true, visible: false, inputs: {}, points: [ANCHOR] },
-  ];
+  const records: ChartDrawingRecord[] = [{ ...recordOf('line-1'), locked: true, visible: false }];
   harness.answers.selection = selection;
   harness.answers.records = records;
   expect(harness.drawings.selected()).toBe(selection);

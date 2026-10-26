@@ -52,6 +52,7 @@ fn record(id: &str) -> ChartDrawingRecord {
         tool_id: "fixedRangeProfile".to_owned(),
         locked: false,
         visible: true,
+        below_bars: false,
         inputs: BTreeMap::from([("rows".to_owned(), json!(128))]),
         points: vec![time_point(1_700_000_000_000), time_point(1_700_000_900_000)],
     }
@@ -104,6 +105,21 @@ fn insert_drawing(store: &SqliteChartDrawingStore, id: &str, inputs: &str) {
         .expect("the hand-written row is stored");
 }
 
+/// Writes one point of the drawing under `id`, so a drawing the test wrote itself loads.
+fn insert_point(store: &SqliteChartDrawingStore, id: &str) {
+    store
+        .database()
+        .write(|connection| {
+            connection.execute(
+                "INSERT INTO chart_drawing_points (drawing_id, point_index, time_ms, price) \
+                 VALUES (?1, 0, ?2, NULL)",
+                params![id, 1_700_000_000_000i64],
+            )?;
+            Ok(())
+        })
+        .expect("the hand-written point is stored");
+}
+
 /// A folder of this test's own, removed with it; the database and its lock file live in it.
 struct TestDirectory(PathBuf);
 
@@ -154,6 +170,31 @@ fn the_drawings_of_one_scope_round_trip() {
     save(&store, ACCOUNT_KEY, "EURUSD", std::slice::from_ref(&saved));
 
     assert_eq!(loaded(&store, ACCOUNT_KEY, "EURUSD"), [saved]);
+}
+
+#[test]
+fn the_below_bars_flag_round_trips_both_values() {
+    let store = store();
+    let mut below = record("below-bars");
+    below.below_bars = true;
+    let above = record("above-bars");
+
+    save(&store, ACCOUNT_KEY, "EURUSD", &[below, above]);
+
+    let restored = loaded(&store, ACCOUNT_KEY, "EURUSD");
+    assert!(restored[0].below_bars);
+    assert!(!restored[1].below_bars);
+}
+
+#[test]
+fn a_stored_payload_without_the_below_bars_flag_stands_above_the_bars() {
+    let stored: ChartDrawingRecord = serde_json::from_str(
+        r#"{"id":"profile-1","toolId":"fixedRangeProfile","locked":false,"visible":true,
+            "inputs":{},"points":[{"timeMs":1700000000000,"price":null}]}"#,
+    )
+    .expect("the record parses without the flag");
+
+    assert!(!stored.below_bars);
 }
 
 #[test]
@@ -295,6 +336,27 @@ fn the_drawings_of_a_database_file_survive_a_reopen() {
     let reopened = SqliteChartDrawingStore::open(&path).expect("the database opens again");
 
     assert_eq!(ids(&reopened, ACCOUNT_KEY, "EURUSD"), ["profile-1"]);
+}
+
+#[test]
+fn a_drawing_written_before_the_below_bars_migration_opens_above_the_bars() {
+    let directory = TestDirectory::new();
+    let path = directory.path().join(DATABASE_FILE_NAME);
+    {
+        let previous = SqliteChartDrawingStore::open_before_last_migration(&path)
+            .expect("the database opens with the earlier migrations");
+        // The row leaves out the below-bars column that build did not have, so only the
+        // migration's default can fill it.
+        insert_drawing(&previous, "profile-1", "{}");
+        insert_point(&previous, "profile-1");
+    }
+
+    let migrated = SqliteChartDrawingStore::open(&path).expect("the database migrates");
+
+    let restored = loaded(&migrated, ACCOUNT_KEY, "EURUSD");
+    assert_eq!(restored.len(), 1);
+    assert_eq!(restored[0].id, "profile-1");
+    assert!(!restored[0].below_bars);
 }
 
 #[test]

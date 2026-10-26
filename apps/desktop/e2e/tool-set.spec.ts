@@ -473,9 +473,17 @@ test('importing hands each tool only its own records, drops unknown tools and re
   harness.selections.length = 0;
   harness.reports.drawingsChanged = 0;
   const records: ChartDrawingRecord[] = [
-    { id: 'a-1', toolId: 'a', locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] },
-    { id: 'b-1', toolId: 'b', locked: true, visible: false, inputs: { period: 20 }, points: [ORIGIN_POINT] },
-    { id: 'c-1', toolId: 'c', locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] },
+    { id: 'a-1', toolId: 'a', locked: false, visible: true, belowBars: false, inputs: {}, points: [ORIGIN_POINT] },
+    {
+      id: 'b-1',
+      toolId: 'b',
+      locked: true,
+      visible: false,
+      belowBars: false,
+      inputs: { period: 20 },
+      points: [ORIGIN_POINT],
+    },
+    { id: 'c-1', toolId: 'c', locked: false, visible: true, belowBars: false, inputs: {}, points: [ORIGIN_POINT] },
   ];
   harness.tools.replaceDrawings(records);
   expect(harness.tools.selectedDrawing()).toBeNull();
@@ -502,6 +510,7 @@ test('an imported record keeps its id, flags and settings', () => {
     toolId: 'a',
     locked: true,
     visible: false,
+    belowBars: false,
     inputs: { period: 55 },
     points: [ORIGIN_POINT],
   };
@@ -530,7 +539,15 @@ test('a tool that places no drawings answers as if it had none', () => {
   tools.setDrawingVisible('pointer', 'missing', false);
   tools.setDrawingInputs('pointer', 'missing', { period: 1 });
   tools.replaceDrawings([
-    { id: 'a-1', toolId: 'pointer', locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] },
+    {
+      id: 'a-1',
+      toolId: 'pointer',
+      locked: false,
+      visible: true,
+      belowBars: false,
+      inputs: {},
+      points: [ORIGIN_POINT],
+    },
   ]);
   expect(tools.exportDrawings()).toEqual([]);
 });

@@ -23,6 +23,8 @@ const APPLICATION_ID: i32 = 0x4243_4131;
 
 /// The version of the drawings schema, applied once to a new file.
 const SCHEMA_VERSION: u32 = 1;
+/// The version that records whether a drawing is stacked below the price bars.
+const BELOW_BARS_VERSION: u32 = 2;
 
 /// The schema of the drawings database: one drawing, then its ordered points.
 const CREATE_SCHEMA: &str = "\
@@ -46,8 +48,13 @@ CREATE TABLE chart_drawing_points (
   PRIMARY KEY (drawing_id, point_index)
 ) STRICT, WITHOUT ROWID;";
 
+/// The stacking flag as a column of its own; a drawing stored before it stands above the bars.
+const ADD_BELOW_BARS_COLUMN: &str = "\
+ALTER TABLE chart_drawings
+  ADD COLUMN is_below_bars INTEGER NOT NULL DEFAULT 0 CHECK (is_below_bars IN (0,1))";
+
 const SELECT_SCOPE_DRAWINGS: &str = "\
-SELECT drawing_id, tool_id, is_locked, is_visible, inputs
+SELECT drawing_id, tool_id, is_locked, is_visible, is_below_bars, inputs
 FROM chart_drawings
 WHERE account_key = ?1 AND symbol = ?2
 ORDER BY position";
@@ -64,21 +71,31 @@ const DELETE_SCOPE_DRAWINGS: &str =
 
 const INSERT_DRAWING: &str = "\
 INSERT INTO chart_drawings
-  (drawing_id, account_key, symbol, position, tool_id, is_locked, is_visible, inputs)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
+  (drawing_id, account_key, symbol, position, tool_id, is_locked, is_visible, is_below_bars, inputs)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
 
 const INSERT_POINT: &str = "\
 INSERT INTO chart_drawing_points (drawing_id, point_index, time_ms, price)
 VALUES (?1, ?2, ?3, ?4)";
 
 /// The migrations of the drawings database, applied in order and never undone.
-const MIGRATIONS: &[Migration] = &[Migration {
-    target_version: SCHEMA_VERSION,
-    apply: create_schema,
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        target_version: SCHEMA_VERSION,
+        apply: create_schema,
+    },
+    Migration {
+        target_version: BELOW_BARS_VERSION,
+        apply: add_below_bars_column,
+    },
+];
 
 fn create_schema(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     transaction.execute_batch(CREATE_SCHEMA)
+}
+
+fn add_below_bars_column(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(ADD_BELOW_BARS_COLUMN)
 }
 
 /// The drawings of this installation, kept in one SQLite file.
@@ -96,6 +113,14 @@ impl SqliteChartDrawingStore {
     #[cfg(test)]
     pub(super) fn in_memory() -> Result<Self, StoreError> {
         SqliteDatabase::in_memory(APPLICATION_ID, MIGRATIONS).map(Self::from_database)
+    }
+
+    /// A database opened with every migration but the last, so a test can write the rows the
+    /// build before it wrote and then open the file with this build.
+    #[cfg(test)]
+    pub(super) fn open_before_last_migration(path: &Path) -> Result<Self, StoreError> {
+        let earlier = &MIGRATIONS[..MIGRATIONS.len() - 1];
+        SqliteDatabase::open(path, APPLICATION_ID, earlier).map(Self::from_database)
     }
 
     /// The database behind the store, for a test that writes a row this build never wrote.
@@ -152,7 +177,7 @@ fn read_scope(connection: &Connection, scope: &DrawingScope) -> Outcome<Vec<Char
     let mut rows = statement.query(params![scope.account_key(), scope.symbol()])?;
     let mut records = Vec::new();
     while let Some(row) = rows.next()? {
-        let inputs: String = row.get(4)?;
+        let inputs: String = row.get(5)?;
         let id: String = row.get(0)?;
         let points = take_points(&mut stored_points, &id)?;
         records.push(ChartDrawingRecord {
@@ -160,6 +185,7 @@ fn read_scope(connection: &Connection, scope: &DrawingScope) -> Outcome<Vec<Char
             tool_id: row.get(1)?,
             locked: row.get(2)?,
             visible: row.get(3)?,
+            below_bars: row.get(4)?,
             inputs: serde_json::from_str(&inputs).map_err(|_| StoreError::Corrupt)?,
             points,
         });
@@ -219,6 +245,7 @@ fn replace_scope(
             record.tool_id,
             record.locked,
             record.visible,
+            record.below_bars,
             inputs_text(&record.inputs)?,
         ])?;
         insert_points(&mut insert_point, record)?;
