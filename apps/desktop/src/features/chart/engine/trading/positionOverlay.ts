@@ -155,7 +155,7 @@ export function createPositionOverlay(
     // `ui` layer: row widgets render over the chart. Two-pass z-order (`lines`
     // before `labels`, features/chart/engine/surface/buildChartPlugins.ts) keeps risk zones beneath row labels;
     // native price lines and their axis labels render below this primitive.
-    descriptor: { id: `position-overlay-${pass}`, name: `Positions & Orders (${pass})`, layer: 'ui' },
+    id: `position-overlay-${pass}`,
     render(ctx, { viewport }) {
       const { x, y, width, height } = viewport.chartRect;
       const drawLines = pass === 'lines';

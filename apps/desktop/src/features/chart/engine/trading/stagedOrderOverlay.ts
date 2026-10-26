@@ -217,7 +217,7 @@ export function createStagedOrderOverlay(
   return {
     // `ui` layer: row widgets render without a chartRect clip; native price
     // labels are rendered by Lightweight Charts.
-    descriptor: { id: `staged-order-${pass}`, name: `Staged Order (${pass})`, layer: 'ui' },
+    id: `staged-order-${pass}`,
     render(ctx, { viewport }) {
       const { x, y, width, height } = viewport.chartRect;
       // Two-pass z-index (features/chart/engine/surface/buildChartPlugins.ts): this pass paints risk zones; the

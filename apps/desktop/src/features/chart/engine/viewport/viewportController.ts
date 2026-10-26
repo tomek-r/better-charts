@@ -9,7 +9,7 @@ import {
   futurePoints,
   neededFutureBarCount,
   timeScaleBaseIndex,
-} from './futureTimePoints';
+} from '../timeScale/futureTimePoints';
 import { recordViewportChange, type ViewportSnapshot } from './viewportDiagnostics';
 
 /**

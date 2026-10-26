@@ -12,6 +12,7 @@ export interface RenderViewport {
 }
 
 export interface OverlayRenderer {
-  descriptor: { id: string; name: string; layer: 'overlay' | 'ui' };
+  /** Stable name of the paint pass, e.g. `position-overlay-lines`; the z-order test reads it. */
+  readonly id: string;
   render: (ctx: CanvasRenderingContext2D, args: { viewport: RenderViewport }) => void;
 }

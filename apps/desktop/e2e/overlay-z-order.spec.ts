@@ -1,7 +1,6 @@
 import { layoutLabelCenters } from '../src/features/chart/engine/trading/labelLayout';
 import { test, expect } from '@playwright/test';
 import { createRecordingCtx, createTestViewport, renderArgsFor, type PaintOp } from './helpers/overlayHarness';
-import type { OverlayRenderer as OverlayPlugin } from '../src/features/chart/engine/surface/overlayTypes';
 import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart/engine/surface/buildChartPlugins';
 import { WorkspacePrimitive } from '../src/features/chart/engine/surface/workspacePrimitive';
 
@@ -83,19 +82,16 @@ function collidingStates(): ChartOverlayState {
 }
 
 function renderAll(ops: Op[], filter: (id: string) => boolean) {
-  for (const entry of buildChartPlugins(collidingStates())) {
-    const overlay = entry.plugin as unknown as OverlayPlugin;
-    if (!filter(overlay.descriptor.id)) {
+  for (const overlay of buildChartPlugins(collidingStates())) {
+    if (!filter(overlay.id)) {
       continue;
     }
-    overlay.render(recordFor(ops, overlay.descriptor.id), renderArgs);
+    overlay.render(recordFor(ops, overlay.id), renderArgs);
   }
 }
 
 test('chart plugin registration is the overlay z-index contract', () => {
-  const ids = buildChartPlugins(collidingStates()).map(
-    (entry) => (entry.plugin as unknown as OverlayPlugin).descriptor.id,
-  );
+  const ids = buildChartPlugins(collidingStates()).map((overlay) => overlay.id);
   // Drawing tools paint before this list (WorkspacePrimitive), so they are not in it.
   // ALL lines passes first, then ALL labels passes (see features/chart/engine/surface/buildChartPlugins.ts).
   expect(ids).toEqual([
@@ -186,8 +182,8 @@ test('row panels keep their inset from the chart left edge in both overlays', ()
 test('colliding trading and staged rows spread apart without moving their price lines', () => {
   const state = collidingStates();
   const ops: Op[] = [];
-  for (const { plugin } of buildChartPlugins(state)) {
-    plugin.render(recordFor(ops, plugin.descriptor.id), renderArgs);
+  for (const overlay of buildChartPlugins(state)) {
+    overlay.render(recordFor(ops, overlay.id), renderArgs);
   }
   const rows = [...(state.positions.hit.labels ?? []), ...(state.staged.hit.labels ?? [])].sort((a, b) => a.y - b.y);
   expect(rows).toHaveLength(9);

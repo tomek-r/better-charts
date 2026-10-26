@@ -3,7 +3,7 @@ import {
   futurePoints,
   neededFutureBarCount,
   timeScaleBaseIndex,
-} from '../src/features/chart/engine/viewport/futureTimePoints';
+} from '../src/features/chart/engine/timeScale/futureTimePoints';
 
 /** Pure formulas behind the time-scale padding; no chart or browser needed. */
 

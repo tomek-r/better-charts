@@ -15,14 +15,14 @@ import type { ChartDrawTarget, RenderViewport } from '../tools/toolContract';
  */
 export interface WorkspaceRenderHost {
   viewport(): RenderViewport;
-  /** Each tool's content for the below-trading layer, painted before every plugin in the list. */
+  /** Each tool's content for the below-trading layer, painted before every overlay in the list. */
   drawTools(target: ChartDrawTarget): void;
 }
 
 /**
  * One primitive owns paint ordering in both the pane and its price axis.
  *
- * The overlay list is built once, here, so the plugins keep receiving the live
+ * The overlay list is built once, here, so the overlays keep receiving the live
  * state refs the app mutates. The drawing tools paint first (their content, e.g. a
  * profile fill and then its selection handles), which places it below every
  * ui-layer row.
@@ -43,9 +43,9 @@ export class WorkspacePrimitive implements ISeriesPrimitive {
           }
           const layer = axis ? PRICE_AXIS_BELOW_TRADING_OVERLAYS : PANE_BELOW_TRADING_OVERLAYS;
           host.drawTools(createDrawTarget(renderTarget, context, viewport, layer));
-          for (const { plugin } of overlays) {
+          for (const overlay of overlays) {
             context.save();
-            plugin.render(context, { viewport });
+            overlay.render(context, { viewport });
             context.restore();
           }
           context.restore();

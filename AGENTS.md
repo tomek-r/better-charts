@@ -114,7 +114,7 @@ edit generated `target/`, `dist/`, `node_modules/`, `.vite/`, `test-results/`,
   final newline.
 - TypeScript uses strict mode. Use existing domain types, avoid `any`, keep
   bridge data transformations in the adapter, and keep chart-rendering logic in
-  `features/chart/engine/` domain folders (surface, bars, viewport, priceScale, quotes, trading, legend, text, tools, barCountdown)
+  `features/chart/engine/` domain folders (surface, bars, viewport, timeScale, priceScale, quotes, trading, legend, text, tools, barCountdown)
   (or, for a drawing tool, in its plugin under `features/tools/<tool>/`).
 - Drawing tools implement `ChartToolPlugin` from
   `features/chart/engine/tools/toolContract.ts` and register in

@@ -5,7 +5,7 @@ import type { OverlayRenderer } from '../surface/overlayTypes';
  * spaces and paints them together. Price lines and risk zones stay put. */
 export function createTradingLabelsOverlay(state: TradingLabelLayoutState): OverlayRenderer {
   return {
-    descriptor: { id: 'trading-labels', name: 'Spaced trading labels', layer: 'ui' },
+    id: 'trading-labels',
     render(_ctx, { viewport }) {
       const rows = state.pending;
       state.pending = [];

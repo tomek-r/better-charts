@@ -13,33 +13,31 @@ export interface ChartOverlayState {
 }
 
 /**
- * Z-INDEX CONTRACT: the chart paints `ui`-layer plugins in REGISTRATION order
- * (the package filters `pluginManager.getOverlays()` per layer), so THIS ARRAY
- * is the z-order of every risk zone and label on the chart. Three rules:
+ * The paint order of every trading and quote overlay. `WorkspacePrimitive` paints the
+ * drawing tools first and then calls `render` on these renderers in array order, so
+ * THIS ARRAY is the z-order of every risk zone and label on the chart:
  *
- * 0. Drawing tools paint first, below everything here (`ChartController.drawTools`).
- * 1. Native Lightweight Charts price lines (bid/ask, entry, SL, TP) and their
- *    axis labels render below this primitive. Risk-zone fills paint before row
- *    labels (✕ chips, pills, handles and qty), so `lines` passes precede
- *    `labels` passes.
- * 2. Among row surfaces later registrations win: position/order rows under
- *    the staged draft row (the active draft is the primary surface). Native
- *    price-line axis labels are drawn by Lightweight Charts below this layer.
- * 3. Trading rows are laid out together in the final pass to avoid collisions.
+ * 1. Native Lightweight Charts price lines (bid/ask, entry, SL, TP) and their axis
+ *    labels render below this primitive.
+ * 2. Every `lines` pass (risk-zone fills) precedes every `labels` pass (✕ chips, pills,
+ *    handles and qty), so fills never cover a row label.
+ * 3. Among row surfaces the later entry wins: position/order rows sit under the staged
+ *    draft row, which is the primary surface.
+ * 4. Trading rows are laid out together in the final pass to avoid collisions.
  *
- * Plugin ids carry the pass suffix because the plugin registry is keyed by id.
+ * Each renderer's `id` carries its pass suffix so the z-order test can name it.
  */
-export function buildChartPlugins(state: ChartOverlayState): Array<{ kind: 'overlay'; plugin: OverlayRenderer }> {
+export function buildChartPlugins(state: ChartOverlayState): readonly OverlayRenderer[] {
   const labels: TradingLabelLayoutState = { pending: [] };
   return [
     // ── lines passes: risk zones (native price lines are managed by PriceLineController).
-    { kind: 'overlay', plugin: createPriceLinesOverlay(state.priceLines, 'lines') },
-    { kind: 'overlay', plugin: createPositionOverlay(state.positions, 'lines') },
-    { kind: 'overlay', plugin: createStagedOrderOverlay(state.staged, 'lines') },
+    createPriceLinesOverlay(state.priceLines, 'lines'),
+    createPositionOverlay(state.positions, 'lines'),
+    createStagedOrderOverlay(state.staged, 'lines'),
     // ── labels passes: ✕ chips, side pills, handles and qty.
-    { kind: 'overlay', plugin: createPriceLinesOverlay(state.priceLines, 'labels') },
-    { kind: 'overlay', plugin: createPositionOverlay(state.positions, 'labels', labels) },
-    { kind: 'overlay', plugin: createStagedOrderOverlay(state.staged, 'labels', labels) },
-    { kind: 'overlay', plugin: createTradingLabelsOverlay(labels) },
+    createPriceLinesOverlay(state.priceLines, 'labels'),
+    createPositionOverlay(state.positions, 'labels', labels),
+    createStagedOrderOverlay(state.staged, 'labels', labels),
+    createTradingLabelsOverlay(labels),
   ];
 }
