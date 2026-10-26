@@ -1,7 +1,8 @@
-import { formatSignedMoney, formatVolume, normalizedPrice } from '../../../../shared/format';
-import { estimateLevelMoney, type AccountMoneyBasis } from '../../../../shared/money';
-import type { OpenPosition, PendingOrder, PortfolioSnapshot, RiskSide } from '../../../../shared/bridge/types';
+import { formatVolume, normalizedPrice } from '../../../../shared/format';
+import type { AccountMoneyBasis } from '../../../../shared/money';
+import type { OpenPosition, PendingOrder, PortfolioSnapshot } from '../../../../shared/bridge/types';
 import { partialCloseLimits } from '../../../partial-close/partialCloseVolume';
+import { levelMoneyText, pnlMoneyText } from './moneyLabels';
 import type { OrderLine, PositionLine, PositionOverlayState } from './positionOverlay';
 
 /** `buy_limit`, `sell_stop_limit`, … — compiled once, not per order line. */
@@ -16,33 +17,6 @@ function chartPrice(value?: string | null) {
   return Number.isFinite(price) && price > 0 ? price : undefined;
 }
 
-/** Account-currency display estimates shared by live and staged labels. */
-export function levelMoneyText(
-  entry: number,
-  level: number,
-  volume: number,
-  side: RiskSide,
-  money: AccountMoneyBasis,
-): string | undefined {
-  const value = estimateLevelMoney(entry, level, volume, side, money);
-  return value === undefined ? undefined : formatSignedMoney(value, money.currency, money.currencyDigits);
-}
-/** Signed money P&L in the ACCOUNT currency, the levelMoneyText format
- *  ("−6.63 USD" / "+1.04 USD") so the P&L box reads exactly like SL/TP money. */
-export function pnlMoneyText(
-  profit: string | undefined,
-  currency: string | undefined,
-  currencyDigits?: number,
-): string | undefined {
-  if (profit === undefined || profit.trim() === '' || !currency) {
-    return undefined;
-  }
-  const value = Number(profit);
-  if (!Number.isFinite(value)) {
-    return undefined;
-  }
-  return formatSignedMoney(value, currency, currencyDigits);
-}
 export function toPositionLine(
   item: OpenPosition,
   money?: AccountMoneyBasis,
