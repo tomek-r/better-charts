@@ -105,6 +105,42 @@ test('chart plugin registration is the overlay z-index contract', () => {
   ]);
 });
 
+function renderTargetFor(context: CanvasRenderingContext2D) {
+  return {
+    useMediaCoordinateSpace: (paint: (scope: { context: CanvasRenderingContext2D }) => void) => paint({ context }),
+    useBitmapCoordinateSpace: <T>(
+      read: (scope: {
+        horizontalPixelRatio: number;
+        verticalPixelRatio: number;
+        bitmapSize: { width: number; height: number };
+      }) => T,
+    ) => read({ horizontalPixelRatio: 1, verticalPixelRatio: 1, bitmapSize: { width: 600, height: 400 } }),
+  } as never;
+}
+
+test('drawings below the price bars paint in the background pass, above the grid and under the series', () => {
+  let belowBarsPaints = 0;
+  const primitive = new WorkspacePrimitive(
+    {
+      viewport: () => renderArgs.viewport,
+      drawTools: () => undefined,
+      drawDrawingsBelowBars: () => {
+        belowBarsPaints += 1;
+      },
+    },
+    collidingStates(),
+  );
+  // 'bottom' would sit under the grid; 'normal' background passes run after it and before every foreground.
+  const belowBarsView = primitive.paneViews().find((view) => view.zOrder?.() === 'normal');
+  const renderer = belowBarsView!.renderer()!;
+  const renderTarget = renderTargetFor(recordFor([], 'workspace'));
+  renderer.draw(renderTarget);
+  expect(belowBarsPaints).toBe(0);
+  renderer.drawBackground!(renderTarget);
+  expect(belowBarsPaints).toBe(1);
+  expect(primitive.paneViews().some((view) => view.zOrder?.() === 'bottom')).toBe(false);
+});
+
 test('drawing tools paint before every trading overlay', () => {
   const ops: Op[] = [];
   const TOOL_FILL = '#123456';
@@ -120,19 +156,8 @@ test('drawing tools paint before every trading overlay', () => {
     },
     collidingStates(),
   );
-  const context = recordFor(ops, 'workspace');
-  const renderTarget = {
-    useMediaCoordinateSpace: (paint: (scope: { context: CanvasRenderingContext2D }) => void) => paint({ context }),
-    useBitmapCoordinateSpace: <T>(
-      read: (scope: {
-        horizontalPixelRatio: number;
-        verticalPixelRatio: number;
-        bitmapSize: { width: number; height: number };
-      }) => T,
-    ) => read({ horizontalPixelRatio: 1, verticalPixelRatio: 1, bitmapSize: { width: 600, height: 400 } }),
-  };
   const overSeriesView = primitive.paneViews().find((view) => view.zOrder?.() === 'top');
-  overSeriesView!.renderer()!.draw(renderTarget as never);
+  overSeriesView!.renderer()!.draw(renderTargetFor(recordFor(ops, 'workspace')));
   const toolOpIndexes = ops.flatMap((op, index) => (op.style === TOOL_FILL ? [index] : []));
   expect(toolOpIndexes).toEqual([0]);
   // The overlays must really have painted after it, or the order proves nothing.
