@@ -1,5 +1,5 @@
 import { layoutLabelCenters, type TradingLabelLayoutState } from './labelLayout';
-import type { OverlayRenderer } from './overlayTypes';
+import type { OverlayRenderer } from '../surface/overlayTypes';
 
 /** Final labels pass: both trading overlays queue rows, then this plugin
  * spaces and paints them together. Price lines and risk zones stay put. */

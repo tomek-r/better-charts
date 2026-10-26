@@ -1,6 +1,6 @@
-import { palette } from '../../../shared/theme/palette';
-import { drawSeparatedText, separatedTextWidth } from '../../../shared/canvas/separatedText';
-import type { RenderViewport } from './overlayTypes';
+import { palette } from '../../../../shared/theme/palette';
+import { drawSeparatedText, separatedTextWidth } from '../../../../shared/canvas/separatedText';
+import type { RenderViewport } from '../surface/overlayTypes';
 
 export interface TradingHitRect {
   x: number;

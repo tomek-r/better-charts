@@ -2,7 +2,7 @@ import type { TradingLabelHit } from './labelLayout';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlay';
 import { levelMoneyText } from './overlayLines';
-import type { ChartWorkspaceState } from '../state/useChartWorkspace';
+import type { ChartWorkspaceState } from '../../state/useChartWorkspace';
 
 type TradingGestureWorkspace = Pick<
   ChartWorkspaceState,
@@ -59,7 +59,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
   } | null = null;
   /** Slop before a ✕ press counts as a drag (abandons the click) — staged grab slop. */
   const CHIP_CLICK_SLOP = STAGED_GRAB;
-  // Custom overlay (features/chart/engine/positionOverlay.ts): ✕ chips first (small precise
+  // Custom overlay (features/chart/engine/trading/positionOverlay.ts): ✕ chips first (small precise
   // targets), then lines in the LIBRARY's hit order — order price, position
   // SL, position TP — with its ±8px y tolerance; lines bounded to chartRect so
   // the axis strip keeps its native scale-drag (the library's axis check ran

@@ -8,8 +8,8 @@ import {
   type IChartApi,
   type ISeriesApi,
 } from 'lightweight-charts';
-import { DEFAULT_BAR_SPACING, END_MARGIN } from './futureTimePoints';
-import { palette } from '../../../shared/theme/palette';
+import { DEFAULT_BAR_SPACING, END_MARGIN } from '../viewport/futureTimePoints';
+import { palette } from '../../../../shared/theme/palette';
 
 export interface ChartSurface {
   chart: IChartApi;

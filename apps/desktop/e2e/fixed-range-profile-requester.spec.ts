@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { withFakeClock, type FakeClock } from './helpers/fakeClock';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
-import type { ChartToolHost } from '../src/features/chart/engine/toolContract';
+import type { ChartToolHost } from '../src/features/chart/engine/tools/toolContract';
 import {
   FixedRangeProfileRequester,
   SLOW_PROFILE_SPINNER_DELAY_MS,

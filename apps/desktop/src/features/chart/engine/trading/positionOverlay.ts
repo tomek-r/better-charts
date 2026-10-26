@@ -4,10 +4,10 @@ import {
   type TradingLabelTarget,
   type TradingLabelLayoutState,
 } from './labelLayout';
-import type { OverlayRenderer } from './overlayTypes';
-import type { RiskSide } from '../../../shared/bridge/types';
-import type { AccountMoneyBasis } from '../../../shared/money';
-import { riskRewardRatio } from '../../order-ticket/domain/ticketRules';
+import type { OverlayRenderer } from '../surface/overlayTypes';
+import type { RiskSide } from '../../../../shared/bridge/types';
+import type { AccountMoneyBasis } from '../../../../shared/money';
+import { riskRewardRatio } from '../../../order-ticket/domain/ticketRules';
 import {
   CANCEL_CHIP_X,
   bindViewportHit,
@@ -22,8 +22,8 @@ import {
   type TradingHitRect,
   type OverlayPass,
 } from './tradingOverlayDrawing';
-import { palette } from '../../../shared/theme/palette';
-import { MINUS_SIGN } from '../../../shared/format';
+import { palette } from '../../../../shared/theme/palette';
+import { MINUS_SIGN } from '../../../../shared/format';
 
 export interface PositionLine {
   id: string;
@@ -153,7 +153,7 @@ export function createPositionOverlay(
   const pnlColumnWidths = new Map<string, number>();
   return {
     // `ui` layer: row widgets render over the chart. Two-pass z-order (`lines`
-    // before `labels`, features/chart/engine/overlays.ts) keeps risk zones beneath row labels;
+    // before `labels`, features/chart/engine/trading/overlays.ts) keeps risk zones beneath row labels;
     // native price lines and their axis labels render below this primitive.
     descriptor: { id: `position-overlay-${pass}`, name: `Positions & Orders (${pass})`, layer: 'ui' },
     render(ctx, { viewport }) {

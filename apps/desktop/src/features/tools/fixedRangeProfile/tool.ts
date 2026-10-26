@@ -8,7 +8,7 @@ import {
   type ChartTool,
   type ChartToolHost,
   type ChartToolResetReason,
-} from '../../chart/engine/toolContract';
+} from '../../chart/engine/tools/toolContract';
 import { palette } from '../../../shared/theme/palette';
 import { FixedRangeProfileRequester } from './requester';
 import {

@@ -885,14 +885,14 @@ test('live candle bursts paint once per distinct bar and keep the final OHLC and
     // class loaded by the app instead of importing another class prototype.
     const modulePath = performance
       .getEntriesByType('resource')
-      .filter((entry) => new URL(entry.name).pathname === '/src/features/chart/engine/chartController.ts')
+      .filter((entry) => new URL(entry.name).pathname === '/src/features/chart/engine/surface/chartController.ts')
       .pop()?.name;
     if (!modulePath) {
       throw new Error('ChartController module was not loaded by the app');
     }
     const { ChartController } = (await import(
       modulePath
-    )) as typeof import('../src/features/chart/engine/chartController');
+    )) as typeof import('../src/features/chart/engine/surface/chartController');
     const original = ChartController.prototype.updateCandle;
     let updates = 0;
     ChartController.prototype.updateCandle = function (candle) {

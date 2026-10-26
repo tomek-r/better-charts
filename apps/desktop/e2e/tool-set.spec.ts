@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { ChartToolSet } from '../src/features/chart/engine/toolSet';
+import { ChartToolSet } from '../src/features/chart/engine/tools/toolSet';
 import type {
   ChartDrawTarget,
   ChartTool,
   ChartToolDefinition,
   ChartToolHost,
-} from '../src/features/chart/engine/toolContract';
+} from '../src/features/chart/engine/tools/toolContract';
 
 /**
  * Routing and lifecycle rules of the engine's tool set, with fake tools that log every

@@ -1,8 +1,8 @@
 import { LineStyle, type IPriceLine, type ISeriesApi } from 'lightweight-charts';
-import type { ChartOverlayState } from './overlays';
-import { TRADING_COLORS } from './tradingOverlayDrawing';
+import type { ChartOverlayState } from '../trading/overlays';
+import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
 import type { PriceAxisTagsPrimitive } from './priceAxisTagsPrimitive';
-import { palette } from '../../../shared/theme/palette';
+import { palette } from '../../../../shared/theme/palette';
 
 /**
  * Owns the native Lightweight Charts price lines: the Bid/Ask pair, the staged

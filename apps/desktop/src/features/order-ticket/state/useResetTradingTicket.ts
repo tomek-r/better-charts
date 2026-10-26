@@ -1,6 +1,6 @@
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import { useChartResources } from '../../chart/ChartWorkspaceProvider';
-import type { PositionOverlayState } from '../../chart/engine/positionOverlay';
+import type { PositionOverlayState } from '../../chart/engine/trading/positionOverlay';
 import { useOrderTicketActions, useOrderTicketStores } from './orderTicketContext';
 import type { OrderTicketStores } from './orderTicketStores';
 

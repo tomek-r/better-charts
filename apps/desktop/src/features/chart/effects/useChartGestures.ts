@@ -1,8 +1,8 @@
-import { containsLabel } from '../engine/labelLayout';
+import { containsLabel } from '../engine/trading/labelLayout';
 import { useEffect } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
-import { createStagedOrderGestures, type StagedOrderGestureTicket } from '../engine/stagedOrderGestures';
-import { createTradingOverlayGestures } from '../engine/tradingOverlayGestures';
+import { createStagedOrderGestures, type StagedOrderGestureTicket } from '../engine/trading/stagedOrderGestures';
+import { createTradingOverlayGestures } from '../engine/trading/tradingOverlayGestures';
 import { DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
 import type { ChartWorkspaceState } from '../state/useChartWorkspace';
 import { useChartGestureDiagnostics } from './useChartGestureDiagnostics';

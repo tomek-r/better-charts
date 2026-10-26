@@ -1,4 +1,4 @@
-import type { Candle } from '../../../shared/bridge/types';
+import type { Candle } from '../../../../shared/bridge/types';
 
 /** Longest candles wait for a pointer release before the chart takes them anyway. */
 const MAX_HOLD_MS = 10_000;

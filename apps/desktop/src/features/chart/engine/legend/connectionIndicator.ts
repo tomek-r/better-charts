@@ -1,4 +1,4 @@
-import type { BridgeState } from '../../../shared/bridge/types';
+import type { BridgeState } from '../../../../shared/bridge/types';
 
 const LABELS: Record<BridgeState, string> = {
   connected: 'MT5 connected',

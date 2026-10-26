@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { SubscriptionScope } from '../../../shared/bridge/subscriptionScope';
-import { toRenderBar } from '../../chart/engine/mt5DataAdapter';
+import { toRenderBar } from '../../chart/engine/bars/mt5DataAdapter';
 import type {
   BridgeStatus,
   AccountSnapshot,
@@ -23,7 +23,7 @@ import type {
   SelectionFallback,
 } from '../../../shared/bridge/types';
 import { normalizeAccount, normalizePortfolio, normalizeQuote, normalizeSnapshot } from '../normalizers';
-import { initialHistoryBarsFor } from '../../chart/engine/initialHistoryWindow';
+import { initialHistoryBarsFor } from '../../chart/engine/bars/initialHistoryWindow';
 import type { BridgeSessionState } from '../useBridgeSession';
 import { beginHistoryWait, endHistoryWait } from '../historyWait';
 import type { BridgeTicketResponsePort } from '../bridgeTicketResponseHandlers';

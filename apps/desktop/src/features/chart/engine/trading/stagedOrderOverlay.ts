@@ -4,9 +4,9 @@ import {
   type TradingLabelTarget,
   type TradingLabelLayoutState,
 } from './labelLayout';
-import type { OverlayRenderer } from './overlayTypes';
-import type { RiskSide } from '../../../shared/bridge/types';
-import { palette } from '../../../shared/theme/palette';
+import type { OverlayRenderer } from '../surface/overlayTypes';
+import type { RiskSide } from '../../../../shared/bridge/types';
+import { palette } from '../../../../shared/theme/palette';
 import {
   CANCEL_CHIP_X,
   bindViewportHit,
@@ -220,7 +220,7 @@ export function createStagedOrderOverlay(
     descriptor: { id: `staged-order-${pass}`, name: `Staged Order (${pass})`, layer: 'ui' },
     render(ctx, { viewport }) {
       const { x, y, width, height } = viewport.chartRect;
-      // Two-pass z-index (features/chart/engine/overlays.ts): this pass paints risk zones; the
+      // Two-pass z-index (features/chart/engine/trading/overlays.ts): this pass paints risk zones; the
       // native price lines are managed by PriceLineController. The other pass
       // paints row labels.
       const drawLines = pass === 'lines';

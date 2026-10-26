@@ -4,9 +4,9 @@ import type {
   ISeriesPrimitive,
   SeriesAttachedParameter,
 } from 'lightweight-charts';
-import { buildChartPlugins, type ChartOverlayState } from './overlays';
+import { buildChartPlugins, type ChartOverlayState } from '../trading/overlays';
 import { createDrawTarget, PANE_BELOW_TRADING_OVERLAYS, PRICE_AXIS_BELOW_TRADING_OVERLAYS } from './drawTarget';
-import type { ChartDrawTarget, RenderViewport } from './toolContract';
+import type { ChartDrawTarget, RenderViewport } from '../tools/toolContract';
 
 /**
  * The render-facing surface the workspace primitive needs from the chart host:

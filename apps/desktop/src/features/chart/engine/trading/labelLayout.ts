@@ -1,4 +1,4 @@
-import type { RenderViewport } from './overlayTypes';
+import type { RenderViewport } from '../surface/overlayTypes';
 
 export interface TradingLabelTarget {
   source: 'trading' | 'staged';

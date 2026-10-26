@@ -1,16 +1,16 @@
 import type { IPrimitivePaneRenderer, IPrimitivePaneView } from 'lightweight-charts';
-import { palette } from '../../../shared/theme/palette';
-import { AttachedSeriesPrimitive } from './attachedPrimitive';
-import { priceTagHeight } from './tagStack';
-import { measureTextWidth } from './textMeasure';
+import { palette } from '../../../../shared/theme/palette';
+import { AttachedSeriesPrimitive } from '../surface/attachedPrimitive';
+import { priceTagHeight } from '../quotes/tagStack';
+import { measureTextWidth } from '../text/textMeasure';
 import {
   createDrawTarget,
   PANE_ABOVE_TRADING_OVERLAYS,
   PRICE_AXIS_ABOVE_TRADING_OVERLAYS,
   TIME_AXIS_ABOVE_TRADING_OVERLAYS,
   type RenderTarget,
-} from './drawTarget';
-import type { ChartDrawLayer, ChartDrawTarget, RenderViewport } from './toolContract';
+} from '../surface/drawTarget';
+import type { ChartDrawLayer, ChartDrawTarget, RenderViewport } from '../tools/toolContract';
 
 /**
  * Pointer price/time labels shown for every tool, plus the tools' layer above the trading overlays.

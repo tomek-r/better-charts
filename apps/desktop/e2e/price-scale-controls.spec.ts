@@ -7,7 +7,7 @@ import type { Candle } from '../src/shared/bridge/types';
  * Right price-scale toggles: `A` (auto scale — fit the visible data) and `L`
  * (logarithmic prices). The library paints the axis on its own canvas, so the
  * toggles are DOM buttons revealed by a pointer hit test over the axis column
- * (see src/features/chart/engine/priceScaleController.ts). These tests drive REAL pointer
+ * (see src/features/chart/engine/priceScale/priceScaleController.ts). These tests drive REAL pointer
  * positions against the chart host and read the scale back through the DEV
  * `window.__chartTest` hook — no pixel assertions.
  */

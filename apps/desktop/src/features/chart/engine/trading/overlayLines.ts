@@ -1,7 +1,7 @@
-import { formatSignedMoney, formatVolume, normalizedPrice } from '../../../shared/format';
-import { estimateLevelMoney, type AccountMoneyBasis } from '../../../shared/money';
-import type { OpenPosition, PendingOrder, PortfolioSnapshot, RiskSide } from '../../../shared/bridge/types';
-import { partialCloseLimits } from '../../partial-close/partialCloseVolume';
+import { formatSignedMoney, formatVolume, normalizedPrice } from '../../../../shared/format';
+import { estimateLevelMoney, type AccountMoneyBasis } from '../../../../shared/money';
+import type { OpenPosition, PendingOrder, PortfolioSnapshot, RiskSide } from '../../../../shared/bridge/types';
+import { partialCloseLimits } from '../../../partial-close/partialCloseVolume';
 import type { OrderLine, PositionLine, PositionOverlayState } from './positionOverlay';
 
 /** `buy_limit`, `sell_stop_limit`, … — compiled once, not per order line. */
@@ -131,7 +131,7 @@ export function toOrderLine(
 function withPartialClose(item: OpenPosition, line: PositionLine | null, available: boolean): PositionLine | null {
   return line && partialCloseLimits(item, available) ? { ...line, partialClose: true } : line;
 }
-// Source of truth: replace-style re-sync into OUR overlay (features/chart/engine/positionOverlay.ts). The library's built-in trading overlay is deliberately NEVER fed — chart.setPositions()/setOrders() stay empty, so it paints nothing and its drag hit-testing falls through to pan. Returns true when the painted content changed (or a drag preview was dropped) so the caller can repaint.
+// Source of truth: replace-style re-sync into OUR overlay (features/chart/engine/trading/positionOverlay.ts). The library's built-in trading overlay is deliberately NEVER fed — chart.setPositions()/setOrders() stay empty, so it paints nothing and its drag hit-testing falls through to pan. Returns true when the painted content changed (or a drag preview was dropped) so the caller can repaint.
 export function syncPositionOverlay(
   state: PositionOverlayState,
   portfolio: PortfolioSnapshot | undefined,

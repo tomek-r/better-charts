@@ -2,9 +2,9 @@
 import { useEffect } from 'react';
 import { accountMoneyBasis } from '../../../shared/money';
 import { quoteDigits } from '../../../shared/format';
-import type { ChartController } from '../../chart/engine/chartController';
-import type { PositionOverlayState } from '../../chart/engine/positionOverlay';
-import { syncPositionOverlay } from '../../chart/engine/overlayLines';
+import type { ChartController } from '../../chart/engine/surface/chartController';
+import type { PositionOverlayState } from '../../chart/engine/trading/positionOverlay';
+import { syncPositionOverlay } from '../../chart/engine/trading/overlayLines';
 import type { BridgeSessionState } from '../useBridgeSession';
 
 type BridgeStreamState = Pick<BridgeSessionState, 'snapshot' | 'instrument' | 'account' | 'portfolio' | 'quote'>;

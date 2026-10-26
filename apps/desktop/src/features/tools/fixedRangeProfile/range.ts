@@ -1,6 +1,6 @@
 import { timeframeBarTime } from '../../../shared/bridge/timeframes';
-import { anchorAtBar, reanchorToCurrentBars, type BarAnchor } from '../../chart/engine/toolContract';
-import type { TimeModel } from '../../chart/engine/viewportController';
+import { anchorAtBar, reanchorToCurrentBars, type BarAnchor } from '../../chart/engine/tools/toolContract';
+import type { TimeModel } from '../../chart/engine/viewport/viewportController';
 
 /**
  * A committed fixed-range volume profile window, `[fromMs, endMs)`. The end is

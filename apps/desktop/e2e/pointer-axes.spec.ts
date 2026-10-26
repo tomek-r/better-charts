@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { eurusdFormingBar, eurusdQuote, gotoWithStub, pushEvent, STUB_NOW } from './helpers/tauriStub';
-import type { PointerReadout } from '../src/features/chart/engine/pointerReadoutPrimitive';
+import type { PointerReadout } from '../src/features/chart/engine/legend/pointerReadoutPrimitive';
 
 /**
  * The pointer's price and time readouts live ON the axes: the price pill at the

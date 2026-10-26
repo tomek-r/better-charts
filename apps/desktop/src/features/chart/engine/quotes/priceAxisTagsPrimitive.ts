@@ -5,10 +5,10 @@ import type {
   SeriesAttachedParameter,
   Time,
 } from 'lightweight-charts';
-import { palette } from '../../../shared/theme/palette';
-import { AttachedSeriesPrimitive } from './attachedPrimitive';
-import type { RenderTarget } from './drawTarget';
-import { paintTag, tagLayout, type TagLayout } from './fixedCellText';
+import { palette } from '../../../../shared/theme/palette';
+import { AttachedSeriesPrimitive } from '../surface/attachedPrimitive';
+import type { RenderTarget } from '../surface/drawTarget';
+import { paintTag, tagLayout, type TagLayout } from '../text/fixedCellText';
 import { priceTagHeight, tagStackTops } from './tagStack';
 
 /**

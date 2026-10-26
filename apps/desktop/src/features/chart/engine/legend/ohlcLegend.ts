@@ -1,4 +1,4 @@
-import type { RenderBar } from './mt5DataAdapter';
+import type { RenderBar } from '../bars/mt5DataAdapter';
 
 /**
  * The OHLC readout in the chart's top-left corner. It owns the `.chart-legend`

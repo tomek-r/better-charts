@@ -1,4 +1,4 @@
-import type { RenderViewport } from '../../chart/engine/toolContract';
+import type { RenderViewport } from '../../chart/engine/tools/toolContract';
 import type { ProfileResult, TickProfileBin } from '../../../shared/bridge/types';
 import { DEFAULT_LOADER_COLORS, drawLoader } from '../../../shared/canvas/loader';
 import { drawSeparatedText } from '../../../shared/canvas/separatedText';

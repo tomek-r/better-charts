@@ -11,7 +11,7 @@ import {
   DEFAULT_TIMEFRAME_FAVORITES,
   loadTimeframeFavorites,
 } from '../src/features/chart/timeframes/timeframeFavorites';
-import { futurePoints } from '../src/features/chart/engine/futureTimePoints';
+import { futurePoints } from '../src/features/chart/engine/viewport/futureTimePoints';
 import { BrokerClock } from '../src/features/chart/engine/barCountdown/clock';
 
 const periods = [

@@ -1,8 +1,8 @@
-import { ChartController } from '../../src/features/chart/engine/chartController';
+import { ChartController } from '../../src/features/chart/engine/surface/chartController';
 import { arrowPlugin } from '../../src/features/tools/arrow/plugin';
 import { crosshairPlugin } from '../../src/features/tools/crosshair/plugin';
 import { fixedRangeProfilePlugin } from '../../src/features/tools/fixedRangeProfile/plugin';
-import type { ChartToolDefinition } from '../../src/features/chart/engine/toolContract';
+import type { ChartToolDefinition } from '../../src/features/chart/engine/tools/toolContract';
 
 const NO_MARKET_DATA = {
   requestTickProfile: () => undefined,

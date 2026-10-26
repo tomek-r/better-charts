@@ -1,6 +1,6 @@
-import { HISTORY_BARS, INITIAL_HISTORY_BARS } from '../../../shared/bridge/limits';
-import type { ChartController } from './chartController';
-import { DEFAULT_BAR_SPACING, END_MARGIN } from './futureTimePoints';
+import { HISTORY_BARS, INITIAL_HISTORY_BARS } from '../../../../shared/bridge/limits';
+import type { ChartController } from '../surface/chartController';
+import { DEFAULT_BAR_SPACING, END_MARGIN } from '../viewport/futureTimePoints';
 
 /** Bars beyond the visible span, so a small pan does not immediately reveal a gap. */
 const SLACK_BARS = 50;

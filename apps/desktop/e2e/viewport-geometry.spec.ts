@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { isOutsidePane } from '../src/features/chart/engine/viewportController';
+import { isOutsidePane } from '../src/features/chart/engine/viewport/viewportController';
 
 /** Pure pane-bounds predicate behind the crosshair tool's hide-rather-than-clamp rule. */
 

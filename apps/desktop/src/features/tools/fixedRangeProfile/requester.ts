@@ -1,5 +1,5 @@
 import type { ProfileResult } from '../../../shared/bridge/types';
-import type { ChartToolHost } from '../../chart/engine/toolContract';
+import type { ChartToolHost } from '../../chart/engine/tools/toolContract';
 import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from './overlay';
 import type { FixedRangeProfileRange } from './range';
 

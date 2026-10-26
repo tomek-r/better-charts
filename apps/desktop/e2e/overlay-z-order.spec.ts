@@ -1,14 +1,14 @@
-import { layoutLabelCenters } from '../src/features/chart/engine/labelLayout';
+import { layoutLabelCenters } from '../src/features/chart/engine/trading/labelLayout';
 import { test, expect } from '@playwright/test';
 import { createRecordingCtx, createTestViewport, renderArgsFor, type PaintOp } from './helpers/overlayHarness';
-import type { OverlayRenderer as OverlayPlugin } from '../src/features/chart/engine/overlayTypes';
-import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart/engine/overlays';
-import { WorkspacePrimitive } from '../src/features/chart/engine/workspacePrimitive';
+import type { OverlayRenderer as OverlayPlugin } from '../src/features/chart/engine/surface/overlayTypes';
+import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart/engine/trading/overlays';
+import { WorkspacePrimitive } from '../src/features/chart/engine/surface/workspacePrimitive';
 
 /**
  * Paint-order (z-index) and row-inset regression for the chart overlays.
  * Everything is drawn on canvas, so the z-order IS the paint order: the chart
- * renders `ui`-layer plugins in REGISTRATION order, and features/chart/engine/overlays.ts
+ * renders `ui`-layer plugins in REGISTRATION order, and features/chart/engine/trading/overlays.ts
  * encodes the contract — every dotted level/reference line (bid/ask, entry,
  * SL, TP) and risk-zone fill paints UNDER every row label (chips, handles, qty
  * and axis tags). The row panels (✕ chip / pill / handles) additionally keep a
@@ -97,7 +97,7 @@ test('chart plugin registration is the overlay z-index contract', () => {
     (entry) => (entry.plugin as unknown as OverlayPlugin).descriptor.id,
   );
   // Drawing tools paint before this list (WorkspacePrimitive), so they are not in it.
-  // ALL lines passes first, then ALL labels passes (see features/chart/engine/overlays.ts).
+  // ALL lines passes first, then ALL labels passes (see features/chart/engine/trading/overlays.ts).
   expect(ids).toEqual([
     'price-lines-lines',
     'position-overlay-lines',

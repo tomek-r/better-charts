@@ -1,8 +1,8 @@
 import type { ISeriesApi, UTCTimestamp } from 'lightweight-charts';
-import type { Candle } from '../../../shared/bridge/types';
+import type { Candle } from '../../../../shared/bridge/types';
 import { toRenderBar, type RenderBar } from './mt5DataAdapter';
-import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../shared/bridge/timeframes';
-import { palette } from '../../../shared/theme/palette';
+import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../../shared/bridge/timeframes';
+import { palette } from '../../../../shared/theme/palette';
 
 /**
  * Owns the renderable bar cache and the two series it feeds, so every mutation

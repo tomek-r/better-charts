@@ -1,10 +1,10 @@
-import { timeframeBarOffset, timeframeBarTime } from '../../../shared/bridge/timeframes';
-import type { QuoteSnapshot } from '../../../shared/bridge/types';
-import type { MarketDataPort } from '../../bridge/marketDataPort';
-import type { RenderViewport } from './overlayTypes';
+import { timeframeBarOffset, timeframeBarTime } from '../../../../shared/bridge/timeframes';
+import type { QuoteSnapshot } from '../../../../shared/bridge/types';
+import type { MarketDataPort } from '../../../bridge/marketDataPort';
+import type { RenderViewport } from '../surface/overlayTypes';
 
 export type { RenderViewport };
-import type { TimeModel } from './viewportController';
+import type { TimeModel } from '../viewport/viewportController';
 
 /** The viewport geometry a tool hit-tests against, in pane CSS pixels. */
 export interface ChartToolGeometry {

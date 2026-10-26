@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { withFakeClock } from './helpers/fakeClock';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
-import type { ChartToolHost, ChartToolResetReason } from '../src/features/chart/engine/toolContract';
+import type { ChartToolHost, ChartToolResetReason } from '../src/features/chart/engine/tools/toolContract';
 import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/tool';
 
 /**

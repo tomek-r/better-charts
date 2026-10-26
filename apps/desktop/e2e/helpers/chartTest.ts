@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import type { DevTestApi } from '../../src/features/chart/engine/devTestApi';
+import type { DevTestApi } from '../../src/features/chart/engine/surface/devTestApi';
 import type { CrosshairTestApi } from '../../src/features/tools/crosshair/tool';
 import type { FixedRangeProfileTestApi } from '../../src/features/tools/fixedRangeProfile/tool';
 

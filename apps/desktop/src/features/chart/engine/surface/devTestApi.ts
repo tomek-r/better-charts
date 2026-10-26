@@ -1,7 +1,7 @@
 import type { PriceScaleMode } from 'lightweight-charts';
-import type { RenderBar } from './mt5DataAdapter';
-import type { PointerReadout } from './pointerReadoutPrimitive';
-import type { ViewportChangeRecord } from './viewportDiagnostics';
+import type { RenderBar } from '../bars/mt5DataAdapter';
+import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
+import type { ViewportChangeRecord } from '../viewport/viewportDiagnostics';
 
 /**
  * The development-only test hook the e2e suite drives (see e2e/README.md).

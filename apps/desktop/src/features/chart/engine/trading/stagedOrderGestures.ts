@@ -1,9 +1,9 @@
 import type { TradingLabelTarget } from './labelLayout';
 import { hitCircle, hitRect, STAGED_GRAB, type StagedOrderLevels, type StagedSlBand } from './stagedOrderOverlay';
-import type { RiskSide } from '../../../shared/bridge/types';
-import { ticketPrice } from '../../../shared/format';
-import type { OrderTicketStores } from '../../order-ticket/state/orderTicketStores';
-import type { ChartWorkspaceState } from '../state/useChartWorkspace';
+import type { RiskSide } from '../../../../shared/bridge/types';
+import { ticketPrice } from '../../../../shared/format';
+import type { OrderTicketStores } from '../../../order-ticket/state/orderTicketStores';
+import type { ChartWorkspaceState } from '../../state/useChartWorkspace';
 
 type StagedGestureWorkspace = Pick<ChartWorkspaceState, 'stagedOrderState'> &
   Partial<Pick<ChartWorkspaceState, 'chart'>>;

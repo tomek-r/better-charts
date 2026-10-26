@@ -1,4 +1,4 @@
-import { timeframeBarTime } from '../../../shared/bridge/timeframes';
+import { timeframeBarTime } from '../../../../shared/bridge/timeframes';
 
 /**
  * Time-scale padding: the invisible points that let every real candle leave the

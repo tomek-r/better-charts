@@ -1,32 +1,32 @@
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
-import type { BridgeState, Candle, QuoteSnapshot } from '../../../shared/bridge/types';
-import { toRenderBar, type RenderBar } from './mt5DataAdapter';
-import type { ChartOverlayState } from './overlays';
+import type { BridgeState, Candle, QuoteSnapshot } from '../../../../shared/bridge/types';
+import { toRenderBar, type RenderBar } from '../bars/mt5DataAdapter';
+import type { ChartOverlayState } from '../trading/overlays';
 import type { RenderViewport } from './overlayTypes';
 import { createChartSurface } from './chartFactory';
-import { TRADING_COLORS } from './tradingOverlayDrawing';
-import { BarCountdownPrimitive, CountdownController } from './barCountdown';
-import { OhlcLegend } from './ohlcLegend';
-import { ConnectionIndicator } from './connectionIndicator';
-import { PointerReadoutPrimitive } from './pointerReadoutPrimitive';
-import { PriceAxisTagsPrimitive } from './priceAxisTagsPrimitive';
-import { PriceScaleController } from './priceScaleController';
-import { BarSeriesController } from './barSeriesController';
-import { PriceLineController } from './priceLineController';
-import { isOutsidePane, ViewportController } from './viewportController';
+import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
+import { BarCountdownPrimitive, CountdownController } from '../barCountdown';
+import { OhlcLegend } from '../legend/ohlcLegend';
+import { ConnectionIndicator } from '../legend/connectionIndicator';
+import { PointerReadoutPrimitive } from '../legend/pointerReadoutPrimitive';
+import { PriceAxisTagsPrimitive } from '../quotes/priceAxisTagsPrimitive';
+import { PriceScaleController } from '../priceScale/priceScaleController';
+import { BarSeriesController } from '../bars/barSeriesController';
+import { PriceLineController } from '../quotes/priceLineController';
+import { isOutsidePane, ViewportController } from '../viewport/viewportController';
 import type {
   ChartDrawTarget,
   ChartPointerUpOutcome,
   ChartToolDefinition,
   ChartToolHost,
   ChartToolResetReason,
-} from './toolContract';
-import { ChartToolSet } from './toolSet';
+} from '../tools/toolContract';
+import { ChartToolSet } from '../tools/toolSet';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installDevTestApi, removeDevTestApi } from './devTestApi';
-import { initialHistoryWindow } from './initialHistoryWindow';
-import { clearViewportChangeLog, viewportChangeLog } from './viewportDiagnostics';
-import { PointerCandleHold } from './pointerCandleHold';
+import { initialHistoryWindow } from '../bars/initialHistoryWindow';
+import { clearViewportChangeLog, viewportChangeLog } from '../viewport/viewportDiagnostics';
+import { PointerCandleHold } from '../bars/pointerCandleHold';
 
 /** What the app gives the chart for its tools; a tool sees it only through its `ChartToolHost`. */
 export type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
