@@ -59,7 +59,7 @@
   font-family: inherit;
   font-size: 13px;
   text-align: left;
-  cursor: pointer;
+  cursor: inherit;
 }
 
 /* A hidden drawing reads as a ghost row: still listed and still clickable, visibly switched off. */
@@ -76,6 +76,27 @@
 
 .object-tree-row-icon {
   flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+/* Every row drags: grab to pick it up, grabbing while it is in flight, dimmed where it started. */
+.object-tree-row {
+  cursor: grab;
+}
+
+.object-tree-row[data-dragging] {
+  cursor: grabbing;
+  opacity: 0.4;
+}
+
+/* The drop line: 2px on the edge the dragged row would land on, drawn inside the row's box. */
+.object-tree-row[data-drop-edge='before'] {
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+
+.object-tree-row[data-drop-edge='after'] {
+  box-shadow: inset 0 -2px 0 var(--color-accent);
 }
 
 .object-tree-row-label {

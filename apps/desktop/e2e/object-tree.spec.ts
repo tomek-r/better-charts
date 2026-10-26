@@ -41,6 +41,18 @@ function rowName(row: Locator): Locator {
   return row.getByRole('button', { name: PROFILE_ROW_NAME, exact: true });
 }
 
+/** The price bars row, which sits among the drawings at its place in the stacking order. */
+function barsRow(page: Page): Locator {
+  return page.getByRole('list', { name: 'Drawings' }).locator('[data-layer="bars"]');
+}
+
+/** The name of every row, topmost first: a drawing by its seeded id, the price bars as 'bars'. */
+async function layerNames(page: Page): Promise<Array<string | null>> {
+  return drawingRows(page).evaluateAll((rows) =>
+    rows.map((row) => row.getAttribute('data-drawing-id') ?? row.getAttribute('data-layer')),
+  );
+}
+
 /** One action button of a row, by the label the floating toolbar shares with the tree. */
 function rowAction(row: Locator, name: string): Locator {
   return row.getByRole('button', { name, exact: true });
@@ -61,23 +73,58 @@ async function gotoWithSavedProfiles(page: Page, records: readonly SavedProfile[
   await openObjectTree(page);
 }
 
-test('a chart without drawings lists none', async ({ page }) => {
+test('a chart without drawings lists only the price bars', async ({ page }) => {
   await gotoWithStub(page);
   await openObjectTree(page);
 
-  await expect(drawingRows(page)).toHaveCount(0);
+  await expect(drawingRows(page)).toHaveCount(1);
+  await expect(barsRow(page)).toBeVisible();
   await expect(page.getByText('No drawings yet')).toBeVisible();
 });
 
-test('two saved profiles list as rows, the topmost drawing first', async ({ page }) => {
+test('two saved profiles list as rows, the topmost drawing first and the price bars last', async ({ page }) => {
   await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE), savedProfile('second', EDITABLE)]);
 
-  await expect(drawingRows(page)).toHaveCount(2);
+  await expect(drawingRows(page)).toHaveCount(3);
   await expect(rowName(drawingRows(page).first())).toHaveText(PROFILE_ROW_NAME);
-  const seededIds = await drawingRows(page).evaluateAll((rows) =>
-    rows.map((row) => row.getAttribute('data-drawing-id')),
-  );
-  expect(seededIds).toEqual(['second', 'first']);
+  expect(await layerNames(page)).toEqual(['second', 'first', 'bars']);
+  await expect(barsRow(page).getByRole('button')).toHaveAccessibleName(/^EURUSD/);
+});
+
+test('a drawing saved below the price bars lists under the bars row', async ({ page }) => {
+  await gotoWithSavedProfiles(page, [savedProfile('first', { ...EDITABLE, belowBars: true })]);
+
+  expect(await layerNames(page)).toEqual(['bars', 'first']);
+});
+
+test('dragging the price bars row above the top drawing puts every drawing under the bars', async ({ page }) => {
+  await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE), savedProfile('second', EDITABLE)]);
+
+  await barsRow(page).dragTo(drawingRow(page, 'second'), { targetPosition: { x: 20, y: 2 } });
+
+  await expect.poll(async () => (await chartDrawings(page)).map((record) => record.belowBars)).toEqual([true, true]);
+  await expect.poll(async () => (await savedDrawings(page)).map((record) => record.belowBars)).toEqual([true, true]);
+  expect(await layerNames(page)).toEqual(['bars', 'second', 'first']);
+});
+
+test('dragging a drawing row above another reorders the chart', async ({ page }) => {
+  await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE), savedProfile('second', EDITABLE)]);
+
+  await drawingRow(page, 'first').dragTo(drawingRow(page, 'second'), { targetPosition: { x: 20, y: 2 } });
+
+  await expect.poll(async () => (await chartDrawings(page)).map((record) => record.id)).toEqual(['second', 'first']);
+});
+
+test('Alt+ArrowUp moves the focused row up and keeps focus on it', async ({ page }) => {
+  await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE), savedProfile('second', EDITABLE)]);
+  const name = rowName(drawingRow(page, 'first'));
+
+  await name.focus();
+  await page.keyboard.press('Alt+ArrowUp');
+
+  await expect.poll(async () => (await chartDrawings(page)).map((record) => record.id)).toEqual(['second', 'first']);
+  expect(await layerNames(page)).toEqual(['first', 'second', 'bars']);
+  await expect(name).toBeFocused();
 });
 
 test('clicking a row selects its drawing and shows the toolbar', async ({ page }) => {
@@ -142,9 +189,9 @@ test('Delete on a focused row removes its drawing', async ({ page }) => {
   await name.click();
   await name.press('Delete');
 
-  await expect(drawingRows(page)).toHaveCount(0);
+  await expect(drawingRows(page)).toHaveCount(1);
   await expect(page.getByText('No drawings yet')).toBeVisible();
-  await expect(page.getByRole('list', { name: 'Drawings' })).toBeFocused();
+  await expect(barsRow(page).getByRole('button')).toBeFocused();
   await expect.poll(async () => (await savedDrawings(page)).length).toBe(0);
 });
 
@@ -168,15 +215,20 @@ test('locking from the toolbar updates the tree row', async ({ page }) => {
 test('the arrow keys walk the rows and stop at both ends', async ({ page }) => {
   await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE), savedProfile('second', EDITABLE)]);
   const topRow = rowName(drawingRow(page, 'second'));
-  const bottomRow = rowName(drawingRow(page, 'first'));
+  const middleRow = rowName(drawingRow(page, 'first'));
+  const bottomRow = barsRow(page).getByRole('button');
 
   await topRow.focus();
   await page.keyboard.press('ArrowDown');
+  await expect(middleRow).toBeFocused();
+
+  await page.keyboard.press('ArrowDown');
   await expect(bottomRow).toBeFocused();
 
   await page.keyboard.press('ArrowDown');
   await expect(bottomRow).toBeFocused();
 
+  await page.keyboard.press('ArrowUp');
   await page.keyboard.press('ArrowUp');
   await expect(topRow).toBeFocused();
 });

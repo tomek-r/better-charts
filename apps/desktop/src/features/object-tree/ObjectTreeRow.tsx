@@ -17,32 +17,15 @@ import {
   TrashIcon,
 } from '../tools/drawingToolbar/drawingToolbarIcons';
 import { CHART_TOOL_PLUGINS } from '../tools/registry';
-
-/** The class of a row's name button, which the arrow keys and the focus after a removal walk by. */
-const ROW_NAME_CLASS = 'object-tree-row-name';
-const ROW_NAME_SELECTOR = `.${ROW_NAME_CLASS}`;
+import { ROW_NAME_CLASS, rowNameButtons } from './objectTreeRowFocus';
+import type { LayerRowReorder } from './useLayerReorder';
 
 /** The row glyph, sized like the floating toolbar's. */
 const ROW_ICON_SIZE_PX = 18;
 
-/** Arrow keys walk the rows in list order: down the tree and up it, stopping at its ends. */
-const ROW_FOCUS_STEPS: Readonly<Partial<Record<string, number>>> = { ArrowDown: 1, ArrowUp: -1 };
-
 /** A data attribute that exists only while its condition holds, which is how object-tree.css selects it. */
 function presentWhileTrue(holds: boolean): 'true' | undefined {
   return holds ? 'true' : undefined;
-}
-
-/** Every name button of the list the given row button lives in, topmost first. */
-function rowNameButtons(rowButton: HTMLButtonElement): HTMLButtonElement[] {
-  const list = rowButton.closest('ul');
-  return list === null ? [] : [...list.querySelectorAll<HTMLButtonElement>(ROW_NAME_SELECTOR)];
-}
-
-/** Moves focus one row down or up the list; the ends hold focus instead of wrapping around. */
-function focusNextRowButton(rowButton: HTMLButtonElement, step: number): void {
-  const rowButtons = rowNameButtons(rowButton);
-  rowButtons[rowButtons.indexOf(rowButton) + step]?.focus();
 }
 
 /**
@@ -50,7 +33,7 @@ function focusNextRowButton(rowButton: HTMLButtonElement, step: number): void {
  * else to the list. The target is read before the delete, while the row is still in the list.
  */
 function removeDrawingAndFocusRow(rowButton: HTMLButtonElement, removeDrawing: () => boolean): void {
-  const rowButtons = rowNameButtons(rowButton);
+  const rowButtons = rowNameButtons(rowButton.closest('ul'));
   const removedIndex = rowButtons.indexOf(rowButton);
   const nextFocusTarget = rowButtons[removedIndex + 1] ?? rowButtons[removedIndex - 1] ?? rowButton.closest('ul');
   if (!removeDrawing()) {
@@ -106,13 +89,14 @@ export interface ObjectTreeRowProps {
   /** The registry entry that placed the drawing: the row names it and commands it through its id. */
   readonly plugin: (typeof CHART_TOOL_PLUGINS)[number];
   readonly selected: boolean;
+  readonly reorder: LayerRowReorder;
 }
 
 /**
  * One drawing of the object tree: its name selects the drawing on the chart and a double click opens
  * its settings, while the three small buttons beside it lock, hide and remove it.
  */
-export function ObjectTreeRow({ record, plugin, selected }: ObjectTreeRowProps) {
+export function ObjectTreeRow({ record, plugin, selected, reorder }: ObjectTreeRowProps) {
   const { chart } = useChartResources();
   const openDrawingSettings = useOpenDrawingSettings();
   const nameRef = useRef<HTMLButtonElement>(null);
@@ -131,12 +115,7 @@ export function ObjectTreeRow({ record, plugin, selected }: ObjectTreeRowProps) 
       removeAndFocusRow();
       return;
     }
-    const step = ROW_FOCUS_STEPS[event.key];
-    if (step === undefined) {
-      return;
-    }
-    event.preventDefault();
-    focusNextRowButton(event.currentTarget, step);
+    reorder.onNameKeyDown(event);
   };
 
   return (
@@ -145,6 +124,7 @@ export function ObjectTreeRow({ record, plugin, selected }: ObjectTreeRowProps) 
       data-drawing-id={record.id}
       data-selected={presentWhileTrue(selected)}
       data-hidden={presentWhileTrue(!record.visible)}
+      {...reorder.listItemProps}
     >
       <button
         ref={nameRef}

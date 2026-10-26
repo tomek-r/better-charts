@@ -240,7 +240,12 @@ under it. The Object tree lists every drawing of the account and symbol, topmost
 the way TradingView lists its objects. A click on a row selects that drawing on the chart,
 hovering a row reveals Lock, Hide/Show and Remove buttons, a double click opens the
 drawing's settings dialog, and Delete or Backspace removes the drawing of the focused row.
-Arrow keys walk the rows. A locked or hidden drawing keeps its toggle in sight, and a
+Arrow keys walk the rows. The price bars have a row of their own (the chart's symbol and
+timeframe, e.g. "EURUSD, 1H", with a candlestick icon) at their place in the stacking order,
+and it has no action buttons. Any row, the bars row included, drags with the mouse or moves
+with Alt+ArrowUp / Alt+ArrowDown to change the order: the top row paints on top, and
+drawings listed below the bars row paint under the candles. The order and each drawing's
+side of the bars are saved. A locked or hidden drawing keeps its toggle in sight, and a
 hidden row's name is dimmed while the row stays listed and clickable. The dialog is the
 same one the floating toolbar opens, held by one provider above the chart and the tree.
 The tree keeps no data window and no toolbar of its own (owner decision).
