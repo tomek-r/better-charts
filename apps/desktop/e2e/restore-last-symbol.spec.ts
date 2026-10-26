@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { accountSnapshotFixture, connectBridgeSession } from './helpers/bridgeConnect';
+import { blockedStorage, fixedStorage, memoryStorage } from './helpers/memoryStorage';
+import { readStoredJson, seedStoredValue } from './helpers/pageStorage';
 import { brokerSymbolFixture, expectNoErrors, gotoWithStub, pushEvent, stubInvocations } from './helpers/tauriStub';
 import { chooseSearchResult, openSymbolSearch } from './helpers/panel';
 import {
@@ -28,41 +30,14 @@ async function expectDefaultWindow(page: Page): Promise<void> {
   await expect(timeframeButton(page, '5m')).toHaveAttribute('aria-pressed', 'true');
 }
 
-/** In-memory `Storage` stand-in for the pure storage helpers. */
-function memoryStorage(initial: Record<string, string> = {}) {
-  const values = new Map(Object.entries(initial));
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    },
-  };
-}
-
-/** A storage that answers one fixed raw value. */
-const fixedStorage = (value: string | null) => ({ getItem: () => value });
-
 /** Writes a raw value under the saved-selection key once, so a reload keeps what the app stored. */
-async function seedStoredValue(page: Page, raw: string): Promise<void> {
-  await page.addInitScript(
-    ({ key, value }) => {
-      if (localStorage.getItem(key) === null) {
-        localStorage.setItem(key, value);
-      }
-    },
-    { key: lastChartSelectionKey, value: raw },
-  );
-}
-
 async function seedSavedSelection(page: Page, selections: Record<string, LastChartSelection>): Promise<void> {
-  await seedStoredValue(page, JSON.stringify(selections));
+  await seedStoredValue(page, lastChartSelectionKey, JSON.stringify(selections));
 }
 
 async function storedSelection(page: Page, accountKey: string) {
-  return page.evaluate(
-    ({ key, account }) => (JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>)[account],
-    { key: lastChartSelectionKey, account: accountKey },
-  );
+  const stored = (await readStoredJson(page, lastChartSelectionKey)) as Record<string, unknown>;
+  return stored[accountKey];
 }
 
 /** The queries the app sent to the broker's symbol list. */
@@ -124,12 +99,8 @@ test('malformed, foreign or unreadable storage reads as no saved window', () => 
   ]) {
     expect(loadLastChartSelection(ACCOUNT_KEY, fixedStorage(raw))).toBeUndefined();
   }
-  const blocked = {
-    getItem: (): string => {
-      throw new Error('blocked');
-    },
-  };
-  expect(loadLastChartSelection(ACCOUNT_KEY, blocked)).toBeUndefined();
+  expect(loadLastChartSelection(ACCOUNT_KEY, blockedStorage)).toBeUndefined();
+
   // A broken neighbour does not hide a readable entry.
   const neighbours = '{"50123456@Broker-Demo":{"symbol":"NAS100","timeframe":"M15"},"x":null}';
   const readable = loadLastChartSelection(ACCOUNT_KEY, fixedStorage(neighbours));
@@ -245,7 +216,7 @@ for (const [label, raw] of [
   ['an entry that is not a window', JSON.stringify({ [ACCOUNT_KEY]: { symbol: 'NAS100' } })],
 ] as const) {
   test(`malformed saved storage (${label}) keeps the default and never crashes`, async ({ page }) => {
-    await seedStoredValue(page, raw);
+    await seedStoredValue(page, lastChartSelectionKey, raw);
     const collected = await gotoWithStub(page);
 
     await expectDefaultWindow(page);

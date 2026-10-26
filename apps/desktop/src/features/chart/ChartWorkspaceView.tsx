@@ -4,6 +4,8 @@ import { ChartTimeframes } from './timeframes/ChartTimeframes';
 import { ChartCanvas } from './ChartCanvas';
 import { ChartPartialClose } from './ChartPartialClose';
 import { useChartDrawn } from './useChartDrawn';
+import { ChartDrawingPersistence } from './drawingPersistence/ChartDrawingPersistence';
+import { ChartDrawingToolbar } from '../tools/drawingToolbar/ChartDrawingToolbar';
 
 export function ChartWorkspaceView() {
   const chartDrawn = useChartDrawn();
@@ -15,7 +17,9 @@ export function ChartWorkspaceView() {
       </div>
       <ChartTimeframes />
       <ChartCanvas>
+        <ChartDrawingPersistence />
         <ChartPartialClose />
+        <ChartDrawingToolbar />
       </ChartCanvas>
     </section>
   );

@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
-import type { ChartController } from '../engine/chartController';
+import type { ChartController } from '../engine/surface/chartController';
 import { DEFAULT_CHART_TOOL_ID, type ChartToolId } from '../../tools/registry';
-import type { Mt5DataAdapter } from '../engine/mt5DataAdapter';
-import type { StagedOrderState } from '../engine/stagedOrderOverlay';
-import type { PositionOverlayState } from '../engine/positionOverlay';
-import type { PartialCloseChipPort } from '../engine/partialCloseChipPort';
-import type { PriceLinesState } from '../engine/priceLinesOverlay';
+import type { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
+import type { StagedOrderState } from '../engine/trading/stagedOrderOverlay';
+import type { PositionOverlayState } from '../engine/trading/positionOverlay';
+import type { PartialCloseChipPort } from '../engine/trading/partialCloseChipPort';
+import type { PriceLinesState } from '../engine/quotes/priceLinesOverlay';
 import type { PendingModification } from '../../../shared/bridge/types';
 import { useChartModificationDrafts } from './useChartModificationDrafts';
 
@@ -13,11 +13,11 @@ export function useChartWorkspace() {
   // Shared (never re-created) state for the staged-order widget overlay: the
   // renderer writes hit geometry every frame; App's mirror effect writes the
   // ticket values; the host pointer handlers read both. No polling, no chart
-  // internals — see features/chart/engine/stagedOrderOverlay.ts for the mechanism contract.
+  // internals — see features/chart/engine/trading/stagedOrderOverlay.ts for the mechanism contract.
   const stagedOrderState = useRef<StagedOrderState>({ order: null, digits: 2, hit: {} });
   // Shared (never re-created) state for OUR position/order overlay: the painter
   // writes hit geometry every frame; the sync effect writes the portfolio
-  // lines; the host pointer handlers read both — see features/chart/engine/positionOverlay.ts.
+  // lines; the host pointer handlers read both — see features/chart/engine/trading/positionOverlay.ts.
   const positionOverlayState = useRef<PositionOverlayState>({
     positions: [],
     orders: [],
@@ -26,7 +26,7 @@ export function useChartWorkspace() {
     hit: {},
   });
   // Live bid/ask price lines overlay state — the quote effect writes the
-  // prices, the painter writes hit geometry (see features/chart/engine/priceLinesOverlay.ts).
+  // prices, the painter writes hit geometry (see features/chart/engine/quotes/priceLinesOverlay.ts).
   const priceLinesState = useRef<PriceLinesState>({ digits: 2, hit: {} });
   // The chart SL/TP drag handlers bind once at mount; they read this render's
   // dispatch gate and auto-dispatch path through this ref (drag events arrive only

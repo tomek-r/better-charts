@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import type { DevTestApi } from '../../src/features/chart/engine/devTestApi';
+import type { DevTestApi } from '../../src/features/chart/engine/surface/devTestApi';
 import type { CrosshairTestApi } from '../../src/features/tools/crosshair/tool';
 import type { FixedRangeProfileTestApi } from '../../src/features/tools/fixedRangeProfile/tool';
 
@@ -40,4 +40,9 @@ export async function profileBoundaries(page: Page) {
 /** The profile tool's selection, or null before the chart mounted. */
 export async function profileSelection(page: Page) {
   return page.evaluate(() => window.__chartTest?.tool('fixedRangeProfile')?.selection() ?? null);
+}
+
+/** Every FRVP drawing the tool holds, bottom to top, or null before the chart mounted. */
+export async function profileDrawings(page: Page) {
+  return page.evaluate(() => window.__chartTest?.tool('fixedRangeProfile')?.drawings() ?? null);
 }

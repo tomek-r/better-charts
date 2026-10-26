@@ -1,0 +1,55 @@
+/* A / L price-scale toggles at the foot of the price axis (engine/priceScale). */
+.price-scale-controls {
+  position: absolute;
+  right: 0;
+  bottom: 28px;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  background: var(--color-panel);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  padding-top: 5px;
+}
+
+.price-scale-controls-revealed,
+.price-scale-controls:focus-within {
+  opacity: 1;
+}
+
+.price-scale-controls button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.price-scale-controls-revealed button {
+  pointer-events: auto;
+}
+
+.price-scale-controls button:hover {
+  border-color: var(--color-muted);
+  color: var(--color-text);
+}
+
+.price-scale-controls button.price-scale-control-on {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-ring-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .price-scale-controls {
+    transition: none;
+  }
+}

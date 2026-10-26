@@ -1,4 +1,4 @@
-import type { ChartDrawTarget, ChartTool, ChartToolHost } from '../../chart/engine/toolContract';
+import type { ChartDrawTarget, ChartTool, ChartToolHost } from '../../chart/engine/tools/toolContract';
 import { palette } from '../../../shared/theme/palette';
 
 /** Colours come from the shared palette — a canvas renderer cannot read CSS variables. */

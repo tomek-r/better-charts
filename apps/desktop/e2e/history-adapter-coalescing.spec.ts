@@ -4,7 +4,7 @@ import { gotoWithStub } from './helpers/tauriStub';
 test('coalesces same-turn history selections and suppresses requests invalidated before dispatch', async ({ page }) => {
   await gotoWithStub(page);
   const result = await page.evaluate(async () => {
-    const adapterPath = '/src/features/chart/engine/mt5DataAdapter.ts';
+    const adapterPath = '/src/features/chart/engine/bars/mt5DataAdapter.ts';
     const { Mt5DataAdapter } = await import(/* @vite-ignore */ adapterPath);
     const internals = (
       window as unknown as {

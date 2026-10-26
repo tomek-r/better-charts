@@ -10,7 +10,7 @@ export function useChartModificationDrafts(
   const [tradingSyncTick, setTradingSyncTick] = useState(0);
   // Flows for real-position/order drags — hoisted so the SAME functions
   // serve the chart's trading events (positionModify/orderModify) and OUR
-  // capture-phase line drags on the custom overlay (features/chart/engine/positionOverlay.ts).
+  // capture-phase line drags on the custom overlay (features/chart/engine/trading/positionOverlay.ts).
   // Only stable setters + dragModifyRef are touched, so mount-once effects may
   // safely capture first-render copies (dragModifyRef pattern).
   const recordDraft = (draft: PendingModification) => {

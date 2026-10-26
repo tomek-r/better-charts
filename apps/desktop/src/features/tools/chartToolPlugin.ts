@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { ChartToolDefinition } from '../chart/engine/toolContract';
+import type { ChartToolDefinition } from '../chart/engine/tools/toolContract';
 
 /** One glyph plus the stroke settings it is drawn with (they differ per icon). */
 export interface ChartToolIconSpec {

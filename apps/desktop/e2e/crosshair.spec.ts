@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gotoWithStub, STUB_NOW } from './helpers/tauriStub';
-import type { PointerReadout } from '../src/features/chart/engine/pointerReadoutPrimitive';
+import type { PointerReadout } from '../src/features/chart/engine/legend/pointerReadoutPrimitive';
 
 /**
  * The crosshair tool: the rail's arrow reveals the tool menu (Escape closes it and

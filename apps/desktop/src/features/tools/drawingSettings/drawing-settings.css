@@ -1,0 +1,93 @@
+/* Settings of one drawing (DrawingSettingsDialog): a two-column label/control grid per group. */
+
+.drawing-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* A field's label, control and tooltip join the group's grid directly. */
+.drawing-settings-field {
+  display: contents;
+}
+
+.drawing-settings-group {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.drawing-settings-group legend {
+  grid-column: 1 / -1;
+  padding: 0;
+  color: var(--color-text-bright);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.drawing-settings-label {
+  color: var(--color-text-label);
+  font-size: 13px;
+}
+
+.drawing-settings-control {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: 13px;
+}
+
+.drawing-settings-control:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
+/* The draft value does not (yet) satisfy its kind: the field is marked, the dialog says why. */
+.drawing-settings-control[aria-invalid='true'] {
+  border-color: var(--color-sell-border);
+}
+
+.drawing-settings-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  justify-self: start;
+  accent-color: var(--color-accent);
+}
+
+.drawing-settings-color {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.drawing-settings-color-input {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-surface);
+}
+
+.drawing-settings-color-hex {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.drawing-settings-empty {
+  margin: 0;
+  color: var(--color-muted-strong);
+  font-size: 13px;
+}

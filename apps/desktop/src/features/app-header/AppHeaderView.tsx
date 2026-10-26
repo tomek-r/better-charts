@@ -1,19 +1,20 @@
 import { useAppSettingsActions } from '../settings/AppSettingsProvider';
+import { useSideDrawerActions, useSideDrawerOpen } from '../side-drawers/SideDrawerProvider';
 import { useSymbolSearchControls } from '../symbol-search/SymbolSearchProvider';
 import { TopBar } from '../topbar/TopBar';
-import { usePanelActions, usePanelOpen } from './PanelVisibilityProvider';
 
 /** Wires drawer, search and settings controls into the topbar's presentation. */
 export function AppHeaderView() {
-  const panelOpen = usePanelOpen();
-  const { setPanelOpen } = usePanelActions();
+  const panelOpen = useSideDrawerOpen('tradePanel');
+  const { toggleDrawer } = useSideDrawerActions();
   const { setSearchOpen } = useSymbolSearchControls();
   const { openSettings } = useAppSettingsActions();
+  const togglePanel = () => toggleDrawer('tradePanel');
 
   return (
     <TopBar
       panelOpen={panelOpen}
-      setPanelOpen={setPanelOpen}
+      onTogglePanel={togglePanel}
       setSearchOpen={setSearchOpen}
       openSettings={openSettings}
     />

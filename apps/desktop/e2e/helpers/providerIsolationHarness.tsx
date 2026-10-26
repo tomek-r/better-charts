@@ -5,10 +5,10 @@ import type { ReactNode } from 'react';
 import { AppHeaderView } from '../../src/features/app-header/AppHeaderView';
 import { AccountBadge } from '../../src/features/account-badge/AccountBadge';
 import {
-  PanelVisibilityProvider,
-  usePanelActions,
-  usePanelOpen,
-} from '../../src/features/app-header/PanelVisibilityProvider';
+  SideDrawerProvider,
+  useSideDrawerActions,
+  useSideDrawerOpen,
+} from '../../src/features/side-drawers/SideDrawerProvider';
 import {
   useBridgeAccount,
   useBridgeConnectionSelector,
@@ -196,7 +196,7 @@ function TicketEditProbe() {
 }
 
 function PanelProbe() {
-  const panelOpen = usePanelOpen();
+  const panelOpen = useSideDrawerOpen('tradePanel');
   return <output data-testid="probe-panel">{String(panelOpen)}</output>;
 }
 
@@ -452,9 +452,9 @@ function TicketActionProbe() {
 }
 
 function PanelControls() {
-  const { setPanelOpen } = usePanelActions();
+  const { toggleDrawer } = useSideDrawerActions();
   return (
-    <button type="button" onClick={() => setPanelOpen((open) => !open)}>
+    <button type="button" onClick={() => toggleDrawer('tradePanel')}>
       Toggle panel
     </button>
   );
@@ -591,9 +591,9 @@ export function mountProviderIsolationHarness(container: HTMLElement): void {
 
   createRoot(container).render(
     <ErrorNotificationsProvider>
-      <PanelVisibilityProvider>
+      <SideDrawerProvider>
         <WorkspaceProbes />
-      </PanelVisibilityProvider>
+      </SideDrawerProvider>
     </ErrorNotificationsProvider>,
   );
 }

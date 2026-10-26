@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
-import type { RenderBar } from '../src/features/chart/engine/mt5DataAdapter';
+import type { RenderBar } from '../src/features/chart/engine/bars/mt5DataAdapter';
 import {
   gotoWithStub,
   pausePageClockAhead,

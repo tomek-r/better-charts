@@ -1,23 +1,27 @@
+import { ChartDrawingCollection, type ChartDrawingEntry } from '../../chart/engine/drawings/chartDrawingCollection';
 import {
   anchorAtX,
-  anchorAtBar,
   type BarAnchor,
+  type ChartDrawingPaintTarget,
   type ChartDrawTarget,
   type ChartPointerDownPurpose,
   type ChartPointerUpOutcome,
   type ChartTool,
   type ChartToolHost,
   type ChartToolResetReason,
-} from '../../chart/engine/toolContract';
-import { palette } from '../../../shared/theme/palette';
-import { FixedRangeProfileRequester } from './requester';
-import {
-  drawFixedRangeProfile,
-  drawFixedRangeProfileLoadingWash,
-  drawFixedRangeProfileSpinner,
-  type FixedRangeProfileState,
-} from './overlay';
-import { isRangeOpen, rangeEndingAtAnchor, sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './range';
+} from '../../chart/engine/tools/toolContract';
+import type { ToolInputDefinition } from '../../chart/engine/drawings/toolInputs';
+import { FixedRangeProfileDrawing, outsidePane } from './drawing/fixedRangeProfileDrawing';
+import { FixedRangeProfileFactory } from './drawing/fixedRangeProfileFactory';
+import { FIXED_RANGE_PROFILE_POINTS } from './drawing/fixedRangeProfilePoints';
+import { TickProfileRequestQueue } from './requests/tickProfileRequestQueue';
+import { sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './range';
+
+/**
+ * The FRVP's settings; empty until its inputs are designed. Every drawing still stores resolved
+ * values so adding an input later restores old drawings with its default.
+ */
+export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [];
 
 /** Where the two drag handles sit, in pane CSS px, and the range they delimit. */
 interface FixedRangeProfileBoundaries {
@@ -26,83 +30,71 @@ interface FixedRangeProfileBoundaries {
   range: { fromMs: number; endMs: number };
 }
 
+/** The boundary drag in progress: the drawing it edits, which side, and the range it previews. */
+interface BoundaryDrag {
+  readonly drawing: FixedRangeProfileDrawing;
+  readonly side: 'from' | 'end';
+  readonly original: PlacedFixedRangeProfile;
+  preview: PlacedFixedRangeProfile;
+}
+
 /** What the e2e suite reads through `window.__chartTest.tool('fixedRangeProfile')` (dev builds only). */
 export interface FixedRangeProfileTestApi {
-  /** Handle x positions and the range as the tool currently shows it (null = no range). */
+  /** Handle x positions and the range of the shown drawing; null when the tool has no drawing. */
   boundaries(): FixedRangeProfileBoundaries | null;
-  /** The active selection (null = cleared) and whether its computed profile is loaded and visible. */
+  /** The shown drawing's requested range and whether its computed profile is loaded and visible. */
   selection(): { range: { fromMs: number; toMs: number } | null; hasProfile: boolean };
+  /** Every drawing, bottom to top. */
+  drawings(): Array<{
+    id: string;
+    locked: boolean;
+    range: { fromMs: number; endMs: number };
+    hasProfile: boolean;
+  }>;
 }
 
 /**
- * The Fixed Range Volume Profile tool: the gesture, its painter and its profile requester.
- * The gesture: two clicks place the range, and dragging either boundary edits it
- * with a live preview. A placed or edited range is handed to the requester, which
- * requests its profile. The end may sit in the empty area right of the newest bar;
- * the start is always a real bar.
+ * The Fixed Range Volume Profile tool: the two-click gesture, the boundary drag and the drawings it
+ * routes them to. The shared collection owns the drawings' ids, paint order, selection, lock,
+ * visibility and settings; this class decides which drawing a press addresses, how a range is
+ * committed and how a drawing paints, and reports every committed change to the host. The start of a
+ * range is always a real bar, the end may sit in the empty area right of the newest bar.
  *
- * Which tool is active is not decided here: once the range is placed the tool asks the
- * host to return to the default tool. `state` is the overlay's state: this tool is the only writer of
- * `previewing`, and the only writer that clears `range` and `profile`. The
- * `FixedRangeProfileRequester` also writes `range` and `profile` when it issues a
- * request or accepts a result, which is why that object is shared by design.
+ * The drawings' requests share one queue, because the backend computes a single tick profile at a time.
  */
 export class FixedRangeProfileTool implements ChartTool {
   private first: BarAnchor | null = null;
   private hover: BarAnchor | null = null;
   private pressed: BarAnchor | null = null;
-  private selection: PlacedFixedRangeProfile | null = null;
-  /** Whether the newest bar opened before the range end at the last bar change: its last bar may still gain ticks. */
-  private wasOpenAtLastBarsChange = false;
-  /** The timeframe of the bars `wasOpenAtLastBarsChange` was judged on. */
-  private lastTimeframe: string | undefined;
-  private boundary: {
-    side: 'from' | 'end';
-    original: PlacedFixedRangeProfile;
-    preview: PlacedFixedRangeProfile;
-  } | null = null;
-
-  private readonly state: FixedRangeProfileState = { range: null, hit: {} };
-  private readonly requester: FixedRangeProfileRequester;
+  private drag: BoundaryDrag | null = null;
+  readonly drawings: ChartDrawingCollection<FixedRangeProfileDrawing>;
+  private readonly queue: TickProfileRequestQueue;
 
   constructor(private readonly host: ChartToolHost) {
-    this.requester = new FixedRangeProfileRequester(host, this.state, () => this.selection);
+    this.queue = new TickProfileRequestQueue(host.marketDataPort);
+    this.drawings = new ChartDrawingCollection<FixedRangeProfileDrawing>(
+      { inputs: FIXED_RANGE_PROFILE_INPUTS, points: FIXED_RANGE_PROFILE_POINTS },
+      new FixedRangeProfileFactory(host, this.queue),
+      () => host.requestRepaint(),
+    );
   }
 
   /** Whether a click-drag is mid-gesture, which the owner must cancel on a tool switch. */
   hasGesture(): boolean {
-    return this.pressed !== null || this.first !== null || this.boundary !== null;
+    return this.pressed !== null || this.first !== null || this.drag !== null;
   }
 
   pointerDown(x: number, y: number, purpose: ChartPointerDownPurpose): boolean {
-    const viewport = this.host.geometry.viewport();
-    if (x < 0 || x > viewport.chartRect.width || y < 0 || y > viewport.chartRect.height) {
+    if (outsidePane(this.host.geometry.viewport().chartRect, x, y)) {
       return false;
     }
-    if (purpose === 'startNewDrawing') {
-      const anchor = anchorAtX(this.host, x);
-      if (anchor === null) {
-        return true;
-      }
+    if (purpose === 'editExistingDrawing') {
+      return this.beginBoundaryDrag(x);
+    }
+    const anchor = anchorAtX(this.host, x);
+    if (anchor !== null) {
       this.pressed = anchor;
-      this.host.requestRepaint();
-      return true;
     }
-    const selection = this.selection;
-    const bounds = this.boundaries();
-    if (!selection || !bounds) {
-      return false;
-    }
-    let side: 'from' | 'end' | null = null;
-    if (Math.abs(x - bounds.fromX) <= 7) {
-      side = 'from';
-    } else if (Math.abs(x - bounds.toX) <= 7) {
-      side = 'end';
-    }
-    if (!side) {
-      return false;
-    }
-    this.boundary = { side, original: selection, preview: selection };
     this.host.requestRepaint();
     return true;
   }
@@ -113,75 +105,15 @@ export class FixedRangeProfileTool implements ChartTool {
       this.host.requestRepaint();
       return true;
     }
-    const boundary = this.boundary;
-    if (!boundary) {
-      return false;
-    }
-    const anchor = anchorAtX(this.host, x);
-    if (anchor === null) {
-      return true;
-    }
-    const { barSeries } = this.host;
-    const { bars } = barSeries;
-    const { original } = boundary;
-    // Keep a moving boundary on a real candle when it crosses the other
-    // boundary; never synthesize endMs ± 1 millisecond anchors.
-    if (boundary.side === 'from') {
-      let lastAllowedIndex = bars.length - 1;
-      while (lastAllowedIndex >= 0 && bars[lastAllowedIndex].time * 1000 > original.lastSlotOpenMs) {
-        lastAllowedIndex -= 1;
-      }
-      if (lastAllowedIndex < 0) {
-        return true;
-      }
-      const index = Math.min(anchor.index, lastAllowedIndex);
-      boundary.preview = { ...original, fromMs: bars[index].time * 1000 };
-    } else {
-      const firstAllowedIndex = bars.findIndex((bar) => bar.time * 1000 >= original.fromMs);
-      if (firstAllowedIndex < 0) {
-        return true;
-      }
-      const endAnchor = anchor.index < firstAllowedIndex ? anchorAtBar(barSeries, firstAllowedIndex) : anchor;
-      boundary.preview = rangeEndingAtAnchor(barSeries, original.fromMs, endAnchor);
-    }
-    this.state.previewing = !sameRange(boundary.preview, original);
-    this.host.requestRepaint();
-    return true;
+    return this.drag === null ? false : this.moveBoundary(this.drag, x);
   }
 
   pointerUp(outcome: ChartPointerUpOutcome): boolean {
     const commit = outcome === 'released';
     if (this.pressed !== null) {
-      const anchor = this.pressed;
-      this.pressed = null;
-      if (commit) {
-        if (this.first === null) {
-          this.first = this.hover = anchor;
-        } else {
-          const placed = spanBetweenAnchors(this.host.barSeries, this.first, anchor);
-          this.selection = placed;
-          this.markPlaced(placed);
-          this.first = this.hover = null;
-          this.host.returnToDefaultTool();
-          this.requester.requestProfile(placed);
-        }
-      }
-      this.host.requestRepaint();
-      return true;
+      return this.endPlacementStep(this.pressed, commit);
     }
-    const current = this.boundary;
-    if (!current) {
-      return false;
-    }
-    this.boundary = null;
-    this.state.previewing = false;
-    if (commit && !sameRange(current.original, current.preview)) {
-      this.selection = current.preview;
-      this.markPlaced(current.preview);
-      this.requester.requestProfile(current.preview);
-    }
-    this.host.requestRepaint();
-    return true;
+    return this.drag === null ? false : this.endBoundaryDrag(this.drag, commit);
   }
 
   cancelGesture(): void {
@@ -190,159 +122,171 @@ export class FixedRangeProfileTool implements ChartTool {
     this.host.requestRepaint();
   }
 
-  /**
-   * Reports a range whose last slot has not yet been passed by the newest bar.
-   * Reported on every change, not only on a new bar, because ticks inside the
-   * forming bar belong to the profile too; the requester throttles the refresh. The
-   * change in which a bar opens at or after `endMs` is reported once more, as the
-   * final refresh, and later changes are not. The end itself never moves, so the
-   * range is re-evaluated against whatever the newest bar is, e.g. after a
-   * timeframe switch.
-   */
+  /** Places the drawings stored before the bars arrived and keeps the visible open ranges fresh. */
   barsChanged(): void {
-    const selection = this.selection;
-    // A boundary drag owns the range until it is released or cancelled.
-    if (!selection || this.boundary || this.host.barSeries.bars.length === 0) {
-      return;
-    }
-    const wasOpen = this.wasOpenAtLastBarsChange;
-    this.wasOpenAtLastBarsChange = this.isOpen(selection);
-    const timeframe = this.host.barSeries.timeframe;
-    if (timeframe !== this.lastTimeframe) {
-      // The profile is timeframe-independent, so "was open" on the previous timeframe's bars is no reason for a
-      // final refresh. A request still unsettled is renewed rather than waited for; a loaded profile stays.
-      this.lastTimeframe = timeframe;
-      this.requester.renewUnsettledRequest(selection);
-      if (this.wasOpenAtLastBarsChange) {
-        this.requester.requestThrottledRefresh(selection);
+    for (const { drawing, visible } of this.drawings.entries()) {
+      // A hidden drawing asks for nothing: showing it again is what starts its request. A boundary
+      // drag owns its range until it is released or cancelled.
+      if (visible && drawing !== this.drag?.drawing) {
+        drawing.barsChanged();
       }
-      return;
-    }
-    if (wasOpen || this.wasOpenAtLastBarsChange) {
-      this.requester.requestThrottledRefresh(selection);
     }
   }
 
-  /** Records the committed range and the timeframe whose bars it is judged against. */
-  private markPlaced(range: PlacedFixedRangeProfile): void {
-    this.lastTimeframe = this.host.barSeries.timeframe;
-    this.wasOpenAtLastBarsChange = this.isOpen(range);
-  }
-
-  /** Whether the range may still gain ticks, judged by the newest bar and by the feed's newest quote. */
-  private isOpen(range: PlacedFixedRangeProfile): boolean {
-    const { currentMarket, barSeries } = this.host;
-    const quote = currentMarket.quote();
-    const quoteTimeMs =
-      quote && quote.symbol === currentMarket.symbol() && Number.isFinite(quote.timeMs) ? quote.timeMs : undefined;
-    return isRangeOpen(barSeries, range, quoteTimeMs);
-  }
-
-  deleteDrawing(): boolean {
-    if (!this.selection && !this.hasGesture()) {
-      return false;
-    }
-    this.clearSelection();
-    this.requester.cancelRequest();
-    return true;
-  }
-
-  private clearSelection(): void {
-    this.cancelGesture();
-    this.selection = null;
-    this.wasOpenAtLastBarsChange = false;
-    this.state.range = null;
-    this.state.profile = undefined;
-    this.host.requestRepaint();
-  }
-
-  private boundaries(): FixedRangeProfileBoundaries | null {
-    const range = this.boundary?.preview ?? this.selection;
-    return range
-      ? {
-          fromX: this.host.geometry.timeToX(range.fromMs),
-          toX: this.host.geometry.timeToX(range.lastSlotOpenMs),
-          range: { fromMs: range.fromMs, endMs: range.endMs },
-        }
-      : null;
-  }
-
-  draw({ context: ctx, viewport, layer }: ChartDrawTarget): void {
+  /** Paints the half-placed range; committed drawings paint through `drawDrawing`, in the chart's order. */
+  draw({ context, viewport, layer }: ChartDrawTarget): void {
     // The price-axis pass paints nothing: the histogram clips to the pane rect, which
     // that pass shifts entirely off the axis canvas.
     if (layer.surface !== 'pane' || layer.depth !== 'belowTradingOverlays') {
       return;
     }
-    // The histogram first, isolated so its style does not leak, then the handles.
-    ctx.save();
-    drawFixedRangeProfile(ctx, viewport, this.state);
-    ctx.restore();
-    // Veil the histogram but not the handles, which stay crisp; the spinner goes on top of both.
-    const handles = this.boundaries() ?? undefined;
-    drawFixedRangeProfileLoadingWash(ctx, viewport, this.state, handles);
-    this.drawSelection(ctx, viewport);
-    drawFixedRangeProfileSpinner(ctx, viewport, this.state, Date.now(), handles);
+    this.drawPlacementPreview(context, viewport);
   }
 
-  private drawSelection(ctx: CanvasRenderingContext2D, viewport: ChartDrawTarget['viewport']): void {
-    const placing =
-      this.first !== null && this.hover !== null
-        ? spanBetweenAnchors(this.host.barSeries, this.first, this.hover)
-        : null;
-    const range = placing ?? this.boundary?.preview ?? this.selection;
-    if (!range) {
+  /** Paints one committed drawing where the chart's stacking order puts it: below the bars or over them. */
+  drawDrawing({ context, viewport }: ChartDrawingPaintTarget, drawingId: string): void {
+    const entry = this.entryOf(drawingId);
+    if (entry === undefined) {
       return;
     }
-    const { height } = viewport.chartRect;
-    ctx.strokeStyle = palette.textLabel;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
-    for (const time of [range.fromMs, range.lastSlotOpenMs]) {
-      const x = this.host.geometry.timeToX(time);
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.arc(x, height / 2, 4, 0, Math.PI * 2);
-      ctx.fillStyle = palette.panel;
-      ctx.fill();
-      ctx.stroke();
-      ctx.setLineDash([4, 3]);
-    }
-    ctx.setLineDash([]);
+    const preview = this.drag?.drawing === entry.drawing ? this.drag.preview : undefined;
+    entry.drawing.draw(context, viewport, { selected: entry.selected, preview });
   }
 
-  /**
-   * The selection is instrument-specific, so a symbol change that finds one cancels the
-   * backend request behind it; a disconnect or a new session only abandons it locally.
-   * Either way a late event for the old request is stale.
-   */
+  /** Every reason drops the drawings; a symbol change also stops the backend work behind them, with one cancel. */
   reset(reason: ChartToolResetReason): void {
-    const hadSelection = this.selection !== null;
-    this.clearSelection();
-    if (reason === 'symbol' && hadSelection) {
-      this.requester.cancelRequest();
-    } else {
-      this.requester.abandonPendingRequest();
+    const hadDrawings = this.drawings.entries().length > 0;
+    if (reason === 'symbol' && hadDrawings) {
+      this.queue.cancelInFlight();
     }
+    // Forgetting the requests first is what keeps dropping the drawings from cancelling one by one.
+    this.queue.clear();
+    this.drawings.clear();
+    this.drag = null;
+    this.cancelGesture();
+    this.host.requestRepaint();
   }
 
   dispose(): void {
-    this.requester.dispose();
+    // Forgetting the requests first keeps every disposed drawing from sending a cancel of its own.
+    this.queue.clear();
+    this.drawings.clear();
+    this.queue.dispose();
   }
 
   testApi(): FixedRangeProfileTestApi {
     return {
       boundaries: () => this.boundaries(),
-      selection: () => {
-        const range = this.state.range;
-        return {
-          range: range ? { fromMs: range.fromMs, toMs: range.toMs } : null,
-          hasProfile: this.state.profile !== undefined && !this.state.previewing,
-        };
-      },
+      selection: () => this.selection(),
+      drawings: () => this.drawings.entries().map(({ id, locked, drawing }) => ({ id, locked, ...drawing.summary() })),
     };
+  }
+
+  /** A press on a handle starts the drag of the topmost visible unlocked drawing; a locked one lets the chart pan. */
+  private beginBoundaryDrag(x: number): boolean {
+    const target = this.unlockedHandleAt(x);
+    const original = target?.drawing.placedRange() ?? null;
+    if (target === null || original === null) {
+      return false;
+    }
+    this.drag = { drawing: target.drawing, side: target.side, original, preview: original };
+    this.host.requestRepaint();
+    return true;
+  }
+
+  private endPlacementStep(anchor: BarAnchor, commit: boolean): boolean {
+    this.pressed = null;
+    if (commit) {
+      const first = this.first;
+      if (first === null) {
+        this.first = this.hover = anchor;
+      } else {
+        this.placeDrawing(spanBetweenAnchors(this.host.barSeries, first, anchor));
+        this.first = this.hover = null;
+      }
+    }
+    this.host.requestRepaint();
+    return true;
+  }
+
+  /** Commits the second click as a new drawing: the collection gives it an id, its settings and a profile request. */
+  private placeDrawing(range: PlacedFixedRangeProfile): void {
+    const drawingId = this.drawings.add(FixedRangeProfileDrawing.placed(this.host, this.queue, range));
+    this.host.returnToDefaultTool();
+    this.host.drawingPlaced(drawingId);
+  }
+
+  private moveBoundary(drag: BoundaryDrag, x: number): boolean {
+    const anchor = anchorAtX(this.host, x);
+    const preview = anchor === null ? null : drag.drawing.boundaryPreview(drag.side, drag.original, anchor);
+    if (preview === null) {
+      return true;
+    }
+    drag.preview = preview;
+    drag.drawing.setPreviewing(!sameRange(preview, drag.original));
+    this.host.requestRepaint();
+    return true;
+  }
+
+  private endBoundaryDrag(drag: BoundaryDrag, commit: boolean): boolean {
+    this.drag = null;
+    drag.drawing.setPreviewing(false);
+    if (commit && !sameRange(drag.original, drag.preview)) {
+      drag.drawing.commitRange(drag.preview);
+      this.host.drawingsChanged();
+    }
+    this.host.requestRepaint();
+    return true;
+  }
+
+  /** The dashed lines and circles of a half-placed range, while the second click is still pending. */
+  private drawPlacementPreview(ctx: CanvasRenderingContext2D, viewport: ChartDrawTarget['viewport']): void {
+    if (this.first === null || this.hover === null) {
+      return;
+    }
+    const range = spanBetweenAnchors(this.host.barSeries, this.first, this.hover);
+    const handles = FixedRangeProfileDrawing.handleXsFor(this.host.geometry, range);
+    FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles, { selected: false });
+  }
+
+  /** The collection entry of one drawing, or undefined when the tool no longer holds that id. */
+  private entryOf(drawingId: string): ChartDrawingEntry<FixedRangeProfileDrawing> | undefined {
+    return this.drawings.entries().find((entry) => entry.id === drawingId);
+  }
+
+  /** The drawing a hit test or the e2e suite shows: the selected one, else the one painted last. */
+  private shownDrawing(): FixedRangeProfileDrawing | undefined {
+    const entries = this.drawings.entries();
+    return (entries.find((entry) => entry.selected) ?? entries.at(-1))?.drawing;
+  }
+
+  private boundaries(): FixedRangeProfileBoundaries | null {
+    const drawing = this.shownDrawing();
+    const placed = drawing?.placedRange() ?? null;
+    if (drawing === undefined || placed === null) {
+      return null;
+    }
+    const range = this.drag?.drawing === drawing ? this.drag.preview : placed;
+    return { ...drawing.handleXs(range), range: { fromMs: range.fromMs, endMs: range.endMs } };
+  }
+
+  private selection(): { range: { fromMs: number; toMs: number } | null; hasProfile: boolean } {
+    const drawing = this.shownDrawing();
+    const requested = drawing?.state.range;
+    const range = requested ? { fromMs: requested.fromMs, toMs: requested.toMs } : null;
+    return { range, hasProfile: drawing?.hasProfile() ?? false };
+  }
+
+  /** The topmost visible unlocked drawing with a handle under the pane x, with the side that press would drag. */
+  private unlockedHandleAt(x: number): { drawing: FixedRangeProfileDrawing; side: 'from' | 'end' } | null {
+    const entries = this.drawings.entries();
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const { drawing, locked, visible } = entries[index];
+      const side = locked || !visible ? null : drawing.handleAt(x);
+      if (side !== null) {
+        return { drawing, side };
+      }
+    }
+    return null;
   }
 }

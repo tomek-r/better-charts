@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { withFakeClock, type FakeClock } from './helpers/fakeClock';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
-import type { ChartToolHost } from '../src/features/chart/engine/toolContract';
+import { createFakeToolHost } from './helpers/fakeToolHost';
 import {
   FixedRangeProfileRequester,
   SLOW_PROFILE_SPINNER_DELAY_MS,
-} from '../src/features/tools/fixedRangeProfile/requester';
+} from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
 import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/overlay';
 import type { FixedRangeProfileRange } from '../src/features/tools/fixedRangeProfile/range';
 
@@ -26,24 +26,15 @@ const resultFor = (window: { fromMs: number; endMs: number }, symbol = SYMBOL) =
 
 function createRequester(committed: FixedRangeProfileRange | null = RANGE) {
   const market = createFakeMarketDataPort();
-  const errors: string[] = [];
+  const fakeHost = createFakeToolHost(market.port);
+  fakeHost.setQuoteTime(QUOTE_TIME_MS);
   const state: FixedRangeProfileState = { range: null, hit: {} };
   let committedRange = committed;
-  const host = {
-    barSeries: { bars: [{ time: 1_500 }] },
-    currentMarket: {
-      symbol: () => SYMBOL,
-      quote: () => ({ symbol: SYMBOL, timeMs: QUOTE_TIME_MS }),
-    },
-    marketDataPort: market.port,
-    requestRepaint: () => undefined,
-    notifyError: (message: string) => errors.push(message),
-  } as unknown as ChartToolHost;
-  const requester = new FixedRangeProfileRequester(host, state, () => committedRange);
+  const requester = new FixedRangeProfileRequester(fakeHost.host, market.port, state, () => committedRange);
   return {
     requester,
     state,
-    errors,
+    errors: fakeHost.errors,
     market,
     setCommittedRange: (range: FixedRangeProfileRange | null) => {
       committedRange = range;

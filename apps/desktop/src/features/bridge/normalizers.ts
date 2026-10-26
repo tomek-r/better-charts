@@ -1,4 +1,4 @@
-import { toRenderBar } from '../chart/engine/mt5DataAdapter';
+import { toRenderBar } from '../chart/engine/bars/mt5DataAdapter';
 import type {
   AccountSnapshot,
   Candle,

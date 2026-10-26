@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { SubscriptionScope } from '../../shared/bridge/subscriptionScope';
 import { errorText } from '../../shared/errorText';
-import type { ChartController } from '../chart/engine/chartController';
+import type { ChartController } from '../chart/engine/surface/chartController';
 import type {
   AccountSnapshot,
   CommandError,
@@ -14,7 +14,7 @@ import type {
   ExecutionQueueView,
   PendingModification,
 } from '../../shared/bridge/types';
-import type { PositionOverlayState } from '../chart/engine/positionOverlay';
+import type { PositionOverlayState } from '../chart/engine/trading/positionOverlay';
 import { useErrorNotification, useNotifyError } from '../../shared/ui/ErrorNotifications';
 import { describeRejection } from './tradeRejection';
 import { useDomainField, type DomainStore } from '../../shared/state/domainStore';

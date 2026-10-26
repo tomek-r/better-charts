@@ -1,0 +1,44 @@
+/* Chart heading: symbol title and description (ChartTitle). */
+.chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.chart-heading h1 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+  /* One line always: the loading placeholder must not wrap wider than the symbol, or the frame shifts up on load. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.chart-title {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chart-symbol {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.chart-symbol-description {
+  color: var(--color-muted-strong);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .chart-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+}

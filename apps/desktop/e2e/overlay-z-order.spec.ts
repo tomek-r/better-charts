@@ -1,14 +1,13 @@
-import { layoutLabelCenters } from '../src/features/chart/engine/labelLayout';
+import { layoutLabelCenters } from '../src/features/chart/engine/trading/labels/layoutLabelCenters';
 import { test, expect } from '@playwright/test';
 import { createRecordingCtx, createTestViewport, renderArgsFor, type PaintOp } from './helpers/overlayHarness';
-import type { OverlayRenderer as OverlayPlugin } from '../src/features/chart/engine/overlayTypes';
-import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart/engine/overlays';
-import { WorkspacePrimitive } from '../src/features/chart/engine/workspacePrimitive';
+import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart/engine/surface/buildChartPlugins';
+import { WorkspacePrimitive } from '../src/features/chart/engine/surface/workspacePrimitive';
 
 /**
  * Paint-order (z-index) and row-inset regression for the chart overlays.
  * Everything is drawn on canvas, so the z-order IS the paint order: the chart
- * renders `ui`-layer plugins in REGISTRATION order, and features/chart/engine/overlays.ts
+ * renders `ui`-layer plugins in REGISTRATION order, and features/chart/engine/surface/buildChartPlugins.ts
  * encodes the contract — every dotted level/reference line (bid/ask, entry,
  * SL, TP) and risk-zone fill paints UNDER every row label (chips, handles, qty
  * and axis tags). The row panels (✕ chip / pill / handles) additionally keep a
@@ -83,21 +82,18 @@ function collidingStates(): ChartOverlayState {
 }
 
 function renderAll(ops: Op[], filter: (id: string) => boolean) {
-  for (const entry of buildChartPlugins(collidingStates())) {
-    const overlay = entry.plugin as unknown as OverlayPlugin;
-    if (!filter(overlay.descriptor.id)) {
+  for (const overlay of buildChartPlugins(collidingStates())) {
+    if (!filter(overlay.id)) {
       continue;
     }
-    overlay.render(recordFor(ops, overlay.descriptor.id), renderArgs);
+    overlay.render(recordFor(ops, overlay.id), renderArgs);
   }
 }
 
 test('chart plugin registration is the overlay z-index contract', () => {
-  const ids = buildChartPlugins(collidingStates()).map(
-    (entry) => (entry.plugin as unknown as OverlayPlugin).descriptor.id,
-  );
+  const ids = buildChartPlugins(collidingStates()).map((overlay) => overlay.id);
   // Drawing tools paint before this list (WorkspacePrimitive), so they are not in it.
-  // ALL lines passes first, then ALL labels passes (see features/chart/engine/overlays.ts).
+  // ALL lines passes first, then ALL labels passes (see features/chart/engine/surface/buildChartPlugins.ts).
   expect(ids).toEqual([
     'price-lines-lines',
     'position-overlay-lines',
@@ -107,6 +103,42 @@ test('chart plugin registration is the overlay z-index contract', () => {
     'staged-order-labels',
     'trading-labels',
   ]);
+});
+
+function renderTargetFor(context: CanvasRenderingContext2D) {
+  return {
+    useMediaCoordinateSpace: (paint: (scope: { context: CanvasRenderingContext2D }) => void) => paint({ context }),
+    useBitmapCoordinateSpace: <T>(
+      read: (scope: {
+        horizontalPixelRatio: number;
+        verticalPixelRatio: number;
+        bitmapSize: { width: number; height: number };
+      }) => T,
+    ) => read({ horizontalPixelRatio: 1, verticalPixelRatio: 1, bitmapSize: { width: 600, height: 400 } }),
+  } as never;
+}
+
+test('drawings below the price bars paint in the background pass, above the grid and under the series', () => {
+  let belowBarsPaints = 0;
+  const primitive = new WorkspacePrimitive(
+    {
+      viewport: () => renderArgs.viewport,
+      drawTools: () => undefined,
+      drawDrawingsBelowBars: () => {
+        belowBarsPaints += 1;
+      },
+    },
+    collidingStates(),
+  );
+  // 'bottom' would sit under the grid; 'normal' background passes run after it and before every foreground.
+  const belowBarsView = primitive.paneViews().find((view) => view.zOrder?.() === 'normal');
+  const renderer = belowBarsView!.renderer()!;
+  const renderTarget = renderTargetFor(recordFor([], 'workspace'));
+  renderer.draw(renderTarget);
+  expect(belowBarsPaints).toBe(0);
+  renderer.drawBackground!(renderTarget);
+  expect(belowBarsPaints).toBe(1);
+  expect(primitive.paneViews().some((view) => view.zOrder?.() === 'bottom')).toBe(false);
 });
 
 test('drawing tools paint before every trading overlay', () => {
@@ -119,24 +151,13 @@ test('drawing tools paint before every trading overlay', () => {
         context.fillStyle = TOOL_FILL;
         context.fillRect(0, 0, 1, 1);
       },
+      // The below-bars pass has its own view; this case is about the pass over the series.
+      drawDrawingsBelowBars: () => undefined,
     },
     collidingStates(),
   );
-  const context = recordFor(ops, 'workspace');
-  const renderTarget = {
-    useMediaCoordinateSpace: (paint: (scope: { context: CanvasRenderingContext2D }) => void) => paint({ context }),
-    useBitmapCoordinateSpace: <T>(
-      read: (scope: {
-        horizontalPixelRatio: number;
-        verticalPixelRatio: number;
-        bitmapSize: { width: number; height: number };
-      }) => T,
-    ) => read({ horizontalPixelRatio: 1, verticalPixelRatio: 1, bitmapSize: { width: 600, height: 400 } }),
-  };
-  primitive
-    .paneViews()[0]
-    .renderer()!
-    .draw(renderTarget as never);
+  const overSeriesView = primitive.paneViews().find((view) => view.zOrder?.() === 'top');
+  overSeriesView!.renderer()!.draw(renderTargetFor(recordFor(ops, 'workspace')));
   const toolOpIndexes = ops.flatMap((op, index) => (op.style === TOOL_FILL ? [index] : []));
   expect(toolOpIndexes).toEqual([0]);
   // The overlays must really have painted after it, or the order proves nothing.
@@ -186,8 +207,8 @@ test('row panels keep their inset from the chart left edge in both overlays', ()
 test('colliding trading and staged rows spread apart without moving their price lines', () => {
   const state = collidingStates();
   const ops: Op[] = [];
-  for (const { plugin } of buildChartPlugins(state)) {
-    plugin.render(recordFor(ops, plugin.descriptor.id), renderArgs);
+  for (const overlay of buildChartPlugins(state)) {
+    overlay.render(recordFor(ops, overlay.id), renderArgs);
   }
   const rows = [...(state.positions.hit.labels ?? []), ...(state.staged.hit.labels ?? [])].sort((a, b) => a.y - b.y);
   expect(rows).toHaveLength(9);

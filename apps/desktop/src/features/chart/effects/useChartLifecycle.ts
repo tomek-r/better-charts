@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect } from 'react';
-import { ChartController } from '../engine/chartController';
+import { ChartController } from '../engine/surface/chartController';
 import { CHART_TOOL_PLUGINS, DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
-import { Mt5DataAdapter } from '../engine/mt5DataAdapter';
+import { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
 import { quoteDigits } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';

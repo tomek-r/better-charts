@@ -33,13 +33,13 @@ const brandMark = (
 
 export function TopBar({
   panelOpen,
-  setPanelOpen,
+  onTogglePanel,
   setSearchOpen,
   openSettings,
 }: {
   openSettings: () => void;
   panelOpen: boolean;
-  setPanelOpen: Dispatch<SetStateAction<boolean>>;
+  onTogglePanel: () => void;
   setSearchOpen: Dispatch<SetStateAction<boolean>>;
 }) {
   const chartDrawn = useChartDrawn();
@@ -66,7 +66,7 @@ export function TopBar({
           className="panel-toggle"
           aria-label="Toggle trade panel"
           aria-expanded={panelOpen}
-          onClick={() => setPanelOpen((open) => !open)}
+          onClick={onTogglePanel}
         >
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
             <rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />

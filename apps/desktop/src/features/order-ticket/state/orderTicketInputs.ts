@@ -6,8 +6,8 @@ import type {
   MarketSnapshot,
   QuoteSnapshot,
 } from '../../../shared/bridge/types';
-import type { ChartController } from '../../chart/engine/chartController';
-import type { StagedOrderState } from '../../chart/engine/stagedOrderOverlay';
+import type { ChartController } from '../../chart/engine/surface/chartController';
+import type { StagedOrderState } from '../../chart/engine/trading/stagedOrderOverlay';
 
 /** External bridge and chart inputs shared by the ticket's focused producer and runtime hooks. */
 export type OrderTicketInputs = {

@@ -1,0 +1,130 @@
+import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
+import type { ChartDrawings } from '../../chart/engine/drawings/chartDrawings';
+import type { ChartDrawingSelection } from '../../chart/engine/drawings/drawingRecord';
+import {
+  resolveToolInputValues,
+  type ToolInputDefinition,
+  type ToolInputValues,
+} from '../../chart/engine/drawings/toolInputs';
+import { useChartResources } from '../../chart/ChartWorkspaceProvider';
+import { useRequiredContext } from '../../../shared/state/useRequiredContext';
+import { useDrawingSelection } from '../drawingToolbar/useDrawingSelection';
+import { CHART_TOOL_PLUGINS } from '../registry';
+import { DrawingSettingsDialog } from './DrawingSettingsDialog';
+
+/** The drawing whose settings are open, with the values the dialog started from. */
+interface OpenDrawingSettings {
+  readonly toolId: string;
+  readonly drawingId: string;
+  readonly values: ToolInputValues;
+}
+
+/** What the app shares about drawing settings: the one command that opens them. */
+interface DrawingSettingsContextValue {
+  readonly openDrawingSettings: (toolId: string, drawingId: string) => void;
+}
+
+const DrawingSettingsContext = createContext<DrawingSettingsContextValue | null>(null);
+
+/** A drawing's stored settings, with each definition's default filling the gaps. */
+function storedInputValues(
+  drawings: ChartDrawings | undefined,
+  toolId: string,
+  drawingId: string,
+  definitions: readonly ToolInputDefinition[],
+): ToolInputValues {
+  const record = drawings?.exportRecords().find((entry) => entry.toolId === toolId && entry.id === drawingId);
+  return resolveToolInputValues(definitions, record?.inputs);
+}
+
+/**
+ * Opens the settings of one drawing, from the floating toolbar or from an object tree row alike. The
+ * answers function keeps its identity while the chart does, so the rows that hold it do not re-render
+ * when a dialog opens or closes.
+ */
+export function useOpenDrawingSettings(): (toolId: string, drawingId: string) => void {
+  const { openDrawingSettings } = useRequiredContext(
+    DrawingSettingsContext,
+    'useOpenDrawingSettings must be used within DrawingSettingsProvider.',
+  );
+  return openDrawingSettings;
+}
+
+interface OpenDrawingSettingsDialogProps {
+  readonly target: OpenDrawingSettings | null;
+  readonly selection: ChartDrawingSelection | null;
+  readonly onSave: (values: ToolInputValues) => void;
+  readonly onClose: () => void;
+}
+
+/** The dialog of the open target, for as long as its drawing stays the selected one. */
+function OpenDrawingSettingsDialog({ target, selection, onSave, onClose }: OpenDrawingSettingsDialogProps) {
+  if (target === null) {
+    return null;
+  }
+  const plugin = CHART_TOOL_PLUGINS.find((entry) => entry.id === target.toolId);
+  if (plugin === undefined) {
+    return null;
+  }
+  // A selection that moved on while the dialog was open leaves nothing that dialog could edit.
+  if (target.drawingId !== selection?.drawingId) {
+    return null;
+  }
+  return (
+    <DrawingSettingsDialog
+      label={plugin.label}
+      definitions={plugin.inputs ?? []}
+      initialValues={target.values}
+      onSave={onSave}
+      onClose={onClose}
+    />
+  );
+}
+
+export interface DrawingSettingsProviderProps {
+  readonly children: ReactNode;
+}
+
+/**
+ * Holds the drawing whose settings are open, and renders that one dialog. It sits above the chart and
+ * the object tree, so both open the same dialog instead of keeping a copy each.
+ */
+export function DrawingSettingsProvider({ children }: DrawingSettingsProviderProps) {
+  const { chart } = useChartResources();
+  const selection = useDrawingSelection();
+  const [target, setTarget] = useState<OpenDrawingSettings | null>(null);
+
+  const openDrawingSettings = useCallback(
+    (toolId: string, drawingId: string) => {
+      const drawings = chart.current?.drawings;
+      const plugin = CHART_TOOL_PLUGINS.find((entry) => entry.id === toolId);
+      if (plugin === undefined) {
+        return;
+      }
+      // Opening selects the drawing too, so the dialog clears itself when another drawing is picked.
+      drawings?.select(toolId, drawingId);
+      setTarget({ toolId, drawingId, values: storedInputValues(drawings, toolId, drawingId, plugin.inputs ?? []) });
+    },
+    [chart],
+  );
+
+  const contextValue = useMemo(() => ({ openDrawingSettings }), [openDrawingSettings]);
+
+  const saveSettings = (values: ToolInputValues) => {
+    if (target !== null) {
+      chart.current?.drawings.setInputs(target.toolId, target.drawingId, values);
+    }
+    setTarget(null);
+  };
+
+  const closeSettings = () => {
+    setTarget(null);
+  };
+
+  return (
+    <DrawingSettingsContext value={contextValue}>
+      {children}
+      <OpenDrawingSettingsDialog target={target} selection={selection} onSave={saveSettings} onClose={closeSettings} />
+    </DrawingSettingsContext>
+  );
+}

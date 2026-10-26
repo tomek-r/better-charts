@@ -1,5 +1,5 @@
-import { HistoryViewportMode, type ChartController } from '../chart/engine/chartController';
-import { toRenderBar, type Mt5DataAdapter, type Mt5HistoryError } from '../chart/engine/mt5DataAdapter';
+import { HistoryViewportMode, type ChartController } from '../chart/engine/surface/chartController';
+import { toRenderBar, type Mt5DataAdapter, type Mt5HistoryError } from '../chart/engine/bars/mt5DataAdapter';
 import { listen } from '@tauri-apps/api/event';
 import type {
   BridgeStatus,

@@ -1,0 +1,74 @@
+/* The chart frame: canvas host, loading veil, viewport-centred layer, history notice and error (ChartCanvas). */
+.chart-frame {
+  position: relative;
+  /* Contain canvas, message and legend layers within the chart frame. */
+  isolation: isolate;
+  min-height: 320px;
+  flex: 1 1 320px;
+  overflow: hidden;
+  border-radius: var(--border-radius);
+  background: var(--color-surface);
+}
+
+.chart-host {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+}
+
+/* Veil over the chart frame while no candles are shown; its message lives in the viewport layer. */
+.chart-overlay {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  background: var(--color-overlay);
+  pointer-events: none;
+}
+
+/* Window-sized layer that centers the loading message and the history notice on the viewport.
+   It never takes pointer events, so the top bar and trade panel stay clickable beneath it. */
+.viewport-center-layer {
+  position: fixed;
+  z-index: 4;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 9px;
+  pointer-events: none;
+}
+
+.chart-wait-notice {
+  max-width: min(420px, calc(100% - 28px));
+  padding: 9px 12px;
+  border-radius: var(--border-radius);
+  color: var(--color-muted-strong);
+  background: var(--color-overlay);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  pointer-events: none;
+}
+
+.chart-wait-notice:empty {
+  display: none;
+}
+
+.chart-error {
+  position: absolute;
+  z-index: 3;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  padding: 9px 11px;
+  border-radius: var(--border-radius);
+  color: var(--color-danger-text);
+  background: var(--color-sell-fill-translucent);
+  font-size: 12px;
+}

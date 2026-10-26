@@ -7,7 +7,7 @@ import { partialCloseLimits, partialCloseTitle } from '../partial-close/partialC
 import { usePartialCloseAvailable } from '../partial-close/usePartialCloseAvailable';
 import { ChartAnchoredPanel } from './ChartAnchoredPanel';
 import { useChartResources } from './ChartWorkspaceProvider';
-import type { PartialCloseMenuRequest } from './engine/partialCloseChipPort';
+import type { PartialCloseMenuRequest } from './engine/trading/partialCloseChipPort';
 
 type PartialCloseStage = PartialCloseMenuRequest & { view: 'menu' | 'custom-volume' };
 

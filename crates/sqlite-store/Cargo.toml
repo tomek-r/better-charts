@@ -1,0 +1,18 @@
+[package]
+name = "sqlite-store"
+version = "0.1.0"
+edition.workspace = true
+description = "Generic local SQLite storage: integrity checks, migrations, private files and a single-instance lock"
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+fs2 = "0.4"
+thiserror = "1"
+
+[dev-dependencies]
+tempfile = "3"

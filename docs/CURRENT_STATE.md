@@ -3,7 +3,7 @@
 Current behavior and owner decisions. See [architecture](architecture/README.md)
 and the [bridge contract](protocol/bridge-v1.md) for implementation details.
 
-React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object. The lifecycle coordinator passes non-quote props to ordered children; only quote-dependent children subscribe to live quotes. Chart tools, the Arrow and Crosshair pointers included, are plugins: one folder per tool under `features/tools/` implementing the `ChartToolPlugin`/`ChartTool` contract (`features/chart/engine/toolContract.ts`), registered by one line in `features/tools/registry.ts`; the chart lifecycle passes that list to `ChartController` (`toolPlugins`), so the engine imports no concrete tool; the rail and icon iterate the registry, plugins sharing a `railGroup` (the pointers) render as one flyout button, and `DEFAULT_CHART_TOOL_ID` (arrow) is active when nothing else is. The engine owns only the pointer's time/price axis labels (`pointerReadoutPrimitive.ts`, shown for every tool); the Crosshair lines are drawn by `CrosshairTool` through the generic `pointerHover`/`pointerLeave` hooks and the layered `draw(ctx, viewport, layer)` hook (`aboveTradingOverlays*` layers); every plugin is built from its `toolClass`. Tools see the bridge only through the read-only `MarketDataPort` (`features/bridge/marketDataPort.ts`), never `invoke` or execution commands.
+React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object. The lifecycle coordinator passes non-quote props to ordered children; only quote-dependent children subscribe to live quotes. Chart tools, the Arrow and Crosshair pointers included, are plugins: one folder per tool under `features/tools/` implementing the `ChartToolPlugin`/`ChartTool` contract (`features/chart/engine/tools/toolContract.ts`), registered by one line in `features/tools/registry.ts`; the chart lifecycle passes that list to `ChartController` (`toolPlugins`), so the engine imports no concrete tool; the rail and icon iterate the registry, plugins sharing a `railGroup` (the pointers) render as one flyout button, and `DEFAULT_CHART_TOOL_ID` (arrow) is active when nothing else is. The engine owns only the pointer's time/price axis labels (`pointerReadoutPrimitive.ts`, shown for every tool); the Crosshair lines are drawn by `CrosshairTool` through the generic `pointerHover`/`pointerLeave` hooks and the layered `draw(ctx, viewport, layer)` hook (`aboveTradingOverlays*` layers); every plugin is built from its `toolClass`. Tools see the bridge only through the read-only `MarketDataPort` (`features/bridge/marketDataPort.ts`), never `invoke` or execution commands.
 
 ## Available
 
@@ -205,6 +205,50 @@ Not implemented: break even, multiple charts or Pine Script execution.
   SL/TP and pending-entry drags use the execution guard; Shift+drag moves all levels.
 
 Check corresponding E2E regressions before changing these decisions.
+
+## Chart drawings
+
+Drawings belong to one account and symbol and are kept by the Rust side in the local
+SQLite database `better-charts.sqlite3` (under the app data folder): one list per
+account and symbol, loaded when that window opens and saved again on every committed
+change. A record holds only vector data — the shared fields (id, tool id, lock,
+visibility, settings) plus the ordered anchor points a tool placed, each a time, a
+price, or both, with prices kept as decimal text. No candle, tick or profile data is
+stored; a tool asks for what it paints from the chart again. An unreadable list is
+reported and never overwritten by the empty chart.
+
+Pressing a drawing selects it (the drawing is highlighted), and a floating toolbar
+appears over the chart: a drag grip that moves the toolbar inside the chart frame,
+Settings, Lock/Unlock, Hide/Show and Remove. Lock makes the drawing ignore edit
+gestures, and Delete/Backspace removes the selected drawing even while it is locked. The
+toolbar is built once against the shared drawing interface (`ChartDrawings`, the selection
+it reports, and each tool's declarations), so every tool that places drawings gets it
+without its own code; the Arrow and Crosshair pointers place no drawings and therefore
+never show it.
+
+Settings are the tool's typed Pine Script v6-style inputs (`int`, `float`, `bool`,
+`string`, `textArea`, `color`, `source`, `timeframe`, `symbol`, `session`, `price`,
+`time`, `enum`), rendered generically from the definitions a tool declares, one control
+per kind, grouped in fieldsets as the definitions ask, and OK stays disabled while a
+value fails its kind's rule. The Fixed Range Volume Profile declares no inputs yet, so
+its dialog says so. A hidden drawing keeps its stored `visible` flag and is neither
+painted nor hit; the toolbar's Hide/Show button sets that flag.
+
+A strip down the chart's right edge holds the Trade panel and Object tree buttons: one
+drawer is open at a time, and the chart shrinks beside the open drawer instead of sitting
+under it. The Object tree lists every drawing of the account and symbol, topmost first,
+the way TradingView lists its objects. A click on a row selects that drawing on the chart,
+hovering a row reveals Lock, Hide/Show and Remove buttons, a double click opens the
+drawing's settings dialog, and Delete or Backspace removes the drawing of the focused row.
+Arrow keys walk the rows. The price bars have a row of their own (the chart's symbol and
+timeframe, e.g. "EURUSD, 1H", with a candlestick icon) at their place in the stacking order,
+and it has no action buttons. Any row, the bars row included, drags with the mouse or moves
+with Alt+ArrowUp / Alt+ArrowDown to change the order: the top row paints on top, and
+drawings listed below the bars row paint under the candles. The order and each drawing's
+side of the bars are saved. A locked or hidden drawing keeps its toggle in sight, and a
+hidden row's name is dimmed while the row stays listed and clickable. The dialog is the
+same one the floating toolbar opens, held by one provider above the chart and the tree.
+The tree keeps no data window and no toolbar of its own (owner decision).
 
 ## Execution and configuration
 
