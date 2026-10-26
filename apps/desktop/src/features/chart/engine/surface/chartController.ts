@@ -15,6 +15,7 @@ import { BarSeriesController } from '../bars/barSeriesController';
 import { PriceLineController } from '../quotes/priceLineController';
 import { isOutsidePane, ViewportController } from '../viewport/viewportController';
 import type {
+  ChartDrawingPaintTarget,
   ChartDrawTarget,
   ChartPointerUpOutcome,
   ChartToolDefinition,
@@ -452,6 +453,10 @@ export class ChartController {
   }
   drawTools(target: ChartDrawTarget): void {
     this.tools.draw(target);
+  }
+  /** The drawings stacked under the price bars: the workspace primitive paints them below the series. */
+  drawDrawingsBelowBars(target: ChartDrawingPaintTarget): void {
+    this.tools.drawBelowBars(target);
   }
   resetTools(reason: ChartToolResetReason): void {
     this.tools.resetTools(reason);

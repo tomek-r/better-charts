@@ -1,8 +1,16 @@
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
+import {
+  DrawingStack,
+  drawingRefs,
+  drawingsAroundBars,
+  type DrawingRef,
+  type DrawingStackEntry,
+} from '../drawings/drawingStack';
 import { DrawingSelectionState } from '../drawings/drawingSelection';
 import type { ToolInputValues } from '../drawings/toolInputs';
 import type { ChartToolDrawings } from '../drawings/toolDrawings';
 import type {
+  ChartDrawingPaintTarget,
   ChartDrawTarget,
   ChartPointerUpOutcome,
   ChartTool,
@@ -51,6 +59,7 @@ function resolveTool(tool: ChartTool): ResolvedChartTool {
     cancelGesture: () => tool.cancelGesture?.(),
     drawings: tool.drawings,
     draw: (target) => tool.draw?.(target),
+    drawDrawing: (target, drawingId) => tool.drawDrawing?.(target, drawingId),
     barsChanged: () => tool.barsChanged?.(),
     reset: (reason) => tool.reset?.(reason),
     dispose: () => tool.dispose?.(),
@@ -73,6 +82,8 @@ export class ChartToolSet {
   /** Where the pointer rests in the pane; replayed to a tool that becomes active later. Null outside it. */
   private hoverPoint: { x: number; y: number } | null = null;
   private readonly entries: readonly ToolEntry[];
+  /** The chart's single stacking order, shared by every tool's drawings. */
+  private readonly stack = new DrawingStack();
   /** The selected drawing; the state decides whether a new selection really differs. */
   private readonly selectionState = new DrawingSelectionState((selection) => this.paintSelection(selection));
   private highlight: DrawingHighlight | null = null;
@@ -167,17 +178,45 @@ export class ChartToolSet {
     this.activeEntry.tool.pointerLeave();
   }
 
-  /** One layer pass: every tool, in registry order, each isolated by save/restore so none leaks canvas state. */
+  /**
+   * One layer pass: every tool, in registry order, each isolated by save/restore so none leaks canvas
+   * state. On the pane's below-trading layer the drawings stacked over the price bars paint first, in
+   * the chart's order, so they stay under the trading overlays and over the candles.
+   */
   draw(target: ChartDrawTarget): void {
-    const { context } = target;
-    for (const tool of this.tools()) {
-      context.save();
-      try {
-        tool.draw(target);
-      } finally {
-        context.restore();
-      }
+    if (target.layer.surface === 'pane' && target.layer.depth === 'belowTradingOverlays') {
+      this.paintDrawings(target, drawingsAroundBars(this.stackEntries()).above);
     }
+    for (const tool of this.tools()) {
+      this.paintIsolated(target.context, () => tool.draw(target));
+    }
+  }
+
+  /** The pane pass under the candle series: every drawing stacked below the price bars, bottom to top. */
+  drawBelowBars(target: ChartDrawingPaintTarget): void {
+    this.paintDrawings(target, drawingsAroundBars(this.stackEntries()).below);
+  }
+
+  /** The chart's single stacking order, bottom to top, healed against the drawings that really exist. */
+  drawingStack(): readonly DrawingStackEntry[] {
+    return this.stackEntries();
+  }
+
+  /**
+   * Moves one entry of the stacking order, both indexes bottom first, and answers whether it moved.
+   * Every tool reorders its own drawings to match, so a press grabs the same drawing the user saw on
+   * top, and the move is reported once for saving.
+   */
+  moveStackEntry(fromIndex: number, toIndex: number): boolean {
+    if (!this.stack.move(fromIndex, toIndex)) {
+      return false;
+    }
+    const entries = this.stackEntries();
+    for (const { definition, tool } of this.entries) {
+      tool.drawings?.arrange(this.stackedIdsOf(definition.id, entries));
+    }
+    this.listeners.drawingsChanged();
+    return true;
   }
 
   cancelGestures(): void {
@@ -240,34 +279,42 @@ export class ChartToolSet {
     }
   }
 
-  /** Every tool's drawings in registry order, each stamped with the tool that owns it. */
+  /** Every drawing in the chart's stacking order, bottom first, stamped with its tool and its side of the bars. */
   exportDrawings(): ChartDrawingRecord[] {
-    // Stacking below the bars belongs to the tool set, not to a tool; every drawing starts above.
-    return this.entries.flatMap(({ definition, tool }) =>
-      (tool.drawings?.exportRecords() ?? []).map((record) => ({
-        ...record,
-        toolId: definition.id,
-        belowBars: false,
-      })),
-    );
+    const entries = this.stackEntries();
+    const markerIndex = entries.findIndex((entry) => entry.kind === 'bars');
+    const records: ChartDrawingRecord[] = [];
+    for (const [index, entry] of entries.entries()) {
+      const record = entry.kind === 'drawing' ? this.exportedRecord(entry.ref) : undefined;
+      if (record !== undefined) {
+        records.push({ ...record, belowBars: index < markerIndex });
+      }
+    }
+    return records;
   }
 
-  /** Replaces every tool's drawings; records of unknown tool ids are dropped, and nothing is reported. */
+  /** Replaces every tool's drawings and the order they stack in; records of unknown tool ids are dropped. */
   replaceDrawings(records: readonly ChartDrawingRecord[]): void {
     this.changeSelection(null);
     for (const { definition, tool } of this.entries) {
       tool.drawings?.importRecords(records.filter((record) => record.toolId === definition.id));
     }
+    this.stack.replace(
+      records
+        .filter((record) => this.findEntry(record.toolId) !== undefined)
+        .map((record) => ({ ref: { toolId: record.toolId, drawingId: record.id }, belowBars: record.belowBars })),
+    );
   }
 
   barsChanged(): void {
     this.tools().forEach((tool) => tool.barsChanged());
   }
 
-  /** Drops every tool's instrument-, session- or connection-bound state, and the selection with it. */
+  /** Drops every tool's instrument-, session- or connection-bound state, the drawings and the stacking order. */
   resetTools(reason: ChartToolResetReason): void {
     this.changeSelection(null);
     this.tools().forEach((tool) => tool.reset(reason));
+    this.stack.clear();
   }
 
   disposeTools(): void {
@@ -304,15 +351,63 @@ export class ChartToolSet {
     this.changeSelection(this.hitTestDrawings(x, y));
   }
 
-  /** The topmost drawing under a pane point: tools painted later sit above, so the registry is walked backwards. */
+  /** Every drawing that really exists, in registry order and each tool's own paint order. */
+  private existingRefs(): DrawingRef[] {
+    return this.entries.flatMap(({ definition, tool }) =>
+      (tool.drawings?.drawingIds() ?? []).map((drawingId) => ({ toolId: definition.id, drawingId })),
+    );
+  }
+
+  /** The chart's one stacking order, healed against the drawings that really exist. */
+  private stackEntries(): readonly DrawingStackEntry[] {
+    return this.stack.entries(this.existingRefs());
+  }
+
+  /** The ids of one tool's drawings in the chart's order, which is the order its collection needs too. */
+  private stackedIdsOf(toolId: string, entries: readonly DrawingStackEntry[]): string[] {
+    return drawingRefs(entries)
+      .filter((ref) => ref.toolId === toolId)
+      .map(({ drawingId }) => drawingId);
+  }
+
+  /** One side of the stacking order, bottom to top, each drawing painted by its own tool and isolated. */
+  private paintDrawings(target: ChartDrawingPaintTarget, refs: readonly DrawingRef[]): void {
+    for (const { toolId, drawingId } of refs) {
+      const tool = this.findEntry(toolId)?.tool;
+      // A hidden drawing keeps its place in the order but paints nothing.
+      if (tool === undefined || tool.drawings?.isVisible(drawingId) !== true) {
+        continue;
+      }
+      this.paintIsolated(target.context, () => tool.drawDrawing(target, drawingId));
+    }
+  }
+
+  /** Runs one paint step with the canvas state saved around it, so no tool leaks styles into the next. */
+  private paintIsolated(context: CanvasRenderingContext2D, paint: () => void): void {
+    context.save();
+    try {
+      paint();
+    } finally {
+      context.restore();
+    }
+  }
+
+  /** The topmost drawing under a pane point in the chart's stacking order, below-bars drawings included. */
   private hitTestDrawings(x: number, y: number): ChartDrawingSelection | null {
-    for (const { definition, tool } of this.entries.slice().reverse()) {
-      const drawingId = tool.drawings?.drawingAt(x, y) ?? null;
-      if (drawingId !== null) {
-        return this.selectionFor(definition.id, drawingId);
+    for (const { toolId, drawingId } of drawingRefs(this.stackEntries()).reverse()) {
+      if (this.drawingsOf(toolId)?.hits(drawingId, x, y) === true) {
+        return this.selectionFor(toolId, drawingId);
       }
     }
     return null;
+  }
+
+  /** One drawing as the app stores it, minus the side of the bars, which only the stacking order knows. */
+  private exportedRecord({ toolId, drawingId }: DrawingRef): Omit<ChartDrawingRecord, 'belowBars'> | undefined {
+    const record = this.drawingsOf(toolId)
+      ?.exportRecords()
+      .find(({ id }) => id === drawingId);
+    return record === undefined ? undefined : { ...record, toolId };
   }
 
   /** The selection for one drawing; its flags come from the tool's exported record. */

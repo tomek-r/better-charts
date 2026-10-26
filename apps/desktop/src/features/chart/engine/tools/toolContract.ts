@@ -47,6 +47,10 @@ export interface ChartToolGeometry {
  * `pane`, `timeAxis` and `priceAxis` at `aboveTradingOverlays`. The three
  * `aboveTradingOverlays` surfaces are painted only while the pointer is over the pane,
  * so a line can follow the pointer across the axes (separate canvases).
+ *
+ * A drawing does not choose a layer: the engine calls `drawDrawing` in the chart's
+ * stacking order, so the drawings of every tool interleave, some under the series and
+ * some over it.
  */
 export interface ChartDrawLayer {
   readonly surface: 'pane' | 'timeAxis' | 'priceAxis';
@@ -83,6 +87,12 @@ export interface ChartDrawTarget {
 }
 
 /**
+ * What one committed drawing is painted with. The engine walks the chart's single stacking order and
+ * hands the drawing no layer to choose from: only the pane exists here, in pane CSS px.
+ */
+export type ChartDrawingPaintTarget = Omit<ChartDrawTarget, 'layer'>;
+
+/**
  * A tool on the chart pane. The chart controller owns which tool is active and
  * routes every pointer event through this contract: the active tool first (with
  * purpose `startNewDrawing`), then every tool in turn so an
@@ -91,8 +101,8 @@ export interface ChartDrawTarget {
  * Every member is optional; a tool implements what it uses. The tool set treats a
  * missing member as a no-op: a missing `pointerDown`/`pointerMove`/`pointerUp`
  * means the event was not consumed, a missing `hasGesture` means false, a missing
- * `drawings` means the tool places no drawings, and every other missing member is
- * skipped.
+ * `drawings` means the tool places no drawings, a missing `drawDrawing` means its
+ * drawings paint nothing, and every other missing member is skipped.
  *
  * Each pointer method returns whether the tool consumed the event; a consumed
  * press makes the caller capture the pointer and keep the library from panning.
@@ -134,6 +144,12 @@ export interface ChartTool {
   readonly drawings?: ChartToolDrawings;
   /** Paints the tool's content for one layer pass (see `ChartDrawLayer`, `ChartDrawTarget`). */
   draw?(target: ChartDrawTarget): void;
+  /**
+   * Paints ONE committed visible drawing on the pane, in pane CSS px. The engine calls it in the
+   * chart's stacking order, so a drawing paints where the order puts it: under the price bars or over
+   * them. A tool never paints a preview here; those stay in `draw`.
+   */
+  drawDrawing?(target: ChartDrawingPaintTarget, drawingId: string): void;
   /** The bar series changed: a live bar update, a new bar or a replaced history. */
   barsChanged?(): void;
   /**

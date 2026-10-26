@@ -1,5 +1,5 @@
 import type { IPrimitivePaneRenderer } from 'lightweight-charts';
-import type { ChartDrawLayer, ChartDrawTarget, RenderViewport } from '../tools/toolContract';
+import type { ChartDrawLayer, ChartDrawingPaintTarget, ChartDrawTarget, RenderViewport } from '../tools/toolContract';
 
 /** The canvas target a primitive renderer draws on (fancy-canvas' `CanvasRenderingTarget2D`). */
 export type RenderTarget = Parameters<IPrimitivePaneRenderer['draw']>[0];
@@ -18,6 +18,38 @@ export const PRICE_AXIS_ABOVE_TRADING_OVERLAYS: ChartDrawLayer = {
 };
 
 /**
+ * Builds the target of one drawing's paint pass on the pane: no layer with it, because the chart's
+ * stacking order, not the tool, decides where the drawing paints. Call it inside the renderer's
+ * `useMediaCoordinateSpace` scope, like `createDrawTarget`.
+ */
+export function createDrawingPaintTarget(
+  renderTarget: RenderTarget,
+  context: CanvasRenderingContext2D,
+  viewport: RenderViewport,
+): ChartDrawingPaintTarget {
+  const { horizontalPixelRatio, verticalPixelRatio, width, height } = renderTarget.useBitmapCoordinateSpace(
+    ({ horizontalPixelRatio, verticalPixelRatio, bitmapSize }) => ({
+      horizontalPixelRatio,
+      verticalPixelRatio,
+      width: bitmapSize.width,
+      height: bitmapSize.height,
+    }),
+  );
+  return {
+    context,
+    viewport,
+    bitmap: {
+      horizontalPixelRatio,
+      verticalPixelRatio,
+      width,
+      height,
+      withContext: (paint) =>
+        renderTarget.useBitmapCoordinateSpace(({ context: bitmapContext }) => paint(bitmapContext)),
+    },
+  };
+}
+
+/**
  * Builds the draw target for one layer pass on the canvas the caller is already drawing
  * on. Call it inside the renderer's `useMediaCoordinateSpace` scope: `context` is that
  * scope's context, and any transform the caller applied (the price-axis shift) is kept.
@@ -30,25 +62,5 @@ export function createDrawTarget(
   viewport: RenderViewport,
   layer: ChartDrawLayer,
 ): ChartDrawTarget {
-  const { horizontalPixelRatio, verticalPixelRatio, width, height } = renderTarget.useBitmapCoordinateSpace(
-    ({ horizontalPixelRatio, verticalPixelRatio, bitmapSize }) => ({
-      horizontalPixelRatio,
-      verticalPixelRatio,
-      width: bitmapSize.width,
-      height: bitmapSize.height,
-    }),
-  );
-  return {
-    context,
-    viewport,
-    layer,
-    bitmap: {
-      horizontalPixelRatio,
-      verticalPixelRatio,
-      width,
-      height,
-      withContext: (paint) =>
-        renderTarget.useBitmapCoordinateSpace(({ context: bitmapContext }) => paint(bitmapContext)),
-    },
-  };
+  return { ...createDrawingPaintTarget(renderTarget, context, viewport), layer };
 }

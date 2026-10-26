@@ -52,8 +52,16 @@ export interface ChartDrawingRules {
  * the member entirely, so every operation on it is a no-op.
  */
 export interface ChartToolDrawings {
-  /** Id of the topmost visible drawing under the pane point, null when none is there. */
-  drawingAt(x: number, y: number): string | null;
+  /** Whether that drawing is visible and holds the pane point; an unknown or hidden drawing never does. */
+  hits(drawingId: string, x: number, y: number): boolean;
+  /** Every id of this tool, bottom to top: the order the chart's stacking order heals itself against. */
+  drawingIds(): readonly string[];
+  /**
+   * Reorders the drawings to the given ids, bottom to top, which keeps the tool's own order (e.g.
+   * which of two overlapping handles a press grabs) in step with the chart's stacking order. Unknown
+   * ids are ignored, and drawings the list leaves out keep their relative order at the top.
+   */
+  arrange(drawingIds: readonly string[]): void;
   /** Paints the highlight on the given drawing; null means none of this tool's drawings is selected. */
   select(drawingId: string | null): void;
   /** Removes one drawing; false when the tool has no drawing with that id. */
@@ -62,6 +70,8 @@ export interface ChartToolDrawings {
   setLocked(drawingId: string, locked: boolean): boolean;
   /** A hidden drawing is neither painted nor hit; false when the tool has no drawing with that id. */
   setVisible(drawingId: string, visible: boolean): boolean;
+  /** Whether the drawing is painted; false when the tool has no drawing with that id. */
+  isVisible(drawingId: string): boolean;
   /** Replaces one drawing's settings; false when the tool has no drawing with that id. */
   setInputs(drawingId: string, inputs: ToolInputValues): boolean;
   /** Every drawing of this tool, for the app to save. */

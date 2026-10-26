@@ -115,6 +115,8 @@ test('drawing tools paint before every trading overlay', () => {
         context.fillStyle = TOOL_FILL;
         context.fillRect(0, 0, 1, 1);
       },
+      // The below-bars pass has its own view; this case is about the pass over the series.
+      drawDrawingsBelowBars: () => undefined,
     },
     collidingStates(),
   );
@@ -129,10 +131,8 @@ test('drawing tools paint before every trading overlay', () => {
       }) => T,
     ) => read({ horizontalPixelRatio: 1, verticalPixelRatio: 1, bitmapSize: { width: 600, height: 400 } }),
   };
-  primitive
-    .paneViews()[0]
-    .renderer()!
-    .draw(renderTarget as never);
+  const overSeriesView = primitive.paneViews().find((view) => view.zOrder?.() === 'top');
+  overSeriesView!.renderer()!.draw(renderTarget as never);
   const toolOpIndexes = ops.flatMap((op, index) => (op.style === TOOL_FILL ? [index] : []));
   expect(toolOpIndexes).toEqual([0]);
   // The overlays must really have painted after it, or the order proves nothing.

@@ -1,7 +1,8 @@
-import { ChartDrawingCollection } from '../../chart/engine/drawings/chartDrawingCollection';
+import { ChartDrawingCollection, type ChartDrawingEntry } from '../../chart/engine/drawings/chartDrawingCollection';
 import {
   anchorAtX,
   type BarAnchor,
+  type ChartDrawingPaintTarget,
   type ChartDrawTarget,
   type ChartPointerDownPurpose,
   type ChartPointerUpOutcome,
@@ -132,20 +133,24 @@ export class FixedRangeProfileTool implements ChartTool {
     }
   }
 
+  /** Paints the half-placed range; committed drawings paint through `drawDrawing`, in the chart's order. */
   draw({ context, viewport, layer }: ChartDrawTarget): void {
     // The price-axis pass paints nothing: the histogram clips to the pane rect, which
     // that pass shifts entirely off the axis canvas.
     if (layer.surface !== 'pane' || layer.depth !== 'belowTradingOverlays') {
       return;
     }
-    for (const { drawing, selected, visible } of this.drawings.entries()) {
-      if (!visible) {
-        continue;
-      }
-      const preview = this.drag?.drawing === drawing ? this.drag.preview : undefined;
-      drawing.draw(context, viewport, { selected, preview });
-    }
     this.drawPlacementPreview(context, viewport);
+  }
+
+  /** Paints one committed drawing where the chart's stacking order puts it: below the bars or over them. */
+  drawDrawing({ context, viewport }: ChartDrawingPaintTarget, drawingId: string): void {
+    const entry = this.entryOf(drawingId);
+    if (entry === undefined) {
+      return;
+    }
+    const preview = this.drag?.drawing === entry.drawing ? this.drag.preview : undefined;
+    entry.drawing.draw(context, viewport, { selected: entry.selected, preview });
   }
 
   /** Every reason drops the drawings; a symbol change also stops the backend work behind them, with one cancel. */
@@ -242,6 +247,11 @@ export class FixedRangeProfileTool implements ChartTool {
     const range = spanBetweenAnchors(this.host.barSeries, this.first, this.hover);
     const handles = FixedRangeProfileDrawing.handleXsFor(this.host.geometry, range);
     FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles, { selected: false });
+  }
+
+  /** The collection entry of one drawing, or undefined when the tool no longer holds that id. */
+  private entryOf(drawingId: string): ChartDrawingEntry<FixedRangeProfileDrawing> | undefined {
+    return this.drawings.entries().find((entry) => entry.id === drawingId);
   }
 
   /** The drawing a hit test or the e2e suite shows: the selected one, else the one painted last. */

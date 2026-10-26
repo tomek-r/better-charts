@@ -9,6 +9,7 @@ import type {
 import type { ChartDrawingPointRule } from '../src/features/chart/engine/drawings/toolDrawings';
 import type { ToolInputDefinition } from '../src/features/chart/engine/drawings/toolInputs';
 import type {
+  ChartDrawingPaintTarget,
   ChartDrawTarget,
   ChartPointerUpOutcome,
   ChartTool,
@@ -67,6 +68,29 @@ function selectionOf(toolId: string, drawingId: string, locked: boolean, visible
   return { toolId, drawingId, locked, visible };
 }
 
+/**
+ * The target of one drawing's paint pass: the fakes read the context alone, so the viewport and the
+ * bitmap stay empty here.
+ */
+function drawingTarget(context: CanvasRenderingContext2D): ChartDrawingPaintTarget {
+  return { context, viewport: {} as ChartDrawTarget['viewport'], bitmap: {} as ChartDrawTarget['bitmap'] };
+}
+
+/** The target of one pane layer pass, which every drawing and every tool's `draw` receives. */
+function paneTarget(context: CanvasRenderingContext2D): ChartDrawTarget {
+  return { ...drawingTarget(context), layer: { surface: 'pane', depth: 'belowTradingOverlays' } };
+}
+
+/** One stored record of a fake tool, on the side of the bars the case is about. */
+function storedRecord(drawing: { readonly id: string; readonly belowBars: boolean }): ChartDrawingRecord {
+  return { ...drawing, toolId: 'a', locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] };
+}
+
+/** Every paint call the fakes received, in order, without the lifecycle calls around them. */
+function paintLog({ log }: Harness): string[] {
+  return log.filter((call) => call.includes(':draw'));
+}
+
 /** The id of the drawing a fake tool paints as selected, null when none of its drawings is. */
 function selectedInTool(harness: Harness, toolId: string): string | null {
   return (
@@ -111,7 +135,15 @@ function buildToolSet({ toolIds = ['a', 'b', 'c'], placementToolIds = [] }: Tool
         deactivate = () => log.push(`${id}:deactivate`);
         pointerHover = (x: number, y: number) => log.push(`${id}:pointerHover(${x},${y})`);
         pointerLeave = () => log.push(`${id}:pointerLeave`);
-        draw = ({ context }: ChartDrawTarget) => drawActions.get(id)?.(context);
+        draw = ({ context }: ChartDrawTarget) => {
+          log.push(`${id}:draw`);
+          drawActions.get(id)?.(context);
+        };
+        drawDrawing = ({ context }: ChartDrawingPaintTarget, drawingId: string) => {
+          log.push(`${id}:drawDrawing:${drawingId}`);
+          drawActions.get(id)?.(context);
+        };
+        reset = () => this.drawings.clear();
 
         pointerDown = (x: number) => {
           if (!placesDrawings) {
@@ -154,7 +186,10 @@ function seedDrawing(harness: Harness, toolId: string, x: number): string {
   if (shapes === undefined) {
     throw new Error(`No fake tool "${toolId}"`);
   }
-  return shapes.add(new FakeDrawingShape(x, [ORIGIN_POINT]));
+  const drawingId = shapes.add(new FakeDrawingShape(x, [ORIGIN_POINT]));
+  // Reading the order heals it, as the next paint would, so a drawing seeded later sits on top.
+  harness.tools.drawingStack();
+  return drawingId;
 }
 
 /**
@@ -230,7 +265,7 @@ test('selecting an unknown tool is rejected', () => {
   expect(() => tools.selectTool('missing')).toThrow('Unknown chart tool "missing"');
 });
 
-test('a press picks the drawing of the tool registered last under the pointer', () => {
+test('a press picks the drawing the order paints last under the pointer', () => {
   const harness = buildToolSet();
   seedDrawing(harness, 'a', 10);
   const topmost = seedDrawing(harness, 'c', 10);
@@ -458,7 +493,7 @@ test('new settings on a drawing are reported only when the tool accepts them', (
   expect(harness.drawings.get('a')?.exportRecords()[0]?.inputs).toEqual({ period: 30 });
 });
 
-test('exported drawings are stamped with their tool, in registry order', () => {
+test('exported drawings are stamped with their tool, bottom of the order first', () => {
   const harness = buildToolSet({ toolIds: ['b', 'a'] });
   const first = seedDrawing(harness, 'b', 1);
   const second = seedDrawing(harness, 'a', 2);
@@ -518,6 +553,144 @@ test('an imported record keeps its id, flags and settings', () => {
   harness.tools.replaceDrawings([record]);
 
   expect(harness.tools.exportDrawings()).toEqual([record]);
+});
+
+test('the drawings of every tool paint in one order, bottom to top', () => {
+  const harness = buildToolSet({ toolIds: ['a', 'b'] });
+  const below = seedDrawing(harness, 'b', 10);
+  const above = seedDrawing(harness, 'a', 20);
+  harness.log.length = 0;
+
+  harness.tools.draw(paneTarget(createStateContext()));
+
+  // The drawing of "b" paints first although "a" is registered first: place order decides.
+  expect(paintLog(harness)).toEqual([`b:drawDrawing:${below}`, `a:drawDrawing:${above}`, 'a:draw', 'b:draw']);
+});
+
+test('a drawing below the bars paints in the below-bars pass only', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  harness.tools.replaceDrawings([
+    storedRecord({ id: 'under', belowBars: true }),
+    storedRecord({ id: 'over', belowBars: false }),
+  ]);
+  harness.log.length = 0;
+
+  harness.tools.draw(paneTarget(createStateContext()));
+  expect(paintLog(harness)).toEqual(['a:drawDrawing:over', 'a:draw']);
+
+  harness.log.length = 0;
+  harness.tools.drawBelowBars(drawingTarget(createStateContext()));
+  expect(paintLog(harness)).toEqual(['a:drawDrawing:under']);
+});
+
+test('a hidden drawing is painted in neither pass', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const drawingId = seedDrawing(harness, 'a', 10);
+  harness.tools.setDrawingVisible('a', drawingId, false);
+  harness.log.length = 0;
+
+  harness.tools.draw(paneTarget(createStateContext()));
+  harness.tools.drawBelowBars(drawingTarget(createStateContext()));
+
+  expect(paintLog(harness)).toEqual(['a:draw']);
+});
+
+test('a press picks the topmost drawing of the one order, across tools and below-bars drawings', () => {
+  const harness = buildToolSet({ toolIds: ['a', 'b'] });
+  const lower = seedDrawing(harness, 'a', 5);
+  const upper = seedDrawing(harness, 'b', 5);
+
+  harness.tools.pointerDown(5, 1);
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('b', upper, false, true));
+
+  // Below the bars the other drawing is on top, so the press follows the order, not the registry.
+  harness.tools.moveStackEntry(2, 0);
+  harness.tools.pointerDown(5, 1);
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', lower, false, true));
+});
+
+test('moving an entry reorders the paint, reports one change and refuses an invalid move', () => {
+  const harness = buildToolSet({ toolIds: ['a', 'b'] });
+  const first = seedDrawing(harness, 'a', 10);
+  const second = seedDrawing(harness, 'b', 20);
+  harness.log.length = 0;
+  harness.reports.drawingsChanged = 0;
+
+  expect(harness.tools.moveStackEntry(2, 1)).toBe(true);
+
+  expect(harness.reports.drawingsChanged).toBe(1);
+  harness.tools.draw(paneTarget(createStateContext()));
+  expect(paintLog(harness)).toEqual([`b:drawDrawing:${second}`, `a:drawDrawing:${first}`, 'a:draw', 'b:draw']);
+
+  expect(harness.tools.moveStackEntry(0, 9)).toBe(false);
+  expect(harness.tools.moveStackEntry(1, 1)).toBe(false);
+  expect(harness.reports.drawingsChanged).toBe(1);
+});
+
+test('moving an entry keeps the drawing order of each tool in step with the chart order', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const first = seedDrawing(harness, 'a', 10);
+  const second = seedDrawing(harness, 'a', 20);
+
+  harness.tools.moveStackEntry(1, 2);
+
+  expect(
+    harness.drawings
+      .get('a')
+      ?.exportRecords()
+      .map(({ id }) => id),
+  ).toEqual([second, first]);
+});
+
+test('an export stamps the side of the bars from the marker and keeps the order bottom first', () => {
+  const harness = buildToolSet({ toolIds: ['a', 'b'] });
+  const below = seedDrawing(harness, 'b', 10);
+  const above = seedDrawing(harness, 'a', 20);
+  harness.tools.moveStackEntry(0, 1);
+
+  expect(harness.tools.exportDrawings().map(({ id, belowBars }) => `${id}:${belowBars}`)).toEqual([
+    `${below}:true`,
+    `${above}:false`,
+  ]);
+});
+
+test('an import rebuilds the order from the below-bars flag and the record order', () => {
+  const harness = buildToolSet({ toolIds: ['a', 'b'] });
+  harness.tools.replaceDrawings([
+    storedRecord({ id: 'over-1', belowBars: false }),
+    storedRecord({ id: 'under-1', belowBars: true }),
+    storedRecord({ id: 'over-2', belowBars: false }),
+    storedRecord({ id: 'under-2', belowBars: true }),
+  ]);
+
+  expect(harness.tools.exportDrawings().map(({ id, belowBars }) => `${id}:${belowBars}`)).toEqual([
+    'under-1:true',
+    'under-2:true',
+    'over-1:false',
+    'over-2:false',
+  ]);
+});
+
+test('a newly placed drawing lands on top of the order', () => {
+  const harness = buildToolSet({ toolIds: ['a', 'b'], placementToolIds: ['b'] });
+  const existing = seedDrawing(harness, 'a', 10);
+  harness.tools.selectTool('b');
+  harness.tools.pointerDown(20, 0);
+  harness.tools.pointerUp('released');
+  const placed = harness.tools.selectedDrawing()?.drawingId;
+
+  expect(harness.tools.exportDrawings().map(({ id }) => id)).toEqual([existing, placed]);
+});
+
+test('resetting every tool empties the order down to the bars marker', () => {
+  const harness = buildToolSet();
+  seedDrawing(harness, 'a', 5);
+  seedDrawing(harness, 'b', 6);
+
+  harness.tools.resetTools('symbol');
+
+  expect(harness.tools.drawingStack()).toEqual([{ kind: 'bars' }]);
+  expect(harness.tools.exportDrawings()).toEqual([]);
 });
 
 test('a tool that places no drawings answers as if it had none', () => {
@@ -581,7 +754,7 @@ test('a tool that changes canvas state does not leak it into the next tool', () 
     ctx.lineWidth = 9;
   });
   drawActions.set('b', (ctx) => seenByNextTool.push(ctx.lineWidth));
-  tools.draw({ context } as ChartDrawTarget);
+  tools.draw(paneTarget(context));
   expect(seenByNextTool).toEqual([1]);
   expect(context.lineWidth).toBe(1);
 });
@@ -593,6 +766,6 @@ test('canvas state is restored even when a tool throws while drawing', () => {
     ctx.lineWidth = 9;
     throw new Error('draw failed');
   });
-  expect(() => tools.draw({ context } as ChartDrawTarget)).toThrow('draw failed');
+  expect(() => tools.draw(paneTarget(context))).toThrow('draw failed');
   expect(context.lineWidth).toBe(1);
 });

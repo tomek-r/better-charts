@@ -1,12 +1,18 @@
+import type { ChartLayerEntry } from '../chart/engine/drawings/chartDrawings';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../chart/engine/drawings/drawingRecord';
 import { CHART_TOOL_PLUGINS } from '../tools/registry';
 import { useDrawingSelection } from '../tools/drawingToolbar/useDrawingSelection';
 import { ObjectTreeRow } from './ObjectTreeRow';
-import { useDrawingList } from './useDrawingList';
+import { useLayerList } from './useLayerList';
 
 /** Whether the chart holds this row's drawing: ids repeat across tools, so both halves must match. */
 function isRecordSelected(selection: ChartDrawingSelection | null, record: ChartDrawingRecord): boolean {
   return selection !== null && selection.toolId === record.toolId && selection.drawingId === record.id;
+}
+
+/** The records of the layer list: the price bars have no row of their own yet. */
+function drawingRecords(layers: readonly ChartLayerEntry[]): readonly ChartDrawingRecord[] {
+  return layers.flatMap((layer) => (layer.kind === 'drawing' ? [layer.record] : []));
 }
 
 /**
@@ -14,7 +20,8 @@ function isRecordSelected(selection: ChartDrawingSelection | null, record: Chart
  * the app no longer knows has no row, because its label and icon come from the registry.
  */
 export function ObjectTreePanel() {
-  const drawings = useDrawingList();
+  const layers = useLayerList();
+  const drawings = drawingRecords(layers);
   const selection = useDrawingSelection();
 
   return (

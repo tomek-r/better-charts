@@ -151,25 +151,49 @@ test('an import replaces the drawings the collection already held, disposing of 
   expect(previous.events).toEqual(['shown', 'disposed']);
 });
 
-test('drawingAt finds the topmost drawing under the point and nothing outside it', () => {
+test('hits answers only for a visible drawing the point is on', () => {
   const { collection } = buildCollection();
   const lower = collection.add(new FakeDrawingShape(10));
   const upper = collection.add(new FakeDrawingShape(10));
 
-  expect(collection.drawingAt(10, 0)).toBe(upper);
-  expect(collection.drawingAt(20, 0)).toBeNull();
+  expect(collection.hits(upper, 10, 0)).toBe(true);
+  expect(collection.hits(upper, 20, 0)).toBe(false);
+  expect(collection.hits('missing', 10, 0)).toBe(false);
   expect(collection.isLocked(lower)).toBe(false);
 });
 
-test('a hidden drawing is never hit, and the drawing below it answers instead', () => {
+test('a hidden drawing is never hit', () => {
   const { collection } = buildCollection();
   const below = collection.add(new FakeDrawingShape(10));
   const above = collection.add(new FakeDrawingShape(10));
 
   collection.setVisible(above, false);
 
-  expect(collection.drawingAt(10, 0)).toBe(below);
+  expect(collection.hits(above, 10, 0)).toBe(false);
+  expect(collection.hits(below, 10, 0)).toBe(true);
   expect(collection.isVisible(above)).toBe(false);
+});
+
+test('the drawing ids are the paint order, bottom to top', () => {
+  const { collection } = buildCollection();
+  const first = collection.add(new FakeDrawingShape(10));
+  const second = collection.add(new FakeDrawingShape(11));
+
+  expect(collection.drawingIds()).toEqual([first, second]);
+});
+
+test('arranging reorders the drawings, ignores unknown ids and keeps the unlisted ones on top', () => {
+  const { collection, repaints } = buildCollection();
+  const first = collection.add(new FakeDrawingShape(10));
+  const second = collection.add(new FakeDrawingShape(11));
+  const third = collection.add(new FakeDrawingShape(12));
+  const repaintsBefore = repaints();
+
+  collection.arrange([third, 'missing', first]);
+
+  expect(collection.drawingIds()).toEqual([third, first, second]);
+  expect(collection.exportRecords().map(({ id }) => id)).toEqual([third, first, second]);
+  expect(repaints()).toBe(repaintsBefore + 1);
 });
 
 test('hiding and showing tells the drawing once per real change', () => {

@@ -3,7 +3,7 @@ import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarket
 import { createFakeToolHost, oneMinuteBars, SLOT_WIDTH_PX, FAKE_SYMBOL } from './helpers/fakeToolHost';
 import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/tool';
 import { readFixedRangeProfilePoints } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfilePoints';
-import type { ChartDrawTarget } from '../src/features/chart/engine/tools/toolContract';
+import type { ChartDrawingPaintTarget } from '../src/features/chart/engine/tools/toolContract';
 
 /**
  * Many independent drawings of one tool: two placements no longer replace each other, each drawing has
@@ -61,11 +61,16 @@ function paintedHandles({ tool, fakeHost }: Session): number {
       arcs += 1;
     },
   } as unknown as CanvasRenderingContext2D;
-  tool.draw({
+  const target = {
     context,
     viewport: fakeHost.host.geometry.viewport(),
-    layer: { surface: 'pane', depth: 'belowTradingOverlays' },
-  } as ChartDrawTarget);
+  } as ChartDrawingPaintTarget;
+  // The engine paints only the drawings it finds visible, in the chart's stacking order.
+  for (const drawingId of tool.drawings.drawingIds()) {
+    if (tool.drawings.isVisible(drawingId)) {
+      tool.drawDrawing(target, drawingId);
+    }
+  }
   return arcs;
 }
 
@@ -100,18 +105,19 @@ test('the second drawing asks for its profile only once the first one answered',
   expect(session.market.requests.map((request) => request.fromMs)).toEqual([1_120_000, 1_480_000]);
 });
 
-test('drawingAt finds the topmost drawing over its band and nothing outside', () => {
+test('hits answers over a drawing band and nothing outside it', () => {
   const { tool, place } = createSession();
   place(FIRST_CLICKS);
   place(SECOND_CLICKS);
   const [first, second] = tool.testApi().drawings();
-  expect(tool.drawings.drawingAt(FIRST_FROM_X + 5, PANE_Y)).toBe(first.id);
-  expect(tool.drawings.drawingAt(SECOND_FROM_X + 5, PANE_Y)).toBe(second.id);
-  expect(tool.drawings.drawingAt(GAP_X, PANE_Y)).toBeNull();
-  expect(tool.drawings.drawingAt(FIRST_FROM_X + 5, 500)).toBeNull();
+  expect(tool.drawings.hits(first.id, FIRST_FROM_X + 5, PANE_Y)).toBe(true);
+  expect(tool.drawings.hits(second.id, SECOND_FROM_X + 5, PANE_Y)).toBe(true);
+  expect(tool.drawings.hits(first.id, GAP_X, PANE_Y)).toBe(false);
+  expect(tool.drawings.hits(first.id, FIRST_FROM_X + 5, 500)).toBe(false);
   // A later drawing over the same window is on top of the earlier one.
   place(FIRST_CLICKS);
-  expect(tool.drawings.drawingAt(FIRST_FROM_X + 5, PANE_Y)).toBe(tool.testApi().drawings()[2].id);
+  expect(tool.drawings.drawingIds().at(-1)).toBe(tool.testApi().drawings()[2].id);
+  expect(tool.drawings.hits(tool.testApi().drawings()[2].id, FIRST_FROM_X + 5, PANE_Y)).toBe(true);
 });
 
 test('a hidden drawing is not painted, and paints its handles again once shown', () => {
@@ -133,7 +139,7 @@ test('a hidden drawing is not hit and its handle starts no drag', () => {
   const [drawing] = session.tool.testApi().drawings();
   session.tool.drawings.setVisible(drawing.id, false);
 
-  expect(session.tool.drawings.drawingAt(FIRST_FROM_X, PANE_Y)).toBeNull();
+  expect(session.tool.drawings.hits(drawing.id, FIRST_FROM_X, PANE_Y)).toBe(false);
   expect(session.tool.pointerDown(FIRST_FROM_X, PANE_Y, 'editExistingDrawing')).toBe(false);
 });
 

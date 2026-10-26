@@ -101,15 +101,26 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     return this.find(drawingId)?.visible ?? false;
   }
 
-  /** The topmost visible drawing under the pane point; a hidden drawing is never hit. */
-  drawingAt(x: number, y: number): string | null {
-    for (let index = this.kept.length - 1; index >= 0; index -= 1) {
-      const entry = this.kept[index];
-      if (entry.visible && entry.drawing.contains(x, y)) {
-        return entry.id;
-      }
-    }
-    return null;
+  /** Whether that drawing is visible and holds the pane point: the test the chart's stacking order walks. */
+  hits(drawingId: string, x: number, y: number): boolean {
+    const entry = this.find(drawingId);
+    return entry !== undefined && entry.visible && entry.drawing.contains(x, y);
+  }
+
+  /** The ids of the drawings, bottom to top: cheap, because the points of a drawing are not read. */
+  drawingIds(): readonly string[] {
+    return this.kept.map(({ id }) => id);
+  }
+
+  /** Reorders the drawings to the given ids, ignoring unknown ones and keeping unlisted ones on top. */
+  arrange(drawingIds: readonly string[]): void {
+    const listed = drawingIds.flatMap((drawingId) => {
+      const entry = this.find(drawingId);
+      return entry === undefined ? [] : [entry];
+    });
+    const listedSet = new Set(listed);
+    this.kept.splice(0, this.kept.length, ...listed, ...this.kept.filter((entry) => !listedSet.has(entry)));
+    this.requestRepaint();
   }
 
   /** Paints the highlight on one drawing; an id the collection does not hold clears the selection. */

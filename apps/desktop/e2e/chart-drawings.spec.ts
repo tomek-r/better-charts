@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { ChartDrawings, type ChartDrawingCommands } from '../src/features/chart/engine/drawings/chartDrawings';
+import type { DrawingStackEntry } from '../src/features/chart/engine/drawings/drawingStack';
 import type {
   ChartDrawingPoint,
   ChartDrawingRecord,
@@ -15,9 +16,12 @@ import type { ToolInputValues } from '../src/features/chart/engine/drawings/tool
 /** One anchor point of a stored drawing; these commands pass it through untouched. */
 const ANCHOR: ChartDrawingPoint = { timeMs: 1_700_000_000_000, price: null };
 
+/** The tool every record of these cases belongs to. */
+const TOOL_ID = 'trend-line';
+
 /** The selection the fake commands report when a test needs one: the drawing its commands act on. */
 const SELECTED_LINE: ChartDrawingSelection = {
-  toolId: 'trend-line',
+  toolId: TOOL_ID,
   drawingId: 'line-1',
   locked: false,
   visible: true,
@@ -27,10 +31,14 @@ const SELECTED_LINE: ChartDrawingSelection = {
 interface CommandAnswers {
   /** The selection `selectedDrawing` answers with. */
   selection: ChartDrawingSelection | null;
-  /** The records `exportDrawings` answers with. */
+  /** The records `exportDrawings` answers with, bottom of the stack first. */
   records: ChartDrawingRecord[];
+  /** The chart's stacking order, bottom first. */
+  stack: readonly DrawingStackEntry[];
   /** Whether deleting finds a drawing to remove. */
   removes: boolean;
+  /** Whether the stack accepts the move it is asked for. */
+  moves: boolean;
 }
 
 /** One call the fake commands received: the method name and the arguments it was given, unchanged. */
@@ -83,12 +91,33 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
     replaceDrawings: (records) => {
       calls.push({ name: 'replaceDrawings', args: [records] });
     },
+    drawingStack: () => {
+      calls.push({ name: 'drawingStack', args: [] });
+      return answers.stack;
+    },
+    moveStackEntry: (fromIndex, toIndex) => {
+      calls.push({ name: 'moveStackEntry', args: [fromIndex, toIndex] });
+      return answers.moves;
+    },
   };
 }
 
 /** One stored drawing under the id, with the flags the list carries through. */
 function recordOf(id: string): ChartDrawingRecord {
-  return { id, toolId: 'trend-line', locked: false, visible: true, belowBars: false, inputs: {}, points: [ANCHOR] };
+  return { id, toolId: TOOL_ID, locked: false, visible: true, belowBars: false, inputs: {}, points: [ANCHOR] };
+}
+
+/** One stack entry naming a drawing of these cases' tool. */
+function stackEntryOf(drawingId: string): DrawingStackEntry {
+  return { kind: 'drawing', ref: { toolId: TOOL_ID, drawingId } };
+}
+
+/** The bars marker, as the tool set reports it. */
+const BARS_STACK_ENTRY: DrawingStackEntry = { kind: 'bars' };
+
+/** A layer list as readable names: 'bars', or the id of the record a drawing entry carries. */
+function layerNames(drawings: ChartDrawings): string[] {
+  return drawings.layerList().map((entry) => (entry.kind === 'bars' ? 'bars' : entry.record.id));
 }
 
 /** Records one change subscriber that pushes its label to the timeline; answers its unsubscribe. */
@@ -100,14 +129,14 @@ function recordChanges(drawings: ChartDrawings, timeline: string[], label = 'cha
 
 /** Records one list reader that pushes 'list' to the timeline; answers its unsubscribe. */
 function recordListReads(drawings: ChartDrawings, timeline: string[]): () => void {
-  return drawings.subscribeDrawingList(() => timeline.push('list'));
+  return drawings.subscribeLayerList(() => timeline.push('list'));
 }
 
 function buildHarness(): Harness {
   const calls: CommandCall[] = [];
   const timeline: string[] = [];
   const selections: Array<ChartDrawingSelection | null> = [];
-  const answers: CommandAnswers = { selection: null, records: [], removes: false };
+  const answers: CommandAnswers = { selection: null, records: [], stack: [], removes: false, moves: false };
   const drawings = new ChartDrawings(commandsFor(answers, calls), () => {
     timeline.push('repaint');
   });
@@ -235,43 +264,47 @@ test('one change reaches every subscriber and stops reaching an unsubscribed one
   expect(timeline).toEqual(['change', 'second', 'change']);
 });
 
-test('the drawing list is topmost first, the reverse of the exported records', () => {
+test('the layer list is topmost first, with the bars between the drawings they sit between', () => {
   const harness = buildHarness();
   harness.answers.records = [recordOf('line-1'), recordOf('line-2')];
-  expect(harness.drawings.drawingList().map(({ id }) => id)).toEqual(['line-2', 'line-1']);
+  harness.answers.stack = [stackEntryOf('line-1'), BARS_STACK_ENTRY, stackEntryOf('line-2')];
+
+  expect(layerNames(harness.drawings)).toEqual(['line-2', 'bars', 'line-1']);
 });
 
-test('the drawing list is read once and kept until the drawings change', () => {
+test('the layer list is read once and kept until the drawings change', () => {
   const harness = buildHarness();
   harness.answers.records = [recordOf('line-1')];
+  harness.answers.stack = [BARS_STACK_ENTRY, stackEntryOf('line-1')];
 
-  const list = harness.drawings.drawingList();
-  expect(harness.drawings.drawingList()).toBe(list);
+  const list = harness.drawings.layerList();
+  expect(harness.drawings.layerList()).toBe(list);
   expect(harness.calls.filter(({ name }) => name === 'exportDrawings')).toHaveLength(1);
 
   harness.drawings.drawingsChanged();
 
-  expect(harness.drawings.drawingList()).not.toBe(list);
+  expect(harness.drawings.layerList()).not.toBe(list);
 });
 
 test('a change, an import and a replace notice each hand out a fresh list and notify its readers', () => {
   const harness = buildHarness();
   harness.answers.records = [recordOf('line-1')];
+  harness.answers.stack = [BARS_STACK_ENTRY, stackEntryOf('line-1')];
   recordListReads(harness.drawings, harness.timeline);
-  const handedOut = [harness.drawings.drawingList()];
+  const handedOut = [harness.drawings.layerList()];
 
   harness.drawings.drawingsChanged();
-  handedOut.push(harness.drawings.drawingList());
+  handedOut.push(harness.drawings.layerList());
   harness.drawings.replaceRecords([recordOf('line-2')]);
-  handedOut.push(harness.drawings.drawingList());
+  handedOut.push(harness.drawings.layerList());
   harness.drawings.drawingsReplaced();
-  handedOut.push(harness.drawings.drawingList());
+  handedOut.push(harness.drawings.layerList());
 
   expect(new Set(handedOut).size).toBe(handedOut.length);
   expect(harness.timeline).toEqual(['list', 'change', 'list', 'repaint', 'list']);
 });
 
-test('a replace notice tells the list readers and never asks the app to save', () => {
+test('a replace notice tells the layer readers and never asks the app to save', () => {
   const harness = buildHarness();
   recordListReads(harness.drawings, harness.timeline);
 
@@ -289,13 +322,36 @@ test('imported records refresh the list without asking the app to save', () => {
   expect(harness.timeline).toEqual(['list', 'repaint']);
 });
 
-test('one list notice reaches every reader and stops reaching an unsubscribed one', () => {
+test('one layer notice reaches every reader and stops reaching an unsubscribed one', () => {
   const harness = buildHarness();
-  const stopReading = harness.drawings.subscribeDrawingList(() => harness.timeline.push('second'));
-  harness.drawings.subscribeDrawingList(() => harness.timeline.push('first'));
+  const stopReading = harness.drawings.subscribeLayerList(() => harness.timeline.push('second'));
+  harness.drawings.subscribeLayerList(() => harness.timeline.push('first'));
 
   stopReading();
   harness.drawings.drawingsReplaced();
 
   expect(harness.timeline).toEqual(['first']);
+});
+
+test('moving a layer mirrors the topmost-first indexes into the bottom-first stack', () => {
+  const harness = buildHarness();
+  harness.answers.stack = [stackEntryOf('line-1'), BARS_STACK_ENTRY, stackEntryOf('line-2')];
+  harness.answers.moves = true;
+
+  harness.drawings.moveLayer(0, 2);
+  harness.drawings.moveLayer(1, 0);
+
+  expect(harness.calls).toContainEqual({ name: 'moveStackEntry', args: [2, 0] });
+  expect(harness.calls).toContainEqual({ name: 'moveStackEntry', args: [1, 2] });
+  expect(harness.timeline).toEqual(['repaint', 'repaint']);
+});
+
+test('a moved layer that the stack refuses repaints nothing', () => {
+  const harness = buildHarness();
+  harness.answers.stack = [stackEntryOf('line-1'), BARS_STACK_ENTRY, stackEntryOf('line-2')];
+
+  harness.drawings.moveLayer(1, 1);
+
+  expect(harness.calls).toContainEqual({ name: 'moveStackEntry', args: [1, 1] });
+  expect(harness.timeline).toEqual([]);
 });
