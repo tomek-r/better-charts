@@ -17,6 +17,8 @@ export interface ToolInputFieldProps<Kind extends ToolInputDefinition['kind']> {
   readonly tooltipId: string | undefined;
   /** Whether the draft value still fails its own kind's rule. */
   readonly invalid: boolean;
+  /** Whether the definition's `activeWhen` currently locks the control; its value is kept. */
+  readonly disabled: boolean;
 }
 
 /**
@@ -44,12 +46,12 @@ const COLOR_BASE_LENGTH = 7;
 const DATETIME_LOCAL_LENGTH = 16;
 
 /** The text a number input shows: empty while the draft holds no number. */
-function numberText(value: ToolInputValue): string {
+export function numberText(value: ToolInputValue): string {
   return typeof value === 'number' ? String(value) : '';
 }
 
 /** The text a text-like control shows: empty while the draft holds no string. */
-function stringText(value: ToolInputValue): string {
+export function stringText(value: ToolInputValue): string {
   return typeof value === 'string' ? value : '';
 }
 
@@ -67,7 +69,7 @@ function epochMilliseconds(text: string): number | '' {
 }
 
 /** The picker's `#RRGGBB` and the alpha suffix beside it, from a draft the definition already accepts. */
-function colorParts({ value, invalid }: { value: ToolInputValue; invalid: boolean }): {
+export function colorParts({ value, invalid }: { value: ToolInputValue; invalid: boolean }): {
   base: string;
   alpha: string;
 } {
@@ -99,6 +101,7 @@ function controlAttributes(props: FieldPropsFor<ToolInputDefinition['kind']>) {
     title: props.definition.tooltip,
     'aria-describedby': props.tooltipId,
     'aria-invalid': props.invalid,
+    disabled: props.disabled,
   };
 }
 

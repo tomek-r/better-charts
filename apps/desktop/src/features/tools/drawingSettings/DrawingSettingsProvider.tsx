@@ -1,11 +1,8 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
 import type { ChartDrawings } from '../../chart/engine/drawings/chartDrawings';
 import type { ChartDrawingSelection } from '../../chart/engine/drawings/drawingRecord';
-import {
-  resolveToolInputValues,
-  type ToolInputDefinition,
-  type ToolInputValues,
-} from '../../chart/engine/drawings/toolInputs';
+import type { ToolInputValues } from '../../chart/engine/drawings/toolInputs';
+import { resolveToolSettingValues, type ToolSettingsSchema } from '../../chart/engine/drawings/toolSettings';
 import { useChartResources } from '../../chart/ChartWorkspaceProvider';
 import { useRequiredContext } from '../../../shared/state/useRequiredContext';
 import { useDrawingSelection } from '../drawingToolbar/useDrawingSelection';
@@ -26,15 +23,15 @@ interface DrawingSettingsContextValue {
 
 const DrawingSettingsContext = createContext<DrawingSettingsContextValue | null>(null);
 
-/** A drawing's stored settings, with each definition's default filling the gaps. */
-function storedInputValues(
+/** A drawing's stored settings, inputs and styles, with each definition's default filling the gaps. */
+function storedSettingValues(
   drawings: ChartDrawings | undefined,
   toolId: string,
   drawingId: string,
-  definitions: readonly ToolInputDefinition[],
+  settings: ToolSettingsSchema,
 ): ToolInputValues {
   const record = drawings?.exportRecords().find((entry) => entry.toolId === toolId && entry.id === drawingId);
-  return resolveToolInputValues(definitions, record?.inputs);
+  return resolveToolSettingValues(settings, record?.inputs);
 }
 
 /**
@@ -73,7 +70,7 @@ function OpenDrawingSettingsDialog({ target, selection, onSave, onClose }: OpenD
   return (
     <DrawingSettingsDialog
       label={plugin.label}
-      definitions={plugin.inputs ?? []}
+      settings={plugin}
       initialValues={target.values}
       onSave={onSave}
       onClose={onClose}
@@ -103,7 +100,7 @@ export function DrawingSettingsProvider({ children }: DrawingSettingsProviderPro
       }
       // Opening selects the drawing too, so the dialog clears itself when another drawing is picked.
       drawings?.select(toolId, drawingId);
-      setTarget({ toolId, drawingId, values: storedInputValues(drawings, toolId, drawingId, plugin.inputs ?? []) });
+      setTarget({ toolId, drawingId, values: storedSettingValues(drawings, toolId, drawingId, plugin) });
     },
     [chart],
   );

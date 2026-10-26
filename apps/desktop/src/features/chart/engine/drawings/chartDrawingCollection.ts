@@ -1,5 +1,6 @@
 import { newChartDrawingId, type ChartDrawingPoint, type ChartToolDrawingRecord } from './drawingRecord';
-import { resolveToolInputValues, type ToolInputValues } from './toolInputs';
+import type { ToolInputValues } from './toolInputs';
+import { assertUniqueToolSettingKeys, resolveToolSettingValues } from './toolSettings';
 import type {
   ChartDrawingAnchor,
   ChartDrawingFactory,
@@ -68,7 +69,9 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     private readonly rules: ChartDrawingRules,
     private readonly factory: ChartDrawingFactory<Drawing>,
     private readonly requestRepaint: () => void,
-  ) {}
+  ) {
+    assertUniqueToolSettingKeys(rules);
+  }
 
   /**
    * Adds a drawing on top of the paint order, unlocked, visible and with the tool's default settings
@@ -182,7 +185,7 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     if (entry === undefined) {
       return false;
     }
-    entry.inputs = resolveToolInputValues(this.rules.inputs, inputs);
+    entry.inputs = resolveToolSettingValues(this.rules, inputs);
     this.requestRepaint();
     return true;
   }
@@ -225,7 +228,7 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
       drawing,
       locked: state.locked ?? false,
       visible: state.visible ?? true,
-      inputs: resolveToolInputValues(this.rules.inputs, state.inputs),
+      inputs: resolveToolSettingValues(this.rules, state.inputs),
     };
     this.kept.push(kept);
     drawing.visibilityChanged(kept.visible);

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
-import { gotoWithStub, STUB_M5_INTERVAL_MS, STUB_NOW } from './helpers/tauriStub';
+import { mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
+import { STUB_M5_INTERVAL_MS, STUB_NOW } from './helpers/tauriStub';
 
 /**
  * The drawing settings form on its own: one field per input kind, each edited and handed back with the
@@ -29,21 +30,9 @@ const SINCE_MS = STUB_NOW - 2 * STUB_M5_INTERVAL_MS;
 /** The text a `datetime-local` field shows for that instant, in UTC. */
 const SINCE_TEXT = new Date(SINCE_MS).toISOString().slice(0, 16);
 
-/** Loads the app page, then mounts the harness module, which replaces the page with the bare form. */
-async function mountForm(page: Page, overrides: ToolInputValues = {}): Promise<void> {
-  await gotoWithStub(page);
-  await page.evaluate(async (initialValues) => {
-    const harnessPath = '/e2e/helpers/drawingSettingsHarness.tsx';
-    const harness = await import(/* @vite-ignore */ harnessPath);
-    harness.mountDrawingSettingsFormHarness(initialValues);
-  }, overrides);
-}
-
-/** Every draft the form saved, oldest first. */
-async function savedValues(page: Page): Promise<ToolInputValues[]> {
-  return page.evaluate(
-    () => (window as unknown as { __drawingSettings: { saves: ToolInputValues[] } }).__drawingSettings.saves,
-  );
+/** Mounts the form holding one input of every kind. */
+function mountForm(page: Page, overrides: ToolInputValues = {}): Promise<void> {
+  return mountSettingsForm(page, undefined, overrides);
 }
 
 /** Types into one field by its label, as a user typing into it would. */

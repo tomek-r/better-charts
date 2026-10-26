@@ -1,10 +1,10 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
+import type { ToolInputDefinition, ToolInputValues } from '../../src/features/chart/engine/drawings/toolInputs';
 import {
-  defaultToolInputValues,
-  type ToolInputDefinition,
-  type ToolInputValues,
-} from '../../src/features/chart/engine/drawings/toolInputs';
+  resolveToolSettingValues,
+  type ToolSettingsSchema,
+} from '../../src/features/chart/engine/drawings/toolSettings';
 import { DrawingSettingsForm } from '../../src/features/tools/drawingSettings/DrawingSettingsDialog';
 import { timeframeOptions } from '../../src/shared/bridge/timeframes';
 
@@ -67,9 +67,14 @@ const PANEL_PADDING = '24px 28px';
 
 /**
  * Mounts the form over an empty page: the app root is hidden so its own labels cannot answer a query.
+ * A missing declaration (the specs pass undefined through JSON as null) mounts every input kind;
  * `overrides` replaces the starting draft, e.g. to open a colour with an alpha suffix.
  */
-export function mountDrawingSettingsFormHarness(overrides: ToolInputValues = {}): void {
+export function mountSettingsFormHarness(
+  declared: ToolSettingsSchema | null | undefined,
+  overrides: ToolInputValues = {},
+): void {
+  const settings = declared ?? { inputs: EVERY_KIND };
   const recorderWindow = window as unknown as { __drawingSettings: DrawingSettingsRecorder };
   recorderWindow.__drawingSettings = { saves: [], cancels: 0 };
   const appRoot = document.getElementById('root');
@@ -82,8 +87,8 @@ export function mountDrawingSettingsFormHarness(overrides: ToolInputValues = {})
   act(() => {
     createRoot(container).render(
       createElement(DrawingSettingsForm, {
-        definitions: EVERY_KIND,
-        initialValues: { ...defaultToolInputValues(EVERY_KIND), ...overrides },
+        settings,
+        initialValues: { ...resolveToolSettingValues(settings, undefined), ...overrides },
         onSave: (values) => recorderWindow.__drawingSettings.saves.push(values),
         onCancel: () => {
           recorderWindow.__drawingSettings.cancels += 1;

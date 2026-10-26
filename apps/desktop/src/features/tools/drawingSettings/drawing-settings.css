@@ -86,6 +86,146 @@
   font-size: 12px;
 }
 
+/* Tabs: a dim track under the row, with a light underline on the active tab. */
+.drawing-settings-tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawing-settings-tab {
+  margin-bottom: -1px;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted-strong);
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.drawing-settings-tab:hover,
+.drawing-settings-tab[aria-selected='true'] {
+  color: var(--color-text-bright);
+}
+
+.drawing-settings-tab[aria-selected='true'] {
+  border-bottom-color: var(--color-text-bright);
+}
+
+.drawing-settings-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
+.drawing-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Inputs sharing an `inline` key: their labels and controls sit in one row of the group's grid. */
+.drawing-settings-inline-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.drawing-settings-inline-row .drawing-settings-control {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.drawing-settings-control:disabled,
+.drawing-settings-checkbox:disabled {
+  opacity: 0.5;
+}
+
+/* Style tab: one row per style; a child row is indented under its parent. */
+.drawing-settings-style-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawing-settings-style-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drawing-settings-style-row[data-child='true'] {
+  padding-left: 26px;
+}
+
+.drawing-settings-style-title {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-text-label);
+  font-size: 13px;
+}
+
+.drawing-settings-style-number,
+.drawing-settings-style-choice {
+  flex: 0 0 auto;
+  width: 120px;
+}
+
+.drawing-settings-color-input:disabled {
+  opacity: 0.5;
+}
+
+.drawing-settings-line-picker {
+  position: relative;
+}
+
+.drawing-settings-line-picker summary {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  color: var(--color-text);
+  background: var(--color-surface);
+  cursor: pointer;
+  list-style: none;
+}
+
+.drawing-settings-line-picker summary::-webkit-details-marker {
+  display: none;
+}
+
+.drawing-settings-line-picker summary:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
+.drawing-settings-line-picker[inert] {
+  opacity: 0.5;
+}
+
+.drawing-settings-line-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 110px;
+  padding: 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  background: var(--color-panel);
+}
+
 .drawing-settings-empty {
   margin: 0;
   color: var(--color-muted-strong);

@@ -3,6 +3,7 @@ import type { QuoteSnapshot } from '../../../../shared/bridge/types';
 import type { MarketDataPort } from '../../../bridge/marketDataPort';
 import type { RenderViewport } from '../surface/overlayTypes';
 import type { ToolInputDefinition } from '../drawings/toolInputs';
+import type { ToolStyleDefinition } from '../drawings/toolStyles';
 import type { ChartDrawingPointRule, ChartToolDrawings } from '../drawings/toolDrawings';
 
 export type { RenderViewport };
@@ -220,6 +221,8 @@ export interface ChartToolDefinition {
    * omitted means the tool's drawings have no settings.
    */
   readonly inputs?: readonly ToolInputDefinition[];
+  /** The per-plot style settings of every drawing, stored beside the inputs; omitted means none. */
+  readonly styles?: readonly ToolStyleDefinition[];
   /**
    * The anchors every drawing of this tool carries: how many, and whether each holds a time, a
    * price or both. A tool with drawings declares it together with `inputs`; a tool without

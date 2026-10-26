@@ -1,5 +1,6 @@
 import type { ChartDrawingPoint, ChartToolDrawingRecord } from './drawingRecord';
 import type { ToolInputDefinition, ToolInputValues } from './toolInputs';
+import type { ToolStyleDefinition } from './toolStyles';
 
 /**
  * A drawing of one tool, seen by the engine's shared drawing core: the anchors it stores and the
@@ -43,6 +44,8 @@ export interface ChartDrawingPointRule {
 /** What a tool declares about its drawings: the settings each one carries and the anchors it holds. */
 export interface ChartDrawingRules {
   readonly inputs: readonly ToolInputDefinition[];
+  /** The Style tab's settings, stored beside the inputs; omitted means the drawings have none. */
+  readonly styles?: readonly ToolStyleDefinition[];
   readonly points: ChartDrawingPointRule;
 }
 

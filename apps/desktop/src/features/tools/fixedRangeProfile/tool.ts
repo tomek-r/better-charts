@@ -11,6 +11,7 @@ import {
   type ChartToolResetReason,
 } from '../../chart/engine/tools/toolContract';
 import type { ToolInputDefinition } from '../../chart/engine/drawings/toolInputs';
+import type { ToolStyleDefinition } from '../../chart/engine/drawings/toolStyles';
 import { FixedRangeProfileDrawing, outsidePane } from './drawing/fixedRangeProfileDrawing';
 import { FixedRangeProfileFactory } from './drawing/fixedRangeProfileFactory';
 import { FIXED_RANGE_PROFILE_POINTS } from './drawing/fixedRangeProfilePoints';
@@ -22,6 +23,9 @@ import { sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './r
  * values so adding an input later restores old drawings with its default.
  */
 export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [];
+
+/** The fixed range profile's style settings; empty until its styles are designed, and stored beside the inputs. */
+export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [];
 
 /** Where the two drag handles sit, in pane CSS px, and the range they delimit. */
 interface FixedRangeProfileBoundaries {
@@ -73,7 +77,7 @@ export class FixedRangeProfileTool implements ChartTool {
   constructor(private readonly host: ChartToolHost) {
     this.queue = new TickProfileRequestQueue(host.marketDataPort);
     this.drawings = new ChartDrawingCollection<FixedRangeProfileDrawing>(
-      { inputs: FIXED_RANGE_PROFILE_INPUTS, points: FIXED_RANGE_PROFILE_POINTS },
+      { inputs: FIXED_RANGE_PROFILE_INPUTS, styles: FIXED_RANGE_PROFILE_STYLES, points: FIXED_RANGE_PROFILE_POINTS },
       new FixedRangeProfileFactory(host, this.queue),
       () => host.requestRepaint(),
     );

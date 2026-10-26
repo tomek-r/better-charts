@@ -11,6 +11,12 @@ export const TOOL_INPUT_SOURCES = ['open', 'high', 'low', 'close', 'hl2', 'hlc3'
 
 export type ToolInputSource = (typeof TOOL_INPUT_SOURCES)[number];
 
+/** Pine Script v6 `active`, declarative: the input is editable while another input holds one value. */
+export interface ToolInputActiveWhen {
+  readonly inputId: string;
+  readonly equals: ToolInputValue;
+}
+
 /** Fields every input carries, whatever its kind and value type. */
 interface ToolInputCommon<Kind extends string, Value> {
   readonly kind: Kind;
@@ -19,6 +25,10 @@ interface ToolInputCommon<Kind extends string, Value> {
   readonly defaultValue: Value;
   readonly group?: string;
   readonly tooltip?: string;
+  /** Pine Script v6 `inline`: inputs sharing one key sit in one row, in declaration order. */
+  readonly inline?: string;
+  /** Pine Script v6 `active`: disabled, with its value kept, while the other input differs. */
+  readonly activeWhen?: ToolInputActiveWhen;
 }
 
 /** Bounds the two numeric kinds may carry; both optional, so a one-sided range is allowed. */
@@ -113,11 +123,16 @@ function isToolInputValue(value: unknown): value is ToolInputValue {
   return typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string';
 }
 
-function isFiniteInteger(value: unknown): value is number {
+export function isFiniteInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value);
 }
 
-function isNumberInBounds({ minValue, maxValue }: ToolInputNumberBounds, value: unknown): value is number {
+/** Whether `value` is an `#RRGGBB` or `#RRGGBBAA` colour. */
+export function isColorText(value: unknown): value is string {
+  return typeof value === 'string' && COLOR_PATTERN.test(value);
+}
+
+export function isNumberInBounds({ minValue, maxValue }: ToolInputNumberBounds, value: unknown): value is number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return false;
   }
@@ -156,7 +171,7 @@ const TOOL_INPUT_VALIDATORS = {
   bool: (_definition: ToolInputBool, value: unknown) => typeof value === 'boolean',
   string: (definition: ToolInputString, value: unknown) => isStringInOptions(definition.options, value),
   textArea: (_definition: ToolInputTextArea, value: unknown) => typeof value === 'string',
-  color: (_definition: ToolInputColor, value: unknown) => typeof value === 'string' && COLOR_PATTERN.test(value),
+  color: (_definition: ToolInputColor, value: unknown) => isColorText(value),
   source: (_definition: ToolInputSourceChoice, value: unknown) => typeof value === 'string' && SOURCE_VALUES.has(value),
   timeframe: (_definition: ToolInputTimeframe, value: unknown) =>
     typeof value === 'string' && TIMEFRAME_WIRES.has(value),
@@ -193,6 +208,12 @@ export function resolveToolInputValues(definitions: readonly ToolInputDefinition
       return [definition.id, value];
     }),
   );
+}
+
+/** Whether the input is editable now: it names no condition, or the other input holds the wanted value. */
+export function isToolInputActive(definition: ToolInputDefinition, values: ToolInputValues): boolean {
+  const { activeWhen } = definition;
+  return activeWhen === undefined || values[activeWhen.inputId] === activeWhen.equals;
 }
 
 /** Every definition's default value, keyed by input id: what nothing stored resolves to. */
