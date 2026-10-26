@@ -189,30 +189,34 @@ export class ChartToolSet {
     return this.selectionState.current();
   }
 
-  /** The Delete key: removes the selected drawing even when it is locked; false when nothing is selected. */
-  deleteSelectedDrawing(): boolean {
-    const selection = this.selectionState.current();
+  /**
+   * Selects one drawing of any tool, hidden or not, which is what the object tree asks for.
+   * An unknown tool or drawing leaves the selection exactly as it was.
+   */
+  selectDrawing(toolId: string, drawingId: string): void {
+    const selection = this.selectionFor(toolId, drawingId);
     if (selection === null) {
+      return;
+    }
+    this.changeSelection(selection);
+  }
+
+  /** Removes one drawing of any tool, even when it is locked; false when there is no such drawing. */
+  deleteDrawing(toolId: string, drawingId: string): boolean {
+    if (this.drawingsOf(toolId)?.delete(drawingId) !== true) {
       return false;
     }
-    if (this.drawingsOf(selection.toolId)?.delete(selection.drawingId) !== true) {
-      return false;
-    }
-    this.selectionState.clearIfDrawing(selection.toolId, selection.drawingId);
+    this.selectionState.clearIfDrawing(toolId, drawingId);
     this.listeners.drawingsChanged();
     return true;
   }
 
-  /** Locks or unlocks the selected drawing, which then ignores edit gestures or accepts them again. */
-  setSelectedDrawingLocked(locked: boolean): void {
-    const selection = this.selectionState.current();
-    if (selection === null) {
+  /** Locks or unlocks one drawing of any tool, which then ignores edit gestures or accepts them again. */
+  setDrawingLocked(toolId: string, drawingId: string, locked: boolean): void {
+    if (this.drawingsOf(toolId)?.setLocked(drawingId, locked) !== true) {
       return;
     }
-    if (this.drawingsOf(selection.toolId)?.setLocked(selection.drawingId, locked) !== true) {
-      return;
-    }
-    this.changeSelection({ ...selection, locked });
+    this.refreshSelectionOf(toolId, drawingId);
     this.listeners.drawingsChanged();
   }
 
@@ -224,6 +228,8 @@ export class ChartToolSet {
     if (!visible) {
       this.selectionState.clearIfDrawing(toolId, drawingId);
     }
+    // A shown drawing can still be the selection, so its flags are re-read for the toolbar.
+    this.refreshSelectionOf(toolId, drawingId);
     this.listeners.drawingsChanged();
   }
 
@@ -312,9 +318,21 @@ export class ChartToolSet {
     return record === undefined ? null : { toolId, drawingId, locked: record.locked, visible: record.visible };
   }
 
-  /** The drawing operations of one tool; undefined when that tool places no drawings. */
+  /**
+   * Re-reads the selection of one drawing after its flags changed, so a toolbar shows the new lock or
+   * visibility; a selection of another drawing, or no selection, stays untouched.
+   */
+  private refreshSelectionOf(toolId: string, drawingId: string): void {
+    const selection = this.selectionState.current();
+    if (selection === null || selection.toolId !== toolId || selection.drawingId !== drawingId) {
+      return;
+    }
+    this.changeSelection(this.selectionFor(toolId, drawingId));
+  }
+
+  /** The drawing operations of one tool; undefined when no such tool is registered or it places no drawings. */
   private drawingsOf(toolId: string): ChartToolDrawings | undefined {
-    return this.entry(toolId).tool.drawings;
+    return this.findEntry(toolId)?.tool.drawings;
   }
 
   /** A tool committed a new drawing: it becomes the selection and the change is reported for saving. */
@@ -354,8 +372,13 @@ export class ChartToolSet {
     this.listeners.cursorChanged(next.definition.cursor);
   }
 
+  /** The tool registered under the id, or undefined: the drawing commands treat an unknown id as a no-op. */
+  private findEntry(id: string): ToolEntry | undefined {
+    return this.entries.find(({ definition }) => definition.id === id);
+  }
+
   private entry(id: string): ToolEntry {
-    const entry = this.entries.find(({ definition }) => definition.id === id);
+    const entry = this.findEntry(id);
     if (!entry) {
       throw new Error(`Unknown chart tool "${id}"`);
     }

@@ -455,6 +455,8 @@ export class ChartController {
   }
   resetTools(reason: ChartToolResetReason): void {
     this.tools.resetTools(reason);
+    // The reset removes every drawing from the chart without a save, so only the list readers hear it.
+    this.drawings.drawingsReplaced();
   }
   private toolTestApi(id: string): unknown {
     return this.tools.toolTestApi(id);

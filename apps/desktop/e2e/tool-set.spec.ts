@@ -62,6 +62,11 @@ interface ToolKinds {
   readonly placementToolIds?: readonly string[];
 }
 
+/** The selection one drawing is expected to report, with the flags the test watches. */
+function selectionOf(toolId: string, drawingId: string, locked: boolean, visible: boolean): ChartDrawingSelection {
+  return { toolId, drawingId, locked, visible };
+}
+
 /** The id of the drawing a fake tool paints as selected, null when none of its drawings is. */
 function selectedInTool(harness: Harness, toolId: string): string | null {
   return (
@@ -162,6 +167,14 @@ function seedSelectedDrawing(harness: Harness): string {
   harness.selections.length = 0;
   harness.reports.drawingsChanged = 0;
   return drawingId;
+}
+
+/** A harness with a selected drawing of tool "a" and one more drawing of tool "b" that is not selected. */
+function harnessWithUnselectedDrawing(): { harness: Harness; selected: string; other: string } {
+  const harness = buildToolSet();
+  const selected = seedSelectedDrawing(harness);
+  const other = seedDrawing(harness, 'b', 20);
+  return { harness, selected, other };
 }
 
 test('selecting a tool cancels every gesture in progress before the switch', () => {
@@ -276,32 +289,109 @@ test('a newly placed drawing becomes selected and the change is reported once', 
   expect(harness.reports.drawingsChanged).toBe(1);
 });
 
-test('the selected drawing is deleted even when locked, and the selection is dropped', () => {
-  const harness = buildToolSet();
-  seedDrawing(harness, 'a', 5);
-  harness.tools.pointerDown(5, 1);
-  harness.tools.setSelectedDrawingLocked(true);
+test('deleting a locked drawing of another tool by id keeps the selection and reports the change once', () => {
+  const { harness, selected, other } = harnessWithUnselectedDrawing();
+  harness.tools.setDrawingLocked('b', other, true);
   harness.reports.drawingsChanged = 0;
-  expect(harness.tools.deleteSelectedDrawing()).toBe(true);
-  expect(harness.tools.selectedDrawing()).toBeNull();
+
+  expect(harness.tools.deleteDrawing('b', other)).toBe(true);
+
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', selected, false, true));
   expect(harness.reports.drawingsChanged).toBe(1);
-  expect(harness.drawings.get('a')?.exportRecords()).toEqual([]);
+  expect(harness.drawings.get('b')?.exportRecords()).toEqual([]);
 });
 
-test('deleting with nothing selected changes nothing', () => {
-  const harness = buildToolSet();
-  expect(harness.tools.deleteSelectedDrawing()).toBe(false);
-  expect(harness.reports.drawingsChanged).toBe(0);
-});
-
-test('locking the selected drawing updates the selection and reports the change once', () => {
+test('deleting the selected drawing by id drops the selection', () => {
   const harness = buildToolSet();
   const drawingId = seedSelectedDrawing(harness);
-  harness.tools.setSelectedDrawingLocked(true);
-  const locked = { toolId: 'a', drawingId, locked: true, visible: true };
-  expect(harness.tools.selectedDrawing()).toEqual(locked);
-  expect(harness.selections).toEqual([locked]);
+
+  expect(harness.tools.deleteDrawing('a', drawingId)).toBe(true);
+
+  expect(harness.tools.selectedDrawing()).toBeNull();
+  expect(harness.selections).toEqual([null]);
   expect(harness.reports.drawingsChanged).toBe(1);
+});
+
+test('deleting an unknown drawing or an unknown tool reports false and reports nothing', () => {
+  const harness = buildToolSet();
+  const drawingId = seedDrawing(harness, 'a', 5);
+
+  expect(harness.tools.deleteDrawing('a', 'missing')).toBe(false);
+  expect(harness.tools.deleteDrawing('missing', drawingId)).toBe(false);
+
+  expect(harness.reports.drawingsChanged).toBe(0);
+  expect(
+    harness.drawings
+      .get('a')
+      ?.exportRecords()
+      .map(({ id }) => id),
+  ).toEqual([drawingId]);
+});
+
+test('selecting a drawing of another tool by id selects and highlights it', () => {
+  const harness = buildToolSet();
+  const drawingId = seedDrawing(harness, 'b', 20);
+
+  harness.tools.selectDrawing('b', drawingId);
+
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('b', drawingId, false, true));
+  expect(harness.selections).toEqual([selectionOf('b', drawingId, false, true)]);
+  expect(selectedInTool(harness, 'b')).toBe(drawingId);
+});
+
+test('a hidden drawing can be selected by id and reports itself as hidden', () => {
+  const harness = buildToolSet();
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.setDrawingVisible('a', drawingId, false);
+  harness.selections.length = 0;
+
+  harness.tools.selectDrawing('a', drawingId);
+
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', drawingId, false, false));
+  expect(harness.selections).toEqual([selectionOf('a', drawingId, false, false)]);
+});
+
+test('selecting an unknown drawing or an unknown tool changes nothing', () => {
+  const harness = buildToolSet();
+  const drawingId = seedSelectedDrawing(harness);
+
+  harness.tools.selectDrawing('a', 'missing');
+  harness.tools.selectDrawing('missing', drawingId);
+
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', drawingId, false, true));
+  expect(harness.selections).toEqual([]);
+  expect(selectedInTool(harness, 'a')).toBe(drawingId);
+});
+
+test('locking the selected drawing by id updates the selection and reports the change once', () => {
+  const harness = buildToolSet();
+  const drawingId = seedSelectedDrawing(harness);
+
+  harness.tools.setDrawingLocked('a', drawingId, true);
+
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', drawingId, true, true));
+  expect(harness.selections).toEqual([selectionOf('a', drawingId, true, true)]);
+  expect(harness.reports.drawingsChanged).toBe(1);
+});
+
+test('locking a drawing that is not selected leaves the selection as it was', () => {
+  const { harness, selected, other } = harnessWithUnselectedDrawing();
+
+  harness.tools.setDrawingLocked('b', other, true);
+
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', selected, false, true));
+  expect(harness.selections).toEqual([]);
+  expect(harness.drawings.get('b')?.exportRecords()[0]?.locked).toBe(true);
+});
+
+test('locking or showing through an unknown tool or drawing changes nothing', () => {
+  const harness = buildToolSet();
+
+  harness.tools.setDrawingLocked('missing', 'missing', true);
+  harness.tools.setDrawingLocked('a', 'missing', true);
+  harness.tools.setDrawingVisible('missing', 'missing', true);
+
+  expect(harness.reports.drawingsChanged).toBe(0);
 });
 
 test('hiding the selected drawing clears the selection and reports the change once', () => {
@@ -341,6 +431,21 @@ test('hiding a drawing that is not selected keeps the selection', () => {
     locked: false,
     visible: true,
   });
+});
+
+test('showing the selected hidden drawing updates the selection to visible', () => {
+  const harness = buildToolSet();
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.setDrawingVisible('a', drawingId, false);
+  harness.tools.selectDrawing('a', drawingId);
+  harness.selections.length = 0;
+  harness.reports.drawingsChanged = 0;
+
+  harness.tools.setDrawingVisible('a', drawingId, true);
+
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', drawingId, false, true));
+  expect(harness.selections).toEqual([selectionOf('a', drawingId, false, true)]);
+  expect(harness.reports.drawingsChanged).toBe(1);
 });
 
 test('new settings on a drawing are reported only when the tool accepts them', () => {
@@ -420,7 +525,7 @@ test('a tool that places no drawings answers as if it had none', () => {
   tools.activateDefaultTool();
 
   expect(tools.exportDrawings()).toEqual([]);
-  expect(tools.deleteSelectedDrawing()).toBe(false);
+  expect(tools.deleteDrawing('pointer', 'missing')).toBe(false);
   expect(tools.pointerDown(1, 1)).toBe(false);
   tools.setDrawingVisible('pointer', 'missing', false);
   tools.setDrawingInputs('pointer', 'missing', { period: 1 });
