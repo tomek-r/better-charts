@@ -1,0 +1,49 @@
+/* Chart section frame and the states it shows before the first candles (ChartWorkspaceView). */
+.chart-section {
+  min-width: 0;
+  border-radius: var(--border-radius);
+  background: var(--color-overlay);
+  align-self: start;
+  width: 100%;
+  height: calc(100vh - 68px - 8px);
+  padding: 8px 22px 0 22px;
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+
+/* Without candles there is no chart to frame, so the section shows only the loader and the
+   backgrounds of both the section and the frame become transparent. */
+.chart-section-waiting,
+.chart-section-waiting .chart-frame {
+  background: transparent;
+}
+
+/* The chart library still draws its empty axis borders and attribution logo, so the heading, the
+   timeframes and the host stay mounted (and sized) but show nothing until the first candles arrive;
+   hiding them by visibility keeps their layout stable, so nothing jumps when data arrives. */
+.chart-section-waiting .chart-heading,
+.chart-section-waiting .timeframe-tabs,
+.chart-section-waiting .chart-host {
+  visibility: hidden;
+}
+
+/* No chart on screen yet, so a dot describing its data would only blink over an empty pane. */
+.chart-section-waiting .chart-connection-dot {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .chart-section {
+    height: clamp(520px, 72vh, 760px);
+    min-height: 520px;
+  }
+}
+
+@media (max-width: 520px) {
+  .chart-section {
+    height: 520px;
+    padding: 14px;
+    min-height: 470px;
+  }
+}

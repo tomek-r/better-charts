@@ -1,0 +1,38 @@
+/* Chart heading: symbol title and description (ChartTitle). */
+.chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.chart-heading h1 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+}
+
+.chart-title {
+  min-width: 0;
+}
+
+.chart-symbol {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.chart-symbol-description {
+  color: var(--color-muted-strong);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .chart-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+}

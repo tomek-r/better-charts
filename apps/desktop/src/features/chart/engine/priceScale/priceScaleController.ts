@@ -22,7 +22,7 @@ const PRICE_SCALE_ID = 'right';
  * own too, by turning auto scale off when the axis is dragged and on again when
  * it is double-clicked.
  *
- * Position and paint are CSS (`.price-scale-controls` in features/chart/chart.css). Only
+ * Position and paint are CSS (`.price-scale-controls` in features/chart/engine/priceScale/price-scale-controls.css). Only
  * the row's width is set here, because the axis width is runtime geometry.
  */
 export class PriceScaleController {

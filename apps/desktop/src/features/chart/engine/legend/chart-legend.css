@@ -1,0 +1,52 @@
+/* OHLC legend and the connection dot (engine/legend). */
+.chart-legend {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 4;
+  color: var(--color-text-label);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.chart-connection-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-sell);
+  box-shadow: 0 0 0 3px var(--color-sell-wash);
+}
+
+.chart-connection-connected {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-ring-soft);
+}
+
+.chart-connection-connecting {
+  background: var(--color-warn);
+  box-shadow: 0 0 0 3px var(--color-warn-wash);
+  animation: connection-pulse 1.15s ease-in-out infinite;
+}
+
+.chart-connection-protocol_error {
+  background: var(--color-sell);
+  box-shadow: 0 0 0 3px var(--color-sell-wash);
+}
+
+@keyframes connection-pulse {
+  50% {
+    opacity: 0.35;
+    box-shadow: 0 0 0 5px var(--color-warn-wash-faint);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-connection-connecting {
+    animation: none;
+  }
+}

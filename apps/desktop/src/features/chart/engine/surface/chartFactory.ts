@@ -47,7 +47,7 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
   const chart = createChart(host, {
     autoSize: false,
     layout: {
-      // This colour is also .price-scale-controls' fill in features/chart/chart.css,
+      // This colour is also .price-scale-controls' fill in features/chart/engine/priceScale/price-scale-controls.css,
       // which masks the axis labels behind the price-scale toggles.
       background: { type: ColorType.Solid, color: palette.overlay },
       textColor: palette.mutedStrong,

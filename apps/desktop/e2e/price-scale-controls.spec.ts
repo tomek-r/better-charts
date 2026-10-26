@@ -111,7 +111,7 @@ test('the price-scale toggles appear only over the right price scale and toggle 
   expect(row.left).toBeGreaterThanOrEqual(frame.right - pane.axisWidth - 1);
   expect(row.right).toBeLessThanOrEqual(frame.right + 1);
   // Anchored to the pane's bottom edge by `bottom: <time axis height>` in
-  // features/chart/chart.css — at the bottom of the price scale, never over the time
+  // features/chart/engine/priceScale/price-scale-controls.css — at the bottom of the price scale, never over the time
   // axis below it.
   expect(row.bottom).toBeGreaterThan(frame.top + pane.paneHeight - 40);
   expect(row.bottom).toBeLessThanOrEqual(frame.top + pane.paneHeight + 1);
