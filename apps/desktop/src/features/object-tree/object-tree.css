@@ -1,0 +1,8 @@
+/* Object tree drawer: the heading, styled like the panel headings beside it. */
+.object-tree-title {
+  margin: 0;
+  padding: 8px 8px 12px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}

@@ -1,0 +1,85 @@
+/* Side drawers: the right-edge icon strip and the drawer chrome it opens. */
+
+:root {
+  /* Shared widths: the strip clears its own column in the dashboard padding and
+     the drawer clears the strip, so both are defined once here. */
+  --side-drawer-strip-width: 52px;
+  --side-drawer-width: 330px;
+}
+
+/* Right-edge icon strip, mirroring the left tool rail. */
+.side-drawer-strip {
+  position: fixed;
+  /* 68px topbar + 8px: the strip top edge sits on the chart card's top line,
+     same distance from the topbar as the card. */
+  top: 76px;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: var(--side-drawer-strip-width);
+  padding: 8px 0 8px;
+  overflow: visible;
+  border-radius: var(--border-radius) 0 0 0;
+  background: var(--color-panel);
+}
+
+/* No chart to draw on yet: visibility hides the strip without shifting the layout or leaving it tabbable. */
+.side-drawer-strip-waiting {
+  visibility: hidden;
+}
+
+.side-drawer-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+/* Drawer chrome: fixed to the strip's inner edge below the 68px topbar. Closed,
+   it is translated off-screen AND visibility-hidden (delayed until the slide
+   finishes) so it cannot catch pointer events, focus, or Playwright hits. */
+.side-drawer {
+  position: fixed;
+  /* 68px topbar + 8px: the drawer top edge sits on the chart card's top line,
+     same distance from the topbar as the card. */
+  top: 76px;
+  right: var(--side-drawer-strip-width);
+  bottom: 0;
+  width: var(--side-drawer-width);
+  overflow-y: auto;
+  z-index: 20;
+  /* 8px top inside the drawer keeps the panel content at 84px (68 + 16) from the
+     window top, unchanged when the drawer edge moved down. */
+  padding: 8px 8px 8px;
+  border-radius: var(--border-radius) 0 0 var(--border-radius);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0.2s;
+  min-width: 0;
+  background: var(--color-overlay);
+}
+
+.side-drawer.open {
+  transform: translateX(0);
+  visibility: visible;
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0s;
+}
+
+@media (max-width: 900px) {
+  .side-drawer {
+    width: min(var(--side-drawer-width), 88vw);
+  }
+}
+
+@media (max-width: 520px) {
+  .side-drawer {
+    padding: 20px;
+  }
+}

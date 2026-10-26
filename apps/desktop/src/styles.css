@@ -17,7 +17,8 @@
 @import './features/tools/drawingToolbar/drawing-toolbar.css';
 @import './features/tools/drawingSettings/drawing-settings.css';
 @import './features/symbol-search/search.css';
-@import './features/trade-panel/trade-panel.css';
+@import './features/side-drawers/side-drawers.css';
+@import './features/object-tree/object-tree.css';
 @import './features/execution/execution.css';
 @import './shared/ui/action-button.css';
 @import './shared/ui/primary-button.css';

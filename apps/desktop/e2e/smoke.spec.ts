@@ -143,6 +143,21 @@ async function settledFrameWidth(page: Page): Promise<number> {
 }
 
 test.describe('drawer regression (fullscreen chart layout)', () => {
+  // Fixed-width icon column on the left edge; permanent chrome, like the topbar.
+  const TOOL_RAIL_PX = 52;
+  // Fixed-width icon strip on the right edge; the trade drawer sits left of it.
+  const SIDE_DRAWER_STRIP_PX = 52;
+  // Gap between the chart frame and the side chrome.
+  const SIDE_GAP_PX = 14;
+  // Dashboard and section chrome that takes width off the viewport.
+  const SECTION_CHROME_PX = 80;
+  // Width of the trade drawer when open.
+  const DRAWER_PX = 330;
+  // Closed-state budget: section chrome, side gap, left tool rail and right strip.
+  const CLOSED_FRAME_MIN_WIDTH = 1440 - SECTION_CHROME_PX - SIDE_GAP_PX - TOOL_RAIL_PX - SIDE_DRAWER_STRIP_PX;
+  // Open-state dashboard padding: drawer, gap, and the right strip (396px total).
+  const OPEN_DASHBOARD_PADDING = `${DRAWER_PX + SIDE_GAP_PX + SIDE_DRAWER_STRIP_PX}px`;
+
   // Fixed viewport: the width assertions below are calibrated for 1440px.
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -153,9 +168,10 @@ test.describe('drawer regression (fullscreen chart layout)', () => {
     await expect(page.locator('aside.trade-panel')).toBeHidden();
     const frame = await page.locator('.chart-frame').boundingBox();
     // Full-bleed chart: only the dashboard/section chrome (~74px measured),
-    // the 14px side gap, and the fixed 52px tool rail (like the topbar, it is
-    // permanent chrome) take width off the viewport when the drawer is closed.
-    expect(frame!.width).toBeGreaterThanOrEqual(1440 - 80 - 14 - 52);
+    // the 14px side gap, the fixed 52px tool rail on the left, and the fixed
+    // 52px icon strip on the right (both permanent chrome, like the topbar)
+    // take width off the viewport when the drawer is closed.
+    expect(frame!.width).toBeGreaterThanOrEqual(CLOSED_FRAME_MIN_WIDTH);
     expect(pageErrors).toEqual([]);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
@@ -168,11 +184,11 @@ test.describe('drawer regression (fullscreen chart layout)', () => {
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     // The dashboard reserves the drawer's space off the panel's own open class.
-    await expect(page.locator('main.dashboard')).toHaveCSS('padding-right', '344px');
+    await expect(page.locator('main.dashboard')).toHaveCSS('padding-right', OPEN_DASHBOARD_PADDING);
     await expect(page.locator('aside.trade-panel')).toBeVisible();
     const openWidth = await settledFrameWidth(page);
-    // Opening adds 344px dashboard padding (330px panel + 14px gap) — the
-    // chart must give up at least 300px of its width.
+    // Opening adds 396px dashboard padding (330px panel + 14px gap + 52px
+    // right strip) — the chart must give up at least 300px of its width.
     expect(closedWidth - openWidth).toBeGreaterThanOrEqual(300);
     expect(pageErrors).toEqual([]);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
@@ -191,8 +207,8 @@ test.describe('drawer regression (fullscreen chart layout)', () => {
     const restoredWidth = await settledFrameWidth(page);
     // Poll-again semantics: the frame comes back to its closed width.
     expect(Math.abs(restoredWidth - closedWidth)).toBeLessThanOrEqual(2);
-    // Same closed-state chrome budget as above: section chrome + 14px gap + rail.
-    expect(restoredWidth).toBeGreaterThanOrEqual(1440 - 80 - 14 - 52);
+    // Same closed-state chrome budget as above: section chrome + 14px gap + left rail + right strip.
+    expect(restoredWidth).toBeGreaterThanOrEqual(CLOSED_FRAME_MIN_WIDTH);
     expect(pageErrors).toEqual([]);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });

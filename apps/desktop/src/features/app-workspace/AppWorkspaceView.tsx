@@ -6,9 +6,11 @@ import { ChartWorkspaceProvider } from '../chart/ChartWorkspaceProvider';
 import { ChartWorkspaceView } from '../chart/ChartWorkspaceView';
 import { DrawingToolsView } from '../tools/DrawingToolsView';
 import { ExecutionProvider } from '../execution/ExecutionProvider';
+import { ObjectTreeDrawer } from '../object-tree/ObjectTreeDrawer';
 import { OrderTicketPanel } from '../order-ticket/OrderTicketPanel';
 import { OrderTicketProvider } from '../order-ticket/OrderTicketProvider';
 import { SymbolChangeTicketReset } from '../order-ticket/SymbolChangeTicketReset';
+import { SideDrawerStrip } from '../side-drawers/SideDrawerStrip';
 import { SymbolSearchProvider } from '../symbol-search/SymbolSearchProvider';
 import { SymbolSearchView } from '../symbol-search/SymbolSearchView';
 
@@ -21,9 +23,11 @@ export function AppWorkspaceView() {
           <SymbolSearchView />
         </SymbolSearchProvider>
         <DrawingToolsView />
+        <SideDrawerStrip />
         <ExecutionProvider>
           <main className="dashboard">
             <ChartWorkspaceView />
+            <ObjectTreeDrawer />
             <OrderTicketProvider>
               <OrderTicketPanel />
               <AppLifecycle />

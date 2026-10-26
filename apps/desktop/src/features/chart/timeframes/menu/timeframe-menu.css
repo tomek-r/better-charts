@@ -8,12 +8,13 @@
 }
 
 /* Floats over the chart (above its overlays, below modal dialogs) so opening
-   it never shifts the layout. Height and horizontal fit are set in JS. */
+   it never shifts the layout. Height and horizontal fit are set in JS.
+   z-index 30 keeps it above the fixed tool rail and side-drawer strip (z-index 25). */
 .timeframe-menu {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 20;
+  z-index: 30;
   box-sizing: border-box;
   width: 220px;
   max-width: calc(100vw - 16px);

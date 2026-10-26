@@ -1,10 +1,10 @@
-/* Trading workspace: the dashboard column hosting the chart and the panel. */
+/* Trading workspace: the dashboard column hosting the chart and the drawers. */
 .dashboard {
   width: 100%;
   margin: 0;
-  /* Left: 52px clears the fixed tool rail + 14px, leaving the same 14px
-     side gap the right side uses when the drawer is closed. */
-  padding: 8px 14px 0 66px;
+  /* Left: 52px clears the fixed tool rail; right: 52px clears the side-drawer
+     strip. Both sides then keep the same 14px gap to the chart card. */
+  padding: 8px calc(14px + var(--side-drawer-strip-width)) 0 66px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
@@ -12,22 +12,23 @@
   transition: padding-right 0.2s ease;
 }
 
-/* Open drawer shrinks the chart column (330px panel + 14px gap, matching the
-   rail-side gap); the chart host's ResizeObserver then calls
-   instance.resize() for the new width. The panel carries the state its own
-   styles already need, so opening it cannot re-render the app tree. */
-.dashboard:has(.trade-panel.open) {
-  padding-right: 344px;
+/* An open drawer shrinks the chart column (330px drawer + 14px gap + the 52px
+   strip, matching the rail-side gap); the chart host's ResizeObserver then
+   calls instance.resize() for the new width. The drawer carries the state its
+   own styles already need, so opening it cannot re-render the app tree. */
+.dashboard:has(.side-drawer.open) {
+  padding-right: calc(var(--side-drawer-width) + 14px + var(--side-drawer-strip-width));
 }
 
 @media (max-width: 900px) {
-  .dashboard:has(.trade-panel.open) {
-    padding-right: 14px;
+  /* Too narrow to shrink the chart: the open drawer overlays it instead. */
+  .dashboard:has(.side-drawer.open) {
+    padding-right: calc(14px + var(--side-drawer-strip-width));
   }
 }
 
 @media (max-width: 520px) {
   .dashboard {
-    padding: 14px 12px 14px 52px;
+    padding: 14px calc(12px + var(--side-drawer-strip-width)) 14px 52px;
   }
 }
