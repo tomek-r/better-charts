@@ -1,5 +1,5 @@
-import type { ChartToolDrawingRecord } from '../../../chart/engine/drawings/drawingRecord';
-import type { ToolInputValues } from '../../../chart/engine/drawings/toolInputs';
+import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
+import type { ChartDrawingShape } from '../../../chart/engine/drawings/toolDrawings';
 import {
   anchorAtBar,
   type BarAnchor,
@@ -15,7 +15,13 @@ import {
   type FixedRangeProfileState,
   type HandleEdges,
 } from '../overlay';
-import { isRangeOpen, rangeEndingAtAnchor, type PlacedFixedRangeProfile } from '../range';
+import {
+  isRangeOpen,
+  lastSlotOpenBefore,
+  rangeEndingAtAnchor,
+  type FixedRangeProfileRange,
+  type PlacedFixedRangeProfile,
+} from '../range';
 import { FixedRangeProfileRequester } from '../requests/fixedRangeProfileRequester';
 import type { TickProfileRequestQueue } from '../requests/tickProfileRequestQueue';
 import { fixedRangeProfilePoints } from './fixedRangeProfilePoints';
@@ -27,56 +33,45 @@ const HANDLE_RADIUS_PX = 4;
 /** The dash of the two boundary lines: 4 px on, 3 px off. */
 const HANDLE_DASH_PX = [4, 3];
 
-/** One drawing's stored fields, already validated on the way in. */
-export interface FixedRangeProfileDrawingSpec {
-  readonly id: string;
-  readonly locked: boolean;
-  readonly visible: boolean;
-  readonly inputs: ToolInputValues;
-  readonly range: PlacedFixedRangeProfile;
-}
-
-/** What a fresh placement carries: the tool resolved its settings, the drawing starts unlocked and painted. */
-export interface FixedRangeProfilePlacement {
-  readonly id: string;
-  readonly range: PlacedFixedRangeProfile;
-  readonly inputs: ToolInputValues;
-}
-
 /** How one drawing paints itself: the selection highlight, and the range a boundary drag previews. */
 export interface FixedRangeProfilePaintOptions {
   selected: boolean;
   preview?: PlacedFixedRangeProfile;
 }
 
-/** One drawing as the e2e suite reads it: its identity, its lock, its committed range and its painted result. */
+/** What one drawing reports about itself: its window and whether its computed profile is painted. */
 export interface FixedRangeProfileDrawingSummary {
-  id: string;
-  locked: boolean;
   range: { fromMs: number; endMs: number };
   hasProfile: boolean;
 }
 
+/** Whether a pane point lies outside the plot area, where no drawing is hit. */
+export function outsidePane(chartRect: { width: number; height: number }, x: number, y: number): boolean {
+  return x < 0 || x > chartRect.width || y < 0 || y > chartRect.height;
+}
+
 /**
- * One placed fixed-range volume profile: its committed range, its settings, its overlay state and
- * the request behind it. The tool owns the list and the gestures; a drawing owns everything about
- * itself, so two drawings never share a request, a result or a paint.
+ * One placed fixed-range volume profile: its window, the slot its right-hand handle sits on, its
+ * overlay state and the request behind it. The tool's collection owns its id, lock, visibility and
+ * settings; a drawing owns everything about what it shows, so two drawings never share a request, a
+ * result or a paint.
  *
  * The two factories are the only ways in: `placed` for a range the user just committed, `restored`
- * for one the app read back from storage.
+ * for one the app read back from storage. A restored window the loaded bars cannot place yet (they
+ * had none, or started after it) stays a drawing without a slot: it exports unchanged, paints
+ * nothing and asks for nothing until the bars that hold it arrive.
  */
-export class FixedRangeProfileDrawing {
-  readonly id: string;
-  locked: boolean;
-  /** Stored and exported as it arrived; hiding the drawing arrives with its own behaviour later. */
-  visible: boolean;
-  inputs: ToolInputValues;
-  /** The overlay's state: this drawing's range, its profile and the flags the requester and the tool write. */
+export class FixedRangeProfileDrawing implements ChartDrawingShape {
+  /** The overlay's state: this drawing's range, its profile and the flags the requester writes. */
   readonly state: FixedRangeProfileState = { range: null, hit: {} };
 
-  private range: PlacedFixedRangeProfile;
+  private window: FixedRangeProfileRange;
+  /** Open time of the window's last slot; undefined while the loaded bars do not place the window. */
+  private lastSlotOpenMs: number | undefined;
   private readonly requester: FixedRangeProfileRequester;
-  /** Whether the newest bar opened before the range end at the last bar change: its last bar may still gain ticks. */
+  /** The shared queue tells drawings apart by a key of their own; the stored id belongs to the collection. */
+  private readonly queueKey = crypto.randomUUID();
+  /** Whether the newest bar opened before the window end at the last bar change: its last bar may gain ticks. */
   private wasOpenAtLastBarsChange = false;
   /** The timeframe of the bars `wasOpenAtLastBarsChange` was judged on. */
   private lastTimeframe: string | undefined;
@@ -84,35 +79,32 @@ export class FixedRangeProfileDrawing {
   private constructor(
     private readonly host: ChartToolHost,
     private readonly queue: TickProfileRequestQueue,
-    spec: FixedRangeProfileDrawingSpec,
+    window: FixedRangeProfileRange,
+    lastSlotOpenMs: number | undefined,
   ) {
-    this.id = spec.id;
-    this.locked = spec.locked;
-    this.visible = spec.visible;
-    this.inputs = spec.inputs;
-    this.range = spec.range;
-    this.requester = new FixedRangeProfileRequester(host, queue.portFor(spec.id), this.state, () => this.range);
+    this.window = { fromMs: window.fromMs, endMs: window.endMs };
+    this.lastSlotOpenMs = lastSlotOpenMs;
+    this.requester = new FixedRangeProfileRequester(host, queue.portFor(this.queueKey), this.state, () => this.window);
+    this.markPlaced();
   }
 
-  /** A drawing the user just placed: unlocked, painted, with the tool's resolved settings. */
+  /** A drawing the user just placed: its handle sits on the slot the gesture anchored to. */
   static placed(
     host: ChartToolHost,
     queue: TickProfileRequestQueue,
-    placement: FixedRangeProfilePlacement,
+    range: PlacedFixedRangeProfile,
   ): FixedRangeProfileDrawing {
-    return new FixedRangeProfileDrawing(host, queue, { ...placement, locked: false, visible: true });
+    return new FixedRangeProfileDrawing(host, queue, range, range.lastSlotOpenMs);
   }
 
-  /** A drawing read back from the app's storage: its points and settings were validated by the caller. */
+  /** A drawing read back from the app's storage, already validated by the collection and the factory. */
   static restored(
     host: ChartToolHost,
     queue: TickProfileRequestQueue,
-    spec: FixedRangeProfileDrawingSpec,
+    window: FixedRangeProfileRange,
+    lastSlotOpenMs: number | undefined,
   ): FixedRangeProfileDrawing {
-    const drawing = new FixedRangeProfileDrawing(host, queue, spec);
-    // A restored range is open or closed against the bars it arrived with, exactly as a placed one was.
-    drawing.markPlaced(spec.range);
-    return drawing;
+    return new FixedRangeProfileDrawing(host, queue, window, lastSlotOpenMs);
   }
 
   /** The pane x of both handles of one range: what a hit test and the two boundary lines measure against. */
@@ -150,40 +142,51 @@ export class FixedRangeProfileDrawing {
     ctx.setLineDash([]);
   }
 
-  /** The committed range: the profile window, and the guard the requester compares its throttled refresh against. */
-  committedRange(): PlacedFixedRangeProfile {
-    return this.range;
+  /** The window the profile is requested for: the two anchors the app stores are its edges. */
+  points(): ChartDrawingPoint[] {
+    return fixedRangeProfilePoints(this.window);
+  }
+
+  /** The committed window and where its right-hand handle sits; null until the loaded bars place it. */
+  placedRange(): PlacedFixedRangeProfile | null {
+    const { lastSlotOpenMs } = this;
+    return lastSlotOpenMs === undefined ? null : { ...this.window, lastSlotOpenMs };
   }
 
   /** Commits a new range: it becomes this drawing's window and its profile is requested again. */
   commitRange(range: PlacedFixedRangeProfile): void {
-    this.range = range;
-    this.markPlaced(range);
+    this.window = { fromMs: range.fromMs, endMs: range.endMs };
+    this.lastSlotOpenMs = range.lastSlotOpenMs;
+    this.markPlaced();
     this.requestProfile();
   }
 
-  requestProfile(): void {
-    this.requester.requestProfile(this.range);
+  /** The pane x of both handles of `range`. */
+  handleXs(range: PlacedFixedRangeProfile): HandleEdges {
+    return FixedRangeProfileDrawing.handleXsFor(this.host.geometry, range);
   }
 
-  /** The pane x of both handles, for `range` or, by default, for the committed one. */
-  handleXs(geometry: ChartToolGeometry, range: PlacedFixedRangeProfile = this.range): HandleEdges {
-    return FixedRangeProfileDrawing.handleXsFor(geometry, range);
-  }
-
-  /** Which boundary a press at pane x would drag, null when x is not on a handle. */
+  /** Which boundary a press at pane x would drag, null when x is not on a handle or the window is unplaced. */
   handleAt(x: number): 'from' | 'end' | null {
-    const { fromX, toX } = this.handleXs(this.host.geometry);
+    const placed = this.placedRange();
+    if (placed === null) {
+      return null;
+    }
+    const { fromX, toX } = this.handleXs(placed);
     if (Math.abs(x - fromX) <= HANDLE_HIT_PX) {
       return 'from';
     }
     return Math.abs(x - toX) <= HANDLE_HIT_PX ? 'end' : null;
   }
 
-  /** Whether pane x lies between the two handles: the band this profile covers. */
-  contains(x: number): boolean {
-    const { fromX, toX } = this.handleXs(this.host.geometry);
-    return x >= Math.min(fromX, toX) && x <= Math.max(fromX, toX);
+  /** Whether the pane point falls between its handles or on one of them: the band this profile covers. */
+  contains(x: number, y: number): boolean {
+    const placed = this.placedRange();
+    if (placed === null || outsidePane(this.host.geometry.viewport().chartRect, x, y)) {
+      return false;
+    }
+    const { fromX, toX } = this.handleXs(placed);
+    return this.handleAt(x) !== null || (x >= Math.min(fromX, toX) && x <= Math.max(fromX, toX));
   }
 
   /**
@@ -227,98 +230,118 @@ export class FixedRangeProfileDrawing {
     return this.state.profile !== undefined && !this.state.previewing;
   }
 
-  /** This drawing as the e2e suite names it: its identity, its lock, its committed range and its result. */
+  /** This drawing as the e2e suite names it: its window and its result. */
   summary(): FixedRangeProfileDrawingSummary {
-    const range = this.range;
-    return {
-      id: this.id,
-      locked: this.locked,
-      range: { fromMs: range.fromMs, endMs: range.endMs },
-      hasProfile: this.hasProfile(),
-    };
+    return { range: { fromMs: this.window.fromMs, endMs: this.window.endMs }, hasProfile: this.hasProfile() };
   }
 
   /**
-   * Reports a range whose last slot has not yet been passed by the newest bar.
-   * Reported on every change, not only on a new bar, because ticks inside the
-   * forming bar belong to the profile too; the requester throttles the refresh. The
-   * change in which a bar opens at or after `endMs` is reported once more, as the
-   * final refresh, and later changes are not. The end itself never moves, so the
-   * range is re-evaluated against whatever the newest bar is, e.g. after a
-   * timeframe switch.
+   * Asks for the profile of the committed window. A drawing the loaded bars do not place yet asks
+   * once they do, because a request needs the slot its window ends in.
+   */
+  requestProfile(): void {
+    if (this.lastSlotOpenMs === undefined) {
+      this.placeOnBars();
+      return;
+    }
+    this.requester.requestProfile(this.window);
+  }
+
+  /**
+   * Reported on every change, not only on a new bar, because ticks inside the forming bar belong to
+   * the profile too; the requester throttles the refresh. The change in which a bar opens at or
+   * after the window end is reported once more, as the final refresh, and later changes are not. The
+   * end itself never moves, so the range is re-evaluated against whatever the newest bar is, e.g.
+   * after a timeframe switch.
    */
   barsChanged(): void {
     if (this.host.barSeries.bars.length === 0) {
       return;
     }
+    if (this.lastSlotOpenMs === undefined) {
+      // The bars that place a stored drawing are also the ones it was waiting for.
+      this.requestProfile();
+      return;
+    }
     const wasOpen = this.wasOpenAtLastBarsChange;
-    this.wasOpenAtLastBarsChange = this.isOpen(this.range);
+    this.wasOpenAtLastBarsChange = this.isOpen();
     const timeframe = this.host.barSeries.timeframe;
     if (timeframe !== this.lastTimeframe) {
       // The profile is timeframe-independent, so "was open" on the previous timeframe's bars is no reason for a
       // final refresh. A request still unsettled is renewed rather than waited for; a loaded profile stays.
       this.lastTimeframe = timeframe;
-      this.requester.renewUnsettledRequest(this.range);
+      this.requester.renewUnsettledRequest(this.window);
       if (this.wasOpenAtLastBarsChange) {
-        this.requester.requestThrottledRefresh(this.range);
+        this.requester.requestThrottledRefresh(this.window);
       }
       return;
     }
     if (wasOpen || this.wasOpenAtLastBarsChange) {
-      this.requester.requestThrottledRefresh(this.range);
+      this.requester.requestThrottledRefresh(this.window);
     }
   }
 
   draw(ctx: CanvasRenderingContext2D, viewport: RenderViewport, options: FixedRangeProfilePaintOptions): void {
+    const placed = options.preview ?? this.placedRange();
+    if (placed === null) {
+      return;
+    }
     // The histogram first, isolated so its style does not leak, then the handles.
     ctx.save();
     drawFixedRangeProfile(ctx, viewport, this.state);
     ctx.restore();
     // Veil the histogram but not the handles, which stay crisp; the loader goes on top of both.
-    const handles = this.handleXs(this.host.geometry, options.preview ?? this.range);
+    const handles = this.handleXs(placed);
     drawFixedRangeProfileLoadingWash(ctx, viewport, this.state, handles);
     FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles, { selected: options.selected });
     drawFixedRangeProfileSpinner(ctx, viewport, this.state, Date.now(), handles);
   }
 
-  /** This drawing as the app saves it: no reference into the live state. */
-  toRecord(): ChartToolDrawingRecord {
-    return {
-      id: this.id,
-      locked: this.locked,
-      visible: this.visible,
-      inputs: this.inputs,
-      points: fixedRangeProfilePoints(this.range),
-    };
+  /** Hidden: the drawing stops refreshing and leaves the queue; shown again: it asks for its profile again. */
+  visibilityChanged(visible: boolean): void {
+    if (visible) {
+      this.requestProfile();
+      return;
+    }
+    this.requester.suspendRequests();
+    this.queue.release(this.queueKey);
   }
 
-  /** The drawing was deleted: abandon its request and stop the backend work behind it. */
-  cancelRequest(): void {
-    this.requester.cancelRequest();
-  }
-
-  /** The drawing goes away locally: a late result is stale and a waiting request leaves the queue uncancelled. */
-  abandon(): void {
-    this.requester.abandonPendingRequest();
-    this.queue.release(this.id);
-  }
-
+  /** The drawing goes away: abandon its request, stop the backend load behind it and stop listening. */
   dispose(): void {
+    this.requester.cancelRequest();
     this.requester.dispose();
   }
 
-  /** Records the committed range and the timeframe whose bars it is judged against. */
-  private markPlaced(range: PlacedFixedRangeProfile): void {
+  /** Records the window and the timeframe whose bars judge whether it may still gain ticks. */
+  private markPlaced(): void {
     this.lastTimeframe = this.host.barSeries.timeframe;
-    this.wasOpenAtLastBarsChange = this.isOpen(range);
+    this.wasOpenAtLastBarsChange = this.isOpen();
   }
 
-  /** Whether the range may still gain ticks, judged by the newest bar and by the feed's newest quote. */
-  private isOpen(range: PlacedFixedRangeProfile): boolean {
+  /**
+   * Places a stored window on the bars loaded now: its right-hand handle needs the slot that holds
+   * the window's last instant. Nothing is painted, hit or requested while no bar reaches it.
+   */
+  private placeOnBars(): void {
+    if (this.host.barSeries.bars.length === 0) {
+      return;
+    }
+    const lastSlotOpenMs = lastSlotOpenBefore(this.host.barSeries, this.window.endMs);
+    if (lastSlotOpenMs === undefined) {
+      return;
+    }
+    this.lastSlotOpenMs = lastSlotOpenMs;
+    this.markPlaced();
+    this.requestProfile();
+  }
+
+  /** Whether the window may still gain ticks, judged by the newest bar and by the feed's newest quote. */
+  private isOpen(): boolean {
     const { currentMarket, barSeries } = this.host;
     const quote = currentMarket.quote();
     const quoteTimeMs =
       quote && quote.symbol === currentMarket.symbol() && Number.isFinite(quote.timeMs) ? quote.timeMs : undefined;
-    return isRangeOpen(barSeries, range, quoteTimeMs);
+    return isRangeOpen(barSeries, this.window, quoteTimeMs);
   }
 }

@@ -56,6 +56,9 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
     setSelectedDrawingLocked: (locked) => {
       calls.push({ name: 'setSelectedDrawingLocked', args: [locked] });
     },
+    setDrawingVisible: (toolId, drawingId, visible) => {
+      calls.push({ name: 'setDrawingVisible', args: [toolId, drawingId, visible] });
+    },
     setDrawingInputs: (toolId, drawingId, inputs) => {
       calls.push({ name: 'setDrawingInputs', args: [toolId, drawingId, inputs] });
     },
@@ -113,6 +116,13 @@ test('locking the selection reaches the commands with the same flag and repaints
   expect(timeline).toEqual(['repaint']);
 });
 
+test('hiding a drawing reaches the commands with the same arguments and repaints once', () => {
+  const { drawings, calls, timeline } = buildHarness();
+  drawings.setVisible('trend-line', 'line-1', false);
+  expect(calls).toEqual([{ name: 'setDrawingVisible', args: ['trend-line', 'line-1', false] }]);
+  expect(timeline).toEqual(['repaint']);
+});
+
 test('new settings reach the commands with the same arguments and repaint once', () => {
   const { drawings, calls, timeline } = buildHarness();
   const inputs: ToolInputValues = { period: 30 };
@@ -133,7 +143,7 @@ test('replacing the records hands the same records to the commands and repaints 
 
 test('reading the selection and the records answers from the commands without repainting', () => {
   const harness = buildHarness();
-  const selection: ChartDrawingSelection = { toolId: 'trend-line', drawingId: 'line-1', locked: true };
+  const selection: ChartDrawingSelection = { toolId: 'trend-line', drawingId: 'line-1', locked: true, visible: true };
   const records: ChartDrawingRecord[] = [
     { id: 'line-1', toolId: 'trend-line', locked: true, visible: false, inputs: {}, points: [ANCHOR] },
   ];
@@ -146,7 +156,12 @@ test('reading the selection and the records answers from the commands without re
 
 test('a new selection repaints before the app is told about it', () => {
   const { drawings, timeline, selections } = buildHarness();
-  const selection: ChartDrawingSelection = { toolId: 'trend-line', drawingId: 'line-1', locked: false };
+  const selection: ChartDrawingSelection = {
+    toolId: 'trend-line',
+    drawingId: 'line-1',
+    locked: false,
+    visible: true,
+  };
   drawings.selectionChanged(selection);
   expect(timeline).toEqual(['repaint', 'selection']);
   expect(selections).toEqual([selection]);

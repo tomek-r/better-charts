@@ -33,11 +33,12 @@ export interface ChartDrawingRecord extends ChartToolDrawingRecord {
   readonly toolId: string;
 }
 
-/** The drawing the user picked: which tool owns it, and whether it is locked against edits. */
+/** The drawing the user picked: which tool owns it, and whether it is locked and shown. */
 export interface ChartDrawingSelection {
   readonly toolId: string;
   readonly drawingId: string;
   readonly locked: boolean;
+  readonly visible: boolean;
 }
 
 /** The most anchor points one drawing may carry, as the backend enforces. */

@@ -1,4 +1,5 @@
 import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
+import type { ChartDrawingPointRule } from '../../../chart/engine/drawings/toolDrawings';
 import type { FixedRangeProfileRange } from '../range';
 
 /**
@@ -6,6 +7,9 @@ import type { FixedRangeProfileRange } from '../range';
  * engine carries them as a plain anchor list, so this module is the one place that decides
  * whether a stored list is a window the tool can paint again.
  */
+
+/** Every FRVP drawing anchors twice, and in time only: the two edges of its window. */
+export const FIXED_RANGE_PROFILE_POINTS: ChartDrawingPointRule = { min: 2, max: 2, anchor: 'time' };
 
 /** The two anchors of a window: its start, and the exclusive end of its last slot. */
 export function fixedRangeProfilePoints(range: FixedRangeProfileRange): ChartDrawingPoint[] {

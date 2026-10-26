@@ -30,10 +30,15 @@ export class DrawingSelectionState {
   }
 }
 
-/** Same drawing of the same tool with the same lock flag: nothing a repaint would show changed. */
+/** Same drawing of the same tool with the same lock and visibility: nothing a toolbar or a paint would show changed. */
 function isSameSelection(current: ChartDrawingSelection | null, next: ChartDrawingSelection | null): boolean {
   if (current === null || next === null) {
     return current === next;
   }
-  return current.toolId === next.toolId && current.drawingId === next.drawingId && current.locked === next.locked;
+  return (
+    current.toolId === next.toolId &&
+    current.drawingId === next.drawingId &&
+    current.locked === next.locked &&
+    current.visible === next.visible
+  );
 }

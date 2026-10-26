@@ -65,6 +65,17 @@ export class FixedRangeProfileRequester {
     this.hideSpinner();
   }
 
+  /**
+   * The drawing was hidden: abandon the request in flight and stop refreshing, so nothing reaches
+   * the backend until the drawing is shown again.
+   */
+  suspendRequests(): void {
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = undefined;
+    this.refreshRange = undefined;
+    this.abandonPendingRequest();
+  }
+
   /** The range was deleted: abandon the request and stop the backend work behind it. */
   cancelRequest(): void {
     this.abandonPendingRequest();

@@ -1,6 +1,7 @@
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import { DrawingSelectionState } from '../drawings/drawingSelection';
 import type { ToolInputValues } from '../drawings/toolInputs';
+import type { ChartToolDrawings } from '../drawings/toolDrawings';
 import type {
   ChartDrawTarget,
   ChartPointerUpOutcome,
@@ -11,8 +12,12 @@ import type {
   ChartToolResetReason,
 } from './toolContract';
 
-/** A tool with every optional member defaulted: `resolveTool` is the single place a missing member means a no-op. */
-type ResolvedChartTool = Required<ChartTool>;
+/**
+ * A tool with every optional member defaulted: `resolveTool` is the single place a missing member
+ * means a no-op. `drawings` stays undefined when a tool places no drawings, which is how the set
+ * knows to skip it.
+ */
+type ResolvedChartTool = Required<Omit<ChartTool, 'drawings'>> & Pick<ChartTool, 'drawings'>;
 
 /** A registered tool: what the app says about it and the instance the engine built. */
 interface ToolEntry {
@@ -44,13 +49,7 @@ function resolveTool(tool: ChartTool): ResolvedChartTool {
     pointerHover: (x, y) => tool.pointerHover?.(x, y),
     pointerLeave: () => tool.pointerLeave?.(),
     cancelGesture: () => tool.cancelGesture?.(),
-    drawingAt: (x, y) => tool.drawingAt?.(x, y) ?? null,
-    setSelectedDrawing: (drawingId) => tool.setSelectedDrawing?.(drawingId),
-    setDrawingLocked: (drawingId, locked) => tool.setDrawingLocked?.(drawingId, locked) ?? false,
-    setDrawingInputs: (drawingId, inputs) => tool.setDrawingInputs?.(drawingId, inputs) ?? false,
-    deleteDrawing: (drawingId) => tool.deleteDrawing?.(drawingId) ?? false,
-    exportDrawings: () => tool.exportDrawings?.() ?? [],
-    importDrawings: (records) => tool.importDrawings?.(records),
+    drawings: tool.drawings,
     draw: (target) => tool.draw?.(target),
     barsChanged: () => tool.barsChanged?.(),
     reset: (reason) => tool.reset?.(reason),
@@ -196,7 +195,7 @@ export class ChartToolSet {
     if (selection === null) {
       return false;
     }
-    if (!this.entry(selection.toolId).tool.deleteDrawing(selection.drawingId)) {
+    if (this.drawingsOf(selection.toolId)?.delete(selection.drawingId) !== true) {
       return false;
     }
     this.selectionState.clearIfDrawing(selection.toolId, selection.drawingId);
@@ -210,16 +209,27 @@ export class ChartToolSet {
     if (selection === null) {
       return;
     }
-    if (!this.entry(selection.toolId).tool.setDrawingLocked(selection.drawingId, locked)) {
+    if (this.drawingsOf(selection.toolId)?.setLocked(selection.drawingId, locked) !== true) {
       return;
     }
     this.changeSelection({ ...selection, locked });
     this.listeners.drawingsChanged();
   }
 
+  /** Hides or shows one drawing; hiding the selected drawing drops the selection with it. */
+  setDrawingVisible(toolId: string, drawingId: string, visible: boolean): void {
+    if (this.drawingsOf(toolId)?.setVisible(drawingId, visible) !== true) {
+      return;
+    }
+    if (!visible) {
+      this.selectionState.clearIfDrawing(toolId, drawingId);
+    }
+    this.listeners.drawingsChanged();
+  }
+
   /** Applies new settings to one drawing; the owner saves when the tool accepted them. */
   setDrawingInputs(toolId: string, drawingId: string, inputs: ToolInputValues): void {
-    if (this.entry(toolId).tool.setDrawingInputs(drawingId, inputs)) {
+    if (this.drawingsOf(toolId)?.setInputs(drawingId, inputs) === true) {
       this.listeners.drawingsChanged();
     }
   }
@@ -227,7 +237,7 @@ export class ChartToolSet {
   /** Every tool's drawings in registry order, each stamped with the tool that owns it. */
   exportDrawings(): ChartDrawingRecord[] {
     return this.entries.flatMap(({ definition, tool }) =>
-      tool.exportDrawings().map((record) => ({ ...record, toolId: definition.id })),
+      (tool.drawings?.exportRecords() ?? []).map((record) => ({ ...record, toolId: definition.id })),
     );
   }
 
@@ -235,7 +245,7 @@ export class ChartToolSet {
   replaceDrawings(records: readonly ChartDrawingRecord[]): void {
     this.changeSelection(null);
     for (const { definition, tool } of this.entries) {
-      tool.importDrawings(records.filter((record) => record.toolId === definition.id));
+      tool.drawings?.importRecords(records.filter((record) => record.toolId === definition.id));
     }
   }
 
@@ -286,7 +296,7 @@ export class ChartToolSet {
   /** The topmost drawing under a pane point: tools painted later sit above, so the registry is walked backwards. */
   private hitTestDrawings(x: number, y: number): ChartDrawingSelection | null {
     for (const { definition, tool } of this.entries.slice().reverse()) {
-      const drawingId = tool.drawingAt(x, y);
+      const drawingId = tool.drawings?.drawingAt(x, y) ?? null;
       if (drawingId !== null) {
         return this.selectionFor(definition.id, drawingId);
       }
@@ -294,12 +304,17 @@ export class ChartToolSet {
     return null;
   }
 
-  /** The selection for one drawing; its lock flag comes from the tool's exported record. */
+  /** The selection for one drawing; its flags come from the tool's exported record. */
   private selectionFor(toolId: string, drawingId: string): ChartDrawingSelection | null {
-    const record = this.entry(toolId)
-      .tool.exportDrawings()
+    const record = this.drawingsOf(toolId)
+      ?.exportRecords()
       .find((drawing) => drawing.id === drawingId);
-    return record === undefined ? null : { toolId, drawingId, locked: record.locked };
+    return record === undefined ? null : { toolId, drawingId, locked: record.locked, visible: record.visible };
+  }
+
+  /** The drawing operations of one tool; undefined when that tool places no drawings. */
+  private drawingsOf(toolId: string): ChartToolDrawings | undefined {
+    return this.entry(toolId).tool.drawings;
   }
 
   /** A tool committed a new drawing: it becomes the selection and the change is reported for saving. */
@@ -315,12 +330,12 @@ export class ChartToolSet {
 
   /** Clears the highlight on the previous drawing, paints the new one and tells the owner. */
   private paintSelection(selection: ChartDrawingSelection | null): void {
-    this.highlight?.entry.tool.setSelectedDrawing(null);
+    this.highlight?.entry.tool.drawings?.select(null);
     const highlight =
       selection === null ? null : { entry: this.entry(selection.toolId), drawingId: selection.drawingId };
     this.highlight = highlight;
     if (highlight !== null) {
-      highlight.entry.tool.setSelectedDrawing(highlight.drawingId);
+      highlight.entry.tool.drawings?.select(highlight.drawingId);
     }
     this.listeners.selectionChanged(selection);
   }

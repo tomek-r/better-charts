@@ -1,9 +1,9 @@
 import { timeframeBarOffset, timeframeBarTime } from '../../../../shared/bridge/timeframes';
 import type { QuoteSnapshot } from '../../../../shared/bridge/types';
 import type { MarketDataPort } from '../../../bridge/marketDataPort';
-import type { ChartToolDrawingRecord } from '../drawings/drawingRecord';
 import type { RenderViewport } from '../surface/overlayTypes';
-import type { ToolInputDefinition, ToolInputValues } from '../drawings/toolInputs';
+import type { ToolInputDefinition } from '../drawings/toolInputs';
+import type { ChartDrawingPointRule, ChartToolDrawings } from '../drawings/toolDrawings';
 
 export type { RenderViewport };
 import type { TimeModel } from '../viewport/viewportController';
@@ -90,8 +90,9 @@ export interface ChartDrawTarget {
  *
  * Every member is optional; a tool implements what it uses. The tool set treats a
  * missing member as a no-op: a missing `pointerDown`/`pointerMove`/`pointerUp`
- * means the event was not consumed, a missing `hasGesture`/`deleteDrawing` means
- * false, and every other missing member is skipped.
+ * means the event was not consumed, a missing `hasGesture` means false, a missing
+ * `drawings` means the tool places no drawings, and every other missing member is
+ * skipped.
  *
  * Each pointer method returns whether the tool consumed the event; a consumed
  * press makes the caller capture the pointer and keep the library from panning.
@@ -126,23 +127,11 @@ export interface ChartTool {
   pointerLeave?(): void;
   /** Drops an in-progress gesture and restores the committed drawing. */
   cancelGesture?(): void;
-  /** Removes one drawing at the user's request; false when the tool has no drawing with that id. */
-  deleteDrawing?(drawingId: string): boolean;
-  /** Id of this tool's topmost drawing under the pane point, null when none. */
-  drawingAt?(x: number, y: number): string | null;
-  /** Paints the highlight on the given drawing; null means none of this tool's drawings is selected. */
-  setSelectedDrawing?(drawingId: string | null): void;
-  /** A locked drawing ignores edit gestures; false when the tool has no drawing with that id. */
-  setDrawingLocked?(drawingId: string, locked: boolean): boolean;
-  /** Replaces one drawing's settings; false when the tool has no drawing with that id. */
-  setDrawingInputs?(drawingId: string, inputs: ToolInputValues): boolean;
-  /** Every drawing of this tool, for the app to save. */
-  exportDrawings?(): ChartToolDrawingRecord[];
   /**
-   * Replaces every drawing of the tool. The tool validates the points and the inputs and drops
-   * invalid records; it reports nothing through the host, because nothing was placed.
+   * Everything this tool's drawings share: the paint order, the selection, the lock, visibility and
+   * settings of each drawing and its stored records. Omitted by a tool that places no drawings.
    */
-  importDrawings?(records: readonly ChartToolDrawingRecord[]): void;
+  readonly drawings?: ChartToolDrawings;
   /** Paints the tool's content for one layer pass (see `ChartDrawLayer`, `ChartDrawTarget`). */
   draw?(target: ChartDrawTarget): void;
   /** The bar series changed: a live bar update, a new bar or a replaced history. */
@@ -215,6 +204,12 @@ export interface ChartToolDefinition {
    * omitted means the tool's drawings have no settings.
    */
   readonly inputs?: readonly ToolInputDefinition[];
+  /**
+   * The anchors every drawing of this tool carries: how many, and whether each holds a time, a
+   * price or both. A tool with drawings declares it together with `inputs`; a tool without
+   * drawings omits both.
+   */
+  readonly points?: ChartDrawingPointRule;
   /** The engine builds the tool once per chart with `new toolClass(host)`. */
   readonly toolClass: new (host: ChartToolHost) => ChartTool;
 }

@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { ChartToolSet } from '../src/features/chart/engine/tools/toolSet';
+import { ChartDrawingCollection } from '../src/features/chart/engine/drawings/chartDrawingCollection';
 import type {
   ChartDrawingPoint,
   ChartDrawingRecord,
   ChartDrawingSelection,
-  ChartToolDrawingRecord,
 } from '../src/features/chart/engine/drawings/drawingRecord';
-import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
+import type { ChartDrawingPointRule } from '../src/features/chart/engine/drawings/toolDrawings';
+import type { ToolInputDefinition } from '../src/features/chart/engine/drawings/toolInputs';
 import type {
   ChartDrawTarget,
   ChartPointerUpOutcome,
@@ -15,26 +16,29 @@ import type {
   ChartToolHost,
   ChartToolHostBase,
 } from '../src/features/chart/engine/tools/toolContract';
+import { ArrowTool } from '../src/features/tools/arrow/tool';
+import { FakeDrawingShape } from './helpers/fakeDrawingShape';
 
 /**
- * Routing and lifecycle rules of the engine's tool set, with fake tools that log every
- * call they receive and keep their drawings in memory. The set is DOM-free, so no
+ * Routing and lifecycle rules of the engine's tool set, with fake tools that log every call they
+ * receive and keep their drawings in the engine's own drawing collection. The set is DOM-free, so no
  * browser is needed.
  */
 
 /** One anchor point, which the fake tools keep unchanged: the set routes them, it never reads them. */
 const ORIGIN_POINT: ChartDrawingPoint = { timeMs: 0, price: null };
 
-/** One fake tool's drawings, with the pane x a press hits each of them at. */
-interface FakeDrawings {
-  readonly records: ChartToolDrawingRecord[];
-  readonly hitAtX: Map<number, string>;
-}
+/** The settings every fake tool's drawings carry; the set never resolves them, the collection does. */
+const FAKE_INPUTS: readonly ToolInputDefinition[] = [{ kind: 'int', id: 'period', title: 'Period', defaultValue: 20 }];
+const FAKE_POINTS: ChartDrawingPointRule = { min: 1, max: 4, anchor: 'time' };
+const FAKE_DRAWING_RULES = { inputs: FAKE_INPUTS, points: FAKE_POINTS };
 
 /** How often the set reported something worth saving. */
 interface ChangeReports {
   drawingsChanged: number;
 }
+
+type FakeDrawings = ChartDrawingCollection<FakeDrawingShape>;
 
 interface Harness {
   tools: ChartToolSet;
@@ -48,11 +52,27 @@ interface Harness {
   gesturing: Set<string>;
   /** Extra `draw` behavior per tool id, to prove draw isolation. */
   drawActions: Map<string, (context: CanvasRenderingContext2D) => void>;
-  /** Each fake tool's in-memory drawings, keyed by tool id. */
+  /** Each fake tool's drawings, keyed by tool id. */
   drawings: Map<string, FakeDrawings>;
 }
 
-function buildToolSet(toolIds = ['a', 'b', 'c'], placementToolIds: readonly string[] = []): Harness {
+/** The tool ids a harness builds tools for, and the ones that place drawings. */
+interface ToolKinds {
+  readonly toolIds?: readonly string[];
+  readonly placementToolIds?: readonly string[];
+}
+
+/** The id of the drawing a fake tool paints as selected, null when none of its drawings is. */
+function selectedInTool(harness: Harness, toolId: string): string | null {
+  return (
+    harness.drawings
+      .get(toolId)
+      ?.entries()
+      .find((entry) => entry.selected)?.id ?? null
+  );
+}
+
+function buildToolSet({ toolIds = ['a', 'b', 'c'], placementToolIds = [] }: ToolKinds = {}): Harness {
   const log: string[] = [];
   const cursors: Array<string | undefined> = [];
   const selections: Array<ChartDrawingSelection | null> = [];
@@ -61,18 +81,24 @@ function buildToolSet(toolIds = ['a', 'b', 'c'], placementToolIds: readonly stri
   const drawActions = new Map<string, (context: CanvasRenderingContext2D) => void>();
   const drawings = new Map<string, FakeDrawings>();
   const definitions: ChartToolDefinition[] = toolIds.map((id) => {
-    const state: FakeDrawings = { records: [], hitAtX: new Map() };
+    const shapes = new ChartDrawingCollection<FakeDrawingShape>(
+      FAKE_DRAWING_RULES,
+      { restore: (points) => new FakeDrawingShape(0, points) },
+      () => undefined,
+    );
     const placesDrawings = placementToolIds.includes(id);
-    drawings.set(id, state);
+    drawings.set(id, shapes);
     return {
       id,
       cursor: `cursor-${id}`,
       placesDrawings,
+      ...FAKE_DRAWING_RULES,
       toolClass: class implements ChartTool {
-        private placedCount = 0;
-        private pressing: { x: number; y: number } | null = null;
+        private pressingAtX: number | null = null;
 
         constructor(private readonly host: ChartToolHost) {}
+
+        readonly drawings = shapes;
 
         hasGesture = () => gesturing.has(id);
         cancelGesture = () => log.push(`${id}:cancelGesture`);
@@ -80,71 +106,27 @@ function buildToolSet(toolIds = ['a', 'b', 'c'], placementToolIds: readonly stri
         deactivate = () => log.push(`${id}:deactivate`);
         pointerHover = (x: number, y: number) => log.push(`${id}:pointerHover(${x},${y})`);
         pointerLeave = () => log.push(`${id}:pointerLeave`);
-        setSelectedDrawing = (drawingId: string | null) => log.push(`${id}:setSelectedDrawing(${drawingId})`);
-        drawingAt = (x: number) => state.hitAtX.get(x) ?? null;
-        exportDrawings = () => state.records.map((record) => ({ ...record }));
-        importDrawings = (records: readonly ChartToolDrawingRecord[]) =>
-          state.records.splice(0, state.records.length, ...records);
         draw = ({ context }: ChartDrawTarget) => drawActions.get(id)?.(context);
-        setDrawingLocked = (drawingId: string, locked: boolean) => this.updateDrawing(drawingId, { locked });
-        setDrawingInputs = (drawingId: string, inputs: ToolInputValues) => this.updateDrawing(drawingId, { inputs });
-        deleteDrawing = (drawingId: string) => this.removeDrawing(drawingId);
 
-        pointerDown = (x: number, y: number) => {
+        pointerDown = (x: number) => {
           if (!placesDrawings) {
             return false;
           }
-          this.pressing = { x, y };
+          this.pressingAtX = x;
           return true;
         };
 
         pointerUp = (outcome: ChartPointerUpOutcome) => {
-          const press = this.pressing;
-          this.pressing = null;
-          if (press === null) {
+          const x = this.pressingAtX;
+          this.pressingAtX = null;
+          if (x === null) {
             return false;
           }
           if (outcome === 'released') {
-            this.commitDrawing(press.x);
+            this.host.drawingPlaced(this.drawings.add(new FakeDrawingShape(x, [ORIGIN_POINT])));
           }
           return true;
         };
-
-        private commitDrawing(x: number): void {
-          const drawingId = `drawing-${id}-${this.placedCount}`;
-          this.placedCount += 1;
-          state.records.push({
-            id: drawingId,
-            locked: false,
-            visible: true,
-            inputs: {},
-            points: [ORIGIN_POINT],
-          });
-          state.hitAtX.set(x, drawingId);
-          this.host.drawingPlaced(drawingId);
-        }
-
-        private updateDrawing(drawingId: string, patch: Partial<ChartToolDrawingRecord>): boolean {
-          const index = this.drawingIndex(drawingId);
-          if (index < 0) {
-            return false;
-          }
-          state.records[index] = { ...state.records[index], ...patch };
-          return true;
-        }
-
-        private removeDrawing(drawingId: string): boolean {
-          const index = this.drawingIndex(drawingId);
-          if (index < 0) {
-            return false;
-          }
-          state.records.splice(index, 1);
-          return true;
-        }
-
-        private drawingIndex(drawingId: string): number {
-          return state.records.findIndex((record) => record.id === drawingId);
-        }
       },
     };
   });
@@ -161,14 +143,25 @@ function buildToolSet(toolIds = ['a', 'b', 'c'], placementToolIds: readonly stri
   return { tools, log, cursors, selections, reports, gesturing, drawActions, drawings };
 }
 
-/** Seeds one committed, unlocked drawing on a fake tool, hittable at pane x. */
-function seedDrawing(harness: Harness, toolId: string, drawingId: string, x: number): void {
-  const state = harness.drawings.get(toolId);
-  if (state === undefined) {
+/** Seeds one committed, unlocked drawing on a fake tool, hittable at pane x, and answers its id. */
+function seedDrawing(harness: Harness, toolId: string, x: number): string {
+  const shapes = harness.drawings.get(toolId);
+  if (shapes === undefined) {
     throw new Error(`No fake tool "${toolId}"`);
   }
-  state.records.push({ id: drawingId, locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] });
-  state.hitAtX.set(x, drawingId);
+  return shapes.add(new FakeDrawingShape(x, [ORIGIN_POINT]));
+}
+
+/**
+ * Seeds one drawing on tool "a" at pane x 5, presses it so it becomes the selection, and clears the
+ * recorded selections and change reports so the test sees only what happens next. Answers its id.
+ */
+function seedSelectedDrawing(harness: Harness): string {
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.pointerDown(5, 1);
+  harness.selections.length = 0;
+  harness.reports.drawingsChanged = 0;
+  return drawingId;
 }
 
 test('selecting a tool cancels every gesture in progress before the switch', () => {
@@ -226,41 +219,40 @@ test('selecting an unknown tool is rejected', () => {
 
 test('a press picks the drawing of the tool registered last under the pointer', () => {
   const harness = buildToolSet();
-  seedDrawing(harness, 'a', 'a-low', 10);
-  seedDrawing(harness, 'c', 'c-high', 10);
+  seedDrawing(harness, 'a', 10);
+  const topmost = seedDrawing(harness, 'c', 10);
   harness.tools.pointerDown(10, 5);
-  const selection = { toolId: 'c', drawingId: 'c-high', locked: false };
+  const selection = { toolId: 'c', drawingId: topmost, locked: false, visible: true };
   expect(harness.tools.selectedDrawing()).toEqual(selection);
   expect(harness.selections).toEqual([selection]);
-  expect(harness.log).toContain('c:setSelectedDrawing(c-high)');
+  expect(selectedInTool(harness, 'c')).toBe(topmost);
 });
 
 test('a press that hits no drawing clears the selection and unhighlights the old one', () => {
   const harness = buildToolSet();
-  seedDrawing(harness, 'b', 'b-1', 5);
+  const drawingId = seedDrawing(harness, 'b', 5);
   harness.tools.pointerDown(5, 1);
-  harness.log.length = 0;
   harness.tools.pointerDown(50, 1);
   expect(harness.tools.selectedDrawing()).toBeNull();
-  expect(harness.log).toContain('b:setSelectedDrawing(null)');
-  expect(harness.selections).toEqual([{ toolId: 'b', drawingId: 'b-1', locked: false }, null]);
+  expect(selectedInTool(harness, 'b')).toBeNull();
+  expect(harness.selections).toEqual([{ toolId: 'b', drawingId, locked: false, visible: true }, null]);
 });
 
 test('a press with a placement tool active leaves the selection alone', () => {
-  const harness = buildToolSet(['a', 'b'], ['b']);
-  seedDrawing(harness, 'a', 'a-1', 10);
+  const harness = buildToolSet({ toolIds: ['a', 'b'], placementToolIds: ['b'] });
+  seedDrawing(harness, 'a', 10);
   harness.tools.selectTool('b');
   harness.tools.pointerDown(20, 0);
   harness.tools.pointerUp('released');
   const placed = harness.tools.selectedDrawing();
-  expect(placed).toEqual({ toolId: 'b', drawingId: 'drawing-b-0', locked: false });
+  expect(placed).toMatchObject({ toolId: 'b', locked: false, visible: true });
   harness.tools.pointerDown(10, 0);
   expect(harness.tools.selectedDrawing()).toEqual(placed);
 });
 
 test('selecting a placement tool clears the selection', () => {
-  const harness = buildToolSet(['a', 'b'], ['b']);
-  seedDrawing(harness, 'a', 'a-1', 10);
+  const harness = buildToolSet({ toolIds: ['a', 'b'], placementToolIds: ['b'] });
+  seedDrawing(harness, 'a', 10);
   harness.tools.pointerDown(10, 0);
   expect(harness.tools.selectedDrawing()).not.toBeNull();
   harness.tools.selectTool('b');
@@ -268,27 +260,32 @@ test('selecting a placement tool clears the selection', () => {
 });
 
 test('a newly placed drawing becomes selected and the change is reported once', () => {
-  const harness = buildToolSet(['a', 'b'], ['b']);
+  const harness = buildToolSet({ toolIds: ['a', 'b'], placementToolIds: ['b'] });
   harness.tools.selectTool('b');
   harness.selections.length = 0;
   harness.reports.drawingsChanged = 0;
   harness.tools.pointerDown(20, 0);
   harness.tools.pointerUp('released');
-  expect(harness.tools.selectedDrawing()).toEqual({ toolId: 'b', drawingId: 'drawing-b-0', locked: false });
+  expect(harness.tools.selectedDrawing()).toEqual({
+    toolId: 'b',
+    drawingId: expect.any(String),
+    locked: false,
+    visible: true,
+  });
   expect(harness.selections).toHaveLength(1);
   expect(harness.reports.drawingsChanged).toBe(1);
 });
 
 test('the selected drawing is deleted even when locked, and the selection is dropped', () => {
   const harness = buildToolSet();
-  seedDrawing(harness, 'a', 'a-1', 5);
+  seedDrawing(harness, 'a', 5);
   harness.tools.pointerDown(5, 1);
   harness.tools.setSelectedDrawingLocked(true);
   harness.reports.drawingsChanged = 0;
   expect(harness.tools.deleteSelectedDrawing()).toBe(true);
   expect(harness.tools.selectedDrawing()).toBeNull();
   expect(harness.reports.drawingsChanged).toBe(1);
-  expect(harness.drawings.get('a')?.records).toEqual([]);
+  expect(harness.drawings.get('a')?.exportRecords()).toEqual([]);
 });
 
 test('deleting with nothing selected changes nothing', () => {
@@ -299,38 +296,74 @@ test('deleting with nothing selected changes nothing', () => {
 
 test('locking the selected drawing updates the selection and reports the change once', () => {
   const harness = buildToolSet();
-  seedDrawing(harness, 'a', 'a-1', 5);
-  harness.tools.pointerDown(5, 1);
-  harness.selections.length = 0;
-  harness.reports.drawingsChanged = 0;
+  const drawingId = seedSelectedDrawing(harness);
   harness.tools.setSelectedDrawingLocked(true);
-  const locked = { toolId: 'a', drawingId: 'a-1', locked: true };
+  const locked = { toolId: 'a', drawingId, locked: true, visible: true };
   expect(harness.tools.selectedDrawing()).toEqual(locked);
   expect(harness.selections).toEqual([locked]);
   expect(harness.reports.drawingsChanged).toBe(1);
 });
 
+test('hiding the selected drawing clears the selection and reports the change once', () => {
+  const harness = buildToolSet();
+  const drawingId = seedSelectedDrawing(harness);
+
+  harness.tools.setDrawingVisible('a', drawingId, false);
+
+  expect(harness.tools.selectedDrawing()).toBeNull();
+  expect(harness.selections).toEqual([null]);
+  expect(harness.reports.drawingsChanged).toBe(1);
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.visible).toBe(false);
+});
+
+test('a hidden drawing is skipped by the hit test, so the drawing below it is picked', () => {
+  const harness = buildToolSet();
+  const below = seedDrawing(harness, 'a', 5);
+  const hidden = seedDrawing(harness, 'a', 5);
+
+  harness.tools.setDrawingVisible('a', hidden, false);
+  harness.tools.pointerDown(5, 1);
+
+  expect(harness.tools.selectedDrawing()).toEqual({ toolId: 'a', drawingId: below, locked: false, visible: true });
+});
+
+test('hiding a drawing that is not selected keeps the selection', () => {
+  const harness = buildToolSet();
+  const selected = seedDrawing(harness, 'a', 5);
+  const other = seedDrawing(harness, 'b', 20);
+  harness.tools.pointerDown(5, 1);
+
+  harness.tools.setDrawingVisible('b', other, false);
+
+  expect(harness.tools.selectedDrawing()).toEqual({
+    toolId: 'a',
+    drawingId: selected,
+    locked: false,
+    visible: true,
+  });
+});
+
 test('new settings on a drawing are reported only when the tool accepts them', () => {
   const harness = buildToolSet();
-  seedDrawing(harness, 'a', 'a-1', 5);
-  harness.tools.setDrawingInputs('a', 'a-1', { period: 30 });
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.setDrawingInputs('a', drawingId, { period: 30 });
   expect(harness.reports.drawingsChanged).toBe(1);
   harness.tools.setDrawingInputs('a', 'missing', { period: 50 });
   expect(harness.reports.drawingsChanged).toBe(1);
-  expect(harness.drawings.get('a')?.records[0]?.inputs).toEqual({ period: 30 });
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.inputs).toEqual({ period: 30 });
 });
 
 test('exported drawings are stamped with their tool, in registry order', () => {
-  const harness = buildToolSet(['b', 'a']);
-  seedDrawing(harness, 'b', 'b-1', 1);
-  seedDrawing(harness, 'a', 'a-1', 2);
+  const harness = buildToolSet({ toolIds: ['b', 'a'] });
+  const first = seedDrawing(harness, 'b', 1);
+  const second = seedDrawing(harness, 'a', 2);
   const stamped = harness.tools.exportDrawings().map(({ toolId, id }) => `${toolId}:${id}`);
-  expect(stamped).toEqual(['b:b-1', 'a:a-1']);
+  expect(stamped).toEqual([`b:${first}`, `a:${second}`]);
 });
 
 test('importing hands each tool only its own records, drops unknown tools and reports nothing', () => {
-  const harness = buildToolSet(['a', 'b']);
-  seedDrawing(harness, 'a', 'stale', 5);
+  const harness = buildToolSet({ toolIds: ['a', 'b'] });
+  seedDrawing(harness, 'a', 5);
   harness.tools.pointerDown(5, 1);
   harness.selections.length = 0;
   harness.reports.drawingsChanged = 0;
@@ -342,14 +375,64 @@ test('importing hands each tool only its own records, drops unknown tools and re
   harness.tools.replaceDrawings(records);
   expect(harness.tools.selectedDrawing()).toBeNull();
   expect(harness.selections).toEqual([null]);
-  expect(harness.drawings.get('a')?.records.map(({ id }) => id)).toEqual(['a-1']);
-  expect(harness.drawings.get('b')?.records.map(({ id }) => id)).toEqual(['b-1']);
+  expect(
+    harness.drawings
+      .get('a')
+      ?.exportRecords()
+      .map(({ id }) => id),
+  ).toEqual(['a-1']);
+  expect(
+    harness.drawings
+      .get('b')
+      ?.exportRecords()
+      .map(({ id }) => id),
+  ).toEqual(['b-1']);
   expect(harness.reports.drawingsChanged).toBe(0);
+});
+
+test('an imported record keeps its id, flags and settings', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const record: ChartDrawingRecord = {
+    id: 'a-1',
+    toolId: 'a',
+    locked: true,
+    visible: false,
+    inputs: { period: 55 },
+    points: [ORIGIN_POINT],
+  };
+
+  harness.tools.replaceDrawings([record]);
+
+  expect(harness.tools.exportDrawings()).toEqual([record]);
+});
+
+test('a tool that places no drawings answers as if it had none', () => {
+  const tools = new ChartToolSet(
+    [{ id: 'pointer', placesDrawings: false, toolClass: ArrowTool }],
+    'pointer',
+    {} as ChartToolHostBase,
+    {
+      cursorChanged: () => undefined,
+      selectionChanged: () => undefined,
+      drawingsChanged: () => undefined,
+    },
+  );
+  tools.activateDefaultTool();
+
+  expect(tools.exportDrawings()).toEqual([]);
+  expect(tools.deleteSelectedDrawing()).toBe(false);
+  expect(tools.pointerDown(1, 1)).toBe(false);
+  tools.setDrawingVisible('pointer', 'missing', false);
+  tools.setDrawingInputs('pointer', 'missing', { period: 1 });
+  tools.replaceDrawings([
+    { id: 'a-1', toolId: 'pointer', locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] },
+  ]);
+  expect(tools.exportDrawings()).toEqual([]);
 });
 
 test('resetting every tool clears the selection', () => {
   const harness = buildToolSet();
-  seedDrawing(harness, 'a', 'a-1', 5);
+  seedDrawing(harness, 'a', 5);
   harness.tools.pointerDown(5, 1);
   harness.tools.resetTools('symbol');
   expect(harness.tools.selectedDrawing()).toBeNull();

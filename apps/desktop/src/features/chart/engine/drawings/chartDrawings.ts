@@ -8,6 +8,7 @@ export type ChartDrawingCommands = Pick<
   | 'selectedDrawing'
   | 'deleteSelectedDrawing'
   | 'setSelectedDrawingLocked'
+  | 'setDrawingVisible'
   | 'setDrawingInputs'
   | 'exportDrawings'
   | 'replaceDrawings'
@@ -87,6 +88,12 @@ export class ChartDrawings {
 
   setSelectedLocked(locked: boolean): void {
     this.commands.setSelectedDrawingLocked(locked);
+    this.repaint();
+  }
+
+  /** Hides or shows one drawing of any tool; a hidden drawing is neither painted nor hit. */
+  setVisible(toolId: string, drawingId: string, visible: boolean): void {
+    this.commands.setDrawingVisible(toolId, drawingId, visible);
     this.repaint();
   }
 
