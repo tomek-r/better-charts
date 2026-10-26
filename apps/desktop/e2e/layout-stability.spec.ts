@@ -50,6 +50,8 @@ for (const viewport of [
   { width: 1280, height: 800 },
   { width: 800, height: 900 },
   { width: 400, height: 800 },
+  // Narrow enough that the "Waiting for symbol" placeholder wraps with macOS fonts, as it does at 400px on Linux CI.
+  { width: 340, height: 800 },
 ]) {
   test(`chart frame does not shift while the timeframe header and data load at ${viewport.width}px`, async ({
     page,
