@@ -219,10 +219,10 @@ reported and never overwritten by the empty chart.
 
 Pressing a drawing selects it (the drawing is highlighted), and a floating toolbar
 appears over the chart: a drag grip that moves the toolbar inside the chart frame,
-Settings, Lock/Unlock and Remove. Lock makes the drawing ignore edit gestures, and
-Delete/Backspace removes the selected drawing even while it is locked. The toolbar is
-built once against the shared drawing interface (`ChartDrawings`, the selection it
-reports, and each tool's declarations), so every tool that places drawings gets it
+Settings, Lock/Unlock, Hide/Show and Remove. Lock makes the drawing ignore edit
+gestures, and Delete/Backspace removes the selected drawing even while it is locked. The
+toolbar is built once against the shared drawing interface (`ChartDrawings`, the selection
+it reports, and each tool's declarations), so every tool that places drawings gets it
 without its own code; the Arrow and Crosshair pointers place no drawings and therefore
 never show it.
 
@@ -231,8 +231,19 @@ Settings are the tool's typed Pine Script v6-style inputs (`int`, `float`, `bool
 `time`, `enum`), rendered generically from the definitions a tool declares, one control
 per kind, grouped in fieldsets as the definitions ask, and OK stays disabled while a
 value fails its kind's rule. The Fixed Range Volume Profile declares no inputs yet, so
-its dialog says so. Hidden drawings are supported by the engine and by the stored
-`visible` flag, but the toolbar has no hide control yet.
+its dialog says so. A hidden drawing keeps its stored `visible` flag and is neither
+painted nor hit; the toolbar's Hide/Show button sets that flag.
+
+A strip down the chart's right edge holds the Trade panel and Object tree buttons: one
+drawer is open at a time, and the chart shrinks beside the open drawer instead of sitting
+under it. The Object tree lists every drawing of the account and symbol, topmost first,
+the way TradingView lists its objects. A click on a row selects that drawing on the chart,
+hovering a row reveals Lock, Hide/Show and Remove buttons, a double click opens the
+drawing's settings dialog, and Delete or Backspace removes the drawing of the focused row.
+Arrow keys walk the rows. A locked or hidden drawing keeps its toggle in sight, and a
+hidden row's name is dimmed while the row stays listed and clickable. The dialog is the
+same one the floating toolbar opens, held by one provider above the chart and the tree.
+The tree keeps no data window and no toolbar of its own (owner decision).
 
 ## Execution and configuration
 

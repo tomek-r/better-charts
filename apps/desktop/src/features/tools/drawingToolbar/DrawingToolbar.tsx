@@ -1,5 +1,11 @@
 import { useState, type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from 'react';
 import {
+  DRAWING_LOCK_LABELS,
+  DRAWING_VISIBILITY_LABELS,
+  REMOVE_DRAWING_LABEL,
+  type DrawingToggleLabels,
+} from './drawingCommandLabels';
+import {
   EyeCrossedIcon,
   EyeIcon,
   GripIcon,
@@ -57,11 +63,9 @@ function ToolbarButton({ label, tabIndex, onFocus, onClick, pressed, children }:
 }
 
 interface ToolbarToggleButtonProps {
-  /** What the button does and shows while the toggle is off. */
-  readonly offLabel: string;
+  /** The command's two faces: what it does while its toggle is off, and what it does while it is on. */
+  readonly labels: DrawingToggleLabels;
   readonly offIcon: ReactNode;
-  /** What the button does and shows while the toggle is on. */
-  readonly onLabel: string;
   readonly onIcon: ReactNode;
   readonly pressed: boolean;
   readonly tabIndex: number;
@@ -71,9 +75,8 @@ interface ToolbarToggleButtonProps {
 
 /** A button that names the next command: one face while the toggle is off, another while it is on. */
 function ToolbarToggleButton({
-  offLabel,
+  labels,
   offIcon,
-  onLabel,
   onIcon,
   pressed,
   tabIndex,
@@ -82,7 +85,7 @@ function ToolbarToggleButton({
 }: ToolbarToggleButtonProps) {
   return (
     <ToolbarButton
-      label={pressed ? onLabel : offLabel}
+      label={pressed ? labels.on : labels.off}
       pressed={pressed}
       tabIndex={tabIndex}
       onFocus={onFocus}
@@ -164,24 +167,22 @@ export function DrawingToolbar({
         <SettingsIcon />
       </ToolbarButton>
       <ToolbarToggleButton
-        offLabel="Lock drawing"
+        labels={DRAWING_LOCK_LABELS}
         offIcon={<LockOpenIcon />}
-        onLabel="Unlock drawing"
         onIcon={<LockClosedIcon />}
         pressed={locked}
         {...tabStop(2)}
         onClick={onToggleLock}
       />
       <ToolbarToggleButton
-        offLabel="Hide drawing"
+        labels={DRAWING_VISIBILITY_LABELS}
         offIcon={<EyeIcon />}
-        onLabel="Show drawing"
         onIcon={<EyeCrossedIcon />}
         pressed={!visible}
         {...tabStop(3)}
         onClick={onToggleVisibility}
       />
-      <ToolbarButton label="Remove drawing" {...tabStop(4)} onClick={onRemove}>
+      <ToolbarButton label={REMOVE_DRAWING_LABEL} {...tabStop(4)} onClick={onRemove}>
         <TrashIcon />
       </ToolbarButton>
     </div>

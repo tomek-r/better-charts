@@ -3,6 +3,7 @@ import { accountSnapshotFixture, connectBridgeSession } from './helpers/bridgeCo
 import { drawingToolbar } from './helpers/drawingToolbarPage';
 import { position, profileState, ready, requests, respond, select } from './helpers/fixedRangeProfilePage';
 import { chooseSearchResult, openSymbolSearch } from './helpers/panel';
+import { savedProfile } from './helpers/savedProfile';
 import {
   brokerSymbolFixture,
   chartDrawingSaveCount,
@@ -10,8 +11,6 @@ import {
   expectNoErrors,
   gotoWithStub,
   pushEvent,
-  STUB_M5_INTERVAL_MS,
-  STUB_NOW,
   storedDrawingIds,
   stubChartDrawings,
   stubInvocations,
@@ -39,27 +38,6 @@ async function drawings(page: Page) {
 async function savedSymbols(page: Page): Promise<string[]> {
   const saves = (await stubInvocations(page)).filter((entry) => entry.cmd === 'save_chart_drawings');
   return saves.map((entry) => String(entry.args.symbol));
-}
-
-/** The flags a seeded record carries: a locked drawing ignores gestures, a hidden one is never painted. */
-interface SavedProfileFlags {
-  readonly locked: boolean;
-  readonly visible: boolean;
-}
-
-/** A saved drawing over bars 2..7 of the stub's ten-bar window, in the shape the tool exports. */
-function savedProfile(id: string, { locked, visible }: SavedProfileFlags) {
-  return {
-    id,
-    toolId: 'fixedRangeProfile',
-    locked,
-    visible,
-    inputs: {},
-    points: [
-      { timeMs: STUB_NOW - 8 * STUB_M5_INTERVAL_MS, price: null },
-      { timeMs: STUB_NOW - 3 * STUB_M5_INTERVAL_MS, price: null },
-    ],
-  };
 }
 
 /** Boots the app with one seeded drawing saved under the drawing account and symbol. */
