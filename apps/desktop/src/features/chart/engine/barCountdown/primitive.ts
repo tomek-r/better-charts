@@ -1,5 +1,5 @@
 import type { IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, Time } from 'lightweight-charts';
-import { AttachedSeriesPrimitive } from '../surface/attachedPrimitive';
+import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
 import { BrokerClock } from './clock';
 import { priceTagHeight, tagStackTops } from '../quotes/tagStack';
@@ -23,7 +23,7 @@ import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
  * wake-up and calls `requestUpdate` when the broker second turns over, which is
  * the supported way to repaint content whose source is wall-clock time.
  */
-export class BarCountdownPrimitive extends AttachedSeriesPrimitive {
+export class BarCountdownPrimitive extends ChartSeriesPrimitive {
   private readonly clock = new BrokerClock();
   private readonly axisViews: readonly IPrimitivePaneView[];
   private options: BarCountdownOptions;

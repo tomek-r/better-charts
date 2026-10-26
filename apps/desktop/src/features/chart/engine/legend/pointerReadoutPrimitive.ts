@@ -1,6 +1,6 @@
 import type { IPrimitivePaneRenderer, IPrimitivePaneView } from 'lightweight-charts';
 import { palette } from '../../../../shared/theme/palette';
-import { AttachedSeriesPrimitive } from '../surface/attachedPrimitive';
+import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import { priceTagHeight } from '../quotes/tagStack';
 import { measureTextWidth } from '../text/textMeasure';
 import {
@@ -130,7 +130,7 @@ function timeLabelBox(text: string, x: number, paneWidth: number, axisHeight: nu
   };
 }
 
-export class PointerReadoutPrimitive extends AttachedSeriesPrimitive {
+export class PointerReadoutPrimitive extends ChartSeriesPrimitive {
   /** Pointer position in pane CSS px; null outside the pane. */
   private point: { x: number; y: number } | null = null;
   private readonly pane: readonly IPrimitivePaneView[];

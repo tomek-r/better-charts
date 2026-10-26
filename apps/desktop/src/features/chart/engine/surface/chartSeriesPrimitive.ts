@@ -13,7 +13,7 @@ import type {
  * them on detach, so a primitive can never repaint or read a chart it is no
  * longer attached to. Subclasses extend `attached`/`detached` and call `super`.
  */
-export abstract class AttachedSeriesPrimitive implements ISeriesPrimitive<Time> {
+export abstract class ChartSeriesPrimitive implements ISeriesPrimitive<Time> {
   protected chart: IChartApi | null = null;
   protected series: ISeriesApi<SeriesType, Time> | null = null;
   protected requestUpdate: (() => void) | null = null;

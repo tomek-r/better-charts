@@ -6,7 +6,7 @@ import type {
   Time,
 } from 'lightweight-charts';
 import { palette } from '../../../../shared/theme/palette';
-import { AttachedSeriesPrimitive } from '../surface/attachedPrimitive';
+import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
 import { paintTag, tagLayout, type TagLayout } from '../text/fixedCellText';
 import { priceTagHeight, tagStackTops } from './tagStack';
@@ -55,7 +55,7 @@ export interface PriceAxisTagsOptions {
   bidColor: string;
 }
 
-export class PriceAxisTagsPrimitive extends AttachedSeriesPrimitive {
+export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
   private readonly axisViews: readonly IPrimitivePaneView[];
   /** Axis coordinate of each tag's centre captured by `updateAllViews`; NaN while hidden. */
   private readonly shownY = { ask: NaN, bid: NaN };
