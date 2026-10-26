@@ -226,6 +226,37 @@
   background: var(--color-panel);
 }
 
+/* Coordinates tab: one row per anchor, its label on the left and its fields side by side on the right. */
+.drawing-settings-coordinate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawing-settings-coordinate-row {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 14px;
+}
+
+.drawing-settings-coordinate-fields {
+  display: flex;
+  gap: 10px;
+}
+
+.drawing-settings-coordinate-fields .drawing-settings-control {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.drawing-settings-error {
+  margin: 0;
+  color: var(--color-sell-border);
+  font-size: 13px;
+}
+
 .drawing-settings-empty {
   margin: 0;
   color: var(--color-muted-strong);

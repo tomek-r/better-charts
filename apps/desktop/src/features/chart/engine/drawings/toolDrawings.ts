@@ -77,6 +77,11 @@ export interface ChartToolDrawings {
   isVisible(drawingId: string): boolean;
   /** Replaces one drawing's settings; false when the tool has no drawing with that id. */
   setInputs(drawingId: string, inputs: ToolInputValues): boolean;
+  /**
+   * Moves one drawing to new anchors, keeping its id, flags, settings, selection and paint position;
+   * false when the tool has no such drawing or does not accept the anchors.
+   */
+  setPoints(drawingId: string, points: readonly ChartDrawingPoint[]): boolean;
   /** Every drawing of this tool, for the app to save. */
   exportRecords(): ChartToolDrawingRecord[];
   /**

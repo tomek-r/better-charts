@@ -1,4 +1,4 @@
-import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
+import type { ChartDrawingPoint, ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import {
   DrawingStack,
   drawingRefs,
@@ -277,6 +277,16 @@ export class ChartToolSet {
     if (this.drawingsOf(toolId)?.setInputs(drawingId, inputs) === true) {
       this.listeners.drawingsChanged();
     }
+  }
+
+  /** Moves one drawing to new anchors; answers whether the tool accepted them, and only then reports a change. */
+  setDrawingPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean {
+    if (this.drawingsOf(toolId)?.setPoints(drawingId, points) !== true) {
+      return false;
+    }
+    this.refreshSelectionOf(toolId, drawingId);
+    this.listeners.drawingsChanged();
+    return true;
   }
 
   /** Every drawing in the chart's stacking order, bottom first, stamped with its tool and its side of the bars. */

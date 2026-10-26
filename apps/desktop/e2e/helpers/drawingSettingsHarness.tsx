@@ -89,7 +89,10 @@ export function mountSettingsFormHarness(
       createElement(DrawingSettingsForm, {
         settings,
         initialValues: { ...resolveToolSettingValues(settings, undefined), ...overrides },
-        onSave: (values) => recorderWindow.__drawingSettings.saves.push(values),
+        onSave: (values) => {
+          recorderWindow.__drawingSettings.saves.push(values);
+          return true;
+        },
         onCancel: () => {
           recorderWindow.__drawingSettings.cancels += 1;
         },

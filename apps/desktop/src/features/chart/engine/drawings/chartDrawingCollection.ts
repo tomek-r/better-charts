@@ -190,6 +190,28 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     return true;
   }
 
+  /**
+   * Moves a drawing to new anchors: the tool restores a drawing from them and that one takes the old
+   * one's place, keeping its id, lock, visibility, settings, selection and paint position. False, with
+   * nothing changed, when the id is unknown or the tool refuses the anchors.
+   */
+  setPoints(drawingId: string, points: readonly ChartDrawingPoint[]): boolean {
+    const index = this.kept.findIndex((entry) => entry.id === drawingId);
+    if (index < 0 || !pointsHeldByRule(points, this.rules.points)) {
+      return false;
+    }
+    const drawing = this.factory.restore(points);
+    if (drawing === undefined) {
+      return false;
+    }
+    const { id, locked, visible, inputs, drawing: previous } = this.kept[index];
+    this.kept[index] = { id, drawing, locked, visible, inputs };
+    previous.dispose();
+    drawing.visibilityChanged(visible);
+    this.requestRepaint();
+    return true;
+  }
+
   exportRecords(): ChartToolDrawingRecord[] {
     return this.kept.map(({ id, drawing, locked, visible, inputs }) => ({
       id,

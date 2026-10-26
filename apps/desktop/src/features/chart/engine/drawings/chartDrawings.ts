@@ -1,4 +1,4 @@
-import type { ChartDrawingRecord, ChartDrawingSelection } from './drawingRecord';
+import type { ChartDrawingPoint, ChartDrawingRecord, ChartDrawingSelection } from './drawingRecord';
 import type { ToolInputValues } from './toolInputs';
 import type { ChartToolSet } from '../tools/toolSet';
 
@@ -11,6 +11,7 @@ export type ChartDrawingCommands = Pick<
   | 'setDrawingLocked'
   | 'setDrawingVisible'
   | 'setDrawingInputs'
+  | 'setDrawingPoints'
   | 'exportDrawings'
   | 'replaceDrawings'
   | 'drawingStack'
@@ -168,6 +169,13 @@ export class ChartDrawings {
   setInputs(toolId: string, drawingId: string, inputs: ToolInputValues): void {
     this.commands.setDrawingInputs(toolId, drawingId, inputs);
     this.repaint();
+  }
+
+  /** Moves one drawing of any tool to new anchors; false when it has no such drawing or refuses them. */
+  setPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean {
+    const accepted = this.commands.setDrawingPoints(toolId, drawingId, points);
+    this.repaint();
+    return accepted;
   }
 
   /**

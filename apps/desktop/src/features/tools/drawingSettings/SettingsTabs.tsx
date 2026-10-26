@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from 'react';
+import { useId, type KeyboardEvent } from 'react';
 import type { SettingsPanelProps, SettingsTab } from './settingsTabModel';
 
 /** Arrow keys step between tabs and wrap around; Home and End jump to the ends (WAI-ARIA tabs pattern). */
@@ -18,15 +18,17 @@ function targetTabIndex(key: string, current: number, count: number): number | u
 
 interface SettingsTabsProps extends SettingsPanelProps {
   readonly tabs: readonly SettingsTab[];
+  /** The open tab; the first tab while it is undefined or names no tab. The owner can switch tabs too. */
+  readonly selectedId: string | undefined;
+  readonly onSelect: (tabId: string) => void;
 }
 
 /**
  * The tablist and the panel of the selected tab. Selection follows focus, so an arrow key both moves
  * to and opens the next tab; only the selected tab sits in the tab order.
  */
-export function SettingsTabs({ tabs, values, onChange }: SettingsTabsProps) {
+export function SettingsTabs({ tabs, values, onChange, coordinates, selectedId, onSelect }: SettingsTabsProps) {
   const idPrefix = useId();
-  const [selectedId, setSelectedId] = useState(tabs[0].id);
   const selected = tabs.find((tab) => tab.id === selectedId) ?? tabs[0];
 
   const moveWithKey = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -35,7 +37,7 @@ export function SettingsTabs({ tabs, values, onChange }: SettingsTabsProps) {
       return;
     }
     event.preventDefault();
-    setSelectedId(tabs[index].id);
+    onSelect(tabs[index].id);
     event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[index].focus();
   };
 
@@ -52,7 +54,7 @@ export function SettingsTabs({ tabs, values, onChange }: SettingsTabsProps) {
             aria-selected={tab === selected}
             aria-controls={`${idPrefix}-panel`}
             tabIndex={tab === selected ? 0 : -1}
-            onClick={() => setSelectedId(tab.id)}
+            onClick={() => onSelect(tab.id)}
           >
             {tab.title}
           </button>
@@ -64,7 +66,7 @@ export function SettingsTabs({ tabs, values, onChange }: SettingsTabsProps) {
         role="tabpanel"
         aria-labelledby={`${idPrefix}-tab-${selected.id}`}
       >
-        {selected.render({ values, onChange })}
+        {selected.render({ values, onChange, coordinates })}
       </div>
     </>
   );

@@ -493,6 +493,31 @@ test('new settings on a drawing are reported only when the tool accepts them', (
   expect(harness.drawings.get('a')?.exportRecords()[0]?.inputs).toEqual({ period: 30 });
 });
 
+test('new anchors on the selected drawing are reported once and keep it selected', () => {
+  const harness = buildToolSet();
+  const drawingId = seedSelectedDrawing(harness);
+  const movedPoints = [{ timeMs: 5, price: null }];
+
+  expect(harness.tools.setDrawingPoints('a', drawingId, movedPoints)).toBe(true);
+
+  expect(harness.reports.drawingsChanged).toBe(1);
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.points).toEqual(movedPoints);
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', drawingId, false, true));
+  expect(selectedInTool(harness, 'a')).toBe(drawingId);
+});
+
+test('anchors the tool refuses, or for an unknown drawing or tool, report nothing', () => {
+  const harness = buildToolSet();
+  const drawingId = seedSelectedDrawing(harness);
+
+  expect(harness.tools.setDrawingPoints('a', drawingId, [])).toBe(false);
+  expect(harness.tools.setDrawingPoints('a', 'missing', [ORIGIN_POINT])).toBe(false);
+  expect(harness.tools.setDrawingPoints('missing', drawingId, [ORIGIN_POINT])).toBe(false);
+
+  expect(harness.reports.drawingsChanged).toBe(0);
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.points).toEqual([ORIGIN_POINT]);
+});
+
 test('exported drawings are stamped with their tool, bottom of the order first', () => {
   const harness = buildToolSet({ toolIds: ['b', 'a'] });
   const first = seedDrawing(harness, 'b', 1);
