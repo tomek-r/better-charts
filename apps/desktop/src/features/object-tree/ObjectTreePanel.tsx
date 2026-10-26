@@ -21,7 +21,6 @@ export function ObjectTreePanel() {
   const layers = useLayerList();
   const selection = useDrawingSelection();
   const { forRow, listRef } = useLayerReorder(layers.length);
-  const hasDrawings = layers.some((layer) => layer.kind === 'drawing');
 
   const layerRow = (layer: ChartLayerEntry, layerIndex: number) => {
     if (layer.kind === 'bars') {
@@ -50,7 +49,6 @@ export function ObjectTreePanel() {
       <ul ref={listRef} className="object-tree-list" aria-label="Drawings" tabIndex={-1}>
         {layers.map(layerRow)}
       </ul>
-      {hasDrawings ? null : <p className="object-tree-empty">No drawings yet</p>}
     </>
   );
 }

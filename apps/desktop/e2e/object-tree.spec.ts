@@ -79,7 +79,7 @@ test('a chart without drawings lists only the price bars', async ({ page }) => {
 
   await expect(drawingRows(page)).toHaveCount(1);
   await expect(barsRow(page)).toBeVisible();
-  await expect(page.getByText('No drawings yet')).toBeVisible();
+  await expect(page.getByText('No drawings yet')).toHaveCount(0);
 });
 
 test('two saved profiles list as rows, the topmost drawing first and the price bars last', async ({ page }) => {
@@ -190,7 +190,8 @@ test('Delete on a focused row removes its drawing', async ({ page }) => {
   await name.press('Delete');
 
   await expect(drawingRows(page)).toHaveCount(1);
-  await expect(page.getByText('No drawings yet')).toBeVisible();
+  await expect(barsRow(page)).toBeVisible();
+  await expect(page.getByText('No drawings yet')).toHaveCount(0);
   await expect(barsRow(page).getByRole('button')).toBeFocused();
   await expect.poll(async () => (await savedDrawings(page)).length).toBe(0);
 });
