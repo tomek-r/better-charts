@@ -1,4 +1,4 @@
-import type { TradingLabelTarget } from './labelLayout';
+import type { TradingLabelTarget } from './labels/tradingLabelTypes';
 import { hitCircle, hitRect, STAGED_GRAB, type StagedOrderLevels, type StagedSlBand } from './stagedOrderOverlay';
 import type { RiskSide } from '../../../../shared/bridge/types';
 import { ticketPrice } from '../../../../shared/format';

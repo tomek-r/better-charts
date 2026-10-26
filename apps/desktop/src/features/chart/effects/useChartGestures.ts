@@ -1,4 +1,4 @@
-import { containsLabel } from '../engine/trading/labelLayout';
+import { containsLabel } from '../engine/trading/labels/containsLabel';
 import { useEffect } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import { createStagedOrderGestures, type StagedOrderGestureTicket } from '../engine/trading/stagedOrderGestures';

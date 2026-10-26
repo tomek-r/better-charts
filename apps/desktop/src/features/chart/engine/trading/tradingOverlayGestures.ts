@@ -1,4 +1,4 @@
-import type { TradingLabelHit } from './labelLayout';
+import type { TradingLabelHit } from './labels/tradingLabelTypes';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlay';
 import { levelMoneyText } from './moneyLabels';

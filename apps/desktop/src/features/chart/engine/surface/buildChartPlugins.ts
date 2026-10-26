@@ -1,5 +1,5 @@
-import type { TradingLabelLayoutState } from '../trading/labelLayout';
-import { createTradingLabelsOverlay } from '../trading/tradingLabelsOverlay';
+import type { TradingLabelLayoutState } from '../trading/labels/tradingLabelTypes';
+import { createTradingLabelsOverlay } from '../trading/labels/tradingLabelsOverlay';
 import type { OverlayRenderer } from './overlayTypes';
 import { createPositionOverlay, type PositionOverlayState } from '../trading/positionOverlay';
 import { createStagedOrderOverlay, type StagedOrderState } from '../trading/stagedOrderOverlay';

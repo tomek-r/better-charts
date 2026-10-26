@@ -1,4 +1,4 @@
-import { layoutLabelCenters } from '../src/features/chart/engine/trading/labelLayout';
+import { layoutLabelCenters } from '../src/features/chart/engine/trading/labels/layoutLabelCenters';
 import { test, expect } from '@playwright/test';
 import { createRecordingCtx, createTestViewport, renderArgsFor, type PaintOp } from './helpers/overlayHarness';
 import { buildChartPlugins, type ChartOverlayState } from '../src/features/chart/engine/surface/buildChartPlugins';

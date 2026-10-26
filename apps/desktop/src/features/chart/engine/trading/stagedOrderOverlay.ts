@@ -1,9 +1,5 @@
-import {
-  paintTradingLabel,
-  type TradingLabelHit,
-  type TradingLabelTarget,
-  type TradingLabelLayoutState,
-} from './labelLayout';
+import { paintTradingLabel } from './labels/paintTradingLabel';
+import type { TradingLabelHit, TradingLabelLayoutState, TradingLabelTarget } from './labels/tradingLabelTypes';
 import type { OverlayRenderer } from '../surface/overlayTypes';
 import type { RiskSide } from '../../../../shared/bridge/types';
 import { palette } from '../../../../shared/theme/palette';
