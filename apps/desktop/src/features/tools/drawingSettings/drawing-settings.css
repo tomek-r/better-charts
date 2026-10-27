@@ -20,6 +20,7 @@
   /* One step above the 13px the dialog used before, so labels and fields read comfortably. */
   --drawing-settings-font-size: 15px;
   --drawing-settings-control-width: 200px;
+  --drawing-settings-row-gap: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -39,7 +40,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--drawing-settings-control-width);
   align-items: center;
-  gap: 10px 14px;
+  gap: var(--drawing-settings-row-gap) 14px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -172,7 +173,7 @@
 .drawing-settings-style-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--drawing-settings-row-gap);
 }
 
 .drawing-settings-style-row {
