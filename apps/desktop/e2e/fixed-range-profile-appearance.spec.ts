@@ -5,6 +5,7 @@ import { drawFixedRangeProfile, type FixedRangeProfileState } from '../src/featu
 import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
 import { readFixedRangeProfileSettings } from '../src/features/tools/fixedRangeProfile/settings';
 import type { TickProfileBin } from '../src/shared/bridge/types';
+import { palette } from '../src/shared/theme/palette';
 
 /**
  * How the fixed range volume profile paints under its settings. Pure Node: a recording context captures every
@@ -129,6 +130,63 @@ test('a row with equal down and up volume has no delta bar', () => {
     appearance,
   );
   expect(ops.filter((op) => op.kind === 'fillRect')).toHaveLength(1);
+});
+
+test('the histogram box is the raised colour at alpha 00 by default, so it paints nothing', () => {
+  expect(readFixedRangeProfileSettings(undefined).appearance.histogramBoxColor).toBe(`${palette.raised}00`);
+  const { ops, hit } = paint();
+  expect(ops.filter((op) => op.kind === 'fillRect')).toHaveLength(6);
+  expect(hit.boxLeft).toBeUndefined();
+});
+
+test('the histogram box takes a stored #rrggbbaa colour and falls back to the default for an invalid one', () => {
+  expect(readFixedRangeProfileSettings({ 'histogramBox.color': '#11223344' }).appearance.histogramBoxColor).toBe(
+    '#11223344',
+  );
+  expect(readFixedRangeProfileSettings({ 'histogramBox.color': 'teal' }).appearance.histogramBoxColor).toBe(
+    `${palette.raised}00`,
+  );
+});
+
+test('the histogram box spans the range box and the bins, and is painted first under the bars', () => {
+  const { ops, hit } = paint({ 'histogramBox.color': palette.raised });
+  expect(hit.boxLeft).toBe(START_X);
+  expect(hit.boxRight).toBe(END_X);
+  expect(hit.boxTop).toBe(viewport.priceToY(170));
+  expect(hit.boxBottom).toBe(viewport.priceToY(140));
+  const boxOps = ops.filter((op) => op.kind === 'fillRect' && op.style === palette.raised);
+  expect(boxOps).toHaveLength(1);
+  expect([boxOps[0].minX, boxOps[0].maxX, boxOps[0].minY, boxOps[0].maxY]).toEqual([
+    START_X,
+    END_X,
+    hit.boxTop,
+    hit.boxBottom,
+  ]);
+  expect(ops.findIndex((op) => op.kind === 'fillRect')).toBe(ops.indexOf(boxOps[0]));
+});
+
+test('a fully transparent histogram box paints nothing and reports no box', () => {
+  const { ops, hit } = paint({ 'histogramBox.color': '#ffffff00' });
+  expect(ops.filter((op) => op.kind === 'fillRect')).toHaveLength(6);
+  expect(hit.boxLeft).toBeUndefined();
+});
+
+test('there is no histogram box without bins, and none while previewing', () => {
+  const { appearance } = readFixedRangeProfileSettings(undefined);
+  for (const state of [
+    { range: RANGE, profile: { ...PROFILE, bins: [] }, hit: {} },
+    { range: RANGE, profile: PROFILE, previewing: true, hit: {} },
+  ] satisfies FixedRangeProfileState[]) {
+    const ops: PaintOp[] = [];
+    drawFixedRangeProfile(
+      createRecordingCtx((op) => ops.push(op)),
+      renderArgsFor(viewport).viewport,
+      state,
+      appearance,
+    );
+    expect(ops).toEqual([]);
+    expect(state.hit).toEqual({});
+  }
 });
 
 test('placement right hangs the bars from the range end: mirrored for up/down, growing left otherwise', () => {

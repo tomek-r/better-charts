@@ -1,3 +1,4 @@
+import { withOpacityPercent } from '../../../shared/theme/hexColor';
 import { palette } from '../../../shared/theme/palette';
 import type { ProfileRequestParams, ProfileRowsLayout } from '../../bridge/marketDataPort';
 import type { ToolInputDefinition, ToolInputValues } from '../../chart/engine/drawings/toolInputs';
@@ -70,6 +71,8 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
   { kind: 'bool', id: 'extendRight', title: 'Extend Right', defaultValue: true },
 ];
 
+const HISTOGRAM_BOX_DEFAULT_COLOR = withOpacityPercent(palette.raised, 0);
+
 /** The settings that only change how the computed profile is painted: changing one repaints. */
 export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
   { kind: 'color', id: 'upVolume', title: 'Up Volume', defaults: { color: palette.buy } },
@@ -111,6 +114,9 @@ export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
       { value: PLACEMENT_RIGHT, title: PLACEMENT_RIGHT },
     ],
   },
+  // Listed last but painted first, under the bars and level lines. Transparent until the user picks an opacity,
+  // so drawings saved before the box existed look unchanged.
+  { kind: 'color', id: 'histogramBox', title: 'Histogram Box', defaults: { color: HISTOGRAM_BOX_DEFAULT_COLOR } },
 ];
 
 /** How each row's volume is drawn: down and up mirrored, stacked into one bar, or their difference. */
@@ -134,6 +140,8 @@ export interface FixedRangeProfileAppearance {
   readonly placement: FixedRangeProfilePlacement;
   /** Level lines run to the pane's right edge when set, and stop at the range end otherwise. */
   readonly extendRight: boolean;
+  /** The fill behind the profile; an alpha of 00 paints no box. */
+  readonly histogramBoxColor: string;
   readonly upColor: string;
   readonly downColor: string;
   /** Share of the range width (handle to handle) the histogram's widest extent takes, in percent. */
@@ -203,6 +211,7 @@ export function readFixedRangeProfileSettings(stored: unknown): FixedRangeProfil
       volumeMode: VOLUME_MODE_BY_OPTION[textOf(values, 'volume')] ?? 'upDown',
       placement: textOf(values, 'placement') === PLACEMENT_RIGHT ? 'right' : 'left',
       extendRight: values.extendRight === true,
+      histogramBoxColor: textOf(values, toolStyleKey('histogramBox', 'color')),
       upColor: textOf(values, toolStyleKey('upVolume', 'color')),
       downColor: textOf(values, toolStyleKey('downVolume', 'color')),
       widthPercent: numberOf(values, 'widthPercent'),

@@ -3,7 +3,8 @@ import type { ProfileResult } from '../../../shared/bridge/types';
 import { DEFAULT_LOADER_COLORS, drawLoader } from '../../../shared/canvas/loader';
 import { drawSeparatedText } from '../../../shared/canvas/separatedText';
 import { palette } from '../../../shared/theme/palette';
-import { drawProfileBars, layoutProfileBars } from './profileBars';
+import { parseHexColor } from '../../../shared/theme/hexColor';
+import { drawProfileBars, layoutProfileBars, type ProfileBarsLayout } from './profileBars';
 import { DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE, type FixedRangeProfileAppearance } from './settings';
 
 /**
@@ -20,7 +21,19 @@ export interface FixedRangeProfileState {
   /** A boundary preview hides the result until release or cancellation. */
   previewing?: boolean;
   /** Painted geometry from the last frame (dev hook / tests). */
-  hit: { anchorX?: number; profileLeft?: number; profileRight?: number; pocY?: number; vahY?: number; valY?: number };
+  hit: {
+    anchorX?: number;
+    profileLeft?: number;
+    profileRight?: number;
+    pocY?: number;
+    vahY?: number;
+    valY?: number;
+    /** The painted histogram box; absent while nothing is painted for it. */
+    boxLeft?: number;
+    boxRight?: number;
+    boxTop?: number;
+    boxBottom?: number;
+  };
 }
 
 /** The profile request the app is waiting for; results that do not match it are stale and ignored. */
@@ -95,6 +108,37 @@ function drawLevelLines(
   }
 }
 
+/** The painted histogram box: the range box horizontally, the rows' price extent vertically. */
+interface HistogramBox {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/** The box to paint, or undefined when there are no rows, an edge is off the scale, or the colour is fully transparent. */
+function histogramBoxOf(
+  layout: ProfileBarsLayout,
+  color: string,
+  left: number,
+  right: number,
+): HistogramBox | undefined {
+  if (layout.rows.length === 0 || parseHexColor(color)?.alpha === 0) {
+    return undefined;
+  }
+  const top = Math.min(...layout.rows.map((row) => row.top));
+  const bottom = Math.max(...layout.rows.map((row) => row.bottom));
+  return [left, right, top, bottom].every(Number.isFinite) ? { left, right, top, bottom } : undefined;
+}
+
+function drawHistogramBox(ctx: CanvasRenderingContext2D, box: HistogramBox, color: string): void {
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color;
+  ctx.fillRect(box.left, box.top, box.right - box.left, box.bottom - box.top);
+  ctx.restore();
+}
+
 /**
  * The profile of the drawn range. The bars hang from the range start (placement left) or from the range end
  * (placement right) and never leave the range; `handles` gives the end x, which is otherwise the end of the
@@ -132,6 +176,11 @@ export function drawFixedRangeProfile(
   ctx.beginPath();
   ctx.rect(x, viewport.chartRect.y, width, viewport.chartRect.height);
   ctx.clip();
+  const box = histogramBoxOf(layout, appearance.histogramBoxColor, handles?.fromX ?? startX, endX);
+  if (box !== undefined) {
+    drawHistogramBox(ctx, box, appearance.histogramBoxColor);
+    Object.assign(hit, { boxLeft: box.left, boxRight: box.right, boxTop: box.top, boxBottom: box.bottom });
+  }
   // The bars also stay inside the range box, whatever the pane shows of it.
   ctx.save();
   ctx.beginPath();

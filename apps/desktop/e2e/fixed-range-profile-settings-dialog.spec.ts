@@ -79,6 +79,25 @@ test('the Style tab lists the colours, the three level lines, the width and the 
   await expect(label(page, 'Placement')).toHaveText('Left');
 });
 
+test('the Histogram Box row is last on the Style tab, a swatch with no checkbox, opening at 0 percent opacity', async ({
+  page,
+}) => {
+  await page.getByRole('tab', { name: 'Style' }).click();
+  const box = label(page, 'Histogram Box');
+  await expect(box).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Histogram Box' })).toHaveCount(0);
+  const placement = await label(page, 'Placement').boundingBox();
+  expect((await box.boundingBox())!.y).toBeGreaterThan(placement!.y);
+
+  await box.click();
+  const popover = page.getByRole('dialog', { name: 'Histogram Box options' });
+  await expect(popover.getByLabel('Opacity percent', { exact: true })).toHaveValue('0');
+  await popover.getByLabel('Opacity percent', { exact: true }).fill('50');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  expect((await savedValues(page))[0]['histogramBox.color']).toBe(`${palette.raised}80`);
+});
+
 test('every input sits on its own row, its label on the left and its control on the right', async ({ page }) => {
   const titles = ['Rows Layout', 'Row Size', 'Ticks Per Row', 'Volume', 'Value Area Volume %', 'Extend Right'];
   const boxes = [];
@@ -130,6 +149,7 @@ test('saving without a change hands back the defaults that reproduce the current
       'val.style': 'dashed',
       widthPercent: 20,
       placement: 'Left',
+      'histogramBox.color': `${palette.raised}00`,
     },
   ]);
 });

@@ -37,7 +37,9 @@ full set.
      own row (`activeWhen` disables the one the layout does not use), Volume (Up/Down, Total, Delta), Value Area
      Volume % 1-100, Extend Right.
    - Styles: Up Volume and Down Volume colours, POC, VAH and VAL lines, Width (% of range) 1-100, Placement Left or
-     Right. Defaults keep the 128 rows / 70% request and the 20% width; the width is now a share of the range
+     Right, and last Histogram Box (a colour swatch with no checkbox; painted first, behind the bars and level lines,
+     spanning the range box and the bins' price extent; the default is the `raised` palette colour at alpha 00, so
+     it paints nothing until the user raises the opacity and saved drawings look unchanged). Defaults keep the 128 rows / 70% request and the 20% width; the width is now a share of the range
      and no longer capped at 180 px, so the default look changes (the owner asked for this).
    - Rows layout, row count, ticks and value area map to the request through one pure function; a change re-requests
      the profile (a hidden drawing asks when shown again). Everything else only repaints.
