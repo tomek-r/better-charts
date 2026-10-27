@@ -103,7 +103,7 @@ test('settings opens the drawing dialog, which has its Coordinates and Visibilit
 
   const dialog = page.getByRole('dialog', { name: 'Fixed range volume profile settings' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('tab')).toHaveText(['Coordinates', 'Visibility']);
+  await expect(dialog.getByRole('tab')).toHaveText(['Inputs', 'Style', 'Coordinates', 'Visibility']);
 
   await page.keyboard.press('Escape');
 

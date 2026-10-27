@@ -21,9 +21,15 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   choice, retries and reason to the `pnpm dev` terminal. The `request_tick_profile`
   command takes `rowsLayout` (`{ kind: 'rows', count }` with 1-128 rows, or
   `{ kind: 'ticksPerRow', ticks }` with 1-1000 ticks per row) and `valueAreaPercent`
-  (an integer 1-100); the chart still sends 128 rows and 70% until the drawing's
-  Inputs set them. A range needing more than 1000 rows is coarsened to the smallest
+  (an integer 1-100); the chart sends what the drawing's Inputs set (128 rows and 70%
+  by default). A range needing more than 1000 rows is coarsened to the smallest
   whole-tick row height that fits, and `actualRows` reports the rows used.
+  The drawing's settings dialog has Inputs (Rows Layout with Row Size or Ticks Per Row,
+  Volume Up/Down, Total or Delta, Value Area Volume %, Extend Right) and Style (Up and Down
+  Volume colours, POC/VAH/VAL lines, Width % of pane, Placement Left or Right). Defaults
+  paint the original look: down bars left and up bars right of the range start, solid POC,
+  dashed VAH/VAL, lines to the pane's right edge. Rows layout and value area re-request the
+  profile; everything else only repaints.
 - The last chart window survives an app restart: on connect the app reopens the symbol and timeframe saved for the same login and broker server, and only when the broker still lists that symbol and serves that timeframe; another account, or a symbol the broker no longer lists, keeps the session default.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
@@ -235,8 +241,8 @@ Settings are the tool's typed Pine Script v6-style inputs (`int`, `float`, `bool
 `string`, `textArea`, `color`, `source`, `timeframe`, `symbol`, `session`, `price`,
 `time`, `enum`), rendered generically from the definitions a tool declares, one control
 per kind, grouped in fieldsets as the definitions ask, and OK stays disabled while a
-value fails its kind's rule. The Fixed Range Volume Profile declares no inputs yet, so
-its dialog says so. A hidden drawing keeps its stored `visible` flag and is neither
+value fails its kind's rule. The Fixed Range Volume Profile declares its inputs and styles
+(see above), so its dialog opens on the Inputs and Style tabs. A hidden drawing keeps its stored `visible` flag and is neither
 painted nor hit; the toolbar's Hide/Show button sets that flag.
 
 A strip down the chart's right edge holds the Trade panel and Object tree buttons: one

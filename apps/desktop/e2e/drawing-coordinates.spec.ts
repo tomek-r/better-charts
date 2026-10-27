@@ -47,7 +47,7 @@ async function editAnchor(page: Page, label: string, timeMs: number): Promise<vo
 test('the Coordinates tab lists the two anchors with their UTC date and time and no price', async ({ page }) => {
   await openSavedProfileCoordinates(page);
 
-  await expect(page.getByRole('tab')).toHaveText(['Coordinates', 'Visibility']);
+  await expect(page.getByRole('tab')).toHaveText(['Inputs', 'Style', 'Coordinates', 'Visibility']);
   await expect(page.getByRole('tabpanel').getByRole('group')).toHaveCount(2);
   for (const [label, timeMs] of [
     ['#1', WINDOW_START_MS],

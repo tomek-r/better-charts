@@ -186,6 +186,7 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
       return false;
     }
     entry.inputs = resolveToolSettingValues(this.rules, inputs);
+    entry.drawing.settingsChanged?.(entry.inputs);
     this.requestRepaint();
     return true;
   }
@@ -207,6 +208,7 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     const { id, locked, visible, inputs, drawing: previous } = this.kept[index];
     this.kept[index] = { id, drawing, locked, visible, inputs };
     previous.dispose();
+    drawing.settingsChanged?.(inputs);
     drawing.visibilityChanged(visible);
     this.requestRepaint();
     return true;
@@ -253,6 +255,7 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
       inputs: resolveToolSettingValues(this.rules, state.inputs),
     };
     this.kept.push(kept);
+    drawing.settingsChanged?.(kept.inputs);
     drawing.visibilityChanged(kept.visible);
     return kept.id;
   }

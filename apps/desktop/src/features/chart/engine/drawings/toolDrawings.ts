@@ -18,6 +18,12 @@ export interface ChartDrawingShape {
    * state that made it hidden, and the paint order, stay with the collection.
    */
   visibilityChanged(visible: boolean): void;
+  /**
+   * The drawing's resolved settings (inputs and flattened styles) were given or replaced. It is told
+   * before its first visibility, so a drawing that owns backend work starts it with the right inputs;
+   * a drawing whose settings only change how it paints omits the member.
+   */
+  settingsChanged?(inputs: ToolInputValues): void;
   /** The drawing goes away: release everything it still holds. */
   dispose(): void;
 }

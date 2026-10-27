@@ -3,12 +3,12 @@ import type { ChartDrawingPointRule } from '../../../chart/engine/drawings/toolD
 import type { FixedRangeProfileRange } from '../range';
 
 /**
- * The points one FRVP drawing stores: the two edges of the profile window as time anchors. The
+ * The points one fixed range volume profile drawing stores: the two edges of the profile window as time anchors. The
  * engine carries them as a plain anchor list, so this module is the one place that decides
  * whether a stored list is a window the tool can paint again.
  */
 
-/** Every FRVP drawing anchors twice, and in time only: the two edges of its window. */
+/** Every fixed range volume profile drawing anchors twice, and in time only: the two edges of its window. */
 export const FIXED_RANGE_PROFILE_POINTS: ChartDrawingPointRule = { min: 2, max: 2, anchor: 'time' };
 
 /** The two anchors of a window: its start, and the exclusive end of its last slot. */

@@ -25,7 +25,18 @@ full set.
      `belowBars`, stamps it on export and applies it in the paint and hit passes; the drawing keeps its own
      `visible` flag. The Rust store keeps it as JSON text in a column added by migration v3.
 4. `profile-request-params`: rows layout and value area percent in the Rust profile request.
-5. `fixed-range-profile-settings`: the tool declares its inputs and styles.
+5. `fixed-range-profile-settings` (done): the tool declares its inputs and styles (`fixedRangeProfile/settings.ts`).
+   - Inputs: Rows Layout (Number Of Rows / Ticks Per Row) with Row Size 1-128 or Ticks Per Row 1-1000 on one inline
+     row (`activeWhen`), Volume (Up/Down, Total, Delta), Value Area Volume % 1-100, Extend Right.
+   - Styles: Up Volume and Down Volume colours, POC, VAH and VAL lines, Width (% of pane) 5-50, Placement Left or
+     Right. Defaults reproduce the original look and the 128 rows / 70% request.
+   - Rows layout, row count, ticks and value area map to the request through one pure function; a change re-requests
+     the profile (a hidden drawing asks when shown again). Everything else only repaints.
+   - Rendering: Up/Down mirrors down left and up right of the anchor; Total stacks down then up, scaled by the
+     largest total; Delta is one bar of |up - down| in the leading side's colour. Left anchors at the range start and
+     grows right, Right anchors at the range end and grows left. Bars are at most 180 px. A hidden level paints no line
+     and reports no y; without Extend Right the lines stop at the range end.
+   - A drawing learns its resolved values through the optional `settingsChanged` member of `ChartDrawingShape`.
 
 Templates and Developing POC/VA come later.
 

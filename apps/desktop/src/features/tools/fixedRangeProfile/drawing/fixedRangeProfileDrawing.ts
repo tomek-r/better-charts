@@ -1,4 +1,5 @@
 import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
+import type { ToolInputValues } from '../../../chart/engine/drawings/toolInputs';
 import type { ChartDrawingShape } from '../../../chart/engine/drawings/toolDrawings';
 import {
   anchorAtBar,
@@ -23,6 +24,12 @@ import {
   type PlacedFixedRangeProfile,
 } from '../range';
 import { FixedRangeProfileRequester } from '../requests/fixedRangeProfileRequester';
+import {
+  DEFAULT_FIXED_RANGE_PROFILE_SETTINGS,
+  readFixedRangeProfileSettings,
+  sameProfileRequestParams,
+  type FixedRangeProfileSettings,
+} from '../settings';
 import type { TickProfileRequestQueue } from '../requests/tickProfileRequestQueue';
 import { fixedRangeProfilePoints } from './fixedRangeProfilePoints';
 
@@ -75,6 +82,10 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
   private wasOpenAtLastBarsChange = false;
   /** The timeframe of the bars `wasOpenAtLastBarsChange` was judged on. */
   private lastTimeframe: string | undefined;
+  /** The resolved settings the collection last gave this drawing; the defaults until it does. */
+  private settings: FixedRangeProfileSettings = DEFAULT_FIXED_RANGE_PROFILE_SETTINGS;
+  /** Whether the collection shows this drawing; a hidden one asks for nothing, so a settings change waits. */
+  private shown = false;
 
   private constructor(
     private readonly host: ChartToolHost,
@@ -84,7 +95,13 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
   ) {
     this.window = { fromMs: window.fromMs, endMs: window.endMs };
     this.lastSlotOpenMs = lastSlotOpenMs;
-    this.requester = new FixedRangeProfileRequester(host, queue.portFor(this.queueKey), this.state, () => this.window);
+    this.requester = new FixedRangeProfileRequester(
+      host,
+      queue.portFor(this.queueKey),
+      this.state,
+      () => this.window,
+      () => this.settings.requestParams,
+    );
     this.markPlaced();
   }
 
@@ -287,11 +304,11 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
       return;
     }
     // The histogram first, isolated so its style does not leak, then the handles.
+    const handles = this.handleXs(placed);
     ctx.save();
-    drawFixedRangeProfile(ctx, viewport, this.state);
+    drawFixedRangeProfile(ctx, viewport, this.state, this.settings.appearance, handles);
     ctx.restore();
     // Veil the histogram but not the handles, which stay crisp; the loader goes on top of both.
-    const handles = this.handleXs(placed);
     drawFixedRangeProfileLoadingWash(ctx, viewport, this.state, handles);
     FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles, { selected: options.selected });
     drawFixedRangeProfileSpinner(ctx, viewport, this.state, Date.now(), handles);
@@ -299,12 +316,26 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
 
   /** Hidden: the drawing stops refreshing and leaves the queue; shown again: it asks for its profile again. */
   visibilityChanged(visible: boolean): void {
+    this.shown = visible;
     if (visible) {
       this.requestProfile();
       return;
     }
     this.requester.suspendRequests();
     this.queue.release(this.queueKey);
+  }
+
+  /**
+   * New resolved settings. Only the ones that shape the computation (rows, value area) ask for a new profile; the
+   * request replaces the awaited one and, for this drawing, the load in flight. The rest repaint with the
+   * collection's own repaint.
+   */
+  settingsChanged(inputs: ToolInputValues): void {
+    const previous = this.settings.requestParams;
+    this.settings = readFixedRangeProfileSettings(inputs);
+    if (this.shown && !sameProfileRequestParams(previous, this.settings.requestParams)) {
+      this.requestProfile();
+    }
   }
 
   /** The drawing goes away: abandon its request, stop the backend load behind it and stop listening. */
