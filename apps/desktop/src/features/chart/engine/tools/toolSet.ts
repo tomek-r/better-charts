@@ -150,16 +150,18 @@ export class ChartToolSet {
   }
 
   /**
-   * Routes a press to the active tool first, which may start a new drawing, then
-   * to every tool so an existing drawing stays editable with no tool active.
-   * A press that lands on a drawing of a finished tool selects it.
+   * Routes a press to the active tool first, which may start a new drawing, then to every tool so an
+   * existing drawing stays editable. A press that selects a drawing only selects it: editing needs a
+   * press on an already selected drawing, because its edit handles show only then.
    */
   pointerDown(x: number, y: number): boolean {
+    const selectionBefore = this.selectionState.current();
     this.selectDrawingAt(x, y);
     const active = this.activeEntry.tool;
+    const mayEdit = this.selectionState.current() === selectionBefore;
     return (
       active.pointerDown(x, y, 'startNewDrawing') ||
-      this.tools().some((tool) => tool !== active && tool.pointerDown(x, y, 'editExistingDrawing'))
+      (mayEdit && this.tools().some((tool) => tool !== active && tool.pointerDown(x, y, 'editExistingDrawing')))
     );
   }
 

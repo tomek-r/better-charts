@@ -51,6 +51,8 @@ export interface FixedRangeProfileTestApi {
     locked: boolean;
     range: { fromMs: number; endMs: number };
     hasProfile: boolean;
+    /** Whether the last paint drew the boundary lines and circles. */
+    handlesShown: boolean;
   }>;
 }
 
@@ -179,7 +181,13 @@ export class FixedRangeProfileTool implements ChartTool {
     return {
       boundaries: () => this.boundaries(),
       selection: () => this.selection(),
-      drawings: () => this.drawings.entries().map(({ id, locked, drawing }) => ({ id, locked, ...drawing.summary() })),
+      drawings: () =>
+        this.drawings.entries().map(({ id, locked, drawing }) => ({
+          id,
+          locked,
+          ...drawing.summary(),
+          handlesShown: drawing.wereHandlesPainted(),
+        })),
     };
   }
 
@@ -247,7 +255,7 @@ export class FixedRangeProfileTool implements ChartTool {
     }
     const range = spanBetweenAnchors(this.host.barSeries, this.first, this.hover);
     const handles = FixedRangeProfileDrawing.handleXsFor(this.host.geometry, range);
-    FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles, { selected: false });
+    FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles);
   }
 
   /** The collection entry of one drawing, or undefined when the tool no longer holds that id. */
@@ -278,12 +286,15 @@ export class FixedRangeProfileTool implements ChartTool {
     return { range, hasProfile: drawing?.hasProfile() ?? false };
   }
 
-  /** The topmost visible unlocked drawing with a handle under the pane x, with the side that press would drag. */
+  /**
+   * The selected drawing's handle under the pane x, with the side that press would drag. Only a selected
+   * drawing shows its handles, so only its handles can be grabbed; a locked one lets the chart pan.
+   */
   private unlockedHandleAt(x: number): { drawing: FixedRangeProfileDrawing; side: 'from' | 'end' } | null {
     const entries = this.drawings.entries();
     for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const { id, drawing, locked, visible } = entries[index];
-      const grabbable = !locked && visible && this.host.drawingShownOnTimeframe(id);
+      const { id, drawing, locked, visible, selected } = entries[index];
+      const grabbable = selected && !locked && visible && this.host.drawingShownOnTimeframe(id);
       const side = grabbable ? drawing.handleAt(x) : null;
       if (side !== null) {
         return { drawing, side };

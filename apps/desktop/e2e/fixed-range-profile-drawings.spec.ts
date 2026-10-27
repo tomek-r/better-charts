@@ -3,7 +3,7 @@ import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarket
 import { createFakeToolHost, oneMinuteBars, SLOT_WIDTH_PX, FAKE_SYMBOL } from './helpers/fakeToolHost';
 import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/tool';
 import { readFixedRangeProfilePoints } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfilePoints';
-import type { ChartDrawingPaintTarget } from '../src/features/chart/engine/tools/toolContract';
+import type { ChartDrawingPaintTarget, ChartDrawTarget } from '../src/features/chart/engine/tools/toolContract';
 
 /**
  * Many independent drawings of one tool: two placements no longer replace each other, each drawing has
@@ -45,8 +45,8 @@ function answerInFlight({ market }: Session): void {
   market.publisher.publishTickProfile(profileResultFor(market.requests[market.requests.length - 1], FAKE_SYMBOL));
 }
 
-/** The handle circles one paint pass draws: two per visible drawing, none for a hidden one. */
-function paintedHandles({ tool, fakeHost }: Session): number {
+/** A canvas context that ignores every call but counts the circles it is asked to draw. */
+function circleCountingContext(): { context: CanvasRenderingContext2D; arcCount: () => number } {
   let arcs = 0;
   const context = {
     save: () => undefined,
@@ -61,6 +61,12 @@ function paintedHandles({ tool, fakeHost }: Session): number {
       arcs += 1;
     },
   } as unknown as CanvasRenderingContext2D;
+  return { context, arcCount: () => arcs };
+}
+
+/** The handle circles one paint pass draws: two per selected visible drawing, none for the others. */
+function paintedHandles({ tool, fakeHost }: Session): number {
+  const { context, arcCount } = circleCountingContext();
   const target = {
     context,
     viewport: fakeHost.host.geometry.viewport(),
@@ -71,7 +77,7 @@ function paintedHandles({ tool, fakeHost }: Session): number {
       tool.drawDrawing(target, drawingId);
     }
   }
-  return arcs;
+  return arcCount();
 }
 
 /** The ids of a tool's drawings, bottom to top. */
@@ -120,23 +126,81 @@ test('hits answers over a drawing band and nothing outside it', () => {
   expect(tool.drawings.hits(tool.testApi().drawings()[2].id, FIRST_FROM_X + 5, PANE_Y)).toBe(true);
 });
 
-test('a hidden drawing is not painted, and paints its handles again once shown', () => {
+test('an unselected drawing paints no handles, a selected one paints both, and deselecting hides them again', () => {
   const session = createSession();
   session.place(FIRST_CLICKS);
   const [drawing] = session.tool.testApi().drawings();
+  expect(paintedHandles(session)).toBe(0);
+  expect(session.tool.testApi().drawings()[0].handlesShown).toBe(false);
+
+  session.tool.drawings.select(drawing.id);
+  expect(paintedHandles(session)).toBe(2);
+  expect(session.tool.testApi().drawings()[0].handlesShown).toBe(true);
+
+  session.tool.drawings.select(null);
+  expect(paintedHandles(session)).toBe(0);
+  expect(session.tool.testApi().drawings()[0].handlesShown).toBe(false);
+});
+
+test('a hidden drawing is not painted, and paints its handles again once shown and selected', () => {
+  const session = createSession();
+  session.place(FIRST_CLICKS);
+  const [drawing] = session.tool.testApi().drawings();
+  session.tool.drawings.select(drawing.id);
   expect(paintedHandles(session)).toBe(2);
 
   session.tool.drawings.setVisible(drawing.id, false);
   expect(paintedHandles(session)).toBe(0);
 
   session.tool.drawings.setVisible(drawing.id, true);
+  expect(paintedHandles(session)).toBe(0);
+  session.tool.drawings.select(drawing.id);
   expect(paintedHandles(session)).toBe(2);
+});
+
+test('a press on the hidden handle of an unselected drawing starts no drag', () => {
+  const session = createSession();
+  session.place(FIRST_CLICKS);
+  const [drawing] = session.tool.testApi().drawings();
+
+  expect(session.tool.pointerDown(FIRST_FROM_X, PANE_Y, 'editExistingDrawing')).toBe(false);
+  expect(session.tool.hasGesture()).toBe(false);
+
+  session.tool.drawings.select(drawing.id);
+  expect(session.tool.pointerDown(FIRST_FROM_X, PANE_Y, 'editExistingDrawing')).toBe(true);
+  session.tool.pointerUp('cancelled');
+});
+
+test('a half-placed range paints its handles before the second click', () => {
+  const { tool, fakeHost } = createSession();
+  const { context, arcCount } = circleCountingContext();
+  tool.pointerDown(25, PANE_Y, 'startNewDrawing');
+  tool.pointerUp('released');
+  tool.pointerMove(65);
+  tool.draw({
+    context,
+    viewport: fakeHost.host.geometry.viewport(),
+    layer: { surface: 'pane', depth: 'belowTradingOverlays' },
+  } as ChartDrawTarget);
+  expect(arcCount()).toBe(2);
+});
+
+test('a boundary drag keeps painting the handles of the drawing it edits', () => {
+  const session = createSession();
+  session.place(FIRST_CLICKS);
+  const [drawing] = session.tool.testApi().drawings();
+  session.tool.drawings.select(drawing.id);
+  session.tool.pointerDown(FIRST_FROM_X, PANE_Y, 'editExistingDrawing');
+  session.tool.pointerMove(FIRST_FROM_X + SLOT_WIDTH_PX);
+  expect(paintedHandles(session)).toBe(2);
+  session.tool.pointerUp('cancelled');
 });
 
 test('a hidden drawing is not hit and its handle starts no drag', () => {
   const session = createSession();
   session.place(FIRST_CLICKS);
   const [drawing] = session.tool.testApi().drawings();
+  session.tool.drawings.select(drawing.id);
   session.tool.drawings.setVisible(drawing.id, false);
 
   expect(session.tool.drawings.hits(drawing.id, FIRST_FROM_X, PANE_Y)).toBe(false);
@@ -171,8 +235,10 @@ function sessionWithTwoDrawings() {
 test('a locked drawing ignores its handle while an unlocked one commits one reported edit', () => {
   const { session, first, second } = sessionWithTwoDrawings();
   expect(session.tool.drawings.setLocked(first.id, true)).toBe(true);
+  session.tool.drawings.select(first.id);
   expect(session.tool.pointerDown(FIRST_FROM_X, PANE_Y, 'editExistingDrawing')).toBe(false);
   expect(session.tool.testApi().drawings()[0].range).toEqual(first.range);
+  session.tool.drawings.select(second.id);
   expect(session.tool.pointerDown(SECOND_FROM_X, PANE_Y, 'editExistingDrawing')).toBe(true);
   session.tool.pointerMove(SECOND_FROM_X + SLOT_WIDTH_PX);
   session.tool.pointerUp('released');

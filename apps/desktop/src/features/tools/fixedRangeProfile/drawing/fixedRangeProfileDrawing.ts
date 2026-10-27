@@ -87,6 +87,8 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
   private settings: FixedRangeProfileSettings = DEFAULT_FIXED_RANGE_PROFILE_SETTINGS;
   /** Whether the collection shows this drawing; a hidden one asks for nothing, so a settings change waits. */
   private shown = false;
+  /** Whether the last paint drew the boundary lines and circles; the e2e suite reads it instead of sampling pixels. */
+  private handlesPainted = false;
 
   private constructor(
     private readonly host: ChartToolHost,
@@ -131,15 +133,10 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
   }
 
   /**
-   * The two dashed boundary lines and their handle circles, painted at the given pane x. The
-   * selection fills the circles with the accent colour so the picked drawing reads as picked.
+   * The two dashed boundary lines and their handle circles, painted at the given pane x. A committed
+   * drawing calls this only while selected, a half-placed range while its second click is pending.
    */
-  static drawHandles(
-    ctx: CanvasRenderingContext2D,
-    viewport: RenderViewport,
-    handles: HandleEdges,
-    options: { selected: boolean },
-  ): void {
+  static drawHandles(ctx: CanvasRenderingContext2D, viewport: RenderViewport, handles: HandleEdges): void {
     const { height } = viewport.chartRect;
     ctx.strokeStyle = palette.textLabel;
     ctx.lineWidth = 1;
@@ -152,7 +149,7 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
       ctx.setLineDash([]);
       ctx.beginPath();
       ctx.arc(x, height / 2, HANDLE_RADIUS_PX, 0, Math.PI * 2);
-      ctx.fillStyle = options.selected ? palette.accent : palette.panel;
+      ctx.fillStyle = palette.panel;
       ctx.fill();
       ctx.stroke();
       ctx.setLineDash(HANDLE_DASH_PX);
@@ -248,6 +245,11 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
     return this.state.profile !== undefined && !this.state.previewing;
   }
 
+  /** Whether the last paint showed the boundary lines and circles. */
+  wereHandlesPainted(): boolean {
+    return this.handlesPainted;
+  }
+
   /** This drawing as the e2e suite names it: its window and its result. */
   summary(): FixedRangeProfileDrawingSummary {
     return { range: { fromMs: this.window.fromMs, endMs: this.window.endMs }, hasProfile: this.hasProfile() };
@@ -311,7 +313,10 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
     ctx.restore();
     // Veil the histogram but not the handles, which stay crisp; the loader goes on top of both.
     drawFixedRangeProfileLoadingWash(ctx, viewport, this.state, handles);
-    FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles, { selected: options.selected });
+    this.handlesPainted = options.selected;
+    if (options.selected) {
+      FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles);
+    }
     drawFixedRangeProfileSpinner(ctx, viewport, this.state, Date.now(), handles);
   }
 
