@@ -20,8 +20,12 @@ const END_X = 118;
 const RANGE = { fromMs: 1_000 + 3.5 * 60_000, toMs: 1_000 + 8 * 60_000 };
 const UP_COLOR = '#26a69a';
 const DOWN_COLOR = '#f7525f';
-// The pane is 600 wide: 20% is 120 px, below the 180 px cap.
-const FULL_LENGTH = 120;
+// The width setting is a share of the range, handle to handle: 45 px here, so the default 20% is 9 px.
+const RANGE_WIDTH = END_X - START_X;
+const FULL_LENGTH = RANGE_WIDTH * 0.2;
+// Up/Down mirrors around an axis half that extent inside the range, from its start (Left) or its end (Right).
+const LEFT_AXIS_X = START_X + FULL_LENGTH / 2;
+const RIGHT_AXIS_X = END_X - FULL_LENGTH / 2;
 
 const bin = (low: number, high: number, down: number, up: number): TickProfileBin => ({
   low: String(low),
@@ -65,12 +69,13 @@ test('no stored settings paint exactly what the defaults paint, and what the too
   const defaults = paint();
   expect(paint({}).ops).toEqual(defaults.ops);
   expect(defaults.rows).toHaveLength(6);
-  // Down weight 30 is the longest down bar (30/50 of 120) and up weight 50 the longest up bar.
+  // The mirrored bars share the extent: each side's longest is at most half of it, so the up weight 50 (the
+  // common maximum) takes half the extent and the down weight 30 takes 30/50 of that, around the axis.
   expect(defaults.hit.anchorX).toBe(START_X);
-  expect(defaults.hit.profileLeft).toBeCloseTo(START_X - 72, 9);
-  expect(defaults.hit.profileRight).toBe(START_X + FULL_LENGTH);
-  expect(withColor(defaults.rows, DOWN_COLOR).every((row) => row.maxX <= START_X)).toBe(true);
-  expect(withColor(defaults.rows, UP_COLOR).every((row) => row.minX >= START_X)).toBe(true);
+  expect(defaults.hit.profileLeft).toBeCloseTo(LEFT_AXIS_X - (FULL_LENGTH / 2) * (30 / 50), 9);
+  expect(defaults.hit.profileRight).toBeCloseTo(LEFT_AXIS_X + FULL_LENGTH / 2, 9);
+  expect(withColor(defaults.rows, DOWN_COLOR).every((row) => row.maxX <= LEFT_AXIS_X + 1e-9)).toBe(true);
+  expect(withColor(defaults.rows, UP_COLOR).every((row) => row.minX >= LEFT_AXIS_X - 1e-9)).toBe(true);
   expect(defaults.lines.map((line) => [line.style, line.dash])).toEqual([
     ['#ffd200', []],
     ['#f2f5fa', [4, 3]],
@@ -129,8 +134,8 @@ test('a row with equal down and up volume has no delta bar', () => {
 test('placement right hangs the bars from the range end: mirrored for up/down, growing left otherwise', () => {
   const mirrored = paint({ placement: 'Right' });
   expect(mirrored.hit.anchorX).toBe(END_X);
-  expect(mirrored.hit.profileLeft).toBeCloseTo(END_X - 72, 9);
-  expect(mirrored.hit.profileRight).toBe(END_X + FULL_LENGTH);
+  expect(mirrored.hit.profileLeft).toBeCloseTo(RIGHT_AXIS_X - (FULL_LENGTH / 2) * (30 / 50), 9);
+  expect(mirrored.hit.profileRight).toBeCloseTo(END_X, 9);
 
   for (const volume of ['Total', 'Delta']) {
     const { hit, rows } = paint({ placement: 'Right', volume });
@@ -141,9 +146,53 @@ test('placement right hangs the bars from the range end: mirrored for up/down, g
   }
 });
 
-test('the width setting sets the bar length and the 180 px cap still holds', () => {
-  expect(paint({ widthPercent: 10 }).hit.profileRight).toBe(START_X + 60);
-  expect(paint({ widthPercent: 50 }).hit.profileRight).toBe(START_X + 180);
+/** A profile whose largest down weight and largest up weight are equal, so a mirrored row can span the whole extent. */
+const BALANCED_PROFILE = { ...PROFILE, bins: [bin(140, 150, 50, 5), bin(150, 160, 5, 50)] };
+
+/** The leftmost and rightmost edge the histogram paints. */
+function paintedBounds(stored: ToolInputValues): { left: number; right: number } {
+  const state: FixedRangeProfileState = { range: RANGE, profile: { ...BALANCED_PROFILE, ...LEVELS }, hit: {} };
+  const { appearance } = readFixedRangeProfileSettings(stored);
+  drawFixedRangeProfile(
+    createRecordingCtx(() => undefined),
+    renderArgsFor(viewport).viewport,
+    state,
+    appearance,
+  );
+  return { left: state.hit.profileLeft!, right: state.hit.profileRight! };
+}
+
+test('the width percent is the share of the range the histogram spans, and the bars stay inside the range', () => {
+  for (const volume of ['Up/Down', 'Total', 'Delta']) {
+    for (const placement of ['Left', 'Right']) {
+      for (const widthPercent of [1, 20, 100]) {
+        // Every row of the balanced profile is the maximum of its mode (50 down or up, total 55, delta 45).
+        const { left, right } = paintedBounds({ volume, placement, widthPercent });
+        expect(Math.abs(right - left - (RANGE_WIDTH * widthPercent) / 100)).toBeLessThanOrEqual(1);
+        expect(left).toBeGreaterThanOrEqual(START_X - 1e-9);
+        expect(right).toBeLessThanOrEqual(END_X + 1e-9);
+      }
+    }
+  }
+});
+
+test('at 100 percent the widest row spans the whole range, with no pixel cap', () => {
+  for (const volume of ['Up/Down', 'Total', 'Delta']) {
+    const { left, right } = paintedBounds({ volume, widthPercent: 100 });
+    expect([left, right]).toEqual([START_X, END_X]);
+  }
+});
+
+test('a one-sided bar takes the whole extent from its anchor', () => {
+  expect(paint({ volume: 'Total', widthPercent: 10 }).hit.profileRight).toBeCloseTo(START_X + RANGE_WIDTH / 10, 9);
+  expect(paint({ volume: 'Delta', widthPercent: 100 }).hit.profileRight).toBeCloseTo(END_X, 9);
+});
+
+test('the bars are clipped to the range box as well as to the pane, and the level lines are not', () => {
+  const clips = paint().ops.filter((op) => op.kind === 'clip');
+  expect(clips).toHaveLength(2);
+  expect([clips[1].minX, clips[1].maxX]).toEqual([START_X, END_X]);
+  expect(clips[0].minX).toBe(chartRect.x);
 });
 
 test('the up and down colours restyle the bars', () => {

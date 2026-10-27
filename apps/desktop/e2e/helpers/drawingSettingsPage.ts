@@ -25,6 +25,19 @@ export async function mountSettingsForm(
   );
 }
 
+/** Opens the drop-down a field's label names and picks the option with that text, as a user would. */
+export async function chooseOption(page: Page, fieldLabel: string, optionText: string): Promise<void> {
+  await page.getByLabel(fieldLabel, { exact: true }).click();
+  await page.getByRole('option', { name: optionText, exact: true }).click();
+}
+
+/** How many times the form's Cancel button was pressed. */
+export async function cancelCount(page: Page): Promise<number> {
+  return page.evaluate(
+    () => (window as unknown as { __drawingSettings: { cancels: number } }).__drawingSettings.cancels,
+  );
+}
+
 /** Every draft the form saved, oldest first. */
 export async function savedValues(page: Page): Promise<ToolInputValues[]> {
   return page.evaluate(

@@ -107,7 +107,8 @@ export interface DrawingSettingsDialogProps {
 
 /**
  * The settings dialog of one drawing. It is portalled to the page body because the chart frame is a
- * clipped stacking context: the modal has to cover the whole window, the tool rail included.
+ * clipped stacking context: the modal has to cover the whole window, the tool rail included. Unlike the
+ * other modals it hangs from a fixed offset below the top edge, so switching tabs never moves it.
  */
 export function DrawingSettingsDialog({
   label,
@@ -121,6 +122,7 @@ export function DrawingSettingsDialog({
   return createPortal(
     <ModalDialog
       title={`${label} settings`}
+      backdropClassName="drawing-settings-backdrop"
       onDismiss={onClose}
       headerActions={<ModalDialogCloseButton label="Close drawing settings" onClick={onClose} />}
     >

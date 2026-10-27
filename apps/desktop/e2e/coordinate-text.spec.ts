@@ -19,7 +19,8 @@ import { STUB_M5_INTERVAL_MS, STUB_NOW } from './helpers/tauriStub';
 const BAR_MS = STUB_NOW - 3 * STUB_M5_INTERVAL_MS;
 const BAR_ISO = new Date(BAR_MS).toISOString();
 const BAR_DATE = BAR_ISO.slice(0, 10);
-const BAR_TIME = BAR_ISO.slice(11, 19);
+/** `HH:MM`: anchors are whole minutes, MT5's lowest timeframe being M1. */
+const BAR_TIME = BAR_ISO.slice(11, 16);
 
 const VALID_ROW: CoordinateRowText = { date: BAR_DATE, time: BAR_TIME, price: '1.0850' };
 
@@ -44,13 +45,24 @@ test('every anchor kind round trips through its text', () => {
 });
 
 test('the date and time are read as UTC, not as local time', () => {
-  const point = rowTextToPoint({ date: '2024-03-10', time: '12:34:56', price: '' }, 'time');
-  expect(point?.timeMs).toBe(Date.UTC(2024, 2, 10, 12, 34, 56));
-});
-
-test('a time of day without seconds is read as whole minutes', () => {
   const point = rowTextToPoint({ date: '2024-03-10', time: '12:34', price: '' }, 'time');
   expect(point?.timeMs).toBe(Date.UTC(2024, 2, 10, 12, 34));
+});
+
+test('a stored anchor with seconds shows the nearest minute: 29 s down, 30 s up', () => {
+  const minuteMs = Date.UTC(2024, 2, 10, 12, 34);
+  expect(pointToRowText({ timeMs: minuteMs + 29_000, price: null }).time).toBe('12:34');
+  expect(pointToRowText({ timeMs: minuteMs + 30_000, price: null }).time).toBe('12:35');
+  expect(pointToRowText({ timeMs: Date.UTC(2024, 2, 10, 23, 59, 45), price: null })).toMatchObject({
+    date: '2024-03-11',
+    time: '00:00',
+  });
+});
+
+test('a typed time with seconds is tolerated and rounded to the nearest minute, never stored with seconds', () => {
+  const read = (time: string) => rowTextToPoint({ date: '2024-03-10', time, price: '' }, 'time')?.timeMs;
+  expect(read('12:34:29')).toBe(Date.UTC(2024, 2, 10, 12, 34));
+  expect(read('12:34:30')).toBe(Date.UTC(2024, 2, 10, 12, 35));
 });
 
 test('a price is carried as written, never re-rounded', () => {

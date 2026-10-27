@@ -119,6 +119,12 @@ for (const { name, change } of RENDER_ONLY_CHANGES) {
   });
 }
 
+test('the width percent accepts 1 to 100 and falls back to 20 outside them', () => {
+  const widthOf = (widthPercent: number) => readFixedRangeProfileSettings({ widthPercent }).appearance.widthPercent;
+  expect([widthOf(1), widthOf(100)]).toEqual([1, 100]);
+  expect([widthOf(0), widthOf(101)]).toEqual([20, 20]);
+});
+
 test('an inactive field changes nothing the backend would compute', () => {
   const { collection, market, id } = holdOneDrawing();
   collection.setInputs(id, { ...DEFAULT_VALUES, ticksPerRow: 40 });

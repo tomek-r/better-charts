@@ -11,14 +11,14 @@ import type { ChartDrawingPaintTarget } from '../src/features/chart/engine/tools
  * exactly one of them. The tool keeps its gestures and its paint; the engine's collection keeps the
  * drawings themselves.
  *
- * The fake series is ten one-minute bars from 1_000 s, so a click at slot * SLOT_WIDTH_PX lands on that
+ * The fake series is ten one-minute bars from 1_020 s, so a click at slot * SLOT_WIDTH_PX lands on that
  * bar and a two-click placement commits the bar window it spans.
  */
 
 const PANE_Y = 200;
-/** Slots 2..6: the window [1_120_000, 1_420_000) ms, handles at x 20 and 60. */
+/** Slots 2..6: the window [1_140_000, 1_440_000) ms, handles at x 20 and 60. */
 const FIRST_CLICKS = [25, 65];
-/** Slots 8..9: the window [1_480_000, 1_600_000) ms, handles at x 80 and 90. */
+/** Slots 8..9: the window [1_500_000, 1_620_000) ms, handles at x 80 and 90. */
 const SECOND_CLICKS = [85, 95];
 const FIRST_FROM_X = 20;
 const SECOND_FROM_X = 80;
@@ -92,8 +92,8 @@ test('two placements keep two drawings and report each new id once', () => {
   expect(fakeHost.placedIds).toEqual([drawings[0].id, drawings[1].id]);
   expect(fakeHost.changeCount()).toBe(0);
   expect(drawings.map((drawing) => drawing.locked)).toEqual([false, false]);
-  expect(drawings[0].range).toEqual({ fromMs: 1_120_000, endMs: 1_420_000 });
-  expect(drawings[1].range).toEqual({ fromMs: 1_480_000, endMs: 1_600_000 });
+  expect(drawings[0].range).toEqual({ fromMs: 1_140_000, endMs: 1_440_000 });
+  expect(drawings[1].range).toEqual({ fromMs: 1_500_000, endMs: 1_620_000 });
 });
 
 test('the second drawing asks for its profile only once the first one answered', () => {
@@ -102,7 +102,7 @@ test('the second drawing asks for its profile only once the first one answered',
   session.place(SECOND_CLICKS);
   expect(session.market.requests).toHaveLength(1);
   answerInFlight(session);
-  expect(session.market.requests.map((request) => request.fromMs)).toEqual([1_120_000, 1_480_000]);
+  expect(session.market.requests.map((request) => request.fromMs)).toEqual([1_140_000, 1_500_000]);
 });
 
 test('hits answers over a drawing band and nothing outside it', () => {
@@ -155,7 +155,7 @@ test('hiding a drawing whose request waits drops it from the queue, showing it a
   expect(session.market.requests).toHaveLength(1);
 
   session.tool.drawings.setVisible(second.id, true);
-  expect(session.market.requests.map((request) => request.fromMs)).toEqual([1_120_000, 1_480_000]);
+  expect(session.market.requests.map((request) => request.fromMs)).toEqual([1_140_000, 1_500_000]);
 });
 
 /** Two placed drawings whose first profile request was answered, so the second one is in flight. */
@@ -177,7 +177,7 @@ test('a locked drawing ignores its handle while an unlocked one commits one repo
   session.tool.pointerMove(SECOND_FROM_X + SLOT_WIDTH_PX);
   session.tool.pointerUp('released');
   expect(session.fakeHost.changeCount()).toBe(1);
-  expect(session.tool.testApi().drawings()[1].range).toEqual({ fromMs: 1_540_000, endMs: 1_600_000 });
+  expect(session.tool.testApi().drawings()[1].range).toEqual({ fromMs: 1_560_000, endMs: 1_620_000 });
   expect(second.locked).toBe(false);
 });
 
@@ -215,8 +215,8 @@ test('a stored drawing exports the points, the lock and the visibility it arrive
   const [record] = source.tool.drawings.exportRecords();
   expect(record.visible).toBe(true);
   expect(record.points).toEqual([
-    { timeMs: 1_120_000, price: null },
-    { timeMs: 1_420_000, price: null },
+    { timeMs: 1_140_000, price: null },
+    { timeMs: 1_440_000, price: null },
   ]);
 
   const target = createSession();
@@ -224,6 +224,32 @@ test('a stored drawing exports the points, the lock and the visibility it arrive
 
   expect(target.tool.drawings.exportRecords()).toEqual([{ ...record, visible: false }]);
   expect(target.market.requests).toEqual([]);
+});
+
+test('a stored drawing with second-precision anchors loads on whole minutes and requests whole minutes', () => {
+  const source = createSession();
+  source.place(FIRST_CLICKS);
+  const [record] = source.tool.drawings.exportRecords();
+  const [start, end] = record.points;
+  const target = createSession();
+  target.tool.drawings.importRecords([
+    {
+      ...record,
+      points: [
+        { ...start, timeMs: (start.timeMs ?? 0) + 40_000 },
+        { ...end, timeMs: (end.timeMs ?? 0) + 20_000 },
+      ],
+    },
+  ]);
+
+  // 40 s past the start rounds up to the next minute, 20 s past the end rounds down to the end.
+  expect(target.tool.drawings.exportRecords()[0].points).toEqual([
+    { timeMs: (start.timeMs ?? 0) + 60_000, price: null },
+    { timeMs: end.timeMs, price: null },
+  ]);
+  expect(target.market.requests).toHaveLength(1);
+  expect(target.market.requests[0].fromMs % 60_000).toBe(0);
+  expect(target.market.requests[0].endMs % 60_000).toBe(0);
 });
 
 test('an import drops a record whose points do not name a window', () => {

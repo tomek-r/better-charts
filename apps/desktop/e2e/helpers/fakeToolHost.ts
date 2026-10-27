@@ -6,7 +6,8 @@ export const FAKE_SYMBOL = 'DEMO.TEST';
 /** Pane x of one bar slot: a click at `slot * SLOT_WIDTH_PX` lands on that bar. */
 export const SLOT_WIDTH_PX = 10;
 
-const FIRST_BAR_SECONDS = 1_000;
+/** A whole minute, like every real bar time: a drawing's window is aligned to whole minutes. */
+const FIRST_BAR_SECONDS = 1_020;
 const BAR_SECONDS = 60;
 const BAR_COUNT = 10;
 const PANE_WIDTH = 600;
@@ -34,7 +35,7 @@ export interface FakeToolHost {
   setQuoteTime(timeMs: number | undefined): void;
 }
 
-/** Ten one-minute bars from 1_000 s: the series every fake host starts with. */
+/** Ten one-minute bars from 1_020 s: the series every fake host starts with. */
 export function oneMinuteBars(): Array<{ time: number }> {
   return Array.from({ length: BAR_COUNT }, (_, index) => ({ time: FIRST_BAR_SECONDS + index * BAR_SECONDS }));
 }

@@ -14,10 +14,10 @@ const WINDOW_END_MS = STUB_NOW - 3 * STUB_M5_INTERVAL_MS;
 /** An earlier bar still after the window's start. */
 const EARLIER_END_MS = STUB_NOW - 5 * STUB_M5_INTERVAL_MS;
 
-/** The text a date and a time field show for an instant, in UTC. */
+/** The text a date and a time field show for an instant, in UTC: the time is `HH:MM`, anchors being whole minutes. */
 function utcFieldTexts(timeMs: number): { date: string; time: string } {
   const iso = new Date(timeMs).toISOString();
-  return { date: iso.slice(0, 10), time: iso.slice(11, 19) };
+  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
 }
 
 /** The anchors of a profile window, the way the chart exports and the backend stores them. */

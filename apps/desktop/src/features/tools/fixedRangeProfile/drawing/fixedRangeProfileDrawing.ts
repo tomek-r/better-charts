@@ -19,6 +19,7 @@ import {
 import {
   isRangeOpen,
   lastSlotOpenBefore,
+  minuteAlignedWindow,
   rangeEndingAtAnchor,
   type FixedRangeProfileRange,
   type PlacedFixedRangeProfile,
@@ -227,7 +228,7 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
         return null;
       }
       const index = Math.min(anchor.index, lastAllowedIndex);
-      return { ...original, fromMs: bars[index].time * 1000 };
+      return { ...original, ...minuteAlignedWindow({ fromMs: bars[index].time * 1000, endMs: original.endMs }) };
     }
     const firstAllowedIndex = bars.findIndex((bar) => bar.time * 1000 >= original.fromMs);
     if (firstAllowedIndex < 0) {

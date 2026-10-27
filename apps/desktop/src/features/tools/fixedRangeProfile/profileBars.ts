@@ -2,8 +2,6 @@ import type { RenderViewport } from '../../chart/engine/tools/toolContract';
 import type { ProfileResult, TickProfileBin } from '../../../shared/bridge/types';
 import type { FixedRangeProfileAppearance, FixedRangeProfilePlacement, FixedRangeProfileVolumeMode } from './settings';
 
-/** The longest a bar may grow, whatever share of a wide pane the width setting asks for. */
-const MAX_BAR_LENGTH_PX = 180;
 const ROW_ALPHA = 0.75;
 const POC_ROW_ALPHA = 1;
 
@@ -42,10 +40,23 @@ interface RowWeights {
 /** Turns a weight into a bar length in px. */
 type WeightLength = (weight: number) => number;
 
+/** How a row's bars are measured: weight to length, the growth direction, and where a mirrored profile's axis sits. */
+interface BarGeometry {
+  readonly lengthOf: WeightLength;
+  readonly growth: Growth;
+  /** The offset from the anchor of the line down and up bars mirror around: half the extent inward from the anchor. */
+  readonly mirrorAxis: number;
+}
+
 interface VolumeLayout {
+  /**
+   * The share of the histogram's extent the longest bar may take: a mirrored profile spends it on both sides, so
+   * each side gets half, and a row with the maximum on both sides spans the whole extent.
+   */
+  longestBarShare: number;
   /** The weight of the row's longest bar: the largest of these over all rows is what a full-length bar stands for. */
   barWeight(weights: RowWeights): number;
-  segments(weights: RowWeights, lengthOf: WeightLength, growth: Growth): BarSegment[];
+  segments(weights: RowWeights, geometry: BarGeometry): BarSegment[];
 }
 
 /** The span `[start, end]` measured along the growth direction, as an offset from the anchor. */
@@ -54,25 +65,28 @@ function outward(start: number, end: number, growth: Growth, side: BarSegment['s
 }
 
 const VOLUME_LAYOUTS: Readonly<Record<FixedRangeProfileVolumeMode, VolumeLayout>> = {
-  // Down to the left of the anchor, up to its right, whichever end the anchor is.
+  // Down to the left of the mirror axis, up to its right; the axis sits inside the range so nothing leaves it.
   upDown: {
+    longestBarShare: 0.5,
     barWeight: ({ up, down }) => Math.max(up, down),
-    segments: ({ up, down }, lengthOf) => [
-      { from: -lengthOf(down), to: 0, side: 'down' },
-      { from: 0, to: lengthOf(up), side: 'up' },
+    segments: ({ up, down }, { lengthOf, mirrorAxis }) => [
+      { from: mirrorAxis - lengthOf(down), to: mirrorAxis, side: 'down' },
+      { from: mirrorAxis, to: mirrorAxis + lengthOf(up), side: 'up' },
     ],
   },
   // The down part first, the up part stacked after it.
   total: {
+    longestBarShare: 1,
     barWeight: ({ up, down }) => up + down,
-    segments: ({ up, down }, lengthOf, growth) => [
+    segments: ({ up, down }, { lengthOf, growth }) => [
       outward(0, lengthOf(down), growth, 'down'),
       outward(lengthOf(down), lengthOf(up + down), growth, 'up'),
     ],
   },
   delta: {
+    longestBarShare: 1,
     barWeight: ({ up, down }) => Math.abs(up - down),
-    segments: ({ up, down }, lengthOf, growth) => [
+    segments: ({ up, down }, { lengthOf, growth }) => [
       outward(0, lengthOf(Math.abs(up - down)), growth, up >= down ? 'up' : 'down'),
     ],
   },
@@ -92,24 +106,32 @@ function weightsOf(bin: TickProfileBin): RowWeights {
 
 /**
  * The rows of a profile at the viewport's price scale. One COMMON denominator covers every row so
- * dominance is comparable; the floor of 1 only matters when every weight is 0.
+ * dominance is comparable; the floor of 1 only matters when every weight is 0. The histogram's widest
+ * extent is the width setting's share of `rangeWidth`, the px between the range's two handles, and the
+ * bars hang from the anchor inward, so they stay inside the range.
  */
 export function layoutProfileBars(
   profile: ProfileResult,
   viewport: RenderViewport,
   appearance: FixedRangeProfileAppearance,
+  rangeWidth: number,
 ): ProfileBarsLayout {
   const layout = VOLUME_LAYOUTS[appearance.volumeMode];
   const growth = GROWTH_BY_PLACEMENT[appearance.placement];
-  const maxLength = Math.min(MAX_BAR_LENGTH_PX, viewport.chartRect.width * (appearance.widthPercent / 100));
+  const histogramExtent = rangeWidth * (appearance.widthPercent / 100);
+  const longestBarLength = histogramExtent * layout.longestBarShare;
   const maxWeight = profile.bins.reduce((largest, bin) => Math.max(largest, layout.barWeight(weightsOf(bin))), 1);
-  const lengthOf: WeightLength = (weight) => maxLength * (weight / maxWeight);
+  const geometry: BarGeometry = {
+    lengthOf: (weight) => longestBarLength * (weight / maxWeight),
+    growth,
+    mirrorAxis: (growth * histogramExtent) / 2,
+  };
 
   const pocPrice = Number(profile.poc);
   const pocValid = Number.isFinite(pocPrice);
   let pocClaimed = false;
-  let reachLeft = 0;
-  let reachRight = 0;
+  let reachLeft = Number.POSITIVE_INFINITY;
+  let reachRight = Number.NEGATIVE_INFINITY;
   const rows: ProfileRow[] = [];
   for (const bin of profile.bins) {
     const low = Number(bin.low);
@@ -123,14 +145,15 @@ export function layoutProfileBars(
     if (isPoc) {
       pocClaimed = true;
     }
-    const segments = layout.segments(weightsOf(bin), lengthOf, growth);
+    const segments = layout.segments(weightsOf(bin), geometry);
     for (const { from, to } of segments) {
       reachLeft = Math.min(reachLeft, from);
       reachRight = Math.max(reachRight, to);
     }
     rows.push({ top: viewport.priceToY(binHigh), bottom: viewport.priceToY(binLow), isPoc, segments });
   }
-  return { rows, reachLeft, reachRight };
+  // Nothing painted reaches nowhere: the extent collapses onto the anchor.
+  return rows.length === 0 ? { rows, reachLeft: 0, reachRight: 0 } : { rows, reachLeft, reachRight };
 }
 
 /** Paints the rows hanging from `anchorX`; a side without volume paints nothing (a zero-width rect is an empty op). */

@@ -1,6 +1,6 @@
 import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
 import type { ChartDrawingPointRule } from '../../../chart/engine/drawings/toolDrawings';
-import type { FixedRangeProfileRange } from '../range';
+import { minuteAlignedWindow, type FixedRangeProfileRange } from '../range';
 
 /**
  * The points one fixed range volume profile drawing stores: the two edges of the profile window as time anchors. The
@@ -36,5 +36,6 @@ export function readFixedRangeProfilePoints(points: readonly ChartDrawingPoint[]
   if (fromMs === null || endMs === null || fromMs >= endMs) {
     return undefined;
   }
-  return { fromMs, endMs };
+  // Older drawings may carry seconds: they load on whole minutes, and the next save stores them so.
+  return minuteAlignedWindow({ fromMs, endMs });
 }

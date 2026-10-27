@@ -8,7 +8,7 @@ import type { ChartDrawingAnchor } from '../../chart/engine/drawings/toolDrawing
 export interface CoordinateRowText {
   /** `YYYY-MM-DD`, the value of a date input. */
   readonly date: string;
-  /** `HH:MM:SS` (`HH:MM` is accepted too), the value of a time input with a one-second step. */
+  /** `HH:MM`, the value of a time input with a one-minute step: MT5's lowest timeframe is M1. */
   readonly time: string;
   /** Decimal price text, kept as the user wrote it so a stored price is never re-rounded. */
   readonly price: string;
@@ -20,7 +20,7 @@ const DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_TEXT = /^(\d{2}):(\d{2})(?::(\d{2}))?$/;
 const DATE_CHARS = 10;
 const TIME_CHARS_START = 11;
-const TIME_CHARS_END = 19;
+const TIME_CHARS_END = 16;
 const MS_PER_SECOND = 1000;
 const MS_PER_MINUTE = 60 * MS_PER_SECOND;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
@@ -54,7 +54,16 @@ function utcDayStartMs(date: string): number | undefined {
   return new Date(dayStartMs).toISOString().slice(0, DATE_CHARS) === date ? dayStartMs : undefined;
 }
 
-/** The milliseconds since midnight the clock text names, or undefined when it is not a time of day. */
+/** The instant rounded to the nearest whole minute: MT5's lowest timeframe is M1, so anchors never carry seconds. */
+function nearestMinuteMs(timeMs: number): number {
+  return Math.round(timeMs / MS_PER_MINUTE) * MS_PER_MINUTE;
+}
+
+/**
+ * The milliseconds since midnight the clock text names, on a whole minute, or undefined when it is not a time
+ * of day. A typed `HH:MM:SS` is still read (pasted text, an older habit) and rounded to the nearest minute
+ * instead of rejected.
+ */
 function timeOfDayMs(time: string): number | undefined {
   const match = TIME_TEXT.exec(time);
   if (match === null) {
@@ -66,7 +75,7 @@ function timeOfDayMs(time: string): number | undefined {
   if (hours >= HOURS_PER_DAY || minutes >= MINUTES_PER_HOUR || seconds >= SECONDS_PER_MINUTE) {
     return undefined;
   }
-  return hours * MS_PER_HOUR + minutes * MS_PER_MINUTE + seconds * MS_PER_SECOND;
+  return nearestMinuteMs(hours * MS_PER_HOUR + minutes * MS_PER_MINUTE + seconds * MS_PER_SECOND);
 }
 
 /** The instant the row's date and time name, or undefined while either is invalid. */
@@ -81,7 +90,7 @@ export function pointToRowText({ timeMs, price }: ChartDrawingPoint): Coordinate
   if (timeMs === null) {
     return { ...EMPTY_ROW, price: price ?? '' };
   }
-  const iso = new Date(timeMs).toISOString();
+  const iso = new Date(nearestMinuteMs(timeMs)).toISOString();
   return { date: iso.slice(0, DATE_CHARS), time: iso.slice(TIME_CHARS_START, TIME_CHARS_END), price: price ?? '' };
 }
 

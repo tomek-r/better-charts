@@ -26,10 +26,14 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   whole-tick row height that fits, and `actualRows` reports the rows used.
   The drawing's settings dialog has Inputs (Rows Layout with Row Size or Ticks Per Row,
   Volume Up/Down, Total or Delta, Value Area Volume %, Extend Right) and Style (Up and Down
-  Volume colours, POC/VAH/VAL lines, Width % of pane, Placement Left or Right). Defaults
+  Volume colours, POC/VAH/VAL lines, Width % of range, Placement Left or Right). Defaults
   paint the original look: down bars left and up bars right of the range start, solid POC,
   dashed VAH/VAL, lines to the pane's right edge. Rows layout and value area re-request the
   profile; everything else only repaints.
+  The dialog hangs from a fixed offset below the window's top edge, shows one setting per row
+  (label left, control right), and uses an app-styled drop-down instead of the native select.
+  A style's colour (and a line's thickness and line style) is edited in one colour picker
+  popover; colours are stored as `#rrggbb`, or `#rrggbbaa` when not fully opaque.
 - The last chart window survives an app restart: on connect the app reopens the symbol and timeframe saved for the same login and broker server, and only when the broker still lists that symbol and serves that timeframe; another account, or a symbol the broker no longer lists, keeps the session default.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.

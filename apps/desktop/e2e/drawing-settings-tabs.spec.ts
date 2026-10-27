@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { ToolInputDefinition } from '../src/features/chart/engine/drawings/toolInputs';
 import { defaultToolStyleValues } from '../src/features/chart/engine/drawings/toolStyles';
+import { HUE_ROW } from '../src/shared/ui/colorPicker/colorPalette';
 import { mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
 import { ALL_STYLES, POC_LINE } from './helpers/toolStyleFixtures';
 
@@ -8,6 +9,9 @@ import { ALL_STYLES, POC_LINE } from './helpers/toolStyleFixtures';
  * The tabbed settings form: tabs only for what the tool declares, arrow-key navigation, inputs laid out
  * inline or switched off by `activeWhen`, and the Style tab's field per kind saved as flat scalar keys.
  */
+
+/** A preset of the colour picker's hue row, so the swatch exists to click. */
+const BLUE = HUE_ROW[6];
 
 const BARS_INPUT = { kind: 'int', id: 'bars', title: 'Bars', defaultValue: 20 } satisfies ToolInputDefinition;
 const MODE_INPUT = {
@@ -103,7 +107,6 @@ test('the Style tab renders a field for every style kind, children indented', as
     'Volume profile',
     'POC',
     'POC colour',
-    'POC line style',
     'Histogram Box',
     'Value Area Up',
     'Value Area Up colour',
@@ -131,23 +134,24 @@ test('unchecking a parent disables its children and keeps their values', async (
 test('editing a line colour and a toggle then OK saves the flattened values', async ({ page }) => {
   await mountSettingsForm(page, { styles: ALL_STYLES });
 
-  await page.getByLabel('POC colour', { exact: true }).fill('#0000ff');
+  await page.getByLabel('POC colour', { exact: true }).click();
+  await page.getByRole('button', { name: BLUE, exact: true }).click();
+  await page.keyboard.press('Escape');
   await page.getByLabel('Volume profile', { exact: true }).uncheck();
   await page.getByRole('button', { name: 'OK', exact: true }).click();
 
   expect(await savedValues(page)).toEqual([
-    { ...defaultToolStyleValues(ALL_STYLES), 'poc.color': '#0000ff', 'profile.visible': false },
+    { ...defaultToolStyleValues(ALL_STYLES), 'poc.color': BLUE, 'profile.visible': false },
   ]);
 });
 
 test('the line picker saves the chosen width and dash pattern', async ({ page }) => {
   await mountSettingsForm(page, { styles: [POC_LINE] });
 
-  await page.getByLabel('POC line style', { exact: true }).click();
-  await page.getByLabel('POC width', { exact: true }).selectOption('3');
-  await page.getByLabel('POC dash', { exact: true }).selectOption('dotted');
-  // The open popover would cover the footer, so the user closes it the way they opened it.
-  await page.getByLabel('POC line style', { exact: true }).click();
+  await page.getByLabel('POC colour', { exact: true }).click();
+  await page.getByRole('button', { name: '3 px', exact: true }).click();
+  await page.getByRole('button', { name: 'Dotted', exact: true }).click();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'OK', exact: true }).click();
 
   expect(await savedValues(page)).toEqual([

@@ -6,8 +6,8 @@ const FIELD_INPUTS: Readonly<
   Record<CoordinateFieldName, { readonly title: string; readonly type: HTMLInputTypeAttribute; readonly step?: number }>
 > = {
   date: { title: 'date', type: 'date' },
-  // One-second steps, so the browser shows the seconds a bar time may carry.
-  time: { title: 'time', type: 'time', step: 1 },
+  // One-minute steps and no seconds: MT5's lowest timeframe is M1, so an anchor is a whole minute.
+  time: { title: 'time', type: 'time', step: 60 },
   price: { title: 'price', type: 'text' },
 };
 

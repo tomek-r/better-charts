@@ -30,7 +30,6 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
     title: 'Rows Layout',
     defaultValue: ROWS_BY_COUNT,
     options: [ROWS_BY_COUNT, ROWS_BY_TICKS],
-    inline: 'rows',
   },
   {
     kind: 'int',
@@ -40,7 +39,6 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
     minValue: 1,
     maxValue: 128,
     step: 1,
-    inline: 'rows',
     activeWhen: { inputId: 'rowsLayout', equals: ROWS_BY_COUNT },
   },
   {
@@ -51,7 +49,6 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
     minValue: 1,
     maxValue: 1000,
     step: 1,
-    inline: 'rows',
     activeWhen: { inputId: 'rowsLayout', equals: ROWS_BY_TICKS },
   },
   {
@@ -98,10 +95,10 @@ export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
   {
     kind: 'number',
     id: 'widthPercent',
-    title: 'Width (% of pane)',
+    title: 'Width (% of range)',
     defaultValue: 20,
-    minValue: 5,
-    maxValue: 50,
+    minValue: 1,
+    maxValue: 100,
     step: 1,
   },
   {
@@ -139,7 +136,7 @@ export interface FixedRangeProfileAppearance {
   readonly extendRight: boolean;
   readonly upColor: string;
   readonly downColor: string;
-  /** Share of the pane width the longest bar may take, in percent. */
+  /** Share of the range width (handle to handle) the histogram's widest extent takes, in percent. */
   readonly widthPercent: number;
   readonly poc: FixedRangeProfileLevelStyle;
   readonly vah: FixedRangeProfileLevelStyle;

@@ -1,9 +1,33 @@
 /* Settings of one drawing (DrawingSettingsDialog): a two-column label/control grid per group. */
 
+/*
+ * The dialog sits at a fixed offset from the top of the window, not centred: tabs differ in height, and a
+ * centred panel would move its top edge (and the tab bar under the pointer) with every switch.
+ */
+/* Two classes, to outrank the backdrop's own `place-items: center` whatever the stylesheet order. */
+.modal-dialog-backdrop.drawing-settings-backdrop {
+  --drawing-settings-top-offset: 72px;
+  align-items: start;
+  padding-top: var(--drawing-settings-top-offset);
+}
+
+.drawing-settings-backdrop .modal-dialog {
+  max-height: calc(100dvh - var(--drawing-settings-top-offset) - 12px);
+  overflow-y: auto;
+}
+
 .drawing-settings {
+  /* One step above the 13px the dialog used before, so labels and fields read comfortably. */
+  --drawing-settings-font-size: 15px;
+  --drawing-settings-control-width: 200px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  font-size: var(--drawing-settings-font-size);
+}
+
+.drawing-settings .modal-dialog-button {
+  font-size: 16px;
 }
 
 /* A field's label, control and tooltip join the group's grid directly. */
@@ -13,7 +37,7 @@
 
 .drawing-settings-group {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: minmax(0, 1fr) var(--drawing-settings-control-width);
   align-items: center;
   gap: 10px 14px;
   margin: 0;
@@ -25,25 +49,27 @@
   grid-column: 1 / -1;
   padding: 0;
   color: var(--color-text-bright);
-  font-size: 13px;
   font-weight: 500;
 }
 
 .drawing-settings-label {
   color: var(--color-text-label);
-  font-size: 13px;
 }
 
 .drawing-settings-control {
-  box-sizing: border-box;
   width: 100%;
+  font: inherit;
   padding: 7px 9px;
+  box-sizing: border-box;
+  background: var(--color-surface);
+  color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
-  color: var(--color-text);
-  background: var(--color-surface);
-  font: inherit;
-  font-size: 13px;
+}
+
+/* Room for four digits and the spin buttons, wherever the field sits. */
+.drawing-settings-control[type='number'] {
+  min-width: 96px;
 }
 
 .drawing-settings-control:focus-visible {
@@ -83,7 +109,7 @@
 
 .drawing-settings-color-hex {
   color: var(--color-text-tertiary);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* Tabs: a dim track under the row, with a light underline on the active tab. */
@@ -101,7 +127,6 @@
   color: var(--color-muted-strong);
   background: none;
   font: inherit;
-  font-size: 13px;
   cursor: pointer;
 }
 
@@ -125,7 +150,7 @@
   gap: 16px;
 }
 
-/* Inputs sharing an `inline` key: their labels and controls sit in one row of the group's grid. */
+/* Inputs sharing an `inline` key (a tool opts in): their labels and controls sit in one row of the grid. */
 .drawing-settings-inline-row {
   grid-column: 1 / -1;
   display: flex;
@@ -133,10 +158,15 @@
   gap: 10px 14px;
 }
 
-.drawing-settings-inline-row .drawing-settings-control {
+.drawing-settings-inline-row .drawing-settings-control,
+.drawing-settings-inline-row .select-button {
   flex: 1 1 0;
   width: auto;
   min-width: 0;
+}
+
+.drawing-settings-inline-row .drawing-settings-control[type='number'] {
+  min-width: 96px;
 }
 
 .drawing-settings-control:disabled,
@@ -144,7 +174,7 @@
   opacity: 0.5;
 }
 
-/* Style tab: one row per style; a child row is indented under its parent. */
+/* Style tab: one row per style, the title on the left and its control in the same column as the Inputs tab. */
 .drawing-settings-style-list {
   display: flex;
   flex-direction: column;
@@ -152,9 +182,10 @@
 }
 
 .drawing-settings-style-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--drawing-settings-control-width);
   align-items: center;
-  gap: 10px;
+  gap: 10px 14px;
 }
 
 .drawing-settings-style-row[data-child='true'] {
@@ -163,67 +194,13 @@
 
 .drawing-settings-style-title {
   display: flex;
-  flex: 1 1 auto;
   align-items: center;
   gap: 9px;
   color: var(--color-text-label);
-  font-size: 13px;
 }
 
-.drawing-settings-style-number,
-.drawing-settings-style-choice {
-  flex: 0 0 auto;
-  width: 120px;
-}
-
-.drawing-settings-color-input:disabled {
-  opacity: 0.5;
-}
-
-.drawing-settings-line-picker {
-  position: relative;
-}
-
-.drawing-settings-line-picker summary {
-  display: flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-  color: var(--color-text);
-  background: var(--color-surface);
-  cursor: pointer;
-  list-style: none;
-}
-
-.drawing-settings-line-picker summary::-webkit-details-marker {
-  display: none;
-}
-
-.drawing-settings-line-picker summary:focus-visible {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-ring);
-}
-
-.drawing-settings-line-picker[inert] {
-  opacity: 0.5;
-}
-
-.drawing-settings-line-popover {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 110px;
-  padding: 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--border-radius);
-  background: var(--color-panel);
+.drawing-settings-style-row .color-trigger {
+  justify-self: start;
 }
 
 /* Coordinates tab: one row per anchor, its label on the left and its fields side by side on the right. */
@@ -270,7 +247,6 @@
   align-items: center;
   gap: 9px;
   color: var(--color-text-label);
-  font-size: 13px;
 }
 
 .drawing-settings-range-field {
@@ -348,11 +324,9 @@
 .drawing-settings-error {
   margin: 0;
   color: var(--color-sell-border);
-  font-size: 13px;
 }
 
 .drawing-settings-empty {
   margin: 0;
   color: var(--color-muted-strong);
-  font-size: 13px;
 }

@@ -97,7 +97,8 @@ function drawLevelLines(
 
 /**
  * The profile of the drawn range. The bars hang from the range start (placement left) or from the range end
- * (placement right); `handles` gives the end x, which is otherwise the end of the requested range.
+ * (placement right) and never leave the range; `handles` gives the end x, which is otherwise the end of the
+ * requested range.
  */
 export function drawFixedRangeProfile(
   ctx: CanvasRenderingContext2D,
@@ -120,7 +121,7 @@ export function drawFixedRangeProfile(
     state.hit = {};
     return;
   }
-  const layout = layoutProfileBars(profile, viewport, appearance);
+  const layout = layoutProfileBars(profile, viewport, appearance, Math.max(0, endX - startX));
   const hit: FixedRangeProfileState['hit'] = {
     anchorX,
     profileLeft: anchorX + layout.reachLeft,
@@ -131,7 +132,13 @@ export function drawFixedRangeProfile(
   ctx.beginPath();
   ctx.rect(x, viewport.chartRect.y, width, viewport.chartRect.height);
   ctx.clip();
+  // The bars also stay inside the range box, whatever the pane shows of it.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(startX, viewport.chartRect.y, Math.max(0, endX - startX), viewport.chartRect.height);
+  ctx.clip();
   drawProfileBars(ctx, anchorX, layout, appearance);
+  ctx.restore();
   const lineEndX = appearance.extendRight ? x + width : endX;
   if (Number.isFinite(lineEndX)) {
     drawLevelLines(ctx, viewport, profile, appearance, { startX, endX: lineEndX }, hit);

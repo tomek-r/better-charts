@@ -1,7 +1,15 @@
 import { useId, type ReactNode } from 'react';
 import type { ToolInputValue, ToolInputValues } from '../../chart/engine/drawings/toolInputs';
-import { toolStyleKey, type ToolStyleDefinition } from '../../chart/engine/drawings/toolStyles';
-import { ColorSwatch, LinePicker, VisibleCheckbox } from './styleControls';
+import {
+  TOOL_STYLE_LINE_STYLES,
+  TOOL_STYLE_LINE_WIDTHS,
+  toolStyleKey,
+  type ToolStyleDefinition,
+} from '../../chart/engine/drawings/toolStyles';
+import { ColorPickerButton } from '../../../shared/ui/colorPicker/ColorPickerButton';
+import type { LineOptions } from '../../../shared/ui/colorPicker/LineOptionsSection';
+import { Select } from '../../../shared/ui/Select';
+import { VisibleCheckbox } from './styleControls';
 import { numberText, stringText } from './toolInputFields';
 
 /** What one style field is given: its definition, every draft value, and whether its row is locked. */
@@ -13,10 +21,26 @@ export interface ToolStyleFieldProps<Kind extends ToolStyleDefinition['kind']> {
   readonly disabled: boolean;
 }
 
+/** The thickness and dash pattern a line's picker edits; an invalid draft reads as a plain thin solid line. */
+function lineOptionsOf(
+  id: string,
+  values: ToolInputValues,
+  onChange: (key: string, value: ToolInputValue) => void,
+): LineOptions {
+  const width = values[toolStyleKey(id, 'width')];
+  return {
+    widths: TOOL_STYLE_LINE_WIDTHS,
+    dashStyles: TOOL_STYLE_LINE_STYLES,
+    width: typeof width === 'number' ? width : TOOL_STYLE_LINE_WIDTHS[0],
+    dashStyle: TOOL_STYLE_LINE_STYLES.find((style) => style === values[toolStyleKey(id, 'style')]) ?? 'solid',
+    onWidthChange: (next) => onChange(toolStyleKey(id, 'width'), next),
+    onDashStyleChange: (next) => onChange(toolStyleKey(id, 'style'), next),
+  };
+}
+
 function LineStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'line'>) {
   const { id, title } = definition;
   const visible = values[toolStyleKey(id, 'visible')] === true;
-  const controlsDisabled = disabled || !visible;
   return (
     <>
       <VisibleCheckbox
@@ -25,20 +49,12 @@ function LineStyleField({ definition, values, onChange, disabled }: ToolStyleFie
         disabled={disabled}
         onChange={(checked) => onChange(toolStyleKey(id, 'visible'), checked)}
       />
-      <ColorSwatch
+      <ColorPickerButton
         label={`${title} colour`}
-        value={values[toolStyleKey(id, 'color')]}
-        disabled={controlsDisabled}
-        onChange={(color) => onChange(toolStyleKey(id, 'color'), color)}
-      />
-      <LinePicker
-        title={title}
-        color={values[toolStyleKey(id, 'color')]}
-        width={values[toolStyleKey(id, 'width')]}
-        style={values[toolStyleKey(id, 'style')]}
-        disabled={controlsDisabled}
-        onWidthChange={(width) => onChange(toolStyleKey(id, 'width'), width)}
-        onStyleChange={(style) => onChange(toolStyleKey(id, 'style'), style)}
+        color={stringText(values[toolStyleKey(id, 'color')])}
+        disabled={disabled || !visible}
+        onColorChange={(color) => onChange(toolStyleKey(id, 'color'), color)}
+        line={lineOptionsOf(id, values, onChange)}
       />
     </>
   );
@@ -62,11 +78,11 @@ function ColorStyleField({ definition, values, onChange, disabled }: ToolStyleFi
       ) : (
         <span className="drawing-settings-style-title">{title}</span>
       )}
-      <ColorSwatch
+      <ColorPickerButton
         label={hasCheckbox ? `${title} colour` : title}
-        value={values[toolStyleKey(id, 'color')]}
+        color={stringText(values[toolStyleKey(id, 'color')])}
         disabled={disabled || (hasCheckbox && !visible)}
-        onChange={(color) => onChange(toolStyleKey(id, 'color'), color)}
+        onColorChange={(color) => onChange(toolStyleKey(id, 'color'), color)}
       />
     </>
   );
@@ -111,24 +127,19 @@ function NumberStyleField({ definition, values, onChange, disabled }: ToolStyleF
 
 function ChoiceStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'choice'>) {
   const controlId = useId();
+  const choiceOptions = definition.options.map((option) => ({ value: option.value, label: option.title }));
   return (
     <>
       <label className="drawing-settings-style-title" htmlFor={controlId}>
         {definition.title}
       </label>
-      <select
+      <Select
         id={controlId}
-        className="drawing-settings-control drawing-settings-style-choice"
+        options={choiceOptions}
         value={stringText(values[definition.id])}
         disabled={disabled}
-        onChange={(event) => onChange(definition.id, event.target.value)}
-      >
-        {definition.options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.title}
-          </option>
-        ))}
-      </select>
+        onChange={(value) => onChange(definition.id, value)}
+      />
     </>
   );
 }

@@ -16,6 +16,13 @@ full set.
 1. `settings-schema` (done): `inline` and `activeWhen` on inputs, the style schema, the tabbed dialog with the
    Inputs and Style tabs.
 2. `drawing-coordinates`: a generic tab; a time anchor gets date and time fields, a price anchor a price field.
+   - Times are whole minutes, MT5's lowest timeframe: the time field is `HH:MM` (60-second step), a stored anchor
+     with seconds shows the nearest minute, and Ok stores whole minutes. A typed `HH:MM:SS` is tolerated and rounded
+     to the nearest minute, not rejected.
+   - The fixed range volume profile window is aligned in one pure helper (`minuteAlignedWindow`): each edge rounds to
+     the nearest minute (30 s rounds up) and an empty window ends one minute after it starts. It runs where a window
+     is placed, where a boundary is dragged, where stored points are read (so old drawings normalise) and where
+     Coordinates sets points, so tick requests always cover whole M1 bars.
 3. `drawing-visibility`: a generic tab with MT5 timeframe ranges, stored as a new record field.
    - Minutes 1-30 (1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30) and Hours 1-12 (1, 2, 3, 4, 6, 8, 12) as snapping range
      sliders.
@@ -26,16 +33,21 @@ full set.
      `visible` flag. The Rust store keeps it as JSON text in a column added by migration v3.
 4. `profile-request-params`: rows layout and value area percent in the Rust profile request.
 5. `fixed-range-profile-settings` (done): the tool declares its inputs and styles (`fixedRangeProfile/settings.ts`).
-   - Inputs: Rows Layout (Number Of Rows / Ticks Per Row) with Row Size 1-128 or Ticks Per Row 1-1000 on one inline
-     row (`activeWhen`), Volume (Up/Down, Total, Delta), Value Area Volume % 1-100, Extend Right.
-   - Styles: Up Volume and Down Volume colours, POC, VAH and VAL lines, Width (% of pane) 5-50, Placement Left or
-     Right. Defaults reproduce the original look and the 128 rows / 70% request.
+   - Inputs: Rows Layout (Number Of Rows / Ticks Per Row) with Row Size 1-128 or Ticks Per Row 1-1000, each on its
+     own row (`activeWhen` disables the one the layout does not use), Volume (Up/Down, Total, Delta), Value Area
+     Volume % 1-100, Extend Right.
+   - Styles: Up Volume and Down Volume colours, POC, VAH and VAL lines, Width (% of range) 1-100, Placement Left or
+     Right. Defaults keep the 128 rows / 70% request and the 20% width; the width is now a share of the range
+     and no longer capped at 180 px, so the default look changes (the owner asked for this).
    - Rows layout, row count, ticks and value area map to the request through one pure function; a change re-requests
      the profile (a hidden drawing asks when shown again). Everything else only repaints.
-   - Rendering: Up/Down mirrors down left and up right of the anchor; Total stacks down then up, scaled by the
-     largest total; Delta is one bar of |up - down| in the leading side's colour. Left anchors at the range start and
-     grows right, Right anchors at the range end and grows left. Bars are at most 180 px. A hidden level paints no line
-     and reports no y; without Extend Right the lines stop at the range end.
+   - Rendering: the histogram's widest extent is this share of the range width (handle to handle); bars stay inside
+     the range (they are clipped to it as well as to the pane), with no pixel cap. Total stacks down then up, scaled
+     by the largest total; Delta is one bar of |up - down| in the leading side's colour; both reach the full extent.
+     Left anchors at the range start and grows right, Right anchors at the range end and grows left. Up/Down
+     mirrors down left and up right of an axis placed half the extent inside the range (from the start for Left,
+     from the end for Right), each side at most half, so a row with the maximum on both sides spans the extent
+     exactly. A hidden level paints no line and reports no y; without Extend Right the lines stop at the range end.
    - A drawing learns its resolved values through the optional `settingsChanged` member of `ChartDrawingShape`.
 
 Templates and Developing POC/VA come later.
@@ -63,3 +75,27 @@ Templates and Developing POC/VA come later.
 - Tabs are modelled as `{ id, title, render }` entries built from the declaration, so a later module adds a tab
   by adding an entry.
 - Ok saves the merged values through `setInputs`; it stays disabled while any value is invalid.
+- Top-anchored: the panel hangs from a fixed offset below the window's top edge (`backdropClassName`
+  `drawing-settings-backdrop`, not the shared centring), so tabs of different height never move it. Only this dialog
+  does this; the other modals keep centring.
+- One setting per row in a two-column grid, label left and control right, in both the Inputs and Style tabs. Number
+  fields are wide enough for four digits and their spin buttons. `inline` stays in the schema (Pine v6), but no
+  tool uses it by default.
+- Text is one step larger than before (15px body, 16px footer buttons), set once by the dialog's stylesheet.
+- Drop-downs (Inputs options and Style choices) are `shared/ui/Select`, an ARIA listbox: a button with
+  `aria-haspopup="listbox"` and `aria-expanded`, a portalled list with `role="option"` and `aria-selected`, a check
+  mark on the chosen option. Enter, Space and the up and down arrows open it; arrows, Home, End and a typed first
+  letter move; Enter or Space selects; Escape closes it and returns focus to the button; Tab and an outside press
+  close it. The list opens under the button and above it when there is no room.
+- Colour and line picker (`shared/ui/colorPicker`): one swatch button per `color` or `line` style opens a popover with
+  a ten-column preset grid (greyscale, saturated hues, then six tint and shade rows), the current preset outlined
+  (`aria-pressed`), the user's custom colours (up to ten, newest first, no repeats, kept in `localStorage` under a
+  versioned key) with a "+" that adds one from the native colour input, and Opacity as a slider over a checkerboard
+  gradient plus a 0-100 percent field. A `line` style adds Thickness (1-4) and Line style (solid, dashed, dotted)
+  as segmented controls, and its swatch previews colour, width and style; it replaces the separate width and style
+  controls. The popover traps focus, Escape closes it and returns focus to the swatch, an outside press closes it.
+  Changes go to the dialog's pending values; Cancel discards them.
+- Colours are stored as `#rrggbb` (opaque) or `#rrggbbaa`; a fully opaque colour is always six digits, so earlier
+  values are unchanged. The Rust store keeps them as plain strings. Canvas consumers pass them straight to
+  `fillStyle` or `strokeStyle`; the fixed range volume profile's own `globalAlpha` (rows 0.75, POC row 1, level
+  lines 0.95) multiplies with the colour's alpha.

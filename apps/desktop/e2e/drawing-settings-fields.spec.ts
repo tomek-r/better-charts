@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
-import { mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
+import { timeframeLabel } from '../src/shared/bridge/timeframes';
+import { chooseOption, mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
 import { STUB_M5_INTERVAL_MS, STUB_NOW } from './helpers/tauriStub';
 
 /**
@@ -53,15 +54,15 @@ test('every edited field is saved with the type its kind stores', async ({ page 
   await editField(page, 'Ratio', '4.5');
   await editField(page, 'Level', '1.75');
   await page.getByLabel('Filled', { exact: true }).check();
-  await page.getByLabel('Mode', { exact: true }).selectOption('trades');
+  await chooseOption(page, 'Mode', 'trades');
   await editField(page, 'Note', 'opening range note');
   await editField(page, 'Tint', '#ff0000');
-  await page.getByLabel('Basis', { exact: true }).selectOption('hlc3');
-  await page.getByLabel('Window', { exact: true }).selectOption('H1');
+  await chooseOption(page, 'Basis', 'hlc3');
+  await chooseOption(page, 'Window', timeframeLabel('H1'));
   await editField(page, 'Target', 'GBPUSD');
   await editField(page, 'Session', '0800-1200');
   await editField(page, 'Since', SINCE_TEXT);
-  await page.getByLabel('Method', { exact: true }).selectOption('smooth');
+  await chooseOption(page, 'Method', 'Smooth');
 
   await page.getByRole('button', { name: 'OK', exact: true }).click();
 
