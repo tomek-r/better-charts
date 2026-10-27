@@ -20,7 +20,7 @@
   /* One step above the 13px the dialog used before, so labels and fields read comfortably. */
   --drawing-settings-font-size: 15px;
   --drawing-settings-control-width: 200px;
-  --drawing-settings-row-gap: 24px;
+  --drawing-settings-row-gap: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -202,7 +202,7 @@
 .drawing-settings-coordinate-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--drawing-settings-row-gap);
 }
 
 .drawing-settings-coordinate-row {
@@ -227,7 +227,7 @@
 .drawing-settings-range-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--drawing-settings-row-gap);
 }
 
 .drawing-settings-range-row {
