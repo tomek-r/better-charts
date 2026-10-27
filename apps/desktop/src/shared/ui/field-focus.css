@@ -1,0 +1,28 @@
+/* The one focus look of every form field: the field's own 1px border turns accent, with no outline and
+   no ring. The selector outranks a component's base `border` shorthand (`.settings-field input`), and
+   an invalid field keeps its red border while focused. A field without a border (the order ticket's,
+   inside its tinted wrapper) shows nothing extra. */
+:is(
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit']),
+  select,
+  textarea,
+  .select-button
+):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+:is(
+    input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit']),
+    select,
+    textarea,
+    .select-button
+  ):focus-visible:not([aria-invalid='true']) {
+  border-color: var(--color-accent);
+}
+
+/* A checkbox or radio has no border to colour: one accent outline hugs the box. */
+:where(input[type='checkbox'], input[type='radio']):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
+}

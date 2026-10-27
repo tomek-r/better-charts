@@ -69,8 +69,16 @@
   opacity: 0.42;
 }
 
-.timeframe-chevron:focus-visible {
-  outline: 1px solid var(--color-accent);
+/* The chevron has a border of its own, which takes the accent. Same specificity as its hover rule, later. */
+.timeframe-chevron:focus-visible:not(:disabled) {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+/* The favourites have no visible border, and the active one is accent-filled: a hugging outline stays visible on both. */
+.timeframe-favorites button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
 }
 
 .timeframe-chevron[aria-expanded='true'] .timeframe-caret {

@@ -72,12 +72,6 @@
   min-width: 96px;
 }
 
-.drawing-settings-control:focus-visible {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-ring);
-}
-
 /* The draft value does not (yet) satisfy its kind: the field is marked, the dialog says why. */
 .drawing-settings-control[aria-invalid='true'] {
   border-color: var(--color-sell-border);
@@ -140,8 +134,8 @@
 }
 
 .drawing-settings-tab:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent-ring);
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
 }
 
 .drawing-settings-panel {

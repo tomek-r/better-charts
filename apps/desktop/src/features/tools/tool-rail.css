@@ -52,7 +52,6 @@
 .tool-rail-btn:focus-visible {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-ring);
 }
 
 .tool-rail-btn.active {
@@ -130,7 +129,6 @@
 .tool-rail-arrow:focus-visible {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-ring);
 }
 
 /* Revealed by the rail itself (pointer on the button) or by an open menu — not
@@ -179,7 +177,6 @@
 .tool-flyout-row:focus-visible {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-ring);
 }
 
 .tool-flyout-row.selected {
