@@ -12,7 +12,10 @@ import {
   select,
 } from './helpers/fixedRangeProfilePage';
 import { openTradePanel } from './helpers/panel';
-import { SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
+import {
+  DEFAULT_PROFILE_REQUEST_PARAMS,
+  SLOW_PROFILE_SPINNER_DELAY_MS,
+} from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
 import {
   eurusdFormingBar,
   eurusdQuote,
@@ -121,7 +124,7 @@ for (const reversed of [false, true]) {
       symbol: 'EURUSD',
       fromMs: STUB_NOW - 8 * INTERVAL,
       endMs: STUB_NOW - 3 * INTERVAL,
-      rows: 128,
+      ...DEFAULT_PROFILE_REQUEST_PARAMS,
     });
     expect(collected.pageErrors).toEqual([]);
     expect(collected.consoleErrors).toEqual([]);
@@ -670,7 +673,7 @@ test('FRVP end placed in the empty area stays on that future slot and requests u
     symbol: 'EURUSD',
     fromMs: STUB_NOW - 8 * INTERVAL,
     endMs: STUB_NOW,
-    rows: 128,
+    ...DEFAULT_PROFILE_REQUEST_PARAMS,
   });
 });
 
@@ -684,7 +687,7 @@ test('FRVP a new bar before the end line keeps the line and refreshes with the p
   expect((await requests(page))[1].args).toMatchObject({
     fromMs: STUB_NOW - 8 * INTERVAL,
     endMs: quoteMs,
-    rows: 128,
+    ...DEFAULT_PROFILE_REQUEST_PARAMS,
   });
   await expectEndLineAt(page, FUTURE_LINE_MS);
   expect((await boundaries(page))!.range.endMs).toBe(FUTURE_END_MS);
@@ -815,8 +818,8 @@ for (const boundary of ['fromX', 'toX'] as const) {
     await expect.poll(async () => (await requests(page)).length).toBe(2);
     expect((await requests(page))[1].args).toMatchObject(
       boundary === 'fromX'
-        ? { fromMs: STUB_NOW - 4 * INTERVAL, endMs: STUB_NOW - 3 * INTERVAL, rows: 128 }
-        : { fromMs: STUB_NOW - 8 * INTERVAL, endMs: STUB_NOW - 7 * INTERVAL, rows: 128 },
+        ? { fromMs: STUB_NOW - 4 * INTERVAL, endMs: STUB_NOW - 3 * INTERVAL, ...DEFAULT_PROFILE_REQUEST_PARAMS }
+        : { fromMs: STUB_NOW - 8 * INTERVAL, endMs: STUB_NOW - 7 * INTERVAL, ...DEFAULT_PROFILE_REQUEST_PARAMS },
     );
   });
 }

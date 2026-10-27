@@ -18,7 +18,12 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   the whole range; if none reaches the range start, the furthest-reaching one is
   used and the band label turns amber (`M2 · from 20 Mar`, `coveredFromMs`) so a
   partial profile is never shown as complete. Each profile logs its tick/bar
-  choice, retries and reason to the `pnpm dev` terminal.
+  choice, retries and reason to the `pnpm dev` terminal. The `request_tick_profile`
+  command takes `rowsLayout` (`{ kind: 'rows', count }` with 1-128 rows, or
+  `{ kind: 'ticksPerRow', ticks }` with 1-1000 ticks per row) and `valueAreaPercent`
+  (an integer 1-100); the chart still sends 128 rows and 70% until the drawing's
+  Inputs set them. A range needing more than 1000 rows is coarsened to the smallest
+  whole-tick row height that fits, and `actualRows` reports the rows used.
 - The last chart window survives an app restart: on connect the app reopens the symbol and timeframe saved for the same login and broker server, and only when the broker still lists that symbol and serves that timeframe; another account, or a symbol the broker no longer lists, keeps the session default.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.

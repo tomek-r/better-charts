@@ -2,12 +2,24 @@ import { invoke } from '@tauri-apps/api/core';
 import type { ProfileCancelled, ProfileError, ProfileResult } from '../../shared/bridge/types';
 import { errorText } from '../../shared/errorText';
 
+/**
+ * How the profile's price range is cut into rows: a row count (1-128), or a fixed row height of `ticks` symbol
+ * ticks (1-1000) whose row count follows the range. The backend coarsens a range that would need over 1000 rows.
+ */
+export type ProfileRowsLayout = { kind: 'rows'; count: number } | { kind: 'ticksPerRow'; ticks: number };
+
+/** What the user chose for the histogram; both are validated by the backend. */
+export interface ProfileRequestParams {
+  rowsLayout: ProfileRowsLayout;
+  /** Share of the total weight the value area covers, an integer 1-100. */
+  valueAreaPercent: number;
+}
+
 /** A bounded tick-profile request: the window `[fromMs, endMs)` of one symbol. */
-export interface TickProfileRequest {
+export interface TickProfileRequest extends ProfileRequestParams {
   symbol: string;
   fromMs: number;
   endMs: number;
-  rows: number;
 }
 
 export type Unsubscribe = () => void;
@@ -63,17 +75,19 @@ export function createMarketDataConnection(): MarketDataConnection {
   const failed = createEventChannel<ProfileError>();
   return {
     port: {
-      requestTickProfile: ({ symbol, fromMs, endMs, rows }) => {
+      requestTickProfile: ({ symbol, fromMs, endMs, rowsLayout, valueAreaPercent }) => {
         // A rejected command never produces a backend event, so the requester would wait
         // forever: report it as the same error event a backend failure would send.
-        invoke('request_tick_profile', { symbol, fromMs, endMs, rows }).catch((reason: unknown) => {
-          failed.publish({
-            symbol,
-            fromMs,
-            endMs,
-            message: `Volume profile request failed: ${errorText(reason)}`,
-          });
-        });
+        invoke('request_tick_profile', { symbol, fromMs, endMs, rowsLayout, valueAreaPercent }).catch(
+          (reason: unknown) => {
+            failed.publish({
+              symbol,
+              fromMs,
+              endMs,
+              message: `Volume profile request failed: ${errorText(reason)}`,
+            });
+          },
+        );
       },
       // Silent on failure by design: a cancel names no request, so there is no
       // `ProfileError` to attribute; the tool has already abandoned the request locally.

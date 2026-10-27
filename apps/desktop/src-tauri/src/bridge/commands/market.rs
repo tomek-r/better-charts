@@ -6,12 +6,13 @@ use super::super::{
     build_streamed_tick_profile, build_tick_profile, cache_line, can_estimate,
     clear_profile_bar_slots, invalidate_validated_order_check, log_decision, log_info, AccountView,
     BridgeState, BridgeStatus, HistoryRequest, MarketSnapshot, Mt5BackendState, Mt5BackendStatus,
-    PortfolioView, ProfileSource, QuoteView, ReconciliationStatus, SourceDecision, SourceReason,
-    State, SymbolInfoRequest, SymbolSearchRequest, SymbolSearchResultView, TickHistoryRequest,
-    TickPageResult, TickProfileCancelledView, TickProfileProgress, TickProfileRequest,
-    TickProfileResult,
+    PortfolioView, ProfileSettings, ProfileSource, QuoteView, ReconciliationStatus, SourceDecision,
+    SourceReason, State, SymbolInfoRequest, SymbolSearchRequest, SymbolSearchResultView,
+    TickHistoryRequest, TickPageResult, TickProfileCancelledView, TickProfileProgress,
+    TickProfileRequest, TickProfileResult,
 };
 use tauri::Emitter;
+use trading_core::volume_profile::{value_area_fraction, RowLayout};
 
 #[tauri::command]
 pub(crate) fn get_mt5_backend_status(state: State<'_, Mt5BackendState>) -> Mt5BackendStatus {
@@ -225,9 +226,17 @@ pub(crate) fn request_tick_profile(
     symbol: String,
     from_ms: i64,
     end_ms: i64,
-    rows: u16,
+    rows_layout: RowLayout,
+    value_area_percent: u8,
 ) -> Result<(), String> {
-    match request_tick_profile_inner(&state, symbol, from_ms, end_ms, rows)? {
+    match request_tick_profile_inner(
+        &state,
+        symbol,
+        from_ms,
+        end_ms,
+        rows_layout,
+        value_area_percent,
+    )? {
         ProfileStart::Ready(result) => {
             let _ = app.emit("tick-profile", *result);
         }
@@ -253,11 +262,13 @@ pub(crate) fn request_tick_profile_inner(
     symbol: String,
     from_ms: i64,
     end_ms: i64,
-    rows: u16,
+    layout: RowLayout,
+    value_area_percent: u8,
 ) -> Result<ProfileStart, String> {
-    if !(1..=128).contains(&rows) {
-        return Err("rows must be between 1 and 128".into());
-    }
+    layout
+        .validate_request()
+        .map_err(|error| error.to_string())?;
+    let value_area = value_area_fraction(value_area_percent).map_err(|error| error.to_string())?;
     let session_work = state
         .session_work
         .lock()
@@ -293,7 +304,7 @@ pub(crate) fn request_tick_profile_inner(
     }
     let profile = TickProfileRequest {
         wire: wire.clone(),
-        rows,
+        settings: ProfileSettings { layout, value_area },
     };
     // Invalidate the old wire request before creating a new generation.  A
     // response already in flight retains its old generation and is ignored.

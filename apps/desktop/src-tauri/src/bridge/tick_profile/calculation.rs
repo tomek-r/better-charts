@@ -3,7 +3,7 @@ use super::super::{
     TickProfileBin, TickProfileLevels, TickProfileRequest, TickProfileResult,
 };
 use trading_core::volume_profile::{
-    calculate_fixed_range_profile, FixedRangeProfile, FixedRangeProfileConfig, Tick as ProfileTick,
+    calculate_fixed_range_profile, FixedRangeProfile, Tick as ProfileTick,
 };
 
 /// Resolves the profile grid step for `symbol`: the broker tick size from
@@ -98,11 +98,7 @@ pub(crate) fn build_tick_profile(
             })
         })
         .collect::<Result<Vec<_>, &'static str>>()?;
-    let config = FixedRangeProfileConfig {
-        rows: usize::from(request.rows),
-        tick_size: resolve_tick_size(state, &snapshot.symbol, &ticks),
-        value_area_percent: "0.7".parse().expect("valid value area"),
-    };
+    let config = request.config(resolve_tick_size(state, &snapshot.symbol, &ticks));
     let calculated = calculate_fixed_range_profile(&config, &ticks);
     Ok(profile_result(
         snapshot.symbol,
@@ -125,12 +121,10 @@ pub(crate) fn build_streamed_tick_profile(
     if wire_size <= rust_decimal::Decimal::ZERO {
         return Err("invalid tick size");
     }
-    let config = FixedRangeProfileConfig {
-        rows: usize::from(request.rows),
-        tick_size: cached_tick_size(state, &request.wire.symbol)
+    let config = request.config(
+        cached_tick_size(state, &request.wire.symbol)
             .unwrap_or_else(|| compact.counts.inferred_tick_size()),
-        value_area_percent: "0.7".parse().expect("valid value area"),
-    };
+    );
     let calculated = compact.counts.calculate(&config);
     Ok(profile_result(
         request.wire.symbol.clone(),

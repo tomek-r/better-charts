@@ -1,4 +1,5 @@
 use super::*;
+use trading_core::volume_profile::RowLayout;
 
 #[test]
 fn frame_configuration_accepts_measured_sizes_and_rejects_invalid_values() {
@@ -53,7 +54,7 @@ async fn negotiated_price_counts_reach_profile_with_tiny_payloads_and_legacy_fal
             to_ms: 400_000,
             max_ticks: 65535,
         },
-        rows: 128,
+        settings: ProfileSettings::default(),
     };
     harness
         .state
@@ -178,7 +179,10 @@ async fn negotiated_tick_page_larger_than_one_mib_reaches_the_profile() {
             to_ms: 50_000,
             max_ticks: limits.max_ticks_per_page,
         },
-        rows: 32,
+        settings: ProfileSettings {
+            layout: RowLayout::Rows { count: 32 },
+            ..ProfileSettings::default()
+        },
     };
     state.tick_controller.lock().unwrap().begin(request.clone());
     *state.pending_tick_profile.lock().unwrap() = Some(request);
@@ -244,7 +248,7 @@ async fn pending_h1_tick_history_keeps_heartbeats_alive_and_failure_preserves_se
             to_ms: 86_400_100,
             max_ticks: 5000,
         },
-        rows: 128,
+        settings: ProfileSettings::default(),
     };
     harness
         .state
@@ -304,7 +308,7 @@ async fn pending_h1_tick_history_keeps_heartbeats_alive_and_failure_preserves_se
                 to_ms: 300,
                 max_ticks: 5000,
             },
-            rows: 128,
+            settings: ProfileSettings::default(),
         });
     client.send(BridgeClient::envelope(MessageType::Error, &page.id, Some(&handshake.session),
         serde_json::json!({"code": "INTERNAL_ERROR", "message": "stale page", "retryable": false}))).await.unwrap();
@@ -339,7 +343,7 @@ async fn profile_page_limit_switches_to_bars_without_painting_prefix_or_resettin
             to_ms: 1000,
             max_ticks: 5000,
         },
-        rows: 128,
+        settings: ProfileSettings::default(),
     };
     {
         let mut controller = harness.state.tick_controller.lock().unwrap();
@@ -413,7 +417,7 @@ async fn streamed_multi_day_profile_reaches_ui_without_truncation_or_session_res
             to_ms: 400_000,
             max_ticks: limits.max_ticks_per_page,
         },
-        rows: 128,
+        settings: ProfileSettings::default(),
     };
     harness
         .state

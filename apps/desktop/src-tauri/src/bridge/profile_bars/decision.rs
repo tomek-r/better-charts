@@ -365,7 +365,7 @@ mod tests {
                 to_ms: range_end_ms(),
                 max_ticks: 5000,
             },
-            rows: 128,
+            settings: Default::default(),
         }
     }
 

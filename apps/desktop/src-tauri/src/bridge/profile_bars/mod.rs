@@ -57,8 +57,7 @@ use trading_core::protocol::{
 };
 use trading_core::volume_profile::{
     bar_timeframe_for_range, bar_timeframes_coarser_than, bars_overlapping_range,
-    calculate_bar_profile, estimate_profile_load, partial_coverage_start, BarSeries,
-    FixedRangeProfileConfig, ProfileBudget,
+    calculate_bar_profile, estimate_profile_load, partial_coverage_start, BarSeries, ProfileBudget,
 };
 
 /// The estimate page must cover the range in one request: with a margin of two
@@ -877,12 +876,7 @@ pub(crate) fn build_bar_profile(
         .ok_or("Bar profile needs the symbol tick size; reconnect or reselect the symbol")?;
     let in_range =
         bars_overlapping_range(bars, timeframe, request.wire.from_ms, request.wire.to_ms)?;
-    let config = FixedRangeProfileConfig {
-        rows: usize::from(request.rows),
-        tick_size,
-        value_area_percent: "0.7".parse().expect("valid value area"),
-    };
-    let calculated = calculate_bar_profile(&in_range, &config)?;
+    let calculated = calculate_bar_profile(&in_range, &request.config(tick_size))?;
     let mut result = profile_result(
         request.wire.symbol.clone(),
         request.wire.from_ms,

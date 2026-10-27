@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
 import type { TickProfileRequest } from '../src/features/bridge/marketDataPort';
+import { DEFAULT_PROFILE_REQUEST_PARAMS } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
 import { TickProfileRequestQueue } from '../src/features/tools/fixedRangeProfile/requests/tickProfileRequestQueue';
 
 /**
@@ -16,7 +17,12 @@ const START_MS = Date.now();
 type Market = ReturnType<typeof createFakeMarketDataPort>;
 type EndLoad = (market: Market, request: TickProfileRequest) => void;
 
-const requestFor = (endMs: number): TickProfileRequest => ({ symbol: SYMBOL, fromMs: START_MS, endMs, rows: 128 });
+const requestFor = (endMs: number): TickProfileRequest => ({
+  symbol: SYMBOL,
+  fromMs: START_MS,
+  endMs,
+  ...DEFAULT_PROFILE_REQUEST_PARAMS,
+});
 const FIRST = requestFor(START_MS + 60_000);
 const SECOND = requestFor(START_MS + 120_000);
 const REPLACEMENT = requestFor(START_MS + 180_000);

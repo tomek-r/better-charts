@@ -6,6 +6,7 @@ use crate::bridge::tests::profile_bars::{
     bar, bar_snapshot, bars_every, profile_request, seed_symbol, RANGE_END, RANGE_FROM,
 };
 use crate::bridge::{request_tick_profile_inner, MarketCandle};
+use trading_core::volume_profile::{RowLayout, DEFAULT_VALUE_AREA_PERCENT};
 
 const MINUTE: i64 = 60_000;
 const WAIT: Duration = Duration::from_secs(2);
@@ -37,7 +38,8 @@ impl ProfileConnection {
             "EURUSD".into(),
             RANGE_FROM,
             RANGE_END,
-            128,
+            RowLayout::default(),
+            DEFAULT_VALUE_AREA_PERCENT,
         )
         .map(|_| ())
         .unwrap();
@@ -131,7 +133,8 @@ impl ProfileConnection {
             "EURUSD".into(),
             RANGE_FROM,
             end_ms,
-            128,
+            RowLayout::default(),
+            DEFAULT_VALUE_AREA_PERCENT,
         )
         .map(|_| ())
         .unwrap();

@@ -13,6 +13,9 @@ use trading_core::protocol::{
     HistoryRequest, OrderCheckRequest, OrderCheckResult, RiskQuoteRequest, SymbolInfoRequest,
     SymbolSearchRequest, TickHistoryRequest, TickHistorySnapshot, PROTOCOL_VERSION,
 };
+use trading_core::volume_profile::{
+    FixedRangeProfileConfig, RowLayout, DEFAULT_VALUE_AREA_PERCENT,
+};
 
 pub(crate) const DEFAULT_ADDR: &str = "127.0.0.1:8765";
 pub(crate) const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -317,7 +320,38 @@ pub(crate) struct MarketSnapshot {
 #[derive(Debug, Clone)]
 pub(crate) struct TickProfileRequest {
     pub(crate) wire: TickHistoryRequest,
-    pub(crate) rows: u16,
+    pub(crate) settings: ProfileSettings,
+}
+
+/// What the user chose for the histogram. Part of the request, so every
+/// retry, queue slot and cached completion carries the settings it was asked
+/// with (the tick and bar caches hold raw data and never a built profile).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProfileSettings {
+    pub(crate) layout: RowLayout,
+    /// Fraction of the total weight the value area covers, from the validated
+    /// integer percent of the command.
+    pub(crate) value_area: rust_decimal::Decimal,
+}
+
+impl Default for ProfileSettings {
+    fn default() -> Self {
+        Self {
+            layout: RowLayout::default(),
+            value_area: rust_decimal::Decimal::new(i64::from(DEFAULT_VALUE_AREA_PERCENT), 2),
+        }
+    }
+}
+
+impl TickProfileRequest {
+    /// The profile configuration this request asks for on a `tick_size` grid.
+    pub(crate) fn config(&self, tick_size: rust_decimal::Decimal) -> FixedRangeProfileConfig {
+        FixedRangeProfileConfig {
+            layout: self.settings.layout,
+            tick_size,
+            value_area_percent: self.settings.value_area,
+        }
+    }
 }
 
 #[allow(dead_code)]
