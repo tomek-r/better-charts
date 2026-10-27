@@ -37,6 +37,9 @@ export interface FixedRangeProfileState {
     /** Row value labels painted; the totals line is reported by `summaryY` and absent when it is not painted. */
     valueLabels?: number;
     summaryY?: number;
+    /** Where the labels and the totals line are anchored, and how their text is aligned there. */
+    valueLabelX?: number;
+    valueLabelAlign?: CanvasTextAlign;
   };
 }
 
@@ -191,9 +194,11 @@ export function drawFixedRangeProfile(
   ctx.rect(startX, viewport.chartRect.y, Math.max(0, endX - startX), viewport.chartRect.height);
   ctx.clip();
   drawProfileBars(ctx, anchorX, layout, appearance);
-  const valueLabels = drawProfileValueLabels(ctx, anchorX, layout, appearance);
+  const valueLabels = drawProfileValueLabels(ctx, { startX, endX }, layout, appearance);
   hit.valueLabels = valueLabels.rowLabels;
   hit.summaryY = valueLabels.summaryY;
+  hit.valueLabelX = valueLabels.textX;
+  hit.valueLabelAlign = valueLabels.textAlign;
   ctx.restore();
   const lineEndX = appearance.extendRight ? x + width : endX;
   if (Number.isFinite(lineEndX)) {

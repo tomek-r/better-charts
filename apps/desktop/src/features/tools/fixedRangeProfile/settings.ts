@@ -19,6 +19,8 @@ const VOLUME_TOTAL = 'Total';
 const VOLUME_DELTA = 'Delta';
 const PLACEMENT_LEFT = 'Left';
 const PLACEMENT_RIGHT = 'Right';
+const VALUES_ON_PROFILE = 'On Profile';
+const VALUES_OPPOSITE_SIDE = 'Opposite Side';
 
 /**
  * The Inputs tab. Rows layout, row size and value area feed the request and
@@ -79,6 +81,17 @@ export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
   { kind: 'color', id: 'downVolume', title: 'Down Volume', defaults: { color: palette.sell } },
   // Off by default so drawings saved before the labels existed look unchanged.
   { kind: 'color', id: 'values', title: 'Values', defaults: { visible: false, color: palette.text } },
+  {
+    kind: 'choice',
+    id: 'valuesPosition',
+    title: 'Values Position',
+    defaultValue: VALUES_ON_PROFILE,
+    options: [
+      { value: VALUES_ON_PROFILE, title: VALUES_ON_PROFILE },
+      { value: VALUES_OPPOSITE_SIDE, title: VALUES_OPPOSITE_SIDE },
+    ],
+    parentId: 'values',
+  },
   {
     kind: 'line',
     id: 'poc',
@@ -149,6 +162,8 @@ export interface FixedRangeProfileAppearance {
   /** Per-row volume text and the totals line under the profile. */
   readonly valuesVisible: boolean;
   readonly valuesColor: string;
+  /** Beside the bars (the edge they hang from) or at the opposite edge of the range box. */
+  readonly valuesSide: 'profile' | 'opposite';
   /** Share of the range width (handle to handle) the histogram's widest extent takes, in percent. */
   readonly widthPercent: number;
   readonly poc: FixedRangeProfileLevelStyle;
@@ -221,6 +236,7 @@ export function readFixedRangeProfileSettings(stored: unknown): FixedRangeProfil
       downColor: textOf(values, toolStyleKey('downVolume', 'color')),
       valuesVisible: values[toolStyleKey('values', 'visible')] === true,
       valuesColor: textOf(values, toolStyleKey('values', 'color')),
+      valuesSide: textOf(values, 'valuesPosition') === VALUES_OPPOSITE_SIDE ? 'opposite' : 'profile',
       widthPercent: numberOf(values, 'widthPercent'),
       poc: levelStyleOf(values, 'poc'),
       vah: levelStyleOf(values, 'vah'),

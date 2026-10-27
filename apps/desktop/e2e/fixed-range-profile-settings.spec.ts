@@ -108,6 +108,7 @@ const RENDER_ONLY_CHANGES: ReadonlyArray<{ name: string; change: ToolInputValues
   { name: 'a level line being hidden', change: { 'vah.visible': false } },
   { name: 'a level line style', change: { 'val.style': 'dotted' } },
   { name: 'the width percent', change: { widthPercent: 35 } },
+  { name: 'the values position', change: { valuesPosition: 'Opposite Side' } },
   { name: 'the placement', change: { placement: 'Right' } },
   { name: 'the volume mode', change: { volume: 'Delta' } },
   { name: 'extend right', change: { extendRight: false } },

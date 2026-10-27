@@ -55,9 +55,14 @@ full set.
      non-empty row shows its volumes 4px inside the anchor edge (left-aligned from the range start for Left,
      right-aligned from the range end for Right), vertically centred: Up/Down `down×up` (down is the left bar),
      Total `up+down`, Delta `up-down` with a typographic minus. Numbers are compact: under 1000 at most 2 decimals,
-     then 3 significant digits with K, M or B (`1.35K`). Row labels are drawn only while every row is at least 11px
-     tall, otherwise none. A totals line (same format over all rows) sits 4px under the lowest row whenever Values
-     is on. `state.hit` reports `valueLabels` (row labels painted) and `summaryY`. Toggling only repaints.
+     then 3 significant digits with K, M or B (`1.35K`). Every non-empty row is labelled, with a font of its own
+     height minus 1px, capped at 11px and floored at 1px, centred on the row. A totals line, in the smallest row font, (same format over all rows) sits 4px under the lowest row whenever Values
+     is on. `state.hit` reports `valueLabels` (row labels painted), `summaryY`, `valueLabelX` and
+     `valueLabelAlign`. Toggling only repaints.
+   - Values Position (`On Profile` default, `Opposite Side`), a child of Values (indented, disabled while Values is
+     off). On Profile anchors the labels and the totals line at the edge the bars hang from; Opposite Side anchors
+     them 4px inside the other edge of the range box (right-aligned at the end for Left placement, left-aligned at
+     the start for Right placement). Changing it only repaints.
    - A drawing learns its resolved values through the optional `settingsChanged` member of `ChartDrawingShape`.
 
 Templates and Developing POC/VA come later.

@@ -2,11 +2,19 @@ import { formatCompactNumber } from '../../../shared/compactNumber';
 import type { ProfileBarsLayout, RowWeights } from './profileBars';
 import type { FixedRangeProfileAppearance, FixedRangeProfileVolumeMode } from './settings';
 
-const VALUE_FONT = '400 11px system-ui, sans-serif';
-/** A row shorter than the font would stack its text on its neighbours', so no row is labelled below this. */
-const MIN_LABELLED_ROW_HEIGHT = 11;
+const MAX_FONT_PX = 11;
+const MIN_FONT_PX = 1;
 const ANCHOR_INSET = 4;
 const SUMMARY_GAP = 4;
+
+function valueFont(sizePx: number): string {
+  return `400 ${sizePx}px system-ui, sans-serif`;
+}
+
+/** One pixel less than the row, so text centred in a short row stays inside it. */
+function rowFontPx(row: ProfileBarsLayout['rows'][number]): number {
+  return Math.max(MIN_FONT_PX, Math.min(MAX_FONT_PX, row.bottom - row.top - 1));
+}
 
 type WeightsText = (weights: RowWeights) => string;
 
@@ -35,45 +43,64 @@ export function summaryValueText(mode: FixedRangeProfileVolumeMode, rows: Profil
 export interface PaintedValueLabels {
   readonly rowLabels: number;
   readonly summaryY?: number;
+  readonly textX?: number;
+  readonly textAlign?: CanvasTextAlign;
 }
 
 const NOTHING_PAINTED: PaintedValueLabels = { rowLabels: 0 };
+
+/** The x edges of the range box the labels sit inside. */
+export interface RangeEdges {
+  readonly startX: number;
+  readonly endX: number;
+}
+
+/** The label x and alignment: 4px inside the chosen edge, text running away from it into the box. */
+function labelAnchor(
+  { startX, endX }: RangeEdges,
+  { placement, valuesSide }: FixedRangeProfileAppearance,
+): { textX: number; textAlign: CanvasTextAlign } {
+  const atEnd = (placement === 'right') === (valuesSide === 'profile');
+  return atEnd
+    ? { textX: endX - ANCHOR_INSET, textAlign: 'right' }
+    : { textX: startX + ANCHOR_INSET, textAlign: 'left' };
+}
 
 function isRowLabelled({ weights }: ProfileBarsLayout['rows'][number]): boolean {
   return weights.up + weights.down > 0;
 }
 
 /**
- * Paints each row's volumes at the bars' anchor edge and the totals 4px under the lowest row. Rows too short to
- * hold the text get no label, rather than overlapping ones; the totals still show. Draws nothing when Values is off.
+ * Paints each non-empty row's volumes at the bars' edge (or the opposite edge) of the range box and the totals 4px
+ * under the lowest row, on the same side. Each row's font shrinks with its height so labels never overlap; the
+ * totals use the smallest row font. Draws nothing when Values is off.
  */
 export function drawProfileValueLabels(
   ctx: CanvasRenderingContext2D,
-  anchorX: number,
+  edges: RangeEdges,
   { rows }: ProfileBarsLayout,
   appearance: FixedRangeProfileAppearance,
 ): PaintedValueLabels {
   if (!appearance.valuesVisible || rows.length === 0) {
     return NOTHING_PAINTED;
   }
-  const isRight = appearance.placement === 'right';
-  const textX = isRight ? anchorX - ANCHOR_INSET : anchorX + ANCHOR_INSET;
+  const { textX, textAlign } = labelAnchor(edges, appearance);
   ctx.save();
   ctx.globalAlpha = 1;
   ctx.fillStyle = appearance.valuesColor;
-  ctx.font = VALUE_FONT;
-  ctx.textAlign = isRight ? 'right' : 'left';
+  ctx.textAlign = textAlign;
 
-  const shortestRow = Math.min(...rows.map((row) => row.bottom - row.top));
-  const labelledRows = shortestRow >= MIN_LABELLED_ROW_HEIGHT ? rows.filter(isRowLabelled) : [];
+  const labelledRows = rows.filter(isRowLabelled);
   ctx.textBaseline = 'middle';
   for (const row of labelledRows) {
+    ctx.font = valueFont(rowFontPx(row));
     ctx.fillText(rowValueText(appearance.volumeMode, row.weights), textX, (row.top + row.bottom) / 2);
   }
 
   const summaryY = Math.max(...rows.map((row) => row.bottom)) + SUMMARY_GAP;
+  ctx.font = valueFont(Math.min(...rows.map(rowFontPx)));
   ctx.textBaseline = 'top';
   ctx.fillText(summaryValueText(appearance.volumeMode, rows), textX, summaryY);
   ctx.restore();
-  return { rowLabels: labelledRows.length, summaryY };
+  return { rowLabels: labelledRows.length, summaryY, textX, textAlign };
 }

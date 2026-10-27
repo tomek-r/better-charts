@@ -110,6 +110,25 @@ test('the Values row has a checkbox, unchecked by default, and a colour swatch',
   expect((await savedValues(page))[0]['values.visible']).toBe(true);
 });
 
+test('Values Position sits indented under Values, disabled while Values is off, defaulting to On Profile', async ({
+  page,
+}) => {
+  await page.getByRole('tab', { name: 'Style' }).click();
+  const position = label(page, 'Values Position');
+  await expect(position).toHaveText('On Profile');
+  await expect(position).toBeDisabled();
+  const values = await page.getByRole('checkbox', { name: 'Values' }).boundingBox();
+  const indented = await position.boundingBox();
+  expect(indented!.y).toBeGreaterThan(values!.y);
+  await expect(position.locator('xpath=ancestor::*[@data-child][1]')).toHaveAttribute('data-child', 'true');
+
+  await page.getByRole('checkbox', { name: 'Values' }).check();
+  await expect(position).toBeEnabled();
+  await chooseOption(page, 'Values Position', 'Opposite Side');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  expect((await savedValues(page))[0].valuesPosition).toBe('Opposite Side');
+});
+
 test('every input sits on its own row, its label on the left and its control on the right', async ({ page }) => {
   const titles = ['Rows Layout', 'Row Size', 'Ticks Per Row', 'Volume', 'Value Area Volume %', 'Extend Right'];
   const boxes = [];
@@ -149,6 +168,7 @@ test('saving without a change hands back the defaults that reproduce the current
       'downVolume.color': palette.sell,
       'values.visible': false,
       'values.color': palette.text,
+      valuesPosition: 'On Profile',
       'poc.visible': true,
       'poc.color': palette.profilePoc,
       'poc.width': 1,

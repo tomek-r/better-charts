@@ -321,6 +321,7 @@ test('with tall rows Values paints one label per row and the totals line, in the
   expect(hit.valueLabels).toBe(3);
   // Bins are listed bottom first; rows are 40 px tall, so each label sits at its row's vertical middle.
   expect(texts.map((text) => text.text)).toEqual(['6×40', '30×12', '3×50', '39×102']);
+  // The totals line (last) uses the same 11 px as the rows.
   expect(texts.every((text) => text.style === '#112233' && text.font === '400 11px system-ui, sans-serif')).toBe(true);
   expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
   expect(texts.every((text) => text.x === START_X + 4)).toBe(true);
@@ -331,6 +332,34 @@ test('with tall rows Values paints one label per row and the totals line, in the
 test('placement right puts the labels 4 px inside the range end', () => {
   const { texts } = paintValues({ ...VALUES_ON, placement: 'Right' });
   expect(texts.every((text) => text.x === END_X - 4)).toBe(true);
+});
+
+test('Values Position defaults to On Profile and reads Opposite Side as the opposite edge', () => {
+  expect(readFixedRangeProfileSettings(undefined).appearance.valuesSide).toBe('profile');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'Opposite Side' }).appearance.valuesSide).toBe('opposite');
+});
+
+test('Opposite Side puts the labels and the totals line at the other edge of the range box', () => {
+  const cases = [
+    { placement: 'Left', x: END_X - 4, align: 'right' },
+    { placement: 'Right', x: START_X + 4, align: 'left' },
+  ];
+  for (const { placement, x, align } of cases) {
+    const { texts, hit } = paintValues({ ...VALUES_ON, placement, valuesPosition: 'Opposite Side' });
+    expect(texts.every((text) => text.x === x)).toBe(true);
+    expect(hit.valueLabelX).toBe(x);
+    expect(hit.valueLabelAlign).toBe(align);
+    expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
+    expect(texts.at(-1)?.y).toBe(hit.summaryY);
+  }
+});
+
+test('On Profile anchors the labels at the edge the bars hang from', () => {
+  expect(paintValues(VALUES_ON).hit).toMatchObject({ valueLabelX: START_X + 4, valueLabelAlign: 'left' });
+  expect(paintValues({ ...VALUES_ON, placement: 'Right' }).hit).toMatchObject({
+    valueLabelX: END_X - 4,
+    valueLabelAlign: 'right',
+  });
 });
 
 test('the label text follows the volume mode, with a typographic minus for a negative delta', () => {
@@ -355,13 +384,25 @@ test('a row without volume gets no label, and fractional volumes are shortened',
   expect(texts.map((text) => text.text)).toEqual(['1.35K×0.13', '1.35K×0.13']);
 });
 
-test('rows shorter than 11 px get no labels but the totals line still shows', () => {
+test('rows shorter than 11 px each get a label sized to the row height minus 1 px, and the totals use the same size', () => {
   // 2 price units are 8 px.
   const bins = [bin(140, 142, 6, 40), bin(142, 144, 30, 12)];
   const { texts, hit } = paintValues(VALUES_ON, bins);
-  expect(hit.valueLabels).toBe(0);
-  expect(texts.map((text) => text.text)).toEqual(['36×52']);
+  expect(hit.valueLabels).toBe(2);
+  expect(texts.map((text) => text.text)).toEqual(['6×40', '30×12', '36×52']);
+  expect(texts.map((text) => text.font)).toEqual([
+    '400 7px system-ui, sans-serif',
+    '400 7px system-ui, sans-serif',
+    '400 7px system-ui, sans-serif',
+  ]);
+  expect(texts[0].y).toBe((viewport.priceToY(140) + viewport.priceToY(142)) / 2);
   expect(hit.summaryY).toBe(viewport.priceToY(140) + 4);
+});
+
+test('a row of 1 px or less still gets a 1 px label', () => {
+  // 0.25 price units are 1 px.
+  const { texts } = paintValues(VALUES_ON, [bin(140, 140.25, 6, 40)]);
+  expect(texts[0].font).toBe('400 1px system-ui, sans-serif');
 });
 
 test('the value labels are painted after the bars and before the level lines, inside the range box clip', () => {
