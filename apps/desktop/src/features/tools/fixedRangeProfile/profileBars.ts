@@ -22,6 +22,7 @@ interface ProfileRow {
   readonly bottom: number;
   /** The bin containing profile.poc: paints at full alpha. */
   readonly isPoc: boolean;
+  readonly weights: RowWeights;
   readonly segments: readonly BarSegment[];
 }
 
@@ -32,7 +33,7 @@ export interface ProfileBarsLayout {
   readonly reachRight: number;
 }
 
-interface RowWeights {
+export interface RowWeights {
   readonly up: number;
   readonly down: number;
 }
@@ -145,12 +146,13 @@ export function layoutProfileBars(
     if (isPoc) {
       pocClaimed = true;
     }
-    const segments = layout.segments(weightsOf(bin), geometry);
+    const weights = weightsOf(bin);
+    const segments = layout.segments(weights, geometry);
     for (const { from, to } of segments) {
       reachLeft = Math.min(reachLeft, from);
       reachRight = Math.max(reachRight, to);
     }
-    rows.push({ top: viewport.priceToY(binHigh), bottom: viewport.priceToY(binLow), isPoc, segments });
+    rows.push({ top: viewport.priceToY(binHigh), bottom: viewport.priceToY(binLow), isPoc, weights, segments });
   }
   // Nothing painted reaches nowhere: the extent collapses onto the anchor.
   return rows.length === 0 ? { rows, reachLeft: 0, reachRight: 0 } : { rows, reachLeft, reachRight };

@@ -77,6 +77,8 @@ const HISTOGRAM_BOX_DEFAULT_COLOR = withOpacityPercent(palette.raised, 0);
 export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
   { kind: 'color', id: 'upVolume', title: 'Up Volume', defaults: { color: palette.buy } },
   { kind: 'color', id: 'downVolume', title: 'Down Volume', defaults: { color: palette.sell } },
+  // Off by default so drawings saved before the labels existed look unchanged.
+  { kind: 'color', id: 'values', title: 'Values', defaults: { visible: false, color: palette.text } },
   {
     kind: 'line',
     id: 'poc',
@@ -144,6 +146,9 @@ export interface FixedRangeProfileAppearance {
   readonly histogramBoxColor: string;
   readonly upColor: string;
   readonly downColor: string;
+  /** Per-row volume text and the totals line under the profile. */
+  readonly valuesVisible: boolean;
+  readonly valuesColor: string;
   /** Share of the range width (handle to handle) the histogram's widest extent takes, in percent. */
   readonly widthPercent: number;
   readonly poc: FixedRangeProfileLevelStyle;
@@ -214,6 +219,8 @@ export function readFixedRangeProfileSettings(stored: unknown): FixedRangeProfil
       histogramBoxColor: textOf(values, toolStyleKey('histogramBox', 'color')),
       upColor: textOf(values, toolStyleKey('upVolume', 'color')),
       downColor: textOf(values, toolStyleKey('downVolume', 'color')),
+      valuesVisible: values[toolStyleKey('values', 'visible')] === true,
+      valuesColor: textOf(values, toolStyleKey('values', 'color')),
       widthPercent: numberOf(values, 'widthPercent'),
       poc: levelStyleOf(values, 'poc'),
       vah: levelStyleOf(values, 'vah'),

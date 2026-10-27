@@ -36,7 +36,8 @@ full set.
    - Inputs: Rows Layout (Number Of Rows / Ticks Per Row) with Row Size 1-128 or Ticks Per Row 1-1000, each on its
      own row (`activeWhen` disables the one the layout does not use), Volume (Up/Down, Total, Delta), Value Area
      Volume % 1-100, Extend Right.
-   - Styles: Up Volume and Down Volume colours, POC, VAH and VAL lines, Width (% of range) 1-100, Placement Left or
+   - Styles: Up Volume and Down Volume colours, Values (checkbox plus colour, default off with the `text` palette
+     colour; per-row volume text and a totals line, see below), POC, VAH and VAL lines, Width (% of range) 1-100, Placement Left or
      Right, and last Histogram Box (a colour swatch with no checkbox; painted first, behind the bars and level lines,
      spanning the range box and the bins' price extent; the default is the `raised` palette colour at alpha 00, so
      it paints nothing until the user raises the opacity and saved drawings look unchanged). Defaults keep the 128 rows / 70% request and the 20% width; the width is now a share of the range
@@ -50,6 +51,13 @@ full set.
      mirrors down left and up right of an axis placed half the extent inside the range (from the start for Left,
      from the end for Right), each side at most half, so a row with the maximum on both sides spans the extent
      exactly. A hidden level paints no line and reports no y; without Extend Right the lines stop at the range end.
+   - Values: drawn after the bars and before the level lines, 11px system-ui, clipped to the range box. Each
+     non-empty row shows its volumes 4px inside the anchor edge (left-aligned from the range start for Left,
+     right-aligned from the range end for Right), vertically centred: Up/Down `down×up` (down is the left bar),
+     Total `up+down`, Delta `up-down` with a typographic minus. Numbers are compact: under 1000 at most 2 decimals,
+     then 3 significant digits with K, M or B (`1.35K`). Row labels are drawn only while every row is at least 11px
+     tall, otherwise none. A totals line (same format over all rows) sits 4px under the lowest row whenever Values
+     is on. `state.hit` reports `valueLabels` (row labels painted) and `summaryY`. Toggling only repaints.
    - A drawing learns its resolved values through the optional `settingsChanged` member of `ChartDrawingShape`.
 
 Templates and Developing POC/VA come later.

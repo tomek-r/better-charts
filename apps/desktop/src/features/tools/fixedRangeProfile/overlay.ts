@@ -5,6 +5,7 @@ import { drawSeparatedText } from '../../../shared/canvas/separatedText';
 import { palette } from '../../../shared/theme/palette';
 import { parseHexColor } from '../../../shared/theme/hexColor';
 import { drawProfileBars, layoutProfileBars, type ProfileBarsLayout } from './profileBars';
+import { drawProfileValueLabels } from './profileValueLabels';
 import { DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE, type FixedRangeProfileAppearance } from './settings';
 
 /**
@@ -33,6 +34,9 @@ export interface FixedRangeProfileState {
     boxRight?: number;
     boxTop?: number;
     boxBottom?: number;
+    /** Row value labels painted; the totals line is reported by `summaryY` and absent when it is not painted. */
+    valueLabels?: number;
+    summaryY?: number;
   };
 }
 
@@ -187,6 +191,9 @@ export function drawFixedRangeProfile(
   ctx.rect(startX, viewport.chartRect.y, Math.max(0, endX - startX), viewport.chartRect.height);
   ctx.clip();
   drawProfileBars(ctx, anchorX, layout, appearance);
+  const valueLabels = drawProfileValueLabels(ctx, anchorX, layout, appearance);
+  hit.valueLabels = valueLabels.rowLabels;
+  hit.summaryY = valueLabels.summaryY;
   ctx.restore();
   const lineEndX = appearance.extendRight ? x + width : endX;
   if (Number.isFinite(lineEndX)) {

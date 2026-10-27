@@ -291,6 +291,90 @@ test('without extend right the level lines stop at the range end', () => {
   }
 });
 
+const VALUES_ON = { 'values.visible': true };
+
+/** Paints the given bins under the stored settings and returns the value texts with the painted geometry. */
+function paintValues(stored: ToolInputValues, bins: TickProfileBin[] = BINS) {
+  const state: FixedRangeProfileState = { range: RANGE, profile: { ...PROFILE, ...LEVELS, bins }, hit: {} };
+  const ops: PaintOp[] = [];
+  const { appearance } = readFixedRangeProfileSettings(stored);
+  drawFixedRangeProfile(
+    createRecordingCtx((op) => ops.push(op), { recordClip: true }),
+    renderArgsFor(viewport).viewport,
+    state,
+    appearance,
+  );
+  return { texts: ops.filter((op) => op.kind === 'fillText'), hit: state.hit, ops };
+}
+
+test('Values is off by default: no row labels and no totals line', () => {
+  expect(readFixedRangeProfileSettings(undefined).appearance.valuesVisible).toBe(false);
+  expect(readFixedRangeProfileSettings(undefined).appearance.valuesColor).toBe(palette.text);
+  const { texts, hit } = paintValues({});
+  expect(texts).toHaveLength(0);
+  expect(hit.valueLabels).toBe(0);
+  expect(hit.summaryY).toBeUndefined();
+});
+
+test('with tall rows Values paints one label per row and the totals line, in the values colour', () => {
+  const { texts, hit } = paintValues({ ...VALUES_ON, 'values.color': '#112233' });
+  expect(hit.valueLabels).toBe(3);
+  // Bins are listed bottom first; rows are 40 px tall, so each label sits at its row's vertical middle.
+  expect(texts.map((text) => text.text)).toEqual(['6×40', '30×12', '3×50', '39×102']);
+  expect(texts.every((text) => text.style === '#112233' && text.font === '400 11px system-ui, sans-serif')).toBe(true);
+  expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
+  expect(texts.every((text) => text.x === START_X + 4)).toBe(true);
+  expect(hit.summaryY).toBe(viewport.priceToY(140) + 4);
+  expect(texts[3].y).toBe(hit.summaryY);
+});
+
+test('placement right puts the labels 4 px inside the range end', () => {
+  const { texts } = paintValues({ ...VALUES_ON, placement: 'Right' });
+  expect(texts.every((text) => text.x === END_X - 4)).toBe(true);
+});
+
+test('the label text follows the volume mode, with a typographic minus for a negative delta', () => {
+  expect(paintValues({ ...VALUES_ON, volume: 'Total' }).texts.map((text) => text.text)).toEqual([
+    '46',
+    '42',
+    '53',
+    '141',
+  ]);
+  expect(paintValues({ ...VALUES_ON, volume: 'Delta' }).texts.map((text) => text.text)).toEqual([
+    '34',
+    '−18',
+    '47',
+    '63',
+  ]);
+});
+
+test('a row without volume gets no label, and fractional volumes are shortened', () => {
+  const bins = [bin(140, 150, 0, 0), bin(150, 160, 1350.25, 0.126)];
+  const { texts, hit } = paintValues(VALUES_ON, bins);
+  expect(hit.valueLabels).toBe(1);
+  expect(texts.map((text) => text.text)).toEqual(['1.35K×0.13', '1.35K×0.13']);
+});
+
+test('rows shorter than 11 px get no labels but the totals line still shows', () => {
+  // 2 price units are 8 px.
+  const bins = [bin(140, 142, 6, 40), bin(142, 144, 30, 12)];
+  const { texts, hit } = paintValues(VALUES_ON, bins);
+  expect(hit.valueLabels).toBe(0);
+  expect(texts.map((text) => text.text)).toEqual(['36×52']);
+  expect(hit.summaryY).toBe(viewport.priceToY(140) + 4);
+});
+
+test('the value labels are painted after the bars and before the level lines, inside the range box clip', () => {
+  const { ops } = paintValues(VALUES_ON);
+  const indexesOf = (kind: PaintOp['kind']) => ops.flatMap((op, index) => (op.kind === kind ? [index] : []));
+  const bars = indexesOf('fillRect');
+  const texts = indexesOf('fillText');
+  const lines = indexesOf('stroke');
+  expect(bars.at(-1)).toBeLessThan(texts[0]);
+  expect(texts.at(-1)).toBeLessThan(lines[0]);
+  expect(ops.filter((op) => op.kind === 'clip')).toHaveLength(2);
+});
+
 test('the paint stays clipped to the pane under every setting', () => {
   const { ops } = paint({ volume: 'Total', placement: 'Right', widthPercent: 50 });
   expect(ops[0]).toMatchObject({

@@ -98,6 +98,18 @@ test('the Histogram Box row is last on the Style tab, a swatch with no checkbox,
   expect((await savedValues(page))[0]['histogramBox.color']).toBe(`${palette.raised}80`);
 });
 
+test('the Values row has a checkbox, unchecked by default, and a colour swatch', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Style' }).click();
+  await expect(page.getByRole('checkbox', { name: 'Values' })).not.toBeChecked();
+  await expect(label(page, 'Values colour').locator('.color-face-fill')).toHaveCSS(
+    'background-color',
+    rgbText(palette.text),
+  );
+  await page.getByRole('checkbox', { name: 'Values' }).check();
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  expect((await savedValues(page))[0]['values.visible']).toBe(true);
+});
+
 test('every input sits on its own row, its label on the left and its control on the right', async ({ page }) => {
   const titles = ['Rows Layout', 'Row Size', 'Ticks Per Row', 'Volume', 'Value Area Volume %', 'Extend Right'];
   const boxes = [];
@@ -135,6 +147,8 @@ test('saving without a change hands back the defaults that reproduce the current
       extendRight: true,
       'upVolume.color': palette.buy,
       'downVolume.color': palette.sell,
+      'values.visible': false,
+      'values.color': palette.text,
       'poc.visible': true,
       'poc.color': palette.profilePoc,
       'poc.width': 1,

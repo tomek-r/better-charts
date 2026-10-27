@@ -103,6 +103,7 @@ test('changing the row count, the layout or the value area asks for the profile 
 const RENDER_ONLY_CHANGES: ReadonlyArray<{ name: string; change: ToolInputValues }> = [
   { name: 'a colour', change: { 'upVolume.color': '#112233' } },
   { name: 'the histogram box colour', change: { 'histogramBox.color': '#11223344' } },
+  { name: 'the values labels being shown', change: { 'values.visible': true } },
   { name: 'a level line colour', change: { 'poc.color': '#445566' } },
   { name: 'a level line being hidden', change: { 'vah.visible': false } },
   { name: 'a level line style', change: { 'val.style': 'dotted' } },
