@@ -151,8 +151,11 @@ edit generated `target/`, `dist/`, `node_modules/`, `.vite/`, `test-results/`,
   search and list files with the Read/Grep/Glob tools and edit with
   Edit/Write. Bash is for one plain command per call (gates, `git
   status`/`diff`), with no pipes, chains, redirects, `$()`, heredocs or inline
-  interpreter code (`python3 -c`, `node -e`). Subagent prompts must state the
-  same rule.
+  interpreter code (`python3 -c`, `node -e`). Where Grep/Glob are not
+  available (some subagents lack them), list files with `git ls-files <path>`
+  and search with `git grep -n "<literal text>" -- <path>`. Subagent prompts
+  must state the same rule, allow these two commands, and give the key file
+  paths up front.
 
 ## Validation
 
