@@ -8,8 +8,8 @@ import {
 import { lastSlotOpenBefore } from '../src/features/tools/fixedRangeProfile/range';
 
 /**
- * The points one FRVP drawing stores, and the handle position a restored drawing derives from the
- * current bars. The engine carries the anchors as plain data, so these functions are the only way
+ * The points one fixed range volume profile drawing stores, and the handle position a restored drawing derives from
+ * the current bars. The engine carries the anchors as plain data, so these functions are the only way
  * in and out, and the handle always follows a slot of the bars the drawing is painted against.
  */
 

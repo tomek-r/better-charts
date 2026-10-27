@@ -1120,7 +1120,7 @@ test('timeframe switch issues exactly one request_history', async ({ page }) => 
   expectClean(collected);
 });
 
-// FRVP lifecycle: the fixed-range selection is TIME-anchored, so a TIMEFRAME
+// Fixed range volume profile lifecycle: the fixed-range selection is TIME-anchored, so a TIMEFRAME
 // switch must keep it (selection + drawing + computed profile) while a SYMBOL
 // switch — the profile is instrument-specific — must clear all three.
 test('fixed range volume profile survives a timeframe switch and clears on a symbol switch (owner)', async ({
@@ -1151,7 +1151,7 @@ test('fixed range volume profile survives a timeframe switch and clears on a sym
     localStorage.setItem('better-charts.symbol-favorites.v1', JSON.stringify([item('NAS100', 'US Tech 100', 2)]));
   });
   const collected = await gotoWithStub(page);
-  type FrvpState = { range: { fromMs: number; toMs: number } | null; hasProfile: boolean };
+  type ProfileSelectionState = { range: { fromMs: number; toMs: number } | null; hasProfile: boolean };
   const profileState = () => profileSelection(page);
   // The stub ships no profile backend — deliver each observed request_tick_profile
   // as the matching `tick-profile` event (echoed args, like the reactive stubs),
@@ -1185,7 +1185,7 @@ test('fixed range volume profile survives a timeframe switch and clears on a sym
     }
   };
   /** Answer pending requests until a selection AND its profile are present. */
-  const settleProfile = async (): Promise<FrvpState> => {
+  const settleProfile = async (): Promise<ProfileSelectionState> => {
     await expect
       .poll(
         async () => {
@@ -1200,10 +1200,10 @@ test('fixed range volume profile survives a timeframe switch and clears on a sym
   };
   // Stub series ON the chart before selecting the drawing tool.
   await expect.poll(async () => (await chartData(page)).length, { timeout: 10_000 }).toBe(10);
-  // Select FRVP and select two real candle centers.
-  const frvpButton = page.locator('.tool-rail button[aria-label="Fixed range volume profile"]');
-  await frvpButton.click();
-  await expect(frvpButton).toHaveClass(/active/);
+  // Select the fixed range volume profile tool and select two real candle centers.
+  const profileToolButton = page.locator('.tool-rail button[aria-label="Fixed range volume profile"]');
+  await profileToolButton.click();
+  await expect(profileToolButton).toHaveClass(/active/);
   const host = (await page.locator('.chart-host').boundingBox())!;
   await page.mouse.click(host.x + (await candleX(page, STUB_NOW - 8 * 300_000)), host.y + host.height * 0.35);
   await page.mouse.click(host.x + (await candleX(page, STUB_NOW - 3 * 300_000)), host.y + host.height * 0.35);
