@@ -3,7 +3,7 @@ import type { ChartController } from '../engine/surface/chartController';
 import { DEFAULT_CHART_TOOL_ID, type ChartToolId } from '../../tools/registry';
 import type { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
 import type { StagedOrderState } from '../engine/trading/stagedOrderOverlay';
-import type { PositionOverlayState } from '../engine/trading/positionOverlay';
+import type { PositionOverlayState } from '../engine/trading/positionOverlayTypes';
 import type { PartialCloseChipPort } from '../engine/trading/partialCloseChipPort';
 import type { PriceLinesState } from '../engine/quotes/priceLinesOverlay';
 import type { PendingModification } from '../../../shared/bridge/types';

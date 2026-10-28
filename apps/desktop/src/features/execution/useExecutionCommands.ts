@@ -14,7 +14,7 @@ import type {
   ExecutionQueueView,
   PendingModification,
 } from '../../shared/bridge/types';
-import type { PositionOverlayState } from '../chart/engine/trading/positionOverlay';
+import type { PositionOverlayState } from '../chart/engine/trading/positionOverlayTypes';
 import { useErrorNotification, useNotifyError } from '../../shared/ui/notification/ErrorNotifications';
 import { describeRejection } from './tradeRejection';
 import { useDomainField, type DomainStore } from '../../shared/providers/domainStore';

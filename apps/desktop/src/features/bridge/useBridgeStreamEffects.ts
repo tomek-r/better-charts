@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { accountMoneyBasis } from '../../shared/money';
 import { quoteDigits } from '../../shared/format';
 import type { ChartController } from '../chart/engine/surface/chartController';
-import type { PositionOverlayState } from '../chart/engine/trading/positionOverlay';
+import type { PositionOverlayState } from '../chart/engine/trading/positionOverlayTypes';
 import { syncPositionOverlay } from '../chart/engine/trading/overlayLines';
 import type { BridgeSessionState } from './useBridgeSession';
 

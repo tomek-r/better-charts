@@ -3,7 +3,7 @@ import type { AccountMoneyBasis } from '../../../../shared/money';
 import type { OpenPosition, PendingOrder, PortfolioSnapshot } from '../../../../shared/bridge/types';
 import { partialCloseLimits } from '../../../../shared/trading/partialCloseVolume';
 import { levelMoneyText, pnlMoneyText } from './moneyLabels';
-import type { OrderLine, PositionLine, PositionOverlayState } from './positionOverlay';
+import type { OrderLine, PositionLine, PositionOverlayState } from './positionOverlayTypes';
 
 /** `buy_limit`, `sell_stop_limit`, … — compiled once, not per order line. */
 const ORDER_TYPE = /^(buy|sell)_(limit|stop|stop_limit)$/;

@@ -1,6 +1,6 @@
 import type { ChartController } from '../surface/chartController';
 import type { PartialCloseChipPort } from './partialCloseChipPort';
-import type { PositionOverlayState } from './positionOverlay';
+import type { PositionOverlayState } from './positionOverlayTypes';
 import type { StagedOrderState } from './stagedOrderOverlay';
 
 /** A mutable cell the chart host owns; the gestures only read `current`. */

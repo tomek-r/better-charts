@@ -1,6 +1,6 @@
 import type { TradingLabelHit } from './labels/tradingLabelTypes';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
-import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlay';
+import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlayTypes';
 import { levelMoneyText } from './moneyLabels';
 import type { TradingGestureWorkspace } from './gestureWorkspace';
 
