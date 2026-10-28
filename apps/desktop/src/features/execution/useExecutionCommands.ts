@@ -17,7 +17,7 @@ import type {
 import type { PositionOverlayState } from '../chart/engine/trading/positionOverlay';
 import { useErrorNotification, useNotifyError } from '../../shared/ui/notification/ErrorNotifications';
 import { describeRejection } from './tradeRejection';
-import { useDomainField, type DomainStore } from '../../shared/state/domainStore';
+import { useDomainField, type DomainStore } from '../../shared/providers/domainStore';
 
 export interface ExecutionStoreState {
   executionQueue: ExecutionQueueView | undefined;

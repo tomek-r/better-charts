@@ -1,8 +1,8 @@
 import { createContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { createDomainStore } from '../../shared/state/domainStore';
-import { useRequiredContext } from '../../shared/state/useRequiredContext';
+import { createDomainStore } from '../../shared/providers/domainStore';
+import { useRequiredContext } from '../../shared/providers/useRequiredContext';
 import {
   useAppSettings,
   initialAppSettingsState,

@@ -8,7 +8,7 @@ import {
 import type { ToolInputValues } from '../../chart/engine/drawings/toolInputs';
 import { resolveToolSettingValues, type ToolSettingsSchema } from '../../chart/engine/drawings/toolSettings';
 import { useChartResources } from '../../chart/ChartWorkspaceProvider';
-import { useRequiredContext } from '../../../shared/state/useRequiredContext';
+import { useRequiredContext } from '../../../shared/providers/useRequiredContext';
 import { useDrawingSelection } from '../drawingToolbar/useDrawingSelection';
 import { CHART_TOOL_PLUGINS } from '../registry';
 import { DrawingSettingsDialog, type DrawingSettingsDialogProps } from './DrawingSettingsDialog';

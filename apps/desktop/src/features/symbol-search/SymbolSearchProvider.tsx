@@ -1,6 +1,11 @@
 import { createContext, useMemo, useState, type ReactNode } from 'react';
-import { createDomainStore, useDomainField, type DomainStore, type FieldSetters } from '../../shared/state/domainStore';
-import { useRequiredContext } from '../../shared/state/useRequiredContext';
+import {
+  createDomainStore,
+  useDomainField,
+  type DomainStore,
+  type FieldSetters,
+} from '../../shared/providers/domainStore';
+import { useRequiredContext } from '../../shared/providers/useRequiredContext';
 
 interface SymbolSearchState {
   searchOpen: boolean;

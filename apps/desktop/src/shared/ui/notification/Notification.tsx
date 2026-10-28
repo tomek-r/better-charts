@@ -1,6 +1,6 @@
 import { createContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { afterExitAnimation } from '../animation/afterExitAnimation';
-import { useRequiredContext } from '../../state/useRequiredContext';
+import { useRequiredContext } from '../../providers/useRequiredContext';
 
 const DismissContext = createContext<{ closing: boolean; dismiss: (action: () => void) => void } | null>(null);
 

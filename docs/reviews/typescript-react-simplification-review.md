@@ -72,8 +72,8 @@ modules; large means a staged architectural change.
 ### F01 — Resolved: document supported live SL/TP removal
 
 **Evidence:** [live clear drafts](../../apps/desktop/src/features/chart/useChartModificationDrafts.ts#L90),
-[gesture dispatch](../../apps/desktop/src/features/chart/engine/tradingOverlayGestures.ts#L359),
-[renderer description](../../apps/desktop/src/features/chart/engine/positionOverlay.ts#L43),
+[gesture dispatch](../../apps/desktop/src/features/chart/engine/trading/tradingOverlayGestures.ts#L359),
+[renderer description](../../apps/desktop/src/features/chart/engine/trading/positionOverlay.ts#L43),
 [current scope](../CURRENT_STATE.md), and
 [modify contract](../protocol/bridge-v1.md#execution).
 
@@ -130,8 +130,8 @@ Domain and native adapter tests cover sub-cent budgets, allocation, invalid inpu
 precision loss, and account updates. The browser regression reproduces and
 guards sizing requests for a positive budget below currency display precision.
 
-**Evidence:** [risk basis](../../apps/desktop/src/features/order-ticket/domain/riskBasis.ts#L41),
-[preview request](../../apps/desktop/src/features/order-ticket/effects/useOrderTicketRiskPreviewEffects.ts#L140),
+**Evidence:** [risk basis](../../apps/desktop/src/features/order-ticket/sizing/riskBasis.ts#L41),
+[preview request](../../apps/desktop/src/features/order-ticket/riskPreview/useOrderTicketRiskPreviewEffects.ts#L140),
 and [risk contract](../protocol/bridge-v1.md#risk-preview).
 
 **Confirmed:** Risk % converts equity, allocation, and percentage to JavaScript
@@ -213,7 +213,7 @@ identity, exact raw decimals, and first-live-bar staging after empty history.
 The history-array copy is removed from the flush; no measured speedup is claimed.
 
 **Evidence:** [frame flush](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L419),
-[chart cache](../../apps/desktop/src/features/chart/engine/barSeriesController.ts#L17),
+[chart cache](../../apps/desktop/src/features/chart/engine/bars/barSeriesController.ts#L17),
 and [older-page acceptance](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L715).
 
 **Confirmed structure, impact unmeasured:** batching already reduces work to
@@ -240,7 +240,7 @@ conversion policy. A regression reproduces the sub-second timestamp disagreement
 and covers the accepted boundary, malformed values, and exact raw price strings.
 
 **Evidence:** [bridge predicate](../../apps/desktop/src/features/bridge/bridgePayloadNormalizers.ts#L47)
-and [render conversion](../../apps/desktop/src/features/chart/engine/mt5DataAdapter.ts#L19).
+and [render conversion](../../apps/desktop/src/features/chart/engine/bars/mt5DataAdapter.ts#L19).
 
 **Confirmed duplication:** both parse OHLC/volume and check finite numbers,
 nonnegative values, and candle geometry. They differ for time: `isValidCandle`
@@ -290,7 +290,7 @@ including preview freshness, exact volume echo, account/check identity, nullable
 exits, TIF, and the empty blocked reason. A 26-case characterization matrix passed
 on both the original and refactored derivation; execution gates are unchanged.
 
-**Evidence:** [ticket derivation](../../apps/desktop/src/features/order-ticket/domain/ticketRules.ts#L266).
+**Evidence:** [ticket derivation](../../apps/desktop/src/features/order-ticket/derivation/ticketRules.ts#L266).
 
 **Confirmed duplication:** check eligibility, submit eligibility, and blocked
 reason selection independently repeat account, volume, stop, allocation, and
@@ -321,7 +321,7 @@ effect dependencies, and provider state ownership are unchanged.
 **Evidence:** [central lifecycle](../../apps/desktop/src/lifecycle/AppLifecycle.tsx#L29),
 [bridge bootstrap inputs](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L336),
 [ticket state](../../apps/desktop/src/features/order-ticket/state/useOrderTicketState.ts#L111),
-and [display input](../../apps/desktop/src/features/order-ticket/domain/stagedOrderDisplay.ts#L3).
+and [display input](../../apps/desktop/src/features/order-ticket/stagedOrder/stagedOrderDisplay.ts#L3).
 
 **Confirmed structure:** providers return large bags of state, setters, and refs;
 `AppLifecycle` passes them across domains. Bridge bootstrap takes the entire
@@ -385,7 +385,7 @@ zero, or invalid point size; existing quote UI tests pass. The pulled main had
 already delegated P&L formatting to the shared currency-aware formatter, so that
 part needed no additional change.
 
-**Evidence:** [P&L formatting](../../apps/desktop/src/features/chart/engine/overlayLines.ts#L40),
+**Evidence:** [P&L formatting](../../apps/desktop/src/features/chart/engine/trading/overlayLines.ts#L40),
 [shared signed-money formatter](../../apps/desktop/src/shared/format.ts#L42),
 [chart quote derivation](../../apps/desktop/src/features/chart/header/ChartQuotes.tsx#L6),
 and [ticket quote derivation](../../apps/desktop/src/features/order-ticket/OrderTicketProvider.tsx#L70).
@@ -409,9 +409,9 @@ behavior and account-currency regressions.
 
 **Implemented:** shared geometry, colors, row anchors, and drawing helpers now live in `tradingOverlayDrawing.ts`. Staged and live rendering policies remain separate. Overlay layering and gesture regressions pass.
 
-**Evidence:** [live overlay imports](../../apps/desktop/src/features/chart/engine/positionOverlay.ts#L10),
-[live quantity tag](../../apps/desktop/src/features/chart/engine/positionOverlay.ts#L229),
-and [staged quantity tag](../../apps/desktop/src/features/chart/engine/stagedOrderOverlay.ts#L306).
+**Evidence:** [live overlay imports](../../apps/desktop/src/features/chart/engine/trading/positionOverlay.ts#L10),
+[live quantity tag](../../apps/desktop/src/features/chart/engine/trading/positionOverlay.ts#L229),
+and [staged quantity tag](../../apps/desktop/src/features/chart/engine/trading/stagedOrderOverlay.ts#L306).
 
 **Confirmed:** live positions/orders import generic drawing and hit-geometry
 primitives from the staged-order renderer. Quantity tags repeat font, measuring,
@@ -431,8 +431,8 @@ Use trading gesture, z-order, and fixed-range profile regressions.
 
 **Implemented:** pending creation is synchronous and the explicit microtask boundary preserves same-turn last-selection dispatch. A/B/A, duplicate, reset, and disposal regressions pass.
 
-**Evidence:** [history request](../../apps/desktop/src/features/chart/engine/mt5DataAdapter.ts#L85)
-and [ensurePending](../../apps/desktop/src/features/chart/engine/mt5DataAdapter.ts#L197).
+**Evidence:** [history request](../../apps/desktop/src/features/chart/engine/bars/mt5DataAdapter.ts#L85)
+and [ensurePending](../../apps/desktop/src/features/chart/engine/bars/mt5DataAdapter.ts#L197).
 
 **Confirmed:** `ensurePending` is declared async but contains no await or
 asynchronous operation. Its caller has already returned if `existing` is truthy,
@@ -517,14 +517,14 @@ new history. The initial-load comparison failed without key invalidation.
   returns for zero positions, then checks `hasPositions` repeatedly. Remove the
   always-true conditions and flatten the fragment while preserving the account
   condition and eight-row limit.
-- [ChartController.setCurrentPrice](../../apps/desktop/src/features/chart/engine/chartController.ts#L318)
+- [ChartController.setCurrentPrice](../../apps/desktop/src/features/chart/engine/surface/chartController.ts#L318)
   ignores its price and only refreshes overlays. Its caller/comment still implies
   a distinct lighter scheduling path. Call the actual refresh operation and
   update the explanation; do not invent another price owner.
-- [priceToTicks](../../apps/desktop/src/features/order-ticket/domain/priceTicks.ts)
+- [priceToTicks](../../apps/desktop/src/features/order-ticket/pricing/priceTicks.ts)
   ignores its `kind` parameter. Remove that parameter and update callers if the
   conversion is intentionally absolute-distance-only.
-- [UnitsSizingRow](../../apps/desktop/src/features/order-ticket/editor/sizing/UnitsSizingRow.tsx#L177)
+- [UnitsSizingRow](../../apps/desktop/src/features/order-ticket/sizing/UnitsSizingRow.tsx#L177)
   repeats three menu items with the same structure. A local typed three-item
   description can remove repetition; keep focus restoration, keyboard controls,
   and mode-specific copy explicit. This does not justify a new menu library.

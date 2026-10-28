@@ -1,8 +1,8 @@
 import { createContext, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { createDomainStore, type DomainStore } from '../../shared/state/domainStore';
-import { useRequiredContext } from '../../shared/state/useRequiredContext';
+import { createDomainStore, type DomainStore } from '../../shared/providers/domainStore';
+import { useRequiredContext } from '../../shared/providers/useRequiredContext';
 import { useEventCallback } from '../../shared/hooks/useEventCallback';
 import { useExecutionCommands, type ExecutionCommandState, type ExecutionStoreState } from './useExecutionCommands';
 import { useBridgeAccount } from '../bridge/BridgeSessionProvider';

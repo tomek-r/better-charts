@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { flipExits, sideReference } from '../src/features/order-ticket/domain/sideFlip';
+import { flipExits, sideReference } from '../src/features/order-ticket/sideFlip/sideFlip';
 
 test('each side measures from its own quote', () => {
   expect(sideReference('buy')).toBe('ask');

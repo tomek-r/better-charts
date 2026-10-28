@@ -1,8 +1,8 @@
 import { act, createElement, Fragment, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createDomainStore, useDomainField, useFieldSetterSelector } from '../../src/shared/state/domainStore';
-import { useOrderTicketSizingActions } from '../../src/features/order-ticket/state/useOrderTicketSizingActions';
-import { createOrderTicketStores } from '../../src/features/order-ticket/state/orderTicketStores';
+import { createDomainStore, useDomainField, useFieldSetterSelector } from '../../src/shared/providers/domainStore';
+import { useOrderTicketSizingActions } from '../../src/features/order-ticket/sizing/useOrderTicketSizingActions';
+import { createOrderTicketStores } from '../../src/features/order-ticket/draft/orderTicketStores';
 
 interface DomainStoreHarnessWindow extends Window {
   __domainStoreNotifications: { first: number; second: number };

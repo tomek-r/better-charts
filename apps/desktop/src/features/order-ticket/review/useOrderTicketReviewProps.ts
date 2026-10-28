@@ -2,10 +2,10 @@ import type { ComponentProps } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useBridgeAccountSelector, useBridgeQuote } from '../../bridge/BridgeSessionProvider';
-import { passedStopEntryGuidance } from '../domain/passedStopEntry';
-import { useOrderTicketActions, useOrderTicketStores } from '../state/orderTicketContext';
-import type { OrderTicketReview } from '../review/OrderTicketReview';
-import { useTicketGateProjection } from '../editor/useOrderTicketGates';
+import { passedStopEntryGuidance } from '../pricing/passedStopEntry';
+import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
+import type { OrderTicketReview } from './OrderTicketReview';
+import { useTicketGateProjection } from '../submit/useOrderTicketGates';
 
 type ReviewProps = ComponentProps<typeof OrderTicketReview>;
 

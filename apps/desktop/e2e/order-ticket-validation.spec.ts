@@ -1,11 +1,11 @@
-import { defaultStopLossPrice } from '../src/features/order-ticket/domain/defaultStopLoss';
+import { defaultStopLossPrice } from '../src/features/order-ticket/exits/defaultStopLoss';
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   deriveOrderTicket,
   orderEntryPrice,
   orderVolumeIssue,
   stopDistanceGuard,
-} from '../src/features/order-ticket/domain/ticketRules';
+} from '../src/features/order-ticket/derivation/ticketRules';
 import type { QuoteSnapshot } from '../src/shared/bridge/types';
 import { riskRewardRatio } from '../src/shared/trading/riskReward';
 import { fillExitPrice, openTradePanel } from './helpers/panel';

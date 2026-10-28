@@ -8,7 +8,7 @@ import type {
   PortfolioSnapshot,
   QuoteSnapshot,
 } from '../../shared/bridge/types';
-import { createDomainStore } from '../../shared/state/domainStore';
+import { createDomainStore } from '../../shared/providers/domainStore';
 
 interface BridgeConnectionStoreState {
   status: BridgeStatus;

@@ -1,8 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useEventCallback } from '../../shared/hooks/useEventCallback';
-import { OrderTicketStoresContext, type TicketActions } from './state/orderTicketContext';
-import { createOrderTicketStores } from './state/orderTicketStores';
-import { useOrderTicketActionsProducer } from './state/useOrderTicketActionsProducer';
+import { OrderTicketStoresContext, type TicketActions } from './draft/orderTicketContext';
+import { createOrderTicketStores } from './draft/orderTicketStores';
+import { useOrderTicketActionsProducer } from './lifecycle/useOrderTicketActionsProducer';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 import {
   useBridgeAccountSelector,

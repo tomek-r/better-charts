@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { DomainStore } from '../../shared/state/domainStore';
+import type { DomainStore } from '../../shared/providers/domainStore';
 import { readSetupCompleted, saveSetupCompleted } from './setup/setupCompletion';
 import type { AppSettingsData } from './appSettingsData';
 

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { brokerSymbolFixture } from './helpers/tauriStub';
-import { deriveOrderTicket, type TicketDerivationInput } from '../src/features/order-ticket/domain/ticketRules';
-import { createOrderTicketStores } from '../src/features/order-ticket/state/orderTicketStores';
+import { deriveOrderTicket, type TicketDerivationInput } from '../src/features/order-ticket/derivation/ticketRules';
+import { createOrderTicketStores } from '../src/features/order-ticket/draft/orderTicketStores';
 import type { AccountSnapshot, BrokerSymbol, OrderCheckResult, RiskPreview } from '../src/shared/bridge/types';
 
 const account: AccountSnapshot = {

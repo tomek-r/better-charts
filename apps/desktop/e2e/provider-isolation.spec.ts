@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
+import { deriveOrderRiskBasis } from '../src/features/order-ticket/sizing/riskBasis';
 import { chooseOption } from './helpers/select';
 import { gotoWithStub, STUB_NOW } from './helpers/tauriStub';
 

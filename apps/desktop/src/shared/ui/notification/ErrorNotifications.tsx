@@ -1,7 +1,7 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
-import { createDomainStore, type DomainStore } from '../../state/domainStore';
-import { useRequiredContext } from '../../state/useRequiredContext';
+import { createDomainStore, type DomainStore } from '../../providers/domainStore';
+import { useRequiredContext } from '../../providers/useRequiredContext';
 import { Notification } from './Notification';
 
 /** The fix a notice offers: the text of its button, and what pressing it does. */

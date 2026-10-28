@@ -3,7 +3,7 @@ import { errorText } from '../../../shared/errorText';
 import type { BridgeStatus } from '../../../shared/bridge/types';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
 import { useBridgeAccount, useBridgeChartState, useBridgeConnection } from '../../bridge/BridgeSessionProvider';
-import { accountIdentityKey } from '../../bridge/lastChartSelection';
+import { accountIdentityKey } from '../../bridge/lastChartSelection/lastChartSelection';
 import { useChartResources } from '../ChartWorkspaceProvider';
 import type { ChartDrawingStore } from './chartDrawingStore';
 import { LatestSaveQueue } from './latestSaveQueue';

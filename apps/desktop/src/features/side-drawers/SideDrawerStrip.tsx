@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useChartDrawn } from '../chart/state/useChartDrawn';
+import { useChartDrawn } from '../chart/useChartDrawn';
 import { useSideDrawerActions, useSideDrawerOpen, type SideDrawerId } from './SideDrawerProvider';
 import { ObjectTreeIcon, TradePanelIcon } from './sideDrawerIcons';
 

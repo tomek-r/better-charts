@@ -1,39 +1,39 @@
 import { useEffect, type RefObject } from 'react';
 import { useExecutionCommandEffects } from '../features/execution/useExecutionCommands';
 import type { ExecutionCommandState } from '../features/execution/useExecutionCommands';
-import { useBridgeBootstrapEffects } from '../features/bridge/effects/useBridgeBootstrapEffects';
-import { useBridgeStreamEffects } from '../features/bridge/effects/useBridgeStreamEffects';
-import { useLastChartSelectionEffects } from '../features/bridge/effects/useLastChartSelectionEffects';
+import { useBridgeBootstrapEffects } from '../features/bridge/useBridgeBootstrapEffects';
+import { useBridgeStreamEffects } from '../features/bridge/useBridgeStreamEffects';
+import { useLastChartSelectionEffects } from '../features/bridge/lastChartSelection/useLastChartSelectionEffects';
 import { usePartialCloseAvailable } from '../features/partial-close/usePartialCloseAvailable';
 import { useBridgeQuote } from '../features/bridge/BridgeSessionProvider';
-import { useOrderTicketStores } from '../features/order-ticket/state/orderTicketContext';
+import { useOrderTicketStores } from '../features/order-ticket/draft/orderTicketContext';
 import type { BridgeSessionLifecycleState } from '../features/bridge/BridgeSessionProvider';
 import {
   useChartWorkspaceInitEffects,
   useChartWorkspaceChartEffects,
   useChartWorkspaceResetEffects,
   useChartWorkspaceHotkeyEffect,
-} from '../features/chart/effects/useChartWorkspaceEffects';
-import { useChartWorkspacePointerEffects } from '../features/chart/effects/useChartWorkspacePointerEffects';
+} from '../features/chart/workspace/useChartWorkspaceEffects';
+import { useChartWorkspacePointerEffects } from '../features/chart/pointer/useChartWorkspacePointerEffects';
 import {
   useChartWorkspaceMirrorRefEffect,
   useChartWorkspaceMirrorLayoutEffect,
-} from '../features/chart/effects/useChartOverlaySync';
-import { useOrderTicketEntryEffects } from '../features/order-ticket/effects/useOrderTicketEntryEffects';
-import { useOrderTicketDefaultVolume } from '../features/order-ticket/effects/useOrderTicketDefaultVolume';
-import { useOrderTicketStopLossSnap } from '../features/order-ticket/effects/useOrderTicketStopLossSnap';
-import { useOrderTicketOrderCheckEffects } from '../features/order-ticket/effects/useOrderTicketOrderCheckEffects';
-import { useOrderTicketRiskPreviewEffects } from '../features/order-ticket/effects/useOrderTicketRiskPreviewEffects';
+} from '../features/chart/workspace/useChartOverlaySync';
+import { useOrderTicketEntryEffects } from '../features/order-ticket/pricing/useOrderTicketEntryEffects';
+import { useOrderTicketDefaultVolume } from '../features/order-ticket/sizing/useOrderTicketDefaultVolume';
+import { useOrderTicketStopLossSnap } from '../features/order-ticket/stagedOrder/useOrderTicketStopLossSnap';
+import { useOrderTicketOrderCheckEffects } from '../features/order-ticket/orderCheck/useOrderTicketOrderCheckEffects';
+import { useOrderTicketRiskPreviewEffects } from '../features/order-ticket/riskPreview/useOrderTicketRiskPreviewEffects';
 import { usePortfolioAccountResetEffect } from '../features/portfolio/usePortfolioAccountResetEffect';
-import type { ChartWorkspaceState } from '../features/chart/state/useChartWorkspace';
-import { useOrderTicketEntryRuntime } from '../features/order-ticket/state/useOrderTicketEntryRuntime';
-import { useOrderTicketCheckRuntime } from '../features/order-ticket/state/useOrderTicketCheckRuntime';
-import { useOrderTicketPreviewRuntime } from '../features/order-ticket/state/useOrderTicketPreviewRuntime';
+import type { ChartWorkspaceState } from '../features/chart/workspace/useChartWorkspace';
+import { useOrderTicketEntryRuntime } from '../features/order-ticket/pricing/useOrderTicketEntryRuntime';
+import { useOrderTicketCheckRuntime } from '../features/order-ticket/orderCheck/useOrderTicketCheckRuntime';
+import { useOrderTicketPreviewRuntime } from '../features/order-ticket/riskPreview/useOrderTicketPreviewRuntime';
 import {
   useOrderTicketChartActions,
   useOrderTicketChartControls,
   useOrderTicketChartRuntime,
-} from '../features/order-ticket/state/useOrderTicketChartRuntime';
+} from '../features/order-ticket/stagedOrder/useOrderTicketChartRuntime';
 import type { BridgeTicketResponsePort } from '../features/bridge/bridgeTicketResponseHandlers';
 
 type InitializationSession = Pick<

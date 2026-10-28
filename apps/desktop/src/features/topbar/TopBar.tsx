@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { AccountBadge } from '../account-badge/AccountBadge';
 import { DemoAccountNotice } from '../demo-notice/DemoAccountNotice';
-import { useChartDrawn } from '../chart/state/useChartDrawn';
+import { useChartDrawn } from '../chart/useChartDrawn';
 
 /** Static brand mark: hoisted so a re-render reuses the same element. */
 const brandMark = (

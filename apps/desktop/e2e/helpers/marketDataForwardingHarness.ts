@@ -1,6 +1,6 @@
-import { createBridgeMarketRuntime, type BridgeEffectRun } from '../../src/features/bridge/bridgeMarketRuntime';
+import { createBridgeMarketRuntime, type BridgeEffectRun } from '../../src/features/bridge/market/bridgeMarketRuntime';
 import { createMarketDataConnection } from '../../src/features/bridge/marketDataPort';
-import type { BridgeMarketResources } from '../../src/features/bridge/bridgeMarketRuntime';
+import type { BridgeMarketResources } from '../../src/features/bridge/market/bridgeMarketRuntime';
 
 /**
  * Starts the market runtime's event forwarding on its own run and records what reaches the

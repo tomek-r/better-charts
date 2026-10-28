@@ -10,7 +10,7 @@ import { ExecutionProvider } from '../execution/ExecutionProvider';
 import { ObjectTreeDrawer } from '../object-tree/ObjectTreeDrawer';
 import { OrderTicketPanel } from '../order-ticket/OrderTicketPanel';
 import { OrderTicketProvider } from '../order-ticket/OrderTicketProvider';
-import { SymbolChangeTicketReset } from '../order-ticket/SymbolChangeTicketReset';
+import { SymbolChangeTicketReset } from '../order-ticket/lifecycle/SymbolChangeTicketReset';
 import { SideDrawerStrip } from '../side-drawers/SideDrawerStrip';
 import { SymbolSearchProvider } from '../symbol-search/SymbolSearchProvider';
 import { SymbolSearchView } from '../symbol-search/SymbolSearchView';

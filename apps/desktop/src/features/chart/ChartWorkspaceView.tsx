@@ -3,7 +3,7 @@ import { ChartQuotes } from './header/ChartQuotes';
 import { ChartTimeframes } from './timeframes/ChartTimeframes';
 import { ChartCanvas } from './ChartCanvas';
 import { ChartPartialClose } from '../partial-close/ChartPartialClose';
-import { useChartDrawn } from './state/useChartDrawn';
+import { useChartDrawn } from './useChartDrawn';
 import { ChartDrawingPersistence } from './drawingPersistence/ChartDrawingPersistence';
 import { ChartDrawingToolbar } from '../tools/drawingToolbar/ChartDrawingToolbar';
 

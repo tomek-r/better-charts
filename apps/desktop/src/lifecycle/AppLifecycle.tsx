@@ -5,8 +5,8 @@ import { useExecutionRuntime } from '../features/execution/ExecutionProvider';
 import {
   useOrderTicketChartActions,
   useOrderTicketChartControls,
-} from '../features/order-ticket/state/useOrderTicketChartRuntime';
-import { useOrderTicketBridgeResponsePort } from '../features/order-ticket/state/useOrderTicketBridgeResponsePort';
+} from '../features/order-ticket/stagedOrder/useOrderTicketChartRuntime';
+import { useOrderTicketBridgeResponsePort } from '../features/order-ticket/lifecycle/useOrderTicketBridgeResponsePort';
 import {
   LifecycleAccountAndCheck,
   LifecycleBootstrapAndGestures,

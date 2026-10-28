@@ -1,5 +1,5 @@
 import type { OrderCheckError, OrderCheckResult, RiskPreview, RiskPreviewError } from '../../shared/bridge/types';
-import type { OrderTicketCoordination, OrderTicketStores } from '../order-ticket/state/orderTicketStores';
+import type { OrderTicketCoordination, OrderTicketStores } from '../order-ticket/draft/orderTicketStores';
 import type { BridgeSessionState } from './useBridgeSession';
 
 type PayloadEvent<T> = { payload: T };

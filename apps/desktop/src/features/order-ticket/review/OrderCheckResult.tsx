@@ -7,7 +7,7 @@ import type {
 } from '../../../shared/bridge/types';
 import { finiteNumber, formatAccountMoney, formatMarginThreshold } from '../../../shared/accountFormat';
 import { Separated } from '../../../shared/ui/icons/SeparatorIcon';
-import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
+import { formatOrderMetric, formatQuoted } from './ticketFormatting';
 
 type ReviewAccount = Pick<
   AccountSnapshot,
