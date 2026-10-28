@@ -3,7 +3,7 @@ import {
   isValidToolInputValue,
   type ToolInputDefinition,
   type ToolInputValue,
-} from '../../chart/engine/drawings/toolInputs';
+} from '../../../chart/engine/drawings/toolInputs';
 import { TOOL_INPUT_FIELDS, type ToolInputFieldProps } from './toolInputFields';
 
 /** The table indexed by one kind is the union of its entries; this names the one call, as the validators do. */

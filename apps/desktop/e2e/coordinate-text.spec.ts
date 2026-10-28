@@ -7,7 +7,7 @@ import {
   rowTextToPoint,
   sameRowTexts,
   type CoordinateRowText,
-} from '../src/features/tools/drawingSettings/coordinateText';
+} from '../src/features/tools/drawingSettings/coordinates/coordinateText';
 import { STUB_M5_INTERVAL_MS, STUB_NOW } from './helpers/tauriStub';
 
 /**

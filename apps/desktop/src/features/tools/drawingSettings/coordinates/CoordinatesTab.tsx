@@ -1,4 +1,4 @@
-import type { ChartDrawingAnchor } from '../../chart/engine/drawings/toolDrawings';
+import type { ChartDrawingAnchor } from '../../../chart/engine/drawings/toolDrawings';
 import { CoordinateField } from './CoordinateField';
 import {
   anchorFieldNames,

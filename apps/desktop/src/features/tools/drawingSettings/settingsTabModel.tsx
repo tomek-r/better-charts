@@ -2,10 +2,10 @@ import type { ReactNode } from 'react';
 import type { ChartDrawingPointRule } from '../../chart/engine/drawings/toolDrawings';
 import type { ToolInputValue, ToolInputValues } from '../../chart/engine/drawings/toolInputs';
 import type { ToolSettingsSchema } from '../../chart/engine/drawings/toolSettings';
-import { CoordinatesTab, type CoordinateEditing } from './CoordinatesTab';
-import { InputsTab } from './InputsTab';
-import { StyleTab } from './StyleTab';
-import { VisibilityTab, type TimeframeVisibilityEditing } from './VisibilityTab';
+import { CoordinatesTab, type CoordinateEditing } from './coordinates/CoordinatesTab';
+import { InputsTab } from './inputs/InputsTab';
+import { StyleTab } from './style/StyleTab';
+import { VisibilityTab, type TimeframeVisibilityEditing } from './visibility/VisibilityTab';
 
 /** The id of the Coordinates tab, which the dialog opens when the tool refuses the saved anchors. */
 export const COORDINATES_TAB_ID = 'coordinates';

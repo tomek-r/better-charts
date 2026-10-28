@@ -10,8 +10,8 @@ import { areToolSettingValuesValid } from '../../chart/engine/drawings/toolSetti
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../../shared/ui/dialog/ModalDialog';
 import { SettingsTabs } from './SettingsTabs';
 import { buildSettingsTabs, COORDINATES_TAB_ID, type DrawingSettingsSchema } from './settingsTabModel';
-import { useCoordinateDraft } from './useCoordinateDraft';
-import { useTimeframeVisibilityDraft } from './useTimeframeVisibilityDraft';
+import { useCoordinateDraft } from './coordinates/useCoordinateDraft';
+import { useTimeframeVisibilityDraft } from './visibility/useTimeframeVisibilityDraft';
 
 /** The no-anchor default, one list so a form without anchors keeps a stable prop. */
 const NO_POINTS: readonly ChartDrawingPoint[] = [];

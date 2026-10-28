@@ -2,7 +2,7 @@ import {
   TIMEFRAME_COUNTS,
   type DrawingTimeframeVisibility,
   type TimeframeCountFamily,
-} from '../../chart/engine/drawings/timeframeVisibility';
+} from '../../../chart/engine/drawings/timeframeVisibility';
 import { SnappingRangeSlider } from './SnappingRangeSlider';
 import { TimeframeCountField } from './TimeframeCountField';
 

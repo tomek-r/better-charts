@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { ChartDrawingPoint } from '../../chart/engine/drawings/drawingRecord';
-import type { ChartDrawingPointRule } from '../../chart/engine/drawings/toolDrawings';
+import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
+import type { ChartDrawingPointRule } from '../../../chart/engine/drawings/toolDrawings';
 import type { CoordinateEditing } from './CoordinatesTab';
 import {
   invalidCoordinateFields,

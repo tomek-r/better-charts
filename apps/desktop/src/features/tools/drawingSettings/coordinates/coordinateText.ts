@@ -1,5 +1,5 @@
-import { parsePointPrice, type ChartDrawingPoint } from '../../chart/engine/drawings/drawingRecord';
-import type { ChartDrawingAnchor } from '../../chart/engine/drawings/toolDrawings';
+import { parsePointPrice, type ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
+import type { ChartDrawingAnchor } from '../../../chart/engine/drawings/toolDrawings';
 
 /**
  * The text of one anchor as the Coordinates tab edits it. Times are UTC, the zone of the chart's time

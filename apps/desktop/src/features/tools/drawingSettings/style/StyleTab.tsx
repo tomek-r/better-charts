@@ -1,5 +1,5 @@
-import type { ToolInputValue, ToolInputValues } from '../../chart/engine/drawings/toolInputs';
-import { toolStyleKey, type ToolStyleDefinition } from '../../chart/engine/drawings/toolStyles';
+import type { ToolInputValue, ToolInputValues } from '../../../chart/engine/drawings/toolInputs';
+import { toolStyleKey, type ToolStyleDefinition } from '../../../chart/engine/drawings/toolStyles';
 import { ToolStyleField } from './ToolStyleField';
 
 interface StyleTabProps {

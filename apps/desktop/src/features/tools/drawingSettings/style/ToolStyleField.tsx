@@ -1,16 +1,16 @@
 import { useId, type ReactNode } from 'react';
-import type { ToolInputValue, ToolInputValues } from '../../chart/engine/drawings/toolInputs';
+import type { ToolInputValue, ToolInputValues } from '../../../chart/engine/drawings/toolInputs';
 import {
   TOOL_STYLE_LINE_STYLES,
   TOOL_STYLE_LINE_WIDTHS,
   toolStyleKey,
   type ToolStyleDefinition,
-} from '../../chart/engine/drawings/toolStyles';
-import { ColorPickerButton } from '../../../shared/ui/colorPicker/ColorPickerButton';
-import type { LineOptions } from '../../../shared/ui/colorPicker/LineOptionsSection';
-import { Select } from '../../../shared/ui/select/Select';
+} from '../../../chart/engine/drawings/toolStyles';
+import { ColorPickerButton } from '../../../../shared/ui/colorPicker/ColorPickerButton';
+import type { LineOptions } from '../../../../shared/ui/colorPicker/LineOptionsSection';
+import { Select } from '../../../../shared/ui/select/Select';
+import { numberText, stringText } from '../inputs/toolInputFields';
 import { VisibleCheckbox } from './styleControls';
-import { numberText, stringText } from './toolInputFields';
 
 /** What one style field is given: its definition, every draft value, and whether its row is locked. */
 export interface ToolStyleFieldProps<Kind extends ToolStyleDefinition['kind']> {

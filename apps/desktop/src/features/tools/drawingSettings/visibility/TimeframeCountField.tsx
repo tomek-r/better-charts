@@ -3,7 +3,7 @@ import {
   snapTimeframeCount,
   TIMEFRAME_COUNTS,
   type TimeframeCountFamily,
-} from '../../chart/engine/drawings/timeframeVisibility';
+} from '../../../chart/engine/drawings/timeframeVisibility';
 
 export interface TimeframeCountFieldProps {
   readonly family: TimeframeCountFamily;

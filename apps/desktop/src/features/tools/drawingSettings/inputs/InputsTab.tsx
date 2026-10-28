@@ -3,7 +3,7 @@ import {
   type ToolInputDefinition,
   type ToolInputValue,
   type ToolInputValues,
-} from '../../chart/engine/drawings/toolInputs';
+} from '../../../chart/engine/drawings/toolInputs';
 import { ToolInputField } from './ToolInputField';
 
 /** The inputs sharing one group, or the ungrouped ones; `legend` is undefined for those. */
