@@ -1,6 +1,7 @@
 import type { OrderCheckResult, OrderKind, RiskPreview, RiskSide, TimeInForce } from '../../../shared/bridge/types';
 import type { RefObject } from 'react';
 import { createDomainStore } from '../../../shared/providers/domainStore';
+import type { DispatchStatus } from '../../execution/dispatchStatus';
 import { createTicketDerivationCache } from '../derivation/ticketDerivation';
 import type { RiskUnitsMode, UnitsMode } from '../sizing/unitsMode';
 
@@ -62,7 +63,7 @@ export type OrderTicketBrokerStore = {
   orderCheckLoading: boolean;
   orderCheckError: string | undefined;
   submittingSide: RiskSide | undefined;
-  submitStatus: { kind: 'locked' | 'error'; text: string } | undefined;
+  submitStatus: DispatchStatus | undefined;
 };
 
 export type OrderTicketEditorStore = {

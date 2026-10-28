@@ -5,8 +5,14 @@ import { errorText } from '../../../shared/errorText';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { OrderTicketInputs } from '../draft/orderTicketInputs';
 import type { OrderTicketStores } from '../draft/orderTicketStores';
-import { buildTicketDerivationInput } from '../derivation/ticketDerivation';
-import { passedStopEntryGuidance } from '../pricing/passedStopEntry';
+import type { RiskSide } from '../../../shared/bridge/types';
+import { dispatchStatusFromError } from '../../execution/dispatchStatus';
+import {
+  buildTicketDerivationInput,
+  selectTicketDerivationBroker,
+  selectTicketDerivationDraft,
+} from '../derivation/ticketDerivation';
+import { usePassedStopEntry } from '../pricing/usePassedStopEntry';
 import { ORDER_CHECK_REQUEST_FAILED, withoutStopLossTooClose } from '../derivation/ticketRules';
 import { useErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
 
@@ -16,38 +22,18 @@ export function useOrderTicketBrokerActions(
   resetTicketToDefaults: () => void,
 ) {
   const { instrument, account, quote, snapshot, status } = inputs;
-  const draft = useStore(
-    stores.draft,
-    useShallow((state) => ({
-      draftVersion: state.draftVersion,
-      riskSide: state.riskSide,
-      entry: state.entry,
-      stopLoss: state.stopLoss,
-      takeProfit: state.takeProfit,
-      equityAllocationPercent: state.equityAllocationPercent,
-      orderKind: state.orderKind,
-      timeInForce: state.timeInForce,
-      limitPrice: state.limitPrice,
-      unitsMode: state.unitsMode,
-      tpOn: state.tpOn,
-      slOn: state.slOn,
-      stagedOnChart: state.stagedOnChart,
-      orderVolume: state.orderVolume,
-    })),
-  );
-  const broker = useStore(
+  const draft = useStore(stores.draft, useShallow(selectTicketDerivationDraft));
+  const derivationBroker = useStore(stores.broker, useShallow(selectTicketDerivationBroker));
+  const { riskError, orderCheckLoading, submittingSide, submitStatus } = useStore(
     stores.broker,
     useShallow((state) => ({
-      riskPreview: state.riskPreview,
-      riskLoading: state.riskLoading,
       riskError: state.riskError,
-      orderCheck: state.orderCheck,
       orderCheckLoading: state.orderCheckLoading,
-      orderCheckError: state.orderCheckError,
       submittingSide: state.submittingSide,
       submitStatus: state.submitStatus,
     })),
   );
+  const orderCheckError = useStore(stores.broker, (state) => state.orderCheckError);
   const derived = stores.deriveTicket(
     buildTicketDerivationInput(
       {
@@ -59,7 +45,7 @@ export function useOrderTicketBrokerActions(
         marketOpen: status.marketSession?.isOpen,
       },
       draft,
-      broker,
+      derivationBroker,
     ),
   );
   const {
@@ -70,7 +56,7 @@ export function useOrderTicketBrokerActions(
     submitSwapPendingRef,
   } = stores.coordination;
   const setters = stores.setters;
-  const { orderCheck, orderCheckLoading, submittingSide } = broker;
+  const { orderCheck } = derivationBroker;
   const { riskSide, orderKind, timeInForce, slOn, tpOn } = draft;
   const {
     orderCheckEntry,
@@ -82,17 +68,24 @@ export function useOrderTicketBrokerActions(
     canSubmitOrder,
   } = derived;
 
-  useErrorNotification(withoutStopLossTooClose(broker.riskError));
+  useErrorNotification(withoutStopLossTooClose(riskError));
   // The review notification carries the specific "price moved past your stop entry" guidance.
-  const passedStopEntry = passedStopEntryGuidance({
-    orderCheckError: broker.orderCheckError,
+  const passedStopEntry = usePassedStopEntry(stores, quote);
+  useErrorNotification(passedStopEntry ? undefined : withoutStopLossTooClose(orderCheckError));
+  useErrorNotification(submitStatus?.text);
+
+  // Fields the check and the submit command both carry, in wire order.
+  const orderWireFields = (side: RiskSide) => ({
+    symbol: snapshot.symbol,
+    side,
     orderKind,
-    side: riskSide,
-    entry: draft.entry,
-    quote,
+    volume: effectiveVolume,
+    entry: orderCheckEntry,
+    stopLoss: slOn ? orderCheckStopLoss : null,
+    takeProfit: tpOn ? orderCheckTakeProfit : null,
+    timeInForce,
+    limitPrice: normalizedLimitPrice,
   });
-  useErrorNotification(passedStopEntry ? undefined : withoutStopLossTooClose(broker.orderCheckError));
-  useErrorNotification(broker.submitStatus?.text);
 
   const requestOrderCheck = useEventCallback(async () => {
     if (!canCheckOrder || !snapshot.symbol || !account || orderCheckEntry === null) {
@@ -117,15 +110,7 @@ export function useOrderTicketBrokerActions(
       await invoke('request_order_check', {
         accountLogin: account.accountLogin,
         brokerServer: account.brokerServer,
-        symbol: snapshot.symbol,
-        side: riskSide,
-        orderKind,
-        volume: effectiveVolume,
-        entry: orderCheckEntry,
-        stopLoss: slOn ? orderCheckStopLoss : null,
-        takeProfit: tpOn ? orderCheckTakeProfit : null,
-        timeInForce,
-        limitPrice: normalizedLimitPrice,
+        ...orderWireFields(riskSide),
         draftVersion,
       });
     } catch (error) {
@@ -141,38 +126,23 @@ export function useOrderTicketBrokerActions(
   });
 
   // Submit only the accepted check's draft, then keep its chart widget frozen until fill sync.
-  const submitOrder = useEventCallback(async (side: typeof riskSide) => {
-    const check = orderCheck;
-    const currentAccount = account;
-    if (!canSubmitOrder || !check?.draftId || !currentAccount || orderCheckEntry === null || submittingSide) {
+  const submitOrder = useEventCallback(async (side: RiskSide) => {
+    if (!canSubmitOrder || !orderCheck?.draftId || !account || orderCheckEntry === null || submittingSide) {
       return;
     }
     setters.broker.setSubmittingSide(side);
     try {
       await invoke('submit_order', {
-        draftId: check.draftId,
-        accountLogin: currentAccount.accountLogin,
-        brokerServer: currentAccount.brokerServer,
-        symbol: snapshot.symbol,
-        side,
-        orderKind,
-        volume: effectiveVolume,
-        entry: orderCheckEntry,
-        stopLoss: slOn ? orderCheckStopLoss : null,
-        takeProfit: tpOn ? orderCheckTakeProfit : null,
-        timeInForce,
-        limitPrice: normalizedLimitPrice,
+        draftId: orderCheck.draftId,
+        accountLogin: account.accountLogin,
+        brokerServer: account.brokerServer,
+        ...orderWireFields(side),
       });
       submitSwapPendingRef.current = true;
       setters.draft.setStagedOnChart(false);
       resetTicketToDefaults();
     } catch (error) {
-      const text = errorText(error);
-      setters.broker.setSubmitStatus(
-        /dispatch is disabled/i.test(text)
-          ? { kind: 'locked', text: 'Dispatch locked — nothing was sent to MT5. Owner approval required.' }
-          : { kind: 'error', text },
-      );
+      setters.broker.setSubmitStatus(dispatchStatusFromError(errorText(error)));
     } finally {
       setters.broker.setSubmittingSide(undefined);
     }

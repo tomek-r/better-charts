@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { createDomainStore, type DomainStore } from '../../shared/providers/domainStore';
 import { useRequiredContext } from '../../shared/providers/useRequiredContext';
-import { useEventCallback } from '../../shared/hooks/useEventCallback';
+import { useStableActions } from '../../shared/hooks/useStableActions';
 import { useExecutionCommands, type ExecutionCommandState, type ExecutionStoreState } from './useExecutionCommands';
 import { useBridgeAccount } from '../bridge/bridgeSelectors';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
@@ -32,21 +32,13 @@ export function ExecutionProvider({ children }: { children: ReactNode }) {
     }),
   );
   const execution = useExecutionCommands({ account, setPendingModification, positionOverlayState, chart, store });
-  const setExecutionQueue = useEventCallback(execution.setExecutionQueue);
-  const runCloseCancel = useEventCallback(execution.runCloseCancel);
-  const requestClosePosition = useEventCallback(execution.requestClosePosition);
-  const requestCancelOrder = useEventCallback(execution.requestCancelOrder);
-  const requestModifyDraft = useEventCallback(execution.requestModifyDraft);
-  const actions = useMemo<ExecutionActions>(
-    () => ({
-      setExecutionQueue,
-      runCloseCancel,
-      requestClosePosition,
-      requestCancelOrder,
-      requestModifyDraft,
-    }),
-    [requestCancelOrder, requestClosePosition, requestModifyDraft, runCloseCancel, setExecutionQueue],
-  );
+  const actions = useStableActions<ExecutionActions>({
+    setExecutionQueue: execution.setExecutionQueue,
+    runCloseCancel: execution.runCloseCancel,
+    requestClosePosition: execution.requestClosePosition,
+    requestCancelOrder: execution.requestCancelOrder,
+    requestModifyDraft: execution.requestModifyDraft,
+  });
   const contextValue = useMemo(() => ({ store, actions }), [actions, store]);
 
   return <ExecutionContext value={contextValue}>{children}</ExecutionContext>;

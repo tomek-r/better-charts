@@ -1,5 +1,5 @@
 import { currencyFractionDigits } from './money';
-import type { QuoteSnapshot } from './bridge/types';
+import type { BrokerSymbol, QuoteSnapshot } from './bridge/types';
 
 /** What a value shows when it is missing or not a number. */
 export const EMPTY_VALUE = '—';
@@ -16,6 +16,16 @@ export function quoteDigits(...values: string[]) {
     ),
   );
 }
+
+/** Symbol-info may not have arrived yet, so the quote text then carries the price precision. */
+export function priceDigitsFor(
+  instrument: Pick<BrokerSymbol, 'digits'> | undefined,
+  quote: Pick<QuoteSnapshot, 'bid' | 'ask'> | undefined,
+  fallback = 2,
+) {
+  return instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : fallback);
+}
+
 export function formatQuote(value: string, digits: number) {
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(digits) : '—';

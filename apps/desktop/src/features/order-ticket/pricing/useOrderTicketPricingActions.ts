@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
-import { quoteDigits, ticketPrice } from '../../../shared/format';
+import { priceDigitsFor, ticketPrice } from '../../../shared/format';
 import { isPriceSwapDisabled, priceToTicks, tickSizeOf } from './priceTicks';
 import { orderEntryPrice } from '../derivation/ticketRules';
 import type { OrderTicketInputs } from '../draft/orderTicketInputs';
@@ -42,7 +42,7 @@ export function useOrderTicketPricingActions(
   const setters = stores.setters.draft;
   const { tickSize, tickKnown } = tickSizeOf(instrument);
   const reference = quote ? Number(quote[priceReference]) : NaN;
-  const digits = instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : 2);
+  const digits = priceDigitsFor(instrument, quote);
   const priceSwapDisabled = isPriceSwapDisabled({ orderKind, priceMode, hasQuote: !!quote, tickKnown });
 
   useEffect(() => {

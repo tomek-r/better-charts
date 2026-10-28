@@ -7,7 +7,11 @@ import {
   useBridgeQuoteSelector,
 } from '../../bridge/bridgeSelectors';
 import { useOrderTicketStores } from '../draft/orderTicketContext';
-import { buildTicketDerivationInput } from '../derivation/ticketDerivation';
+import {
+  buildTicketDerivationInput,
+  selectTicketDerivationBroker,
+  selectTicketDerivationDraft,
+} from '../derivation/ticketDerivation';
 import type { TicketDerivationBroker, TicketDerivationDraft } from '../derivation/ticketDerivation';
 import { deriveOrderTicket } from '../derivation/ticketRules';
 import type { BridgeStatus, BrokerSymbol, QuoteSnapshot } from '../../../shared/bridge/types';
@@ -56,36 +60,11 @@ export function useTicketGateProjection() {
   const { accountLogin, brokerServer } = useBridgeAccountSelector(
     useShallow((account) => ({ accountLogin: account?.accountLogin, brokerServer: account?.brokerServer })),
   );
-  const draft = useStore(
-    stores.draft,
-    useShallow((state) => ({
-      stagedOnChart: state.stagedOnChart,
-      riskSide: state.riskSide,
-      entry: state.entry,
-      stopLoss: state.stopLoss,
-      takeProfit: state.takeProfit,
-      slOn: state.slOn,
-      tpOn: state.tpOn,
-      orderKind: state.orderKind,
-      limitPrice: state.limitPrice,
-      timeInForce: state.timeInForce,
-      unitsMode: state.unitsMode,
-      equityAllocationPercent: state.equityAllocationPercent,
-      orderVolume: state.orderVolume,
-      draftVersion: state.draftVersion,
-    })),
-  );
+  const draft = useStore(stores.draft, useShallow(selectTicketDerivationDraft));
   const quote = useBridgeQuoteSelector((value) =>
     draft.stagedOnChart && draft.orderKind === 'market' ? value : undefined,
   );
-  const { orderCheck, riskPreview, riskLoading } = useStore(
-    stores.broker,
-    useShallow((state) => ({
-      orderCheck: state.orderCheck,
-      riskPreview: state.riskPreview,
-      riskLoading: state.riskLoading,
-    })),
-  );
+  const broker = useStore(stores.broker, useShallow(selectTicketDerivationBroker));
   return deriveTicketGateProjection({
     symbol,
     instrument,
@@ -94,7 +73,7 @@ export function useTicketGateProjection() {
     accountLogin,
     brokerServer,
     draft,
-    broker: { orderCheck, riskPreview, riskLoading },
+    broker,
     quote,
   });
 }

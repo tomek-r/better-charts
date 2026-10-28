@@ -1,5 +1,5 @@
 import type { BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
-import { quoteDigits, ticketPrice } from '../../../shared/format';
+import { priceDigitsFor, ticketPrice } from '../../../shared/format';
 
 export function defaultStopLossPrice(
   entry: number,
@@ -26,7 +26,7 @@ export function defaultStopLossPrice(
     reference = side === 'buy' ? bid : ask;
   }
   const direction = side === 'buy' ? -1 : 1;
-  const digits = instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : 2);
+  const digits = priceDigitsFor(instrument, quote);
   const step = known ? Math.max(tick, minimum * 0.25) : fallbackDistance * 0.25;
   let distance = known ? minimum + 2 * tick : fallbackDistance;
   for (let attempt = 0; attempt < 5; attempt++) {

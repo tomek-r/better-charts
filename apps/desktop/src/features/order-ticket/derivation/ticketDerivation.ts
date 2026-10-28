@@ -1,3 +1,4 @@
+import type { OrderTicketBrokerStore, OrderTicketDraftStore } from '../draft/orderTicketStores';
 import type { TicketDerivation, TicketDerivationInput } from './ticketRules';
 import { deriveOrderTicket } from './ticketRules';
 
@@ -25,6 +26,31 @@ export type TicketDerivationDraft = Pick<
 >;
 
 export type TicketDerivationBroker = Pick<TicketDerivationInput, 'orderCheck' | 'riskPreview' | 'riskLoading'>;
+
+/** Pick the draft fields the derivation reads; pair with `useShallow` so unrelated draft edits do not re-render. */
+export const selectTicketDerivationDraft = (state: OrderTicketDraftStore): TicketDerivationDraft => ({
+  stagedOnChart: state.stagedOnChart,
+  riskSide: state.riskSide,
+  entry: state.entry,
+  stopLoss: state.stopLoss,
+  takeProfit: state.takeProfit,
+  slOn: state.slOn,
+  tpOn: state.tpOn,
+  orderKind: state.orderKind,
+  limitPrice: state.limitPrice,
+  timeInForce: state.timeInForce,
+  unitsMode: state.unitsMode,
+  equityAllocationPercent: state.equityAllocationPercent,
+  orderVolume: state.orderVolume,
+  draftVersion: state.draftVersion,
+});
+
+/** Pick the broker fields the derivation reads; pair with `useShallow`. */
+export const selectTicketDerivationBroker = (state: OrderTicketBrokerStore): TicketDerivationBroker => ({
+  orderCheck: state.orderCheck,
+  riskPreview: state.riskPreview,
+  riskLoading: state.riskLoading,
+});
 
 /** Build only the domain inputs from canonical subscribed context, draft, and broker snapshots. */
 export function buildTicketDerivationInput(

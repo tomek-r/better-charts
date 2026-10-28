@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useBridgeAccountSelector, useBridgeQuote } from '../../bridge/bridgeSelectors';
-import { passedStopEntryGuidance } from '../pricing/passedStopEntry';
+import { usePassedStopEntry } from '../pricing/usePassedStopEntry';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketReview } from './OrderTicketReview';
 import { useTicketGateProjection } from '../submit/useOrderTicketGates';
@@ -27,18 +27,8 @@ export function useOrderTicketReviewProps(): ReviewProps {
   const orderCheckLoading = useStore(stores.broker, (state) => state.orderCheckLoading);
   const submitStatus = useStore(stores.broker, (state) => state.submitStatus);
   const submittingSide = useStore(stores.broker, (state) => state.submittingSide);
-  const { riskSide, orderKind, entry } = useStore(
-    stores.draft,
-    useShallow((state) => ({ riskSide: state.riskSide, orderKind: state.orderKind, entry: state.entry })),
-  );
-  const quote = useBridgeQuote();
-  const passedStopEntry = passedStopEntryGuidance({
-    orderCheckError,
-    orderKind,
-    side: riskSide,
-    entry,
-    quote,
-  });
+  const riskSide = useStore(stores.draft, (state) => state.riskSide);
+  const passedStopEntry = usePassedStopEntry(stores, useBridgeQuote());
   return {
     account:
       currency === undefined
