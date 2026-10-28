@@ -64,10 +64,11 @@
   margin-top: 11px;
 }
 
+/* The row is the positioning context of the stretched open button (see .portfolio-open::after). */
 .portfolio-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  position: relative;
+  display: grid;
+  gap: 6px;
   padding: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
@@ -75,24 +76,21 @@
   font-size: 10px;
 }
 
-.portfolio-row > div {
-  /* The Close column stays fixed-width (.portfolio-actions is flex: 0 0 auto). */
-  min-width: 0;
+.portfolio-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.portfolio-row > div:last-child {
-  text-align: right;
-}
-
-/* Row body = the "open this symbol on the chart" action. Reset the button
-   chrome so the text keeps the row's layout, and let it fill the space the
-   Close column leaves. Close stays a sibling — never a button inside one. */
+/* Header = the "open this symbol on the chart" action. Reset the button chrome so the text keeps
+   the row's layout. Close stays a sibling — never a button inside one — yet the whole card is
+   clickable: ::after stretches this button over the row, and .portfolio-actions sits above it. */
 .portfolio-open {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  align-items: baseline;
+  gap: 6px;
   padding: 0;
   border: 0;
   background: none;
@@ -102,9 +100,11 @@
   cursor: pointer;
 }
 
-.portfolio-open > div {
-  /* Text columns shrink and ellipsize when the panel is narrow. */
-  min-width: 0;
+.portfolio-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
 }
 
 .portfolio-open:hover strong,
@@ -112,33 +112,64 @@
   color: var(--color-buy-soft);
 }
 
-/* The symbol never wraps; the value lines wrap (instead of ellipsizing) so
-   full-precision prices/volumes stay readable and never lose digits — the row
-   simply grows taller inside the fixed 330px drawer. */
-.portfolio-row strong {
-  display: block;
+/* Only the symbol name may be ellipsized; numbers wrap instead so they never lose digits. */
+.portfolio-open strong {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.portfolio-row span,
-.portfolio-row small {
-  display: block;
-  overflow-wrap: anywhere;
-}
-
-.portfolio-row strong {
   color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
-.portfolio-row span {
+.portfolio-volume {
   color: var(--color-muted-strong);
+  white-space: nowrap;
 }
 
-.portfolio-row small {
-  margin-top: 3px;
+.portfolio-side {
+  padding: 1px 5px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.portfolio-side.side-buy {
+  color: var(--color-buy-soft);
+  border-color: var(--color-buy-border);
+  background: var(--color-buy-wash);
+}
+
+.portfolio-side.side-sell {
+  color: var(--color-sell);
+  border-color: var(--color-sell-border);
+  background: var(--color-sell-wash);
+}
+
+/* Label columns are sized by the fixed labels and value columns are equal shares of the rest, so
+   a live value never sizes a track: a P/L update cannot move or resize anything. Long values wrap. */
+.portfolio-figures {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 3px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.portfolio-figures dt {
   color: var(--color-muted);
+}
+
+.portfolio-figures dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .portfolio-more {
@@ -147,9 +178,9 @@
 
 /* UX clarity pass: portfolio close/cancel row actions (their status line reuses .command-status) */
 .portfolio-actions {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
-  align-self: center;
-  margin-left: 8px;
 }
 
 /* The row is the popover's positioning context: the custom-volume popover is an overlay hung
