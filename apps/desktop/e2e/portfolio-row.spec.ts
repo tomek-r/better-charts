@@ -40,7 +40,7 @@ async function cellBoxes(page: Page) {
 
 test('a position row shows a header and a label grid', async ({ page }) => {
   await openPortfolio(page);
-  await expect(page.locator('.portfolio-open')).toHaveText(/^EURUSD\s*buy\s*1(\.0+)? units$/);
+  await expect(page.locator('.portfolio-open')).toHaveText(/^EURUSD\s*long\s*1(\.0+)? units$/);
   await expect(page.locator('.portfolio-side')).toHaveClass(/side-buy/);
   await expect(page.locator('.portfolio-figures dt')).toHaveText(['P/L', 'Price', 'SL', 'TP', 'Swap']);
   const values = page.locator('.portfolio-figures dd');

@@ -22,6 +22,9 @@ interface PortfolioRowProps {
 
 const FINISH_PARTIAL_FIRST = 'Finish or cancel the partial close first';
 
+/** A bought position is long, a sold one short. */
+const POSITION_DIRECTION: Record<string, string> = { buy: 'long', sell: 'short' };
+
 export function PortfolioRow({
   position,
   account,
@@ -58,7 +61,9 @@ export function PortfolioRow({
             onClick={() => void onOpenSymbol(position.symbol)}
           >
             <strong>{position.symbol}</strong>
-            <span className={`portfolio-side side-${position.side}`}>{position.side}</span>
+            <span className={`portfolio-side side-${position.side}`}>
+              {POSITION_DIRECTION[position.side] ?? position.side}
+            </span>
             <span className="portfolio-volume">{volumeWithUnit(position.volume)}</span>
           </button>
           <div className="portfolio-actions">
