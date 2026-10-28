@@ -129,7 +129,7 @@ test.describe('preset menu', () => {
       volume_min: '0.01000000',
       volume_step: '0.01000000',
     });
-    await expect(page.locator('.portfolio-open')).toContainText(/Position\s*buy\s*0\.1 units/);
+    await expect(page.locator('.portfolio-open')).toContainText(/buy\s*0\.1 units/);
     await expect(page.locator('.portfolio-open')).not.toContainText('0.10000000');
     await menuButton.click();
     await expect(page.getByRole('menuitem')).toHaveText([

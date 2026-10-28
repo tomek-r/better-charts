@@ -4,7 +4,6 @@ import { PartialCloseMenuButton } from '../partial-close/PartialCloseMenuButton'
 import { PartialCloseVolumePopover } from '../partial-close/PartialCloseVolumePopover';
 import { partialCloseLimits, partialCloseTitle } from '../partial-close/partialCloseVolume';
 import { volumeWithUnit } from '../../shared/format';
-import { Separated } from '../../shared/ui/SeparatorIcon';
 import { accountAmount } from './accountAmount';
 
 interface PortfolioRowProps {
@@ -38,7 +37,6 @@ export function PortfolioRow({
   const locked = accountUnavailable || commandInFlight;
   const itemRef = useRef<HTMLDivElement>(null);
   const profitText = accountAmount(position.profit, account?.currency, account?.currencyDigits);
-  const exitParts = [`SL ${position.stopLoss ?? '—'}`, `TP ${position.takeProfit ?? '—'}`];
 
   // The popover floats below the row inside the scrolling drawer; for the last row it extends
   // the drawer's scroll area rather than being clipped, so bring it into view when it opens.
@@ -51,52 +49,57 @@ export function PortfolioRow({
   return (
     <div className="portfolio-item" ref={itemRef}>
       <div className="portfolio-row">
-        {/* Row body is ONE button that opens the symbol on the chart;
-            Close stays a sibling action, never a button inside one. */}
-        <button
-          className="portfolio-open"
-          aria-label={`Open ${position.symbol} chart`}
-          onClick={() => void onOpenSymbol(position.symbol)}
-        >
-          <div className="portfolio-position">
+        <div className="portfolio-header">
+          {/* The header is ONE button that opens the symbol on the chart (its ::after stretches over
+              the whole row); Close stays a sibling action, never a button inside one. */}
+          <button
+            className="portfolio-open"
+            aria-label={`Open ${position.symbol} chart`}
+            onClick={() => void onOpenSymbol(position.symbol)}
+          >
             <strong>{position.symbol}</strong>
-            <span>Position</span>
-            <span>{position.side}</span>
-            <span>{volumeWithUnit(position.volume)}</span>
-          </div>
-          <div className="portfolio-figures">
-            <span>{position.priceCurrent}</span>
-            <span>P/L {profitText}</span>
-            {position.swap && (
-              <span>Swap {accountAmount(position.swap, account?.currency, account?.currencyDigits)}</span>
-            )}
-            <small>
-              <Separated parts={exitParts} />
-            </small>
-          </div>
-        </button>
-        <div className="portfolio-actions">
-          <div className="split-close">
-            <button
-              className="action-button portfolio-action"
-              disabled={locked || customVolumeOpen}
-              title={customVolumeOpen ? FINISH_PARTIAL_FIRST : undefined}
-              aria-busy={closing}
-              onClick={() => void onClose(null)}
-            >
-              {closing ? 'Closing…' : 'Close'}
-            </button>
-            {limits && (
-              <PartialCloseMenuButton
-                limits={limits}
-                className="action-button partial-caret"
+            <span className={`portfolio-side side-${position.side}`}>{position.side}</span>
+            <span className="portfolio-volume">{volumeWithUnit(position.volume)}</span>
+          </button>
+          <div className="portfolio-actions">
+            <div className="split-close">
+              <button
+                className="action-button portfolio-action"
                 disabled={locked || customVolumeOpen}
-                onClosePart={(volume) => void onClose(volume)}
-                onCustomVolume={() => setCustomVolumeOpen(true)}
-              />
-            )}
+                title={customVolumeOpen ? FINISH_PARTIAL_FIRST : undefined}
+                aria-busy={closing}
+                onClick={() => void onClose(null)}
+              >
+                {closing ? 'Closing…' : 'Close'}
+              </button>
+              {limits && (
+                <PartialCloseMenuButton
+                  limits={limits}
+                  className="action-button partial-caret"
+                  disabled={locked || customVolumeOpen}
+                  onClosePart={(volume) => void onClose(volume)}
+                  onCustomVolume={() => setCustomVolumeOpen(true)}
+                />
+              )}
+            </div>
           </div>
         </div>
+        <dl className="portfolio-figures">
+          <dt>P/L</dt>
+          <dd>{profitText}</dd>
+          <dt>Price</dt>
+          <dd>{position.priceCurrent}</dd>
+          <dt>SL</dt>
+          <dd>{position.stopLoss ?? '—'}</dd>
+          <dt>TP</dt>
+          <dd>{position.takeProfit ?? '—'}</dd>
+          {position.swap && (
+            <>
+              <dt>Swap</dt>
+              <dd>{accountAmount(position.swap, account?.currency, account?.currencyDigits)}</dd>
+            </>
+          )}
+        </dl>
       </div>
       {limits && customVolumeOpen && (
         <PartialCloseVolumePopover
