@@ -78,7 +78,6 @@ interface StagedGeom {
   chartRect: { x: number; y: number; width: number; height: number } | null;
   visibleRange: { from: number; to: number } | null;
   priceRange: { min: number; max: number } | null;
-  barSpacing: number | null;
   barWidth: number | null;
   digits: number;
   offset: number | null;

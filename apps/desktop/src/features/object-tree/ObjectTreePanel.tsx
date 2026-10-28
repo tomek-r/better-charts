@@ -1,6 +1,6 @@
 import type { ChartLayerEntry } from '../chart/engine/drawings/chartDrawings';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../chart/engine/drawings/drawingRecord';
-import { CHART_TOOL_PLUGINS } from '../tools/registry';
+import { findChartToolPlugin } from '../tools/registry';
 import { useDrawingSelection } from '../tools/drawingToolbar/useDrawingSelection';
 import { ObjectTreeBarsRow } from './ObjectTreeBarsRow';
 import { ObjectTreeRow } from './ObjectTreeRow';
@@ -27,7 +27,7 @@ export function ObjectTreePanel() {
       return <ObjectTreeBarsRow key="bars" reorder={forRow(layerIndex)} />;
     }
     const { record } = layer;
-    const plugin = CHART_TOOL_PLUGINS.find((entry) => entry.id === record.toolId);
+    const plugin = findChartToolPlugin(record.toolId);
     if (plugin === undefined) {
       return null;
     }

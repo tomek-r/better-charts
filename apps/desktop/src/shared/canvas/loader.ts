@@ -4,6 +4,7 @@
  * profile tool and the app-wide loading message, so both wait with the same animation.
  */
 import { palette } from '../theme/palette';
+import { DASHED_LINE_PATTERN } from './dashPatterns';
 
 export const LOADER_ROW_COUNT = 5;
 export const LOADER_ROW_HEIGHT = 4;
@@ -16,7 +17,6 @@ export const LOADER_LINE_MARGIN = 3;
 const LOADER_STEP_BASE_MS = 350;
 const LOADER_STEP_SPREAD_MS = 50;
 const LOADER_STEP_SPREAD_COUNT = 5;
-const LOADER_LINE_DASH = [4, 3];
 const LOADER_ROWS_HEIGHT = LOADER_ROW_COUNT * LOADER_ROW_HEIGHT + (LOADER_ROW_COUNT - 1) * LOADER_ROW_GAP;
 /** Height of the whole loader in CSS px, centre line overhang included. */
 export const LOADER_HEIGHT = LOADER_ROWS_HEIGHT + 2 * LOADER_LINE_MARGIN;
@@ -71,7 +71,7 @@ export function loaderRowWidths(nowMs: number): Array<{ bid: number; ask: number
 function strokeLoaderLine(ctx: CanvasRenderingContext2D, centerX: number, top: number, color: string): void {
   ctx.lineWidth = 1;
   ctx.strokeStyle = color;
-  ctx.setLineDash(LOADER_LINE_DASH);
+  ctx.setLineDash(DASHED_LINE_PATTERN);
   ctx.beginPath();
   ctx.moveTo(centerX, top - LOADER_LINE_MARGIN);
   ctx.lineTo(centerX, top + LOADER_ROWS_HEIGHT + LOADER_LINE_MARGIN);

@@ -1,22 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ChartToolPlugin } from './chartToolPlugin';
-import { CHART_TOOL_PLUGINS, type ChartToolId } from './registry';
+import { useRef } from 'react';
+import { CHART_TOOL_PLUGINS, type ChartToolId, type RegisteredChartToolPlugin } from './registry';
 import { DrawingToolIcon } from './DrawingToolIcon';
+import { DrawingToolRailGroup, type RailGroup } from './DrawingToolRailGroup';
+import { useRailFlyout } from './useRailFlyout';
 import { useChartDrawn } from '../chart/useChartDrawn';
 
-/** A registered plugin, with its id narrowed to the known tool ids. */
-type RegisteredToolPlugin = ChartToolPlugin<ChartToolId>;
-
-interface RailGroup {
-  id: string;
-  label: string;
-  members: RegisteredToolPlugin[];
-}
+const DIRECT_BUTTON_ICON_SIZE_PX = 26;
 
 /** Splits the registry into flyout groups and direct buttons, both in registry order. */
-function railLayout(plugins: readonly RegisteredToolPlugin[]): { groups: RailGroup[]; direct: RegisteredToolPlugin[] } {
+function railLayout(plugins: readonly RegisteredChartToolPlugin[]): {
+  groups: RailGroup[];
+  direct: RegisteredChartToolPlugin[];
+} {
   const groups: RailGroup[] = [];
-  const direct: RegisteredToolPlugin[] = [];
+  const direct: RegisteredChartToolPlugin[] = [];
   for (const plugin of plugins) {
     if (!plugin.railGroup) {
       direct.push(plugin);
@@ -58,131 +55,28 @@ export function DrawingToolRail({
 }) {
   /** Hidden while no chart is drawn: the tools would have nothing to act on. */
   const chartDrawn = useChartDrawn();
-  /** The group whose flyout is open, if any. */
-  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
-  /**
-   * Whether the arrow tab is showing. The pointer reveals it and takes it away
-   * again on leave; Escape clears it explicitly, because the pointer is usually
-   * still resting on the tab it just clicked and CSS :hover would keep the
-   * chevron on screen after the menu it belongs to is gone.
-   */
-  const [revealedGroupId, setRevealedGroupId] = useState<string | null>(null);
   const railRef = useRef<HTMLElement>(null);
-  /** Each group's icon button: Escape hands focus back to the open group's. */
-  const headRefs = useRef(new Map<string, HTMLButtonElement | null>());
+  const { openGroupId, revealedGroupId, setRevealedGroupId, closeFlyout, toggleFlyout, registerHead } =
+    useRailFlyout(railRef);
   const pick = (tool: ChartToolId) => {
-    setOpenGroupId(null);
+    closeFlyout();
     onPick(tool);
   };
-  const toggleFlyout = (groupId: string) => {
-    setOpenGroupId((open) => (open === groupId ? null : groupId));
-  };
-  useEffect(() => {
-    if (openGroupId === null) {
-      return;
-    }
-    const onPointerDownOutside = (event: MouseEvent) => {
-      if (!railRef.current?.contains(event.target as Node)) {
-        setOpenGroupId(null);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') {
-        return;
-      }
-      // The menu owns this Escape: stopping propagation keeps the chart's own
-      // Escape (deselect the active tool / unstage a draft) from also running.
-      event.stopPropagation();
-      setOpenGroupId(null);
-      setRevealedGroupId(null);
-      headRefs.current.get(openGroupId)?.focus();
-    };
-    document.addEventListener('mousedown', onPointerDownOutside);
-    document.addEventListener('keydown', onKeyDown);
-    // Move focus into the menu: the checked row, else the first one.
-    const checked = railRef.current?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]');
-    const first = railRef.current?.querySelector<HTMLElement>('[role="menuitemradio"]');
-    (checked ?? first)?.focus();
-    return () => {
-      document.removeEventListener('mousedown', onPointerDownOutside);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [openGroupId]);
   return (
     <nav className={`tool-rail${chartDrawn ? '' : ' tool-rail-waiting'}`} aria-label="Drawing tools" ref={railRef}>
-      {RAIL_LAYOUT.groups.map((group) => {
-        // The member the group's button represents: the active one, else the
-        // group's first — so the icon always names what it is while the group
-        // owns the active tool, and what it would activate when it does not.
-        const activeMember = group.members.find((member) => member.id === activeChartToolId);
-        const groupHead = activeMember ?? group.members[0];
-        const flyoutOpen = openGroupId === group.id;
-        return (
-          <div className="tool-rail-group" key={group.id}>
-            <div
-              className={`tool-rail-split${revealedGroupId === group.id || flyoutOpen ? ' open' : ''}`}
-              onPointerEnter={() => setRevealedGroupId(group.id)}
-              onPointerLeave={() => setRevealedGroupId(null)}
-            >
-              <button
-                type="button"
-                className={`tool-rail-btn${activeMember ? ' active' : ''}`}
-                aria-label={group.label}
-                title={groupHead.label}
-                aria-haspopup="menu"
-                aria-expanded={flyoutOpen}
-                ref={(element) => {
-                  headRefs.current.set(group.id, element);
-                }}
-                onClick={() => toggleFlyout(group.id)}
-              >
-                <DrawingToolIcon name={groupHead.id} size={22} />
-              </button>
-              <button
-                type="button"
-                className="tool-rail-arrow"
-                aria-haspopup="menu"
-                aria-expanded={flyoutOpen}
-                aria-label={`Open ${group.label.toLowerCase()}`}
-                onClick={() => toggleFlyout(group.id)}
-              >
-                <svg
-                  className="tool-rail-arrow-glyph"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path d="M5.5 3.5 9 7l-3.5 3.5" />
-                </svg>
-              </button>
-            </div>
-            {flyoutOpen && (
-              <div className="tool-flyout" role="menu" aria-label={group.label}>
-                {group.members.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={activeChartToolId === id}
-                    className={`tool-flyout-row${activeChartToolId === id ? ' selected' : ''}`}
-                    onClick={() => pick(id)}
-                  >
-                    <DrawingToolIcon name={id} size={18} />
-                    <span className="tool-flyout-label">{label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {RAIL_LAYOUT.groups.map((group) => (
+        <DrawingToolRailGroup
+          key={group.id}
+          group={group}
+          activeChartToolId={activeChartToolId}
+          flyoutOpen={openGroupId === group.id}
+          revealed={revealedGroupId === group.id}
+          onToggleFlyout={toggleFlyout}
+          onReveal={setRevealedGroupId}
+          onRegisterHead={registerHead}
+          onPick={pick}
+        />
+      ))}
       <span className="tool-rail-sep" aria-hidden="true" />
       {RAIL_LAYOUT.direct.map(({ id, label }) => (
         <button
@@ -194,7 +88,7 @@ export function DrawingToolRail({
           aria-pressed={activeChartToolId === id}
           onClick={() => pick(id)}
         >
-          <DrawingToolIcon name={id} size={26} />
+          <DrawingToolIcon name={id} size={DIRECT_BUTTON_ICON_SIZE_PX} />
         </button>
       ))}
     </nav>

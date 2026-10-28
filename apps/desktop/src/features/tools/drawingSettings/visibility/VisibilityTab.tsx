@@ -3,6 +3,7 @@ import {
   type DrawingTimeframeVisibility,
   type TimeframeCountFamily,
 } from '../../../chart/engine/drawings/timeframeVisibility';
+import { LabelledCheckbox } from '../LabelledCheckbox';
 import { SnappingRangeSlider } from './SnappingRangeSlider';
 import { TimeframeCountField } from './TimeframeCountField';
 
@@ -11,6 +12,8 @@ export interface TimeframeVisibilityEditing {
   readonly value: DrawingTimeframeVisibility;
   readonly onChange: (next: DrawingTimeframeVisibility) => void;
 }
+
+const RANGE_TITLE_CLASS = 'drawing-settings-range-title';
 
 type SingleTimeframe = 'days' | 'weeks' | 'months';
 
@@ -37,15 +40,13 @@ function CountRangeRow({ family, title, value, onChange }: CountRangeRowProps) {
   const setRange = (from: number, to: number) => onChange({ ...value, [family]: { ...range, from, to } });
   return (
     <div className="drawing-settings-range-row" role="group" aria-label={title}>
-      <label className="drawing-settings-range-title">
-        <input
-          className="drawing-settings-checkbox"
-          type="checkbox"
-          checked={range.shown}
-          onChange={(event) => onChange({ ...value, [family]: { ...range, shown: event.target.checked } })}
-        />
+      <LabelledCheckbox
+        className={RANGE_TITLE_CLASS}
+        checked={range.shown}
+        onChange={(shown) => onChange({ ...value, [family]: { ...range, shown } })}
+      >
         {title}
-      </label>
+      </LabelledCheckbox>
       <TimeframeCountField
         family={family}
         label={`${title} from`}
@@ -83,15 +84,14 @@ export function VisibilityTab({ value, onChange }: TimeframeVisibilityEditing) {
         <CountRangeRow key={family} family={family} title={title} value={value} onChange={onChange} />
       ))}
       {SINGLE_ROWS.map(({ flag, title }) => (
-        <label key={flag} className="drawing-settings-range-title">
-          <input
-            className="drawing-settings-checkbox"
-            type="checkbox"
-            checked={value[flag]}
-            onChange={(event) => onChange({ ...value, [flag]: event.target.checked })}
-          />
+        <LabelledCheckbox
+          key={flag}
+          className={RANGE_TITLE_CLASS}
+          checked={value[flag]}
+          onChange={(checked) => onChange({ ...value, [flag]: checked })}
+        >
           {title}
-        </label>
+        </LabelledCheckbox>
       ))}
     </div>
   );

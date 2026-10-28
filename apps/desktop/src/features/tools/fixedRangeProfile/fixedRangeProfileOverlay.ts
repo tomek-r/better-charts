@@ -5,7 +5,7 @@ import { drawSeparatedText } from '../../../shared/canvas/separatedText';
 import { palette } from '../../../shared/theme/palette';
 import { parseHexColor } from '../../../shared/theme/hexColor';
 import { drawProfileBars, layoutProfileBars, type ProfileBarsLayout } from './profileBars';
-import { drawProfileValueLabels } from './profileValueLabels';
+import { drawProfileValueLabels, MAX_VALUE_FONT_PX, valueFont } from './profileValueLabels';
 import { DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE, type FixedRangeProfileAppearance } from './fixedRangeProfileSettings';
 
 /**
@@ -59,7 +59,7 @@ const BAR_LABEL_COLOR = palette.muted;
 /** A profile whose history starts inside the range must not look complete. */
 const BAR_LABEL_PARTIAL_COLOR = palette.warnText;
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const BAR_LABEL_FONT = '400 11px system-ui, sans-serif';
+const BAR_LABEL_FONT = valueFont(MAX_VALUE_FONT_PX);
 const BAR_LABEL_INSET = 6;
 
 type LevelKey = 'poc' | 'vah' | 'val';

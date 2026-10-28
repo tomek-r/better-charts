@@ -9,7 +9,7 @@ import {
 import { ColorPickerButton } from '../../../../shared/ui/colorPicker/ColorPickerButton';
 import type { LineOptions } from '../../../../shared/ui/colorPicker/LineOptionsSection';
 import { Select } from '../../../../shared/ui/select/Select';
-import { numberText, stringText } from '../inputs/toolInputFields';
+import { numberFromInput, numberText, stringText, titledOptions } from '../inputs/toolInputFields';
 import { VisibleCheckbox } from './styleControls';
 
 /** What one style field is given: its definition, every draft value, and whether its row is locked. */
@@ -38,8 +38,17 @@ function lineOptionsOf(
   };
 }
 
-function LineStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'line'>) {
-  const { id, title } = definition;
+type StyleFieldEditing = Pick<ToolStyleFieldProps<ToolStyleDefinition['kind']>, 'values' | 'onChange' | 'disabled'>;
+
+interface ColorRowProps extends StyleFieldEditing {
+  readonly id: string;
+  readonly title: string;
+  /** The thickness and dash pickers of a line; a plain colour has none. */
+  readonly line?: LineOptions;
+}
+
+/** A style's visible checkbox and its colour picker, which the checkbox switches off. */
+function VisibleColorRow({ id, title, values, onChange, disabled, line }: ColorRowProps) {
   const visible = values[toolStyleKey(id, 'visible')] === true;
   return (
     <>
@@ -54,38 +63,46 @@ function LineStyleField({ definition, values, onChange, disabled }: ToolStyleFie
         color={stringText(values[toolStyleKey(id, 'color')])}
         disabled={disabled || !visible}
         onColorChange={(color) => onChange(toolStyleKey(id, 'color'), color)}
-        line={lineOptionsOf(id, values, onChange)}
+        line={line}
       />
     </>
+  );
+}
+
+/** A colour that cannot be hidden: the title stands in for the checkbox and names the picker. */
+function TitledColorRow({ id, title, values, onChange, disabled }: ColorRowProps) {
+  return (
+    <>
+      <span className="drawing-settings-style-title">{title}</span>
+      <ColorPickerButton
+        label={title}
+        color={stringText(values[toolStyleKey(id, 'color')])}
+        disabled={disabled}
+        onColorChange={(color) => onChange(toolStyleKey(id, 'color'), color)}
+      />
+    </>
+  );
+}
+
+function LineStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'line'>) {
+  const { id, title } = definition;
+  return (
+    <VisibleColorRow
+      id={id}
+      title={title}
+      values={values}
+      onChange={onChange}
+      disabled={disabled}
+      line={lineOptionsOf(id, values, onChange)}
+    />
   );
 }
 
 /** A colour row: with a checkbox when the style can be hidden, a plain title otherwise. */
 function ColorStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'color'>) {
   const { id, title } = definition;
-  const visibleKey = toolStyleKey(id, 'visible');
-  const hasCheckbox = definition.defaults.visible !== undefined;
-  const visible = values[visibleKey] === true;
-  return (
-    <>
-      {hasCheckbox ? (
-        <VisibleCheckbox
-          title={title}
-          checked={visible}
-          disabled={disabled}
-          onChange={(checked) => onChange(visibleKey, checked)}
-        />
-      ) : (
-        <span className="drawing-settings-style-title">{title}</span>
-      )}
-      <ColorPickerButton
-        label={hasCheckbox ? `${title} colour` : title}
-        color={stringText(values[toolStyleKey(id, 'color')])}
-        disabled={disabled || (hasCheckbox && !visible)}
-        onColorChange={(color) => onChange(toolStyleKey(id, 'color'), color)}
-      />
-    </>
-  );
+  const Row = definition.defaults.visible === undefined ? TitledColorRow : VisibleColorRow;
+  return <Row id={id} title={title} values={values} onChange={onChange} disabled={disabled} />;
 }
 
 function ToggleStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'toggle'>) {
@@ -119,7 +136,7 @@ function NumberStyleField({ definition, values, onChange, disabled }: ToolStyleF
         value={numberText(value)}
         disabled={disabled}
         aria-invalid={invalid}
-        onChange={(event) => onChange(definition.id, event.target.value === '' ? '' : Number(event.target.value))}
+        onChange={(event) => onChange(definition.id, numberFromInput(event.target.value))}
       />
     </>
   );
@@ -127,7 +144,6 @@ function NumberStyleField({ definition, values, onChange, disabled }: ToolStyleF
 
 function ChoiceStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'choice'>) {
   const controlId = useId();
-  const choiceOptions = definition.options.map((option) => ({ value: option.value, label: option.title }));
   return (
     <>
       <label className="drawing-settings-style-title" htmlFor={controlId}>
@@ -135,7 +151,7 @@ function ChoiceStyleField({ definition, values, onChange, disabled }: ToolStyleF
       </label>
       <Select
         id={controlId}
-        options={choiceOptions}
+        options={titledOptions(definition.options)}
         value={stringText(values[definition.id])}
         disabled={disabled}
         onChange={(value) => onChange(definition.id, value)}

@@ -1,3 +1,5 @@
+import { LabelledCheckbox } from '../LabelledCheckbox';
+
 interface VisibleCheckboxProps {
   readonly title: string;
   readonly checked: boolean;
@@ -8,15 +10,13 @@ interface VisibleCheckboxProps {
 /** The visible checkbox of a style row, labelled by the style's title. */
 export function VisibleCheckbox({ title, checked, disabled, onChange }: VisibleCheckboxProps) {
   return (
-    <label className="drawing-settings-style-title">
-      <input
-        className="drawing-settings-checkbox"
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-      />
+    <LabelledCheckbox
+      className="drawing-settings-style-title"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+    >
       <span>{title}</span>
-    </label>
+    </LabelledCheckbox>
   );
 }

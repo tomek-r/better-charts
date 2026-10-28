@@ -10,6 +10,12 @@ export interface CrosshairTestApi {
   linesVisible(): boolean;
 }
 
+/** A line through a CSS-px coordinate, in device pixels: the whole-pixel thickness and where it starts. */
+function snappedLine(pointCss: number, pixelRatio: number): { start: number; thickness: number } {
+  const thickness = Math.max(1, Math.floor(pixelRatio));
+  return { start: Math.round(pointCss * pixelRatio - thickness / 2), thickness };
+}
+
 /**
  * Draws full-width and full-height 1 CSS px lines through the pointer while active
  * and the pointer is over the pane. They continue over both axes, so the engine's
@@ -52,14 +58,12 @@ export class CrosshairTool implements ChartTool {
     target.bitmap.withContext((context) => {
       context.fillStyle = LINE_COLOR;
       if (surface !== 'priceAxis') {
-        const lineWidth = Math.max(1, Math.floor(horizontalPixelRatio));
-        const left = Math.round(point.x * horizontalPixelRatio - lineWidth / 2);
-        context.fillRect(left, 0, lineWidth, height);
+        const vertical = snappedLine(point.x, horizontalPixelRatio);
+        context.fillRect(vertical.start, 0, vertical.thickness, height);
       }
       if (surface !== 'timeAxis') {
-        const lineHeight = Math.max(1, Math.floor(verticalPixelRatio));
-        const top = Math.round(point.y * verticalPixelRatio - lineHeight / 2);
-        context.fillRect(0, top, width, lineHeight);
+        const horizontal = snappedLine(point.y, verticalPixelRatio);
+        context.fillRect(0, horizontal.start, width, horizontal.thickness);
       }
     });
   }

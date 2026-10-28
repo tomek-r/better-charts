@@ -1,5 +1,5 @@
 import type { ChartToolIconSpec } from './chartToolPlugin';
-import { CHART_TOOL_PLUGINS, type ChartToolId } from './registry';
+import { findChartToolPlugin, type ChartToolId } from './registry';
 
 export function DrawingToolIcon({
   name,
@@ -10,7 +10,7 @@ export function DrawingToolIcon({
   size?: number;
   className?: string;
 }) {
-  const spec: ChartToolIconSpec = CHART_TOOL_PLUGINS.find((plugin) => plugin.id === name)!.icon;
+  const spec: ChartToolIconSpec = findChartToolPlugin(name)!.icon;
   return (
     <svg
       className={`drawing-tool-icon${className ? ` ${className}` : ''}`}

@@ -8,7 +8,9 @@ import {
   type ChartToolHost,
   type RenderViewport,
 } from '../../../chart/engine/tools/toolContract';
+import { DASHED_LINE_PATTERN } from '../../../../shared/canvas/dashPatterns';
 import { palette } from '../../../../shared/theme/palette';
+import { currentQuoteTimeMs } from '../currentQuoteTimeMs';
 import {
   drawFixedRangeProfile,
   drawFixedRangeProfileLoadingWash,
@@ -38,8 +40,6 @@ import { fixedRangeProfilePoints } from './fixedRangeProfilePoints';
 export const HANDLE_HIT_PX = 7;
 /** Radius of a handle circle, in pane CSS px. */
 const HANDLE_RADIUS_PX = 4;
-/** The dash of the two boundary lines: 4 px on, 3 px off. */
-const HANDLE_DASH_PX = [4, 3];
 
 /** How one drawing paints itself: the selection highlight, and the range a boundary drag previews. */
 export interface FixedRangeProfilePaintOptions {
@@ -140,7 +140,7 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
     const { height } = viewport.chartRect;
     ctx.strokeStyle = palette.textLabel;
     ctx.lineWidth = 1;
-    ctx.setLineDash(HANDLE_DASH_PX);
+    ctx.setLineDash(DASHED_LINE_PATTERN);
     for (const x of [handles.fromX, handles.toX]) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
@@ -152,7 +152,7 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
       ctx.fillStyle = palette.panel;
       ctx.fill();
       ctx.stroke();
-      ctx.setLineDash(HANDLE_DASH_PX);
+      ctx.setLineDash(DASHED_LINE_PATTERN);
     }
     ctx.setLineDash([]);
   }
@@ -375,10 +375,6 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
 
   /** Whether the window may still gain ticks, judged by the newest bar and by the feed's newest quote. */
   private isOpen(): boolean {
-    const { currentMarket, barSeries } = this.host;
-    const quote = currentMarket.quote();
-    const quoteTimeMs =
-      quote && quote.symbol === currentMarket.symbol() && Number.isFinite(quote.timeMs) ? quote.timeMs : undefined;
-    return isRangeOpen(barSeries, this.window, quoteTimeMs);
+    return isRangeOpen(this.host.barSeries, this.window, currentQuoteTimeMs(this.host));
   }
 }

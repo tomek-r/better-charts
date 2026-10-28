@@ -74,6 +74,7 @@ export function DrawingSettingsForm({
       ) : (
         <SettingsTabs
           tabs={tabs}
+          settings={settings}
           selectedId={selectedTabId}
           onSelect={setSelectedTabId}
           values={values}

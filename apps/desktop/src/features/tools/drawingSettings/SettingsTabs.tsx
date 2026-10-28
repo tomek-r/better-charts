@@ -1,8 +1,9 @@
 import { useId, type KeyboardEvent } from 'react';
+import { arrowStep, wrapIndex, type ArrowSteps } from '../../../shared/ui/keyboard/arrowStep';
 import type { SettingsPanelProps, SettingsTab } from './settingsTabModel';
 
 /** Arrow keys step between tabs and wrap around; Home and End jump to the ends (WAI-ARIA tabs pattern). */
-const TAB_KEY_STEPS: Readonly<Partial<Record<string, number>>> = { ArrowRight: 1, ArrowLeft: -1 };
+const TAB_KEY_STEPS: ArrowSteps = { ArrowRight: 1, ArrowLeft: -1 };
 
 /** The tab the key lands on, or undefined when the key is not a tab key. */
 function targetTabIndex(key: string, current: number, count: number): number | undefined {
@@ -12,8 +13,8 @@ function targetTabIndex(key: string, current: number, count: number): number | u
   if (key === 'End') {
     return count - 1;
   }
-  const step = TAB_KEY_STEPS[key];
-  return step === undefined ? undefined : (current + step + count) % count;
+  const step = arrowStep(key, TAB_KEY_STEPS);
+  return step === undefined ? undefined : wrapIndex(current, step, count);
 }
 
 interface SettingsTabsProps extends SettingsPanelProps {
@@ -27,15 +28,7 @@ interface SettingsTabsProps extends SettingsPanelProps {
  * The tablist and the panel of the selected tab. Selection follows focus, so an arrow key both moves
  * to and opens the next tab; only the selected tab sits in the tab order.
  */
-export function SettingsTabs({
-  tabs,
-  values,
-  onChange,
-  coordinates,
-  timeframeVisibility,
-  selectedId,
-  onSelect,
-}: SettingsTabsProps) {
+export function SettingsTabs({ tabs, selectedId, onSelect, ...panelProps }: SettingsTabsProps) {
   const idPrefix = useId();
   const selected = tabs.find((tab) => tab.id === selectedId) ?? tabs[0];
 
@@ -74,7 +67,7 @@ export function SettingsTabs({
         role="tabpanel"
         aria-labelledby={`${idPrefix}-tab-${selected.id}`}
       >
-        {selected.render({ values, onChange, coordinates, timeframeVisibility })}
+        <selected.Panel {...panelProps} />
       </div>
     </>
   );

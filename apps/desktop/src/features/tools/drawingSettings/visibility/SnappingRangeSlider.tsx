@@ -14,6 +14,36 @@ function percentAt(index: number, lastIndex: number): number {
   return lastIndex === 0 ? 0 : (index / lastIndex) * 100;
 }
 
+interface RangeThumbProps {
+  readonly thumb: 'from' | 'to';
+  readonly ariaLabel: string;
+  readonly lastIndex: number;
+  readonly index: number;
+  /** The stop the thumb rests on, which assistive technology reads instead of the index. */
+  readonly valueText: number;
+  readonly disabled: boolean;
+  readonly onIndexChange: (index: number) => void;
+}
+
+/** One thumb of the slider: a range input over the stop indexes. */
+function RangeThumb({ thumb, ariaLabel, lastIndex, index, valueText, disabled, onIndexChange }: RangeThumbProps) {
+  return (
+    <input
+      className="drawing-settings-range-thumb"
+      data-thumb={thumb}
+      type="range"
+      min={0}
+      max={lastIndex}
+      step={1}
+      value={index}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      aria-valuetext={String(valueText)}
+      onChange={(event) => onIndexChange(Number(event.target.value))}
+    />
+  );
+}
+
 /**
  * Two overlaid range inputs over the indexes of `stops`: each thumb rests on a stop only, and the thumbs
  * cannot cross, because a thumb is clamped to the other one.
@@ -32,31 +62,23 @@ export function SnappingRangeSlider({ label, stops, from, to, disabled, onChange
           style={{ left: `${percentAt(fromIndex, lastIndex)}%`, right: `${100 - percentAt(toIndex, lastIndex)}%` }}
         />
       </span>
-      <input
-        className="drawing-settings-range-thumb"
-        data-thumb="from"
-        type="range"
-        min={0}
-        max={lastIndex}
-        step={1}
-        value={fromIndex}
+      <RangeThumb
+        thumb="from"
+        ariaLabel={`${label} range minimum`}
+        lastIndex={lastIndex}
+        index={fromIndex}
+        valueText={from}
         disabled={disabled}
-        aria-label={`${label} range minimum`}
-        aria-valuetext={String(from)}
-        onChange={(event) => onChange(stops[Math.min(Number(event.target.value), toIndex)], to)}
+        onIndexChange={(index) => onChange(stops[Math.min(index, toIndex)], to)}
       />
-      <input
-        className="drawing-settings-range-thumb"
-        data-thumb="to"
-        type="range"
-        min={0}
-        max={lastIndex}
-        step={1}
-        value={toIndex}
+      <RangeThumb
+        thumb="to"
+        ariaLabel={`${label} range maximum`}
+        lastIndex={lastIndex}
+        index={toIndex}
+        valueText={to}
         disabled={disabled}
-        aria-label={`${label} range maximum`}
-        aria-valuetext={String(to)}
-        onChange={(event) => onChange(from, stops[Math.max(Number(event.target.value), fromIndex)])}
+        onIndexChange={(index) => onChange(from, stops[Math.max(index, fromIndex)])}
       />
     </div>
   );

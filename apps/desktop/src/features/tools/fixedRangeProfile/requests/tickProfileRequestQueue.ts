@@ -1,5 +1,6 @@
 import type { ProfileCancelled, ProfileError, ProfileResult } from '../../../../shared/bridge/types';
 import type { MarketDataPort, TickProfileRequest, Unsubscribe } from '../../../bridge/marketDataPort';
+import { IN_FLIGHT_SAFETY_MS } from './profileRequestLimits';
 
 /** The identity the backend echoes back: which window it computed, whatever the outcome. */
 interface TickProfileOutcome {
@@ -20,14 +21,6 @@ interface WaitingTickProfile {
   readonly ownerId: string;
   readonly request: TickProfileRequest;
 }
-
-/**
- * Safety net with the requester's `LIVE_PROFILE_PENDING_MAX_MS` value and reason: every awaited
- * request ends with a result, an error or a cancellation, so an older in-flight request means its
- * terminal event was lost and must not hold the queue forever. No timer reads this: the cutoff is
- * checked when the next request arrives.
- */
-const IN_FLIGHT_SAFETY_MS = 300_000;
 
 /** Whether a terminal event belongs to a request. */
 function isOutcomeOf(outcome: TickProfileOutcome, request: TickProfileRequest): boolean {
@@ -161,6 +154,7 @@ export class TickProfileRequestQueue {
     this.send(next.ownerId, next.request);
   }
 
+  /** The queue's use of the safety cutoff: no timer reads it, it is checked when the next request arrives. */
   private forgetLostInFlight(): void {
     if (this.inFlight !== null && this.now() - this.inFlight.sentAt > IN_FLIGHT_SAFETY_MS) {
       this.inFlight = null;

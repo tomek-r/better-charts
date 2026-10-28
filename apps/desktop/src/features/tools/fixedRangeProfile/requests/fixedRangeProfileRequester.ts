@@ -2,21 +2,16 @@ import type { ProfileResult } from '../../../../shared/bridge/types';
 import type { MarketDataPort, ProfileRequestParams } from '../../../bridge/marketDataPort';
 import type { ChartToolHost } from '../../../chart/engine/tools/toolContract';
 import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from '../fixedRangeProfileOverlay';
+import { currentQuoteTimeMs } from '../currentQuoteTimeMs';
 import type { FixedRangeProfileRange } from '../fixedRangeProfileRange';
+import { DEFAULT_ROW_COUNT, DEFAULT_VALUE_AREA_PERCENT, IN_FLIGHT_SAFETY_MS } from './profileRequestLimits';
 
 /** The histogram settings of a profile whose owner supplies none: 128 rows and a 70% value area. */
 export const DEFAULT_PROFILE_REQUEST_PARAMS: ProfileRequestParams = {
-  rowsLayout: { kind: 'rows', count: 128 },
-  valueAreaPercent: 70,
+  rowsLayout: { kind: 'rows', count: DEFAULT_ROW_COUNT },
+  valueAreaPercent: DEFAULT_VALUE_AREA_PERCENT,
 };
 const LIVE_PROFILE_REFRESH_MS = 2000;
-/**
- * Safety net only. Every awaited request ends with a result, a correlated error (EA page read timeout 120 s), a
- * cancellation or a rejected invoke, and a session change or disconnect resets the tool, so a refresh must never
- * replace a request still loading: the backend would drop the load in flight and restart a load that already takes
- * 30-90 s on a busy feed. The cutoff only recovers from a lost terminal event, so it is well beyond a legitimate load.
- */
-const LIVE_PROFILE_PENDING_MAX_MS = 300_000;
 /** How long the awaited request may stay unanswered before the chart shows a loading spinner. */
 export const SLOW_PROFILE_SPINNER_DELAY_MS = 6000;
 /** Repaint period of the visible spinner (about 30 fps); no repaints are scheduled while it is hidden. */
@@ -108,9 +103,8 @@ export class FixedRangeProfileRequester {
     // Tick and quote times are broker server time. Ticks older than the newest quote are final, but the backend
     // caches a completed raw tick page by its requested end, so a request reaching past the newest tick would be
     // cached as complete and later open-range refreshes would be served that stale page. Historical ranges are unaffected.
-    const quote = this.host.currentMarket.quote();
     const newestBarMs = (this.host.barSeries.bars.at(-1)?.time ?? 0) * 1000;
-    const quoteMs = quote && quote.symbol === symbol && Number.isFinite(quote.timeMs) ? quote.timeMs : 0;
+    const quoteMs = currentQuoteTimeMs(this.host) ?? 0;
     const liveEdgeMs = [quoteMs, newestBarMs].find((ms) => ms > 0) ?? range.endMs;
     const requestEnd = Math.min(range.endMs, liveEdgeMs);
     const nothingToRequest = requestEnd <= fromMs;
@@ -166,7 +160,7 @@ export class FixedRangeProfileRequester {
           return;
         }
         const expected = this.expected;
-        if (expected && !expected.settled && Date.now() - expected.sentAt < LIVE_PROFILE_PENDING_MAX_MS) {
+        if (expected && !expected.settled && Date.now() - expected.sentAt < IN_FLIGHT_SAFETY_MS) {
           scheduleRefresh(LIVE_PROFILE_REFRESH_MS);
           return;
         }

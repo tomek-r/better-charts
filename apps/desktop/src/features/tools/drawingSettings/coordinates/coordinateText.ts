@@ -1,5 +1,6 @@
 import { parsePointPrice, type ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
 import type { ChartDrawingAnchor } from '../../../chart/engine/drawings/toolDrawings';
+import { MS_PER_MINUTE, nearestMinuteMs } from '../../../../shared/time/minutes';
 
 /**
  * The text of one anchor as the Coordinates tab edits it. Times are UTC, the zone of the chart's time
@@ -22,7 +23,6 @@ const DATE_CHARS = 10;
 const TIME_CHARS_START = 11;
 const TIME_CHARS_END = 16;
 const MS_PER_SECOND = 1000;
-const MS_PER_MINUTE = 60 * MS_PER_SECOND;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
@@ -52,11 +52,6 @@ function utcDayStartMs(date: string): number | undefined {
   const dayStartMs = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   // A rolled-over day (02-30) or a two-digit year the Date API maps to 19xx reads back differently.
   return new Date(dayStartMs).toISOString().slice(0, DATE_CHARS) === date ? dayStartMs : undefined;
-}
-
-/** The instant rounded to the nearest whole minute: MT5's lowest timeframe is M1, so anchors never carry seconds. */
-function nearestMinuteMs(timeMs: number): number {
-  return Math.round(timeMs / MS_PER_MINUTE) * MS_PER_MINUTE;
 }
 
 /**

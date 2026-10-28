@@ -2,18 +2,19 @@ import { formatCompactNumber } from '../../../shared/compactNumber';
 import type { ProfileBarsLayout, RowWeights } from './profileBars';
 import type { FixedRangeProfileAppearance, FixedRangeProfileVolumeMode } from './fixedRangeProfileSettings';
 
-const MAX_FONT_PX = 11;
+/** The largest text the profile paints: value labels in tall rows and the bar timeframe label. */
+export const MAX_VALUE_FONT_PX = 11;
 const MIN_FONT_PX = 1;
 const ANCHOR_INSET = 4;
 const SUMMARY_GAP = 4;
 
-function valueFont(sizePx: number): string {
+export function valueFont(sizePx: number): string {
   return `400 ${sizePx}px system-ui, sans-serif`;
 }
 
 /** One pixel less than the row, so text centred in a short row stays inside it. */
 function rowFontPx(row: ProfileBarsLayout['rows'][number]): number {
-  return Math.max(MIN_FONT_PX, Math.min(MAX_FONT_PX, row.bottom - row.top - 1));
+  return Math.max(MIN_FONT_PX, Math.min(MAX_VALUE_FONT_PX, row.bottom - row.top - 1));
 }
 
 type WeightsText = (weights: RowWeights) => string;

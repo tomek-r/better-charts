@@ -39,10 +39,22 @@ const FALLBACK_COLOR = '#000000';
 const COLOR_BASE_LENGTH = 7;
 /** Characters of the `YYYY-MM-DDTHH:mm` a `datetime-local` input shows. */
 const DATETIME_LOCAL_LENGTH = 16;
+/** Visible lines of a multi-line text input. */
+const TEXT_AREA_ROWS = 3;
 
 /** The text a number input shows: empty while the draft holds no number. */
 export function numberText(value: ToolInputValue): string {
   return typeof value === 'number' ? String(value) : '';
+}
+
+/** The draft a number input's text makes: an emptied input holds no number. */
+export function numberFromInput(text: string): number | '' {
+  return text === '' ? '' : Number(text);
+}
+
+/** The drop-down choices of options that carry a value and a title. */
+export function titledOptions(options: readonly { readonly value: string; readonly title: string }[]): SelectOption[] {
+  return options.map((option) => ({ value: option.value, label: option.title }));
 }
 
 /** The text a text-like control shows: empty while the draft holds no string. */
@@ -78,7 +90,7 @@ export function colorParts({ value, invalid }: { value: ToolInputValue; invalid:
 /** The choices one drop-down lists, named per kind: Pine's own names for sources and timeframes. */
 function choiceOptions(definition: Extract<ToolInputDefinition, { kind: ChoiceKind }>): readonly SelectOption[] {
   if (definition.kind === 'enum') {
-    return definition.options.map((option) => ({ value: option.value, label: option.title }));
+    return titledOptions(definition.options);
   }
   if (definition.kind === 'source') {
     return TOOL_INPUT_SOURCES.map((source) => ({ value: source, label: source }));
@@ -112,7 +124,7 @@ function NumberControl(props: FieldPropsFor<'int' | 'float' | 'price'>) {
       max={bounds?.maxValue}
       step={bounds?.step ?? 'any'}
       value={numberText(props.value)}
-      onChange={(event) => props.onChange(event.target.value === '' ? '' : Number(event.target.value))}
+      onChange={(event) => props.onChange(numberFromInput(event.target.value))}
     />
   );
 }
@@ -148,7 +160,7 @@ function TextAreaControl(props: ToolInputFieldProps<'textArea'>) {
     <textarea
       {...controlAttributes(props)}
       className="drawing-settings-control"
-      rows={3}
+      rows={TEXT_AREA_ROWS}
       value={stringText(props.value)}
       onChange={(event) => props.onChange(event.target.value)}
     />

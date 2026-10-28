@@ -1,12 +1,13 @@
-import { useSyncExternalStore } from 'react';
-import type { ChartLayerEntry } from '../chart/engine/drawings/chartDrawings';
-import { useChartResources } from '../chart/ChartWorkspaceProvider';
-
-/** The unsubscribe of a chart that is not there yet; React calls the answer, so it is a function. */
-const subscribeNothing = (): (() => void) => () => undefined;
+import type { ChartDrawings, ChartLayerEntry } from '../chart/engine/drawings/chartDrawings';
+import { useChartDrawingsSnapshot } from '../tools/useChartDrawingsSnapshot';
 
 /** The list of a chart that is not there yet: the same array every read, which the store compares by identity. */
 const NO_LAYERS: readonly ChartLayerEntry[] = [];
+
+const subscribeToLayers = (drawings: ChartDrawings, onLayersChanged: () => void) =>
+  drawings.subscribeLayerList(onLayersChanged);
+
+const readLayers = (drawings: ChartDrawings) => drawings.layerList();
 
 /**
  * Every layer of the chart, topmost first, which is the order an object tree prints them in: the
@@ -14,9 +15,5 @@ const NO_LAYERS: readonly ChartLayerEntry[] = [];
  * only when the drawings change.
  */
 export function useLayerList(): readonly ChartLayerEntry[] {
-  const { chart } = useChartResources();
-  const subscribe = (onLayersChanged: () => void) =>
-    chart.current?.drawings.subscribeLayerList(onLayersChanged) ?? subscribeNothing();
-  const layers = () => chart.current?.drawings.layerList() ?? NO_LAYERS;
-  return useSyncExternalStore(subscribe, layers);
+  return useChartDrawingsSnapshot(subscribeToLayers, readLayers, NO_LAYERS);
 }

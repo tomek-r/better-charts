@@ -1,9 +1,11 @@
+import { DASHED_LINE_PATTERN } from '../../../shared/canvas/dashPatterns';
 import { withOpacityPercent } from '../../../shared/theme/hexColor';
 import { palette } from '../../../shared/theme/palette';
 import type { ProfileRequestParams, ProfileRowsLayout } from '../../bridge/marketDataPort';
 import type { ToolInputDefinition, ToolInputValues } from '../../chart/engine/drawings/toolInputs';
 import { resolveToolSettingValues } from '../../chart/engine/drawings/toolSettings';
 import { toolStyleKey, type ToolStyleDefinition } from '../../chart/engine/drawings/toolStyles';
+import { DEFAULT_ROW_COUNT, DEFAULT_VALUE_AREA_PERCENT } from './requests/profileRequestLimits';
 
 /**
  * What the fixed range volume profile lets the user set, and the typed reading of the stored values.
@@ -38,7 +40,7 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
     kind: 'int',
     id: 'rowCount',
     title: 'Row Size',
-    defaultValue: 128,
+    defaultValue: DEFAULT_ROW_COUNT,
     minValue: 1,
     maxValue: 128,
     step: 1,
@@ -65,7 +67,7 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
     kind: 'int',
     id: 'valueAreaPercent',
     title: 'Value Area Volume %',
-    defaultValue: 70,
+    defaultValue: DEFAULT_VALUE_AREA_PERCENT,
     minValue: 1,
     maxValue: 100,
     step: 1,
@@ -186,7 +188,7 @@ const VOLUME_MODE_BY_OPTION: Readonly<Partial<Record<string, FixedRangeProfileVo
 /** The dash of each line style: dashed is the owner's 4 on, 3 off; dotted matches the dialog's preview. */
 const LINE_DASH_BY_STYLE: Readonly<Partial<Record<string, readonly number[]>>> = {
   solid: [],
-  dashed: [4, 3],
+  dashed: DASHED_LINE_PATTERN,
   dotted: [1, 3],
 };
 
@@ -252,11 +254,14 @@ export const DEFAULT_FIXED_RANGE_PROFILE_SETTINGS: FixedRangeProfileSettings = r
 export const DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE: FixedRangeProfileAppearance =
   DEFAULT_FIXED_RANGE_PROFILE_SETTINGS.appearance;
 
+function sameRowsLayout(a: ProfileRowsLayout, b: ProfileRowsLayout): boolean {
+  if (a.kind === 'rows') {
+    return b.kind === 'rows' && a.count === b.count;
+  }
+  return b.kind === 'ticksPerRow' && a.ticks === b.ticks;
+}
+
 /** Whether two requests ask the backend for the same histogram. */
 export function sameProfileRequestParams(a: ProfileRequestParams, b: ProfileRequestParams): boolean {
-  const sameLayout =
-    a.rowsLayout.kind === 'rows'
-      ? b.rowsLayout.kind === 'rows' && a.rowsLayout.count === b.rowsLayout.count
-      : b.rowsLayout.kind === 'ticksPerRow' && a.rowsLayout.ticks === b.rowsLayout.ticks;
-  return sameLayout && a.valueAreaPercent === b.valueAreaPercent;
+  return sameRowsLayout(a.rowsLayout, b.rowsLayout) && a.valueAreaPercent === b.valueAreaPercent;
 }

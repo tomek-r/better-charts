@@ -1,4 +1,5 @@
 import { timeframeBarOffset, timeframeBarTime } from '../../../shared/bridge/timeframes';
+import { MS_PER_MINUTE, nearestMinuteMs } from '../../../shared/time/minutes';
 import { anchorAtBar, reanchorToCurrentBars, type BarAnchor } from '../../chart/engine/tools/toolContract';
 import type { TimeModel } from '../../chart/engine/viewport/viewportController';
 
@@ -22,8 +23,6 @@ export interface PlacedFixedRangeProfile extends FixedRangeProfileRange {
   lastSlotOpenMs: number;
 }
 
-const MS_PER_MINUTE = 60_000;
-
 /**
  * The window with both edges on whole-minute boundaries, each rounded to the NEAREST minute (30 s rounds up).
  * MT5's lowest timeframe is M1, so a tick request must cover whole M1 bars. A window that rounds to nothing
@@ -31,8 +30,8 @@ const MS_PER_MINUTE = 60_000;
  * stored anchors and Coordinates edits all pass through it.
  */
 export function minuteAlignedWindow({ fromMs, endMs }: FixedRangeProfileRange): FixedRangeProfileRange {
-  const alignedFromMs = Math.round(fromMs / MS_PER_MINUTE) * MS_PER_MINUTE;
-  const alignedEndMs = Math.round(endMs / MS_PER_MINUTE) * MS_PER_MINUTE;
+  const alignedFromMs = nearestMinuteMs(fromMs);
+  const alignedEndMs = nearestMinuteMs(endMs);
   return { fromMs: alignedFromMs, endMs: alignedEndMs > alignedFromMs ? alignedEndMs : alignedFromMs + MS_PER_MINUTE };
 }
 
