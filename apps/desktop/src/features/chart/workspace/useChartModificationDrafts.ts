@@ -1,6 +1,7 @@
 import { useState, type RefObject } from 'react';
 import type { PendingModification } from '../../../shared/bridge/types';
 import { draftLevel } from '../../../shared/format';
+import { parseOverlayId } from '../engine/trading/overlayIds';
 
 /** Builds drag/clear drafts and dispatches only through the latest execution gate. */
 export function useChartModificationDrafts(
@@ -80,8 +81,7 @@ export function useChartModificationDrafts(
   // ✕ on a live SL/TP row: REMOVE that level — modify_order with the "0"
   // sentinel (MT5 clears a stop at price 0; `null` would mean "unchanged").
   const applyLevelClear = (level: 'sl' | 'tp', targetKey: string) => {
-    const isOrder = targetKey.startsWith('order:');
-    const targetId = isOrder ? targetKey.slice('order:'.length) : targetKey;
+    const { isOrder, rawId: targetId } = parseOverlayId(targetKey);
     const draft: PendingModification = {
       kind: isOrder ? 'orderModify' : 'positionModify',
       summary: `${isOrder ? 'order' : 'position'} ${targetId} ${level === 'sl' ? 'SL' : 'TP'} removed`,

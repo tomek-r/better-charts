@@ -3,6 +3,7 @@ import type { TradingLabelHit, TradingLabelLayoutState, TradingLabelTarget } fro
 import type { OverlayRenderer } from '../surface/overlayRenderer';
 import type { RiskSide } from '../../../../shared/bridge/types';
 import { isPositiveFinite } from '../../../../shared/finiteNumber';
+import type { StagedSlBand } from './slBand';
 import { palette } from '../../../../shared/theme/palette';
 import {
   CANCEL_CHIP_X,
@@ -30,15 +31,6 @@ import {
  * Rendering and input use chart-host CSS pixels. The series primitive handles
  * Retina backing-store scaling; capture handlers claim only actual gestures.
  */
-
-/** Allowed SL prices for a risk-sized draft (mirrors the order-ticket domain band). */
-export interface StagedSlBand {
-  nearPrice: number;
-  farPrice: number;
-  /** No price satisfies both edges: nothing is shaded or clamped. */
-  empty: boolean;
-  emptyHint: string;
-}
 
 export interface StagedOrderLevels {
   side: RiskSide;

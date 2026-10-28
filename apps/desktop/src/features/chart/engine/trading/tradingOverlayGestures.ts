@@ -3,6 +3,8 @@ import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlayTypes';
 import { levelMoneyText } from './moneyLabels';
 import type { TradingGestureWorkspace } from './gestureWorkspace';
+import { orderOverlayId, parseOverlayId } from './overlayIds';
+import { releaseCapture } from './pointerCapture';
 
 /** Grab targets of OUR position/order overlay (capture-phase handlers here). */
 type OverlayGrab =
@@ -124,8 +126,8 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
   const resolveLabelGrab = (row: TradingLabelHit, x: number, y: number): OverlayGrab | null => {
     const { hit } = positionOverlayState.current;
     if (row.level === 'entry') {
-      if (row.id.startsWith('order:')) {
-        const id = row.id.slice('order:'.length);
+      const { isOrder, rawId: id } = parseOverlayId(row.id);
+      if (isOrder) {
         const chip = hit.orderCancels?.find((item) => item.id === id);
         return hitCircle(chip, x, y) ? { kind: 'orderCancel', id } : { kind: 'line', line: 'order', id };
       }
@@ -152,7 +154,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
       return undefined;
     }
     const position = state.positions.find((item) => item.id === id);
-    const order = state.orders.find((item) => `order:${item.id}` === id);
+    const order = state.orders.find((item) => orderOverlayId(item.id) === id);
     const entry = position?.entry ?? order?.price;
     const side = position?.side ?? order?.side;
     let volume = NaN;
@@ -290,16 +292,11 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
     // until the portfolio sync settles it (the synced level matches the
     // dragged one) or the modify is rejected. Clearing it here snapped the
     // line back to its pre-drag price for a few frames = the release flicker.
-    if (event.pointerId !== undefined) {
-      try {
-        host.releasePointerCapture(event.pointerId);
-      } catch {
-        /* already released */
-      }
-    }
+    releaseCapture(host, event);
     if (!dispatch || !current.started || current.price === undefined || current.price <= 0) {
       return;
     }
+    const lineOverlayId = parseOverlayId(current.id);
     if (current.line === 'order') {
       const delta = current.moveExits && current.orderPrice !== undefined ? current.price - current.orderPrice : 0;
       const includeExits = current.moveExits || current.preserveExits;
@@ -317,8 +314,8 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
         takeProfit: shifted(current.takeProfit),
         autoDispatch: current.canMoveExits === true,
       });
-    } else if (current.id.startsWith('order:')) {
-      const orderId = current.id.slice('order:'.length);
+    } else if (lineOverlayId.isOrder) {
+      const orderId = lineOverlayId.rawId;
       if (current.line === 'sl') {
         applyOrderLevelModify({ orderId, stopLoss: current.price });
       } else {
@@ -356,13 +353,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
       return;
     }
     chipPress = null;
-    if (event.pointerId !== undefined) {
-      try {
-        host.releasePointerCapture(event.pointerId);
-      } catch {
-        /* already released */
-      }
-    }
+    releaseCapture(host, event);
     if (!dispatch || current.moved) {
       return;
     }

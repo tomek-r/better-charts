@@ -1,23 +1,12 @@
 import type { AccountSnapshot, BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
 import { volumeWithUnit } from '../../../shared/format';
 import { accountMoneyBasis, lossPerPriceUnitPerLot } from '../../../shared/money';
+import type { StagedSlBand } from '../../chart/engine/trading/slBand';
 import { orderEntryPrice } from '../derivation/ticketRules';
 import type { UnitsMode } from '../sizing/unitsMode';
 
-/**
- * Allowed stop-loss band for risk-sized orders, as absolute prices. Display and
- * gesture aid only: the backend/EA risk preview stays the sizing authority, so
- * any missing or inconsistent metadata yields `undefined` (no band, no clamp).
- */
-export interface StopLossBand {
-  /** Closest permitted SL (broker stop distance, or the volumeMax cap). */
-  nearPrice: number;
-  /** Farthest permitted SL: the minimum lot spends the whole risk budget. */
-  farPrice: number;
-  /** No price satisfies both edges: the shading and the clamp are skipped. */
-  empty: boolean;
-  emptyHint: string;
-}
+/** The chart engine owns the band shape; the ticket derives it from the order draft. */
+export type StopLossBand = StagedSlBand;
 
 export interface StopLossBandInput {
   instrument: BrokerSymbol | undefined;

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react';
-import type { StagedOrderLevels, StagedSlBand } from '../engine/trading/stagedOrderOverlay';
+import type { StagedSlBand } from '../engine/trading/slBand';
+import type { StagedOrderLevels } from '../engine/trading/stagedOrderOverlay';
 import { quoteDigits } from '../../../shared/format';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { OrderTicketCoordination, OrderTicketDraftStore } from '../../order-ticket/draft/orderTicketStores';

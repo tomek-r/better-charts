@@ -3,7 +3,7 @@ import { pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
 import { gotoRiskBandStub } from './helpers/riskBandStub';
 import { fillExitPrice, openTradePanel } from './helpers/panel';
 import { decodePng, pixelAt } from './helpers/pngPixels';
-import { clampStopLoss } from '../src/features/chart/engine/trading/stagedOrderGestures';
+import { clampStopLoss } from '../src/features/chart/engine/trading/slBand';
 import { layoutLabelCenters } from '../src/features/chart/engine/trading/labels/layoutLabelCenters';
 
 // The minimum 0.1 lot spends the 6.25 USD budget at 104 ticks from the 1.0850 ask.

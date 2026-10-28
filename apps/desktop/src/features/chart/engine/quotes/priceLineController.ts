@@ -1,5 +1,6 @@
 import { LineStyle, type IPriceLine, type ISeriesApi } from 'lightweight-charts';
 import type { ChartOverlayState } from '../surface/buildChartPlugins';
+import { orderOverlayId } from '../trading/overlayIds';
 import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
 import type { PriceAxisTagsPrimitive } from './priceAxisTagsPrimitive';
 import { isPositiveFinite } from '../../../../shared/finiteNumber';
@@ -69,7 +70,7 @@ export class PriceLineController {
       );
     }
     for (const order of positions.orders) {
-      const orderId = `order:${order.id}`;
+      const orderId = orderOverlayId(order.id);
       const orderDrag = drag?.kind === 'order' && drag.id === order.id ? drag : undefined;
       add(
         `${orderId}:entry`,
