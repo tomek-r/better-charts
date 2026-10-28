@@ -38,9 +38,6 @@ export function PortfolioRow({
   const locked = accountUnavailable || commandInFlight;
   const itemRef = useRef<HTMLDivElement>(null);
   const profitText = accountAmount(position.profit, account?.currency, account?.currencyDigits);
-  const swapText = position.swap
-    ? `Swap ${accountAmount(position.swap, account?.currency, account?.currencyDigits)}`
-    : '';
   const exitParts = [`SL ${position.stopLoss ?? '—'}`, `TP ${position.takeProfit ?? '—'}`];
 
   // The popover floats below the row inside the scrolling drawer; for the last row it extends
@@ -61,16 +58,18 @@ export function PortfolioRow({
           aria-label={`Open ${position.symbol} chart`}
           onClick={() => void onOpenSymbol(position.symbol)}
         >
-          <div>
+          <div className="portfolio-position">
             <strong>{position.symbol}</strong>
-            <span>
-              <Separated parts={['Position', position.side, volumeWithUnit(position.volume)]} />
-            </span>
+            <span>Position</span>
+            <span>{position.side}</span>
+            <span>{volumeWithUnit(position.volume)}</span>
           </div>
-          <div>
-            <span>
-              <Separated parts={[position.priceCurrent, `P/L ${profitText}`, swapText]} />
-            </span>
+          <div className="portfolio-figures">
+            <span>{position.priceCurrent}</span>
+            <span>P/L {profitText}</span>
+            {position.swap && (
+              <span>Swap {accountAmount(position.swap, account?.currency, account?.currencyDigits)}</span>
+            )}
             <small>
               <Separated parts={exitParts} />
             </small>

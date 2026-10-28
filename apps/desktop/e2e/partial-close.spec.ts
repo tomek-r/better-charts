@@ -1,41 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { openTradePanel } from './helpers/panel';
-import { gotoWithStub, openPositionFixture, STUB_NOW, wasInvoked } from './helpers/tauriStub';
-
-async function openPortfolio(
-  page: Page,
-  position: Record<string, unknown> = {},
-  options: {
-    partialClose?: boolean;
-    failures?: Record<string, string>;
-    morePositions?: Record<string, unknown>[];
-  } = {},
-) {
-  await gotoWithStub(page, {
-    partialClose: options.partialClose ?? true,
-    failures: options.failures,
-    responses: {
-      get_portfolio_snapshot: {
-        accountLogin: '50123456',
-        capturedAtMs: STUB_NOW,
-        positions: [
-          openPositionFixture({ volume_min: '0.01', volume_step: '0.01', ...position }),
-          ...(options.morePositions ?? []).map((more) =>
-            openPositionFixture({ volume_min: '0.01', volume_step: '0.01', ...more }),
-          ),
-        ],
-        orders: [],
-      },
-    },
-  });
-  await openTradePanel(page);
-  const row = page.locator('.portfolio-row');
-  return {
-    row,
-    mainClose: row.getByRole('button', { name: 'Close', exact: true }),
-    menuButton: row.getByLabel('Close part of position'),
-  };
-}
+import { openPortfolio } from './helpers/portfolioPage';
+import { wasInvoked } from './helpers/tauriStub';
 
 async function lastCloseVolume(page: Page) {
   await expect.poll(async () => (await wasInvoked(page, 'close_position')) !== undefined).toBe(true);

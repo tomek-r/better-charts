@@ -86,24 +86,28 @@
 
 /* Row body = the "open this symbol on the chart" action. Reset the button
    chrome so the text keeps the row's layout, and let it fill the space the
-   Close column leaves. Close stays a sibling — never a button inside one. */
+   Close column leaves. Close stays a sibling — never a button inside one.
+   Column widths come from the card, never from the live values (two equal minmax(0, 1fr)
+   tracks, tabular digits), so a P/L update cannot move or resize either column. */
 .portfolio-open {
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
   padding: 0;
   border: 0;
   background: none;
   color: inherit;
   font: inherit;
+  font-variant-numeric: tabular-nums;
   text-align: left;
   cursor: pointer;
 }
 
 .portfolio-open > div {
-  /* Text columns shrink and ellipsize when the panel is narrow. */
+  /* Columns may shrink below their content; long values wrap inside the track. */
   min-width: 0;
 }
 

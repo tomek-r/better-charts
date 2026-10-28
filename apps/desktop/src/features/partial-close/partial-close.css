@@ -133,11 +133,12 @@
 .partial-volume-input {
   width: 72px;
   min-width: 0;
-  border: 1px solid var(--color-border-strong);
+  /* Same border and background as the order ticket's input fields (.ticket-field). */
+  border: 1px solid var(--color-border);
   border-radius: 5px;
   padding: 5px 6px;
   color: var(--color-text);
-  background: var(--color-well);
+  background: var(--color-surface);
   font: inherit;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
