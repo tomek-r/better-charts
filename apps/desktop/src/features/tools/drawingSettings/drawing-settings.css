@@ -6,7 +6,7 @@
  */
 /* Two classes, to outrank the backdrop's own `place-items: center` whatever the stylesheet order. */
 .modal-dialog-backdrop.drawing-settings-backdrop {
-  --drawing-settings-top-offset: 72px;
+  --drawing-settings-top-offset: 8%;
   align-items: start;
   padding-top: var(--drawing-settings-top-offset);
 }
@@ -20,10 +20,10 @@
   /* One step above the 13px the dialog used before, so labels and fields read comfortably. */
   --drawing-settings-font-size: 15px;
   --drawing-settings-control-width: 200px;
-  --drawing-settings-row-gap: 20px;
+  --drawing-settings-row-gap: 22px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--drawing-settings-row-gap);
   font-size: var(--drawing-settings-font-size);
 }
 
