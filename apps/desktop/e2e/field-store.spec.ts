@@ -1,16 +1,16 @@
 import { expect, test } from '@playwright/test';
 import { gotoWithStub } from './helpers/tauriStub';
 
-test('domain stores isolate updates and skip notifications for unchanged fields', async ({ page }) => {
+test('field stores isolate updates and skip notifications for unchanged fields', async ({ page }) => {
   await gotoWithStub(page);
   await page.evaluate(async () => {
     const appRoot = document.getElementById('root');
     if (appRoot) {
       appRoot.style.display = 'none';
     }
-    const harnessPath = '/e2e/helpers/domainStoreHarness.tsx';
+    const harnessPath = '/e2e/helpers/fieldStoreHarness.tsx';
     const harness = await import(/* @vite-ignore */ harnessPath);
-    harness.mountDomainStoreHarness();
+    harness.mountFieldStoreHarness();
   });
 
   await expect(page.getByTestId('first-counter')).toHaveText('0');
@@ -24,13 +24,13 @@ test('domain stores isolate updates and skip notifications for unchanged fields'
   await expect(page.getByTestId('second-counter')).toHaveText('10');
   expect(
     await page.evaluate(
-      () => (window as unknown as { __domainStoreNotifications: { first: number } }).__domainStoreNotifications.first,
+      () => (window as unknown as { __fieldStoreNotifications: { first: number } }).__fieldStoreNotifications.first,
     ),
   ).toBe(1);
   expect(
     await page.evaluate(
       () =>
-        (window as unknown as { __domainStoreSetterMetrics: { writerRenders: number } }).__domainStoreSetterMetrics
+        (window as unknown as { __fieldStoreSetterMetrics: { writerRenders: number } }).__fieldStoreSetterMetrics
           .writerRenders,
     ),
   ).toBe(1);
@@ -40,8 +40,8 @@ test('domain stores isolate updates and skip notifications for unchanged fields'
   expect(
     await page.evaluate(
       () =>
-        (window as unknown as { __domainStoreSetterMetrics: { writerRenders: number; stableAcrossRenders: boolean } })
-          .__domainStoreSetterMetrics,
+        (window as unknown as { __fieldStoreSetterMetrics: { writerRenders: number; stableAcrossRenders: boolean } })
+          .__fieldStoreSetterMetrics,
     ),
   ).toEqual({ writerRenders: 2, stableAcrossRenders: true });
 
@@ -50,7 +50,7 @@ test('domain stores isolate updates and skip notifications for unchanged fields'
   expect(
     await page.evaluate(
       () =>
-        (window as unknown as { __domainStoreSetterMetrics: { writerRenders: number } }).__domainStoreSetterMetrics
+        (window as unknown as { __fieldStoreSetterMetrics: { writerRenders: number } }).__fieldStoreSetterMetrics
           .writerRenders,
     ),
   ).toBe(2);
@@ -60,12 +60,12 @@ test('domain stores isolate updates and skip notifications for unchanged fields'
   await expect(page.getByTestId('first-counter')).toHaveText('2');
   expect(
     await page.evaluate(
-      () => (window as unknown as { __domainStoreNotifications: { second: number } }).__domainStoreNotifications.second,
+      () => (window as unknown as { __fieldStoreNotifications: { second: number } }).__fieldStoreNotifications.second,
     ),
   ).toBe(1);
   await page.evaluate(async () => {
-    const harnessPath = '/e2e/helpers/domainStoreHarness.tsx';
+    const harnessPath = '/e2e/helpers/fieldStoreHarness.tsx';
     const harness = await import(/* @vite-ignore */ harnessPath);
-    harness.unmountDomainStoreHarness();
+    harness.unmountFieldStoreHarness();
   });
 });

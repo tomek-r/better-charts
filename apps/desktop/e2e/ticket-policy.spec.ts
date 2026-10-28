@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { deriveOrderTicket, type TicketDerivationInput } from '../src/features/order-ticket/derivation/ticketRules';
+import {
+  deriveOrderTicket,
+  type TicketDerivationInput,
+} from '../src/features/order-ticket/derivation/deriveOrderTicket';
 import { createOrderTicketStores } from '../src/features/order-ticket/draft/orderTicketStores';
 import type { OrderCheckResult, RiskPreview } from '../src/shared/bridge/types';
 import { eligibleTicket, ticketScenario } from './helpers/ticketFixtures';

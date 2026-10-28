@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect } from 'react';
-import type { StagedSlBand } from '../engine/trading/slBand';
+import type { StagedSlBand } from '../engine/trading/stopLossClamp';
 import type { StagedOrderLevels } from '../engine/trading/stagedOrderOverlay';
 import { quoteDigits } from '../../../shared/format';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { OrderTicketCoordination, OrderTicketDraftStore } from '../../order-ticket/draft/orderTicketStores';
-import type { TicketDerivation } from '../../order-ticket/derivation/ticketRules';
+import type { TicketDerivation } from '../../order-ticket/derivation/deriveOrderTicket';
 import type { deriveStagedOrderDisplay } from '../../order-ticket/stagedOrder/stagedOrderDisplay';
 import type { useExecutionCommands } from '../../execution/useExecutionCommands';
 import type { ChartWorkspaceState } from './useChartWorkspace';

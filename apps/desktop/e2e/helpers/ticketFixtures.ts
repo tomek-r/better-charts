@@ -1,5 +1,5 @@
 import { brokerSymbolFixture } from './tauriStub';
-import type { TicketDerivationInput } from '../../src/features/order-ticket/derivation/ticketRules';
+import type { TicketDerivationInput } from '../../src/features/order-ticket/derivation/deriveOrderTicket';
 import type { AccountSnapshot, BrokerSymbol, OrderCheckResult } from '../../src/shared/bridge/types';
 
 export const ticketAccount: AccountSnapshot = {

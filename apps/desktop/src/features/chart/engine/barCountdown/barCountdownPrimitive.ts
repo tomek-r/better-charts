@@ -3,7 +3,7 @@ import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
 import { BrokerClock } from './brokerClock';
 import { priceTagHeight, tagStackTops } from '../quotes/tagStack';
-import { paintTag, tagLayout } from '../text/fixedCellText';
+import { paintTag, tagLayout } from '../text/priceTag';
 import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './barCountdownOptions';
 import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
 

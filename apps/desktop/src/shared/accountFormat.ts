@@ -1,19 +1,13 @@
 import type { AccountSnapshot } from './bridge/types';
+import { parseToFiniteNumber } from './finiteNumber';
 import { formatMoney } from './format';
 
 export type MoneyAccount = Pick<AccountSnapshot, 'currency' | 'currencyDigits'>;
 export type MarginLevelAccount = MoneyAccount & Pick<AccountSnapshot, 'marginLevelsUnit'>;
 
-/** Decimal-string wire value to a finite number; blank, null and non-numeric are undefined. */
-export function finiteNumber(value: string | null | undefined): number | undefined {
-  return value !== null && value !== undefined && value.trim() !== '' && Number.isFinite(Number(value))
-    ? Number(value)
-    : undefined;
-}
-
 /** Amount in the account currency, or undefined when the value or currency is missing. */
 export function formatAccountMoney(value: string | null | undefined, account: MoneyAccount | undefined) {
-  const amount = finiteNumber(value);
+  const amount = parseToFiniteNumber(value);
   return account?.currency && amount !== undefined
     ? formatMoney(amount, account.currency, account.currencyDigits)
     : undefined;
@@ -35,7 +29,7 @@ export function formatMarginThreshold(
   value: string | null | undefined,
   account: MarginLevelAccount | undefined,
 ): string | undefined {
-  const amount = finiteNumber(value);
+  const amount = parseToFiniteNumber(value);
   if (amount === undefined) {
     return undefined;
   }

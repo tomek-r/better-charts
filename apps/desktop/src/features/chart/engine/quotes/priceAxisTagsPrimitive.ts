@@ -8,7 +8,7 @@ import type {
 import { palette } from '../../../../shared/theme/palette';
 import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
-import { paintTag, tagLayout, type TagLayout } from '../text/fixedCellText';
+import { paintTag, tagLayout, type TagLayout } from '../text/priceTag';
 import { priceTagHeight, tagStackTops } from './tagStack';
 
 /**
@@ -37,7 +37,7 @@ export interface PriceAxisTagsState {
  * The tags are painted here, not by the library, because the library sizes a
  * label to its text and the chart font is proportional: the box breathed as the
  * digits changed, and its stack neighbour (the countdown) looked dynamic. The
- * digits are drawn in fixed cells (see `fixedCellText`), so the width depends
+ * digits are drawn in fixed cells (see `priceTag`), so the width depends
  * only on the number of characters.
  */
 interface TagTexts {

@@ -13,7 +13,7 @@ import {
   selectTicketDerivationDraft,
 } from '../derivation/ticketDerivation';
 import type { TicketDerivationBroker, TicketDerivationDraft } from '../derivation/ticketDerivation';
-import { deriveOrderTicket } from '../derivation/ticketRules';
+import { deriveOrderTicket } from '../derivation/deriveOrderTicket';
 import type { BridgeStatus, BrokerSymbol, QuoteSnapshot } from '../../../shared/bridge/types';
 
 export type TicketGateSources = {

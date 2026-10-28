@@ -1,6 +1,6 @@
 import { defaultStopLossPrice } from '../src/features/order-ticket/exits/defaultStopLoss';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { deriveOrderTicket } from '../src/features/order-ticket/derivation/ticketRules';
+import { deriveOrderTicket } from '../src/features/order-ticket/derivation/deriveOrderTicket';
 import { stopDistanceGuard } from '../src/features/order-ticket/exits/stopDistance';
 import { orderEntryPrice } from '../src/features/order-ticket/pricing/orderEntryPrice';
 import { orderVolumeIssue } from '../src/features/order-ticket/sizing/volumeRules';

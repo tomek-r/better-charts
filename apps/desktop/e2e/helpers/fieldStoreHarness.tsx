@@ -4,15 +4,15 @@ import { createFieldStore, useStoreField, useFieldSetterSelector } from '../../s
 import { useOrderTicketSizingActions } from '../../src/features/order-ticket/sizing/useOrderTicketSizingActions';
 import { createOrderTicketStores } from '../../src/features/order-ticket/draft/orderTicketStores';
 
-interface DomainStoreHarnessWindow extends Window {
-  __domainStoreNotifications: { first: number; second: number };
-  __domainStoreSetterMetrics: { writerRenders: number; stableAcrossRenders: boolean };
+interface FieldStoreHarnessWindow extends Window {
+  __fieldStoreNotifications: { first: number; second: number };
+  __fieldStoreSetterMetrics: { writerRenders: number; stableAcrossRenders: boolean };
 }
 
-const getHarnessWindow = () => window as unknown as DomainStoreHarnessWindow;
+const getHarnessWindow = () => window as unknown as FieldStoreHarnessWindow;
 let cleanupHarness: (() => void) | undefined;
 
-export function mountDomainStoreHarness(): void {
+export function mountFieldStoreHarness(): void {
   const firstStore = createFieldStore({ count: 0 });
   const secondStore = createFieldStore({ count: 10 });
   const sizingStores = createOrderTicketStores();
@@ -86,7 +86,7 @@ export function mountDomainStoreHarness(): void {
   }
 
   const container = document.createElement('div');
-  container.id = 'domain-store-harness';
+  container.id = 'field-store-harness';
   document.body.append(container);
   const root = createRoot(container);
   act(() => {
@@ -103,8 +103,8 @@ export function mountDomainStoreHarness(): void {
   });
 
   firstStore.setField('count', 0);
-  getHarnessWindow().__domainStoreNotifications = notifications;
-  getHarnessWindow().__domainStoreSetterMetrics = setterMetrics;
+  getHarnessWindow().__fieldStoreNotifications = notifications;
+  getHarnessWindow().__fieldStoreSetterMetrics = setterMetrics;
   cleanupHarness = () => {
     root.unmount();
     unsubscribeFirst();
@@ -114,6 +114,6 @@ export function mountDomainStoreHarness(): void {
   };
 }
 
-export function unmountDomainStoreHarness(): void {
+export function unmountFieldStoreHarness(): void {
   cleanupHarness?.();
 }

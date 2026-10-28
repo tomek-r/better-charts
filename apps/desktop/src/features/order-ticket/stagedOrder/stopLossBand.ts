@@ -1,7 +1,7 @@
 import type { AccountSnapshot, BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
 import { volumeWithUnit } from '../../../shared/format';
 import { accountMoneyBasis, lossPerPriceUnitPerLot } from '../../../shared/money';
-import type { StagedSlBand } from '../../chart/engine/trading/slBand';
+import type { StagedSlBand } from '../../chart/engine/trading/stopLossClamp';
 import { STOP_DISTANCE_MIN_TICKS } from '../exits/stopDistance';
 import { orderEntryPrice } from '../pricing/orderEntryPrice';
 import type { UnitsMode } from '../sizing/unitsMode';

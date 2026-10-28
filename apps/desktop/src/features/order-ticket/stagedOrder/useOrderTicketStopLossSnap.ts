@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { ticketPrice } from '../../../shared/format';
-import { clampStopLoss } from '../../chart/engine/trading/slBand';
+import { clampStopLoss } from '../../chart/engine/trading/stopLossClamp';
 import type { StopLossBand } from './stopLossBand';
 import { useOrderTicketStores } from '../draft/orderTicketContext';
 

@@ -3,7 +3,7 @@ import type { TradingLabelHit, TradingLabelLayoutState, TradingLabelTarget } fro
 import type { OverlayRenderer } from '../surface/overlayRenderer';
 import type { RiskSide } from '../../../../shared/bridge/types';
 import { isPositiveFinite } from '../../../../shared/finiteNumber';
-import type { StagedSlBand } from './slBand';
+import type { StagedSlBand } from './stopLossClamp';
 import { palette } from '../../../../shared/theme/palette';
 import {
   CANCEL_CHIP_X,

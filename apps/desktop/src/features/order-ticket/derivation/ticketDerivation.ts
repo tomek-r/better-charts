@@ -1,6 +1,6 @@
 import type { OrderTicketBrokerStore, OrderTicketDraftStore } from '../draft/orderTicketStores';
-import type { TicketDerivation, TicketDerivationInput } from './ticketRules';
-import { deriveOrderTicket } from './ticketRules';
+import type { TicketDerivation, TicketDerivationInput } from './deriveOrderTicket';
+import { deriveOrderTicket } from './deriveOrderTicket';
 
 export type TicketDerivationContext = Pick<
   TicketDerivationInput,

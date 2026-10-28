@@ -1,6 +1,6 @@
 import type { TradingLabelTarget } from './labels/tradingLabelTypes';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
-import { clampStopLoss, entryCarriedBand, type StagedSlBand } from './slBand';
+import { clampStopLoss, entryCarriedBand, type StagedSlBand } from './stopLossClamp';
 import { releaseCapture } from './pointerCapture';
 import { ticketPrice } from '../../../../shared/format';
 import type { StagedGestureWorkspace } from './gestureWorkspace';
