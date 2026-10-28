@@ -1,6 +1,6 @@
 import { useStore } from 'zustand';
-import { useStableByContent } from '../../../shared/hooks/useStableByContent';
-import type { ChartTicketOverlayState } from '../../chart/workspace/useChartOverlaySync';
+import { useStableByContent } from '../../../shared/identity/useStableByContent';
+import type { ChartTicketOverlayState } from '../../chart/workspace/useChartWorkspaceMirrorEffects';
 import { deriveOrderRiskBasis } from '../sizing/riskBasis';
 import { deriveStagedOrderDisplay } from './stagedOrderDisplay';
 import { deriveStopLossBand, type StopLossBand } from './stopLossBand';

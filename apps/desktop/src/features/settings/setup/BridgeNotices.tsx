@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { BridgeRefusal } from '../../../shared/bridge/bridgeRefusal';
-import { useDelayedReveal } from '../../../shared/hooks/useDelayedReveal';
+import { useDelayedReveal } from '../../../shared/ui/animation/useDelayedReveal';
 import { ErrorNotification, type NoticeAction } from '../../../shared/ui/notification/ErrorNotifications';
 import { useAppSettingsActions, useSetupFlowOnScreen } from '../AppSettingsProvider';
 import { useBridgeConnectionSelector, useHasCandles } from '../../bridge/bridgeSelectors';

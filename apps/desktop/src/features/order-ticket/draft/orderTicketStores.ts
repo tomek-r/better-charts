@@ -1,6 +1,6 @@
 import type { OrderCheckResult, OrderKind, RiskPreview, RiskSide, TimeInForce } from '../../../shared/bridge/types';
 import type { RefObject } from 'react';
-import { createDomainStore } from '../../../shared/providers/domainStore';
+import { createFieldStore } from '../../../shared/store/fieldStore';
 import type { DispatchStatus } from '../../execution/dispatchStatus';
 import { createTicketDerivationCache } from '../derivation/ticketDerivation';
 import type { RiskUnitsMode, UnitsMode } from '../sizing/unitsMode';
@@ -72,7 +72,7 @@ export type OrderTicketEditorStore = {
 };
 
 export function createOrderTicketStores() {
-  const draft = createDomainStore<OrderTicketDraftStore>({
+  const draft = createFieldStore<OrderTicketDraftStore>({
     draftVersion: 0,
     riskSide: '',
     entry: '',
@@ -99,7 +99,7 @@ export function createOrderTicketStores() {
     orderVolume: '1',
     volumeManual: false,
   });
-  const broker = createDomainStore<OrderTicketBrokerStore>({
+  const broker = createFieldStore<OrderTicketBrokerStore>({
     riskPreview: undefined,
     riskProjection: undefined,
     riskLoading: false,
@@ -110,7 +110,7 @@ export function createOrderTicketStores() {
     submittingSide: undefined,
     submitStatus: undefined,
   });
-  const editor = createDomainStore<OrderTicketEditorStore>({ exitsOpen: true, extraSettingsOpen: false });
+  const editor = createFieldStore<OrderTicketEditorStore>({ exitsOpen: true, extraSettingsOpen: false });
   const coordination: OrderTicketCoordination = {
     submitSwapPendingRef: { current: false },
     stagedPrevPriceRef: { current: undefined },

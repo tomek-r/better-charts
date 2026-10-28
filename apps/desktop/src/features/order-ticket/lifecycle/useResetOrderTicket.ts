@@ -1,4 +1,4 @@
-import { useEventCallback } from '../../../shared/hooks/useEventCallback';
+import { useEventCallback } from '../../../shared/identity/useEventCallback';
 import { useChartResources } from '../../chart/ChartWorkspaceProvider';
 import type { PositionOverlayState } from '../../chart/engine/trading/positionOverlayTypes';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';

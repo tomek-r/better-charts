@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import { useRequiredContext } from '../../../shared/providers/useRequiredContext';
+import { useRequiredContext } from '../../../shared/context/useRequiredContext';
 import type { useOrderTicketActionsProducer } from '../lifecycle/useOrderTicketActionsProducer';
 import type { OrderTicketStores } from './orderTicketStores';
 

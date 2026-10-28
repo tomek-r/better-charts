@@ -8,7 +8,7 @@ import type {
   PortfolioSnapshot,
   QuoteSnapshot,
 } from '../../shared/bridge/types';
-import { createDomainStore } from '../../shared/providers/domainStore';
+import { createFieldStore } from '../../shared/store/fieldStore';
 
 interface BridgeConnectionStoreState {
   status: BridgeStatus;
@@ -45,11 +45,11 @@ const emptySnapshot: MarketSnapshot = { complete: false, candles: [] };
 
 export function createBridgeSessionStores() {
   return {
-    connection: createDomainStore<BridgeConnectionStoreState>({
+    connection: createFieldStore<BridgeConnectionStoreState>({
       status: { state: 'disconnected', message: 'Waiting for the local bridge to start.' },
       tauriAvailable: true,
     }),
-    market: createDomainStore<BridgeMarketStoreState>({
+    market: createFieldStore<BridgeMarketStoreState>({
       snapshot: emptySnapshot,
       latestCandle: undefined,
       instrument: undefined,
@@ -60,9 +60,9 @@ export function createBridgeSessionStores() {
       historyWaitStartedAtMs: undefined,
       historyUnavailable: undefined,
     }),
-    quote: createDomainStore<BridgeQuoteStoreState>({ quote: undefined }),
-    account: createDomainStore<BridgeAccountStoreState>({ account: undefined }),
-    portfolio: createDomainStore<BridgePortfolioStoreState>({ portfolio: undefined }),
+    quote: createFieldStore<BridgeQuoteStoreState>({ quote: undefined }),
+    account: createFieldStore<BridgeAccountStoreState>({ account: undefined }),
+    portfolio: createFieldStore<BridgePortfolioStoreState>({ portfolio: undefined }),
   };
 }
 

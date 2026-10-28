@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useExitAnimation } from '../../../shared/hooks/useExitAnimation';
+import { useExitAnimation } from '../../../shared/ui/animation/useExitAnimation';
 import {
   useAppSettingsActions,
   useSettingsDialogOpen,

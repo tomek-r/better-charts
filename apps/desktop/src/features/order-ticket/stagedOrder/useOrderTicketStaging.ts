@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useEventCallback } from '../../../shared/hooks/useEventCallback';
+import { useEventCallback } from '../../../shared/identity/useEventCallback';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { ticketPrice } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';

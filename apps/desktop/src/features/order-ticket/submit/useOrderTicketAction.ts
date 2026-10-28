@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import type { StoreApi } from 'zustand/vanilla';
 import { useBridgeSessionStores } from '../../bridge/BridgeSessionProvider';
 import type { BridgeSessionStores } from '../../bridge/bridgeSessionStores';
-import { deriveTicketGateProjection } from './useOrderTicketGates';
+import { deriveTicketGateProjection } from './useTicketGateProjection';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketStores } from '../draft/orderTicketStores';
 import type { OrderTicketActionProps } from '../orderTicketEditorProps';

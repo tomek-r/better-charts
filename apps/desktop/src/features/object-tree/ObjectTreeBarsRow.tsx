@@ -1,6 +1,6 @@
 import { useBridgeChartState } from '../bridge/bridgeSelectors';
 import { timeframeLabel } from '../../shared/bridge/timeframes';
-import { CandlesIcon } from './objectTreeIcons';
+import { CandlesIcon } from './CandlesIcon';
 import { ROW_NAME_CLASS } from './objectTreeRowFocus';
 import type { LayerRowReorder } from './useLayerReorder';
 

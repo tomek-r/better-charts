@@ -19,7 +19,7 @@ import { useChartWorkspacePointerEffects } from '../features/chart/pointer/useCh
 import {
   useChartWorkspaceMirrorRefEffect,
   useChartWorkspaceMirrorLayoutEffect,
-} from '../features/chart/workspace/useChartOverlaySync';
+} from '../features/chart/workspace/useChartWorkspaceMirrorEffects';
 import { useOrderTicketEntryEffects } from '../features/order-ticket/pricing/useOrderTicketEntryEffects';
 import { useOrderTicketDefaultVolume } from '../features/order-ticket/sizing/useOrderTicketDefaultVolume';
 import { useOrderTicketStopLossSnap } from '../features/order-ticket/stagedOrder/useOrderTicketStopLossSnap';

@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import type { Candle, BrokerSymbol } from '../../shared/bridge/types';
 import { initialHistoryBarsFor } from '../chart/engine/bars/initialHistoryWindow';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
-import { useFieldSetterSelector } from '../../shared/providers/domainStore';
+import { useFieldSetterSelector } from '../../shared/store/fieldStore';
 import type { BridgeSessionStores } from './bridgeSessionStores';
 import type { BridgeMarketResources } from './market/bridgeMarketRuntime';
 import { beginHistoryWait, endHistoryWait } from './market/historyWait';

@@ -1,7 +1,7 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
-import { createDomainStore, type DomainStore } from '../../providers/domainStore';
-import { useRequiredContext } from '../../providers/useRequiredContext';
+import { createFieldStore, type FieldStore } from '../../store/fieldStore';
+import { useRequiredContext } from '../../context/useRequiredContext';
 import { Notification } from './Notification';
 
 /** The fix a notice offers: the text of its button, and what pressing it does. */
@@ -22,7 +22,7 @@ interface ErrorNoticeState {
   notices: ErrorNotice[];
 }
 
-type ErrorNoticeStore = DomainStore<ErrorNoticeState> & {
+type ErrorNoticeStore = FieldStore<ErrorNoticeState> & {
   show: (message: string, noticeKey?: string, action?: NoticeAction) => void;
   dismiss: (id: number) => void;
   retire: (identity: string) => void;
@@ -40,7 +40,7 @@ function statesSameNotice(notice: ErrorNotice, message: string, action: NoticeAc
 
 export function ErrorNotificationsProvider({ children }: { children: ReactNode }) {
   const [store] = useState<ErrorNoticeStore>(() => {
-    const state = createDomainStore<ErrorNoticeState>({ notices: [] });
+    const state = createFieldStore<ErrorNoticeState>({ notices: [] });
     let nextId = 0;
     return Object.assign(state, {
       show: (message: string, noticeKey?: string, action?: NoticeAction) => {

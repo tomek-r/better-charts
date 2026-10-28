@@ -1,7 +1,7 @@
 import { createContext, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import type { BrokerSymbol } from '../../shared/bridge/types';
-import { useRequiredContext } from '../../shared/providers/useRequiredContext';
+import { useRequiredContext } from '../../shared/context/useRequiredContext';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 import { createBridgeSessionStores, type BridgeSessionStores } from './bridgeSessionStores';
 import { createMarketDataConnection } from './marketDataPort';

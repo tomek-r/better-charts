@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { useEscapeDismissal, useOutsidePointerDismissal } from '../../shared/hooks/useDismissal';
+import { useEscapeDismissal, useOutsidePointerDismissal } from '../../shared/ui/popup/useDismissal';
 
 const EDGE_MARGIN = 8;
 /** Gap between the anchor point and the panel so the painted chip stays visible. */

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect } from 'react';
-import { useEventCallback } from '../../../shared/hooks/useEventCallback';
+import { useEventCallback } from '../../../shared/identity/useEventCallback';
 import type { OrderTicketInputs } from '../draft/orderTicketInputs';
 import type {
   OrderTicketBrokerStore,

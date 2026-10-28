@@ -1,7 +1,7 @@
 import { createContext, useMemo, type ReactNode } from 'react';
 import { useChartWorkspace, type ChartWorkspaceState } from './workspace/useChartWorkspace';
 import { DrawingContextProvider } from '../tools/DrawingContextProvider';
-import { useRequiredContext } from '../../shared/providers/useRequiredContext';
+import { useRequiredContext } from '../../shared/context/useRequiredContext';
 
 export type ChartWorkspaceResources = Pick<
   ChartWorkspaceState,

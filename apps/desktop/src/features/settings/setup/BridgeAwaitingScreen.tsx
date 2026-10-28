@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useBridgeRefusal } from '../../bridge/useBridgeRefusal';
 import { useChartCannotBeDrawn } from '../../bridge/useChartCannotBeDrawn';
 import { useReportBlurredScreen } from '../AppSettingsProvider';
-import { useDelayedReveal } from '../../../shared/hooks/useDelayedReveal';
+import { useDelayedReveal } from '../../../shared/ui/animation/useDelayedReveal';
 import { afterExitAnimation } from '../../../shared/ui/animation/afterExitAnimation';
 import { LoadingMessage } from '../../../shared/ui/loading/LoadingMessage';
 

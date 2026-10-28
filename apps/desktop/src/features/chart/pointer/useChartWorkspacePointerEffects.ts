@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useEventCallback } from '../../../shared/hooks/useEventCallback';
+import { useEventCallback } from '../../../shared/identity/useEventCallback';
 import { createChartPointerRouter } from '../engine/trading/chartPointerRouter';
 import type { StagedOrderGestureTicket } from '../engine/trading/stagedOrderGestures';
 import { DEFAULT_CHART_TOOL_ID } from '../../tools/registry';

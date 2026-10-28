@@ -1,6 +1,6 @@
 import { act, createElement, Fragment, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createDomainStore, useDomainField, useFieldSetterSelector } from '../../src/shared/providers/domainStore';
+import { createFieldStore, useStoreField, useFieldSetterSelector } from '../../src/shared/store/fieldStore';
 import { useOrderTicketSizingActions } from '../../src/features/order-ticket/sizing/useOrderTicketSizingActions';
 import { createOrderTicketStores } from '../../src/features/order-ticket/draft/orderTicketStores';
 
@@ -13,8 +13,8 @@ const getHarnessWindow = () => window as unknown as DomainStoreHarnessWindow;
 let cleanupHarness: (() => void) | undefined;
 
 export function mountDomainStoreHarness(): void {
-  const firstStore = createDomainStore({ count: 0 });
-  const secondStore = createDomainStore({ count: 10 });
+  const firstStore = createFieldStore({ count: 0 });
+  const secondStore = createFieldStore({ count: 10 });
   const sizingStores = createOrderTicketStores();
   const notifications = { first: 0, second: 0 };
   const setterMetrics = { writerRenders: 0, stableAcrossRenders: true };
@@ -22,7 +22,7 @@ export function mountDomainStoreHarness(): void {
   const unsubscribeSecond = secondStore.subscribe(() => notifications.second++);
 
   function Counter({ id, store }: { id: string; store: typeof firstStore }) {
-    const [count, setCount] = useDomainField(store, 'count');
+    const [count, setCount] = useStoreField(store, 'count');
     return createElement(
       'button',
       { 'data-testid': id, onClick: () => setCount((previous) => previous + 1) },

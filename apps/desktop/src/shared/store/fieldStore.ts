@@ -8,13 +8,13 @@ export type FieldSetters<T extends object> = {
   [K in keyof T as `set${Capitalize<string & K>}`]: (action: SetStateAction<T[K]>) => void;
 };
 
-export type DomainStore<T extends object> = StoreApi<T> & {
+export type FieldStore<T extends object> = StoreApi<T> & {
   setField<K extends keyof T>(key: K, action: SetStateAction<T[K]>): void;
   setters: FieldSetters<T>;
 };
 
 function createFieldSetters<T extends object>(
-  store: Pick<StoreApi<T>, 'getState'> & Pick<DomainStore<T>, 'setField'>,
+  store: Pick<StoreApi<T>, 'getState'> & Pick<FieldStore<T>, 'setField'>,
 ): FieldSetters<T> {
   const setters = {} as FieldSetters<T>;
   for (const key of Object.keys(store.getState()) as Array<keyof T>) {
@@ -26,9 +26,9 @@ function createFieldSetters<T extends object>(
   return setters;
 }
 
-export function createDomainStore<T extends object>(initialState: T): DomainStore<T> {
+export function createFieldStore<T extends object>(initialState: T): FieldStore<T> {
   const store = createStore<T>()(() => initialState);
-  const setField: DomainStore<T>['setField'] = (key, action) => {
+  const setField: FieldStore<T>['setField'] = (key, action) => {
     store.setState((state) => {
       const value =
         typeof action === 'function' ? (action as (previous: T[typeof key]) => T[typeof key])(state[key]) : action;
@@ -40,8 +40,8 @@ export function createDomainStore<T extends object>(initialState: T): DomainStor
   return Object.assign(writableStore, { setters });
 }
 
-export function useDomainField<T extends object, K extends keyof T>(
-  store: DomainStore<T>,
+export function useStoreField<T extends object, K extends keyof T>(
+  store: FieldStore<T>,
   key: K,
 ): readonly [T[K], (action: SetStateAction<T[K]>) => void] {
   const value = useStore(store, (state) => state[key]);
@@ -51,7 +51,7 @@ export function useDomainField<T extends object, K extends keyof T>(
 
 /** Selects stable write-only setters without subscribing to store state. */
 export function useFieldSetterSelector<T extends object, Selection>(
-  store: DomainStore<T>,
+  store: FieldStore<T>,
   selector: (setters: FieldSetters<T>) => Selection,
 ): Selection {
   return useShallow(selector)(store.setters);

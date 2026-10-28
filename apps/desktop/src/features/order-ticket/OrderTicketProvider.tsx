@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { useStableActions } from '../../shared/hooks/useStableActions';
+import { useStableActions } from '../../shared/identity/useStableActions';
 import { OrderTicketStoresContext } from './draft/orderTicketContext';
 import { createOrderTicketStores } from './draft/orderTicketStores';
 import { useOrderTicketActionsProducer } from './lifecycle/useOrderTicketActionsProducer';

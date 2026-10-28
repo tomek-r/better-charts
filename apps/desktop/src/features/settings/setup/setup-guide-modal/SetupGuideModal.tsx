@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useExitAnimation } from '../../../../shared/hooks/useExitAnimation';
+import { useExitAnimation } from '../../../../shared/ui/animation/useExitAnimation';
 import { popupOwnsKeyboard } from '../../../../shared/ui/popup/popupKeyboardOwnership';
 import { useAppSettingsActions, useSetupGuideStep } from '../../AppSettingsProvider';
 import { SetupGuideStep } from '../../useAppSettings';

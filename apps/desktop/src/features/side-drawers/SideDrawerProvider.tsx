@@ -1,6 +1,6 @@
 import { createContext, useMemo, useState, type ReactNode } from 'react';
-import { createDomainStore, useDomainField, type DomainStore } from '../../shared/providers/domainStore';
-import { useRequiredContext } from '../../shared/providers/useRequiredContext';
+import { createFieldStore, useStoreField, type FieldStore } from '../../shared/store/fieldStore';
+import { useRequiredContext } from '../../shared/context/useRequiredContext';
 
 export type SideDrawerId = 'tradePanel' | 'objectTree';
 
@@ -8,7 +8,7 @@ interface SideDrawerState {
   openDrawer: SideDrawerId | null;
 }
 
-type SideDrawerStore = DomainStore<SideDrawerState>;
+type SideDrawerStore = FieldStore<SideDrawerState>;
 
 interface SideDrawerActions {
   toggleDrawer: (drawer: SideDrawerId) => void;
@@ -29,13 +29,13 @@ function toggledDrawer(openDrawer: SideDrawerId | null, drawer: SideDrawerId): S
  * action-only consumers stay idle.
  */
 export function SideDrawerProvider({ children }: { children: ReactNode }) {
-  const [store] = useState(() => createDomainStore<SideDrawerState>({ openDrawer: null }));
+  const [store] = useState(() => createFieldStore<SideDrawerState>({ openDrawer: null }));
   return <SideDrawerStoreContext value={store}>{children}</SideDrawerStoreContext>;
 }
 
 export function useSideDrawerOpen(drawer: SideDrawerId): boolean {
   const store = useRequiredContext(SideDrawerStoreContext, MISSING_PROVIDER_MESSAGE);
-  const [openDrawer] = useDomainField(store, 'openDrawer');
+  const [openDrawer] = useStoreField(store, 'openDrawer');
   return openDrawer === drawer;
 }
 

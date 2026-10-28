@@ -9,7 +9,7 @@ import {
   presetVolume,
   type PartialCloseLimits,
 } from '../../shared/trading/partialCloseVolume';
-import { useEscapeDismissal } from '../../shared/hooks/useDismissal';
+import { useEscapeDismissal } from '../../shared/ui/popup/useDismissal';
 import { VolumeStepper } from './VolumeStepper';
 
 interface PartialCloseVolumePopoverProps {

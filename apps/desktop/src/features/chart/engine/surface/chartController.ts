@@ -3,7 +3,7 @@ import type { BridgeState, Candle, QuoteSnapshot } from '../../../../shared/brid
 import { toRenderBar, type RenderBar } from '../bars/renderBar';
 import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayRenderer';
-import { createChartSurface } from './chartFactory';
+import { createChartSurface } from './chartSurface';
 import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
 import { BarCountdownPrimitive } from '../barCountdown/barCountdownPrimitive';
 import { CountdownController } from '../barCountdown/countdownController';

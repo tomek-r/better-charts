@@ -1,11 +1,6 @@
 import { createContext, useMemo, useState, type ReactNode } from 'react';
-import {
-  createDomainStore,
-  useDomainField,
-  type DomainStore,
-  type FieldSetters,
-} from '../../shared/providers/domainStore';
-import { useRequiredContext } from '../../shared/providers/useRequiredContext';
+import { createFieldStore, useStoreField, type FieldStore, type FieldSetters } from '../../shared/store/fieldStore';
+import { useRequiredContext } from '../../shared/context/useRequiredContext';
 
 interface SymbolSearchState {
   searchOpen: boolean;
@@ -13,10 +8,10 @@ interface SymbolSearchState {
 
 export type SymbolSearchControls = Pick<FieldSetters<SymbolSearchState>, 'setSearchOpen'>;
 
-const SearchStoreContext = createContext<DomainStore<SymbolSearchState> | null>(null);
+const SearchStoreContext = createContext<FieldStore<SymbolSearchState> | null>(null);
 
 export function SymbolSearchProvider({ children }: { children: ReactNode }) {
-  const [store] = useState(() => createDomainStore<SymbolSearchState>({ searchOpen: false }));
+  const [store] = useState(() => createFieldStore<SymbolSearchState>({ searchOpen: false }));
   return <SearchStoreContext value={store}>{children}</SearchStoreContext>;
 }
 
@@ -32,6 +27,6 @@ export function useSymbolSearchControls(): SymbolSearchControls {
 /** Open state for views that need to share visibility without owning search data. */
 export function useSymbolSearchOpen(): boolean {
   const store = useRequiredContext(SearchStoreContext, 'useSymbolSearchOpen must be used inside SymbolSearchProvider.');
-  const [searchOpen] = useDomainField(store, 'searchOpen');
+  const [searchOpen] = useStoreField(store, 'searchOpen');
   return searchOpen;
 }

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { afterExitAnimation } from '../ui/animation/afterExitAnimation';
+import { afterExitAnimation } from './afterExitAnimation';
 
 /** One exit in flight: whether it is playing, and the way to start it. */
 export interface ExitAnimation {

@@ -1,8 +1,8 @@
 import { createContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { createDomainStore } from '../../shared/providers/domainStore';
-import { useRequiredContext } from '../../shared/providers/useRequiredContext';
+import { createFieldStore } from '../../shared/store/fieldStore';
+import { useRequiredContext } from '../../shared/context/useRequiredContext';
 import {
   useAppSettings,
   initialAppSettingsState,
@@ -47,7 +47,7 @@ function useSettingsStore(hookName: string): AppSettingsStore {
 }
 
 export function AppSettingsProvider({ children, tauriAvailable }: { children: ReactNode; tauriAvailable: boolean }) {
-  const [store] = useState(() => createDomainStore(initialAppSettingsState));
+  const [store] = useState(() => createFieldStore(initialAppSettingsState));
   const handlers = useAppSettings(store, tauriAvailable);
   const contextValue = useMemo(() => ({ store, actions: handlers }), [handlers, store]);
 

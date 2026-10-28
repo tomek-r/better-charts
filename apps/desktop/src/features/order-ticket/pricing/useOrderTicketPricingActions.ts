@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { useEventCallback } from '../../../shared/hooks/useEventCallback';
+import { useEventCallback } from '../../../shared/identity/useEventCallback';
 import { priceDigitsFor, ticketPrice } from '../../../shared/format';
 import { isPriceSwapDisabled, priceToTicks, tickSizeOf } from './priceTicks';
 import { orderEntryPrice } from './orderEntryPrice';

@@ -1,9 +1,9 @@
 import { createContext, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { createDomainStore, type DomainStore } from '../../shared/providers/domainStore';
-import { useRequiredContext } from '../../shared/providers/useRequiredContext';
-import { useStableActions } from '../../shared/hooks/useStableActions';
+import { createFieldStore, type FieldStore } from '../../shared/store/fieldStore';
+import { useRequiredContext } from '../../shared/context/useRequiredContext';
+import { useStableActions } from '../../shared/identity/useStableActions';
 import { useExecutionCommands, type ExecutionCommandState, type ExecutionStoreState } from './useExecutionCommands';
 import { useBridgeAccount } from '../bridge/bridgeSelectors';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
@@ -15,7 +15,7 @@ type ExecutionActions = Pick<
 type PortfolioActions = Pick<ExecutionCommandState, 'closingTarget' | 'closeCancelStatus' | 'requestClosePosition'>;
 
 interface ExecutionContextValue {
-  store: DomainStore<ExecutionStoreState>;
+  store: FieldStore<ExecutionStoreState>;
   actions: ExecutionActions;
 }
 
@@ -25,7 +25,7 @@ export function ExecutionProvider({ children }: { children: ReactNode }) {
   const account = useBridgeAccount();
   const { chart, positionOverlayState, setPendingModification } = useChartResources();
   const [store] = useState(() =>
-    createDomainStore<ExecutionStoreState>({
+    createFieldStore<ExecutionStoreState>({
       executionQueue: undefined,
       closingTarget: undefined,
       closeCancelStatus: undefined,

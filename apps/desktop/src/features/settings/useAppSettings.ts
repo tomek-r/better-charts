@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { DomainStore } from '../../shared/providers/domainStore';
+import type { FieldStore } from '../../shared/store/fieldStore';
 import { loadAppSettings } from './appSettingsCommands';
 import { readSetupCompleted, saveSetupCompleted } from './setup/setupCompletion';
 import type { AppSettingsData } from './appSettingsData';
@@ -56,7 +56,7 @@ export const initialAppSettingsState: AppSettingsState = {
   notificationRevision: 0,
 };
 
-export type AppSettingsStore = DomainStore<AppSettingsState>;
+export type AppSettingsStore = FieldStore<AppSettingsState>;
 
 /**
  * First launch: the app has just generated the bridge token, so an EA already attached in MT5

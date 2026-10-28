@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { errorText } from '../../../shared/errorText';
-import { useEventCallback } from '../../../shared/hooks/useEventCallback';
+import { useEventCallback } from '../../../shared/identity/useEventCallback';
 import type { OrderTicketInputs } from '../draft/orderTicketInputs';
 import type { OrderTicketStores } from '../draft/orderTicketStores';
 import type { RiskSide } from '../../../shared/bridge/types';

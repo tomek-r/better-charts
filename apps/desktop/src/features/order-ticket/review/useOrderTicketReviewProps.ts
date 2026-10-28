@@ -5,7 +5,7 @@ import { useBridgeAccountSelector, useBridgeQuote } from '../../bridge/bridgeSel
 import { usePassedStopEntry } from '../pricing/usePassedStopEntry';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketReview } from './OrderTicketReview';
-import { useTicketGateProjection } from '../submit/useOrderTicketGates';
+import { useTicketGateProjection } from '../submit/useTicketGateProjection';
 
 type ReviewProps = ComponentProps<typeof OrderTicketReview>;
 

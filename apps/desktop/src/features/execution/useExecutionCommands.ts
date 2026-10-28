@@ -18,7 +18,7 @@ import type { PositionOverlayState } from '../chart/engine/trading/positionOverl
 import { useErrorNotification, useNotifyError } from '../../shared/ui/notification/ErrorNotifications';
 import { describeRejection } from './tradeRejection';
 import { dispatchStatusFromError, type DispatchStatus } from './dispatchStatus';
-import { useDomainField, type DomainStore } from '../../shared/providers/domainStore';
+import { useStoreField, type FieldStore } from '../../shared/store/fieldStore';
 
 export type CloseCancelSource = 'portfolio' | 'draft';
 
@@ -47,16 +47,16 @@ export function useExecutionCommands({
   setPendingModification: Dispatch<SetStateAction<PendingModification | undefined>>;
   positionOverlayState: { current: PositionOverlayState };
   chart: { current: ChartController | null };
-  store: DomainStore<ExecutionStoreState>;
+  store: FieldStore<ExecutionStoreState>;
 }) {
   // The alias keeps react-hooks/immutability from flagging the ref mutation as a prop mutation.
   const positionOverlayRef = positionOverlayState;
   // The former Order panel is gone, but its queue view still supplies the
   // authoritative dispatch gate used by the ticket and chart actions.
-  const [executionQueue, setExecutionQueue] = useDomainField(store, 'executionQueue');
+  const [executionQueue, setExecutionQueue] = useStoreField(store, 'executionQueue');
   // The single in-flight portfolio/draft target (mirrors submittingSide).
-  const [closingTarget, setClosingTarget] = useDomainField(store, 'closingTarget');
-  const [closeCancelStatus, setCloseCancelStatus] = useDomainField(store, 'closeCancelStatus');
+  const [closingTarget, setClosingTarget] = useStoreField(store, 'closingTarget');
+  const [closeCancelStatus, setCloseCancelStatus] = useStoreField(store, 'closeCancelStatus');
   useErrorNotification(closeCancelStatus?.text);
   const accountArgs = { accountLogin: account?.accountLogin, brokerServer: account?.brokerServer };
   // Marks only the exact draft object the command acted on: a newer drag (last wins)
