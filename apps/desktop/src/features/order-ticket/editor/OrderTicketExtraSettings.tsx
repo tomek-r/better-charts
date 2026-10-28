@@ -1,5 +1,13 @@
 import type { TimeInForce } from '../../../shared/bridge/types';
+import { Select, type SelectOption } from '../../../shared/ui/Select';
 import { useOrderTicketExtraSettings } from './useOrderTicketExtraSettings';
+
+const TIME_IN_FORCE_OPTIONS: readonly SelectOption[] = [
+  { value: 'gtc', label: 'GTC' },
+  { value: 'day', label: 'Day' },
+  { value: 'ioc', label: 'IOC' },
+  { value: 'fok', label: 'FOK' },
+];
 
 export function OrderTicketExtraSettings() {
   const {
@@ -22,17 +30,13 @@ export function OrderTicketExtraSettings() {
           <div className="ticket-collapse-body">
             <div className="ticket-row">
               <span className="ticket-row-label">Time in force</span>
-              <select
+              <Select
                 className="ticket-mode"
+                ariaLabel="Time in force"
+                options={TIME_IN_FORCE_OPTIONS}
                 value={timeInForce}
-                onChange={(event) => setTimeInForce(event.target.value as TimeInForce)}
-                aria-label="Time in force"
-              >
-                <option value="gtc">GTC</option>
-                <option value="day">Day</option>
-                <option value="ioc">IOC</option>
-                <option value="fok">FOK</option>
-              </select>
+                onChange={(next) => setTimeInForce(next as TimeInForce)}
+              />
             </div>
           </div>
         )}

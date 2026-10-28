@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { CONNECTING_BRIDGE } from './helpers/bridgeStates';
+import { chooseOption, escapeOpenList, expectOptionLabels } from './helpers/select';
 import {
   DEFAULT_TERMINAL_PATH,
   PORTABLE_MQL5_PATH,
@@ -24,7 +25,7 @@ const INSTALL_AND_RESTART_BUTTON = 'Install and restart MT5';
 /** The target the stub's default installation resolves to, as both commands name it. */
 const PORTABLE_TARGET: Mt5InstallRequest = { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: PORTABLE_MQL5_PATH };
 
-/** The label the data-folder select gives the installation's user data folder. */
+/** The label the data-folder drop-down gives the installation's user data folder. */
 const USER_DATA_FOLDER = 'MetaTrader 5 — user data folder';
 
 /** A machine whose one installation offers two data folders, with an install that only updates files. */
@@ -36,7 +37,7 @@ const TWO_FOLDER_RESPONSES = {
 
 /** Picks the user data folder on the guide's first step, so an install has to name that path. */
 async function pickUserDataFolder(guide: Locator): Promise<void> {
-  await guide.getByLabel('MetaTrader 5 data folder').selectOption({ label: USER_DATA_FOLDER });
+  await chooseOption(guide.getByLabel('MetaTrader 5 data folder'), USER_DATA_FOLDER);
 }
 
 /** Opens the guide on a stub with the given scripted answers, presses `button`, and returns the guide. */
@@ -85,7 +86,8 @@ test('two data folders ask which one to install into, and Install only sends its
 
   // The options name the layout, never the folder path.
   const folder = guide.getByLabel('MetaTrader 5 data folder');
-  await expect(folder.locator('option')).toHaveText(['MetaTrader 5 — portable data folder', USER_DATA_FOLDER]);
+  await expect(folder).toHaveAttribute('aria-haspopup', 'listbox');
+  await expectOptionLabels(folder, ['MetaTrader 5 — portable data folder', USER_DATA_FOLDER]);
   await pickUserDataFolder(guide);
   await guide.getByRole('button', { name: 'Next' }).click();
   await guide.getByRole('button', { name: INSTALL_ONLY_BUTTON }).click();
@@ -95,6 +97,13 @@ test('two data folders ask which one to install into, and Install only sends its
     { terminalPath: DEFAULT_TERMINAL_PATH, mql5Path: STANDARD_MQL5_PATH },
   ]);
   expect(await mt5RestartRequests(page)).toEqual([]);
+});
+
+test('Escape in the open data folder list closes only the list, not the guide', async ({ page }) => {
+  await gotoWithStub(page, { responses: TWO_FOLDER_RESPONSES });
+  const guide = await openSetupGuide(page);
+  await escapeOpenList(guide.getByLabel('MetaTrader 5 data folder'));
+  await expect(guide).toBeVisible();
 });
 
 test('a clean Install only moves on to the connection step', async ({ page }) => {

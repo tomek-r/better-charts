@@ -303,23 +303,30 @@
   border-color: var(--color-warn-border-soft);
 }
 
-.ticket-ref,
-.ticket-mode {
+/* Two classes outrank select.css's base `.select-button` whatever the stylesheet order. */
+.select-button.ticket-ref,
+.select-button.ticket-mode {
+  gap: 4px;
+  width: auto;
   border: 0;
   outline: none;
   padding: 3px 2px;
   color: var(--color-text-label);
   background: transparent;
-  /* The native select arrow scales with font-size in Chromium — 12px gives a
-     visible arrow (the option text grows a step with it). */
   font-size: 12px;
   cursor: pointer;
 }
 
-.ticket-ref:disabled,
-.ticket-mode:disabled {
+.select-button.ticket-ref:disabled,
+.select-button.ticket-mode:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+span.ticket-mode {
+  padding: 3px 2px;
+  color: var(--color-text-label);
+  font-size: 12px;
 }
 
 .ticket-swap {

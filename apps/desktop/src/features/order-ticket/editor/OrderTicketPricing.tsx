@@ -1,5 +1,11 @@
 import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
+import { Select, type SelectOption } from '../../../shared/ui/Select';
 import { useOrderTicketPricing } from './useOrderTicketPricing';
+
+const PRICE_REFERENCE_OPTIONS: readonly SelectOption[] = [
+  { value: 'ask', label: 'Ask' },
+  { value: 'bid', label: 'Bid' },
+];
 
 /** The ticket's decimal text-number input; autofill and spellcheck stay off so prices are never rewritten. */
 function PriceInput({
@@ -95,16 +101,14 @@ export function OrderTicketPricing() {
       <div className={`ticket-row${orderKind === 'market' ? ' disabled' : ''}`}>
         <span className="ticket-row-label">{orderKind === 'stop_limit' ? 'Trigger price' : 'Price offset'}</span>
         <div className="ticket-field">
-          <select
+          <Select
             className="ticket-ref"
+            ariaLabel="Price reference"
+            options={PRICE_REFERENCE_OPTIONS}
             value={displayedPriceReference}
             disabled={absolutePrice || !hasQuote}
-            onChange={(event) => setPriceReference(event.target.value as 'ask' | 'bid')}
-            aria-label="Price reference"
-          >
-            <option value="ask">Ask</option>
-            <option value="bid">Bid</option>
-          </select>
+            onChange={(next) => setPriceReference(next as 'ask' | 'bid')}
+          />
           <button
             className="ticket-swap"
             disabled={priceSwapDisabled}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useExitAnimation } from '../../../shared/hooks/useExitAnimation';
+import { popupOwnsKeyboard } from '../../../shared/ui/openPopup';
 import { useAppSettingsView } from '../AppSettingsProvider';
 import { SetupGuideStep } from '../useAppSettings';
 import { useInstallToMt5 } from './installation/useInstallToMt5';
@@ -82,7 +83,7 @@ export function SetupGuideModal({
   useEffect(() => {
     dialog.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !popupOwnsKeyboard()) {
         event.preventDefault();
         event.stopImmediatePropagation();
         requestClose();
