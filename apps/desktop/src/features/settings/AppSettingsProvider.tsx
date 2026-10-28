@@ -13,9 +13,6 @@ import {
 } from './useAppSettings';
 import type { AppSettingsData } from './appSettingsData';
 
-/** The two ways into the setup surfaces, which the header and the notices call. */
-type AppSettingsActions = Pick<AppSettingsHandlers, 'openSettings' | 'openSetupGuide'>;
-
 export type AppSettingsViewState = AppSettingsHandlers & {
   settings: AppSettingsData | undefined;
   loadRequest: Promise<void>;
@@ -57,6 +54,13 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
   return <AppSettingsContext value={contextValue}>{children}</AppSettingsContext>;
 }
 
+const selectRestartNoticeVisible = (state: AppSettingsState) => state.restartRequired && !state.restartNoticeDismissed;
+
+const selectConfigurationNotice = (state: AppSettingsState) =>
+  state.settings?.configurationError !== state.dismissedConfigurationError
+    ? state.settings?.configurationError
+    : undefined;
+
 export function useAppSettingsView(): AppSettingsViewState {
   const { store, actions } = useSettingsContext('useAppSettingsView');
   const view = useStore(
@@ -74,11 +78,8 @@ export function useAppSettingsView(): AppSettingsViewState {
       setupCompleted: state.setupCompleted,
       loadError: state.loadError,
       notificationRevision: state.notificationRevision,
-      restartNoticeVisible: state.restartRequired && !state.restartNoticeDismissed,
-      configurationNotice:
-        state.settings?.configurationError !== state.dismissedConfigurationError
-          ? state.settings?.configurationError
-          : undefined,
+      restartNoticeVisible: selectRestartNoticeVisible(state),
+      configurationNotice: selectConfigurationNotice(state),
     })),
   );
 
@@ -86,7 +87,7 @@ export function useAppSettingsView(): AppSettingsViewState {
 }
 
 /** The handlers object is stable, so its identity never changes and no consumer re-renders through it. */
-export function useAppSettingsActions(): AppSettingsActions {
+export function useAppSettingsActions(): AppSettingsHandlers {
   return useSettingsContext('useAppSettingsActions').actions;
 }
 
@@ -97,6 +98,51 @@ export function useAppSettingsActions(): AppSettingsActions {
 function useSettingsSelector<T>(hookName: string, selector: (state: AppSettingsState) => T): T {
   const store = useSettingsStore(hookName);
   return useStore(store, selector);
+}
+
+/** The step of the setup guide on screen. */
+export function useSetupGuideStep(): SetupGuideStep {
+  return useSettingsSelector('useSetupGuideStep', (state) => state.setupGuideStep);
+}
+
+/** Whether the setup guide is open, over the settings dialog or over the window. */
+export function useSetupGuideOpen(): boolean {
+  return useSettingsSelector('useSetupGuideOpen', (state) => state.setupGuideOpen);
+}
+
+/** Whether the finished screen stands over the chart. */
+export function useSetupCompleteShown(): boolean {
+  return useSettingsSelector('useSetupCompleteShown', (state) => state.setupCompleteShown);
+}
+
+/** Whether the settings dialog is open. */
+export function useSettingsDialogOpen(): boolean {
+  return useSettingsSelector('useSettingsDialogOpen', (state) => state.isOpen);
+}
+
+/** Whether the finished screen replaces a blurred screen, so its backdrop stands at once. */
+export function useSetupCompleteOverSetupScreen(): boolean {
+  return useSettingsSelector('useSetupCompleteOverSetupScreen', (state) => state.setupCompleteOverSetupScreen);
+}
+
+/** The bridge token of the saved settings; `undefined` until the settings load. */
+export function useBridgeToken(): string | undefined {
+  return useSettingsSelector('useBridgeToken', (state) => state.settings?.mt5BridgeSettings.token);
+}
+
+/** The configuration error to show, `undefined` once dismissed. */
+export function useConfigurationNotice(): string | null | undefined {
+  return useSettingsSelector('useConfigurationNotice', selectConfigurationNotice);
+}
+
+/** Whether the "settings saved, restart" reminder is showing. */
+export function useRestartNoticeVisible(): boolean {
+  return useSettingsSelector('useRestartNoticeVisible', selectRestartNoticeVisible);
+}
+
+/** Changes whenever settings are saved, so a notice that was dismissed shows again. */
+export function useNotificationRevision(): number {
+  return useSettingsSelector('useNotificationRevision', (state) => state.notificationRevision);
 }
 
 /** Operating system the app runs on; `undefined` until the settings load. */

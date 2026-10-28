@@ -2,16 +2,23 @@ import { ErrorNotification } from '../../shared/ui/notification/ErrorNotificatio
 import { afterExitAnimation } from '../../shared/ui/animation/afterExitAnimation';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../shared/ui/dialog/ModalDialog';
 import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { LazySetupGuideModal } from './setup/setup-guide-modal/LazySetupGuideModal';
 import type { AppSettingsData, DetectedSettingsField } from './appSettingsData';
+import { saveAppSettings } from './appSettingsCommands';
+import { bridgeSettingsIssue } from './bridgeSettingsValidation';
+import { SectionInfoIcon } from './SectionInfoIcon';
+import { SettingsTextField } from './SettingsTextField';
 import { FRAME_BYTES } from '../../shared/bridge/config';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';
 
-type Category = 'MT5 setup' | 'Trading';
+const SETTINGS_CATEGORIES = [
+  { name: 'MT5 setup', icon: '⇄' },
+  { name: 'Trading', icon: '⌁' },
+] as const;
 
-/** Loopback host and port; compiled once rather than on every save. */
-const LOOPBACK_ADDRESS = /^(127(?:\.[0-9]{1,3}){3}|\[::1\]):([0-9]+)$/;
+type Category = (typeof SETTINGS_CATEGORIES)[number]['name'];
+
+const BYTES_PER_MIB = 1024 * 1024;
 
 /** Notes that this load filled the field from an MT5 installation found on this computer. */
 function DetectedHint({ detected, field }: { detected: DetectedSettingsField[]; field: DetectedSettingsField }) {
@@ -90,46 +97,18 @@ export function AppSettingsDialog({
   };
   async function save(event: SubmitEvent) {
     event.preventDefault();
-    if (!draft || saving || closing) {
+    if (!draft || busy) {
       return;
     }
-    if (!draft.token.trim()) {
+    const issue = bridgeSettingsIssue(draft, settings?.platform);
+    if (issue) {
       setCategory('MT5 setup');
-      setError('Enter a nonempty token and use the same token in the MT5 EA.');
-      return;
-    }
-    const address = LOOPBACK_ADDRESS.exec(draft.address.trim());
-    if (
-      !address ||
-      Number(address[2]) < 1 ||
-      Number(address[2]) > 65535 ||
-      (address[1] !== '[::1]' && address[1].split('.').some((part) => Number(part) > 255))
-    ) {
-      setCategory('MT5 setup');
-      setError('Use a local address with a port from 1 to 65535, for example 127.0.0.1:8765.');
-      return;
-    }
-    if (
-      !Number.isInteger(draft.maxFrameBytes) ||
-      draft.maxFrameBytes < FRAME_BYTES.min ||
-      draft.maxFrameBytes > FRAME_BYTES.max
-    ) {
-      setCategory('MT5 setup');
-      setError(`Maximum frame bytes must be an integer from ${FRAME_BYTES.min} to ${FRAME_BYTES.max}.`);
-      return;
-    }
-    if (
-      draft.autoStartMt5 &&
-      (!draft.terminalPath.trim() ||
-        (settings?.platform !== 'windows' && (!draft.winePrefix.trim() || !draft.wineBinary.trim())))
-    ) {
-      setCategory('MT5 setup');
-      setError('Provide the terminal path and, on macOS or Linux, the Wine binary and prefix.');
+      setError(issue);
       return;
     }
     setSaving(true);
     try {
-      const next = await invoke<AppSettingsData>('save_app_settings', { settings: draft });
+      const next = await saveAppSettings(draft);
       onSaved(next);
     } catch {
       setError('Could not save settings. Check the values and try again.');
@@ -179,15 +158,15 @@ export function AppSettingsDialog({
       }
     >
       <nav className="settings-nav" aria-label="Settings categories">
-        {(['MT5 setup', 'Trading'] as const).map((item, index) => (
+        {SETTINGS_CATEGORIES.map(({ name, icon }) => (
           <button
             type="button"
-            key={item}
-            aria-current={category === item ? 'page' : undefined}
-            onClick={() => setCategory(item)}
+            key={name}
+            aria-current={category === name ? 'page' : undefined}
+            onClick={() => setCategory(name)}
           >
-            <span aria-hidden="true">{['⇄', '⌁'][index]}</span>
-            {item}
+            <span aria-hidden="true">{icon}</span>
+            {name}
           </button>
         ))}
       </nav>
@@ -208,39 +187,29 @@ export function AppSettingsDialog({
                     aria-label="How to set up the bridge connection"
                     aria-haspopup="dialog"
                     aria-expanded={guideOpen}
-                    disabled={saving || closing}
+                    disabled={busy}
                     onClick={(event) => {
                       guideTrigger.current = event.currentTarget;
                       onOpenGuide();
                     }}
                   >
-                    <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
-                      <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.3" />
-                      <circle cx="8" cy="4.6" r="1" fill="currentColor" />
-                      <path d="M8 7.2v4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                    </svg>
+                    <SectionInfoIcon />
                   </button>
                 </h3>
-                <label className="settings-field">
-                  Address
-                  <input
-                    value={draft.address}
-                    autoComplete="off"
-                    spellCheck={false}
-                    onChange={(event) => change('address', event.target.value)}
-                  />
-                </label>
+                <SettingsTextField
+                  label="Address"
+                  value={draft.address}
+                  autoComplete="off"
+                  onChange={(value) => change('address', value)}
+                />
                 <p className="settings-hint">Local host and port. Use the same host and port in the EA inputs.</p>
-                <label className="settings-field">
-                  Token
-                  <input
-                    type={showToken ? 'text' : 'password'}
-                    value={draft.token}
-                    autoComplete="off"
-                    spellCheck={false}
-                    onChange={(event) => change('token', event.target.value)}
-                  />
-                </label>
+                <SettingsTextField
+                  label="Token"
+                  type={showToken ? 'text' : 'password'}
+                  value={draft.token}
+                  autoComplete="off"
+                  onChange={(value) => change('token', value)}
+                />
                 <label className="settings-checkbox">
                   <input type="checkbox" checked={showToken} onChange={(event) => setShowToken(event.target.checked)} />
                   Show token
@@ -261,7 +230,7 @@ export function AppSettingsDialog({
                   />
                 </label>
                 <p className="settings-hint">
-                  Negotiated with the EA. Default: {FRAME_BYTES.default} bytes ({FRAME_BYTES.default / (1024 * 1024)}{' '}
+                  Negotiated with the EA. Default: {FRAME_BYTES.default} bytes ({FRAME_BYTES.default / BYTES_PER_MIB}{' '}
                   MiB).
                 </p>
               </>
@@ -296,45 +265,36 @@ export function AppSettingsDialog({
                   Start MT5 when Better Charts launches
                 </label>
                 <p className="settings-hint">Saving settings does not start MT5. Startup runs on the next launch.</p>
-                <label className="settings-field">
-                  MT5 executable path
-                  <input
-                    value={draft.terminalPath}
-                    spellCheck={false}
-                    onChange={(event) => change('terminalPath', event.target.value)}
-                  />
+                <SettingsTextField
+                  label="MT5 executable path"
+                  value={draft.terminalPath}
+                  onChange={(value) => change('terminalPath', value)}
+                >
                   <DetectedHint detected={detectedFields} field="terminalPath" />
-                </label>
+                </SettingsTextField>
                 {settings?.platform !== 'windows' && (
                   <>
-                    <label className="settings-field">
-                      Wine binary path
-                      <input
-                        value={draft.wineBinary}
-                        spellCheck={false}
-                        onChange={(event) => change('wineBinary', event.target.value)}
-                      />
+                    <SettingsTextField
+                      label="Wine binary path"
+                      value={draft.wineBinary}
+                      onChange={(value) => change('wineBinary', value)}
+                    >
                       <DetectedHint detected={detectedFields} field="wineBinary" />
-                    </label>
-                    <label className="settings-field">
-                      Wine prefix path
-                      <input
-                        value={draft.winePrefix}
-                        spellCheck={false}
-                        onChange={(event) => change('winePrefix', event.target.value)}
-                      />
+                    </SettingsTextField>
+                    <SettingsTextField
+                      label="Wine prefix path"
+                      value={draft.winePrefix}
+                      onChange={(value) => change('winePrefix', value)}
+                    >
                       <DetectedHint detected={detectedFields} field="winePrefix" />
-                    </label>
+                    </SettingsTextField>
                   </>
                 )}
-                <label className="settings-field">
-                  Startup configuration path (optional)
-                  <input
-                    value={draft.configPath}
-                    spellCheck={false}
-                    onChange={(event) => change('configPath', event.target.value)}
-                  />
-                </label>
+                <SettingsTextField
+                  label="Startup configuration path (optional)"
+                  value={draft.configPath}
+                  onChange={(value) => change('configPath', value)}
+                />
               </>
             )}
             {settings && settings.overriddenKeys.length > 0 && (

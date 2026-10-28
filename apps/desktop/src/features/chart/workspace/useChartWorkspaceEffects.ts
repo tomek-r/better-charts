@@ -5,21 +5,13 @@ import { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
 import { bridgeIdentityKey } from '../../../shared/bridge/bridgeIdentity';
 import { quoteDigits } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
-import { popupOwnsKeyboard } from '../../../shared/ui/popup/popupKeyboardOwnership';
+import { popupOwnsKeyboard, toolFlyoutOpen } from '../../../shared/ui/popup/popupKeyboardOwnership';
 import { mt5HistoryTransport } from '../../bridge/market/mt5HistoryTransport';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { BridgeSessionLifecycleState } from '../../bridge/BridgeSessionProvider';
 import type { QuoteSnapshot } from '../../../shared/bridge/types';
 import type { OrderTicketStores } from '../../order-ticket/draft/orderTicketStores';
 import type { ChartWorkspaceState } from './useChartWorkspace';
-
-/**
- * The rail's tool flyout, when open, owns Escape: it closes itself and restores
- * focus, and its own document-level handler stops the event from reaching the
- * chart shortcuts. This is the guard for the shortcuts that run BEFORE that
- * handler (a window capture-phase listener), which cannot rely on it.
- */
-const toolFlyoutOpen = () => document.querySelector('.tool-flyout') !== null;
 
 export function useChartWorkspaceInitEffects(
   workspace: ChartWorkspaceState,

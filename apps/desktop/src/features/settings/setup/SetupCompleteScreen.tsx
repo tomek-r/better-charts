@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useExitAnimation } from '../../../shared/hooks/useExitAnimation';
-import { useAppSettingsView } from '../AppSettingsProvider';
+import {
+  useAppSettingsActions,
+  useSettingsDialogOpen,
+  useSetupCompleteOverSetupScreen,
+  useSetupCompleteShown,
+} from '../AppSettingsProvider';
 import { SetupCompleteIcon } from './SetupCompleteIcon';
 
 type WindowFront = {
@@ -42,7 +47,9 @@ function entranceFrontClass({ inFront, enteredBehind }: WindowFront): string {
 }
 
 function SetupCompleteDialog() {
-  const { setupCompleteOverSetupScreen, isOpen, dismissSetupComplete } = useAppSettingsView();
+  const setupCompleteOverSetupScreen = useSetupCompleteOverSetupScreen();
+  const isOpen = useSettingsDialogOpen();
+  const { dismissSetupComplete } = useAppSettingsActions();
   const windowFront = useWindowInFront();
   const happyTradingButton = useRef<HTMLButtonElement>(null);
   const screenRoot = useRef<HTMLDivElement>(null);
@@ -101,7 +108,7 @@ function SetupCompleteDialog() {
  * screen, whose button takes the screen away and leaves the chart.
  */
 export function SetupCompleteScreen() {
-  const { setupCompleteShown } = useAppSettingsView();
+  const setupCompleteShown = useSetupCompleteShown();
   if (!setupCompleteShown) {
     return null;
   }

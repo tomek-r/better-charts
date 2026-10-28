@@ -2,7 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
 import { DownloadIcon } from './DownloadIcon';
-import { useAppSettingsView } from '../../AppSettingsProvider';
+import { useBridgeToken } from '../../AppSettingsProvider';
 
 // The EA and tick-history reader already ship with the app as Tauri resources
 // (see tauri.conf.json). The manual steps download them to a folder the user picks:
@@ -37,9 +37,8 @@ async function downloadResource(resourcePath: string, fileName: string): Promise
 
 /** The fallback route, folded away so the automatic install stays the obvious one. */
 export function ManualInstall() {
-  const { settings } = useAppSettingsView();
+  const token = useBridgeToken();
   const shellAvailable = isTauri();
-  const token = settings?.mt5BridgeSettings.token;
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {

@@ -7,3 +7,12 @@
 export function popupOwnsKeyboard(): boolean {
   return document.querySelector('.popup-surface') !== null;
 }
+
+/**
+ * The rail's tool flyout, when open, owns Escape: it closes itself and restores focus, and its own
+ * document-level handler stops the event from reaching the chart shortcuts. This is the guard for the
+ * shortcuts that run BEFORE that handler (a window capture-phase listener), which cannot rely on it.
+ */
+export function toolFlyoutOpen(): boolean {
+  return document.querySelector('.tool-flyout') !== null;
+}

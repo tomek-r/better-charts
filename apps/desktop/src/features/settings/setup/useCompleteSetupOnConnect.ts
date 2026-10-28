@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { BridgeState } from '../../../shared/bridge/types';
 import { useBridgeConnection } from '../../bridge/bridgeSelectors';
-import { useAppSettingsView } from '../AppSettingsProvider';
+import { useAppSettingsActions, useSetupGuideOpen } from '../AppSettingsProvider';
 
 /**
  * The guide has nothing left to do once the bridge answers, so reaching "connected" while it is
@@ -10,7 +10,8 @@ import { useAppSettingsView } from '../AppSettingsProvider';
  */
 export function useCompleteSetupOnConnect(): void {
   const { status } = useBridgeConnection();
-  const { setupGuideOpen, completeSetup } = useAppSettingsView();
+  const setupGuideOpen = useSetupGuideOpen();
+  const { completeSetup } = useAppSettingsActions();
   const stateWhileGuideOpen = useRef<BridgeState | undefined>(undefined);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import type { DomainStore } from '../../shared/providers/domainStore';
+import { loadAppSettings } from './appSettingsCommands';
 import { readSetupCompleted, saveSetupCompleted } from './setup/setupCompletion';
 import type { AppSettingsData } from './appSettingsData';
 
@@ -70,7 +70,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   const loadSettings = useCallback(
     (errorMessage: string, onLoaded?: (next: AppSettingsData) => void) => {
       const generation = ++settingsLoadGeneration.current;
-      const loadRequest = invoke<AppSettingsData>('get_app_settings')
+      const loadRequest = loadAppSettings()
         .then((next) => {
           if (generation !== settingsLoadGeneration.current) {
             return;

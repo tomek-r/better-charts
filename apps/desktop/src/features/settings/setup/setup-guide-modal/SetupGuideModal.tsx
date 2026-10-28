@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useExitAnimation } from '../../../../shared/hooks/useExitAnimation';
 import { popupOwnsKeyboard } from '../../../../shared/ui/popup/popupKeyboardOwnership';
-import { useAppSettingsView } from '../../AppSettingsProvider';
+import { useAppSettingsActions, useSetupGuideStep } from '../../AppSettingsProvider';
 import { SetupGuideStep } from '../../useAppSettings';
+import { GuideCloseIcon } from './GuideCloseIcon';
 import { useInstallToMt5 } from './installation/useInstallToMt5';
 import { ConnectStep } from './steps/ConnectStep';
 import { FindMt5Step } from './steps/FindMt5Step';
@@ -58,7 +59,8 @@ export function SetupGuideModal({
   const dialog = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const { exiting: closing, startExit } = useExitAnimation(backdrop);
-  const { setupGuideStep, showSetupGuideStep } = useAppSettingsView();
+  const setupGuideStep = useSetupGuideStep();
+  const { showSetupGuideStep } = useAppSettingsActions();
   const previousStep = PREVIOUS_STEP[setupGuideStep];
   const goBack = useCallback(() => {
     if (previousStep !== undefined) {
@@ -80,8 +82,12 @@ export function SetupGuideModal({
     closing ? ' is-closing' : ''
   }${finishing ? ' is-finishing' : ''}`;
 
+  // Re-runs with `requestClose`, as the combined focus and Escape effect did before it was split.
   useEffect(() => {
     dialog.current?.focus();
+  }, [requestClose]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !popupOwnsKeyboard()) {
         event.preventDefault();
@@ -109,15 +115,7 @@ export function SetupGuideModal({
         <div className="setup-guide-header">
           <h2 id="setup-guide-title">Set up the MT5 bridge</h2>
           <button type="button" className="setup-guide-close" onClick={requestClose} aria-label="Close setup guide">
-            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
-              <path
-                d="M5.2 5.2l7.6 7.6M12.8 5.2L5.2 12.8"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                fill="none"
-              />
-            </svg>
+            <GuideCloseIcon />
           </button>
         </div>
 
