@@ -1,7 +1,7 @@
 import { OrderTicketEditor } from './editor/OrderTicketEditor';
 import { OrderTicketReview } from './review/OrderTicketReview';
 import { useOrderTicketHeader } from './editor/useOrderTicketHeader';
-import { useOrderTicketReviewProps } from './editor/useOrderTicketReviewProps';
+import { useOrderTicketReviewProps } from './review/useOrderTicketReviewProps';
 import { useOrderTicketStage } from './editor/useOrderTicketStage';
 
 function OrderTicketReviewBody() {

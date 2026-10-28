@@ -352,7 +352,7 @@ changed candle-only chart-quote and balance-only ticket-header render counts fro
 1 to 0; sizing is also idle on balance changes. Currency and environment changes
 still update their relevant consumers. The provider-isolation suite passed 11/11.
 
-**Evidence:** [chart quotes](../../apps/desktop/src/features/chart/ChartQuotes.tsx#L5),
+**Evidence:** [chart quotes](../../apps/desktop/src/features/chart/header/ChartQuotes.tsx#L5),
 [market context](../../apps/desktop/src/features/bridge/BridgeSessionProvider.tsx#L67),
 and [ticket header/sizing](../../apps/desktop/src/features/order-ticket/OrderTicketProvider.tsx#L50).
 
@@ -387,7 +387,7 @@ part needed no additional change.
 
 **Evidence:** [P&L formatting](../../apps/desktop/src/features/chart/engine/overlayLines.ts#L40),
 [shared signed-money formatter](../../apps/desktop/src/shared/format.ts#L42),
-[chart quote derivation](../../apps/desktop/src/features/chart/ChartQuotes.tsx#L6),
+[chart quote derivation](../../apps/desktop/src/features/chart/header/ChartQuotes.tsx#L6),
 and [ticket quote derivation](../../apps/desktop/src/features/order-ticket/OrderTicketProvider.tsx#L70).
 
 **Confirmed duplication:** after checking missing/invalid input, `pnlMoneyText`
@@ -524,7 +524,7 @@ new history. The initial-load comparison failed without key invalidation.
 - [priceToTicks](../../apps/desktop/src/features/order-ticket/state/useOrderTicketPricing.ts#L83)
   ignores its `kind` parameter. Remove that parameter and update callers if the
   conversion is intentionally absolute-distance-only.
-- [UnitsSizingRow](../../apps/desktop/src/features/order-ticket/editor/UnitsSizingRow.tsx#L177)
+- [UnitsSizingRow](../../apps/desktop/src/features/order-ticket/editor/sizing/UnitsSizingRow.tsx#L177)
   repeats three menu items with the same structure. A local typed three-item
   description can remove repetition; keep focus restoration, keyboard controls,
   and mode-specific copy explicit. This does not justify a new menu library.

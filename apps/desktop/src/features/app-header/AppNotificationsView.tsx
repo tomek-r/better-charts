@@ -1,4 +1,4 @@
-import { BridgeComponentOutdatedNotice } from '../bridge/BridgeComponentOutdatedNotice';
+import { BridgeComponentOutdatedNotice } from '../settings/setup/BridgeComponentOutdatedNotice';
 import { Notification } from '../../shared/ui/notification/Notification';
 import { ErrorNotifications } from '../../shared/ui/notification/ErrorNotifications';
 import { useAppSettingsView } from '../settings/AppSettingsProvider';

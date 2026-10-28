@@ -5,7 +5,7 @@ import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal'
 import type { BridgeStatus } from '../../shared/bridge/types';
 import { useErrorNotification } from '../../shared/ui/notification/ErrorNotifications';
 import { LoadingMessage } from '../../shared/ui/loading/LoadingMessage';
-import { HistoryWaitNotice } from './HistoryWaitNotice';
+import { HistoryWaitNotice } from './historyWait/HistoryWaitNotice';
 
 /** A protocol error nothing else explains is the only thing worth a toast: the setup screen below covers a token
  * mismatch, an outdated component has its own notice, and a completed setup adds its fix to this same toast. */

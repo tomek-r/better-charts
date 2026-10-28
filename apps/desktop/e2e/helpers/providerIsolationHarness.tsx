@@ -20,11 +20,11 @@ import {
   BridgeSessionProvider,
   useTauriAvailable,
 } from '../../src/features/bridge/BridgeSessionProvider';
-import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../../src/features/bridge/BridgeAwaitingScreen';
-import { BridgeScreen } from '../../src/features/settings/BridgeScreen';
+import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../../src/features/settings/setup/BridgeAwaitingScreen';
+import { BridgeScreen } from '../../src/features/settings/setup/BridgeScreen';
 import { ChartWorkspaceProvider, useChartResources } from '../../src/features/chart/ChartWorkspaceProvider';
-import { ChartTitle } from '../../src/features/chart/ChartTitle';
-import { ChartQuotes } from '../../src/features/chart/ChartQuotes';
+import { ChartTitle } from '../../src/features/chart/header/ChartTitle';
+import { ChartQuotes } from '../../src/features/chart/header/ChartQuotes';
 import { ChartCanvas } from '../../src/features/chart/ChartCanvas';
 import { ChartTimeframes } from '../../src/features/chart/timeframes/ChartTimeframes';
 import { ExecutionProvider } from '../../src/features/execution/ExecutionProvider';
@@ -33,13 +33,13 @@ import { OrderTicketProvider } from '../../src/features/order-ticket/OrderTicket
 import { useOrderTicketActions, useOrderTicketStores } from '../../src/features/order-ticket/state/orderTicketContext';
 import { useOrderTicketAction } from '../../src/features/order-ticket/editor/useOrderTicketAction';
 import { useOrderTicketHeader } from '../../src/features/order-ticket/editor/useOrderTicketHeader';
-import { useOrderTicketPricing } from '../../src/features/order-ticket/editor/useOrderTicketPricing';
-import { OrderTicketTickValue } from '../../src/features/order-ticket/editor/OrderTicketTickValue';
-import { OrderTicketSizing } from '../../src/features/order-ticket/editor/OrderTicketSizing';
-import { OrderTicketExits } from '../../src/features/order-ticket/editor/OrderTicketExits';
-import { OrderTicketReviewAction } from '../../src/features/order-ticket/editor/OrderTicketReviewAction';
-import { OrderTicketQuotes } from '../../src/features/order-ticket/editor/OrderTicketQuotes';
-import { OrderTicketExtraSettings } from '../../src/features/order-ticket/editor/OrderTicketExtraSettings';
+import { useOrderTicketPricing } from '../../src/features/order-ticket/editor/pricing/useOrderTicketPricing';
+import { OrderTicketTickValue } from '../../src/features/order-ticket/editor/sizing/OrderTicketTickValue';
+import { OrderTicketSizing } from '../../src/features/order-ticket/editor/sizing/OrderTicketSizing';
+import { OrderTicketExits } from '../../src/features/order-ticket/editor/exits/OrderTicketExits';
+import { OrderTicketReviewAction } from '../../src/features/order-ticket/review/OrderTicketReviewAction';
+import { OrderTicketQuotes } from '../../src/features/order-ticket/editor/quotes/OrderTicketQuotes';
+import { OrderTicketExtraSettings } from '../../src/features/order-ticket/editor/exits/OrderTicketExtraSettings';
 import { SymbolSearchView } from '../../src/features/symbol-search/SymbolSearchView';
 import { SymbolSearchProvider } from '../../src/features/symbol-search/SymbolSearchProvider';
 import { AppSettingsProvider, useAppSettingsView } from '../../src/features/settings/AppSettingsProvider';

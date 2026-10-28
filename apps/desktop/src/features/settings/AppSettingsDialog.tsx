@@ -3,7 +3,7 @@ import { afterExitAnimation } from '../../shared/ui/animation/afterExitAnimation
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../shared/ui/dialog/ModalDialog';
 import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { LazySetupGuideModal } from './setup-guide-modal/LazySetupGuideModal';
+import { LazySetupGuideModal } from './setup/setup-guide-modal/LazySetupGuideModal';
 import type { AppSettingsData, DetectedSettingsField } from './settingsTypes';
 import { FRAME_BYTES } from '../../shared/bridge/limits';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';

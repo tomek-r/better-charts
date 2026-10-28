@@ -1,8 +1,8 @@
 import { useTauriAvailable } from '../bridge/BridgeSessionProvider';
 import { AppSettingsProvider } from '../settings/AppSettingsProvider';
 import { AppSettingsView } from '../settings/AppSettingsView';
-import { BridgeScreen } from '../settings/BridgeScreen';
-import { SetupCompleteScreen } from '../settings/SetupCompleteScreen';
+import { BridgeScreen } from '../settings/setup/BridgeScreen';
+import { SetupCompleteScreen } from '../settings/setup/SetupCompleteScreen';
 import { AppHeaderView } from './AppHeaderView';
 import { AppNotificationsView } from './AppNotificationsView';
 

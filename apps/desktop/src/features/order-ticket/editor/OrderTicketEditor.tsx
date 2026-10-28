@@ -1,10 +1,10 @@
-import { OrderTicketQuotes } from './OrderTicketQuotes';
-import { OrderTicketPricing } from './OrderTicketPricing';
-import { OrderTicketTickValue } from './OrderTicketTickValue';
-import { OrderTicketSizing } from './OrderTicketSizing';
-import { OrderTicketExits } from './OrderTicketExits';
-import { OrderTicketExtraSettings } from './OrderTicketExtraSettings';
-import { OrderTicketReviewAction } from './OrderTicketReviewAction';
+import { OrderTicketQuotes } from './quotes/OrderTicketQuotes';
+import { OrderTicketPricing } from './pricing/OrderTicketPricing';
+import { OrderTicketTickValue } from './sizing/OrderTicketTickValue';
+import { OrderTicketSizing } from './sizing/OrderTicketSizing';
+import { OrderTicketExits } from './exits/OrderTicketExits';
+import { OrderTicketExtraSettings } from './exits/OrderTicketExtraSettings';
+import { OrderTicketReviewAction } from '../review/OrderTicketReviewAction';
 
 export function OrderTicketEditor() {
   return (
