@@ -112,7 +112,7 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
   private draw(target: RenderTarget): void {
     const text = this.shownText;
     const fontSize = this.labelFontSize();
-    const font = `${fontSize}px ${this.labelFontFamily()}`;
+    const font = this.labelFont();
     const layout = tagLayout(text, font, fontSize);
     const height = priceTagHeight(fontSize);
     const top = Math.round(this.shownY - height / 2);

@@ -1,7 +1,7 @@
 import { timeframeBarOffset, timeframeBarTime } from '../../../shared/bridge/timeframes';
 import { MS_PER_MINUTE, nearestMinuteMs } from '../../../shared/time/minutes';
-import { anchorAtBar, reanchorToCurrentBars, type BarAnchor } from '../../chart/engine/tools/toolContract';
-import type { TimeModel } from '../../chart/engine/viewport/viewportController';
+import { anchorAtBar, reanchorToCurrentBars, type BarAnchor } from '../../chart/engine/tools/barAnchor';
+import type { TimeModel } from '../../chart/engine/bars/timeModel';
 
 /**
  * A committed fixed-range volume profile window, `[fromMs, endMs)`. The end is

@@ -1,5 +1,5 @@
 import { HISTORY_BARS, INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../../shared/bridge/config';
-import type { Candle, MarketSnapshot } from '../../../../shared/bridge/types';
+import type { MarketSnapshot } from '../../../../shared/bridge/types';
 import { errorText } from '../../../../shared/errorText';
 
 /** Older pages wait for the EA's own page deadline (BRIDGE_HISTORY_PAGE_DEADLINE_MS). */
@@ -12,47 +12,6 @@ const PAGE_TIMEOUT_MS = 10_000;
 const WINDOW_ANSWER_GRACE_MS = 2_000;
 const WINDOW_TIMEOUT_MS = INITIAL_HISTORY_SYNC_TIMEOUT_MS + WINDOW_ANSWER_GRACE_MS;
 const HISTORY_TIMEOUT_MESSAGE = 'History request timed out.';
-
-/** Numeric values used only at the rendering boundary. Bridge models retain ms and decimal strings. */
-export interface RenderBar {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-export function toRenderBar(candle: Candle): RenderBar | null {
-  const bar = {
-    time: Math.floor(candle.timeMs / 1000),
-    open: Number(candle.open),
-    high: Number(candle.high),
-    low: Number(candle.low),
-    close: Number(candle.close),
-    volume: Number(candle.tickVolume),
-  };
-  if (
-    !Number.isFinite(bar.time) ||
-    bar.time <= 0 ||
-    !Number.isFinite(bar.open) ||
-    bar.open < 0 ||
-    !Number.isFinite(bar.high) ||
-    bar.high < 0 ||
-    !Number.isFinite(bar.low) ||
-    bar.low < 0 ||
-    !Number.isFinite(bar.close) ||
-    bar.close < 0 ||
-    !Number.isFinite(bar.volume) ||
-    bar.volume < 0 ||
-    bar.high < bar.low ||
-    bar.high < Math.max(bar.open, bar.close) ||
-    bar.low > Math.min(bar.open, bar.close)
-  ) {
-    return null;
-  }
-  return bar;
-}
 
 export interface Mt5HistoryError {
   message: string;
@@ -120,11 +79,7 @@ export class Mt5DataAdapter {
     }
     const generation = ++this.selectionGeneration;
 
-    for (const [otherKey, other] of [...this.pending]) {
-      if (otherKey !== key) {
-        this.settle(otherKey, other);
-      }
-    }
+    this.settleAll(key);
     const pending: PendingHistory = {
       symbol,
       timeframe,
@@ -211,17 +166,13 @@ export class Mt5DataAdapter {
       return;
     }
     this.disposed = true;
-    for (const [key, pending] of [...this.pending]) {
-      this.settle(key, pending);
-    }
+    this.settleAll();
     this.listeners.clear();
   }
 
   resetRequests(): void {
     this.selectionGeneration += 1;
-    for (const [key, pending] of [...this.pending]) {
-      this.settle(key, pending);
-    }
+    this.settleAll();
   }
 
   private startTimeout(key: string, pending: PendingHistory, kind: 'timeout' | 'page' = 'timeout'): void {
@@ -238,6 +189,15 @@ export class Mt5DataAdapter {
         kind,
       });
     }, timeoutMs);
+  }
+
+  /** Settles every outstanding request, except the one under `keptKey` when given. */
+  private settleAll(keptKey?: string): void {
+    for (const [key, pending] of [...this.pending]) {
+      if (key !== keptKey) {
+        this.settle(key, pending);
+      }
+    }
   }
 
   private settleKey(key: string): void {

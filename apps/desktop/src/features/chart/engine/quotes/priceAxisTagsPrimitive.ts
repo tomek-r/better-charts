@@ -244,7 +244,7 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
     const ask = formatter === undefined || this.state.ask === undefined ? '' : formatter.format(this.state.ask);
     const bid = formatter === undefined || this.state.bid === undefined ? '' : formatter.format(this.state.bid);
     const fontSize = this.labelFontSize();
-    const font = `${fontSize}px ${this.labelFontFamily()}`;
+    const font = this.labelFont();
     const key = `${ask}|${bid}|${font}`;
     if (this.texts.key === key) {
       return this.texts;

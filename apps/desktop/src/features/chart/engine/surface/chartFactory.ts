@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts';
 import { DEFAULT_BAR_SPACING, END_MARGIN } from '../timeScale/futureTimePoints';
 import { palette } from '../../../../shared/theme/palette';
+import { CHART_FONT_SIZE } from './chartFont';
 
 export interface ChartSurface {
   chart: IChartApi;
@@ -51,7 +52,7 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
       // which masks the axis labels behind the price-scale toggles.
       background: { type: ColorType.Solid, color: palette.overlay },
       textColor: palette.mutedStrong,
-      fontSize: 11,
+      fontSize: CHART_FONT_SIZE,
       attributionLogo: true,
     },
     localization: { locale: chartLocale() },
@@ -66,7 +67,7 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
       minimumWidth: 70,
       scaleMargins: { top: 0.12, bottom: 0.18 },
       // Auto scale stays off: the range is fitted once per loaded series (see
-      // ViewportController.fitPriceScale) and then holds, so a tick cannot rescale
+      // fitPriceScale) and then holds, so a tick cannot rescale
       // the pane under the pointer. `A`, a double-click on the axis and dragging
       // it are the ways back to a fitted range.
       autoScale: false,

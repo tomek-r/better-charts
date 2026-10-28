@@ -1,4 +1,4 @@
-import type { RenderViewport } from '../../chart/engine/tools/toolContract';
+import type { RenderViewport } from '../../chart/engine/surface/overlayRenderer';
 import type { ProfileResult, TickProfileBin } from '../../../shared/bridge/types';
 import type {
   FixedRangeProfileAppearance,

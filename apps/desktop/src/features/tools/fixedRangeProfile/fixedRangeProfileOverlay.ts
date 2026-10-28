@@ -1,4 +1,4 @@
-import type { RenderViewport } from '../../chart/engine/tools/toolContract';
+import type { RenderViewport } from '../../chart/engine/surface/overlayRenderer';
 import type { ProfileResult } from '../../../shared/bridge/types';
 import { DEFAULT_LOADER_COLORS, drawLoader } from '../../../shared/canvas/loader';
 import { drawSeparatedText } from '../../../shared/canvas/separatedText';

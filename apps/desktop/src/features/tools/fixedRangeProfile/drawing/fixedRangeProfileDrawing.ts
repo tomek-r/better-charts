@@ -1,13 +1,9 @@
 import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
 import type { ToolInputValues } from '../../../chart/engine/drawings/toolInputs';
 import type { ChartDrawingShape } from '../../../chart/engine/drawings/toolDrawings';
-import {
-  anchorAtBar,
-  type BarAnchor,
-  type ChartToolGeometry,
-  type ChartToolHost,
-  type RenderViewport,
-} from '../../../chart/engine/tools/toolContract';
+import { anchorAtBar, type BarAnchor } from '../../../chart/engine/tools/barAnchor';
+import type { ChartToolGeometry, ChartToolHost } from '../../../chart/engine/tools/toolContract';
+import type { RenderViewport } from '../../../chart/engine/surface/overlayRenderer';
 import { DASHED_LINE_PATTERN } from '../../../../shared/canvas/dashPatterns';
 import { palette } from '../../../../shared/theme/palette';
 import { currentQuoteTimeMs } from '../currentQuoteTimeMs';

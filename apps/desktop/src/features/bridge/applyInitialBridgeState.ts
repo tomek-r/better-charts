@@ -1,5 +1,5 @@
 import type { AccountSnapshot } from '../../shared/bridge/types';
-import { HistoryViewportMode } from '../chart/engine/surface/chartController';
+import { HistoryViewportMode } from '../chart/engine/bars/historyViewportMode';
 import type { Mt5DataAdapter } from '../chart/engine/bars/mt5DataAdapter';
 import {
   normalizeAccount,

@@ -1,4 +1,5 @@
-import { HistoryViewportMode, type ChartController } from '../../chart/engine/surface/chartController';
+import { HistoryViewportMode } from '../../chart/engine/bars/historyViewportMode';
+import type { ChartController } from '../../chart/engine/surface/chartController';
 import type { Mt5DataAdapter, Mt5HistoryError } from '../../chart/engine/bars/mt5DataAdapter';
 import { listen } from '@tauri-apps/api/event';
 import type {

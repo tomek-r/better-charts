@@ -1,4 +1,5 @@
-import { HistoryViewportMode, type ChartController } from '../../chart/engine/surface/chartController';
+import type { HistoryViewportMode } from '../../chart/engine/bars/historyViewportMode';
+import type { ChartController } from '../../chart/engine/surface/chartController';
 import type { Mt5DataAdapter } from '../../chart/engine/bars/mt5DataAdapter';
 import type { MarketSnapshot } from '../../../shared/bridge/types';
 import { DEFAULT_TIMEFRAME } from '../../../shared/bridge/timeframes';
@@ -42,7 +43,10 @@ export function applyAcceptedSnapshot(
   setLatestCandle(latestCandleRef.current);
   chartRef.current?.setSymbol(accepted.symbol ?? '');
   const preserved =
-    chartRef.current?.replaceHistory(accepted.candles, accepted.timeframe ?? DEFAULT_TIMEFRAME, viewportMode) ?? false;
+    chartRef.current?.replaceHistory(accepted.candles, {
+      timeframe: accepted.timeframe ?? DEFAULT_TIMEFRAME,
+      viewportMode,
+    }) ?? false;
   if (replaced && !preserved) {
     chartRef.current?.resetView();
   }

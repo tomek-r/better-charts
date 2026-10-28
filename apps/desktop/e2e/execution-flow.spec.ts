@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
 import { chooseOption, expectOptionLabels } from './helpers/select';
-import type { RenderBar } from '../src/features/chart/engine/bars/mt5DataAdapter';
+import type { RenderBar } from '../src/features/chart/engine/bars/renderBar';
 import {
   gotoWithStub,
   pausePageClockAhead,

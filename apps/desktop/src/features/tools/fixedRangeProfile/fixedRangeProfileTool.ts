@@ -1,7 +1,6 @@
 import { ChartDrawingCollection, type ChartDrawingEntry } from '../../chart/engine/drawings/chartDrawingCollection';
+import { anchorAtX, type BarAnchor } from '../../chart/engine/tools/barAnchor';
 import {
-  anchorAtX,
-  type BarAnchor,
   type ChartDrawingPaintTarget,
   type ChartDrawTarget,
   type ChartPointerDownPurpose,

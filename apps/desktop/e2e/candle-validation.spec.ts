@@ -17,7 +17,7 @@ test('candle validation matches renderable time and rejects malformed values', a
   await gotoWithStub(page);
   const results = await page.evaluate(async (valid) => {
     const normalizersPath = '/src/features/bridge/bridgePayloadNormalizers.ts';
-    const adapterPath = '/src/features/chart/engine/bars/mt5DataAdapter.ts';
+    const adapterPath = '/src/features/chart/engine/bars/renderBar.ts';
     const { isValidCandle } = await import(/* @vite-ignore */ normalizersPath);
     const { toRenderBar } = await import(/* @vite-ignore */ adapterPath);
     const candles = [

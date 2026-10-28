@@ -1,5 +1,5 @@
 import { HISTORY_BARS, INITIAL_HISTORY_BARS } from '../../../../shared/bridge/config';
-import type { ChartController } from '../surface/chartController';
+import { isPositiveFinite } from '../../../../shared/finiteNumber';
 import { DEFAULT_BAR_SPACING, END_MARGIN } from '../timeScale/futureTimePoints';
 
 /** Bars beyond the visible span, so a small pan does not immediately reveal a gap. */
@@ -15,7 +15,7 @@ const MIN_WINDOW_BARS = 100;
  * `1..=HISTORY_BARS`, because the adapter and backend treat 0 as invalid.
  */
 export function initialHistoryWindow(paneWidth: number, barSpacing: number = DEFAULT_BAR_SPACING): number {
-  if (!Number.isFinite(paneWidth) || paneWidth <= 0 || !Number.isFinite(barSpacing) || barSpacing <= 0) {
+  if (!isPositiveFinite(paneWidth) || !isPositiveFinite(barSpacing)) {
     return INITIAL_HISTORY_BARS;
   }
   // A reset view uses the default spacing, so a wider zoom never needs more bars than that.
@@ -23,7 +23,12 @@ export function initialHistoryWindow(paneWidth: number, barSpacing: number = DEF
   return Math.min(HISTORY_BARS, Math.max(MIN_WINDOW_BARS, fit));
 }
 
+/** What the first history request asks the chart: how many bars its pane, as measured now, needs. */
+export interface InitialHistoryProvider {
+  initialHistoryBars(): number;
+}
+
 /** The window for the chart as it is now, or the configured default before it exists. */
-export function initialHistoryBarsFor(chart: Pick<ChartController, 'initialHistoryBars'> | null): number {
+export function initialHistoryBarsFor(chart: InitialHistoryProvider | null): number {
   return chart?.initialHistoryBars() ?? INITIAL_HISTORY_BARS;
 }

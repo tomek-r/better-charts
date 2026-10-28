@@ -2,6 +2,7 @@ import { paintTradingLabel } from './labels/paintTradingLabel';
 import type { TradingLabelHit, TradingLabelLayoutState, TradingLabelTarget } from './labels/tradingLabelTypes';
 import type { OverlayRenderer } from '../surface/overlayRenderer';
 import type { RiskSide } from '../../../../shared/bridge/types';
+import { isPositiveFinite } from '../../../../shared/finiteNumber';
 import { palette } from '../../../../shared/theme/palette';
 import {
   CANCEL_CHIP_X,
@@ -11,6 +12,7 @@ import {
   drawHandle,
   HANDLE_X,
   tagPath,
+  ROW_FONT_SEMIBOLD,
   TRADING_COLORS,
   type TradingHitCircle,
   type TradingHitRect,
@@ -237,7 +239,7 @@ export function createStagedOrderOverlay(
       const toY = viewport.priceToY;
 
       const order = state.order;
-      if (!order || !Number.isFinite(order.entry) || order.entry <= 0) {
+      if (!order || !isPositiveFinite(order.entry)) {
         state.hit = hit;
         // Valid exit levels remain visible through native price lines while
         // the entry is temporarily cleared during ticket editing.
@@ -305,7 +307,7 @@ export function createStagedOrderOverlay(
             const cx = sideBox.x + sideBox.w + 6;
 
             // Pointed tag: grip dots + qty + order type, " | " separators (TV look).
-            ctx.font = '600 12px system-ui, sans-serif';
+            ctx.font = ROW_FONT_SEMIBOLD;
             const qty = order.volume.trim() || '—';
             const tagText = `⋮⋮  |  ${qty}  |  ${order.orderKindLabel}${order.riskRewardLabel ? `  |  RR ${order.riskRewardLabel}` : ''}`;
             const tagW = ctx.measureText(tagText).width + 16;
@@ -331,13 +333,13 @@ export function createStagedOrderOverlay(
         hit.entryLineY = entryY;
       }
 
-      ctx.font = '600 12px system-ui, sans-serif';
+      ctx.font = ROW_FONT_SEMIBOLD;
 
       // ── SL: dotted line when set (✕ chip to unset), handle always present.
       // Unset handle floats on the SL side of the entry line FOR THE ORDER SIDE
       // (SELL: SL is above entry → handle above, tip points down at the line;
       //  BUY: SL is below entry → handle below, tip points up).
-      if (order.stopLoss !== null && Number.isFinite(order.stopLoss) && order.stopLoss > 0) {
+      if (isPositiveFinite(order.stopLoss)) {
         const slY = toY(order.stopLoss);
         if (slY >= y - 20 && slY <= y + height + 20) {
           if (drawLabels) {
@@ -367,7 +369,7 @@ export function createStagedOrderOverlay(
       }
 
       // ── TP: mirrored below the entry line when unset.
-      if (order.takeProfit !== null && Number.isFinite(order.takeProfit) && order.takeProfit > 0) {
+      if (isPositiveFinite(order.takeProfit)) {
         const tpY = toY(order.takeProfit);
         if (tpY >= y - 20 && tpY <= y + height + 20) {
           if (drawLabels) {

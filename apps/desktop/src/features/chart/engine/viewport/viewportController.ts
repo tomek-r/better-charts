@@ -1,7 +1,6 @@
-import { timeframeBarOffset } from '../../../../shared/bridge/timeframes';
 import type { IChartApi, ISeriesApi, Logical, UTCTimestamp } from 'lightweight-charts';
-import { setPriceScaleRange } from '../priceScale/priceScaleRange';
-import type { RenderBar } from '../bars/mt5DataAdapter';
+import type { TimeModel } from '../bars/timeModel';
+import { fitPriceScale } from '../priceScale/fitPriceScale';
 import type { RenderViewport } from '../surface/overlayRenderer';
 import {
   DEFAULT_BAR_SPACING,
@@ -10,6 +9,7 @@ import {
   neededFutureBarCount,
   timeScaleBaseIndex,
 } from '../timeScale/futureTimePoints';
+import { fractionalLogicalIndex } from '../timeScale/logicalIndex';
 import { recordViewportChange, type ViewportSnapshot } from './viewportDiagnostics';
 
 /**
@@ -26,12 +26,11 @@ export interface ViewportAnchor {
   barsFromEnd: number;
 }
 
-/** The bar facts the time scale is derived from; written by BarSeriesController. */
-export interface TimeModel {
-  readonly bars: readonly RenderBar[];
-  readonly timeframe: string;
-  readonly intervalSeconds: number;
-  lastBar(): RenderBar | undefined;
+/** What a gesture diagnostic needs to know about the view: where it sits, where the end anchor is, whether it follows. */
+export interface DiagnosticViewport {
+  offset: number;
+  endAnchor: number;
+  followEnabled: boolean;
 }
 
 /**
@@ -186,7 +185,7 @@ export class ViewportController {
     };
   }
 
-  diagnosticViewport() {
+  diagnosticViewport(): DiagnosticViewport {
     const range = this.visibleRange();
     const spacing = this.chart.timeScale().options().barSpacing;
     const width = this.chart.timeScale().width();
@@ -238,7 +237,7 @@ export class ViewportController {
       this.ensureFuture(DEFAULT_BAR_SPACING);
       const to = timeScaleBaseIndex(this.data.bars.length, END_MARGIN);
       this.restoreViewport(to, DEFAULT_BAR_SPACING);
-      this.fitPriceScale(to, DEFAULT_BAR_SPACING);
+      this.fitPrices(to, DEFAULT_BAR_SPACING);
     });
   }
 
@@ -328,7 +327,7 @@ export class ViewportController {
   }
 
   timeToX(timeMs: number): number {
-    const index = this.logicalAtTime(timeMs);
+    const index = fractionalLogicalIndex(this.data.bars, this.data.timeframe, timeMs);
     if (!Number.isFinite(index)) {
       return NaN;
     }
@@ -376,99 +375,19 @@ export class ViewportController {
     const end = timeScaleBaseIndex(bars.length, END_MARGIN);
     const to = Math.max(end - anchor.barsFromEnd, 0);
     this.restoreViewport(to, barSpacing);
-    this.fitPriceScale(to, barSpacing);
+    this.fitPrices(to, barSpacing);
     return true;
-  }
-
-  /**
-   * Fits the price scale to the candles a viewport ending at `to` shows.
-   *
-   * Auto scale is off by default, and the library keeps the current range across a
-   * data replacement — the next symbol's prices would draw off the pane — so a new
-   * series is fitted here, in the same task that decided the viewport, and no frame
-   * is drawn with the old range on new candles. The range is the high/low extent of
-   * the candles the pane shows, which is what the library's own fit reports for
-   * them. It then holds until the next replacement, which is the point: a tick no
-   * longer rescales the pane.
-   */
-  private fitPriceScale(to: number, barSpacing: number): void {
-    const scale = this.candles.priceScale();
-    const bars = this.data.bars;
-    if (scale.options().autoScale || !bars.length) {
-      return;
-    }
-    const paneBars = Math.max(1, Math.ceil(this.chart.timeScale().width() / barSpacing));
-    const first = Math.max(0, Math.floor(to - paneBars));
-    const last = Math.min(bars.length - 1, Math.ceil(to));
-    let low = Infinity;
-    let high = -Infinity;
-    for (let index = first; index <= last; index += 1) {
-      low = Math.min(low, bars[index].low);
-      high = Math.max(high, bars[index].high);
-    }
-    if (!Number.isFinite(low) || !Number.isFinite(high)) {
-      return;
-    }
-    if (high <= low) {
-      // A window of identical candles has no extent to fit; pad by the symbol's
-      // smallest price step so the range still contains them.
-      const format = this.candles.options().priceFormat;
-      const padding = format.type === 'price' ? format.minMove : 0.01;
-      low -= padding;
-      high += padding;
-    }
-    setPriceScaleRange(this.candles, { from: low, to: high });
-  }
-
-  /** Fractional logical index of a time, per the bar cache. */
-  private logicalAtTime(timeMs: number): number {
-    const bars = this.data.bars;
-    if (!bars.length || !Number.isFinite(timeMs)) {
-      return NaN;
-    }
-    const time = timeMs / 1000;
-    let lo = 0,
-      hi = bars.length - 1;
-    if (time <= bars[0].time) {
-      hi = 0;
-    } else if (time >= bars[hi].time) {
-      lo = hi;
-    } else {
-      while (lo <= hi) {
-        const mid = (lo + hi) >>> 1;
-        if (bars[mid].time === time) {
-          lo = mid;
-          hi = mid;
-          break;
-        }
-        if (bars[mid].time < time) {
-          lo = mid + 1;
-        } else {
-          hi = mid - 1;
-        }
-      }
-    }
-    let index: number;
-    if (time >= bars[bars.length - 1].time) {
-      // A minute selection can lie inside the current hourly candle. Retain
-      // its sub-bar time rather than collapsing both boundaries to its open.
-      index = bars.length - 1 + timeframeBarOffset(this.data.timeframe, bars[bars.length - 1].time, time);
-    } else if (lo === hi) {
-      index = lo;
-    } else if (hi < 0) {
-      index = 0;
-    } else if (lo >= bars.length) {
-      index = bars.length - 1;
-    } else {
-      index = hi + (time - bars[hi].time) / (bars[lo].time - bars[hi].time);
-    }
-    return index;
   }
 
   /** Whole logical slot under a pane x; past the newest bar it counts the empty future slots. */
   slotAt(x: number): number | null {
     const logical = this.chart.timeScale().coordinateToLogical(x);
     return logical === null ? null : Math.round(logical);
+  }
+
+  /** Fits the price scale to the candles a viewport ending at `to` shows. */
+  private fitPrices(to: number, barSpacing: number): void {
+    fitPriceScale(this.candles, this.data.bars, { to, barSpacing, paneWidth: this.chart.timeScale().width() });
   }
 
   private readonly onRangeChange = (): void => {

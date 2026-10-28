@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ChartDrawingPoint } from '../src/features/chart/engine/drawings/drawingRecord';
-import type { TimeModel } from '../src/features/chart/engine/viewport/viewportController';
+import type { TimeModel } from '../src/features/chart/engine/bars/timeModel';
 import {
   fixedRangeProfilePoints,
   readFixedRangeProfilePoints,

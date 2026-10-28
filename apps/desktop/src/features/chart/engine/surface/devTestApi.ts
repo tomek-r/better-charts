@@ -1,8 +1,9 @@
-import type { PriceScaleMode } from 'lightweight-charts';
+import type { IChartApi, PriceScaleMode } from 'lightweight-charts';
+import type { ChartDrawings } from '../drawings/chartDrawings';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
-import type { RenderBar } from '../bars/mt5DataAdapter';
+import type { RenderBar } from '../bars/renderBar';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
-import type { ViewportChangeRecord } from '../viewport/viewportDiagnostics';
+import { clearViewportChangeLog, viewportChangeLog, type ViewportChangeRecord } from '../viewport/viewportDiagnostics';
 
 /**
  * The development-only test hook the e2e suite drives (see e2e/README.md).
@@ -56,7 +57,54 @@ function describeChange({ caller, atMs, before, after }: ViewportChangeRecord) {
   };
 }
 
-export function installDevTestApi(api: DevTestApi): void {
+/** The live chart state the test hook reads; the controller supplies accessors, never chart-library objects. */
+export interface DevTestApiSources {
+  chart: IChartApi;
+  bars(): readonly RenderBar[];
+  visibleRange(): { from: number; to: number } | null;
+  timeToX(timeMs: number): number;
+  toolTestApi(id: string): unknown;
+  drawings: ChartDrawings;
+  pointerReadout(): PointerReadout | null;
+}
+
+function buildDevTestApi({
+  chart,
+  bars,
+  visibleRange,
+  timeToX,
+  toolTestApi,
+  drawings,
+  pointerReadout,
+}: DevTestApiSources): DevTestApi {
+  return {
+    data: () => bars().map((bar) => ({ ...bar })),
+    visibleRange,
+    scrollToRange: (range) => chart.timeScale().setVisibleLogicalRange(range),
+    viewportChanges: viewportChangeLog,
+    clearViewportChanges: clearViewportChangeLog,
+    timeToX,
+    tool: toolTestApi,
+    drawings: () => drawings.exportRecords(),
+    selectedDrawing: () => drawings.selected(),
+    pointerReadout,
+    priceScale: () => {
+      const scale = chart.priceScale('right');
+      const options = scale.options();
+      return {
+        autoScale: options.autoScale,
+        mode: options.mode,
+        axisWidth: scale.width(),
+        paneHeight: chart.panes()[0]?.getHeight() ?? 0,
+        timeAxisHeight: chart.timeScale().height(),
+        range: scale.getVisibleRange(),
+      };
+    },
+  };
+}
+
+export function installDevTestApi(sources: DevTestApiSources): void {
+  const api = buildDevTestApi(sources);
   const devWindow = window as unknown as DevWindow;
   devWindow.__chartTest = api;
   // Console helper for diagnosing a view that moved on its own: `__viewportLog()`.

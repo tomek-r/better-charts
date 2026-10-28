@@ -31,6 +31,10 @@ export const ROW_INSET = 24;
 export const CANCEL_CHIP_X = ROW_INSET + 10;
 export const HANDLE_X = ROW_INSET + 26;
 
+/** The canvas fonts of the row text in staged and live trading overlays. */
+export const ROW_FONT_REGULAR = '400 12px system-ui, sans-serif';
+export const ROW_FONT_SEMIBOLD = '600 12px system-ui, sans-serif';
+
 /** Which half of the two-pass z-order a row overlay paints. */
 export type OverlayPass = 'lines' | 'labels';
 
@@ -129,7 +133,7 @@ export function drawHandle(
   tipDown: boolean,
   trailing?: HandleTrailing,
 ): TradingHitRect {
-  ctx.font = '400 12px system-ui, sans-serif';
+  ctx.font = ROW_FONT_REGULAR;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   const leadingWidth = ctx.measureText(`⋮⋮  ${label}`).width;

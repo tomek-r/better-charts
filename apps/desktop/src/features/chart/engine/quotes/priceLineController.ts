@@ -2,6 +2,7 @@ import { LineStyle, type IPriceLine, type ISeriesApi } from 'lightweight-charts'
 import type { ChartOverlayState } from '../surface/buildChartPlugins';
 import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
 import type { PriceAxisTagsPrimitive } from './priceAxisTagsPrimitive';
+import { isPositiveFinite } from '../../../../shared/finiteNumber';
 import { palette } from '../../../../shared/theme/palette';
 
 /**
@@ -33,7 +34,7 @@ export class PriceLineController {
   sync(): void {
     const desired = new Map<string, { price: number; color: string; label: boolean }>();
     const add = (id: string, price: number | undefined | null, color: string, label = true) => {
-      if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
+      if (isPositiveFinite(price)) {
         desired.set(id, { price, color, label });
       }
     };
