@@ -2,6 +2,7 @@ import type { OrderCheckResult, OrderKind, RiskPreview, RiskSide, TimeInForce } 
 import type { RefObject } from 'react';
 import { createDomainStore } from '../../../shared/providers/domainStore';
 import { createTicketDerivationCache } from '../derivation/ticketDerivation';
+import type { RiskUnitsMode, UnitsMode } from '../sizing/unitsMode';
 
 type OrderCheckPending = {
   generation: number;
@@ -18,7 +19,7 @@ export type OrderTicketCoordination = {
   pendingRiskRequestRef: RefObject<(() => Promise<unknown>) | undefined>;
   orderCheckGeneration: RefObject<number>;
   orderCheckPending: RefObject<OrderCheckPending | undefined>;
-  unitsAutoMode: RefObject<'money' | 'equity'>;
+  unitsAutoMode: RefObject<RiskUnitsMode>;
   riskBrokerVersion: RefObject<number | undefined>;
   riskPreviewDisplayRef: RefObject<RiskPreview | undefined>;
 };
@@ -38,7 +39,7 @@ export type OrderTicketDraftStore = {
   priceMode: 'offset' | 'absolute';
   priceReference: 'ask' | 'bid';
   priceOffset: string;
-  unitsMode: 'money' | 'equity' | 'units';
+  unitsMode: UnitsMode;
   tpOn: boolean;
   slOn: boolean;
   slUnit: 'ticks' | 'price';

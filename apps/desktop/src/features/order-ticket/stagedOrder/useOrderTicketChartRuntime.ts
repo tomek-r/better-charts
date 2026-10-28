@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
 import { useStore } from 'zustand';
+import { useStableByContent } from '../../../shared/hooks/useStableByContent';
 import type { ChartTicketOverlayState } from '../../chart/workspace/useChartOverlaySync';
 import { deriveOrderRiskBasis } from '../sizing/riskBasis';
 import { deriveStagedOrderDisplay } from './stagedOrderDisplay';
@@ -17,7 +17,8 @@ export function useOrderTicketChartRuntime(
   const { instrument, account, quote } = inputs;
   const { unitsMode, riskAmount, equityAllocationPercent, stagedOnChart } = draft;
   const { riskSide, orderKind, entry, limitPrice } = draft;
-  const slBandJson = JSON.stringify(
+  // Stable between equal bands so the chart mirror effect does not re-run.
+  const slBand = useStableByContent<StopLossBand>(
     stagedOnChart
       ? deriveStopLossBand({
           instrument,
@@ -39,11 +40,6 @@ export function useOrderTicketChartRuntime(
           quote,
         })
       : undefined,
-  );
-  // Serialised so the chart mirror effect sees a stable value between equal bands.
-  const slBand = useMemo<StopLossBand | undefined>(
-    () => (slBandJson === undefined ? undefined : (JSON.parse(slBandJson) as StopLossBand)),
-    [slBandJson],
   );
   const effectiveVolume = draft.orderVolume.trim();
   const fullDisplay = deriveStagedOrderDisplay({

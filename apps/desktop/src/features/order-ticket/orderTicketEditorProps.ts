@@ -1,5 +1,6 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { BrokerSymbol, OrderKind, RiskSide, TimeInForce } from '../../shared/bridge/types';
+import type { RiskUnitsMode, UnitsMode } from './sizing/unitsMode';
 
 export interface OrderTicketQuoteProps {
   bidText: string;
@@ -35,7 +36,7 @@ export interface OrderTicketPricingProps {
 export interface OrderTicketSizingProps {
   currency: string | undefined;
   instrument: BrokerSymbol | undefined;
-  unitsMode: 'money' | 'equity' | 'units';
+  unitsMode: UnitsMode;
   orderVolume: string;
   setOrderVolume: Dispatch<SetStateAction<string>>;
   setVolumeManual: Dispatch<SetStateAction<boolean>>;
@@ -43,8 +44,8 @@ export interface OrderTicketSizingProps {
   setEquityAllocationPercent: Dispatch<SetStateAction<string>>;
   riskAmount: string;
   setRiskAmount: (value: string) => void;
-  applyUnitsMode: (mode: 'money' | 'equity' | 'units') => void;
-  unitsAutoMode: RefObject<'money' | 'equity'>;
+  applyUnitsMode: (mode: UnitsMode) => void;
+  unitsAutoMode: RefObject<RiskUnitsMode>;
   volumeIssue: string | undefined;
   equityValue: number | undefined;
   riskModeHint: string | undefined;

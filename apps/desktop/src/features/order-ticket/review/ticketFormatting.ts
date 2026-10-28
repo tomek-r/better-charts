@@ -1,3 +1,6 @@
+/** Shown on the review button and the start button while the MT5 OrderCheck is in flight. */
+export const CHECKING_LABEL = 'Checking with MT5…';
+
 export function formatQuoted(value?: number) {
   if (value === undefined) {
     return '—';

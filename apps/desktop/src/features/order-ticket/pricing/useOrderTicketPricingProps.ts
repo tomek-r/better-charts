@@ -3,6 +3,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useBridgeMarketSelector, useBridgeQuoteSelector } from '../../bridge/bridgeSelectors';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketPricingProps } from '../orderTicketEditorProps';
+import { isLimitPriceValid } from '../derivation/ticketRules';
+import { isPriceSwapDisabled, tickSizeOf } from './priceTicks';
 
 export function useOrderTicketPricingProps(): OrderTicketPricingProps {
   const stores = useOrderTicketStores();
@@ -21,9 +23,8 @@ export function useOrderTicketPricingProps(): OrderTicketPricingProps {
       side: state.riskSide,
     })),
   );
-  const tickSize = instrument ? Number(instrument.tickSize) : NaN;
-  const tickKnown = Number.isFinite(tickSize) && tickSize > 0;
-  const priceSwapDisabled = orderKind === 'market' || (priceMode === 'absolute' && (!hasQuote || !tickKnown));
+  const { tickSize, tickKnown } = tickSizeOf(instrument);
+  const priceSwapDisabled = isPriceSwapDisabled({ orderKind, priceMode, hasQuote, tickKnown });
   let priceSwapTitle: string;
   if (priceMode === 'offset') {
     priceSwapTitle = 'Enter an absolute price';
@@ -37,8 +38,7 @@ export function useOrderTicketPricingProps(): OrderTicketPricingProps {
     priceSwapTitle = 'Enter a price offset from the reference';
   }
   const limitPriceNum = Number(limitPrice.trim());
-  const limitPriceValid =
-    orderKind !== 'stop_limit' || (limitPrice.trim() !== '' && Number.isFinite(limitPriceNum) && limitPriceNum > 0);
+  const limitPriceValid = isLimitPriceValid(orderKind, limitPrice);
   const limitPriceMisaligned =
     limitPriceValid &&
     orderKind === 'stop_limit' &&

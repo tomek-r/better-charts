@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { BrokerSymbol, RiskSide } from '../../../shared/bridge/types';
 import { defaultOrderVolume } from './defaultVolume';
 import { clampRiskPercentInput } from './riskBasis';
+import type { UnitsMode } from './unitsMode';
 import { orderEntryPrice } from '../derivation/ticketRules';
 import type { OrderTicketStores } from '../draft/orderTicketStores';
 
@@ -26,7 +27,7 @@ export function useOrderTicketSizingActions(
   );
 
   const applyUnitsMode = useCallback(
-    (mode: 'money' | 'equity' | 'units') => {
+    (mode: UnitsMode) => {
       const { unitsMode } = stores.draft.getState();
       if (mode !== unitsMode) {
         setters.setOrderVolume(defaultOrderVolume(instrument));

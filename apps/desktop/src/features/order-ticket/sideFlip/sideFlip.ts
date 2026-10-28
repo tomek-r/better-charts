@@ -1,9 +1,14 @@
-import type { RiskSide } from '../../../shared/bridge/types';
+import type { QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
 import { ticketPrice } from '../../../shared/format';
 
 /** The quote a side's entry and price offset are measured from: Buy fills at the ask, Sell at the bid. */
 export function sideReference(side: RiskSide): 'ask' | 'bid' {
   return side === 'sell' ? 'bid' : 'ask';
+}
+
+/** The quote text a side enters at: Buy reads the ask, any other side (including unset) the bid. */
+export function quoteTextFor(side: RiskSide, quote: QuoteSnapshot): string {
+  return side === 'buy' ? quote.ask : quote.bid;
 }
 
 /** The exit levels a draft carries when its side is switched. */

@@ -2,6 +2,7 @@ import type { AccountSnapshot, BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide 
 import { volumeWithUnit } from '../../../shared/format';
 import { accountMoneyBasis, lossPerPriceUnitPerLot } from '../../../shared/money';
 import { orderEntryPrice } from '../derivation/ticketRules';
+import type { UnitsMode } from '../sizing/unitsMode';
 
 /**
  * Allowed stop-loss band for risk-sized orders, as absolute prices. Display and
@@ -21,7 +22,7 @@ export interface StopLossBand {
 export interface StopLossBandInput {
   instrument: BrokerSymbol | undefined;
   account: Pick<AccountSnapshot, 'currency' | 'currencyDigits'> | undefined;
-  unitsMode: 'money' | 'equity' | 'units';
+  unitsMode: UnitsMode;
   /** Risk budget in the account currency (see deriveOrderRiskBasis). */
   riskBudget: string;
   side: RiskSide;

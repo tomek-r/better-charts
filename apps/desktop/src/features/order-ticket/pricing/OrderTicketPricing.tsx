@@ -1,3 +1,4 @@
+import type { OrderKind } from '../../../shared/bridge/types';
 import { ErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
 import { Select, type SelectOption } from '../../../shared/ui/select/Select';
 import { useOrderTicketPricingProps } from './useOrderTicketPricingProps';
@@ -5,6 +6,13 @@ import { useOrderTicketPricingProps } from './useOrderTicketPricingProps';
 const PRICE_REFERENCE_OPTIONS: readonly SelectOption[] = [
   { value: 'ask', label: 'Ask' },
   { value: 'bid', label: 'Bid' },
+];
+
+const ORDER_KIND_TABS: ReadonlyArray<{ kind: OrderKind; label: string }> = [
+  { kind: 'market', label: 'Market' },
+  { kind: 'limit', label: 'Limit' },
+  { kind: 'stop', label: 'Stop' },
+  { kind: 'stop_limit', label: 'Stop Limit' },
 ];
 
 /** The ticket's decimal text-number input; autofill and spellcheck stay off so prices are never rewritten. */
@@ -69,34 +77,16 @@ export function OrderTicketPricing() {
   return (
     <>
       <div className="ticket-type-tabs" role="group" aria-label="Order type">
-        <button
-          className={`ticket-type-tab${orderKind === 'market' ? ' active' : ''}`}
-          aria-pressed={orderKind === 'market'}
-          onClick={() => setOrderKind('market')}
-        >
-          Market
-        </button>
-        <button
-          className={`ticket-type-tab${orderKind === 'limit' ? ' active' : ''}`}
-          aria-pressed={orderKind === 'limit'}
-          onClick={() => setOrderKind('limit')}
-        >
-          Limit
-        </button>
-        <button
-          className={`ticket-type-tab${orderKind === 'stop' ? ' active' : ''}`}
-          aria-pressed={orderKind === 'stop'}
-          onClick={() => setOrderKind('stop')}
-        >
-          Stop
-        </button>
-        <button
-          className={`ticket-type-tab${orderKind === 'stop_limit' ? ' active' : ''}`}
-          aria-pressed={orderKind === 'stop_limit'}
-          onClick={() => setOrderKind('stop_limit')}
-        >
-          Stop Limit
-        </button>
+        {ORDER_KIND_TABS.map((tab) => (
+          <button
+            key={tab.kind}
+            className={`ticket-type-tab${orderKind === tab.kind ? ' active' : ''}`}
+            aria-pressed={orderKind === tab.kind}
+            onClick={() => setOrderKind(tab.kind)}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
       <div className={`ticket-row${orderKind === 'market' ? ' disabled' : ''}`}>
         <span className="ticket-row-label">{orderKind === 'stop_limit' ? 'Trigger price' : 'Price offset'}</span>

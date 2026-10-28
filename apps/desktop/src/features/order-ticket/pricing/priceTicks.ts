@@ -1,5 +1,27 @@
-import type { OrderKind } from '../../../shared/bridge/types';
+import type { BrokerSymbol, OrderKind } from '../../../shared/bridge/types';
 import { orderEntryPrice } from '../derivation/ticketRules';
+
+/** The instrument's tick size; `tickKnown` is false while it is missing or not a positive number. */
+export function tickSizeOf(instrument: BrokerSymbol | undefined): { tickSize: number; tickKnown: boolean } {
+  const tickSize = instrument ? Number(instrument.tickSize) : NaN;
+  const tickKnown = Number.isFinite(tickSize) && tickSize > 0;
+  return { tickSize, tickKnown };
+}
+
+/** An absolute price cannot be converted to an offset without a live quote and a known tick size. */
+export function isPriceSwapDisabled({
+  orderKind,
+  priceMode,
+  hasQuote,
+  tickKnown,
+}: {
+  orderKind: OrderKind;
+  priceMode: 'offset' | 'absolute';
+  hasQuote: boolean;
+  tickKnown: boolean;
+}): boolean {
+  return orderKind === 'market' || (priceMode === 'absolute' && (!hasQuote || !tickKnown));
+}
 
 export function priceToTicks(
   price: string,

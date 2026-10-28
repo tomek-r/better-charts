@@ -5,6 +5,7 @@ import type { OrderTicketInputs } from '../draft/orderTicketInputs';
 import type { OrderTicketCoordination, OrderTicketDraftStore, OrderTicketStores } from '../draft/orderTicketStores';
 import type { StopDistanceGuard } from '../derivation/ticketRules';
 import { equityAllocationIssue, orderEntryPrice } from '../derivation/ticketRules';
+import type { RiskUnitsMode } from '../sizing/unitsMode';
 
 const RISK_PREVIEW_DEBOUNCE_MS = 100;
 
@@ -42,7 +43,7 @@ export type OrderTicketRiskPreviewEffectsInput = Pick<OrderTicketInputs, 'snapsh
     setRiskLoading: OrderTicketStores['setters']['broker']['setRiskLoading'];
   };
 
-export type OrderTicketRiskBasis = { riskMode: 'money' | 'equity'; effectiveRiskAmount: string };
+export type OrderTicketRiskBasis = { riskMode: RiskUnitsMode; effectiveRiskAmount: string };
 
 export function useOrderTicketRiskPreviewEffects(
   ticket: OrderTicketRiskPreviewEffectsInput,

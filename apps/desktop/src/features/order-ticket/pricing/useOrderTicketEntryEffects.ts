@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
 import { quoteDigits, ticketPrice } from '../../../shared/format';
 import type { OrderTicketDraftStore, OrderTicketStores } from '../draft/orderTicketStores';
+import { quoteTextFor } from '../sideFlip/sideFlip';
 
 export type OrderTicketEntryEffectsInput = Pick<
   OrderTicketDraftStore,
@@ -42,7 +43,7 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
   } = ticket;
   useEffect(() => {
     if (!stagedDragging && quote && !entry && !(priceMode === 'offset' && orderKind !== 'market')) {
-      setEntry(riskSide === 'buy' ? quote.ask : quote.bid);
+      setEntry(quoteTextFor(riskSide, quote));
     }
   }, [quote, riskSide, entry, priceMode, orderKind, stagedDragging, setEntry]);
   // A staged market order follows quote ticks while it is being edited.
@@ -58,7 +59,7 @@ export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput)
     if (stagedDragging || orderKind !== 'market' || !quote) {
       return;
     }
-    const nextEntryText = riskSide === 'buy' ? quote.ask : quote.bid;
+    const nextEntryText = quoteTextFor(riskSide, quote);
     const nextEntry = Number(nextEntryText);
     if (!Number.isFinite(nextEntry) || nextEntry <= 0) {
       return;

@@ -1,5 +1,5 @@
 import { ErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
-import { equityAllocationIssue } from '../derivation/ticketRules';
+import { SIZING_NEEDS_STOP_MESSAGE, equityAllocationIssue } from '../derivation/ticketRules';
 import { UnitsSizingRow } from './UnitsSizingRow';
 import { useOrderTicketSizingProps } from './useOrderTicketSizingProps';
 
@@ -74,7 +74,7 @@ export function OrderTicketSizing() {
       {allocationIssue && <ErrorNotification message={allocationIssue} />}
       {volumeIssue && (unitsMode === 'units' || riskEntered) && <ErrorNotification message={volumeIssue} />}
       {stagedOnChart && unitsMode !== 'units' && riskEntered && !slOn && (
-        <ErrorNotification message="Money/% sizing needs a stop distance — enable Stop loss or switch to Units mode." />
+        <ErrorNotification message={SIZING_NEEDS_STOP_MESSAGE} />
       )}
       {stagedOnChart && unitsMode !== 'units' && slOn && !stopLoss.trim() && (
         <p className="ticket-hint">Risk sizing needs the stop distance — set the Stop loss price.</p>

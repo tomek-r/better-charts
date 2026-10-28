@@ -1,4 +1,5 @@
 import type { OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
+import { quoteTextFor } from '../sideFlip/sideFlip';
 
 // The EA rejects a Stop / Stop Limit trigger that the live price has reached or passed
 // (docs/protocol/bridge-v1.md, `INVALID_PRICE`). These are its wordings, matched case-insensitively.
@@ -35,7 +36,7 @@ export function passedStopEntryGuidance(input: PassedStopEntryInput): string | u
     return undefined;
   }
   const entryPrice = positive(entry.trim());
-  const marketText = side === 'buy' ? quote.ask : quote.bid;
+  const marketText = quoteTextFor(side, quote);
   const marketPrice = positive(marketText);
   if (entryPrice === undefined || marketPrice === undefined) {
     return undefined;

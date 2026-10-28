@@ -10,6 +10,7 @@ import { formatSignedMoney } from '../../../shared/format';
 import { accountMoneyBasis, estimateLevelMoney } from '../../../shared/money';
 import { riskRewardRatio } from '../../../shared/trading/riskReward';
 import { orderEntryPrice } from '../derivation/ticketRules';
+import type { UnitsMode } from '../sizing/unitsMode';
 
 export interface StagedOrderDisplayInput {
   instrument: BrokerSymbol | undefined;
@@ -24,7 +25,7 @@ export interface StagedOrderDisplayInput {
   slOn: boolean;
   tpOn: boolean;
   effectiveVolume: string;
-  unitsMode: 'money' | 'equity' | 'units';
+  unitsMode: UnitsMode;
   riskPreview: RiskPreview | undefined;
   draftVersion: number;
   lastPreview?: RiskPreview;

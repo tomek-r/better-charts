@@ -1,6 +1,6 @@
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { priceToTicks } from '../pricing/priceTicks';
+import { priceToTicks, tickSizeOf } from '../pricing/priceTicks';
 import {
   useBridgeAccountSelector,
   useBridgeMarketSelector,
@@ -95,8 +95,7 @@ export function useOrderTicketExits(): OrderTicketExitsProps {
               : stores.coordination.riskPreviewDisplayRef.current,
         })
       : undefined;
-  const tickSize = instrument ? Number(instrument.tickSize) : NaN;
-  const tickKnown = Number.isFinite(tickSize) && tickSize > 0;
+  const { tickSize, tickKnown } = tickSizeOf(instrument);
   const stopGuard = stopDistanceGuard(
     instrument,
     riskSide,

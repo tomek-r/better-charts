@@ -10,6 +10,7 @@ import type {
   TimeInForce,
 } from '../../../shared/bridge/types';
 import { formatVolume, normalizedPrice, withMinusSign } from '../../../shared/format';
+import type { UnitsMode } from '../sizing/unitsMode';
 
 // Editable volume: positive decimal and — when instrument metadata is known — inside [volumeMin, volumeMax] and a whole multiple of volumeStep (the 1e-8 tolerance absorbs binary-float noise such as 0.3/0.1). Unknown instrument: plain positive decimal only; the backend/EA re-validates volume on the wire.
 export function orderVolumeIssue(value: string, instrument?: BrokerSymbol): string | undefined {
@@ -152,6 +153,18 @@ const samePrice = (echo: string | null | undefined, field: string | null): boole
     ? echo === null || echo === undefined
     : echo !== null && echo !== undefined && Number(echo) === Number(field);
 
+/** Shown when risk sizing is selected while the stop loss is off. */
+export const SIZING_NEEDS_STOP_MESSAGE =
+  'Money/% sizing needs a stop distance — enable Stop loss or switch to Units mode.';
+
+/** Only stop_limit carries a resting limit price, and it must be a positive number. */
+export function isLimitPriceValid(orderKind: OrderKind, limitPrice: string): boolean {
+  return (
+    orderKind !== 'stop_limit' ||
+    (limitPrice.trim() !== '' && Number.isFinite(Number(limitPrice)) && Number(limitPrice) > 0)
+  );
+}
+
 export function equityAllocationIssue(value: string): string | undefined {
   const percent = Number(value);
   return value.trim() && Number.isFinite(percent) && percent > 0 && percent <= 100
@@ -173,7 +186,7 @@ export type TicketDerivationInput = {
   orderKind: OrderKind;
   limitPrice: string;
   timeInForce: TimeInForce;
-  unitsMode: 'money' | 'equity' | 'units';
+  unitsMode: UnitsMode;
   equityAllocationPercent?: string;
   orderVolume: string;
   orderCheck: OrderCheckResult | undefined;
@@ -214,9 +227,7 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
   // rejects "stop_limit requires limit_price"); null otherwise (sent as null,
   // which deserializes to None).
   const normalizedLimitPrice = input.orderKind === 'stop_limit' ? normalizedPrice(input.limitPrice) : null;
-  const limitPriceValid =
-    input.orderKind !== 'stop_limit' ||
-    (input.limitPrice.trim() !== '' && Number.isFinite(Number(input.limitPrice)) && Number(input.limitPrice) > 0);
+  const limitPriceValid = isLimitPriceValid(input.orderKind, input.limitPrice);
   // SL-off is only allowed with manual units sizing — money/% sizing needs the
   // stop distance for its risk math. Choosing risk sizing leaves the SL toggle
   // under the user's control; the gate blocks review until a stop is enabled.
@@ -359,7 +370,7 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
     } else if (allocationIssue) {
       ticketBlockedReason = allocationIssue;
     } else if (!sizingAllowed) {
-      ticketBlockedReason = 'Money/% sizing needs a stop distance — enable Stop loss or switch to Units mode.';
+      ticketBlockedReason = SIZING_NEEDS_STOP_MESSAGE;
     } else if (!limitPriceValid) {
       ticketBlockedReason = 'Stop limit requires limit price — enter the resting limit price on the ticket.';
     } else if (!acceptedCurrentCheck) {

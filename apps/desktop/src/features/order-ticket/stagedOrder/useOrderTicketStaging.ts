@@ -1,15 +1,15 @@
 import { useCallback } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { RiskSide } from '../../../shared/bridge/types';
-import { quoteDigits, ticketPrice } from '../../../shared/format';
+import { ticketPrice } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
 import { defaultStopLossPrice } from '../exits/defaultStopLoss';
 import { defaultOrderVolume } from '../sizing/defaultVolume';
-import { flipExits, sideReference } from './sideFlip';
+import { quoteTextFor } from '../sideFlip/sideFlip';
 import type { OrderTicketInputs } from '../draft/orderTicketInputs';
 import type { OrderTicketDraftStore, OrderTicketStores } from '../draft/orderTicketStores';
 
-type DraftInputs = Pick<
+type StagingInputs = Pick<
   OrderTicketInputs,
   | 'chart'
   | 'stagedOrderState'
@@ -21,46 +21,21 @@ type DraftInputs = Pick<
   | 'quote'
 >;
 
-export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStores) {
-  const { chart, stagedOrderState, instrumentDigitsRef, stagedActiveRef, instrument, snapshot, latestCandle, quote } =
-    inputs;
-  const stagedOrderStateRef = stagedOrderState;
+/** Putting the draft on the chart and taking it off again, plus the default stop loss that risk sizing needs. */
+export function useOrderTicketStaging(inputs: StagingInputs, stores: OrderTicketStores, resetOrderDraft: () => void) {
+  const {
+    chart,
+    stagedOrderState: stagedOrderStateRef,
+    instrumentDigitsRef,
+    stagedActiveRef,
+    instrument,
+    snapshot,
+    latestCandle,
+    quote,
+  } = inputs;
   const setters = stores.setters.draft;
   const notifyError = useNotifyError();
   const { submitSwapPendingRef, stagedPrevPriceRef } = stores.coordination;
-
-  // Side flip: symbol-info may not have arrived yet, so the quote text carries the precision;
-  // the entry and exits must share it or the market-follow effect sees a nonzero delta.
-  const ticketDigits = useCallback(
-    () => instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : instrumentDigitsRef.current),
-    [instrument, quote, instrumentDigitsRef],
-  );
-
-  const resetOrderDraft = useCallback(() => {
-    setters.setSlOn(false);
-    setters.setTpOn(false);
-    setters.setStopLoss('');
-    setters.setTakeProfit('');
-    setters.setEntry('');
-  }, [setters]);
-
-  const resetTicketToDefaults = useCallback(() => {
-    resetOrderDraft();
-    setters.setRiskSide('');
-    setters.setRiskAmount('');
-    setters.setOrderKind('market');
-    setters.setLimitPrice('');
-    setters.setTimeInForce('gtc');
-    setters.setUnitsMode('units');
-    setters.setOrderVolume(defaultOrderVolume(instrument));
-    setters.setVolumeManual(false);
-    setters.setSlUnit('ticks');
-    setters.setTpUnit('ticks');
-    setters.setPriceMode('absolute');
-    setters.setPriceReference('ask');
-    setters.setPriceOffset('0');
-    setters.setTicketStage('edit');
-  }, [resetOrderDraft, setters, instrument]);
 
   const enableRiskStopLossForDraft = useCallback(
     (draft: OrderTicketDraftStore, side: RiskSide, entryPrice: number, overwrite = false) => {
@@ -90,6 +65,17 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
     enableRiskStopLossForDraft(stores.draft.getState(), side, entryPrice, overwrite),
   );
 
+  // The entry a draft starts from: the side's quote, else the last candle close.
+  const quoteEntryFor = useCallback(
+    (side: RiskSide): number => {
+      if (quote) {
+        return Number(quoteTextFor(side, quote));
+      }
+      return Number(latestCandle?.close ?? snapshot.candles[snapshot.candles.length - 1]?.close);
+    },
+    [quote, latestCandle, snapshot.candles],
+  );
+
   const stageOrderDraft = useCallback(
     (side: RiskSide, fresh = false) => {
       submitSwapPendingRef.current = false;
@@ -101,9 +87,7 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
       const digits = instrumentDigitsRef.current;
       let price = fresh ? NaN : Number(draft.entry);
       if (!Number.isFinite(price) || price <= 0) {
-        const fallback = quote
-          ? Number(side === 'buy' ? quote.ask : quote.bid)
-          : Number(latestCandle?.close ?? snapshot.candles[snapshot.candles.length - 1]?.close);
+        const fallback = quoteEntryFor(side);
         if (!Number.isFinite(fallback) || fallback <= 0) {
           return;
         }
@@ -122,7 +106,7 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
       snapshot.candles,
       latestCandle,
       instrumentDigitsRef,
-      quote,
+      quoteEntryFor,
       instrument,
       stores.draft,
       enableRiskStopLossForDraft,
@@ -154,52 +138,5 @@ export function useOrderTicketDraft(inputs: DraftInputs, stores: OrderTicketStor
     }
   }, [stagedActiveRef, submitSwapPendingRef, clearStagedWidget, resetOrderDraft]);
 
-  // The entry a side switch starts from: the new side's quote, else the last candle close.
-  const quoteEntryFor = useCallback(
-    (side: RiskSide): number => {
-      if (quote) {
-        return Number(side === 'buy' ? quote.ask : quote.bid);
-      }
-      return Number(latestCandle?.close ?? snapshot.candles[snapshot.candles.length - 1]?.close);
-    },
-    [quote, latestCandle, snapshot.candles],
-  );
-
-  const stageFromQuote = useCallback(
-    (side: RiskSide) => {
-      const draft = stores.draft.getState();
-      const switched = draft.riskSide !== side;
-      setters.setPriceReference(sideReference(side));
-      if (!switched) {
-        stageOrderDraft(side, false);
-        return;
-      }
-      const newEntry = quoteEntryFor(side);
-      const flipped = draft.riskSide === '' ? undefined : flipExits(draft, newEntry, ticketDigits());
-      setters.setRiskSide(side);
-      if (!flipped) {
-        resetOrderDraft();
-        stageOrderDraft(side, true);
-        return;
-      }
-      // The levels keep their distance on the other side; the entry is the new side's quote.
-      setters.setEntry(ticketPrice(newEntry, ticketDigits()));
-      setters.setStopLoss(flipped.stopLoss);
-      setters.setTakeProfit(flipped.takeProfit);
-      setters.setSlOn(flipped.stopLoss !== '');
-      setters.setTpOn(flipped.takeProfit !== '');
-      stageOrderDraft(side, false);
-    },
-    [stores.draft, resetOrderDraft, stageOrderDraft, setters, quoteEntryFor, ticketDigits],
-  );
-
-  return {
-    resetOrderDraft,
-    resetTicketToDefaults,
-    enableRiskStopLoss,
-    stageOrderDraft,
-    clearStagedWidget,
-    unstageOrderDraft,
-    stageFromQuote,
-  };
+  return { enableRiskStopLoss, quoteEntryFor, stageOrderDraft, clearStagedWidget, unstageOrderDraft };
 }

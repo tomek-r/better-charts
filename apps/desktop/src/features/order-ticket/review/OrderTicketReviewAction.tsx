@@ -1,4 +1,5 @@
 import { useOrderTicketAction } from '../submit/useOrderTicketAction';
+import { CHECKING_LABEL } from './ticketFormatting';
 
 export function OrderTicketReviewAction() {
   const { side: riskSide, canCheckOrder, orderCheckLoading, startOrderReview } = useOrderTicketAction();
@@ -9,7 +10,7 @@ export function OrderTicketReviewAction() {
       aria-busy={orderCheckLoading}
       onClick={startOrderReview}
     >
-      {orderCheckLoading ? 'Checking with MT5…' : 'Start creating order'}
+      {orderCheckLoading ? CHECKING_LABEL : 'Start creating order'}
     </button>
   );
 }

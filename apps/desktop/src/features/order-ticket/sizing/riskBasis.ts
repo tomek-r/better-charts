@@ -1,5 +1,6 @@
 import { equityAllocationIssue } from '../derivation/ticketRules';
 import { currencyFractionDigits } from '../../../shared/money';
+import type { RiskUnitsMode, UnitsMode } from './unitsMode';
 
 export const MAX_RISK_PERCENT = 100;
 
@@ -15,7 +16,7 @@ export function clampRiskPercentInput(value: string): string {
 }
 
 export type OrderRiskBasis = {
-  riskMode: 'money' | 'equity';
+  riskMode: RiskUnitsMode;
   /** Display budget, rounded to the currency digits in percent mode. */
   effectiveRiskAmount: string;
   /** Unrounded budget for sizing-derived guides such as the SL band. */
@@ -33,7 +34,7 @@ export function deriveOrderRiskBasis({
   currencyDigits,
   stagedOnChart,
 }: {
-  unitsMode: 'money' | 'equity' | 'units';
+  unitsMode: UnitsMode;
   riskAmount: string;
   equity: string | undefined;
   equityAllocationPercent?: string;

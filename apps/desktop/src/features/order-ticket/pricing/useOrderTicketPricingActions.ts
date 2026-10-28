@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import { quoteDigits, ticketPrice } from '../../../shared/format';
-import { priceToTicks } from './priceTicks';
+import { isPriceSwapDisabled, priceToTicks, tickSizeOf } from './priceTicks';
 import { orderEntryPrice } from '../derivation/ticketRules';
 import type { OrderTicketInputs } from '../draft/orderTicketInputs';
 import type { OrderTicketStores } from '../draft/orderTicketStores';
@@ -40,11 +40,10 @@ export function useOrderTicketPricingActions(
     })),
   );
   const setters = stores.setters.draft;
-  const tickSize = instrument ? Number(instrument.tickSize) : NaN;
-  const tickKnown = Number.isFinite(tickSize) && tickSize > 0;
+  const { tickSize, tickKnown } = tickSizeOf(instrument);
   const reference = quote ? Number(quote[priceReference]) : NaN;
   const digits = instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : 2);
-  const priceSwapDisabled = orderKind === 'market' || (priceMode === 'absolute' && (!quote || !tickKnown));
+  const priceSwapDisabled = isPriceSwapDisabled({ orderKind, priceMode, hasQuote: !!quote, tickKnown });
 
   useEffect(() => {
     if (orderKind === 'market' || priceMode !== 'offset' || ticketStage !== 'edit') {

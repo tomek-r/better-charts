@@ -3,12 +3,13 @@ import { type Dispatch, type SetStateAction } from 'react';
 import type { AccountSnapshot, OrderCheckResult, RiskSide } from '../../../shared/bridge/types';
 import { Separated } from '../../../shared/ui/icons/SeparatorIcon';
 import { OrderCheckResult as OrderCheckResultView, type LocalOrderFigures } from './OrderCheckResult';
+import { CHECKING_LABEL } from './ticketFormatting';
 
 function sendButtonLabel(submitting: boolean, checking: boolean): string {
   if (submitting) {
     return 'Sending…';
   }
-  return checking ? 'Checking with MT5…' : 'Send order';
+  return checking ? CHECKING_LABEL : 'Send order';
 }
 
 export function OrderTicketReview({
