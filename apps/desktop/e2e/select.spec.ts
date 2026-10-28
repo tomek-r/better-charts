@@ -32,6 +32,13 @@ test('the Inputs options and the Style choices are custom drop-downs, never a na
   await expect(page.locator('select')).toHaveCount(0);
 });
 
+test('drawing settings drop-downs read at 15px, closed and open', async ({ page }) => {
+  const settingsFontSize = '15px';
+  await modeButton(page).click();
+  await expect(listbox(page)).toHaveCSS('font-size', settingsFontSize);
+  await expect(modeButton(page)).toHaveCSS('font-size', settingsFontSize);
+});
+
 test('a click opens the list under the button with the chosen option marked', async ({ page }) => {
   const button = modeButton(page);
   await expect(button).toHaveAttribute('aria-expanded', 'false');

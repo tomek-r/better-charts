@@ -317,6 +317,15 @@
   cursor: pointer;
 }
 
+/* The owner's size for Time in force, its closed button and its open list; Price reference keeps 12px. */
+.select-button.ticket-mode {
+  font-size: 11px;
+}
+
+.select-list.ticket-mode-list {
+  font-size: 11px;
+}
+
 .select-button.ticket-ref:disabled,
 .select-button.ticket-mode:disabled {
   cursor: not-allowed;

@@ -32,6 +32,7 @@ export function OrderTicketExtraSettings() {
               <span className="ticket-row-label">Time in force</span>
               <Select
                 className="ticket-mode"
+                listClassName="ticket-mode-list"
                 ariaLabel="Time in force"
                 options={TIME_IN_FORCE_OPTIONS}
                 value={timeInForce}
