@@ -33,6 +33,21 @@ async function chartGapTo(page: Page, neighbour: Locator): Promise<number> {
   return other.left - chart.right;
 }
 
+const DRAWER_TO_STRIP_GAP_PX = 8;
+const CHART_TO_DRAWER_GAP_PX = 14;
+const GAP_TOLERANCE_PX = 0.5;
+
+/** Gap between `neighbour`'s right edge and the strip's left edge. */
+async function gapToStrip(page: Page, neighbour: Locator): Promise<number> {
+  const strip = await horizontalEdges(page.locator(SIDE_DRAWER_STRIP));
+  const other = await horizontalEdges(neighbour);
+  return strip.left - other.right;
+}
+
+function isWithinTolerance(actualGap: number, expectedGap: number): boolean {
+  return Math.abs(actualGap - expectedGap) <= GAP_TOLERANCE_PX;
+}
+
 test('the strip offers both drawers and none is open initially', async ({ page }) => {
   const { pageErrors, consoleErrors } = await gotoWithStub(page);
   const tradePanelButton = stripButton(page, TRADE_PANEL_LABEL);
@@ -103,4 +118,19 @@ test('the chart clears the strip when closed and the open drawer when open', asy
   const objectTreeDrawer = page.locator(OBJECT_TREE_DRAWER);
   await expect(objectTreeDrawer).toBeVisible();
   await expect.poll(() => chartGapTo(page, objectTreeDrawer)).toBeGreaterThan(0);
+});
+
+test('the open trade panel stands off the strip by the drawer gap', async ({ page }) => {
+  await gotoWithStub(page);
+  await stripButton(page, TRADE_PANEL_LABEL).click();
+  const tradePanelDrawer = page.locator(TRADE_PANEL_DRAWER);
+  await expect(tradePanelDrawer).toBeVisible();
+
+  // The drawer slides in over 0.2s, so poll until the edges settle.
+  const drawerSitsOffStrip = async () =>
+    isWithinTolerance(await gapToStrip(page, tradePanelDrawer), DRAWER_TO_STRIP_GAP_PX);
+  const chartSitsOffDrawer = async () =>
+    isWithinTolerance(await chartGapTo(page, tradePanelDrawer), CHART_TO_DRAWER_GAP_PX);
+  await expect.poll(drawerSitsOffStrip).toBe(true);
+  await expect.poll(chartSitsOffDrawer).toBe(true);
 });

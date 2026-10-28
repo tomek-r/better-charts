@@ -5,6 +5,8 @@
      the drawer clears the strip, so both are defined once here. */
   --side-drawer-strip-width: 52px;
   --side-drawer-width: 330px;
+  /* The open drawer stands this far off the strip, like the 8px it keeps below the topbar. */
+  --side-drawer-gap: 8px;
 }
 
 /* Right-edge icon strip, mirroring the left tool rail. */
@@ -38,7 +40,7 @@
   height: 20px;
 }
 
-/* Drawer chrome: fixed to the strip's inner edge below the 68px topbar. Closed,
+/* Drawer chrome: fixed one gap off the strip's inner edge below the 68px topbar. Closed,
    it is translated off-screen AND visibility-hidden (delayed until the slide
    finishes) so it cannot catch pointer events, focus, or Playwright hits. */
 .side-drawer {
@@ -46,7 +48,7 @@
   /* 68px topbar + 8px: the drawer top edge sits on the chart card's top line,
      same distance from the topbar as the card. */
   top: 76px;
-  right: var(--side-drawer-strip-width);
+  right: calc(var(--side-drawer-strip-width) + var(--side-drawer-gap));
   bottom: 0;
   width: var(--side-drawer-width);
   overflow-y: auto;
@@ -54,7 +56,7 @@
   /* 8px top inside the drawer keeps the panel content at 84px (68 + 16) from the
      window top, unchanged when the drawer edge moved down. */
   padding: 8px 8px 8px;
-  border-radius: var(--border-radius) 0 0 var(--border-radius);
+  border-radius: var(--border-radius);
   transform: translateX(100%);
   visibility: hidden;
   transition:

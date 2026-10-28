@@ -12,12 +12,12 @@
   transition: padding-right 0.2s ease;
 }
 
-/* An open drawer shrinks the chart column (330px drawer + 14px gap + the 52px
-   strip, matching the rail-side gap); the chart host's ResizeObserver then
+/* An open drawer shrinks the chart column (330px drawer + 8px drawer gap + 14px
+   gap + the 52px strip, matching the rail-side gap); the chart host's ResizeObserver then
    calls instance.resize() for the new width. The drawer carries the state its
    own styles already need, so opening it cannot re-render the app tree. */
 .dashboard:has(.side-drawer.open) {
-  padding-right: calc(var(--side-drawer-width) + 14px + var(--side-drawer-strip-width));
+  padding-right: calc(var(--side-drawer-width) + var(--side-drawer-gap) + 14px + var(--side-drawer-strip-width));
 }
 
 @media (max-width: 900px) {
