@@ -371,6 +371,21 @@ test('Escape in an open ticket drop-down closes only the list and keeps the stag
   await expect(cta).toBeEnabled();
 });
 
+test('Time in force reads at 11px, closed and open', async ({ page }) => {
+  const timeInForceFontSize = '11px';
+  const priceReferenceFontSize = '12px';
+  const { ticket } = await openTicket(page);
+  await ticket.getByRole('button', { name: 'Extra settings' }).click();
+  const timeInForce = ticket.getByRole('button', { name: 'Time in force', exact: true });
+  await expect(timeInForce).toHaveCSS('font-size', timeInForceFontSize);
+  await expect(page.getByRole('button', { name: 'Price reference', exact: true })).toHaveCSS(
+    'font-size',
+    priceReferenceFontSize,
+  );
+  await timeInForce.click();
+  await expect(page.getByRole('listbox')).toHaveCSS('font-size', timeInForceFontSize);
+});
+
 /** Starts the review of a Buy draft whose OrderCheck request the stub rejects with `reason`; returns the alerts. */
 async function startReviewWithRejectedOrderCheck(page: Page, reason: string) {
   await gotoWithStub(page, { symbolInfo: eurusd, failures: { request_order_check: reason } });

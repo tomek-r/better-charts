@@ -20,6 +20,8 @@ interface SelectListProps {
   readonly onChoose: (value: string) => void;
   /** Closes the list; `returnFocus` is false when the user pressed elsewhere and focus should stay there. */
   readonly onClose: (returnFocus: boolean) => void;
+  /** Extra class on the list, which is portalled to the body and so styled on its own (e.g. its font size). */
+  readonly listClassName?: string;
 }
 
 function optionId(listId: string, index: number): string {
@@ -30,7 +32,16 @@ function optionId(listId: string, index: number): string {
  * The open list of a `Select`. It is portalled to the page body and fixed to the window, so no ancestor's
  * overflow clips it. Focus stays on the list itself and the highlight follows `aria-activedescendant`.
  */
-export function SelectList({ id, buttonId, options, value, anchorRef, onChoose, onClose }: SelectListProps) {
+export function SelectList({
+  id,
+  buttonId,
+  options,
+  value,
+  anchorRef,
+  onChoose,
+  onClose,
+  listClassName,
+}: SelectListProps) {
   const listRef = useRef<HTMLUListElement>(null);
   const [activeIndex, setActiveIndex] = useState(() =>
     Math.max(
@@ -88,7 +99,7 @@ export function SelectList({ id, buttonId, options, value, anchorRef, onChoose, 
     <ul
       ref={listRef}
       id={id}
-      className="select-list popup-surface"
+      className={`select-list popup-surface${listClassName ? ` ${listClassName}` : ''}`}
       role="listbox"
       tabIndex={-1}
       aria-labelledby={buttonId}

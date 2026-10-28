@@ -38,13 +38,15 @@
   color: var(--color-muted-strong);
 }
 
+/* The list is portalled to the body, so it cannot inherit its button's size; a use that needs another size gives
+   the list a class through listClassName and sizes it in its own CSS. */
 .select-list {
+  font-size: 15px;
   max-height: 260px;
   margin: 0;
   padding: 4px;
   overflow-y: auto;
   list-style: none;
-  font-size: 15px;
 }
 
 .select-list:focus {

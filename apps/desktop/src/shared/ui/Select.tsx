@@ -20,6 +20,8 @@ interface SelectProps {
   readonly title?: string;
   readonly describedBy?: string;
   readonly className?: string;
+  /** Extra class on the open list, which is portalled to the body and so styled on its own (e.g. its font size). */
+  readonly listClassName?: string;
 }
 
 /**
@@ -39,6 +41,7 @@ export function Select({
   title,
   describedBy,
   className,
+  listClassName,
 }: SelectProps) {
   const generatedId = useId();
   const buttonId = id ?? generatedId;
@@ -93,6 +96,7 @@ export function Select({
           anchorRef={buttonRef}
           onChoose={choose}
           onClose={close}
+          listClassName={listClassName}
         />
       ) : null}
     </>
