@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AccountSnapshot, OpenPosition } from '../../shared/bridge/types';
 import { PartialCloseMenuButton } from '../partial-close/PartialCloseMenuButton';
 import { PartialCloseVolumePopover } from '../partial-close/PartialCloseVolumePopover';
-import { partialCloseLimits, partialCloseTitle } from '../partial-close/partialCloseVolume';
+import { partialCloseLimits, partialCloseTitle } from '../../shared/trading/partialCloseVolume';
 import { volumeWithUnit } from '../../shared/format';
 import { accountAmount } from './accountAmount';
 

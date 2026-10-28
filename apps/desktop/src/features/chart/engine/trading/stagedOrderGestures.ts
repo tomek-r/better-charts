@@ -2,11 +2,7 @@ import type { TradingLabelTarget } from './labels/tradingLabelTypes';
 import { hitCircle, hitRect, STAGED_GRAB, type StagedOrderLevels, type StagedSlBand } from './stagedOrderOverlay';
 import type { RiskSide } from '../../../../shared/bridge/types';
 import { ticketPrice } from '../../../../shared/format';
-import type { OrderTicketStores } from '../../../order-ticket/state/orderTicketStores';
-import type { ChartWorkspaceState } from '../../state/useChartWorkspace';
-
-type StagedGestureWorkspace = Pick<ChartWorkspaceState, 'stagedOrderState'> &
-  Partial<Pick<ChartWorkspaceState, 'chart'>>;
+import type { StagedGestureWorkspace } from './gestureWorkspace';
 
 /** Holds a dragged SL inside the allowed band; `edge` names the edge that caught it. */
 export function clampStopLoss(
@@ -40,10 +36,15 @@ function entryCarriedBand(order: StagedOrderLevels): { near: number; far: number
   return { near: Math.abs(slBand.nearPrice - order.entry), far: Math.abs(slBand.farPrice - order.entry) };
 }
 
-export type StagedOrderGestureTicket = Pick<
-  OrderTicketStores['setters']['draft'],
-  'setEntry' | 'setSlOn' | 'setStopLoss' | 'setTpOn' | 'setTakeProfit' | 'setStagedDragging' | 'setDragSlMoney'
-> & {
+/** The ticket draft writes a staged-order drag performs; the order ticket supplies them. */
+export type StagedOrderGestureTicket = {
+  setEntry: (price: string) => void;
+  setSlOn: (on: boolean) => void;
+  setStopLoss: (price: string) => void;
+  setTpOn: (on: boolean) => void;
+  setTakeProfit: (price: string) => void;
+  setStagedDragging: (dragging: boolean) => void;
+  setDragSlMoney: (money: string | undefined) => void;
   unstageOrderDraft: () => void;
   toggleExit: (kind: 'sl' | 'tp', on: boolean) => void;
 };

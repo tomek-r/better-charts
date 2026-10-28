@@ -1,3 +1,4 @@
+import type { ChartDrawingCommands } from '../drawings/chartDrawings';
 import type { ChartDrawingPoint, ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import {
   DrawingStack,
@@ -79,7 +80,7 @@ function resolveTool(tool: ChartTool): ResolvedChartTool {
  * `activate` may ask the host to repaint, and the host reaches objects the owner is
  * still creating while the constructor runs.
  */
-export class ChartToolSet {
+export class ChartToolSet implements ChartDrawingCommands {
   private activeEntry: ToolEntry;
   /** Where the pointer rests in the pane; replayed to a tool that becomes active later. Null outside it. */
   private hoverPoint: { x: number; y: number } | null = null;
@@ -243,10 +244,9 @@ export class ChartToolSet {
    */
   selectDrawing(toolId: string, drawingId: string): void {
     const selection = this.selectionFor(toolId, drawingId);
-    if (selection === null) {
-      return;
+    if (selection !== null) {
+      this.changeSelection(selection);
     }
-    this.changeSelection(selection);
   }
 
   /** Removes one drawing of any tool, even when it is locked; false when there is no such drawing. */

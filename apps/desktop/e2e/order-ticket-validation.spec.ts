@@ -4,10 +4,10 @@ import {
   deriveOrderTicket,
   orderEntryPrice,
   orderVolumeIssue,
-  riskRewardRatio,
   stopDistanceGuard,
 } from '../src/features/order-ticket/domain/ticketRules';
 import type { QuoteSnapshot } from '../src/shared/bridge/types';
+import { riskRewardRatio } from '../src/shared/trading/riskReward';
 import { fillExitPrice, openTradePanel } from './helpers/panel';
 import { chooseOption, escapeOpenList, expectOptionLabels } from './helpers/select';
 import {

@@ -2,7 +2,7 @@
 // and use exact decimal arithmetic (BigInt units of the finest decimal place):
 // volumes are never converted to floating point.
 
-import { formatVolume, volumeWithUnit } from '../../shared/format';
+import { formatVolume, volumeWithUnit } from '../format';
 
 /** Volumes of one position, as decimal strings. `min`/`step` come from the broker symbol. */
 export interface PartialCloseLimits {

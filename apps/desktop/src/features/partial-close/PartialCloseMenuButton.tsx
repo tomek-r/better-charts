@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { CaretIcon } from '../../shared/ui/icons/CaretIcon';
 import { PartialCloseMenu } from './PartialCloseMenu';
-import type { PartialCloseLimits } from './partialCloseVolume';
+import type { PartialCloseLimits } from '../../shared/trading/partialCloseVolume';
 import { useEscapeDismissal, useOutsidePointerDismissal } from '../../shared/hooks/useDismissal';
 
 interface PartialCloseMenuButtonProps {

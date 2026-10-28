@@ -2,19 +2,7 @@ import type { TradingLabelHit } from './labels/tradingLabelTypes';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
 import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlay';
 import { levelMoneyText } from './moneyLabels';
-import type { ChartWorkspaceState } from '../../state/useChartWorkspace';
-
-type TradingGestureWorkspace = Pick<
-  ChartWorkspaceState,
-  | 'positionOverlayState'
-  | 'chart'
-  | 'applyOrderModify'
-  | 'applyOrderLevelModify'
-  | 'applyPositionModify'
-  | 'applyLevelClear'
-  | 'closeActionsRef'
-  | 'partialCloseChipPortRef'
->;
+import type { TradingGestureWorkspace } from './gestureWorkspace';
 
 /** Grab targets of OUR position/order overlay (capture-phase handlers here). */
 type OverlayGrab =

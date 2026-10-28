@@ -7,7 +7,7 @@ import {
   volumeSliderPosition,
   volumeSliderScale,
   type PartialCloseLimits,
-} from './partialCloseVolume';
+} from '../../shared/trading/partialCloseVolume';
 
 interface CloseKeepSliderProps {
   limits: PartialCloseLimits;

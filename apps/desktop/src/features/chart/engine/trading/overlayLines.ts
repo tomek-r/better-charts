@@ -1,7 +1,7 @@
 import { formatVolume, normalizedPrice } from '../../../../shared/format';
 import type { AccountMoneyBasis } from '../../../../shared/money';
 import type { OpenPosition, PendingOrder, PortfolioSnapshot } from '../../../../shared/bridge/types';
-import { partialCloseLimits } from '../../../partial-close/partialCloseVolume';
+import { partialCloseLimits } from '../../../../shared/trading/partialCloseVolume';
 import { levelMoneyText, pnlMoneyText } from './moneyLabels';
 import type { OrderLine, PositionLine, PositionOverlayState } from './positionOverlay';
 

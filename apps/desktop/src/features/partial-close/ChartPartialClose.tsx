@@ -3,7 +3,7 @@ import { useBridgeChartState, useBridgePortfolio } from '../bridge/BridgeSession
 import { useExecutionPortfolio } from '../execution/ExecutionProvider';
 import { PartialCloseMenu } from './PartialCloseMenu';
 import { PartialCloseVolumePopover } from './PartialCloseVolumePopover';
-import { partialCloseLimits, partialCloseTitle } from './partialCloseVolume';
+import { partialCloseLimits, partialCloseTitle } from '../../shared/trading/partialCloseVolume';
 import { usePartialCloseAvailable } from './usePartialCloseAvailable';
 import { ChartAnchoredPanel } from './ChartAnchoredPanel';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';

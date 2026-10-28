@@ -3,7 +3,7 @@ import type { TradingLabelHit, TradingLabelLayoutState, TradingLabelTarget } fro
 import type { OverlayRenderer } from '../surface/overlayTypes';
 import type { RiskSide } from '../../../../shared/bridge/types';
 import type { AccountMoneyBasis } from '../../../../shared/money';
-import { riskRewardRatio } from '../../../order-ticket/domain/ticketRules';
+import { riskRewardRatio } from '../../../../shared/trading/riskReward';
 import {
   CANCEL_CHIP_X,
   bindViewportHit,

@@ -8,7 +8,7 @@ import {
   partialVolumeMessage,
   presetVolume,
   type PartialCloseLimits,
-} from './partialCloseVolume';
+} from '../../shared/trading/partialCloseVolume';
 import { useEscapeDismissal } from '../../shared/hooks/useDismissal';
 import { VolumeStepper } from './VolumeStepper';
 

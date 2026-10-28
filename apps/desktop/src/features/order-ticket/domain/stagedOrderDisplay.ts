@@ -8,7 +8,8 @@ import type {
 } from '../../../shared/bridge/types';
 import { formatSignedMoney } from '../../../shared/format';
 import { accountMoneyBasis, estimateLevelMoney } from '../../../shared/money';
-import { orderEntryPrice, riskRewardRatio } from './ticketRules';
+import { riskRewardRatio } from '../../../shared/trading/riskReward';
+import { orderEntryPrice } from './ticketRules';
 
 export interface StagedOrderDisplayInput {
   instrument: BrokerSymbol | undefined;
