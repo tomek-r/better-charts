@@ -3,6 +3,7 @@ import { withFakeClock, type FakeClock } from './helpers/fakeClock';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
 import { createFakeToolHost } from './helpers/fakeToolHost';
 import {
+  DEFAULT_PROFILE_REQUEST_PARAMS,
   FixedRangeProfileRequester,
   SLOW_PROFILE_SPINNER_DELAY_MS,
 } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
@@ -46,7 +47,9 @@ test('the request end is clipped to the quote time', () =>
   withFakeClock(() => {
     const { requester, market, state } = createRequester();
     requester.requestProfile(RANGE);
-    expect(market.requests).toEqual([{ symbol: SYMBOL, fromMs: RANGE.fromMs, endMs: QUOTE_TIME_MS, rows: 128 }]);
+    expect(market.requests).toEqual([
+      { symbol: SYMBOL, fromMs: RANGE.fromMs, endMs: QUOTE_TIME_MS, ...DEFAULT_PROFILE_REQUEST_PARAMS },
+    ]);
     expect(state.range).toEqual({ fromMs: RANGE.fromMs, toMs: QUOTE_TIME_MS });
   }));
 

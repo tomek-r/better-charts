@@ -1,9 +1,34 @@
 /* Settings of one drawing (DrawingSettingsDialog): a two-column label/control grid per group. */
 
+/*
+ * The dialog sits at a fixed offset from the top of the window, not centred: tabs differ in height, and a
+ * centred panel would move its top edge (and the tab bar under the pointer) with every switch.
+ */
+/* Two classes, to outrank the backdrop's own `place-items: center` whatever the stylesheet order. */
+.modal-dialog-backdrop.drawing-settings-backdrop {
+  --drawing-settings-top-offset: 8%;
+  align-items: start;
+  padding-top: var(--drawing-settings-top-offset);
+}
+
+.drawing-settings-backdrop .modal-dialog {
+  max-height: calc(100dvh - var(--drawing-settings-top-offset) - 12px);
+  overflow-y: auto;
+}
+
 .drawing-settings {
+  /* One step above the 13px the dialog used before, so labels and fields read comfortably. */
+  --drawing-settings-font-size: 15px;
+  --drawing-settings-control-width: 200px;
+  --drawing-settings-row-gap: 22px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--drawing-settings-row-gap);
+  font-size: var(--drawing-settings-font-size);
+}
+
+.drawing-settings .modal-dialog-button {
+  font-size: 16px;
 }
 
 /* A field's label, control and tooltip join the group's grid directly. */
@@ -13,9 +38,9 @@
 
 .drawing-settings-group {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: minmax(0, 1fr) var(--drawing-settings-control-width);
   align-items: center;
-  gap: 10px 14px;
+  gap: var(--drawing-settings-row-gap) 14px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -25,31 +50,27 @@
   grid-column: 1 / -1;
   padding: 0;
   color: var(--color-text-bright);
-  font-size: 13px;
   font-weight: 500;
 }
 
 .drawing-settings-label {
   color: var(--color-text-label);
-  font-size: 13px;
 }
 
 .drawing-settings-control {
-  box-sizing: border-box;
   width: 100%;
+  font: inherit;
   padding: 7px 9px;
+  box-sizing: border-box;
+  background: var(--color-surface);
+  color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
-  color: var(--color-text);
-  background: var(--color-surface);
-  font: inherit;
-  font-size: 13px;
 }
 
-.drawing-settings-control:focus-visible {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-ring);
+/* Room for four digits and the spin buttons, wherever the field sits. */
+.drawing-settings-control[type='number'] {
+  min-width: 96px;
 }
 
 /* The draft value does not (yet) satisfy its kind: the field is marked, the dialog says why. */
@@ -83,11 +104,224 @@
 
 .drawing-settings-color-hex {
   color: var(--color-text-tertiary);
-  font-size: 12px;
+  font-size: 13px;
+}
+
+/* Tabs: a dim track under the row, with a light underline on the active tab. */
+.drawing-settings-tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawing-settings-tab {
+  margin-bottom: -1px;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted-strong);
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.drawing-settings-tab:hover,
+.drawing-settings-tab[aria-selected='true'] {
+  color: var(--color-text-bright);
+}
+
+.drawing-settings-tab[aria-selected='true'] {
+  border-bottom-color: var(--color-text-bright);
+}
+
+.drawing-settings-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
+}
+
+.drawing-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Inputs sharing an `inline` key (a tool opts in): their labels and controls sit in one row of the grid. */
+.drawing-settings-inline-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.drawing-settings-inline-row .drawing-settings-control,
+.drawing-settings-inline-row .select-button {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.drawing-settings-inline-row .drawing-settings-control[type='number'] {
+  min-width: 96px;
+}
+
+.drawing-settings-control:disabled,
+.drawing-settings-checkbox:disabled {
+  opacity: 0.5;
+}
+
+/* Style tab: one row per style, the title on the left and its control in the same column as the Inputs tab. */
+.drawing-settings-style-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--drawing-settings-row-gap);
+}
+
+.drawing-settings-style-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--drawing-settings-control-width);
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.drawing-settings-style-row[data-child='true'] {
+  padding-left: 26px;
+}
+
+.drawing-settings-style-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-text-label);
+}
+
+.drawing-settings-style-row .color-trigger {
+  justify-self: start;
+}
+
+/* Coordinates tab: one row per anchor, its label on the left and its fields side by side on the right. */
+.drawing-settings-coordinate-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--drawing-settings-row-gap);
+}
+
+.drawing-settings-coordinate-row {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 14px;
+}
+
+.drawing-settings-coordinate-fields {
+  display: flex;
+  gap: 10px;
+}
+
+.drawing-settings-coordinate-fields .drawing-settings-control {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+/* Visibility tab: a checkbox with its label, the first count, a two-thumb slider and the last count. */
+.drawing-settings-range-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--drawing-settings-row-gap);
+}
+
+.drawing-settings-range-row {
+  display: grid;
+  grid-template-columns: 110px 64px 1fr 64px;
+  align-items: center;
+  gap: 12px;
+}
+
+.drawing-settings-range-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-text-label);
+}
+
+.drawing-settings-range-field {
+  text-align: center;
+}
+
+.drawing-settings-range-slider {
+  position: relative;
+  height: 20px;
+}
+
+.drawing-settings-range-slider[data-disabled='true'] {
+  opacity: 0.5;
+}
+
+.drawing-settings-range-track {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.drawing-settings-range-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
+
+/* Both inputs span the track; only their thumbs take pointer events, so either thumb can be grabbed. */
+.drawing-settings-range-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  appearance: none;
+}
+
+.drawing-settings-range-slider[data-front='from'] [data-thumb='from'],
+.drawing-settings-range-slider[data-front='to'] [data-thumb='to'] {
+  z-index: 1;
+}
+
+.drawing-settings-range-thumb::-webkit-slider-runnable-track {
+  background: none;
+}
+
+.drawing-settings-range-thumb::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-accent);
+  border-radius: 50%;
+  background: var(--color-surface);
+  pointer-events: auto;
+  appearance: none;
+  cursor: pointer;
+}
+
+.drawing-settings-range-thumb:focus-visible {
+  outline: none;
+}
+
+.drawing-settings-range-thumb:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
+.drawing-settings-error {
+  margin: 0;
+  color: var(--color-sell-border);
 }
 
 .drawing-settings-empty {
   margin: 0;
   color: var(--color-muted-strong);
-  font-size: 13px;
 }

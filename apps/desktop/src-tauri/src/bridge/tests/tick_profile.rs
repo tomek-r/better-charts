@@ -12,7 +12,7 @@ fn tick_snapshot_builds_frontend_profile_shape() {
     };
     let request = TickProfileRequest {
         wire: wire.clone(),
-        rows: 128,
+        settings: ProfileSettings::default(),
     };
     let tick = |time_ms, bid: &str, ask: &str, flags| trading_core::protocol::MarketTick {
         time_ms,
@@ -69,8 +69,35 @@ fn nas100_profile_request() -> TickProfileRequest {
             to_ms: 200,
             max_ticks: 5000,
         },
-        rows: 128,
+        settings: ProfileSettings::default(),
     }
+}
+
+#[test]
+fn tick_profile_follows_the_requested_ticks_per_row_and_value_area() {
+    let state = BridgeState::with_symbol_cache_path(None);
+    let mut request = nas100_profile_request();
+    request.settings.layout = trading_core::volume_profile::RowLayout::TicksPerRow { ticks: 2 };
+    request.settings.value_area = rust_decimal::Decimal::ONE;
+    let ticks = vec![
+        profile_tick(110, "100.0", "100.1", 2),
+        profile_tick(120, "100.1", "100.2", 2),
+        profile_tick(130, "100.2", "100.3", 2),
+        profile_tick(140, "100.2", "100.3", 2),
+        profile_tick(150, "100.3", "100.4", 2),
+    ];
+    let result = build_tick_profile(&state, profile_snapshot(ticks), &request).unwrap();
+    // The grid falls back to the 0.1 bid gap: 2 ticks per row is 0.2 high.
+    let edges = result
+        .bins
+        .iter()
+        .map(|bin| (bin.low.as_str(), bin.high.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(edges, [("100", "100.2"), ("100.2", "100.4")]);
+    assert_eq!(result.actual_rows, 2);
+    // A 100% value area spans every row.
+    assert_eq!(result.val.as_deref(), Some("100"));
+    assert_eq!(result.vah.as_deref(), Some("100.4"));
 }
 
 fn profile_tick(

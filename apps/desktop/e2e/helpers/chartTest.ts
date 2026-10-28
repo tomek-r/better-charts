@@ -42,7 +42,7 @@ export async function profileSelection(page: Page) {
   return page.evaluate(() => window.__chartTest?.tool('fixedRangeProfile')?.selection() ?? null);
 }
 
-/** Every FRVP drawing the tool holds, bottom to top, or null before the chart mounted. */
+/** Every fixed range volume profile drawing the tool holds, bottom to top, or null before the chart mounted. */
 export async function profileDrawings(page: Page) {
   return page.evaluate(() => window.__chartTest?.tool('fixedRangeProfile')?.drawings() ?? null);
 }

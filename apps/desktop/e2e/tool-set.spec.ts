@@ -6,6 +6,10 @@ import type {
   ChartDrawingRecord,
   ChartDrawingSelection,
 } from '../src/features/chart/engine/drawings/drawingRecord';
+import {
+  DEFAULT_TIMEFRAME_VISIBILITY,
+  type DrawingTimeframeVisibility,
+} from '../src/features/chart/engine/drawings/timeframeVisibility';
 import type { ChartDrawingPointRule } from '../src/features/chart/engine/drawings/toolDrawings';
 import type { ToolInputDefinition } from '../src/features/chart/engine/drawings/toolInputs';
 import type {
@@ -55,6 +59,16 @@ interface Harness {
   drawActions: Map<string, (context: CanvasRenderingContext2D) => void>;
   /** Each fake tool's drawings, keyed by tool id. */
   drawings: Map<string, FakeDrawings>;
+  /** The timeframe the chart reports to the set; a test assigns it before the bars change. */
+  barSeries: { timeframe: string };
+}
+
+/** The timeframe every harness starts on. */
+const START_TIMEFRAME = 'M5';
+
+/** The only part of the owner's host the set reads: the bar series and its timeframe. */
+function hostOn(barSeries: { timeframe: string }): ChartToolHostBase {
+  return { barSeries } as unknown as ChartToolHostBase;
 }
 
 /** The tool ids a harness builds tools for, and the ones that place drawings. */
@@ -83,7 +97,15 @@ function paneTarget(context: CanvasRenderingContext2D): ChartDrawTarget {
 
 /** One stored record of a fake tool, on the side of the bars the case is about. */
 function storedRecord(drawing: { readonly id: string; readonly belowBars: boolean }): ChartDrawingRecord {
-  return { ...drawing, toolId: 'a', locked: false, visible: true, inputs: {}, points: [ORIGIN_POINT] };
+  return {
+    ...drawing,
+    toolId: 'a',
+    locked: false,
+    visible: true,
+    timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
+    inputs: {},
+    points: [ORIGIN_POINT],
+  };
 }
 
 /** Every paint call the fakes received, in order, without the lifecycle calls around them. */
@@ -109,6 +131,7 @@ function buildToolSet({ toolIds = ['a', 'b', 'c'], placementToolIds = [] }: Tool
   const gesturing = new Set<string>();
   const drawActions = new Map<string, (context: CanvasRenderingContext2D) => void>();
   const drawings = new Map<string, FakeDrawings>();
+  const barSeries = { timeframe: START_TIMEFRAME };
   const definitions: ChartToolDefinition[] = toolIds.map((id) => {
     const shapes = new ChartDrawingCollection<FakeDrawingShape>(
       FAKE_DRAWING_RULES,
@@ -167,7 +190,7 @@ function buildToolSet({ toolIds = ['a', 'b', 'c'], placementToolIds = [] }: Tool
       },
     };
   });
-  const tools = new ChartToolSet(definitions, 'a', {} as ChartToolHostBase, {
+  const tools = new ChartToolSet(definitions, 'a', hostOn(barSeries), {
     cursorChanged: (cursor) => cursors.push(cursor),
     selectionChanged: (selection) => selections.push(selection),
     drawingsChanged: () => {
@@ -177,7 +200,7 @@ function buildToolSet({ toolIds = ['a', 'b', 'c'], placementToolIds = [] }: Tool
   tools.activateDefaultTool();
   log.length = 0;
   cursors.length = 0;
-  return { tools, log, cursors, selections, reports, gesturing, drawActions, drawings };
+  return { tools, log, cursors, selections, reports, gesturing, drawActions, drawings, barSeries };
 }
 
 /** Seeds one committed, unlocked drawing on a fake tool, hittable at pane x, and answers its id. */
@@ -493,6 +516,31 @@ test('new settings on a drawing are reported only when the tool accepts them', (
   expect(harness.drawings.get('a')?.exportRecords()[0]?.inputs).toEqual({ period: 30 });
 });
 
+test('new anchors on the selected drawing are reported once and keep it selected', () => {
+  const harness = buildToolSet();
+  const drawingId = seedSelectedDrawing(harness);
+  const movedPoints = [{ timeMs: 5, price: null }];
+
+  expect(harness.tools.setDrawingPoints('a', drawingId, movedPoints)).toBe(true);
+
+  expect(harness.reports.drawingsChanged).toBe(1);
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.points).toEqual(movedPoints);
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', drawingId, false, true));
+  expect(selectedInTool(harness, 'a')).toBe(drawingId);
+});
+
+test('anchors the tool refuses, or for an unknown drawing or tool, report nothing', () => {
+  const harness = buildToolSet();
+  const drawingId = seedSelectedDrawing(harness);
+
+  expect(harness.tools.setDrawingPoints('a', drawingId, [])).toBe(false);
+  expect(harness.tools.setDrawingPoints('a', 'missing', [ORIGIN_POINT])).toBe(false);
+  expect(harness.tools.setDrawingPoints('missing', drawingId, [ORIGIN_POINT])).toBe(false);
+
+  expect(harness.reports.drawingsChanged).toBe(0);
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.points).toEqual([ORIGIN_POINT]);
+});
+
 test('exported drawings are stamped with their tool, bottom of the order first', () => {
   const harness = buildToolSet({ toolIds: ['b', 'a'] });
   const first = seedDrawing(harness, 'b', 1);
@@ -508,17 +556,15 @@ test('importing hands each tool only its own records, drops unknown tools and re
   harness.selections.length = 0;
   harness.reports.drawingsChanged = 0;
   const records: ChartDrawingRecord[] = [
-    { id: 'a-1', toolId: 'a', locked: false, visible: true, belowBars: false, inputs: {}, points: [ORIGIN_POINT] },
+    { ...storedRecord({ id: 'a-1', belowBars: false }), toolId: 'a' },
     {
-      id: 'b-1',
+      ...storedRecord({ id: 'b-1', belowBars: false }),
       toolId: 'b',
       locked: true,
       visible: false,
-      belowBars: false,
       inputs: { period: 20 },
-      points: [ORIGIN_POINT],
     },
-    { id: 'c-1', toolId: 'c', locked: false, visible: true, belowBars: false, inputs: {}, points: [ORIGIN_POINT] },
+    { ...storedRecord({ id: 'c-1', belowBars: false }), toolId: 'c' },
   ];
   harness.tools.replaceDrawings(records);
   expect(harness.tools.selectedDrawing()).toBeNull();
@@ -541,13 +587,10 @@ test('importing hands each tool only its own records, drops unknown tools and re
 test('an imported record keeps its id, flags and settings', () => {
   const harness = buildToolSet({ toolIds: ['a'] });
   const record: ChartDrawingRecord = {
-    id: 'a-1',
-    toolId: 'a',
+    ...storedRecord({ id: 'a-1', belowBars: false }),
     locked: true,
     visible: false,
-    belowBars: false,
     inputs: { period: 55 },
-    points: [ORIGIN_POINT],
   };
 
   harness.tools.replaceDrawings([record]);
@@ -593,6 +636,98 @@ test('a hidden drawing is painted in neither pass', () => {
   harness.tools.drawBelowBars(drawingTarget(createStateContext()));
 
   expect(paintLog(harness)).toEqual(['a:draw']);
+});
+
+/** Minutes 1 to 3 only: the harness starts on M5, which this setting hides, and M1 shows. */
+const SHOWN_ON_SHORT_MINUTES_ONLY: DrawingTimeframeVisibility = {
+  ...DEFAULT_TIMEFRAME_VISIBILITY,
+  minutes: { shown: true, from: 1, to: 3 },
+};
+
+test('a drawing the current timeframe hides is painted in neither pass and is not hit', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.setDrawingTimeframeVisibility('a', drawingId, SHOWN_ON_SHORT_MINUTES_ONLY);
+  harness.log.length = 0;
+
+  harness.tools.draw(paneTarget(createStateContext()));
+  harness.tools.drawBelowBars(drawingTarget(createStateContext()));
+  harness.tools.pointerDown(5, 1);
+
+  expect(paintLog(harness)).toEqual(['a:draw']);
+  expect(harness.tools.selectedDrawing()).toBeNull();
+  expect(harness.drawings.get('a')?.isVisible(drawingId)).toBe(true);
+});
+
+test('a drawing is painted and hit again on a timeframe its setting shows', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.setDrawingTimeframeVisibility('a', drawingId, SHOWN_ON_SHORT_MINUTES_ONLY);
+  harness.barSeries.timeframe = 'M1';
+  harness.log.length = 0;
+
+  harness.tools.draw(paneTarget(createStateContext()));
+  harness.tools.pointerDown(5, 1);
+
+  expect(paintLog(harness)).toEqual([`a:drawDrawing:${drawingId}`, 'a:draw']);
+  expect(harness.tools.selectedDrawing()).toEqual(selectionOf('a', drawingId, false, true));
+});
+
+test('the selection drops when a timeframe switch hides the selected drawing, not on a live bar', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.setDrawingTimeframeVisibility('a', drawingId, SHOWN_ON_SHORT_MINUTES_ONLY);
+  harness.barSeries.timeframe = 'M1';
+  harness.tools.pointerDown(5, 1);
+  harness.tools.barsChanged();
+  expect(harness.tools.selectedDrawing()?.drawingId).toBe(drawingId);
+
+  harness.barSeries.timeframe = START_TIMEFRAME;
+  harness.tools.barsChanged();
+
+  expect(harness.tools.selectedDrawing()).toBeNull();
+});
+
+test('the object tree can select a drawing the timeframe hides, and live bars keep it selected', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.setDrawingTimeframeVisibility('a', drawingId, SHOWN_ON_SHORT_MINUTES_ONLY);
+
+  harness.tools.selectDrawing('a', drawingId);
+  harness.tools.barsChanged();
+
+  expect(harness.tools.selectedDrawing()?.drawingId).toBe(drawingId);
+});
+
+test('setting the timeframe visibility reports one change, exports with the drawing and ignores unknown ones', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.reports.drawingsChanged = 0;
+
+  harness.tools.setDrawingTimeframeVisibility('a', drawingId, SHOWN_ON_SHORT_MINUTES_ONLY);
+  harness.tools.setDrawingTimeframeVisibility('a', 'missing', SHOWN_ON_SHORT_MINUTES_ONLY);
+  harness.tools.setDrawingTimeframeVisibility('missing', drawingId, SHOWN_ON_SHORT_MINUTES_ONLY);
+
+  expect(harness.reports.drawingsChanged).toBe(1);
+  expect(harness.tools.exportDrawings().map(({ timeframeVisibility }) => timeframeVisibility)).toEqual([
+    SHOWN_ON_SHORT_MINUTES_ONLY,
+  ]);
+});
+
+test('the timeframe visibility survives an import and is forgotten with its drawing', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const record = {
+    ...storedRecord({ id: 'a-1', belowBars: false }),
+    inputs: { period: 20 },
+    timeframeVisibility: SHOWN_ON_SHORT_MINUTES_ONLY,
+  };
+
+  harness.tools.replaceDrawings([record]);
+  expect(harness.tools.exportDrawings()).toEqual([record]);
+
+  harness.tools.deleteDrawing('a', 'a-1');
+  harness.tools.replaceDrawings([storedRecord({ id: 'a-1', belowBars: false })]);
+  expect(harness.tools.exportDrawings()[0].timeframeVisibility).toEqual(DEFAULT_TIMEFRAME_VISIBILITY);
 });
 
 test('a press picks the topmost drawing of the one order, across tools and below-bars drawings', () => {
@@ -697,7 +832,7 @@ test('a tool that places no drawings answers as if it had none', () => {
   const tools = new ChartToolSet(
     [{ id: 'pointer', placesDrawings: false, toolClass: ArrowTool }],
     'pointer',
-    {} as ChartToolHostBase,
+    hostOn({ timeframe: START_TIMEFRAME }),
     {
       cursorChanged: () => undefined,
       selectionChanged: () => undefined,
@@ -711,17 +846,7 @@ test('a tool that places no drawings answers as if it had none', () => {
   expect(tools.pointerDown(1, 1)).toBe(false);
   tools.setDrawingVisible('pointer', 'missing', false);
   tools.setDrawingInputs('pointer', 'missing', { period: 1 });
-  tools.replaceDrawings([
-    {
-      id: 'a-1',
-      toolId: 'pointer',
-      locked: false,
-      visible: true,
-      belowBars: false,
-      inputs: {},
-      points: [ORIGIN_POINT],
-    },
-  ]);
+  tools.replaceDrawings([{ ...storedRecord({ id: 'a-1', belowBars: false }), toolId: 'pointer' }]);
   expect(tools.exportDrawings()).toEqual([]);
 });
 

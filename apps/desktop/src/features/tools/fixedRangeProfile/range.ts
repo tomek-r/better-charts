@@ -22,6 +22,20 @@ export interface PlacedFixedRangeProfile extends FixedRangeProfileRange {
   lastSlotOpenMs: number;
 }
 
+const MS_PER_MINUTE = 60_000;
+
+/**
+ * The window with both edges on whole-minute boundaries, each rounded to the NEAREST minute (30 s rounds up).
+ * MT5's lowest timeframe is M1, so a tick request must cover whole M1 bars. A window that rounds to nothing
+ * ends one minute after it starts. This is the one place a window is aligned: placement, a boundary drag,
+ * stored anchors and Coordinates edits all pass through it.
+ */
+export function minuteAlignedWindow({ fromMs, endMs }: FixedRangeProfileRange): FixedRangeProfileRange {
+  const alignedFromMs = Math.round(fromMs / MS_PER_MINUTE) * MS_PER_MINUTE;
+  const alignedEndMs = Math.round(endMs / MS_PER_MINUTE) * MS_PER_MINUTE;
+  return { fromMs: alignedFromMs, endMs: alignedEndMs > alignedFromMs ? alignedEndMs : alignedFromMs + MS_PER_MINUTE };
+}
+
 export function sameRange(a: FixedRangeProfileRange, b: FixedRangeProfileRange): boolean {
   return a.fromMs === b.fromMs && a.endMs === b.endMs;
 }
@@ -62,7 +76,7 @@ export function rangeEndingAtAnchor(barSeries: TimeModel, fromMs: number, anchor
     // Same end-exclusive rule as a real bar, stepped by the timeframe from the newest bar.
     const newest = bars[bars.length - 1].time;
     const endSeconds = timeframeBarTime(timeframe, newest, anchor.index - (bars.length - 1) + 1);
-    return { fromMs, endMs: endSeconds * 1000, lastSlotOpenMs: anchor.timeMs };
+    return { ...minuteAlignedWindow({ fromMs, endMs: endSeconds * 1000 }), lastSlotOpenMs: anchor.timeMs };
   }
   const end = anchor.index;
   // Preserve the original end-exclusive rule: the preceding real-bar delta
@@ -75,7 +89,8 @@ export function rangeEndingAtAnchor(barSeries: TimeModel, fromMs: number, anchor
   } else if (bars.length > 1) {
     interval = bars[bars.length - 1].time - bars[bars.length - 2].time;
   }
-  return { fromMs, endMs: (bars[end].time + Math.max(0.001, interval)) * 1000, lastSlotOpenMs: anchor.timeMs };
+  const endMs = (bars[end].time + Math.max(0.001, interval)) * 1000;
+  return { ...minuteAlignedWindow({ fromMs, endMs }), lastSlotOpenMs: anchor.timeMs };
 }
 
 /**

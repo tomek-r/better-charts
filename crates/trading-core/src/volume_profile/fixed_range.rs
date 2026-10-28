@@ -5,25 +5,132 @@ use std::collections::{HashMap, HashSet};
 
 use super::{price_string, Tick, TICK_FLAG_ASK, TICK_FLAG_BID};
 
+/// Rows the default layout aims for.
+pub const DEFAULT_PROFILE_ROWS: usize = 128;
+/// Largest row count a request may ask for.
+pub const MAX_REQUEST_ROWS: usize = 128;
+/// Largest ticks-per-row a request may ask for.
+pub const MAX_TICKS_PER_ROW: u32 = 1000;
+/// Most rows any profile gets: a range that would need more is coarsened.
+pub const MAX_PROFILE_BINS: u32 = 1000;
+/// Value area share the default configuration covers, in percent.
+pub const DEFAULT_VALUE_AREA_PERCENT: u8 = 70;
+
+/// A rejected profile setting; the variants name the violated bound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileSettingError {
+    RowCountOutOfRange,
+    TicksPerRowOutOfRange,
+    ValueAreaPercentOutOfRange,
+}
+
+impl std::fmt::Display for ProfileSettingError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RowCountOutOfRange => {
+                write!(formatter, "rows must be between 1 and {MAX_REQUEST_ROWS}")
+            }
+            Self::TicksPerRowOutOfRange => write!(
+                formatter,
+                "ticks per row must be between 1 and {MAX_TICKS_PER_ROW}"
+            ),
+            Self::ValueAreaPercentOutOfRange => {
+                write!(formatter, "value area percent must be between 1 and 100")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ProfileSettingError {}
+
+/// How the price range is cut into rows.
+///
+/// `Rows` targets a row count; `TicksPerRow` fixes each row's height at
+/// `ticks * tick_size` and lets the row count follow the range. Either way a
+/// range needing more than [`MAX_PROFILE_BINS`] rows is coarsened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RowLayout {
+    Rows { count: usize },
+    TicksPerRow { ticks: u32 },
+}
+
+impl Default for RowLayout {
+    fn default() -> Self {
+        Self::Rows {
+            count: DEFAULT_PROFILE_ROWS,
+        }
+    }
+}
+
+impl RowLayout {
+    /// The bounds a profile request must respect.
+    pub fn validate_request(&self) -> Result<(), ProfileSettingError> {
+        match *self {
+            Self::Rows { count } if !(1..=MAX_REQUEST_ROWS).contains(&count) => {
+                Err(ProfileSettingError::RowCountOutOfRange)
+            }
+            Self::TicksPerRow { ticks } if !(1..=MAX_TICKS_PER_ROW).contains(&ticks) => {
+                Err(ProfileSettingError::TicksPerRowOutOfRange)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// True when the layout cannot define a single row.
+    fn is_degenerate(&self) -> bool {
+        matches!(
+            self,
+            Self::Rows { count: 0 } | Self::TicksPerRow { ticks: 0 }
+        )
+    }
+
+    /// Row height in whole ticks for a range touching `span_ticks` tick-grid
+    /// cells: the requested height, raised to the smallest height that keeps
+    /// the row count within [`MAX_PROFILE_BINS`].
+    fn width_ticks(&self, span_ticks: Decimal) -> Decimal {
+        let requested = match *self {
+            Self::Rows { count } => (span_ticks / Decimal::from(count)).ceil(),
+            Self::TicksPerRow { ticks } => Decimal::from(ticks),
+        };
+        let coarsest_needed = (span_ticks / Decimal::from(MAX_PROFILE_BINS)).ceil();
+        requested.max(coarsest_needed).max(Decimal::ONE)
+    }
+}
+
+/// The value area fraction (`0.01..=1`) of an integer percent in `1..=100`.
+pub fn value_area_fraction(percent: u8) -> Result<Decimal, ProfileSettingError> {
+    if !(1..=100).contains(&percent) {
+        return Err(ProfileSettingError::ValueAreaPercentOutOfRange);
+    }
+    Ok(Decimal::new(i64::from(percent), 2))
+}
+
 /// Configuration for [`calculate_fixed_range_profile`].
 ///
-/// `rows` is the target bin count (default `128`), `tick_size` must be
+/// `layout` cuts the range into rows (default: 128 rows), `tick_size` must be
 /// positive, and `value_area_percent` is the fraction of total weight the
 /// value area must cover (default `0.70`); values outside `[0, 1]` are
 /// clamped.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FixedRangeProfileConfig {
-    pub rows: usize,
+    pub layout: RowLayout,
     pub tick_size: Decimal,
     pub value_area_percent: Decimal,
+}
+
+impl FixedRangeProfileConfig {
+    pub(super) fn cannot_define_rows(&self) -> bool {
+        self.tick_size <= Decimal::ZERO || self.layout.is_degenerate()
+    }
 }
 
 impl Default for FixedRangeProfileConfig {
     fn default() -> Self {
         Self {
-            rows: 128,
+            layout: RowLayout::default(),
             tick_size: Decimal::ONE,
-            value_area_percent: Decimal::new(70, 2),
+            value_area_percent: Decimal::new(i64::from(DEFAULT_VALUE_AREA_PERCENT), 2),
         }
     }
 }
@@ -186,20 +293,24 @@ fn level_strings(
 ///
 /// # Bins
 ///
-/// `rows` is a target bin count, not an exact one. The deterministic width
-/// rule keeps every edge on the `tick_size` grid:
+/// `RowLayout::Rows` is a target bin count, not an exact one;
+/// `RowLayout::TicksPerRow` fixes the width. The deterministic width rule
+/// keeps every edge on the `tick_size` grid:
 ///
 /// 1. `min_aligned = floor(min_price / tick_size) * tick_size` anchors the
 ///    grid at a whole multiple of `tick_size` (over contributing prices only).
 /// 2. `span_ticks = floor((max_price - min_aligned) / tick_size) + 1` counts
 ///    the tick-grid cells the contributing prices touch (always >= 1).
-/// 3. `width_ticks = max(1, ceil(span_ticks / rows))` is the bin width in
-///    whole ticks, so each bin width is a whole multiple of `tick_size`.
+/// 3. `width_ticks` is the bin width in whole ticks, so each bin width is a
+///    whole multiple of `tick_size`: `ceil(span_ticks / rows)` for `Rows`,
+///    `ticks` for `TicksPerRow`, in both cases raised to
+///    `ceil(span_ticks / MAX_PROFILE_BINS)` (the smallest width that keeps the
+///    row count within [`MAX_PROFILE_BINS`]) and never below 1.
 /// 4. Bin `k` covers `[min_aligned + k * width, min_aligned + (k+1) * width)`
 ///    with `width = width_ticks * tick_size`, and a price `p` maps to bin
 ///    `floor((p - min_aligned) / width)`. The actual row count is
-///    `ceil(span_ticks / width_ticks)`, which never exceeds `rows` and is
-///    smaller for a narrow range.
+///    `ceil(span_ticks / width_ticks)`; for `Rows` it never exceeds the target
+///    and it is smaller for a narrow range.
 ///
 /// # Levels
 ///
@@ -214,14 +325,15 @@ fn level_strings(
 ///
 /// An empty range (no valid flagged ticks, zero total weight) returns an
 /// empty histogram with every level `None`, carrying `rejected_ticks` from
-/// the input. A non-positive `tick_size` or `rows == 0` cannot define bins
+/// the input. A non-positive `tick_size` or a zero row count or zero
+/// ticks-per-row cannot define bins
 /// and returns the same empty histogram (with `rejected_ticks == 0`);
 /// `value_area_percent` outside `[0, 1]` is clamped to the nearest bound.
 pub fn calculate_fixed_range_profile(
     config: &FixedRangeProfileConfig,
     ticks: &[Tick],
 ) -> FixedRangeProfile {
-    if config.tick_size <= Decimal::ZERO || config.rows == 0 {
+    if config.cannot_define_rows() {
         return FixedRangeProfile::empty(0);
     }
     let mut rejected_ticks = 0u64;
@@ -256,7 +368,7 @@ fn calculate_fixed_range_contributions(
     contributions: Vec<(Decimal, FixedRangeMode, u64)>,
     rejected_ticks: u64,
 ) -> FixedRangeProfile {
-    if config.tick_size <= Decimal::ZERO || config.rows == 0 {
+    if config.cannot_define_rows() {
         return FixedRangeProfile::empty(0);
     }
     if contributions.is_empty() {
@@ -293,19 +405,18 @@ pub(super) struct RowGrid {
 
 impl RowGrid {
     /// Grid covering `[min_price, max_price]`. The caller guarantees
-    /// `tick_size > 0`, `rows > 0` and `min_price <= max_price`.
+    /// `tick_size > 0`, a non-degenerate layout and `min_price <= max_price`.
     pub(super) fn new(
         min_price: Decimal,
         max_price: Decimal,
         config: &FixedRangeProfileConfig,
     ) -> Self {
         // Deterministic width rule: tick-grid anchor, whole-tick width,
-        // actual_rows = ceil(span_ticks / width_ticks) <= rows.
+        // actual_rows = ceil(span_ticks / width_ticks).
         let min_aligned = (min_price / config.tick_size).floor() * config.tick_size;
         let span_ticks = (((max_price - min_aligned) / config.tick_size).floor() + Decimal::ONE)
             .max(Decimal::ONE);
-        let target_rows = Decimal::from(config.rows as u64);
-        let width_ticks = (span_ticks / target_rows).ceil().max(Decimal::ONE);
+        let width_ticks = config.layout.width_ticks(span_ticks);
         let actual_rows = (span_ticks / width_ticks)
             .ceil()
             .to_usize()

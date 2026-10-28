@@ -156,7 +156,7 @@ pub fn estimate_profile_load(
 /// in its row. POC/VAH/VAL use the tick profile's value-area routine.
 ///
 /// Bars without volume are validated but ignored. No volume at all, or an
-/// unusable configuration (`rows == 0`, non-positive `tick_size`), returns
+/// unusable configuration (no rows, non-positive `tick_size`), returns
 /// the tick profile's empty shape. An invalid bar (non-positive or
 /// unparsable price, `high < low`, `open`/`close` outside `[low, high]`, or
 /// prices too precise to apportion) is an error; nothing is guessed.
@@ -165,7 +165,7 @@ pub fn calculate_bar_profile(
     config: &FixedRangeProfileConfig,
 ) -> Result<FixedRangeProfile, &'static str> {
     let parsed = bars.iter().map(parse_bar).collect::<Result<Vec<_>, _>>()?;
-    if config.tick_size <= Decimal::ZERO || config.rows == 0 {
+    if config.cannot_define_rows() {
         return Ok(FixedRangeProfile::empty(0));
     }
     let mut volume_bars = parsed.iter().filter(|bar| bar.volume > 0).peekable();

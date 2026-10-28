@@ -91,11 +91,6 @@
   font: inherit;
 }
 
-.search-panel > input:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-ring-soft);
-}
-
 .search-hint {
   color: var(--color-muted-strong);
   font-size: 12px;

@@ -12,6 +12,7 @@ mod sqlite_drawing_store;
 mod store;
 #[cfg(test)]
 mod tests;
+mod timeframe_visibility;
 
 use error::ChartDrawingError;
 use record::ChartDrawingRecord;

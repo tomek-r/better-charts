@@ -1,5 +1,6 @@
 import { newChartDrawingId, type ChartDrawingPoint, type ChartToolDrawingRecord } from './drawingRecord';
-import { resolveToolInputValues, type ToolInputValues } from './toolInputs';
+import type { ToolInputValues } from './toolInputs';
+import { assertUniqueToolSettingKeys, resolveToolSettingValues } from './toolSettings';
 import type {
   ChartDrawingAnchor,
   ChartDrawingFactory,
@@ -68,7 +69,9 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     private readonly rules: ChartDrawingRules,
     private readonly factory: ChartDrawingFactory<Drawing>,
     private readonly requestRepaint: () => void,
-  ) {}
+  ) {
+    assertUniqueToolSettingKeys(rules);
+  }
 
   /**
    * Adds a drawing on top of the paint order, unlocked, visible and with the tool's default settings
@@ -182,7 +185,31 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     if (entry === undefined) {
       return false;
     }
-    entry.inputs = resolveToolInputValues(this.rules.inputs, inputs);
+    entry.inputs = resolveToolSettingValues(this.rules, inputs);
+    entry.drawing.settingsChanged?.(entry.inputs);
+    this.requestRepaint();
+    return true;
+  }
+
+  /**
+   * Moves a drawing to new anchors: the tool restores a drawing from them and that one takes the old
+   * one's place, keeping its id, lock, visibility, settings, selection and paint position. False, with
+   * nothing changed, when the id is unknown or the tool refuses the anchors.
+   */
+  setPoints(drawingId: string, points: readonly ChartDrawingPoint[]): boolean {
+    const index = this.kept.findIndex((entry) => entry.id === drawingId);
+    if (index < 0 || !pointsHeldByRule(points, this.rules.points)) {
+      return false;
+    }
+    const drawing = this.factory.restore(points);
+    if (drawing === undefined) {
+      return false;
+    }
+    const { id, locked, visible, inputs, drawing: previous } = this.kept[index];
+    this.kept[index] = { id, drawing, locked, visible, inputs };
+    previous.dispose();
+    drawing.settingsChanged?.(inputs);
+    drawing.visibilityChanged(visible);
     this.requestRepaint();
     return true;
   }
@@ -225,9 +252,10 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
       drawing,
       locked: state.locked ?? false,
       visible: state.visible ?? true,
-      inputs: resolveToolInputValues(this.rules.inputs, state.inputs),
+      inputs: resolveToolSettingValues(this.rules, state.inputs),
     };
     this.kept.push(kept);
+    drawing.settingsChanged?.(kept.inputs);
     drawing.visibilityChanged(kept.visible);
     return kept.id;
   }

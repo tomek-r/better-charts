@@ -36,7 +36,7 @@ fn tick_request(from_ms: i64, to_ms: i64) -> TickProfileRequest {
             to_ms,
             max_ticks: 5000,
         },
-        rows: 32,
+        settings: ProfileSettings::default(),
     }
 }
 
@@ -717,7 +717,6 @@ fn multi_day_profile_streams_past_the_old_tick_cap_and_includes_late_prices() {
     let mut controller = TickCacheController::default();
     let mut request = tick_request(0, 300_000);
     request.wire.max_ticks = 65535;
-    request.rows = 128;
     controller.begin(request.clone());
     let mut pages = 0;
     loop {
@@ -869,7 +868,6 @@ fn remote_price_pages_preserve_all_ticks_reuse_cache_and_never_clip_counts() {
     let mut controller = TickCacheController::default();
     let mut request = tick_request(0, 300_000);
     request.wire.max_ticks = 65535;
-    request.rows = 128;
     controller.begin(request.clone());
     let compact = loop {
         let (generation, page) = controller.next_page().unwrap();

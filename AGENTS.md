@@ -135,6 +135,27 @@ edit generated `target/`, `dist/`, `node_modules/`, `.vite/`, `test-results/`,
   reads it at build time. `apps/desktop/src-tauri/Cargo.toml` must carry the
   same version; the `version_tests` guard in `src-tauri/src/lib.rs` fails until
   it does.
+- Load every matching skill before doing anything else on a request,
+  including resumed or "continue" work and before delegating; never wait to
+  be asked. This applies to subagents too: every subagent loads its matching
+  skills with the Skill tool as its first step, and its prompt names them and
+  says so. Typical matches:
+  contracts and Tauri/bridge APIs → `api-and-interface-design`; new behavior
+  or bugs → `test-driven-development`; multi-file work →
+  `incremental-implementation` (plus `planning-and-task-breakdown` for
+  multi-part features); React/UI → `frontend-ui-engineering`,
+  `vercel-composition-patterns`, `vercel-react-best-practices`; chart
+  rendering and drawing tools → `lightweight-charts-plugin-authoring`; before
+  a commit → `code-review-and-quality` and `git-workflow-and-versioning`.
+- Use only tools and commands that run without a permission prompt: read,
+  search and list files with the Read/Grep/Glob tools and edit with
+  Edit/Write. Bash is for one plain command per call (gates, `git
+  status`/`diff`), with no pipes, chains, redirects, `$()`, heredocs or inline
+  interpreter code (`python3 -c`, `node -e`). Where Grep/Glob are not
+  available (some subagents lack them), list files with `git ls-files <path>`
+  and search with `git grep -n "<literal text>" -- <path>`. Subagent prompts
+  must state the same rule, allow these two commands, and give the key file
+  paths up front.
 
 ## Validation
 

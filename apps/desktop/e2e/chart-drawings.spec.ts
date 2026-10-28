@@ -6,6 +6,10 @@ import type {
   ChartDrawingRecord,
   ChartDrawingSelection,
 } from '../src/features/chart/engine/drawings/drawingRecord';
+import {
+  DEFAULT_TIMEFRAME_VISIBILITY,
+  type DrawingTimeframeVisibility,
+} from '../src/features/chart/engine/drawings/timeframeVisibility';
 import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
 
 /**
@@ -39,6 +43,8 @@ interface CommandAnswers {
   removes: boolean;
   /** Whether the stack accepts the move it is asked for. */
   moves: boolean;
+  /** Whether the tool accepts the anchors it is given. */
+  acceptsPoints: boolean;
 }
 
 /** One call the fake commands received: the method name and the arguments it was given, unchanged. */
@@ -84,6 +90,13 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
     setDrawingInputs: (toolId, drawingId, inputs) => {
       calls.push({ name: 'setDrawingInputs', args: [toolId, drawingId, inputs] });
     },
+    setDrawingTimeframeVisibility: (toolId, drawingId, visibility) => {
+      calls.push({ name: 'setDrawingTimeframeVisibility', args: [toolId, drawingId, visibility] });
+    },
+    setDrawingPoints: (toolId, drawingId, points) => {
+      calls.push({ name: 'setDrawingPoints', args: [toolId, drawingId, points] });
+      return answers.acceptsPoints;
+    },
     exportDrawings: () => {
       calls.push({ name: 'exportDrawings', args: [] });
       return answers.records;
@@ -104,7 +117,16 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
 
 /** One stored drawing under the id, with the flags the list carries through. */
 function recordOf(id: string): ChartDrawingRecord {
-  return { id, toolId: TOOL_ID, locked: false, visible: true, belowBars: false, inputs: {}, points: [ANCHOR] };
+  return {
+    id,
+    toolId: TOOL_ID,
+    locked: false,
+    visible: true,
+    belowBars: false,
+    timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
+    inputs: {},
+    points: [ANCHOR],
+  };
 }
 
 /** One stack entry naming a drawing of these cases' tool. */
@@ -136,7 +158,14 @@ function buildHarness(): Harness {
   const calls: CommandCall[] = [];
   const timeline: string[] = [];
   const selections: Array<ChartDrawingSelection | null> = [];
-  const answers: CommandAnswers = { selection: null, records: [], stack: [], removes: false, moves: false };
+  const answers: CommandAnswers = {
+    selection: null,
+    records: [],
+    stack: [],
+    removes: false,
+    moves: false,
+    acceptsPoints: true,
+  };
   const drawings = new ChartDrawings(commandsFor(answers, calls), () => {
     timeline.push('repaint');
   });
@@ -212,6 +241,26 @@ test('new settings reach the commands with the same arguments and repaint once',
   drawings.setInputs('trend-line', 'line-1', inputs);
   expect(calls).toEqual([{ name: 'setDrawingInputs', args: ['trend-line', 'line-1', inputs] }]);
   expect(timeline).toEqual(['repaint']);
+});
+
+test('a new timeframe setting reaches the commands with the same arguments and repaints once', () => {
+  const { drawings, calls, timeline } = buildHarness();
+  const visibility: DrawingTimeframeVisibility = { ...DEFAULT_TIMEFRAME_VISIBILITY, weeks: false };
+  drawings.setTimeframeVisibility('trend-line', 'line-1', visibility);
+  expect(calls).toEqual([{ name: 'setDrawingTimeframeVisibility', args: ['trend-line', 'line-1', visibility] }]);
+  expect(timeline).toEqual(['repaint']);
+});
+
+test('new anchors go to the commands, repaint, and answer whether the tool accepted them', () => {
+  const { drawings, answers, calls, timeline } = buildHarness();
+  const points = [ANCHOR];
+
+  expect(drawings.setPoints('trend-line', 'line-1', points)).toBe(true);
+  answers.acceptsPoints = false;
+  expect(drawings.setPoints('trend-line', 'line-1', points)).toBe(false);
+
+  expect(calls).toEqual(Array(2).fill({ name: 'setDrawingPoints', args: ['trend-line', 'line-1', points] }));
+  expect(timeline).toEqual(['repaint', 'repaint']);
 });
 
 test('replacing the records hands the same records to the commands and repaints once', () => {

@@ -1,4 +1,4 @@
-import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
+import type { ChartDrawingPoint, ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import {
   DrawingStack,
   drawingRefs,
@@ -7,6 +7,8 @@ import {
   type DrawingStackEntry,
 } from '../drawings/drawingStack';
 import { DrawingSelectionState } from '../drawings/drawingSelection';
+import type { DrawingTimeframeVisibility } from '../drawings/timeframeVisibility';
+import { TimeframeVisibilityStore } from '../drawings/timeframeVisibilityStore';
 import type { ToolInputValues } from '../drawings/toolInputs';
 import type { ChartToolDrawings } from '../drawings/toolDrawings';
 import type {
@@ -87,11 +89,15 @@ export class ChartToolSet {
   /** The selected drawing; the state decides whether a new selection really differs. */
   private readonly selectionState = new DrawingSelectionState((selection) => this.paintSelection(selection));
   private highlight: DrawingHighlight | null = null;
+  /** On which timeframes each drawing paints; the tools never see it, only the paint and hit passes do. */
+  private readonly timeframeVisibility = new TimeframeVisibilityStore();
+  /** The timeframe the last `barsChanged` saw, so a selection is dropped on a switch and not on a live tick. */
+  private lastTimeframe: string;
 
   constructor(
     definitions: readonly ChartToolDefinition[],
     private readonly defaultToolId: string,
-    host: ChartToolHostBase,
+    private readonly host: ChartToolHostBase,
     private readonly listeners: ChartToolSetListeners,
   ) {
     const ids = new Set<string>();
@@ -104,6 +110,7 @@ export class ChartToolSet {
     if (!ids.has(defaultToolId)) {
       throw new Error(`Default chart tool "${defaultToolId}" is not registered`);
     }
+    this.lastTimeframe = host.barSeries.timeframe;
     this.entries = definitions.map((definition) => ({
       definition,
       tool: resolveTool(new definition.toolClass(this.hostFor(definition.id, host))),
@@ -143,16 +150,18 @@ export class ChartToolSet {
   }
 
   /**
-   * Routes a press to the active tool first, which may start a new drawing, then
-   * to every tool so an existing drawing stays editable with no tool active.
-   * A press that lands on a drawing of a finished tool selects it.
+   * Routes a press to the active tool first, which may start a new drawing, then to every tool so an
+   * existing drawing stays editable. A press that selects a drawing only selects it: editing needs a
+   * press on an already selected drawing, because its edit handles show only then.
    */
   pointerDown(x: number, y: number): boolean {
+    const selectionBefore = this.selectionState.current();
     this.selectDrawingAt(x, y);
     const active = this.activeEntry.tool;
+    const mayEdit = this.selectionState.current() === selectionBefore;
     return (
       active.pointerDown(x, y, 'startNewDrawing') ||
-      this.tools().some((tool) => tool !== active && tool.pointerDown(x, y, 'editExistingDrawing'))
+      (mayEdit && this.tools().some((tool) => tool !== active && tool.pointerDown(x, y, 'editExistingDrawing')))
     );
   }
 
@@ -246,6 +255,7 @@ export class ChartToolSet {
       return false;
     }
     this.selectionState.clearIfDrawing(toolId, drawingId);
+    this.timeframeVisibility.remove({ toolId, drawingId });
     this.listeners.drawingsChanged();
     return true;
   }
@@ -272,11 +282,34 @@ export class ChartToolSet {
     this.listeners.drawingsChanged();
   }
 
+  /**
+   * Sets on which timeframes one drawing paints, reported once for saving. A drawing the new setting hides
+   * on the current timeframe loses the selection, like a hidden one; an unknown drawing changes nothing.
+   */
+  setDrawingTimeframeVisibility(toolId: string, drawingId: string, visibility: DrawingTimeframeVisibility): void {
+    if (this.selectionFor(toolId, drawingId) === null) {
+      return;
+    }
+    this.timeframeVisibility.set({ toolId, drawingId }, visibility);
+    this.dropSelectionIfHiddenHere();
+    this.listeners.drawingsChanged();
+  }
+
   /** Applies new settings to one drawing; the owner saves when the tool accepted them. */
   setDrawingInputs(toolId: string, drawingId: string, inputs: ToolInputValues): void {
     if (this.drawingsOf(toolId)?.setInputs(drawingId, inputs) === true) {
       this.listeners.drawingsChanged();
     }
+  }
+
+  /** Moves one drawing to new anchors; answers whether the tool accepted them, and only then reports a change. */
+  setDrawingPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean {
+    if (this.drawingsOf(toolId)?.setPoints(drawingId, points) !== true) {
+      return false;
+    }
+    this.refreshSelectionOf(toolId, drawingId);
+    this.listeners.drawingsChanged();
+    return true;
   }
 
   /** Every drawing in the chart's stacking order, bottom first, stamped with its tool and its side of the bars. */
@@ -299,6 +332,7 @@ export class ChartToolSet {
     for (const { definition, tool } of this.entries) {
       tool.drawings?.importRecords(records.filter((record) => record.toolId === definition.id));
     }
+    this.timeframeVisibility.replace(records);
     this.stack.replace(
       records
         .filter((record) => this.findEntry(record.toolId) !== undefined)
@@ -306,8 +340,14 @@ export class ChartToolSet {
     );
   }
 
+  /** The bars changed; a switch to another timeframe also drops a selection the new timeframe hides. */
   barsChanged(): void {
     this.tools().forEach((tool) => tool.barsChanged());
+    const { timeframe } = this.host.barSeries;
+    if (timeframe !== this.lastTimeframe) {
+      this.lastTimeframe = timeframe;
+      this.dropSelectionIfHiddenHere();
+    }
   }
 
   /** Drops every tool's instrument-, session- or connection-bound state, the drawings and the stacking order. */
@@ -315,6 +355,7 @@ export class ChartToolSet {
     this.changeSelection(null);
     this.tools().forEach((tool) => tool.reset(reason));
     this.stack.clear();
+    this.timeframeVisibility.clear();
   }
 
   disposeTools(): void {
@@ -330,6 +371,7 @@ export class ChartToolSet {
   private hostFor(toolId: string, host: ChartToolHostBase): ChartToolHost {
     return {
       ...host,
+      drawingShownOnTimeframe: (drawingId) => this.isShownHere({ toolId, drawingId }),
       drawingPlaced: (drawingId) => this.commitDrawing(toolId, drawingId),
       drawingsChanged: () => this.listeners.drawingsChanged(),
     };
@@ -374,8 +416,11 @@ export class ChartToolSet {
   private paintDrawings(target: ChartDrawingPaintTarget, refs: readonly DrawingRef[]): void {
     for (const { toolId, drawingId } of refs) {
       const tool = this.findEntry(toolId)?.tool;
-      // A hidden drawing keeps its place in the order but paints nothing.
+      // A hidden drawing, or one the current timeframe hides, keeps its place in the order but paints nothing.
       if (tool === undefined || tool.drawings?.isVisible(drawingId) !== true) {
+        continue;
+      }
+      if (!this.isShownHere({ toolId, drawingId })) {
         continue;
       }
       this.paintIsolated(target.context, () => tool.drawDrawing(target, drawingId));
@@ -394,20 +439,37 @@ export class ChartToolSet {
 
   /** The topmost drawing under a pane point in the chart's stacking order, below-bars drawings included. */
   private hitTestDrawings(x: number, y: number): ChartDrawingSelection | null {
-    for (const { toolId, drawingId } of drawingRefs(this.stackEntries()).reverse()) {
-      if (this.drawingsOf(toolId)?.hits(drawingId, x, y) === true) {
+    for (const ref of drawingRefs(this.stackEntries()).reverse()) {
+      const { toolId, drawingId } = ref;
+      if (this.isShownHere(ref) && this.drawingsOf(toolId)?.hits(drawingId, x, y) === true) {
         return this.selectionFor(toolId, drawingId);
       }
     }
     return null;
   }
 
+  /** Whether the drawing's timeframe setting lets it paint and be hit on the chart's current timeframe. */
+  private isShownHere(ref: DrawingRef): boolean {
+    return this.timeframeVisibility.isShown(ref, this.host.barSeries.timeframe);
+  }
+
+  /** A selection the current timeframe hides is dropped, as hiding the drawing outright drops it. */
+  private dropSelectionIfHiddenHere(): void {
+    const selection = this.selectionState.current();
+    if (selection !== null && !this.isShownHere({ toolId: selection.toolId, drawingId: selection.drawingId })) {
+      this.changeSelection(null);
+    }
+  }
+
   /** One drawing as the app stores it, minus the side of the bars, which only the stacking order knows. */
-  private exportedRecord({ toolId, drawingId }: DrawingRef): Omit<ChartDrawingRecord, 'belowBars'> | undefined {
+  private exportedRecord(ref: DrawingRef): Omit<ChartDrawingRecord, 'belowBars'> | undefined {
+    const { toolId, drawingId } = ref;
     const record = this.drawingsOf(toolId)
       ?.exportRecords()
       .find(({ id }) => id === drawingId);
-    return record === undefined ? undefined : { ...record, toolId };
+    return record === undefined
+      ? undefined
+      : { ...record, toolId, timeframeVisibility: this.timeframeVisibility.of(ref) };
   }
 
   /** The selection for one drawing; its flags come from the tool's exported record. */

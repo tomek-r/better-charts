@@ -4,6 +4,7 @@ import {
   parsePointPrice,
   readChartDrawingRecord,
 } from '../src/features/chart/engine/drawings/drawingRecord';
+import { DEFAULT_TIMEFRAME_VISIBILITY } from '../src/features/chart/engine/drawings/timeframeVisibility';
 import {
   defaultToolInputValues,
   isValidToolInputValue,
@@ -217,6 +218,7 @@ const STORED_DRAWING = {
   locked: false,
   visible: true,
   belowBars: false,
+  timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
   inputs: { period: 20, filled: true, basis: 'hlc3' },
   points: [
     { timeMs: 1_700_000_000_000, price: null },

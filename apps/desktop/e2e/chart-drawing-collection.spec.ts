@@ -280,3 +280,84 @@ test('a missing id changes no drawing, and selecting it clears the selection', (
   expect(collection.isLocked(id)).toBe(false);
   expect(selectedId(collection)).toBeNull();
 });
+
+/** Two time anchors the two-time rule holds, unlike the seeded ones, so a swap is visible in the records. */
+const MOVED_POINTS: ChartDrawingPoint[] = [
+  { timeMs: 2_000, price: null },
+  { timeMs: 3_000, price: null },
+];
+
+/** A locked, hidden drawing with its own settings between two plain ones: every flag setPoints must keep. */
+function collectionWithFlaggedDrawing(): { collection: Collection; id: string; old: FakeDrawingShape; ids: string[] } {
+  const { collection } = buildCollection();
+  const below = collection.add(new FakeDrawingShape(10, [TIME_POINT, TIME_POINT]));
+  const old = new FakeDrawingShape(11, [TIME_POINT, TIME_POINT]);
+  const id = collection.add(old, { locked: true, visible: false, inputs: { period: 30 } });
+  const above = collection.add(new FakeDrawingShape(12, [TIME_POINT, TIME_POINT]));
+  return { collection, id, old, ids: [below, id, above] };
+}
+
+test('moving a drawing to new anchors keeps its id, flags, settings and place in the order', () => {
+  const { collection, id, ids } = collectionWithFlaggedDrawing();
+  collection.select(id);
+
+  expect(collection.setPoints(id, MOVED_POINTS)).toBe(true);
+
+  expect(collection.drawingIds()).toEqual(ids);
+  expect(collection.exportRecords()[1]).toEqual({
+    id,
+    locked: true,
+    visible: false,
+    inputs: { period: 30 },
+    points: MOVED_POINTS,
+  });
+  expect(selectedId(collection)).toBe(id);
+});
+
+test('moving a drawing disposes of the old one and tells the new one its visibility', () => {
+  const { collection, id, old } = collectionWithFlaggedDrawing();
+
+  collection.setPoints(id, MOVED_POINTS);
+
+  expect(old.events).toEqual(['hidden', 'disposed']);
+  const replacement = collection.entries()[1].drawing;
+  expect(replacement).not.toBe(old);
+  expect(replacement.events).toEqual(['hidden']);
+});
+
+test('moving a drawing repaints once', () => {
+  const { collection, repaints } = buildCollection();
+  const id = collection.add(new FakeDrawingShape(10, [TIME_POINT, TIME_POINT]));
+  const repaintsBefore = repaints();
+
+  collection.setPoints(id, MOVED_POINTS);
+
+  expect(repaints()).toBe(repaintsBefore + 1);
+});
+
+test('anchors the rule refuses, or an unknown id, change nothing and answer false', () => {
+  const { collection, id, old } = collectionWithFlaggedDrawing();
+  const before = collection.exportRecords();
+
+  expect(collection.setPoints(id, [TIME_POINT])).toBe(false);
+  expect(collection.setPoints(id, [TIME_POINT, PRICE_POINT])).toBe(false);
+  expect(collection.setPoints('missing', MOVED_POINTS)).toBe(false);
+
+  expect(collection.exportRecords()).toEqual(before);
+  expect(old.events).toEqual(['hidden']);
+});
+
+test('anchors the tool cannot restore change nothing and leave the old drawing alive', () => {
+  const collection = new ChartDrawingCollection<FakeDrawingShape>(
+    { inputs: [], points: TWO_TIME_POINTS },
+    { restore: () => undefined },
+    () => undefined,
+  );
+  const old = new FakeDrawingShape(10, [TIME_POINT, TIME_POINT]);
+  const id = collection.add(old);
+
+  expect(collection.setPoints(id, MOVED_POINTS)).toBe(false);
+
+  expect(collection.entries()[0].drawing).toBe(old);
+  expect(old.events).toEqual(['shown']);
+});

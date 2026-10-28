@@ -1,6 +1,7 @@
 use super::*;
 use crate::volume_profile::{
-    calculate_fixed_range_profile, FixedRangeProfileAccumulator, Tick, TICK_FLAG_ASK, TICK_FLAG_BID,
+    calculate_fixed_range_profile, FixedRangeProfileAccumulator, RowLayout, Tick, TICK_FLAG_ASK,
+    TICK_FLAG_BID,
 };
 
 fn candle(
@@ -25,7 +26,15 @@ fn candle(
 
 fn config(rows: usize, tick_size: &str) -> FixedRangeProfileConfig {
     FixedRangeProfileConfig {
-        rows,
+        layout: RowLayout::Rows { count: rows },
+        tick_size: tick_size.parse().unwrap(),
+        ..FixedRangeProfileConfig::default()
+    }
+}
+
+fn config_with_ticks_per_row(ticks: u32, tick_size: &str) -> FixedRangeProfileConfig {
+    FixedRangeProfileConfig {
+        layout: RowLayout::TicksPerRow { ticks },
         tick_size: tick_size.parse().unwrap(),
         ..FixedRangeProfileConfig::default()
     }
@@ -206,6 +215,31 @@ fn grid_matches_the_tick_profile_for_the_same_extremes() {
             (&tick_bin.low, &tick_bin.high, &tick_bin.center)
         );
     }
+}
+
+#[test]
+fn ticks_per_row_gives_bar_rows_of_a_fixed_height_on_the_tick_grid() {
+    // 100.0..=104.0 at tick 0.5 touches 9 cells; 4 ticks per row is 2.0 high.
+    let bars = [candle("100", "104", "100", "104", 8, 0)];
+    let profile = calculate_bar_profile(&bars, &config_with_ticks_per_row(4, "0.5")).unwrap();
+    let edges = profile
+        .bins
+        .iter()
+        .map(|bin| (bin.low.as_str(), bin.high.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(edges, [("100", "102"), ("102", "104"), ("104", "106")]);
+    assert_eq!(series(&profile).0, [4, 4, 0]);
+    assert_eq!(profile.actual_rows, 3);
+}
+
+#[test]
+fn bar_profile_is_coarsened_to_the_bin_limit_for_ticks_per_row() {
+    // 2001 tick-grid cells at one tick per row would be 2001 rows; the
+    // smallest width within the limit is 3 ticks, which gives 667 rows.
+    let bars = [candle("0.01", "20.01", "0.01", "20.01", 100, 0)];
+    let profile = calculate_bar_profile(&bars, &config_with_ticks_per_row(1, "0.01")).unwrap();
+    assert_eq!(profile.actual_rows, 667);
+    assert_eq!(profile.bins[0].high, "0.04");
 }
 
 #[test]

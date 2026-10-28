@@ -12,7 +12,10 @@ import {
   select,
 } from './helpers/fixedRangeProfilePage';
 import { openTradePanel } from './helpers/panel';
-import { SLOW_PROFILE_SPINNER_DELAY_MS } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
+import {
+  DEFAULT_PROFILE_REQUEST_PARAMS,
+  SLOW_PROFILE_SPINNER_DELAY_MS,
+} from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
 import {
   eurusdFormingBar,
   eurusdQuote,
@@ -36,7 +39,9 @@ for (const higher of [
   { wire: 'M15', label: '15m', intervalMs: 900_000 },
   { wire: 'H1', label: '1H', intervalMs: 3_600_000 },
 ]) {
-  test(`FRVP minute selection retains its time anchors on ${higher.wire}`, async ({ page }, testInfo) => {
+  test(`fixed range volume profile: minute selection retains its time anchors on ${higher.wire}`, async ({
+    page,
+  }, testInfo) => {
     const candles = (intervalMs: number): Candle[] => {
       const lastOpen = Math.floor(STUB_NOW / intervalMs) * intervalMs;
       return Array.from({ length: 11 }, (_, index) => ({
@@ -112,7 +117,9 @@ for (const higher of [
 }
 
 for (const reversed of [false, true]) {
-  test(`FRVP two clicks commit one end-exclusive request (${reversed ? 'reversed' : 'forward'})`, async ({ page }) => {
+  test(`fixed range volume profile: two clicks commit one end-exclusive request (${reversed ? 'reversed' : 'forward'})`, async ({
+    page,
+  }) => {
     const collected = await gotoWithStub(page);
     await ready(page);
     await select(page, reversed ? 6 : 2, reversed ? 2 : 6);
@@ -121,7 +128,7 @@ for (const reversed of [false, true]) {
       symbol: 'EURUSD',
       fromMs: STUB_NOW - 8 * INTERVAL,
       endMs: STUB_NOW - 3 * INTERVAL,
-      rows: 128,
+      ...DEFAULT_PROFILE_REQUEST_PARAMS,
     });
     expect(collected.pageErrors).toEqual([]);
     expect(collected.consoleErrors).toEqual([]);
@@ -149,7 +156,9 @@ test('switching tools mid-gesture cancels the pending profile selection', async 
   expect(await boundaries(page)).toBeNull();
 });
 
-test('FRVP Escape cancels a new preview while preserving the previous committed profile', async ({ page }) => {
+test('fixed range volume profile: Escape cancels a new preview while preserving the previous committed profile', async ({
+  page,
+}) => {
   await commitProfile(page);
   const committed = await profileState(page);
   await page.getByRole('button', { name: 'Fixed range volume profile', exact: true }).click();
@@ -161,7 +170,9 @@ test('FRVP Escape cancels a new preview while preserving the previous committed 
   expect(await requests(page)).toHaveLength(1);
 });
 
-test('FRVP boundary click without movement keeps the committed profile visible', async ({ page }) => {
+test('fixed range volume profile: boundary click without movement keeps the committed profile visible', async ({
+  page,
+}) => {
   await commitProfile(page);
 
   const edge = (await boundaries(page))!;
@@ -177,7 +188,9 @@ test('FRVP boundary click without movement keeps the committed profile visible',
 });
 
 for (const boundary of ['fromX', 'toX'] as const) {
-  test(`FRVP ${boundary} drag requests only once after release and rejects the old result`, async ({ page }) => {
+  test(`fixed range volume profile: ${boundary} drag requests only once after release and rejects the old result`, async ({
+    page,
+  }) => {
     await commitProfile(page);
     const before = (await boundaries(page))!;
     const host = (await page.locator('.chart-host').boundingBox())!;
@@ -197,7 +210,7 @@ for (const boundary of ['fromX', 'toX'] as const) {
   });
 }
 
-test('FRVP cancelled drag restores range and result without requesting; Delete removes the drawing', async ({
+test('fixed range volume profile: cancelled drag restores range and result without requesting; Delete removes the drawing', async ({
   page,
 }) => {
   await commitProfile(page);
@@ -623,6 +636,13 @@ async function commitFutureRange(page: Page) {
   await expect.poll(async () => (await requests(page)).length).toBe(1);
 }
 
+/** Commits the future-ended range and waits until its first profile is painted. */
+async function commitFutureRangeWithProfile(page: Page): Promise<void> {
+  await commitFutureRange(page);
+  await respond(page);
+  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+}
+
 /** Pushes a quote at `quoteMs` and a bar update opening at `barMs`, as the bridge would. */
 async function pushLiveTick(page: Page, quoteMs: number, barMs: number) {
   await pushEvent(page, 'quote-update', eurusdQuote(quoteMs));
@@ -656,7 +676,7 @@ async function expectEndLineAt(page: Page, timeMs: number) {
   await expect.poll(() => endLineGap(page, timeMs)).toBeLessThan(0.001);
 }
 
-test('FRVP end placed in the empty area stays on that future slot and requests up to the quote time', async ({
+test('fixed range volume profile: end placed in the empty area stays on that future slot and requests up to the quote time', async ({
   page,
 }) => {
   await commitFutureRange(page);
@@ -670,21 +690,21 @@ test('FRVP end placed in the empty area stays on that future slot and requests u
     symbol: 'EURUSD',
     fromMs: STUB_NOW - 8 * INTERVAL,
     endMs: STUB_NOW,
-    rows: 128,
+    ...DEFAULT_PROFILE_REQUEST_PARAMS,
   });
 });
 
-test('FRVP a new bar before the end line keeps the line and refreshes with the profile kept', async ({ page }) => {
-  await commitFutureRange(page);
-  await respond(page);
-  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+test('fixed range volume profile: a new bar before the end line keeps the line and refreshes with the profile kept', async ({
+  page,
+}) => {
+  await commitFutureRangeWithProfile(page);
   const quoteMs = STUB_NOW + 120_000;
   await pushLiveTick(page, quoteMs, STUB_NOW);
   await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(2);
   expect((await requests(page))[1].args).toMatchObject({
     fromMs: STUB_NOW - 8 * INTERVAL,
     endMs: quoteMs,
-    rows: 128,
+    ...DEFAULT_PROFILE_REQUEST_PARAMS,
   });
   await expectEndLineAt(page, FUTURE_LINE_MS);
   expect((await boundaries(page))!.range.endMs).toBe(FUTURE_END_MS);
@@ -694,7 +714,7 @@ test('FRVP a new bar before the end line keeps the line and refreshes with the p
   expect(await requests(page)).toHaveLength(2);
 });
 
-test('FRVP bars passing the end line trigger exactly one final refresh', async ({ page }) => {
+test('fixed range volume profile: bars passing the end line trigger exactly one final refresh', async ({ page }) => {
   await commitFutureRange(page);
   await respond(page, 0);
   await pushLiveTick(page, STUB_NOW + 20_000, STUB_NOW);
@@ -717,7 +737,7 @@ test('FRVP bars passing the end line trigger exactly one final refresh', async (
   await expectEndLineAt(page, FUTURE_LINE_MS);
 });
 
-test('FRVP end exactly on the newest bar refreshes while it forms, once after it closes, and stays on it', async ({
+test('fixed range volume profile: end exactly on the newest bar refreshes while it forms, once after it closes, and stays on it', async ({
   page,
 }) => {
   await gotoWithStub(page);
@@ -740,7 +760,7 @@ test('FRVP end exactly on the newest bar refreshes while it forms, once after it
   await expectEndLineAt(page, NEWEST_BAR_MS);
 });
 
-test('FRVP range ended on an older bar does not refresh on live updates', async ({ page }) => {
+test('fixed range volume profile: range ended on an older bar does not refresh on live updates', async ({ page }) => {
   await commitProfile(page);
   expect((await boundaries(page))!.range.endMs).toBe(STUB_NOW - 5 * INTERVAL + INTERVAL * 2);
   await pushLiveTick(page, STUB_NOW + 60_000, STUB_NOW);
@@ -749,10 +769,10 @@ test('FRVP range ended on an older bar does not refresh on live updates', async 
   expect(await requests(page)).toHaveLength(1);
 });
 
-test('FRVP dragging an open end back onto an older bar stops the refreshes', async ({ page }) => {
-  await commitFutureRange(page);
-  await respond(page);
-  await expect.poll(async () => (await profileState(page)).hasProfile).toBe(true);
+test('fixed range volume profile: dragging an open end back onto an older bar stops the refreshes', async ({
+  page,
+}) => {
+  await commitFutureRangeWithProfile(page);
   await dragEndTo(page, 7);
   await expect.poll(async () => (await requests(page)).length).toBe(2);
   expect((await boundaries(page))!.range.endMs).toBe(STUB_NOW - 2 * INTERVAL);
@@ -762,7 +782,9 @@ test('FRVP dragging an open end back onto an older bar stops the refreshes', asy
   expect(await requests(page)).toHaveLength(2);
 });
 
-test('FRVP dragging a fixed end into the empty area opens the range and it refreshes', async ({ page }) => {
+test('fixed range volume profile: dragging a fixed end into the empty area opens the range and it refreshes', async ({
+  page,
+}) => {
   await gotoWithStub(page);
   await ready(page);
   await select(page, 2, 6);
@@ -779,7 +801,7 @@ test('FRVP dragging a fixed end into the empty area opens the range and it refre
   await expectEndLineAt(page, FUTURE_LINE_MS);
 });
 
-test('FRVP refresh waits for a pending request, then follows up', async ({ page }) => {
+test('fixed range volume profile: refresh waits for a pending request, then follows up', async ({ page }) => {
   await commitFutureRange(page);
   for (let step = 1; step <= 3; step += 1) {
     await pushLiveTick(page, STUB_NOW + step * 20_000, STUB_NOW);
@@ -790,7 +812,7 @@ test('FRVP refresh waits for a pending request, then follows up', async ({ page 
   await expect.poll(async () => (await requests(page)).length, { timeout: 5000 }).toBe(2);
 });
 
-test('FRVP reversed two clicks, first in the empty area then on an older bar, end on the future slot', async ({
+test('fixed range volume profile: reversed two clicks, first in the empty area then on an older bar, end on the future slot', async ({
   page,
 }) => {
   await gotoWithStub(page);
@@ -802,7 +824,9 @@ test('FRVP reversed two clicks, first in the empty area then on an older bar, en
 });
 
 for (const boundary of ['fromX', 'toX'] as const) {
-  test(`FRVP crossing ${boundary} clamps to one real candle and commits one request`, async ({ page }) => {
+  test(`fixed range volume profile: crossing ${boundary} clamps to one real candle and commits one request`, async ({
+    page,
+  }) => {
     await requestProfile(page);
     const edge = (await boundaries(page))!;
     const host = (await page.locator('.chart-host').boundingBox())!;
@@ -815,8 +839,8 @@ for (const boundary of ['fromX', 'toX'] as const) {
     await expect.poll(async () => (await requests(page)).length).toBe(2);
     expect((await requests(page))[1].args).toMatchObject(
       boundary === 'fromX'
-        ? { fromMs: STUB_NOW - 4 * INTERVAL, endMs: STUB_NOW - 3 * INTERVAL, rows: 128 }
-        : { fromMs: STUB_NOW - 8 * INTERVAL, endMs: STUB_NOW - 7 * INTERVAL, rows: 128 },
+        ? { fromMs: STUB_NOW - 4 * INTERVAL, endMs: STUB_NOW - 3 * INTERVAL, ...DEFAULT_PROFILE_REQUEST_PARAMS }
+        : { fromMs: STUB_NOW - 8 * INTERVAL, endMs: STUB_NOW - 7 * INTERVAL, ...DEFAULT_PROFILE_REQUEST_PARAMS },
     );
   });
 }
@@ -928,7 +952,7 @@ for (const reset of ['disconnect', 'history'] as const) {
   });
 }
 
-test('FRVP keeps a pending first click and a future end on their times when a new bar opens between clicks', async ({
+test('fixed range volume profile: keeps a pending first click and a future end on their times when a new bar opens between clicks', async ({
   page,
 }) => {
   await gotoWithStub(page);

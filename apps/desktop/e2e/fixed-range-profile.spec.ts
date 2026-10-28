@@ -68,8 +68,11 @@ const ANCHOR_X = 73;
 const BID_COLOR = '#f7525f';
 const ASK_COLOR = '#26a69a';
 
-// maxWeight = 50, half = min(180, 600*0.2) = 120.
-// bid widths 14.4/28.8/7.2 (maxBid 28.8 → profileLeft ≈ 44.2); ask widths 96/28.8/120 (maxAsk 120 → profileRight = 193).
+// The range runs 5 bars (50 px) from the anchor: the histogram extent is 20% of it = 10 px, the mirror axis sits
+// half of that (5 px) inside the range, and each mirrored side is at most 5 px.
+const AXIS_X = ANCHOR_X + 5;
+// maxWeight = 50 stands for 5 px: bid widths 0.6/1.2/0.3 (maxBid 1.2 → profileLeft = 76.8) and ask widths 4/1.2/5
+// (maxAsk 5 → profileRight = 83).
 // Row geometry (priceY): tops 245/205/165, bottom = top+40 → drawHeight 39.
 const TICK_SOURCE = { source: 'ticks', barTimeframe: null, coveredFromMs: null } as const;
 const BAR_SOURCE = { source: 'bars', barTimeframe: 'M1', coveredFromMs: null } as const;
@@ -167,9 +170,9 @@ test('every bid row lies left of the anchor, every ask row right of it', () => {
   let bids = 0;
   let asks = 0;
   for (const row of rows) {
-    const leftOf = row.minX < ANCHOR_X && row.maxX <= ANCHOR_X + 1e-9;
-    const rightOf = row.minX >= ANCHOR_X - 1e-9 && row.maxX > ANCHOR_X;
-    // Exactly one side: no row may straddle the anchor, none is zero-width.
+    const leftOf = row.minX < AXIS_X && row.maxX <= AXIS_X + 1e-9;
+    const rightOf = row.minX >= AXIS_X - 1e-9 && row.maxX > AXIS_X;
+    // Exactly one side: no row may straddle the mirror axis, none is zero-width.
     expect(Number(leftOf) + Number(rightOf)).toBe(1);
     expect(row.maxX - row.minX).toBeGreaterThan(0);
     if (leftOf) {
@@ -181,13 +184,13 @@ test('every bid row lies left of the anchor, every ask row right of it', () => {
   expect(bids).toBe(3);
   expect(asks).toBe(3);
 
-  // hit geometry: profileLeft = anchor − maxBidWidth(28.8) ≈ 44.2, profileRight = anchor + maxAskWidth(120) = 193.
+  // hit geometry: profileLeft = axis − maxBidWidth(1.2) = 76.8, profileRight = axis + maxAskWidth(5) = 83.
   expect(state.hit.anchorX).toBe(ANCHOR_X);
-  expect(state.hit.profileLeft).toBeCloseTo(ANCHOR_X - 28.8, 9);
-  expect(state.hit.profileRight).toBe(ANCHOR_X + 120);
+  expect(state.hit.profileLeft).toBeCloseTo(AXIS_X - 1.2, 9);
+  expect(state.hit.profileRight).toBeCloseTo(AXIS_X + 5, 9);
 });
 
-test('with bid === ask the two rows are symmetric around the anchor', () => {
+test('with bid === ask the two rows are symmetric around the mirror axis', () => {
   const bins: TickProfileBin[] = [
     { low: '140.00', high: '150.00', total: '2', bid: '12', ask: '12' },
     { low: '150.00', high: '160.00', total: '4', bid: '4', ask: '4' },
@@ -195,15 +198,15 @@ test('with bid === ask the two rows are symmetric around the anchor', () => {
   const rows = rowsOf(paint(makeProfile(bins)).ops);
   expect(rows).toHaveLength(4);
 
-  const bidRows = rows.filter((r) => r.maxX <= ANCHOR_X + 1e-9);
-  const askRows = rows.filter((r) => r.minX >= ANCHOR_X - 1e-9);
+  const bidRows = rows.filter((r) => r.maxX <= AXIS_X + 1e-9);
+  const askRows = rows.filter((r) => r.minX >= AXIS_X - 1e-9);
   expect(bidRows).toHaveLength(2);
   expect(askRows).toHaveLength(2);
   for (const bid of bidRows) {
     const twin = askRows.find((ask) => ask.minY === bid.minY);
     expect(twin).toBeDefined();
     // Mirror symmetry: left extent == right extent for the same row.
-    expect(ANCHOR_X - bid.minX).toBeCloseTo((twin as Op).maxX - ANCHOR_X, 9);
+    expect(AXIS_X - bid.minX).toBeCloseTo((twin as Op).maxX - AXIS_X, 9);
   }
 });
 
@@ -216,10 +219,10 @@ test('bid rows paint #f7525f, ask rows #26a69a, nothing else', () => {
   expect([...styles].sort()).toEqual([ASK_COLOR, BID_COLOR].sort());
   for (const row of rows) {
     if (row.style === BID_COLOR) {
-      expect(row.maxX).toBeLessThanOrEqual(ANCHOR_X + 1e-9);
+      expect(row.maxX).toBeLessThanOrEqual(AXIS_X + 1e-9);
     } // left side
     else {
-      expect(row.minX).toBeGreaterThanOrEqual(ANCHOR_X - 1e-9);
+      expect(row.minX).toBeGreaterThanOrEqual(AXIS_X - 1e-9);
     } // right side
   }
 });
@@ -378,12 +381,12 @@ test('a bin with zero bid paints only the ask side', () => {
   const rows = rowsOf(ops);
   expect(rows).toHaveLength(1);
   expect(rows[0].style).toBe(ASK_COLOR);
-  expect(rows[0].minX).toBe(ANCHOR_X);
-  expect(rows[0].maxX).toBeCloseTo(ANCHOR_X + 120, 9); // half × 50/50 = 120
+  expect(rows[0].minX).toBe(AXIS_X);
+  expect(rows[0].maxX).toBeCloseTo(AXIS_X + 5, 9); // half the extent × 50/50 = 5
   expect(ops.some((op) => op.style === BID_COLOR)).toBe(false);
-  // No bid side → profileLeft collapses onto the anchor; right edge = anchor + 120.
-  expect(state.hit.profileLeft).toBe(ANCHOR_X);
-  expect(state.hit.profileRight).toBeCloseTo(ANCHOR_X + 120, 9);
+  // No bid side → profileLeft collapses onto the mirror axis; right edge = axis + 5.
+  expect(state.hit.profileLeft).toBeCloseTo(AXIS_X, 9);
+  expect(state.hit.profileRight).toBeCloseTo(AXIS_X + 5, 9);
 });
 
 test('weights arriving as strings parse exactly like numbers', () => {
@@ -397,13 +400,13 @@ test('weights arriving as strings parse exactly like numbers', () => {
   const fromNumbers = paint(numberProfile);
   expect(fromStrings.ops).toEqual(fromNumbers.ops); // identical paint for identical weights
 
-  // And the widths prove the parse: maxWeight 12 → bid 120, ask 60.
+  // And the widths prove the parse: maxWeight 12 → bid 5, ask 2.5.
   const rows = rowsOf(fromStrings.ops);
   expect(rows).toHaveLength(2);
   const bid = rows.find((r) => r.style === BID_COLOR);
   const ask = rows.find((r) => r.style === ASK_COLOR);
-  expect(ANCHOR_X - (bid as Op).minX).toBeCloseTo(120, 9);
-  expect((ask as Op).maxX - ANCHOR_X).toBeCloseTo(60, 9);
+  expect(AXIS_X - (bid as Op).minX).toBeCloseTo(5, 9);
+  expect((ask as Op).maxX - AXIS_X).toBeCloseTo(2.5, 9);
 });
 
 test('a weight that does not parse defensively counts as zero', () => {

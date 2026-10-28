@@ -1,3 +1,4 @@
+import { readTimeframeVisibility, type DrawingTimeframeVisibility } from './timeframeVisibility';
 import { isPlainRecord, isToolInputValues, type ToolInputValues } from './toolInputs';
 
 /**
@@ -36,6 +37,11 @@ export interface ChartDrawingRecord extends ChartToolDrawingRecord {
    * sides of the bars.
    */
   readonly belowBars: boolean;
+  /**
+   * On which timeframes the drawing paints. Like `belowBars` it belongs to the tool set, not to the
+   * tool's own record, and a payload stored before it existed reads as shown everywhere.
+   */
+  readonly timeframeVisibility: DrawingTimeframeVisibility;
 }
 
 /** The drawing the user picked: which tool owns it, and whether it is locked and shown. */
@@ -76,7 +82,7 @@ export function readChartDrawingRecord(value: unknown): ChartDrawingRecord | und
   if (!isPlainRecord(value)) {
     return undefined;
   }
-  const { id, toolId, locked, visible, belowBars, inputs, points } = value;
+  const { id, toolId, locked, visible, belowBars, timeframeVisibility, inputs, points } = value;
   if (!isPresentString(id) || !isPresentString(toolId)) {
     return undefined;
   }
@@ -88,7 +94,16 @@ export function readChartDrawingRecord(value: unknown): ChartDrawingRecord | und
   if (below === undefined || anchors === undefined) {
     return undefined;
   }
-  return { id, toolId, locked, visible, belowBars: below, inputs, points: anchors };
+  return {
+    id,
+    toolId,
+    locked,
+    visible,
+    belowBars: below,
+    timeframeVisibility: readTimeframeVisibility(timeframeVisibility),
+    inputs,
+    points: anchors,
+  };
 }
 
 /** Whether the drawing sits below the bars; a payload stored before the flag existed means false. */

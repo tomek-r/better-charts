@@ -27,7 +27,7 @@ fn merged_remote_price_counts_match_raw_ticks_and_grid_fallback() {
         .unwrap();
     assert_eq!(counts.inferred_tick_size(), Decimal::from(10));
     let config = FixedRangeProfileConfig {
-        rows: 128,
+        layout: RowLayout::Rows { count: 128 },
         tick_size: counts.inferred_tick_size(),
         ..Default::default()
     };
@@ -241,8 +241,16 @@ fn planner_matches_coverage_for_unsorted_overlapping_and_clipped_cache() {
 
 fn fixed_config(rows: usize) -> FixedRangeProfileConfig {
     FixedRangeProfileConfig {
-        rows,
+        layout: RowLayout::Rows { count: rows },
         tick_size: Decimal::ONE,
+        value_area_percent: Decimal::new(70, 2),
+    }
+}
+
+fn ticks_per_row_config(ticks: u32, tick_size: Decimal) -> FixedRangeProfileConfig {
+    FixedRangeProfileConfig {
+        layout: RowLayout::TicksPerRow { ticks },
+        tick_size,
         value_area_percent: Decimal::new(70, 2),
     }
 }
@@ -376,7 +384,7 @@ fn invalid_quotes_are_rejected_and_counted() {
 #[test]
 fn bins_align_to_tick_grid_and_respect_row_target() {
     let config = FixedRangeProfileConfig {
-        rows: 8,
+        layout: RowLayout::Rows { count: 8 },
         tick_size: Decimal::new(25, 2), // 0.25
         value_area_percent: Decimal::new(70, 2),
     };
@@ -401,7 +409,7 @@ fn bins_align_to_tick_grid_and_respect_row_target() {
         "64 tick cells over target 8 -> 8 bins"
     );
     assert_eq!(profile.bins.len(), profile.actual_rows);
-    assert!(profile.actual_rows <= config.rows);
+    assert!(profile.actual_rows <= 8);
     for bin in &profile.bins {
         let low: Decimal = bin.low.parse().unwrap();
         let high: Decimal = bin.high.parse().unwrap();
@@ -445,7 +453,7 @@ fn narrow_range_produces_fewer_rows_than_target() {
     let profile = calculate_fixed_range_profile(&config, &ticks);
     assert_eq!(profile.actual_rows, 4, "3 tick cells + grid alignment");
     assert!(
-        profile.actual_rows < config.rows,
+        profile.actual_rows < DEFAULT_PROFILE_ROWS,
         "narrow range shrinks below target"
     );
     assert_eq!(profile.bins[0].low, "100");
@@ -610,6 +618,153 @@ fn invalid_configuration_yields_empty_profile() {
     assert!(profile.bins.is_empty());
     assert_eq!(profile.total_weight, 0);
     assert_eq!(profile.poc, None);
+
+    let config = ticks_per_row_config(0, Decimal::ONE);
+    let profile = calculate_fixed_range_profile(&config, &ticks);
+    assert!(profile.bins.is_empty());
+    assert_eq!(profile.total_weight, 0);
+}
+
+#[test]
+fn ticks_per_row_edges_are_multiples_of_the_tick_size() {
+    let tick_size = Decimal::new(25, 2); // 0.25
+    let ticks = vec![
+        tick(1, 100, 101, TICK_FLAG_BID),
+        Tick {
+            time_millis: 2,
+            bid: Decimal::new(10575, 2), // 105.75
+            ask: Decimal::new(10600, 2),
+            flags: TICK_FLAG_BID,
+        },
+    ];
+    // 24 tick cells at 4 ticks (1.00) per row: 6 rows from 100 to 106.
+    let profile = calculate_fixed_range_profile(&ticks_per_row_config(4, tick_size), &ticks);
+    assert_eq!(profile.actual_rows, 6);
+    assert_eq!(profile.bins[0].low, "100");
+    assert_eq!(profile.bins[5].high, "106");
+    for bin in &profile.bins {
+        let low: Decimal = bin.low.parse().unwrap();
+        let high: Decimal = bin.high.parse().unwrap();
+        assert_eq!(high - low, Decimal::ONE);
+        assert_eq!((low / tick_size).fract(), Decimal::ZERO);
+    }
+    assert_eq!(profile.bins[0].total, 1);
+    assert_eq!(profile.bins[5].total, 1);
+}
+
+#[test]
+fn ticks_per_row_row_count_follows_the_range() {
+    let narrow = [
+        tick(1, 10, 11, TICK_FLAG_BID),
+        tick(2, 19, 20, TICK_FLAG_BID),
+    ];
+    let wide = [
+        tick(1, 10, 11, TICK_FLAG_BID),
+        tick(2, 49, 50, TICK_FLAG_BID),
+    ];
+    let config = ticks_per_row_config(5, Decimal::ONE);
+    // 10 cells -> 2 rows; 40 cells -> 8 rows.
+    assert_eq!(
+        calculate_fixed_range_profile(&config, &narrow).actual_rows,
+        2
+    );
+    assert_eq!(calculate_fixed_range_profile(&config, &wide).actual_rows, 8);
+}
+
+#[test]
+fn ticks_per_row_is_coarsened_to_the_smallest_width_within_the_bin_limit() {
+    let at_limit = [
+        tick(1, 1, 2, TICK_FLAG_BID),
+        tick(2, 1000, 1001, TICK_FLAG_BID),
+    ];
+    let config = ticks_per_row_config(1, Decimal::ONE);
+    let profile = calculate_fixed_range_profile(&config, &at_limit);
+    assert_eq!(profile.actual_rows, 1000, "exactly the limit is kept");
+
+    // 2001 cells at 1 tick per row would need 2001 rows; 3 ticks is the
+    // smallest width that fits (2 ticks still gives 1001 rows).
+    let beyond = [
+        tick(1, 1, 2, TICK_FLAG_BID),
+        tick(2, 2001, 2002, TICK_FLAG_BID),
+    ];
+    let profile = calculate_fixed_range_profile(&config, &beyond);
+    assert_eq!(profile.actual_rows, 667);
+    assert_eq!(profile.bins[0].high, "4");
+    assert_eq!(calculate_fixed_range_profile(&config, &beyond), profile);
+}
+
+#[test]
+fn a_row_count_above_the_bin_limit_is_coarsened_too() {
+    let beyond = [
+        tick(1, 1, 2, TICK_FLAG_BID),
+        tick(2, 2001, 2002, TICK_FLAG_BID),
+    ];
+    let profile = calculate_fixed_range_profile(&fixed_config(5000), &beyond);
+    assert_eq!(profile.actual_rows, 667);
+}
+
+#[test]
+fn value_area_widens_with_its_percent() {
+    // Weights [1,5,2,8,1]: total 17, POC bin 3.
+    let ticks = weighted(100, &[1, 5, 2, 8, 1]);
+    let levels = |percent: u8| {
+        let config = FixedRangeProfileConfig {
+            value_area_percent: value_area_fraction(percent).unwrap(),
+            ..fixed_config(128)
+        };
+        let profile = calculate_fixed_range_profile(&config, &ticks);
+        (profile.val.unwrap(), profile.vah.unwrap())
+    };
+    // 50%: target 8.5; the POC alone is 8, adding bin 2 (2) reaches 10.
+    assert_eq!(levels(50), ("102".to_owned(), "104".to_owned()));
+    // 70%: target 11.9; bin 2 then bin 1 (5) reaches 15.
+    assert_eq!(levels(70), ("101".to_owned(), "104".to_owned()));
+    // 100%: every bin is included.
+    assert_eq!(levels(100), ("100".to_owned(), "105".to_owned()));
+}
+
+#[test]
+fn invalid_profile_settings_are_rejected() {
+    assert_eq!(
+        RowLayout::Rows { count: 0 }.validate_request(),
+        Err(ProfileSettingError::RowCountOutOfRange)
+    );
+    assert_eq!(
+        RowLayout::Rows { count: 129 }.validate_request(),
+        Err(ProfileSettingError::RowCountOutOfRange)
+    );
+    assert_eq!(
+        RowLayout::TicksPerRow { ticks: 0 }.validate_request(),
+        Err(ProfileSettingError::TicksPerRowOutOfRange)
+    );
+    assert_eq!(
+        RowLayout::TicksPerRow { ticks: 1001 }.validate_request(),
+        Err(ProfileSettingError::TicksPerRowOutOfRange)
+    );
+    assert_eq!(RowLayout::Rows { count: 128 }.validate_request(), Ok(()));
+    assert_eq!(
+        RowLayout::TicksPerRow { ticks: 1000 }.validate_request(),
+        Ok(())
+    );
+    assert_eq!(
+        value_area_fraction(0),
+        Err(ProfileSettingError::ValueAreaPercentOutOfRange)
+    );
+    assert_eq!(
+        value_area_fraction(101),
+        Err(ProfileSettingError::ValueAreaPercentOutOfRange)
+    );
+    assert_eq!(value_area_fraction(70), Ok(Decimal::new(70, 2)));
+    assert_eq!(value_area_fraction(100), Ok(Decimal::ONE));
+}
+
+#[test]
+fn row_layout_uses_the_tagged_camel_case_request_shape() {
+    let rows: RowLayout = serde_json::from_str(r#"{"kind":"rows","count":64}"#).unwrap();
+    assert_eq!(rows, RowLayout::Rows { count: 64 });
+    let ticks: RowLayout = serde_json::from_str(r#"{"kind":"ticksPerRow","ticks":4}"#).unwrap();
+    assert_eq!(ticks, RowLayout::TicksPerRow { ticks: 4 });
+    assert!(serde_json::from_str::<RowLayout>(r#"{"kind":"bins","count":4}"#).is_err());
 }
 #[test]
 fn streamed_profile_equals_batch_with_late_price_extremes_and_flag_changes() {

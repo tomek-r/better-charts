@@ -12,8 +12,10 @@ pub use bar_profile::{
 };
 pub use bar_series::{BarCoverage, BarSeries, BarSeriesError};
 pub use fixed_range::{
-    calculate_fixed_range_profile, FixedRangeBin, FixedRangeProfile, FixedRangeProfileAccumulator,
-    FixedRangeProfileConfig,
+    calculate_fixed_range_profile, value_area_fraction, FixedRangeBin, FixedRangeProfile,
+    FixedRangeProfileAccumulator, FixedRangeProfileConfig, ProfileSettingError, RowLayout,
+    DEFAULT_PROFILE_ROWS, DEFAULT_VALUE_AREA_PERCENT, MAX_PROFILE_BINS, MAX_REQUEST_ROWS,
+    MAX_TICKS_PER_ROW,
 };
 pub use legacy::{
     calculate_volume_profile, ProfileBin, VolumeProfile, VolumeProfileConfig, VolumeProfileError,

@@ -1,3 +1,4 @@
+import type { DrawingTimeframeVisibility } from '../../src/features/chart/engine/drawings/timeframeVisibility';
 import { STUB_M5_INTERVAL_MS, STUB_NOW } from './tauriStub';
 
 /**
@@ -11,16 +12,19 @@ export interface SavedProfileFlags {
   readonly visible: boolean;
   /** Painted under the price bars; a record without the flag sits above them. */
   readonly belowBars?: boolean;
+  /** On which timeframes it paints; a record without the setting shows everywhere. */
+  readonly timeframeVisibility?: DrawingTimeframeVisibility;
 }
 
 /** One profile record, as the stub's backend holds it. */
-export function savedProfile(id: string, { locked, visible, belowBars }: SavedProfileFlags) {
+export function savedProfile(id: string, { locked, visible, belowBars, timeframeVisibility }: SavedProfileFlags) {
   return {
     id,
     toolId: 'fixedRangeProfile',
     locked,
     visible,
     belowBars,
+    timeframeVisibility,
     inputs: {},
     points: [
       { timeMs: STUB_NOW - 8 * STUB_M5_INTERVAL_MS, price: null },

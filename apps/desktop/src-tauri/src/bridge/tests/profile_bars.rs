@@ -2,7 +2,9 @@
 use super::common::*;
 use super::*;
 use crate::bridge::profile_bars::{BarPageOutcome, BarPhase};
+use rust_decimal::Decimal;
 use trading_core::protocol::{HistorySnapshot, MarketCandle};
+use trading_core::volume_profile::{RowLayout, DEFAULT_VALUE_AREA_PERCENT};
 
 pub(super) const RANGE_FROM: i64 = 1_000_000_000_000;
 pub(super) const RANGE_END: i64 = RANGE_FROM + 86_400_000;
@@ -27,7 +29,7 @@ pub(super) fn profile_request() -> TickProfileRequest {
             to_ms: RANGE_END,
             max_ticks: 5000,
         },
-        rows: 128,
+        settings: ProfileSettings::default(),
     }
 }
 
@@ -525,9 +527,104 @@ fn connected_state() -> BridgeState {
 }
 
 fn start(state: &BridgeState) {
-    request_tick_profile_inner(state, "EURUSD".into(), RANGE_FROM, RANGE_END, 128)
-        .map(|_| ())
+    start_with(state, RowLayout::default(), DEFAULT_VALUE_AREA_PERCENT).unwrap();
+}
+
+fn start_with(
+    state: &BridgeState,
+    layout: RowLayout,
+    value_area_percent: u8,
+) -> Result<(), String> {
+    request_tick_profile_inner(
+        state,
+        "EURUSD".into(),
+        RANGE_FROM,
+        RANGE_END,
+        layout,
+        value_area_percent,
+    )
+    .map(|_| ())
+}
+
+#[test]
+fn tick_load_carries_the_requested_settings() {
+    let state = connected_state();
+    let layout = RowLayout::TicksPerRow { ticks: 4 };
+    start_with(&state, layout, 55).unwrap();
+    let queued = state.pending_tick_profile.lock().unwrap().clone().unwrap();
+    assert_eq!(queued.settings.layout, layout);
+    assert_eq!(queued.settings.value_area, Decimal::new(55, 2));
+}
+
+#[test]
+fn bar_estimate_carries_the_requested_settings() {
+    let state = connected_state();
+    seed_symbol(&state, "EURUSD");
+    let layout = RowLayout::TicksPerRow { ticks: 4 };
+    start_with(&state, layout, 55).unwrap();
+    let request = state
+        .tick_controller
+        .lock()
+        .unwrap()
+        .bar_job_request()
         .unwrap();
+    assert_eq!(request.settings.layout, layout);
+    assert_eq!(request.settings.value_area, Decimal::new(55, 2));
+}
+
+#[test]
+fn profile_request_with_invalid_settings_queues_nothing() {
+    let state = connected_state();
+    seed_symbol(&state, "EURUSD");
+    let invalid = [
+        (
+            RowLayout::Rows { count: 0 },
+            70,
+            "rows must be between 1 and 128",
+        ),
+        (
+            RowLayout::Rows { count: 129 },
+            70,
+            "rows must be between 1 and 128",
+        ),
+        (
+            RowLayout::TicksPerRow { ticks: 0 },
+            70,
+            "ticks per row must be between 1 and 1000",
+        ),
+        (
+            RowLayout::TicksPerRow { ticks: 1001 },
+            70,
+            "ticks per row must be between 1 and 1000",
+        ),
+        (
+            RowLayout::default(),
+            0,
+            "value area percent must be between 1 and 100",
+        ),
+        (
+            RowLayout::default(),
+            101,
+            "value area percent must be between 1 and 100",
+        ),
+    ];
+    for (layout, percent, message) in invalid {
+        assert_eq!(start_with(&state, layout, percent), Err(message.to_owned()));
+    }
+    assert!(state.pending_profile_bars.lock().unwrap().is_none());
+    assert!(state.pending_tick_profile.lock().unwrap().is_none());
+}
+
+#[test]
+fn bar_profile_follows_the_requested_layout_and_value_area() {
+    let state = connected_state();
+    seed_symbol(&state, "EURUSD");
+    let mut request = profile_request();
+    request.settings.layout = RowLayout::TicksPerRow { ticks: 2 };
+    let bars = vec![bar(RANGE_FROM, 10)];
+    let result = build_bar_profile(&state, &request, "M5", &bars).unwrap();
+    // 100.0..100.5 at tick 0.1 is 6 cells; 2 ticks per row gives 3 rows.
+    assert_eq!(result.actual_rows, 3);
 }
 
 #[test]

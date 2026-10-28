@@ -13,6 +13,8 @@ import {
 const FOCUSABLE_SELECTOR =
   'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
+const OWNS_KEYBOARD_SELECTOR = '[role="dialog"], [aria-haspopup][aria-expanded="true"]';
+
 /** `compact` for short confirmations, `wide` for a tall multi-section dialog. */
 export type ModalDialogSize = 'compact' | 'wide';
 
@@ -114,8 +116,10 @@ export function ModalDialog({
     const panelElement = panel.current;
     (initialFocusRef?.current ?? (panelElement ? focusableElements(panelElement)[0] : null) ?? panelElement)?.focus();
     const onKey = (event: KeyboardEvent) => {
-      // A dialog nested in the panel (e.g. a guide opened from the body) owns the keyboard.
-      if (panelElement?.querySelector('[role="dialog"]')) {
+      // A dialog nested in the panel (e.g. a guide opened from the body) owns the keyboard, and so does a
+      // popup (a drop-down list, a colour picker) opened by a control of the panel: it is portalled out of
+      // the panel, so its keys would otherwise be swallowed here and Escape would close the whole modal.
+      if (panelElement?.querySelector(OWNS_KEYBOARD_SELECTOR)) {
         return;
       }
       const isModalKey = event.key === 'Escape' || event.key === 'Tab';

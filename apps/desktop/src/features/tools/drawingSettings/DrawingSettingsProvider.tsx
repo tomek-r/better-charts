@@ -1,22 +1,25 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
 import type { ChartDrawings } from '../../chart/engine/drawings/chartDrawings';
-import type { ChartDrawingSelection } from '../../chart/engine/drawings/drawingRecord';
+import type { ChartDrawingPoint, ChartDrawingSelection } from '../../chart/engine/drawings/drawingRecord';
 import {
-  resolveToolInputValues,
-  type ToolInputDefinition,
-  type ToolInputValues,
-} from '../../chart/engine/drawings/toolInputs';
+  DEFAULT_TIMEFRAME_VISIBILITY,
+  type DrawingTimeframeVisibility,
+} from '../../chart/engine/drawings/timeframeVisibility';
+import type { ToolInputValues } from '../../chart/engine/drawings/toolInputs';
+import { resolveToolSettingValues, type ToolSettingsSchema } from '../../chart/engine/drawings/toolSettings';
 import { useChartResources } from '../../chart/ChartWorkspaceProvider';
 import { useRequiredContext } from '../../../shared/state/useRequiredContext';
 import { useDrawingSelection } from '../drawingToolbar/useDrawingSelection';
 import { CHART_TOOL_PLUGINS } from '../registry';
-import { DrawingSettingsDialog } from './DrawingSettingsDialog';
+import { DrawingSettingsDialog, type DrawingSettingsDialogProps } from './DrawingSettingsDialog';
 
 /** The drawing whose settings are open, with the values the dialog started from. */
 interface OpenDrawingSettings {
   readonly toolId: string;
   readonly drawingId: string;
   readonly values: ToolInputValues;
+  readonly points: readonly ChartDrawingPoint[];
+  readonly timeframeVisibility: DrawingTimeframeVisibility;
 }
 
 /** What the app shares about drawing settings: the one command that opens them. */
@@ -26,15 +29,26 @@ interface DrawingSettingsContextValue {
 
 const DrawingSettingsContext = createContext<DrawingSettingsContextValue | null>(null);
 
-/** A drawing's stored settings, with each definition's default filling the gaps. */
-function storedInputValues(
+/** What a drawing stores that the dialog edits: settings with each default filling the gaps, anchors and timeframes. */
+function storedDrawingState(
   drawings: ChartDrawings | undefined,
   toolId: string,
   drawingId: string,
-  definitions: readonly ToolInputDefinition[],
-): ToolInputValues {
+  settings: ToolSettingsSchema,
+): Pick<OpenDrawingSettings, 'values' | 'points' | 'timeframeVisibility'> {
   const record = drawings?.exportRecords().find((entry) => entry.toolId === toolId && entry.id === drawingId);
-  return resolveToolInputValues(definitions, record?.inputs);
+  return {
+    values: resolveToolSettingValues(settings, record?.inputs),
+    points: record?.points ?? [],
+    timeframeVisibility: record?.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY,
+  };
+}
+
+type ChartResourcesRef = ReturnType<typeof useChartResources>['chart'];
+
+/** The drawings of the mounted chart, read at call time rather than during render. */
+function drawingsOf(chart: ChartResourcesRef): ChartDrawings | undefined {
+  return chart.current?.drawings;
 }
 
 /**
@@ -53,7 +67,7 @@ export function useOpenDrawingSettings(): (toolId: string, drawingId: string) =>
 interface OpenDrawingSettingsDialogProps {
   readonly target: OpenDrawingSettings | null;
   readonly selection: ChartDrawingSelection | null;
-  readonly onSave: (values: ToolInputValues) => void;
+  readonly onSave: DrawingSettingsDialogProps['onSave'];
   readonly onClose: () => void;
 }
 
@@ -73,8 +87,10 @@ function OpenDrawingSettingsDialog({ target, selection, onSave, onClose }: OpenD
   return (
     <DrawingSettingsDialog
       label={plugin.label}
-      definitions={plugin.inputs ?? []}
+      settings={plugin}
       initialValues={target.values}
+      initialPoints={target.points}
+      initialTimeframeVisibility={target.timeframeVisibility}
       onSave={onSave}
       onClose={onClose}
     />
@@ -96,25 +112,35 @@ export function DrawingSettingsProvider({ children }: DrawingSettingsProviderPro
 
   const openDrawingSettings = useCallback(
     (toolId: string, drawingId: string) => {
-      const drawings = chart.current?.drawings;
+      const drawings = drawingsOf(chart);
       const plugin = CHART_TOOL_PLUGINS.find((entry) => entry.id === toolId);
       if (plugin === undefined) {
         return;
       }
       // Opening selects the drawing too, so the dialog clears itself when another drawing is picked.
       drawings?.select(toolId, drawingId);
-      setTarget({ toolId, drawingId, values: storedInputValues(drawings, toolId, drawingId, plugin.inputs ?? []) });
+      const stored = storedDrawingState(drawings, toolId, drawingId, plugin);
+      setTarget({ toolId, drawingId, ...stored });
     },
     [chart],
   );
 
   const contextValue = useMemo(() => ({ openDrawingSettings }), [openDrawingSettings]);
 
-  const saveSettings = (values: ToolInputValues) => {
-    if (target !== null) {
-      chart.current?.drawings.setInputs(target.toolId, target.drawingId, values);
+  const saveSettings: DrawingSettingsDialogProps['onSave'] = (values, points, timeframeVisibility) => {
+    const drawings = chart.current?.drawings;
+    if (target !== null && drawings !== undefined) {
+      // Anchors go first and only when edited: a refusal leaves the dialog open with nothing applied.
+      if (points !== undefined && !drawings.setPoints(target.toolId, target.drawingId, points)) {
+        return false;
+      }
+      drawings.setInputs(target.toolId, target.drawingId, values);
+      if (timeframeVisibility !== undefined) {
+        drawings.setTimeframeVisibility(target.toolId, target.drawingId, timeframeVisibility);
+      }
     }
     setTarget(null);
+    return true;
   };
 
   const closeSettings = () => {

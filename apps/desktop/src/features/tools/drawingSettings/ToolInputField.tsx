@@ -13,13 +13,14 @@ interface ToolInputFieldValues {
   readonly definition: ToolInputDefinition;
   readonly value: ToolInputValue;
   readonly onChange: (value: ToolInputValue) => void;
+  readonly disabled: boolean;
 }
 
 /**
  * One setting of a drawing: its title as a label, the control its kind asks for, and its tooltip as the
  * control's description. A draft value the kind rejects marks the control invalid.
  */
-export function ToolInputField({ definition, value, onChange }: ToolInputFieldValues) {
+export function ToolInputField({ definition, value, onChange, disabled }: ToolInputFieldValues) {
   const controlId = useId();
   const tooltipId = `${controlId}-tooltip`;
   const hasTooltip = definition.tooltip !== undefined;
@@ -36,6 +37,7 @@ export function ToolInputField({ definition, value, onChange }: ToolInputFieldVa
         controlId,
         tooltipId: hasTooltip ? tooltipId : undefined,
         invalid: !isValidToolInputValue(definition, value),
+        disabled,
       })}
       {hasTooltip ? (
         <span id={tooltipId} className="visually-hidden">

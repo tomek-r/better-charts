@@ -82,7 +82,10 @@ export async function respond(page: Page, requestIndex = 0, complete = true) {
   });
 }
 
-/** Loads the app, draws the default FRVP range and waits until its profile request left the app. */
+/**
+ * Loads the app, draws the default fixed range volume profile range and waits until its profile
+ * request left the app.
+ */
 export async function requestProfile(page: Page) {
   await gotoWithStub(page);
   await ready(page);

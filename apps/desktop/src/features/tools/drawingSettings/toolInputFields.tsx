@@ -5,6 +5,7 @@ import {
   type ToolInputValue,
 } from '../../chart/engine/drawings/toolInputs';
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
+import { Select, type SelectOption } from '../../../shared/ui/Select';
 
 /** What one field is given: its definition, the draft value, and the ids its label needs. */
 export interface ToolInputFieldProps<Kind extends ToolInputDefinition['kind']> {
@@ -17,6 +18,8 @@ export interface ToolInputFieldProps<Kind extends ToolInputDefinition['kind']> {
   readonly tooltipId: string | undefined;
   /** Whether the draft value still fails its own kind's rule. */
   readonly invalid: boolean;
+  /** Whether the definition's `activeWhen` currently locks the control; its value is kept. */
+  readonly disabled: boolean;
 }
 
 /**
@@ -30,12 +33,6 @@ type FieldPropsFor<Kinds extends ToolInputDefinition['kind']> = Kinds extends To
 /** The kinds a drop-down shows: a string with options, plus the three kinds that always list them. */
 type ChoiceKind = 'string' | 'enum' | 'source' | 'timeframe';
 
-/** One choice of a drop-down: the stored value and the text the user reads. */
-interface ChoiceOption {
-  readonly value: string;
-  readonly title: string;
-}
-
 /** A colour the picker can show while the draft is still invalid. */
 const FALLBACK_COLOR = '#000000';
 /** Characters of `#RRGGBB`; anything after them is the alpha suffix a colour input cannot show. */
@@ -44,12 +41,12 @@ const COLOR_BASE_LENGTH = 7;
 const DATETIME_LOCAL_LENGTH = 16;
 
 /** The text a number input shows: empty while the draft holds no number. */
-function numberText(value: ToolInputValue): string {
+export function numberText(value: ToolInputValue): string {
   return typeof value === 'number' ? String(value) : '';
 }
 
 /** The text a text-like control shows: empty while the draft holds no string. */
-function stringText(value: ToolInputValue): string {
+export function stringText(value: ToolInputValue): string {
   return typeof value === 'string' ? value : '';
 }
 
@@ -67,7 +64,7 @@ function epochMilliseconds(text: string): number | '' {
 }
 
 /** The picker's `#RRGGBB` and the alpha suffix beside it, from a draft the definition already accepts. */
-function colorParts({ value, invalid }: { value: ToolInputValue; invalid: boolean }): {
+export function colorParts({ value, invalid }: { value: ToolInputValue; invalid: boolean }): {
   base: string;
   alpha: string;
 } {
@@ -79,17 +76,17 @@ function colorParts({ value, invalid }: { value: ToolInputValue; invalid: boolea
 }
 
 /** The choices one drop-down lists, named per kind: Pine's own names for sources and timeframes. */
-function choiceOptions(definition: Extract<ToolInputDefinition, { kind: ChoiceKind }>): readonly ChoiceOption[] {
+function choiceOptions(definition: Extract<ToolInputDefinition, { kind: ChoiceKind }>): readonly SelectOption[] {
   if (definition.kind === 'enum') {
-    return definition.options;
+    return definition.options.map((option) => ({ value: option.value, label: option.title }));
   }
   if (definition.kind === 'source') {
-    return TOOL_INPUT_SOURCES.map((source) => ({ value: source, title: source }));
+    return TOOL_INPUT_SOURCES.map((source) => ({ value: source, label: source }));
   }
   if (definition.kind === 'timeframe') {
-    return timeframeOptions.map((option) => ({ value: option.wire, title: option.label }));
+    return timeframeOptions.map((option) => ({ value: option.wire, label: option.label }));
   }
-  return (definition.options ?? []).map((option) => ({ value: option, title: option }));
+  return (definition.options ?? []).map((option) => ({ value: option, label: option }));
 }
 
 /** The attributes every control carries: its label link, its tooltip and its validity. */
@@ -99,6 +96,7 @@ function controlAttributes(props: FieldPropsFor<ToolInputDefinition['kind']>) {
     title: props.definition.tooltip,
     'aria-describedby': props.tooltipId,
     'aria-invalid': props.invalid,
+    disabled: props.disabled,
   };
 }
 
@@ -159,18 +157,16 @@ function TextAreaControl(props: ToolInputFieldProps<'textArea'>) {
 
 function SelectControl(props: FieldPropsFor<ChoiceKind>) {
   return (
-    <select
-      {...controlAttributes(props)}
-      className="drawing-settings-control"
+    <Select
+      id={props.controlId}
+      title={props.definition.tooltip}
+      describedBy={props.tooltipId}
+      invalid={props.invalid}
+      disabled={props.disabled}
+      options={choiceOptions(props.definition)}
       value={stringText(props.value)}
-      onChange={(event) => props.onChange(event.target.value)}
-    >
-      {choiceOptions(props.definition).map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.title}
-        </option>
-      ))}
-    </select>
+      onChange={props.onChange}
+    />
   );
 }
 

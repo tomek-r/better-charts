@@ -1,5 +1,6 @@
 import type { ChartDrawingPoint, ChartToolDrawingRecord } from './drawingRecord';
 import type { ToolInputDefinition, ToolInputValues } from './toolInputs';
+import type { ToolStyleDefinition } from './toolStyles';
 
 /**
  * A drawing of one tool, seen by the engine's shared drawing core: the anchors it stores and the
@@ -17,6 +18,12 @@ export interface ChartDrawingShape {
    * state that made it hidden, and the paint order, stay with the collection.
    */
   visibilityChanged(visible: boolean): void;
+  /**
+   * The drawing's resolved settings (inputs and flattened styles) were given or replaced. It is told
+   * before its first visibility, so a drawing that owns backend work starts it with the right inputs;
+   * a drawing whose settings only change how it paints omits the member.
+   */
+  settingsChanged?(inputs: ToolInputValues): void;
   /** The drawing goes away: release everything it still holds. */
   dispose(): void;
 }
@@ -43,6 +50,8 @@ export interface ChartDrawingPointRule {
 /** What a tool declares about its drawings: the settings each one carries and the anchors it holds. */
 export interface ChartDrawingRules {
   readonly inputs: readonly ToolInputDefinition[];
+  /** The Style tab's settings, stored beside the inputs; omitted means the drawings have none. */
+  readonly styles?: readonly ToolStyleDefinition[];
   readonly points: ChartDrawingPointRule;
 }
 
@@ -74,6 +83,11 @@ export interface ChartToolDrawings {
   isVisible(drawingId: string): boolean;
   /** Replaces one drawing's settings; false when the tool has no drawing with that id. */
   setInputs(drawingId: string, inputs: ToolInputValues): boolean;
+  /**
+   * Moves one drawing to new anchors, keeping its id, flags, settings, selection and paint position;
+   * false when the tool has no such drawing or does not accept the anchors.
+   */
+  setPoints(drawingId: string, points: readonly ChartDrawingPoint[]): boolean;
   /** Every drawing of this tool, for the app to save. */
   exportRecords(): ChartToolDrawingRecord[];
   /**

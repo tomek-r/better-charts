@@ -1,0 +1,11 @@
+/* The raised, bordered panel of a popup that floats over the page: a drop-down list or a picker. */
+.popup-surface {
+  position: fixed;
+  z-index: 130;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  color: var(--color-text);
+  background: var(--color-panel);
+  box-shadow: 0 12px 32px var(--color-scrim-strong);
+}

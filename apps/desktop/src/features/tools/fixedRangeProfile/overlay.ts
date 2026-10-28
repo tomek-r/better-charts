@@ -1,11 +1,15 @@
 import type { RenderViewport } from '../../chart/engine/tools/toolContract';
-import type { ProfileResult, TickProfileBin } from '../../../shared/bridge/types';
+import type { ProfileResult } from '../../../shared/bridge/types';
 import { DEFAULT_LOADER_COLORS, drawLoader } from '../../../shared/canvas/loader';
 import { drawSeparatedText } from '../../../shared/canvas/separatedText';
 import { palette } from '../../../shared/theme/palette';
+import { parseHexColor } from '../../../shared/theme/hexColor';
+import { drawProfileBars, layoutProfileBars, type ProfileBarsLayout } from './profileBars';
+import { drawProfileValueLabels } from './profileValueLabels';
+import { DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE, type FixedRangeProfileAppearance } from './settings';
 
 /**
- * Mirrored BID/ASK profile, below trading labels; levels carry no labels. A `bars` profile is an approximation
+ * Volume profile (mirrored down/up bars by default), below trading labels; levels carry no labels. A `bars` profile is an approximation
  * (bid series = DOWN volume, ask = UP volume) and is the only one that carries text: its bar timeframe code.
  */
 export interface FixedRangeProfileState {
@@ -18,7 +22,25 @@ export interface FixedRangeProfileState {
   /** A boundary preview hides the result until release or cancellation. */
   previewing?: boolean;
   /** Painted geometry from the last frame (dev hook / tests). */
-  hit: { anchorX?: number; profileLeft?: number; profileRight?: number; pocY?: number; vahY?: number; valY?: number };
+  hit: {
+    anchorX?: number;
+    profileLeft?: number;
+    profileRight?: number;
+    pocY?: number;
+    vahY?: number;
+    valY?: number;
+    /** The painted histogram box; absent while nothing is painted for it. */
+    boxLeft?: number;
+    boxRight?: number;
+    boxTop?: number;
+    boxBottom?: number;
+    /** Row value labels painted; the totals line is reported by `summaryY` and absent when it is not painted. */
+    valueLabels?: number;
+    summaryY?: number;
+    /** Where the labels and the totals line are anchored, and how their text is aligned there. */
+    valueLabelX?: number;
+    valueLabelAlign?: CanvasTextAlign;
+  };
 }
 
 /** The profile request the app is waiting for; results that do not match it are stale and ignored. */
@@ -30,14 +52,6 @@ export type ExpectedFixedRangeProfile = {
   settled: boolean;
 };
 
-// The app's sell/buy convention (tradingOverlayDrawing TRADING_COLORS): the bid is
-// what you SELL at (red, mirrored LEFT), the ask what you BUY at (blue, RIGHT).
-const BID_COLOR = palette.sell;
-const ASK_COLOR = palette.buy;
-const POC_COLOR = palette.profilePoc;
-const VA_COLOR = palette.textBright;
-const ROW_ALPHA = 0.75;
-const POC_ROW_ALPHA = 1;
 // Level lines keep the TAP look: same alpha.
 const LEVEL_ALPHA = 0.95;
 
@@ -48,37 +62,9 @@ const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 const BAR_LABEL_FONT = '400 11px system-ui, sans-serif';
 const BAR_LABEL_INSET = 6;
 
-// Weights arrive as decimal strings but are parsed defensively, exactly
-// like tickActivityOverlay's binWeight: invalid or non-positive counts as 0.
-type WeightSide = 'bid' | 'ask' | 'total';
-
-function binWeight(bin: TickProfileBin, side: WeightSide): number {
-  const value = Number(bin[side]);
-  return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-function priceY(price: number, viewport: RenderViewport): number {
-  return viewport.priceToY(price);
-}
-
 type LevelKey = 'poc' | 'vah' | 'val';
 
-interface LevelDef {
-  key: LevelKey;
-  raw: string;
-  color: string;
-  /** Line dash pattern — POC solid, VAH/VAL dashed [4, 3] (owner). */
-  dash: number[];
-}
-
-// Total-profile levels only — never the per-mode (bidLevels/askLevels) sets.
-function levelDefs(profile: ProfileResult): LevelDef[] {
-  return [
-    { key: 'poc', raw: profile.poc, color: POC_COLOR, dash: [] },
-    { key: 'vah', raw: profile.vah, color: VA_COLOR, dash: [4, 3] },
-    { key: 'val', raw: profile.val, color: VA_COLOR, dash: [4, 3] },
-  ];
-}
+const LEVEL_KEYS: readonly LevelKey[] = ['poc', 'vah', 'val'];
 
 // Raw decimal string in, pixel y out; undefined = unset/invalid level.
 function levelY(raw: string, viewport: RenderViewport): number | undefined {
@@ -89,22 +75,88 @@ function levelY(raw: string, viewport: RenderViewport): number | undefined {
   if (!Number.isFinite(price)) {
     return undefined;
   }
-  return priceY(price, viewport);
+  return viewport.priceToY(price);
 }
 
-interface ProfileRow {
-  top: number;
-  bottom: number;
-  bidWidth: number;
-  askWidth: number;
-  /** The bin containing profile.poc — paints at full alpha. */
-  isPoc: boolean;
+/** The horizontal span a level line covers: from the range start to the pane edge or to the range end. */
+interface LevelSpan {
+  readonly startX: number;
+  readonly endX: number;
 }
 
+/**
+ * Level lines of the TOTAL profile (never the per-mode bidLevels/askLevels sets), painted after the rows.
+ * A hidden level paints nothing and reports no y. No text labels (owner).
+ */
+function drawLevelLines(
+  ctx: CanvasRenderingContext2D,
+  viewport: RenderViewport,
+  profile: ProfileResult,
+  appearance: FixedRangeProfileAppearance,
+  span: LevelSpan,
+  hit: FixedRangeProfileState['hit'],
+): void {
+  ctx.globalAlpha = LEVEL_ALPHA;
+  for (const key of LEVEL_KEYS) {
+    const style = appearance[key];
+    const lineY = style.visible ? levelY(profile[key], viewport) : undefined;
+    if (lineY === undefined) {
+      continue;
+    }
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = style.width;
+    ctx.setLineDash([...style.dash]);
+    ctx.beginPath();
+    ctx.moveTo(span.startX, lineY);
+    ctx.lineTo(span.endX, lineY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    hit[`${key}Y`] = lineY;
+  }
+}
+
+/** The painted histogram box: the range box horizontally, the rows' price extent vertically. */
+interface HistogramBox {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/** The box to paint, or undefined when there are no rows, an edge is off the scale, or the colour is fully transparent. */
+function histogramBoxOf(
+  layout: ProfileBarsLayout,
+  color: string,
+  left: number,
+  right: number,
+): HistogramBox | undefined {
+  if (layout.rows.length === 0 || parseHexColor(color)?.alpha === 0) {
+    return undefined;
+  }
+  const top = Math.min(...layout.rows.map((row) => row.top));
+  const bottom = Math.max(...layout.rows.map((row) => row.bottom));
+  return [left, right, top, bottom].every(Number.isFinite) ? { left, right, top, bottom } : undefined;
+}
+
+function drawHistogramBox(ctx: CanvasRenderingContext2D, box: HistogramBox, color: string): void {
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color;
+  ctx.fillRect(box.left, box.top, box.right - box.left, box.bottom - box.top);
+  ctx.restore();
+}
+
+/**
+ * The profile of the drawn range. The bars hang from the range start (placement left) or from the range end
+ * (placement right) and never leave the range; `handles` gives the end x, which is otherwise the end of the
+ * requested range.
+ */
 export function drawFixedRangeProfile(
   ctx: CanvasRenderingContext2D,
   viewport: RenderViewport,
   state: FixedRangeProfileState,
+  appearance: FixedRangeProfileAppearance = DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE,
+  handles?: HandleEdges,
 ): void {
   const range = state.range;
   const profile = state.profile;
@@ -113,89 +165,47 @@ export function drawFixedRangeProfile(
     return;
   }
   const { x, width } = viewport.chartRect;
-  const anchorX = viewport.timeToX(range.fromMs);
-  if (!Number.isFinite(anchorX)) {
+  const startX = viewport.timeToX(range.fromMs);
+  const endX = handles?.toX ?? viewport.timeToX(range.toMs);
+  const anchorX = appearance.placement === 'right' ? endX : startX;
+  if (!Number.isFinite(anchorX) || !Number.isFinite(startX)) {
     state.hit = {};
     return;
   }
-  // One COMMON denominator across both sides so bid/ask dominance is
-  // comparable; the max(1, …) guard only matters when every weight is 0.
-  const half = Math.min(180, width * 0.2);
-  let maxWeight = 1;
-  for (const bin of profile.bins) {
-    maxWeight = Math.max(maxWeight, binWeight(bin, 'bid'), binWeight(bin, 'ask'));
-  }
-
-  const pocPrice = Number(profile.poc);
-  const pocValid = Number.isFinite(pocPrice);
-  let pocClaimed = false;
-  let maxBidWidth = 0;
-  let maxAskWidth = 0;
-  const rows: ProfileRow[] = [];
-  for (const bin of profile.bins) {
-    const low = Number(bin.low);
-    const high = Number(bin.high);
-    if (!Number.isFinite(low) || !Number.isFinite(high)) {
-      continue;
-    }
-    const top = priceY(Math.max(low, high), viewport);
-    const bottom = priceY(Math.min(low, high), viewport);
-    const bidWidth = half * (binWeight(bin, 'bid') / maxWeight);
-    const askWidth = half * (binWeight(bin, 'ask') / maxWeight);
-    maxBidWidth = Math.max(maxBidWidth, bidWidth);
-    maxAskWidth = Math.max(maxAskWidth, askWidth);
-    const binLow = Math.min(low, high);
-    const binHigh = Math.max(low, high);
-    const isPoc = !pocClaimed && pocValid && pocPrice >= binLow && pocPrice <= binHigh;
-    if (isPoc) {
-      pocClaimed = true;
-    }
-    rows.push({ top, bottom, bidWidth, askWidth, isPoc });
-  }
-
-  const profileLeft = anchorX - maxBidWidth;
-  const profileRight = anchorX + maxAskWidth;
-  const hit: FixedRangeProfileState['hit'] = { anchorX, profileLeft, profileRight };
+  const layout = layoutProfileBars(profile, viewport, appearance, Math.max(0, endX - startX));
+  const hit: FixedRangeProfileState['hit'] = {
+    anchorX,
+    profileLeft: anchorX + layout.reachLeft,
+    profileRight: anchorX + layout.reachRight,
+  };
 
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, viewport.chartRect.y, width, viewport.chartRect.height);
   ctx.clip();
-  // Rows: BID extends LEFT from the anchor, ASK RIGHT; zero-weight sides
-  // paint nothing (a zero-width rect would be an empty paint op).
-  for (const row of rows) {
-    const rowHeight = Math.max(1, row.bottom - row.top);
-    // 1px gap between rows — never below 1px, so a 1px-tall bin still paints.
-    const drawHeight = Math.max(1, rowHeight - 1);
-    ctx.globalAlpha = row.isPoc ? POC_ROW_ALPHA : ROW_ALPHA;
-    if (row.bidWidth > 0) {
-      ctx.fillStyle = BID_COLOR;
-      ctx.fillRect(anchorX - row.bidWidth, row.top, row.bidWidth, drawHeight);
-    }
-    if (row.askWidth > 0) {
-      ctx.fillStyle = ASK_COLOR;
-      ctx.fillRect(anchorX, row.top, row.askWidth, drawHeight);
-    }
+  const box = histogramBoxOf(layout, appearance.histogramBoxColor, handles?.fromX ?? startX, endX);
+  if (box !== undefined) {
+    drawHistogramBox(ctx, box, appearance.histogramBoxColor);
+    Object.assign(hit, { boxLeft: box.left, boxRight: box.right, boxTop: box.top, boxBottom: box.bottom });
   }
-  // Level lines AFTER the rows — range start (anchorX) → chartRect right
-  // edge; POC solid, VAH/VAL dashed [4, 3]. No text labels (owner).
-  ctx.globalAlpha = LEVEL_ALPHA;
-  for (const def of levelDefs(profile)) {
-    const lineY = levelY(def.raw, viewport);
-    if (lineY === undefined) {
-      continue;
-    }
-    ctx.strokeStyle = def.color;
-    ctx.setLineDash(def.dash);
-    ctx.beginPath();
-    ctx.moveTo(anchorX, lineY);
-    ctx.lineTo(x + width, lineY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    hit[`${def.key}Y`] = lineY;
+  // The bars also stay inside the range box, whatever the pane shows of it.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(startX, viewport.chartRect.y, Math.max(0, endX - startX), viewport.chartRect.height);
+  ctx.clip();
+  drawProfileBars(ctx, anchorX, layout, appearance);
+  const valueLabels = drawProfileValueLabels(ctx, { startX, endX }, layout, appearance);
+  hit.valueLabels = valueLabels.rowLabels;
+  hit.summaryY = valueLabels.summaryY;
+  hit.valueLabelX = valueLabels.textX;
+  hit.valueLabelAlign = valueLabels.textAlign;
+  ctx.restore();
+  const lineEndX = appearance.extendRight ? x + width : endX;
+  if (Number.isFinite(lineEndX)) {
+    drawLevelLines(ctx, viewport, profile, appearance, { startX, endX: lineEndX }, hit);
   }
   if (profile.source === 'bars' && profile.barTimeframe) {
-    drawBarTimeframeLabel(ctx, viewport, anchorX, profile.barTimeframe, profile.coveredFromMs);
+    drawBarTimeframeLabel(ctx, viewport, startX, profile.barTimeframe, profile.coveredFromMs);
   }
   ctx.restore();
   state.hit = hit;

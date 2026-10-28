@@ -94,14 +94,16 @@ test('remove deletes the drawing, hides the toolbar, saves the empty set and fre
   await expect.poll(async () => savedDrawings(page)).toEqual([]);
 });
 
-test('settings opens the drawing dialog, which has no settings yet, and Escape closes it', async ({ page }) => {
+test('settings opens the drawing dialog, which has its Coordinates and Visibility tabs, and Escape closes it', async ({
+  page,
+}) => {
   await placeProfileWithToolbar(page);
 
   await page.getByRole('button', { name: 'Drawing settings', exact: true }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Fixed range volume profile settings' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText('This tool has no settings yet.')).toBeVisible();
+  await expect(dialog.getByRole('tab')).toHaveText(['Inputs', 'Style', 'Coordinates', 'Visibility']);
 
   await page.keyboard.press('Escape');
 

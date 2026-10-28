@@ -1,9 +1,14 @@
 import type { ProfileResult } from '../../../../shared/bridge/types';
-import type { MarketDataPort } from '../../../bridge/marketDataPort';
+import type { MarketDataPort, ProfileRequestParams } from '../../../bridge/marketDataPort';
 import type { ChartToolHost } from '../../../chart/engine/tools/toolContract';
 import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from '../overlay';
 import type { FixedRangeProfileRange } from '../range';
 
+/** The histogram settings of a profile whose owner supplies none: 128 rows and a 70% value area. */
+export const DEFAULT_PROFILE_REQUEST_PARAMS: ProfileRequestParams = {
+  rowsLayout: { kind: 'rows', count: 128 },
+  valueAreaPercent: 70,
+};
 const LIVE_PROFILE_REFRESH_MS = 2000;
 /**
  * Safety net only. Every awaited request ends with a result, a correlated error (EA page read timeout 120 s), a
@@ -12,7 +17,6 @@ const LIVE_PROFILE_REFRESH_MS = 2000;
  * 30-90 s on a busy feed. The cutoff only recovers from a lost terminal event, so it is well beyond a legitimate load.
  */
 const LIVE_PROFILE_PENDING_MAX_MS = 300_000;
-const PROFILE_ROWS = 128;
 /** How long the awaited request may stay unanswered before the chart shows a loading spinner. */
 export const SLOW_PROFILE_SPINNER_DELAY_MS = 6000;
 /** Repaint period of the visible spinner (about 30 fps); no repaints are scheduled while it is hidden. */
@@ -27,6 +31,9 @@ const SPINNER_REPAINT_MS = 33;
  * `port` is the port of the one drawing this requester belongs to: it may be the bridge
  * itself or the turn-taking queue every drawing shares, which is what keeps the backend
  * to one load at a time.
+ *
+ * `requestParams` is how the owner supplies the histogram settings (rows layout, value area percent); it is read on
+ * every request, so a setting changed between two requests reaches the next one.
  */
 export class FixedRangeProfileRequester {
   private expected: ExpectedFixedRangeProfile | undefined;
@@ -42,6 +49,7 @@ export class FixedRangeProfileRequester {
     private readonly port: MarketDataPort,
     private readonly state: FixedRangeProfileState,
     private readonly committedRange: () => FixedRangeProfileRange | null,
+    private readonly requestParams: () => ProfileRequestParams = () => DEFAULT_PROFILE_REQUEST_PARAMS,
   ) {
     this.unsubscribe = [
       port.onTickProfile((profile) => this.acceptProfileResult(profile)),
@@ -126,7 +134,7 @@ export class FixedRangeProfileRequester {
     }
     this.host.requestRepaint();
     if (!nothingToRequest) {
-      this.port.requestTickProfile({ symbol, fromMs, endMs: requestEnd, rows: PROFILE_ROWS });
+      this.port.requestTickProfile({ symbol, fromMs, endMs: requestEnd, ...this.requestParams() });
     }
   }
 

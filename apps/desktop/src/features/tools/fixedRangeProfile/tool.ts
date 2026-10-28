@@ -10,18 +10,19 @@ import {
   type ChartToolHost,
   type ChartToolResetReason,
 } from '../../chart/engine/tools/toolContract';
-import type { ToolInputDefinition } from '../../chart/engine/drawings/toolInputs';
 import { FixedRangeProfileDrawing, outsidePane } from './drawing/fixedRangeProfileDrawing';
 import { FixedRangeProfileFactory } from './drawing/fixedRangeProfileFactory';
 import { FIXED_RANGE_PROFILE_POINTS } from './drawing/fixedRangeProfilePoints';
 import { TickProfileRequestQueue } from './requests/tickProfileRequestQueue';
 import { sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './range';
+import { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES } from './settings';
 
 /**
- * The FRVP's settings; empty until its inputs are designed. Every drawing still stores resolved
- * values so adding an input later restores old drawings with its default.
+ * The fixed range volume profile's settings live in `settings.ts`, apart from the drawing and the canvas code, so
+ * the dialog and the specs can read them alone. Every drawing stores resolved values, so a setting added later
+ * restores old drawings with its default.
  */
-export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [];
+export { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES };
 
 /** Where the two drag handles sit, in pane CSS px, and the range they delimit. */
 interface FixedRangeProfileBoundaries {
@@ -50,6 +51,8 @@ export interface FixedRangeProfileTestApi {
     locked: boolean;
     range: { fromMs: number; endMs: number };
     hasProfile: boolean;
+    /** Whether the last paint drew the boundary lines and circles. */
+    handlesShown: boolean;
   }>;
 }
 
@@ -73,7 +76,7 @@ export class FixedRangeProfileTool implements ChartTool {
   constructor(private readonly host: ChartToolHost) {
     this.queue = new TickProfileRequestQueue(host.marketDataPort);
     this.drawings = new ChartDrawingCollection<FixedRangeProfileDrawing>(
-      { inputs: FIXED_RANGE_PROFILE_INPUTS, points: FIXED_RANGE_PROFILE_POINTS },
+      { inputs: FIXED_RANGE_PROFILE_INPUTS, styles: FIXED_RANGE_PROFILE_STYLES, points: FIXED_RANGE_PROFILE_POINTS },
       new FixedRangeProfileFactory(host, this.queue),
       () => host.requestRepaint(),
     );
@@ -178,7 +181,13 @@ export class FixedRangeProfileTool implements ChartTool {
     return {
       boundaries: () => this.boundaries(),
       selection: () => this.selection(),
-      drawings: () => this.drawings.entries().map(({ id, locked, drawing }) => ({ id, locked, ...drawing.summary() })),
+      drawings: () =>
+        this.drawings.entries().map(({ id, locked, drawing }) => ({
+          id,
+          locked,
+          ...drawing.summary(),
+          handlesShown: drawing.wereHandlesPainted(),
+        })),
     };
   }
 
@@ -246,7 +255,7 @@ export class FixedRangeProfileTool implements ChartTool {
     }
     const range = spanBetweenAnchors(this.host.barSeries, this.first, this.hover);
     const handles = FixedRangeProfileDrawing.handleXsFor(this.host.geometry, range);
-    FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles, { selected: false });
+    FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles);
   }
 
   /** The collection entry of one drawing, or undefined when the tool no longer holds that id. */
@@ -277,12 +286,16 @@ export class FixedRangeProfileTool implements ChartTool {
     return { range, hasProfile: drawing?.hasProfile() ?? false };
   }
 
-  /** The topmost visible unlocked drawing with a handle under the pane x, with the side that press would drag. */
+  /**
+   * The selected drawing's handle under the pane x, with the side that press would drag. Only a selected
+   * drawing shows its handles, so only its handles can be grabbed; a locked one lets the chart pan.
+   */
   private unlockedHandleAt(x: number): { drawing: FixedRangeProfileDrawing; side: 'from' | 'end' } | null {
     const entries = this.drawings.entries();
     for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const { drawing, locked, visible } = entries[index];
-      const side = locked || !visible ? null : drawing.handleAt(x);
+      const { id, drawing, locked, visible, selected } = entries[index];
+      const grabbable = selected && !locked && visible && this.host.drawingShownOnTimeframe(id);
+      const side = grabbable ? drawing.handleAt(x) : null;
       if (side !== null) {
         return { drawing, side };
       }

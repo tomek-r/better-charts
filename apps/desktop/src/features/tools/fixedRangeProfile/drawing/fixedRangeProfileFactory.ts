@@ -7,7 +7,7 @@ import { FixedRangeProfileDrawing } from './fixedRangeProfileDrawing';
 import { readFixedRangeProfilePoints } from './fixedRangeProfilePoints';
 
 /**
- * Turns the anchors the app stored back into FRVP drawings. A window the loaded bars cannot place
+ * Turns the anchors the app stored back into fixed range volume profile drawings. A window the loaded bars cannot place
  * yet stays a drawing without a slot: it exports unchanged, and gets its profile once the bars that
  * hold it arrive. Only a window the loaded history will never reach is dropped.
  */

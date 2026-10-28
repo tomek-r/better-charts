@@ -4,7 +4,9 @@
 //! points. A point names a time in epoch milliseconds, a price, or both; a price stays
 //! decimal text, so a number the user placed reaches the chart again with the same digits.
 
-use super::{error::ChartDrawingError, limits::is_present_within};
+use super::{
+    error::ChartDrawingError, limits::is_present_within, timeframe_visibility::TimeframeVisibility,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -64,6 +66,9 @@ pub(crate) struct ChartDrawingRecord {
     /// both sides of the bars. Absent in older payloads, which carry every drawing above them.
     #[serde(default)]
     pub(crate) below_bars: bool,
+    /// On which timeframes the drawing paints. Absent in older payloads, which show it everywhere.
+    #[serde(default)]
+    pub(crate) timeframe_visibility: TimeframeVisibility,
     pub(crate) inputs: BTreeMap<String, Value>,
     /// The anchors of the drawing, in paint order.
     pub(crate) points: Vec<ChartDrawingPoint>,
@@ -83,6 +88,7 @@ impl ChartDrawingRecord {
                 "A drawing needs a tool id of 1 to {MAX_ID_BYTES} bytes"
             )));
         }
+        self.timeframe_visibility.validate()?;
         self.validate_inputs()?;
         self.validate_points()
     }
@@ -169,6 +175,7 @@ mod tests {
             locked: false,
             visible: true,
             below_bars: false,
+            timeframe_visibility: TimeframeVisibility::default(),
             inputs: BTreeMap::from([("rows".into(), json!(128))]),
             points: vec![point(Some(1), None), point(Some(2), None)],
         }

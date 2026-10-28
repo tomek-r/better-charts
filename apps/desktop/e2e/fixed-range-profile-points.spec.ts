@@ -5,11 +5,11 @@ import {
   fixedRangeProfilePoints,
   readFixedRangeProfilePoints,
 } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfilePoints';
-import { lastSlotOpenBefore } from '../src/features/tools/fixedRangeProfile/range';
+import { lastSlotOpenBefore, minuteAlignedWindow } from '../src/features/tools/fixedRangeProfile/range';
 
 /**
- * The points one FRVP drawing stores, and the handle position a restored drawing derives from the
- * current bars. The engine carries the anchors as plain data, so these functions are the only way
+ * The points one fixed range volume profile drawing stores, and the handle position a restored drawing derives from
+ * the current bars. The engine carries the anchors as plain data, so these functions are the only way
  * in and out, and the handle always follows a slot of the bars the drawing is painted against.
  */
 
@@ -18,8 +18,11 @@ const ONE_MINUTE_MS = 60_000;
 /** The open of the oldest bar every M1 series here starts from, an hour before now. */
 const FIRST_BAR_SECONDS = Math.floor(NOW_MS / 1000) - 3_600;
 
-/** A window from a minute before now to now: the smallest range the codec accepts. */
-const WINDOW = { fromMs: NOW_MS - ONE_MINUTE_MS, endMs: NOW_MS };
+/** The start of the current minute: a window sits on whole-minute boundaries. */
+const NOW_MINUTE_MS = Math.floor(NOW_MS / ONE_MINUTE_MS) * ONE_MINUTE_MS;
+
+/** A window from a minute before this minute to this minute: the smallest range the codec accepts. */
+const WINDOW = { fromMs: NOW_MINUTE_MS - ONE_MINUTE_MS, endMs: NOW_MINUTE_MS };
 
 /** A bar series the range helpers read: whole seconds, as the chart keeps them. */
 function barSeries(timeframe: string, intervalSeconds: number, barTimes: readonly number[]): TimeModel {
@@ -46,6 +49,35 @@ test('a window is stored as its two time-only anchors and read back', () => {
     { timeMs: WINDOW.endMs, price: null },
   ]);
   expect(readFixedRangeProfilePoints(points)).toEqual(WINDOW);
+});
+
+test('a window with seconds rounds each edge to the nearest minute: 29 s down, 30 s up', () => {
+  expect(minuteAlignedWindow({ fromMs: WINDOW.fromMs + 29_000, endMs: WINDOW.endMs + 30_000 })).toEqual({
+    fromMs: WINDOW.fromMs,
+    endMs: WINDOW.endMs + ONE_MINUTE_MS,
+  });
+});
+
+test('a window that rounds to nothing ends one minute after it starts', () => {
+  expect(minuteAlignedWindow({ fromMs: WINDOW.fromMs + 10_000, endMs: WINDOW.fromMs + 25_000 })).toEqual({
+    fromMs: WINDOW.fromMs,
+    endMs: WINDOW.fromMs + ONE_MINUTE_MS,
+  });
+});
+
+test('a window already on whole minutes is unchanged', () => {
+  expect(minuteAlignedWindow(WINDOW)).toEqual(WINDOW);
+});
+
+test('stored anchors with seconds are read back on whole minutes', () => {
+  const stored = fixedRangeProfilePoints({
+    fromMs: WINDOW.fromMs + 40_000,
+    endMs: WINDOW.endMs + ONE_MINUTE_MS + 20_000,
+  });
+  expect(readFixedRangeProfilePoints(stored)).toEqual({
+    fromMs: WINDOW.fromMs + ONE_MINUTE_MS,
+    endMs: WINDOW.endMs + ONE_MINUTE_MS,
+  });
 });
 
 const REJECTED: ReadonlyArray<{ name: string; value: ChartDrawingPoint[] }> = [

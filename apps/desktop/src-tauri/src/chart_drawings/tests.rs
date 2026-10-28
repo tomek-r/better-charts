@@ -5,6 +5,7 @@ use super::{
     record::{ChartDrawingPoint, ChartDrawingRecord, MAX_POINTS_PER_DRAWING},
     sqlite_drawing_store::SqliteChartDrawingStore,
     store::{ChartDrawingStore, DrawingScope, MAX_DRAWINGS_PER_SCOPE},
+    timeframe_visibility::{TimeframeCountRange, TimeframeVisibility},
     ChartDrawingsState,
 };
 use serde_json::json;
@@ -53,6 +54,7 @@ fn record(id: &str) -> ChartDrawingRecord {
         locked: false,
         visible: true,
         below_bars: false,
+        timeframe_visibility: TimeframeVisibility::default(),
         inputs: BTreeMap::from([("rows".to_owned(), json!(128))]),
         points: vec![time_point(1_700_000_000_000), time_point(1_700_000_900_000)],
     }
@@ -195,6 +197,78 @@ fn a_stored_payload_without_the_below_bars_flag_stands_above_the_bars() {
     .expect("the record parses without the flag");
 
     assert!(!stored.below_bars);
+}
+
+/// Minutes 1 to 15 only, no hours and no weeks: a setting that differs from the default everywhere.
+fn restricted_visibility() -> TimeframeVisibility {
+    TimeframeVisibility {
+        minutes: TimeframeCountRange {
+            shown: true,
+            from: 1,
+            to: 15,
+        },
+        hours: TimeframeCountRange {
+            shown: false,
+            from: 2,
+            to: 8,
+        },
+        days: true,
+        weeks: false,
+        months: true,
+    }
+}
+
+#[test]
+fn the_timeframe_visibility_round_trips() {
+    let store = store();
+    let restricted = ChartDrawingRecord {
+        timeframe_visibility: restricted_visibility(),
+        ..record("restricted")
+    };
+
+    save(
+        &store,
+        ACCOUNT_KEY,
+        "EURUSD",
+        &[restricted.clone(), record("everywhere")],
+    );
+
+    let restored = loaded(&store, ACCOUNT_KEY, "EURUSD");
+    assert_eq!(restored[0], restricted);
+    assert_eq!(
+        restored[1].timeframe_visibility,
+        TimeframeVisibility::default()
+    );
+}
+
+#[test]
+fn a_stored_payload_without_the_timeframe_visibility_shows_everywhere() {
+    let stored: ChartDrawingRecord = serde_json::from_str(
+        r#"{"id":"profile-1","toolId":"fixedRangeProfile","locked":false,"visible":true,
+            "inputs":{},"points":[{"timeMs":1700000000000,"price":null}]}"#,
+    )
+    .expect("the record parses without the setting");
+
+    assert_eq!(stored.timeframe_visibility, TimeframeVisibility::default());
+}
+
+#[test]
+fn a_reversed_timeframe_range_is_refused_and_writes_nothing() {
+    let store = store();
+    let mut reversed = restricted_visibility();
+    reversed.minutes.from = 20;
+    reversed.minutes.to = 5;
+    let refused = ChartDrawingRecord {
+        timeframe_visibility: reversed,
+        ..record("reversed")
+    };
+
+    let error = store
+        .save(&scope(ACCOUNT_KEY, "EURUSD"), &[refused])
+        .expect_err("the range is refused");
+
+    assert!(error.to_string().contains("minutes"), "{error}");
+    assert!(loaded(&store, ACCOUNT_KEY, "EURUSD").is_empty());
 }
 
 #[test]
@@ -357,6 +431,27 @@ fn a_drawing_written_before_the_below_bars_migration_opens_above_the_bars() {
     assert_eq!(restored.len(), 1);
     assert_eq!(restored[0].id, "profile-1");
     assert!(!restored[0].below_bars);
+}
+
+#[test]
+fn a_drawing_written_before_the_timeframe_migration_shows_on_every_timeframe() {
+    let directory = TestDirectory::new();
+    let path = directory.path().join(DATABASE_FILE_NAME);
+    {
+        let previous = SqliteChartDrawingStore::open_before_last_migration(&path)
+            .expect("the database opens with the earlier migrations");
+        insert_drawing(&previous, "profile-1", "{}");
+        insert_point(&previous, "profile-1");
+    }
+
+    let migrated = SqliteChartDrawingStore::open(&path).expect("the database migrates");
+
+    let restored = loaded(&migrated, ACCOUNT_KEY, "EURUSD");
+    assert_eq!(restored.len(), 1);
+    assert_eq!(
+        restored[0].timeframe_visibility,
+        TimeframeVisibility::default()
+    );
 }
 
 #[test]

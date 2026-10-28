@@ -15,6 +15,12 @@
   border-color: var(--color-muted);
 }
 
+/* Same specificity as the hover rule above and later, so a hovered, focused button keeps the accent border. */
+.action-button:focus-visible:not(:disabled) {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
 .action-button:disabled {
   opacity: 0.42;
   cursor: not-allowed;
