@@ -1,26 +1,18 @@
 import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
 import type { ToolInputValues } from '../../../chart/engine/drawings/toolInputs';
 import type { ChartDrawingShape } from '../../../chart/engine/drawings/toolDrawings';
-import { anchorAtBar, type BarAnchor } from '../../../chart/engine/tools/barAnchor';
-import type { ChartToolGeometry, ChartToolHost } from '../../../chart/engine/tools/toolContract';
+import type { ChartToolHost } from '../../../chart/engine/tools/toolContract';
 import type { RenderViewport } from '../../../chart/engine/surface/overlayRenderer';
-import { DASHED_LINE_PATTERN } from '../../../../shared/canvas/dashPatterns';
-import { palette } from '../../../../shared/theme/palette';
 import { currentQuoteTimeMs } from '../currentQuoteTimeMs';
-import {
-  drawFixedRangeProfile,
-  drawFixedRangeProfileLoadingWash,
-  drawFixedRangeProfileSpinner,
-  type FixedRangeProfileState,
-  type HandleEdges,
-} from '../fixedRangeProfileOverlay';
+import { drawFixedRangeProfile } from '../fixedRangeProfileOverlay';
+import { drawFixedRangeProfileLoadingWash, drawFixedRangeProfileSpinner } from '../loadingIndicator';
+import type { FixedRangeProfileState } from '../profileState';
 import {
   isRangeOpen,
   lastSlotOpenBefore,
-  minuteAlignedWindow,
-  rangeEndingAtAnchor,
   type FixedRangeProfileRange,
   type PlacedFixedRangeProfile,
+  type RangeBoundary,
 } from '../fixedRangeProfileRange';
 import { FixedRangeProfileRequester } from '../requests/fixedRangeProfileRequester';
 import {
@@ -31,11 +23,7 @@ import {
 } from '../fixedRangeProfileSettings';
 import type { TickProfileRequestQueue } from '../requests/tickProfileRequestQueue';
 import { fixedRangeProfilePoints } from './fixedRangeProfilePoints';
-
-/** How close to a handle a press or a hit test counts as that handle, in pane CSS px. */
-export const HANDLE_HIT_PX = 7;
-/** Radius of a handle circle, in pane CSS px. */
-const HANDLE_RADIUS_PX = 4;
+import { boundaryAtX, drawHandles, handleXsFor, outsidePane, type HandleEdges } from './handles';
 
 /** How one drawing paints itself: the selection highlight, and the range a boundary drag previews. */
 export interface FixedRangeProfilePaintOptions {
@@ -47,11 +35,6 @@ export interface FixedRangeProfilePaintOptions {
 export interface FixedRangeProfileDrawingSummary {
   range: { fromMs: number; endMs: number };
   hasProfile: boolean;
-}
-
-/** Whether a pane point lies outside the plot area, where no drawing is hit. */
-export function outsidePane(chartRect: { width: number; height: number }, x: number, y: number): boolean {
-  return x < 0 || x > chartRect.width || y < 0 || y > chartRect.height;
 }
 
 /**
@@ -123,36 +106,6 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
     return new FixedRangeProfileDrawing(host, queue, window, lastSlotOpenMs);
   }
 
-  /** The pane x of both handles of one range: what a hit test and the two boundary lines measure against. */
-  static handleXsFor(geometry: ChartToolGeometry, range: PlacedFixedRangeProfile): HandleEdges {
-    return { fromX: geometry.timeToX(range.fromMs), toX: geometry.timeToX(range.lastSlotOpenMs) };
-  }
-
-  /**
-   * The two dashed boundary lines and their handle circles, painted at the given pane x. A committed
-   * drawing calls this only while selected, a half-placed range while its second click is pending.
-   */
-  static drawHandles(ctx: CanvasRenderingContext2D, viewport: RenderViewport, handles: HandleEdges): void {
-    const { height } = viewport.chartRect;
-    ctx.strokeStyle = palette.textLabel;
-    ctx.lineWidth = 1;
-    ctx.setLineDash(DASHED_LINE_PATTERN);
-    for (const x of [handles.fromX, handles.toX]) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.arc(x, height / 2, HANDLE_RADIUS_PX, 0, Math.PI * 2);
-      ctx.fillStyle = palette.panel;
-      ctx.fill();
-      ctx.stroke();
-      ctx.setLineDash(DASHED_LINE_PATTERN);
-    }
-    ctx.setLineDash([]);
-  }
-
   /** The window the profile is requested for: the two anchors the app stores are its edges. */
   points(): ChartDrawingPoint[] {
     return fixedRangeProfilePoints(this.window);
@@ -174,20 +127,13 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
 
   /** The pane x of both handles of `range`. */
   handleXs(range: PlacedFixedRangeProfile): HandleEdges {
-    return FixedRangeProfileDrawing.handleXsFor(this.host.geometry, range);
+    return handleXsFor(this.host.geometry, range);
   }
 
   /** Which boundary a press at pane x would drag, null when x is not on a handle or the window is unplaced. */
-  handleAt(x: number): 'from' | 'end' | null {
+  handleAt(x: number): RangeBoundary | null {
     const placed = this.placedRange();
-    if (placed === null) {
-      return null;
-    }
-    const { fromX, toX } = this.handleXs(placed);
-    if (Math.abs(x - fromX) <= HANDLE_HIT_PX) {
-      return 'from';
-    }
-    return Math.abs(x - toX) <= HANDLE_HIT_PX ? 'end' : null;
+    return placed === null ? null : boundaryAtX(this.handleXs(placed), x);
   }
 
   /** Whether the pane point falls between its handles or on one of them: the band this profile covers. */
@@ -198,37 +144,6 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
     }
     const { fromX, toX } = this.handleXs(placed);
     return this.handleAt(x) !== null || (x >= Math.min(fromX, toX) && x <= Math.max(fromX, toX));
-  }
-
-  /**
-   * The range a dragged boundary previews at `anchor`, or null when no legal range fits there. A
-   * moving boundary stays on a real candle when it crosses the other one: this never synthesizes
-   * anchors one millisecond apart.
-   */
-  boundaryPreview(
-    side: 'from' | 'end',
-    original: PlacedFixedRangeProfile,
-    anchor: BarAnchor,
-  ): PlacedFixedRangeProfile | null {
-    const { barSeries } = this.host;
-    const { bars } = barSeries;
-    if (side === 'from') {
-      let lastAllowedIndex = bars.length - 1;
-      while (lastAllowedIndex >= 0 && bars[lastAllowedIndex].time * 1000 > original.lastSlotOpenMs) {
-        lastAllowedIndex -= 1;
-      }
-      if (lastAllowedIndex < 0) {
-        return null;
-      }
-      const index = Math.min(anchor.index, lastAllowedIndex);
-      return { ...original, ...minuteAlignedWindow({ fromMs: bars[index].time * 1000, endMs: original.endMs }) };
-    }
-    const firstAllowedIndex = bars.findIndex((bar) => bar.time * 1000 >= original.fromMs);
-    if (firstAllowedIndex < 0) {
-      return null;
-    }
-    const endAnchor = anchor.index < firstAllowedIndex ? anchorAtBar(barSeries, firstAllowedIndex) : anchor;
-    return rangeEndingAtAnchor(barSeries, original.fromMs, endAnchor);
   }
 
   /** A boundary preview hides the result until the drag is released or cancelled. */
@@ -311,7 +226,7 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
     drawFixedRangeProfileLoadingWash(ctx, viewport, this.state, handles);
     this.handlesPainted = options.selected;
     if (options.selected) {
-      FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles);
+      drawHandles(ctx, viewport, handles);
     }
     drawFixedRangeProfileSpinner(ctx, viewport, this.state, Date.now(), handles);
   }

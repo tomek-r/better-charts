@@ -92,6 +92,40 @@ export function rangeEndingAtAnchor(barSeries: TimeModel, fromMs: number, anchor
   return { ...minuteAlignedWindow({ fromMs, endMs }), lastSlotOpenMs: anchor.timeMs };
 }
 
+/** Which edge of a placed range a handle belongs to: where it starts or where it ends. */
+export type RangeBoundary = 'from' | 'end';
+
+/**
+ * The range a dragged boundary previews at `anchor`, or null when no legal range fits there. A
+ * moving boundary stays on a real candle when it crosses the other one: this never synthesizes
+ * anchors one millisecond apart.
+ */
+export function previewBoundaryRange(
+  barSeries: TimeModel,
+  side: RangeBoundary,
+  original: PlacedFixedRangeProfile,
+  anchor: BarAnchor,
+): PlacedFixedRangeProfile | null {
+  const { bars } = barSeries;
+  if (side === 'from') {
+    let lastAllowedIndex = bars.length - 1;
+    while (lastAllowedIndex >= 0 && bars[lastAllowedIndex].time * 1000 > original.lastSlotOpenMs) {
+      lastAllowedIndex -= 1;
+    }
+    if (lastAllowedIndex < 0) {
+      return null;
+    }
+    const index = Math.min(anchor.index, lastAllowedIndex);
+    return { ...original, ...minuteAlignedWindow({ fromMs: bars[index].time * 1000, endMs: original.endMs }) };
+  }
+  const firstAllowedIndex = bars.findIndex((bar) => bar.time * 1000 >= original.fromMs);
+  if (firstAllowedIndex < 0) {
+    return null;
+  }
+  const endAnchor = anchor.index < firstAllowedIndex ? anchorAtBar(barSeries, firstAllowedIndex) : anchor;
+  return rangeEndingAtAnchor(barSeries, original.fromMs, endAnchor);
+}
+
 /** The index of the newest bar that opened at or before `timeSeconds`; undefined when every bar is later. */
 function lastBarOpenedAtOrBefore(barSeries: TimeModel, timeSeconds: number): number | undefined {
   const { bars } = barSeries;

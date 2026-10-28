@@ -7,7 +7,7 @@ import {
   FixedRangeProfileRequester,
   SLOW_PROFILE_SPINNER_DELAY_MS,
 } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
-import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
+import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/profileState';
 import type { FixedRangeProfileRange } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileRange';
 
 /**

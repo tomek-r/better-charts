@@ -7,14 +7,14 @@ import {
   type PaintOp,
   type TestViewport,
 } from './helpers/overlayHarness';
+import { drawFixedRangeProfile } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
 import {
-  drawFixedRangeProfile,
   drawFixedRangeProfileSpinner,
   drawFixedRangeProfileLoadingWash,
   LOADING_WASH_ALPHA,
-  type FixedRangeProfileState,
-  type HandleEdges,
-} from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
+} from '../src/features/tools/fixedRangeProfile/loadingIndicator';
+import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/profileState';
+import type { HandleEdges } from '../src/features/tools/fixedRangeProfile/drawing/handles';
 import {
   drawLoader,
   LOADER_LINE_MARGIN,

@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import type { DevTestApi } from '../../src/features/chart/engine/surface/devTestApi';
 import type { CrosshairTestApi } from '../../src/features/tools/crosshair/crosshairTool';
-import type { FixedRangeProfileTestApi } from '../../src/features/tools/fixedRangeProfile/fixedRangeProfileTool';
+import type { FixedRangeProfileTestApi } from '../../src/features/tools/fixedRangeProfile/testApi';
 
 /** Each tool's dev test API, keyed by tool id: the one place a spec learns what `tool(id)` returns. */
 interface ToolTestApis {

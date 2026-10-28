@@ -8,11 +8,11 @@ import type { ChartToolHost } from '../src/features/chart/engine/tools/toolContr
 import { FixedRangeProfileDrawing } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfileDrawing';
 import { FIXED_RANGE_PROFILE_POINTS } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfilePoints';
 import { TickProfileRequestQueue } from '../src/features/tools/fixedRangeProfile/requests/tickProfileRequestQueue';
+import { readFixedRangeProfileSettings } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileSettings';
 import {
   FIXED_RANGE_PROFILE_INPUTS,
   FIXED_RANGE_PROFILE_STYLES,
-  readFixedRangeProfileSettings,
-} from '../src/features/tools/fixedRangeProfile/fixedRangeProfileSettings';
+} from '../src/features/tools/fixedRangeProfile/settingsSchema';
 
 /**
  * The settings that feed the computation (rows, value area) become the profile request and re-request it when

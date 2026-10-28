@@ -9,44 +9,15 @@ import {
   type ChartToolHost,
   type ChartToolResetReason,
 } from '../../chart/engine/tools/toolContract';
-import { FixedRangeProfileDrawing, outsidePane } from './drawing/fixedRangeProfileDrawing';
+import { finishBoundaryDrag, moveBoundary, startBoundaryDrag, type BoundaryDrag } from './boundaryDrag';
+import { FixedRangeProfileDrawing } from './drawing/fixedRangeProfileDrawing';
 import { FixedRangeProfileFactory } from './drawing/fixedRangeProfileFactory';
 import { FIXED_RANGE_PROFILE_POINTS } from './drawing/fixedRangeProfilePoints';
+import { drawHandles, handleXsFor, outsidePane } from './drawing/handles';
 import { TickProfileRequestQueue } from './requests/tickProfileRequestQueue';
-import { sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './fixedRangeProfileRange';
-import { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES } from './fixedRangeProfileSettings';
-
-/** Where the two drag handles sit, in pane CSS px, and the range they delimit. */
-interface FixedRangeProfileBoundaries {
-  fromX: number;
-  toX: number;
-  range: { fromMs: number; endMs: number };
-}
-
-/** The boundary drag in progress: the drawing it edits, which side, and the range it previews. */
-interface BoundaryDrag {
-  readonly drawing: FixedRangeProfileDrawing;
-  readonly side: 'from' | 'end';
-  readonly original: PlacedFixedRangeProfile;
-  preview: PlacedFixedRangeProfile;
-}
-
-/** What the e2e suite reads through `window.__chartTest.tool('fixedRangeProfile')` (dev builds only). */
-export interface FixedRangeProfileTestApi {
-  /** Handle x positions and the range of the shown drawing; null when the tool has no drawing. */
-  boundaries(): FixedRangeProfileBoundaries | null;
-  /** The shown drawing's requested range and whether its computed profile is loaded and visible. */
-  selection(): { range: { fromMs: number; toMs: number } | null; hasProfile: boolean };
-  /** Every drawing, bottom to top. */
-  drawings(): Array<{
-    id: string;
-    locked: boolean;
-    range: { fromMs: number; endMs: number };
-    hasProfile: boolean;
-    /** Whether the last paint drew the boundary lines and circles. */
-    handlesShown: boolean;
-  }>;
-}
+import { spanBetweenAnchors, type PlacedFixedRangeProfile } from './fixedRangeProfileRange';
+import { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES } from './settingsSchema';
+import { createFixedRangeProfileTestApi, type FixedRangeProfileTestApi } from './testApi';
 
 /**
  * The Fixed Range Volume Profile tool: the two-click gesture, the boundary drag and the drawings it
@@ -100,7 +71,11 @@ export class FixedRangeProfileTool implements ChartTool {
       this.host.requestRepaint();
       return true;
     }
-    return this.drag === null ? false : this.moveBoundary(this.drag, x);
+    if (this.drag === null) {
+      return false;
+    }
+    moveBoundary(this.host, this.drag, x);
+    return true;
   }
 
   pointerUp(outcome: ChartPointerUpOutcome): boolean {
@@ -108,7 +83,13 @@ export class FixedRangeProfileTool implements ChartTool {
     if (this.pressed !== null) {
       return this.endPlacementStep(this.pressed, commit);
     }
-    return this.drag === null ? false : this.endBoundaryDrag(this.drag, commit);
+    const drag = this.drag;
+    if (drag === null) {
+      return false;
+    }
+    this.drag = null;
+    finishBoundaryDrag(this.host, drag, commit);
+    return true;
   }
 
   cancelGesture(): void {
@@ -171,27 +152,15 @@ export class FixedRangeProfileTool implements ChartTool {
   }
 
   testApi(): FixedRangeProfileTestApi {
-    return {
-      boundaries: () => this.boundaries(),
-      selection: () => this.selection(),
-      drawings: () =>
-        this.drawings.entries().map(({ id, locked, drawing }) => ({
-          id,
-          locked,
-          ...drawing.summary(),
-          handlesShown: drawing.wereHandlesPainted(),
-        })),
-    };
+    return createFixedRangeProfileTestApi(this.drawings, () => this.drag);
   }
 
-  /** A press on a handle starts the drag of the topmost visible unlocked drawing; a locked one lets the chart pan. */
   private beginBoundaryDrag(x: number): boolean {
-    const target = this.unlockedHandleAt(x);
-    const original = target?.drawing.placedRange() ?? null;
-    if (target === null || original === null) {
+    const drag = startBoundaryDrag(this.host, this.drawings, x);
+    if (drag === null) {
       return false;
     }
-    this.drag = { drawing: target.drawing, side: target.side, original, preview: original };
+    this.drag = drag;
     this.host.requestRepaint();
     return true;
   }
@@ -220,81 +189,17 @@ export class FixedRangeProfileTool implements ChartTool {
     this.host.drawingPlaced(drawingId);
   }
 
-  private moveBoundary(drag: BoundaryDrag, x: number): boolean {
-    const anchor = anchorAtX(this.host, x);
-    const preview = anchor === null ? null : drag.drawing.boundaryPreview(drag.side, drag.original, anchor);
-    if (preview === null) {
-      return true;
-    }
-    drag.preview = preview;
-    drag.drawing.setPreviewing(!sameRange(preview, drag.original));
-    this.host.requestRepaint();
-    return true;
-  }
-
-  private endBoundaryDrag(drag: BoundaryDrag, commit: boolean): boolean {
-    this.drag = null;
-    drag.drawing.setPreviewing(false);
-    if (commit && !sameRange(drag.original, drag.preview)) {
-      drag.drawing.commitRange(drag.preview);
-      this.host.drawingsChanged();
-    }
-    this.host.requestRepaint();
-    return true;
-  }
-
   /** The dashed lines and circles of a half-placed range, while the second click is still pending. */
   private drawPlacementPreview(ctx: CanvasRenderingContext2D, viewport: ChartDrawTarget['viewport']): void {
     if (this.first === null || this.hover === null) {
       return;
     }
     const range = spanBetweenAnchors(this.host.barSeries, this.first, this.hover);
-    const handles = FixedRangeProfileDrawing.handleXsFor(this.host.geometry, range);
-    FixedRangeProfileDrawing.drawHandles(ctx, viewport, handles);
+    drawHandles(ctx, viewport, handleXsFor(this.host.geometry, range));
   }
 
   /** The collection entry of one drawing, or undefined when the tool no longer holds that id. */
   private entryOf(drawingId: string): ChartDrawingEntry<FixedRangeProfileDrawing> | undefined {
     return this.drawings.entries().find((entry) => entry.id === drawingId);
-  }
-
-  /** The drawing a hit test or the e2e suite shows: the selected one, else the one painted last. */
-  private shownDrawing(): FixedRangeProfileDrawing | undefined {
-    const entries = this.drawings.entries();
-    return (entries.find((entry) => entry.selected) ?? entries.at(-1))?.drawing;
-  }
-
-  private boundaries(): FixedRangeProfileBoundaries | null {
-    const drawing = this.shownDrawing();
-    const placed = drawing?.placedRange() ?? null;
-    if (drawing === undefined || placed === null) {
-      return null;
-    }
-    const range = this.drag?.drawing === drawing ? this.drag.preview : placed;
-    return { ...drawing.handleXs(range), range: { fromMs: range.fromMs, endMs: range.endMs } };
-  }
-
-  private selection(): { range: { fromMs: number; toMs: number } | null; hasProfile: boolean } {
-    const drawing = this.shownDrawing();
-    const requested = drawing?.state.range;
-    const range = requested ? { fromMs: requested.fromMs, toMs: requested.toMs } : null;
-    return { range, hasProfile: drawing?.hasProfile() ?? false };
-  }
-
-  /**
-   * The selected drawing's handle under the pane x, with the side that press would drag. Only a selected
-   * drawing shows its handles, so only its handles can be grabbed; a locked one lets the chart pan.
-   */
-  private unlockedHandleAt(x: number): { drawing: FixedRangeProfileDrawing; side: 'from' | 'end' } | null {
-    const entries = this.drawings.entries();
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const { id, drawing, locked, visible, selected } = entries[index];
-      const grabbable = selected && !locked && visible && this.host.drawingShownOnTimeframe(id);
-      const side = grabbable ? drawing.handleAt(x) : null;
-      if (side !== null) {
-        return { drawing, side };
-      }
-    }
-    return null;
   }
 }
