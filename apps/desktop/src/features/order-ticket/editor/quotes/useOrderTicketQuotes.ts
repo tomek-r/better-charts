@@ -2,7 +2,7 @@ import { useStore } from 'zustand';
 import { useBridgeMarketSelector } from '../../../bridge/BridgeSessionProvider';
 import { useBridgeQuotePresentation } from '../../../bridge/useBridgeQuotePresentation';
 import { useOrderTicketActions, useOrderTicketStores } from '../../state/orderTicketContext';
-import type { OrderTicketQuoteProps } from '../orderTicketEditorTypes';
+import type { OrderTicketQuoteProps } from '../orderTicketEditorProps';
 
 export function useOrderTicketQuotes(): OrderTicketQuoteProps {
   const stores = useOrderTicketStores();

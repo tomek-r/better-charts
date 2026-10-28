@@ -239,7 +239,7 @@ Measure allocation and render work with long histories before claiming a speedup
 conversion policy. A regression reproduces the sub-second timestamp disagreement
 and covers the accepted boundary, malformed values, and exact raw price strings.
 
-**Evidence:** [bridge predicate](../../apps/desktop/src/features/bridge/normalizers.ts#L47)
+**Evidence:** [bridge predicate](../../apps/desktop/src/features/bridge/bridgePayloadNormalizers.ts#L47)
 and [render conversion](../../apps/desktop/src/features/chart/engine/mt5DataAdapter.ts#L19).
 
 **Confirmed duplication:** both parse OHLC/volume and check finite numbers,
@@ -318,7 +318,7 @@ new forwarding boilerplate. Staged display declares an independent domain input
 instead of importing a React state-hook type. Lifecycle order, listeners,
 effect dependencies, and provider state ownership are unchanged.
 
-**Evidence:** [central lifecycle](../../apps/desktop/src/AppLifecycle.tsx#L29),
+**Evidence:** [central lifecycle](../../apps/desktop/src/lifecycle/AppLifecycle.tsx#L29),
 [bridge bootstrap inputs](../../apps/desktop/src/features/bridge/useBridgeSession.ts#L336),
 [ticket state](../../apps/desktop/src/features/order-ticket/state/useOrderTicketState.ts#L111),
 and [display input](../../apps/desktop/src/features/order-ticket/domain/stagedOrderDisplay.ts#L3).
@@ -521,7 +521,7 @@ new history. The initial-load comparison failed without key invalidation.
   ignores its price and only refreshes overlays. Its caller/comment still implies
   a distinct lighter scheduling path. Call the actual refresh operation and
   update the explanation; do not invent another price owner.
-- [priceToTicks](../../apps/desktop/src/features/order-ticket/state/useOrderTicketPricing.ts#L83)
+- [priceToTicks](../../apps/desktop/src/features/order-ticket/domain/priceTicks.ts)
   ignores its `kind` parameter. Remove that parameter and update callers if the
   conversion is intentionally absolute-distance-only.
 - [UnitsSizingRow](../../apps/desktop/src/features/order-ticket/editor/sizing/UnitsSizingRow.tsx#L177)

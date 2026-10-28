@@ -6,7 +6,7 @@ import {
   DEFAULT_PROFILE_REQUEST_PARAMS,
   FixedRangeProfileRequester,
 } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
-import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/overlay';
+import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
 
 /** The requester sends the histogram settings its owner supplies, and today's defaults when it supplies none. */
 

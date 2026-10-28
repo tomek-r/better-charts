@@ -2,32 +2,13 @@ import { useCallback, useEffect } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
-import type { OrderKind } from '../../../shared/bridge/types';
 import { quoteDigits, ticketPrice } from '../../../shared/format';
+import { priceToTicks } from '../domain/priceTicks';
 import { orderEntryPrice } from '../domain/ticketRules';
 import type { OrderTicketInputs } from './orderTicketInputs';
 import type { OrderTicketStores } from './orderTicketStores';
 
-export function priceToTicks(
-  price: string,
-  tickKnown: boolean,
-  orderKind: OrderKind,
-  entry: string,
-  limitPrice: string,
-  tickSize: number,
-): string {
-  if (!tickKnown) {
-    return '';
-  }
-  const base = Number(orderEntryPrice(orderKind, entry, limitPrice));
-  const value = Number(price);
-  if (!price.trim() || !Number.isFinite(base) || base <= 0 || !Number.isFinite(value) || value <= 0) {
-    return '';
-  }
-  return String(Math.round(Math.abs(value - base) / tickSize));
-}
-
-export function useOrderTicketPricing(
+export function useOrderTicketPricingActions(
   inputs: Pick<OrderTicketInputs, 'instrument' | 'quote'>,
   stores: OrderTicketStores,
 ) {

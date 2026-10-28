@@ -1,7 +1,7 @@
 import { ErrorNotification } from '../../../../shared/ui/notification/ErrorNotifications';
 import { equityAllocationIssue } from '../../domain/ticketRules';
 import { UnitsSizingRow } from './UnitsSizingRow';
-import { useOrderTicketSizing } from './useOrderTicketSizing';
+import { useOrderTicketSizingProps } from './useOrderTicketSizingProps';
 
 export function OrderTicketSizing() {
   const {
@@ -23,7 +23,7 @@ export function OrderTicketSizing() {
     volumeIssue,
     equityValue,
     riskModeHint,
-  } = useOrderTicketSizing();
+  } = useOrderTicketSizingProps();
   const riskEntered = riskAmount.trim() !== '';
   const allocationIssue = unitsMode === 'units' ? undefined : equityAllocationIssue(equityAllocationPercent);
   const allocationHint = {

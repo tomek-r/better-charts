@@ -3,7 +3,7 @@ import { useChartResources } from '../../chart/ChartWorkspaceProvider';
 import { useOpenDrawingSettings } from '../drawingSettings/DrawingSettingsProvider';
 import { CHART_TOOL_PLUGINS } from '../registry';
 import { DrawingToolbar } from './DrawingToolbar';
-import { useDraggablePosition } from './useDraggablePosition';
+import { useDrawingToolbarPosition } from './useDrawingToolbarPosition';
 import { useDrawingSelection } from './useDrawingSelection';
 
 /** Hands the keyboard back to the chart once the toolbar the command was pressed on is gone. */
@@ -26,7 +26,7 @@ export function ChartDrawingToolbar() {
   const selection = useDrawingSelection();
   const openDrawingSettings = useOpenDrawingSettings();
   const [panel, setPanel] = useState<HTMLDivElement | null>(null);
-  const { position, gripHandlers } = useDraggablePosition(panel);
+  const { position, gripHandlers } = useDrawingToolbarPosition(panel);
   if (selection === null || !isRegisteredTool(selection.toolId)) {
     return null;
   }

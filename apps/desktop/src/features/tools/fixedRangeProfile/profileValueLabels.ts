@@ -1,6 +1,6 @@
 import { formatCompactNumber } from '../../../shared/compactNumber';
 import type { ProfileBarsLayout, RowWeights } from './profileBars';
-import type { FixedRangeProfileAppearance, FixedRangeProfileVolumeMode } from './settings';
+import type { FixedRangeProfileAppearance, FixedRangeProfileVolumeMode } from './fixedRangeProfileSettings';
 
 const MAX_FONT_PX = 11;
 const MIN_FONT_PX = 1;

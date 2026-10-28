@@ -15,8 +15,14 @@ import type {
   QuoteSnapshot,
   SelectionFallback,
 } from '../../shared/bridge/types';
-import { normalizeCandle, normalizeHistoryPage, normalizeSnapshot, isValidCandle, normalizeQuote } from './normalizers';
-import { HISTORY_BARS } from '../../shared/bridge/limits';
+import {
+  normalizeCandle,
+  normalizeHistoryPage,
+  normalizeSnapshot,
+  isValidCandle,
+  normalizeQuote,
+} from './bridgePayloadNormalizers';
+import { HISTORY_BARS } from '../../shared/bridge/config';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
 import type { BridgeSessionState } from './useBridgeSession';
 import { endHistoryWait } from './historyWait';

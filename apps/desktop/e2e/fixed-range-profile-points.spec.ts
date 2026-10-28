@@ -5,7 +5,10 @@ import {
   fixedRangeProfilePoints,
   readFixedRangeProfilePoints,
 } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfilePoints';
-import { lastSlotOpenBefore, minuteAlignedWindow } from '../src/features/tools/fixedRangeProfile/range';
+import {
+  lastSlotOpenBefore,
+  minuteAlignedWindow,
+} from '../src/features/tools/fixedRangeProfile/fixedRangeProfileRange';
 
 /**
  * The points one fixed range volume profile drawing stores, and the handle position a restored drawing derives from

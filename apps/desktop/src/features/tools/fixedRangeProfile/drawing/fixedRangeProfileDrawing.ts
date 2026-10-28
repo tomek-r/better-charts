@@ -15,7 +15,7 @@ import {
   drawFixedRangeProfileSpinner,
   type FixedRangeProfileState,
   type HandleEdges,
-} from '../overlay';
+} from '../fixedRangeProfileOverlay';
 import {
   isRangeOpen,
   lastSlotOpenBefore,
@@ -23,14 +23,14 @@ import {
   rangeEndingAtAnchor,
   type FixedRangeProfileRange,
   type PlacedFixedRangeProfile,
-} from '../range';
+} from '../fixedRangeProfileRange';
 import { FixedRangeProfileRequester } from '../requests/fixedRangeProfileRequester';
 import {
   DEFAULT_FIXED_RANGE_PROFILE_SETTINGS,
   readFixedRangeProfileSettings,
   sameProfileRequestParams,
   type FixedRangeProfileSettings,
-} from '../settings';
+} from '../fixedRangeProfileSettings';
 import type { TickProfileRequestQueue } from '../requests/tickProfileRequestQueue';
 import { fixedRangeProfilePoints } from './fixedRangeProfilePoints';
 

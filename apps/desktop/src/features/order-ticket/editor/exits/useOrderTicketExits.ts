@@ -1,6 +1,6 @@
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { priceToTicks } from '../../state/useOrderTicketPricing';
+import { priceToTicks } from '../../domain/priceTicks';
 import {
   useBridgeAccountSelector,
   useBridgeMarketSelector,
@@ -9,7 +9,7 @@ import {
 import { deriveStagedOrderDisplay } from '../../domain/stagedOrderDisplay';
 import { stopDistanceGuard } from '../../domain/ticketRules';
 import { useOrderTicketActions, useOrderTicketStores } from '../../state/orderTicketContext';
-import type { OrderTicketExitsProps } from '../orderTicketEditorTypes';
+import type { OrderTicketExitsProps } from '../orderTicketEditorProps';
 
 export function useOrderTicketExits(): OrderTicketExitsProps {
   const stores = useOrderTicketStores();

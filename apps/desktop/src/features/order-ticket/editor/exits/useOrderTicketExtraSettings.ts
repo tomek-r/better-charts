@@ -1,6 +1,6 @@
 import { useStore } from 'zustand';
 import { useOrderTicketStores } from '../../state/orderTicketContext';
-import type { OrderTicketExtraSettingsProps } from '../orderTicketEditorTypes';
+import type { OrderTicketExtraSettingsProps } from '../orderTicketEditorProps';
 
 export function useOrderTicketExtraSettings(): OrderTicketExtraSettingsProps {
   const stores = useOrderTicketStores();

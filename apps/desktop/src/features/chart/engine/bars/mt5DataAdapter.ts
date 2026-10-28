@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { HISTORY_BARS, INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../../shared/bridge/limits';
+import { HISTORY_BARS, INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../../shared/bridge/config';
 import type { Candle, MarketSnapshot } from '../../../../shared/bridge/types';
 import { errorText } from '../../../../shared/errorText';
 

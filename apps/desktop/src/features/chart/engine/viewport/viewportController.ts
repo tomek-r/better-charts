@@ -2,7 +2,7 @@ import { timeframeBarOffset } from '../../../../shared/bridge/timeframes';
 import type { IChartApi, ISeriesApi, Logical, UTCTimestamp } from 'lightweight-charts';
 import { setPriceScaleRange } from '../priceScale/priceScaleRange';
 import type { RenderBar } from '../bars/mt5DataAdapter';
-import type { RenderViewport } from '../surface/overlayTypes';
+import type { RenderViewport } from '../surface/overlayRenderer';
 import {
   DEFAULT_BAR_SPACING,
   END_MARGIN,

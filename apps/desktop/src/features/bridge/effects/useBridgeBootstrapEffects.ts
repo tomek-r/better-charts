@@ -22,7 +22,7 @@ import type {
   RiskPreviewError,
   SelectionFallback,
 } from '../../../shared/bridge/types';
-import { normalizeAccount, normalizePortfolio, normalizeQuote, normalizeSnapshot } from '../normalizers';
+import { normalizeAccount, normalizePortfolio, normalizeQuote, normalizeSnapshot } from '../bridgePayloadNormalizers';
 import { initialHistoryBarsFor } from '../../chart/engine/bars/initialHistoryWindow';
 import type { BridgeSessionState } from '../useBridgeSession';
 import { beginHistoryWait, endHistoryWait } from '../historyWait';

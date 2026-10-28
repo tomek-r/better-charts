@@ -4,8 +4,8 @@ import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../sh
 import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { LazySetupGuideModal } from './setup/setup-guide-modal/LazySetupGuideModal';
-import type { AppSettingsData, DetectedSettingsField } from './settingsTypes';
-import { FRAME_BYTES } from '../../shared/bridge/limits';
+import type { AppSettingsData, DetectedSettingsField } from './appSettingsData';
+import { FRAME_BYTES } from '../../shared/bridge/config';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';
 
 type Category = 'MT5 setup' | 'Trading';

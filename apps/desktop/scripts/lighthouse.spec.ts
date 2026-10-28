@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { HISTORY_BARS } from '../src/shared/bridge/limits';
+import { HISTORY_BARS } from '../src/shared/bridge/config';
 import { installTauriStub } from '../e2e/helpers/tauriStub';
 import { loadRecordingsFromEnv } from './captureData';
 

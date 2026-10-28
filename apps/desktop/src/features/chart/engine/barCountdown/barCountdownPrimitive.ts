@@ -1,10 +1,10 @@
 import type { IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, Time } from 'lightweight-charts';
 import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
-import { BrokerClock } from './clock';
+import { BrokerClock } from './brokerClock';
 import { priceTagHeight, tagStackTops } from '../quotes/tagStack';
 import { paintTag, tagLayout } from '../text/fixedCellText';
-import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './types';
+import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './barCountdownOptions';
 import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
 
 /**

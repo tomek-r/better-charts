@@ -1,4 +1,4 @@
-import { AppLifecycle } from '../../AppLifecycle';
+import { AppLifecycle } from '../../lifecycle/AppLifecycle';
 import { AccountSwitchGuard } from '../account-switch/AccountSwitchGuard';
 import { AppHeaderFeature } from '../app-header/AppHeaderFeature';
 import { BridgeSessionProvider } from '../bridge/BridgeSessionProvider';

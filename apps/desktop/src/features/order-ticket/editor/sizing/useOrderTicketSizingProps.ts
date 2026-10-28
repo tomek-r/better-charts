@@ -1,13 +1,12 @@
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { accountMoneyBasis } from '../../../../shared/money';
 import { useBridgeAccountSelector, useBridgeMarketSelector } from '../../../bridge/BridgeSessionProvider';
-import { deriveOrderRiskBasis, type OrderRiskBasis } from '../../domain/riskBasis';
+import { deriveOrderRiskBasis } from '../../domain/riskBasis';
 import { orderVolumeIssue } from '../../domain/ticketRules';
 import { useOrderTicketActions, useOrderTicketStores } from '../../state/orderTicketContext';
-import type { OrderTicketSizingProps, OrderTicketTickValueProps } from '../orderTicketEditorTypes';
+import type { OrderTicketSizingProps } from '../orderTicketEditorProps';
 
-export function useOrderTicketSizing(): OrderTicketSizingProps {
+export function useOrderTicketSizingProps(): OrderTicketSizingProps {
   const stores = useOrderTicketStores();
   const actions = useOrderTicketActions();
   const { currency, equity, currencyDigits } = useBridgeAccountSelector(
@@ -60,44 +59,4 @@ export function useOrderTicketSizing(): OrderTicketSizingProps {
     slOn,
     stopLoss,
   };
-}
-
-export function useOrderRiskBasis(): OrderRiskBasis {
-  const stores = useOrderTicketStores();
-  const { accountEquity, currency, currencyDigits } = useBridgeAccountSelector(
-    useShallow((account) => ({
-      accountEquity: account?.equity,
-      currency: account?.currency,
-      currencyDigits: account?.currencyDigits,
-    })),
-  );
-  const { unitsMode, riskAmount, equityAllocationPercent, stagedOnChart } = useStore(
-    stores.draft,
-    useShallow((state) => ({
-      unitsMode: state.unitsMode,
-      riskAmount: state.riskAmount,
-      equityAllocationPercent: state.equityAllocationPercent,
-      stagedOnChart: state.stagedOnChart,
-    })),
-  );
-  return deriveOrderRiskBasis({
-    unitsMode,
-    riskAmount,
-    equity: accountEquity,
-    equityAllocationPercent,
-    currency,
-    currencyDigits,
-    stagedOnChart,
-  });
-}
-
-export function useOrderTicketTickValue(): OrderTicketTickValueProps {
-  const { instrument } = useBridgeMarketSelector((market) => ({ instrument: market.instrument }));
-  const { currency, currencyDigits } = useBridgeAccountSelector(
-    useShallow((account) => ({ currency: account?.currency, currencyDigits: account?.currencyDigits })),
-  );
-  const tickValueRaw = accountMoneyBasis(instrument, currency, currencyDigits)?.tickValueProfit ?? NaN;
-  const tickValueText =
-    Number.isFinite(tickValueRaw) && tickValueRaw > 0 ? String(Number(tickValueRaw.toPrecision(8))) : '—';
-  return { hasInstrument: instrument !== undefined, tickValueText, currency };
 }

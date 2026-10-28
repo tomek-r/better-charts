@@ -1,6 +1,6 @@
 import { ErrorNotification } from '../../../../shared/ui/notification/ErrorNotifications';
 import { Select, type SelectOption } from '../../../../shared/ui/select/Select';
-import { useOrderTicketPricing } from './useOrderTicketPricing';
+import { useOrderTicketPricingProps } from './useOrderTicketPricingProps';
 
 const PRICE_REFERENCE_OPTIONS: readonly SelectOption[] = [
   { value: 'ask', label: 'Ask' },
@@ -60,7 +60,7 @@ export function OrderTicketPricing() {
     limitPriceMisaligned,
     side: riskSide,
     hasQuote,
-  } = useOrderTicketPricing();
+  } = useOrderTicketPricingProps();
   const absolutePrice = orderKind === 'market' || priceMode === 'absolute';
   let displayedPriceReference = priceReference;
   if (orderKind === 'market') {

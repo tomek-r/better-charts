@@ -1,4 +1,4 @@
-import type { OverlayRenderer } from '../surface/overlayTypes';
+import type { OverlayRenderer } from '../surface/overlayRenderer';
 import type { OverlayPass } from '../trading/tradingOverlayDrawing';
 
 /**

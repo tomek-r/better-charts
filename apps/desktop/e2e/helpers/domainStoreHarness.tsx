@@ -1,7 +1,7 @@
 import { act, createElement, Fragment, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createDomainStore, useDomainField, useFieldSetterSelector } from '../../src/shared/state/domainStore';
-import { useOrderTicketSizing } from '../../src/features/order-ticket/state/useOrderTicketSizing';
+import { useOrderTicketSizingActions } from '../../src/features/order-ticket/state/useOrderTicketSizingActions';
 import { createOrderTicketStores } from '../../src/features/order-ticket/state/orderTicketStores';
 
 interface DomainStoreHarnessWindow extends Window {
@@ -55,7 +55,11 @@ export function mountDomainStoreHarness(): void {
   }
 
   function SizingCommandConsumer() {
-    const { applyUnitsMode, setRiskAmountFromInput } = useOrderTicketSizing(sizingStores, undefined, () => undefined);
+    const { applyUnitsMode, setRiskAmountFromInput } = useOrderTicketSizingActions(
+      sizingStores,
+      undefined,
+      () => undefined,
+    );
     const [result, setResult] = useState('ready');
     return createElement(
       Fragment,

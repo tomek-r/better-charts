@@ -14,7 +14,7 @@ import {
   SettingsIcon,
   TrashIcon,
 } from './drawingToolbarIcons';
-import type { DrawingToolbarPosition, GripHandlers } from './useDraggablePosition';
+import type { DrawingToolbarPosition, GripHandlers } from './useDrawingToolbarPosition';
 
 /** Distance of the default position from the frame's top edge, in CSS px. */
 const DEFAULT_TOP_INSET_PX = 12;

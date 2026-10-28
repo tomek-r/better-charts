@@ -1,7 +1,7 @@
-import { useOrderTicketTickValue } from './useOrderTicketSizing';
+import { useOrderTicketTickValueProps } from './useOrderTicketTickValueProps';
 
 export function OrderTicketTickValue() {
-  const { hasInstrument, tickValueText, currency } = useOrderTicketTickValue();
+  const { hasInstrument, tickValueText, currency } = useOrderTicketTickValueProps();
   return (
     <div className="ticket-row static">
       <span className="ticket-row-label">Tick value</span>

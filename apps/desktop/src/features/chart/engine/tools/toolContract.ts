@@ -1,7 +1,7 @@
 import { timeframeBarOffset, timeframeBarTime } from '../../../../shared/bridge/timeframes';
 import type { QuoteSnapshot } from '../../../../shared/bridge/types';
 import type { MarketDataPort } from '../../../bridge/marketDataPort';
-import type { RenderViewport } from '../surface/overlayTypes';
+import type { RenderViewport } from '../surface/overlayRenderer';
 import type { ToolInputDefinition } from '../drawings/toolInputs';
 import type { ToolStyleDefinition } from '../drawings/toolStyles';
 import type { ChartDrawingPointRule, ChartToolDrawings } from '../drawings/toolDrawings';

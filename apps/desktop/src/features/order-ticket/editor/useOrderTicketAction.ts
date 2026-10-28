@@ -6,7 +6,7 @@ import type { BridgeSessionStores } from '../../bridge/bridgeSessionStores';
 import { deriveTicketGateProjection } from './useOrderTicketGates';
 import { useOrderTicketActions, useOrderTicketStores } from '../state/orderTicketContext';
 import type { OrderTicketStores } from '../state/orderTicketStores';
-import type { OrderTicketActionProps } from './orderTicketEditorTypes';
+import type { OrderTicketActionProps } from './orderTicketEditorProps';
 
 type TicketActionSnapshot = Pick<OrderTicketActionProps, 'canCheckOrder' | 'orderCheckLoading' | 'side'>;
 type TicketActionSourceStates = {

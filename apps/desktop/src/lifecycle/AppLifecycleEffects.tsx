@@ -13,8 +13,8 @@ import {
   useChartWorkspaceChartEffects,
   useChartWorkspaceResetEffects,
   useChartWorkspaceHotkeyEffect,
-} from '../features/chart/effects/useChartLifecycle';
-import { useChartWorkspacePointerEffects } from '../features/chart/effects/useChartGestures';
+} from '../features/chart/effects/useChartWorkspaceEffects';
+import { useChartWorkspacePointerEffects } from '../features/chart/effects/useChartWorkspacePointerEffects';
 import {
   useChartWorkspaceMirrorRefEffect,
   useChartWorkspaceMirrorLayoutEffect,
@@ -24,7 +24,7 @@ import { useOrderTicketDefaultVolume } from '../features/order-ticket/effects/us
 import { useOrderTicketStopLossSnap } from '../features/order-ticket/effects/useOrderTicketStopLossSnap';
 import { useOrderTicketOrderCheckEffects } from '../features/order-ticket/effects/useOrderTicketOrderCheckEffects';
 import { useOrderTicketRiskPreviewEffects } from '../features/order-ticket/effects/useOrderTicketRiskPreviewEffects';
-import { usePortfolioAccountResetEffect } from '../features/portfolio/usePortfolio';
+import { usePortfolioAccountResetEffect } from '../features/portfolio/usePortfolioAccountResetEffect';
 import type { ChartWorkspaceState } from '../features/chart/state/useChartWorkspace';
 import { useOrderTicketEntryRuntime } from '../features/order-ticket/state/useOrderTicketEntryRuntime';
 import { useOrderTicketCheckRuntime } from '../features/order-ticket/state/useOrderTicketCheckRuntime';

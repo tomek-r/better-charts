@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../shared/bridge/limits';
+import { INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../shared/bridge/config';
 
 /** The wait notice appears once this little time is left before the EA's deadline. */
 export const WAIT_NOTICE_LEAD_MS = 5_000;

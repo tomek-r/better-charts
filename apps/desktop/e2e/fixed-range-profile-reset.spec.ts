@@ -3,7 +3,7 @@ import { withFakeClock } from './helpers/fakeClock';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
 import { createFakeToolHost } from './helpers/fakeToolHost';
 import type { ChartToolResetReason } from '../src/features/chart/engine/tools/toolContract';
-import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/tool';
+import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileTool';
 
 /**
  * What a reset does to the Fixed Range Volume Profile tool and its backend request:

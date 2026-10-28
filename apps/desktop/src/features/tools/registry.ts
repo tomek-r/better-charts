@@ -1,7 +1,7 @@
 import type { ChartToolPlugin } from './chartToolPlugin';
-import { arrowPlugin } from './arrow/plugin';
-import { crosshairPlugin } from './crosshair/plugin';
-import { fixedRangeProfilePlugin } from './fixedRangeProfile/plugin';
+import { arrowPlugin } from './arrow/arrowPlugin';
+import { crosshairPlugin } from './crosshair/crosshairPlugin';
+import { fixedRangeProfilePlugin } from './fixedRangeProfile/fixedRangeProfilePlugin';
 
 /**
  * Every chart tool, pointers included, in rail order. Adding a tool is a folder

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { HISTORY_BARS } from '../src/shared/bridge/limits';
+import { HISTORY_BARS } from '../src/shared/bridge/config';
 import { DEFAULT_BAR_SPACING } from '../src/features/chart/engine/timeScale/futureTimePoints';
 import { gotoWithStub, holdIdleCallbacks, stubInvocations, windowCandles } from './helpers/tauriStub';
 

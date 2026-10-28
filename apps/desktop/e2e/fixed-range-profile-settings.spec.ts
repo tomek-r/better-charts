@@ -12,7 +12,7 @@ import {
   FIXED_RANGE_PROFILE_INPUTS,
   FIXED_RANGE_PROFILE_STYLES,
   readFixedRangeProfileSettings,
-} from '../src/features/tools/fixedRangeProfile/settings';
+} from '../src/features/tools/fixedRangeProfile/fixedRangeProfileSettings';
 
 /**
  * The settings that feed the computation (rows, value area) become the profile request and re-request it when

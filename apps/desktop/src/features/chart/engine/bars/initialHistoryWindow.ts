@@ -1,4 +1,4 @@
-import { HISTORY_BARS, INITIAL_HISTORY_BARS } from '../../../../shared/bridge/limits';
+import { HISTORY_BARS, INITIAL_HISTORY_BARS } from '../../../../shared/bridge/config';
 import type { ChartController } from '../surface/chartController';
 import { DEFAULT_BAR_SPACING, END_MARGIN } from '../timeScale/futureTimePoints';
 

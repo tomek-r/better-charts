@@ -1,6 +1,6 @@
 import { paintTradingLabel } from './labels/paintTradingLabel';
 import type { TradingLabelHit, TradingLabelLayoutState, TradingLabelTarget } from './labels/tradingLabelTypes';
-import type { OverlayRenderer } from '../surface/overlayTypes';
+import type { OverlayRenderer } from '../surface/overlayRenderer';
 import type { RiskSide } from '../../../../shared/bridge/types';
 import type { AccountMoneyBasis } from '../../../../shared/money';
 import { riskRewardRatio } from '../../../../shared/trading/riskReward';

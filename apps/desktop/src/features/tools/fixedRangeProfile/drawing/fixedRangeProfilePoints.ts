@@ -1,6 +1,6 @@
 import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
 import type { ChartDrawingPointRule } from '../../../chart/engine/drawings/toolDrawings';
-import { minuteAlignedWindow, type FixedRangeProfileRange } from '../range';
+import { minuteAlignedWindow, type FixedRangeProfileRange } from '../fixedRangeProfileRange';
 
 /**
  * The points one fixed range volume profile drawing stores: the two edges of the profile window as time anchors. The

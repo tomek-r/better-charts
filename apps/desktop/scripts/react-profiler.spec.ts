@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
-import { HISTORY_BARS, INITIAL_HISTORY_BARS } from '../src/shared/bridge/limits';
+import { HISTORY_BARS, INITIAL_HISTORY_BARS } from '../src/shared/bridge/config';
 import { installTauriStub, pushEvent } from '../e2e/helpers/tauriStub';
 import { loadRecordingsFromEnv } from './captureData';
 

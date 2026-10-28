@@ -1,12 +1,12 @@
 import { useRef } from 'react';
-import { useBridgeSessionLifecycleRuntime } from './features/bridge/BridgeSessionProvider';
-import { useChartWorkspaceRuntime } from './features/chart/ChartWorkspaceProvider';
-import { useExecutionRuntime } from './features/execution/ExecutionProvider';
+import { useBridgeSessionLifecycleRuntime } from '../features/bridge/BridgeSessionProvider';
+import { useChartWorkspaceRuntime } from '../features/chart/ChartWorkspaceProvider';
+import { useExecutionRuntime } from '../features/execution/ExecutionProvider';
 import {
   useOrderTicketChartActions,
   useOrderTicketChartControls,
-} from './features/order-ticket/state/useOrderTicketChartRuntime';
-import { useOrderTicketBridgeResponsePort } from './features/order-ticket/state/useOrderTicketBridgeResponsePort';
+} from '../features/order-ticket/state/useOrderTicketChartRuntime';
+import { useOrderTicketBridgeResponsePort } from '../features/order-ticket/state/useOrderTicketBridgeResponsePort';
 import {
   LifecycleAccountAndCheck,
   LifecycleBootstrapAndGestures,
@@ -15,7 +15,7 @@ import {
   LifecyclePortfolioStream,
   LifecycleTicketEntry,
   LifecycleTicketPreviewAndMirror,
-} from './lifecycle/AppLifecycleEffects';
+} from './AppLifecycleEffects';
 
 /**
  * Keeps cross-domain lifecycle effects in their frozen registration order.

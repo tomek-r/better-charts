@@ -5,7 +5,7 @@ import { clampRiskPercentInput } from '../domain/riskBasis';
 import { orderEntryPrice } from '../domain/ticketRules';
 import type { OrderTicketStores } from './orderTicketStores';
 
-export function useOrderTicketSizing(
+export function useOrderTicketSizingActions(
   stores: OrderTicketStores,
   instrument: BrokerSymbol | undefined,
   enableRiskStopLoss: (side: RiskSide, entry: number, overwrite?: boolean) => string | undefined,

@@ -33,7 +33,7 @@ import { OrderTicketProvider } from '../../src/features/order-ticket/OrderTicket
 import { useOrderTicketActions, useOrderTicketStores } from '../../src/features/order-ticket/state/orderTicketContext';
 import { useOrderTicketAction } from '../../src/features/order-ticket/editor/useOrderTicketAction';
 import { useOrderTicketHeader } from '../../src/features/order-ticket/editor/useOrderTicketHeader';
-import { useOrderTicketPricing } from '../../src/features/order-ticket/editor/pricing/useOrderTicketPricing';
+import { useOrderTicketPricingProps } from '../../src/features/order-ticket/editor/pricing/useOrderTicketPricingProps';
 import { OrderTicketTickValue } from '../../src/features/order-ticket/editor/sizing/OrderTicketTickValue';
 import { OrderTicketSizing } from '../../src/features/order-ticket/editor/sizing/OrderTicketSizing';
 import { OrderTicketExits } from '../../src/features/order-ticket/editor/exits/OrderTicketExits';
@@ -191,7 +191,7 @@ function ChartResourcesProbe() {
 }
 
 function TicketEditProbe() {
-  const pricing = useOrderTicketPricing();
+  const pricing = useOrderTicketPricingProps();
   return <output data-testid="probe-ticket-edit">{pricing.entry}</output>;
 }
 

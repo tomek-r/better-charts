@@ -34,7 +34,7 @@ function clearOverlayDrag(overlay: { current: PositionOverlayState }) {
  * Shared by the account-switch guard and the symbol-change reset so both clear
  * exactly the same state.
  */
-export function useResetTradingTicket(): () => void {
+export function useResetOrderTicket(): () => void {
   const stores = useOrderTicketStores();
   const { clearStagedWidget, resetTicketToDefaults } = useOrderTicketActions();
   const { chart, positionOverlayState, setPendingModification } = useChartResources();

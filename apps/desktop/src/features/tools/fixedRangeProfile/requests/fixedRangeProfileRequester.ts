@@ -1,8 +1,8 @@
 import type { ProfileResult } from '../../../../shared/bridge/types';
 import type { MarketDataPort, ProfileRequestParams } from '../../../bridge/marketDataPort';
 import type { ChartToolHost } from '../../../chart/engine/tools/toolContract';
-import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from '../overlay';
-import type { FixedRangeProfileRange } from '../range';
+import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from '../fixedRangeProfileOverlay';
+import type { FixedRangeProfileRange } from '../fixedRangeProfileRange';
 
 /** The histogram settings of a profile whose owner supplies none: 128 rows and a 70% value area. */
 export const DEFAULT_PROFILE_REQUEST_PARAMS: ProfileRequestParams = {

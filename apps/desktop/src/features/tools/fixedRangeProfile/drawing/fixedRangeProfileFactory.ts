@@ -1,7 +1,7 @@
 import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
 import type { ChartDrawingFactory } from '../../../chart/engine/drawings/toolDrawings';
 import type { ChartToolHost } from '../../../chart/engine/tools/toolContract';
-import { lastSlotOpenBefore } from '../range';
+import { lastSlotOpenBefore } from '../fixedRangeProfileRange';
 import type { TickProfileRequestQueue } from '../requests/tickProfileRequestQueue';
 import { FixedRangeProfileDrawing } from './fixedRangeProfileDrawing';
 import { readFixedRangeProfilePoints } from './fixedRangeProfilePoints';

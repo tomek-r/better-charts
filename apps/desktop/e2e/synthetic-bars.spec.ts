@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { INITIAL_HISTORY_BARS } from '../src/shared/bridge/limits';
+import { INITIAL_HISTORY_BARS } from '../src/shared/bridge/config';
 import { installTauriStub } from './helpers/tauriStub';
 
 interface SnapshotCandle {

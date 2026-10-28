@@ -14,8 +14,8 @@ import { FixedRangeProfileDrawing, outsidePane } from './drawing/fixedRangeProfi
 import { FixedRangeProfileFactory } from './drawing/fixedRangeProfileFactory';
 import { FIXED_RANGE_PROFILE_POINTS } from './drawing/fixedRangeProfilePoints';
 import { TickProfileRequestQueue } from './requests/tickProfileRequestQueue';
-import { sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './range';
-import { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES } from './settings';
+import { sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './fixedRangeProfileRange';
+import { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES } from './fixedRangeProfileSettings';
 
 /**
  * The fixed range volume profile's settings live in `settings.ts`, apart from the drawing and the canvas code, so

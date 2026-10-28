@@ -1,6 +1,10 @@
 import type { RenderViewport } from '../../chart/engine/tools/toolContract';
 import type { ProfileResult, TickProfileBin } from '../../../shared/bridge/types';
-import type { FixedRangeProfileAppearance, FixedRangeProfilePlacement, FixedRangeProfileVolumeMode } from './settings';
+import type {
+  FixedRangeProfileAppearance,
+  FixedRangeProfilePlacement,
+  FixedRangeProfileVolumeMode,
+} from './fixedRangeProfileSettings';
 
 const ROW_ALPHA = 0.75;
 const POC_ROW_ALPHA = 1;

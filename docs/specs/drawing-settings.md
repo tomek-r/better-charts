@@ -32,7 +32,7 @@ full set.
      `belowBars`, stamps it on export and applies it in the paint and hit passes; the drawing keeps its own
      `visible` flag. The Rust store keeps it as JSON text in a column added by migration v3.
 4. `profile-request-params`: rows layout and value area percent in the Rust profile request.
-5. `fixed-range-profile-settings` (done): the tool declares its inputs and styles (`fixedRangeProfile/settings.ts`).
+5. `fixed-range-profile-settings` (done): the tool declares its inputs and styles (`fixedRangeProfile/fixedRangeProfileSettings.ts`).
    - Inputs: Rows Layout (Number Of Rows / Ticks Per Row) with Row Size 1-128 or Ticks Per Row 1-1000, each on its
      own row (`activeWhen` disables the one the layout does not use), Volume (Up/Down, Total, Delta), Value Area
      Volume % 1-100, Extend Right.

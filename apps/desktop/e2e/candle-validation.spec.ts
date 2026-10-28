@@ -16,7 +16,7 @@ const validCandle: Candle = {
 test('candle validation matches renderable time and rejects malformed values', async ({ page }) => {
   await gotoWithStub(page);
   const results = await page.evaluate(async (valid) => {
-    const normalizersPath = '/src/features/bridge/normalizers.ts';
+    const normalizersPath = '/src/features/bridge/bridgePayloadNormalizers.ts';
     const adapterPath = '/src/features/chart/engine/bars/mt5DataAdapter.ts';
     const { isValidCandle } = await import(/* @vite-ignore */ normalizersPath);
     const { toRenderBar } = await import(/* @vite-ignore */ adapterPath);
@@ -38,7 +38,7 @@ test('candle validation matches renderable time and rejects malformed values', a
 test('normalizing a valid candle preserves its exact price strings', async ({ page }) => {
   await gotoWithStub(page);
   const result = await page.evaluate(async (valid) => {
-    const normalizersPath = '/src/features/bridge/normalizers.ts';
+    const normalizersPath = '/src/features/bridge/bridgePayloadNormalizers.ts';
     const { isValidCandle, normalizeCandle } = await import(/* @vite-ignore */ normalizersPath);
     const candle = normalizeCandle({
       time_ms: valid.timeMs,

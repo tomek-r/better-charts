@@ -7,8 +7,8 @@ import {
   FixedRangeProfileRequester,
   SLOW_PROFILE_SPINNER_DELAY_MS,
 } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
-import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/overlay';
-import type { FixedRangeProfileRange } from '../src/features/tools/fixedRangeProfile/range';
+import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
+import type { FixedRangeProfileRange } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileRange';
 
 /**
  * The request side of the fixed range profile, with a fake clock and a fake market data

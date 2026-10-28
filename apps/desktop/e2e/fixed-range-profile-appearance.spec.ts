@@ -1,9 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { profileResultFor } from './helpers/fakeMarketDataPort';
 import { createRecordingCtx, createTestViewport, renderArgsFor, type PaintOp } from './helpers/overlayHarness';
-import { drawFixedRangeProfile, type FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/overlay';
+import {
+  drawFixedRangeProfile,
+  type FixedRangeProfileState,
+} from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
 import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
-import { readFixedRangeProfileSettings } from '../src/features/tools/fixedRangeProfile/settings';
+import { readFixedRangeProfileSettings } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileSettings';
 import type { TickProfileBin } from '../src/shared/bridge/types';
 import { palette } from '../src/shared/theme/palette';
 

@@ -14,7 +14,7 @@ import {
   LOADING_WASH_ALPHA,
   type FixedRangeProfileState,
   type HandleEdges,
-} from '../src/features/tools/fixedRangeProfile/overlay';
+} from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
 import {
   drawLoader,
   LOADER_LINE_MARGIN,
@@ -35,7 +35,7 @@ import { formatDayMonth, MS_PER_DAY, STUB_NOW } from './helpers/stubClock';
  * so the assertions run on the recorded op sequence — exactly what the pixels
  * would show.
  *
- * Contract locked down here (see tools/fixedRangeProfile/overlay.ts):
+ * Contract locked down here (see tools/fixedRangeProfile/fixedRangeProfileOverlay.ts):
  *  - time→x anchor = the public viewport mapping (bar center): chartRect.x + i*(barWidth+barSpacing) - offset + barWidth/2,
  *    with i located by binary search over bar times (interpolate inside, clamp outside);
  *  - mirrored rows around the anchor (BID left / ASK right), ONE common weight denominator;

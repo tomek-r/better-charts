@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { DomainStore } from '../../shared/state/domainStore';
 import { readSetupCompleted, saveSetupCompleted } from './setup/setupCompletion';
-import type { AppSettingsData } from './settingsTypes';
+import type { AppSettingsData } from './appSettingsData';
 
 /** The three steps of the setup guide, in the order it walks them. */
 export enum SetupGuideStep {

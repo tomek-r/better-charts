@@ -1,5 +1,5 @@
 import type { ChartToolPlugin } from '../chartToolPlugin';
-import { CrosshairTool } from './tool';
+import { CrosshairTool } from './crosshairTool';
 
 /** Draws the crosshair lines while active; the axis labels follow every tool. */
 export const crosshairPlugin: ChartToolPlugin<'crosshair'> = {

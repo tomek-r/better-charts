@@ -6,7 +6,7 @@ import { palette } from '../../../shared/theme/palette';
 import { parseHexColor } from '../../../shared/theme/hexColor';
 import { drawProfileBars, layoutProfileBars, type ProfileBarsLayout } from './profileBars';
 import { drawProfileValueLabels } from './profileValueLabels';
-import { DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE, type FixedRangeProfileAppearance } from './settings';
+import { DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE, type FixedRangeProfileAppearance } from './fixedRangeProfileSettings';
 
 /**
  * Volume profile (mirrored down/up bars by default), below trading labels; levels carry no labels. A `bars` profile is an approximation

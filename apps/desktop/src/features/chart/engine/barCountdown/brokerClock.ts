@@ -1,5 +1,5 @@
 import { timeframeBarOffset, timeframeBarTime } from '../../../../shared/bridge/timeframes';
-import type { BrokerQuote } from './types';
+import type { BrokerQuote } from './barCountdownOptions';
 
 /**
  * Land the wake-up just past a second boundary. Timers run at or after their

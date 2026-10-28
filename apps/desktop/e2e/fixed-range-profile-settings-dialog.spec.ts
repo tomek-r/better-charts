@@ -5,7 +5,7 @@ import { chooseOption, mountSettingsForm, savedValues } from './helpers/drawingS
 import {
   FIXED_RANGE_PROFILE_INPUTS,
   FIXED_RANGE_PROFILE_STYLES,
-} from '../src/features/tools/fixedRangeProfile/settings';
+} from '../src/features/tools/fixedRangeProfile/fixedRangeProfileSettings';
 
 /** The fixed range volume profile's declarations as the settings dialog shows them, over the real form. */
 

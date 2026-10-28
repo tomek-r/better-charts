@@ -21,7 +21,7 @@ import type {
   ChartToolHost,
   ChartToolHostBase,
 } from '../src/features/chart/engine/tools/toolContract';
-import { ArrowTool } from '../src/features/tools/arrow/tool';
+import { ArrowTool } from '../src/features/tools/arrow/arrowTool';
 import { FakeDrawingShape } from './helpers/fakeDrawingShape';
 
 /**

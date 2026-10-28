@@ -2,9 +2,9 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useBridgeMarketSelector, useBridgeQuoteSelector } from '../../../bridge/BridgeSessionProvider';
 import { useOrderTicketActions, useOrderTicketStores } from '../../state/orderTicketContext';
-import type { OrderTicketPricingProps } from '../orderTicketEditorTypes';
+import type { OrderTicketPricingProps } from '../orderTicketEditorProps';
 
-export function useOrderTicketPricing(): OrderTicketPricingProps {
+export function useOrderTicketPricingProps(): OrderTicketPricingProps {
   const stores = useOrderTicketStores();
   const actions = useOrderTicketActions();
   const instrument = useBridgeMarketSelector((market) => market.instrument);

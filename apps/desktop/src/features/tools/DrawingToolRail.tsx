@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChartToolPlugin } from './chartToolPlugin';
 import { CHART_TOOL_PLUGINS, type ChartToolId } from './registry';
 import { DrawingToolIcon } from './DrawingToolIcon';
-import { useChartDrawn } from '../chart/useChartDrawn';
+import { useChartDrawn } from '../chart/state/useChartDrawn';
 
 /** A registered plugin, with its id narrowed to the known tool ids. */
 type RegisteredToolPlugin = ChartToolPlugin<ChartToolId>;

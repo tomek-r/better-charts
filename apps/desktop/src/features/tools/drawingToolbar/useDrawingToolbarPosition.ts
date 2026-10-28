@@ -33,7 +33,7 @@ function clamped(offset: number, farthest: number): number {
  * pointer from there, and stops at the frame's edges. The place it was left lives in component state,
  * so it is remembered for the session and never stored.
  */
-export function useDraggablePosition(panel: HTMLElement | null): {
+export function useDrawingToolbarPosition(panel: HTMLElement | null): {
   position: DrawingToolbarPosition;
   gripHandlers: GripHandlers;
 } {

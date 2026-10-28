@@ -4,7 +4,7 @@ import { CHART_TOOL_PLUGINS, DEFAULT_CHART_TOOL_ID } from '../../tools/registry'
 import { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
 import { quoteDigits } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
-import { popupOwnsKeyboard } from '../../../shared/ui/popup/openPopup';
+import { popupOwnsKeyboard } from '../../../shared/ui/popup/popupKeyboardOwnership';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { BridgeSessionLifecycleState } from '../../bridge/BridgeSessionProvider';
 import type { QuoteSnapshot } from '../../../shared/bridge/types';

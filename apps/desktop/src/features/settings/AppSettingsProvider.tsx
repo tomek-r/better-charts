@@ -11,7 +11,7 @@ import {
   type AppSettingsStore,
   type SetupGuideStep,
 } from './useAppSettings';
-import type { AppSettingsData } from './settingsTypes';
+import type { AppSettingsData } from './appSettingsData';
 
 /** The two ways into the setup surfaces, which the header and the notices call. */
 type AppSettingsActions = Pick<AppSettingsHandlers, 'openSettings' | 'openSetupGuide'>;

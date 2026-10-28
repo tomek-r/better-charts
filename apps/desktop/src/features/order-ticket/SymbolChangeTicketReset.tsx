@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useBridgeMarketSelector } from '../bridge/BridgeSessionProvider';
-import { useResetTradingTicket } from './state/useResetTradingTicket';
+import { useResetOrderTicket } from './state/useResetOrderTicket';
 
 /**
  * Resets the ticket when the chart switches to a different symbol. A timeframe
@@ -9,7 +9,7 @@ import { useResetTradingTicket } from './state/useResetTradingTicket';
  */
 export function SymbolChangeTicketReset() {
   const symbol = useBridgeMarketSelector((market) => market.snapshot.symbol);
-  const resetTradingTicket = useResetTradingTicket();
+  const resetTradingTicket = useResetOrderTicket();
   const previousSymbol = useRef(symbol);
   useEffect(() => {
     const changed = previousSymbol.current !== '' && previousSymbol.current !== symbol;

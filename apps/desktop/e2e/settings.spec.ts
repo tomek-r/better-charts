@@ -1,7 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { setupGuideDialog, setupScreen } from './helpers/setupGuide';
 import { gotoWithStub, stubInvocations, type StubInternals } from './helpers/tauriStub';
-import type { AppSettingsData } from '../src/features/settings/settingsTypes';
+import type { AppSettingsData } from '../src/features/settings/appSettingsData';
 
 const firstLaunch: AppSettingsData = {
   mt5BridgeSettings: {

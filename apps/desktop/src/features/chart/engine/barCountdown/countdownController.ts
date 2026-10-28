@@ -1,6 +1,6 @@
 import type { BridgeState, QuoteSnapshot } from '../../../../shared/bridge/types';
-import type { BarCountdownPrimitive } from './primitive';
-import type { BarCountdownState } from './types';
+import type { BarCountdownPrimitive } from './barCountdownPrimitive';
+import type { BarCountdownState } from './barCountdownOptions';
 import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
 
 /**
