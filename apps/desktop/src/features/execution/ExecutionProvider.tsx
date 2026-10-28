@@ -5,7 +5,7 @@ import { createDomainStore, type DomainStore } from '../../shared/providers/doma
 import { useRequiredContext } from '../../shared/providers/useRequiredContext';
 import { useEventCallback } from '../../shared/hooks/useEventCallback';
 import { useExecutionCommands, type ExecutionCommandState, type ExecutionStoreState } from './useExecutionCommands';
-import { useBridgeAccount } from '../bridge/BridgeSessionProvider';
+import { useBridgeAccount } from '../bridge/bridgeSelectors';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 
 type ExecutionActions = Pick<

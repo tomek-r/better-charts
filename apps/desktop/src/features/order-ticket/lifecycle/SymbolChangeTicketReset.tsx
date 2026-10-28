@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useBridgeMarketSelector } from '../../bridge/BridgeSessionProvider';
+import { useBridgeMarketSelector } from '../../bridge/bridgeSelectors';
 import { useResetOrderTicket } from './useResetOrderTicket';
 
 /**

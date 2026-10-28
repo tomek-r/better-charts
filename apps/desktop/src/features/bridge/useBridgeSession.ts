@@ -43,6 +43,18 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
   const { setQuote } = useFieldSetterSelector(stores.quote, (setters) => setters);
   const { setAccount } = useFieldSetterSelector(stores.account, (setters) => setters);
   const { setPortfolio } = useFieldSetterSelector(stores.portfolio, (setters) => setters);
+  // Throws synchronously when there is no adapter, so each caller's catch runs
+  // in the same turn it did before this was shared.
+  const sendInitialHistory = useCallback(
+    (symbol: string, timeframe: string): Promise<void> => {
+      const adapter = adapterRef.current;
+      if (!adapter) {
+        throw new Error('chart adapter unavailable');
+      }
+      return adapter.requestHistory(symbol, timeframe, initialHistoryBarsFor(chart.current));
+    },
+    [adapterRef, chart],
+  );
   const requestHistory = useCallback(
     async (wire: string) => {
       const symbol = targetSymbol.current ?? stores.market.getState().snapshot.symbol;
@@ -54,11 +66,7 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
       setLoadingTimeframe(wire);
       beginHistoryWait(historyWaitSetters);
       try {
-        const adapter = adapterRef.current;
-        if (!adapter) {
-          throw new Error('chart adapter unavailable');
-        }
-        await adapter.requestHistory(symbol, wire, initialHistoryBarsFor(chart.current));
+        await sendInitialHistory(symbol, wire);
       } catch {
         if (generation === requestGeneration.current) {
           loadingTimeframeRef.current = undefined;
@@ -68,7 +76,7 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
         }
       }
     },
-    [adapterRef, chart, historyWaitSetters, setChartError, setLoadingTimeframe, stores],
+    [historyWaitSetters, sendInitialHistory, setChartError, setLoadingTimeframe, stores],
   );
   const requestSymbolSelection = useCallback(
     async (symbol: string, metadata?: BrokerSymbol) => {
@@ -84,14 +92,9 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
       beginHistoryWait(historyWaitSetters);
       const generation = ++requestGeneration.current;
       try {
-        const adapter = adapterRef.current;
-        if (!adapter) {
-          throw new Error('chart adapter unavailable');
-        }
-        await adapter.requestHistory(
+        await sendInitialHistory(
           symbol,
           loadingTimeframeRef.current ?? stores.market.getState().snapshot.timeframe ?? DEFAULT_TIMEFRAME,
-          initialHistoryBarsFor(chart.current),
         );
       } catch {
         if (generation !== requestGeneration.current) {
@@ -107,7 +110,7 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
         setChartError('History request could not be sent.');
       }
     },
-    [adapterRef, chart, historyWaitSetters, setChartError, setInstrument, setQuote, setSymbolLoading, stores],
+    [historyWaitSetters, sendInitialHistory, setChartError, setInstrument, setQuote, setSymbolLoading, stores],
   );
   const chooseSymbol = useCallback(
     (item: BrokerSymbol) => requestSymbolSelection(item.symbol, item),
@@ -132,31 +135,20 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
   return {
     stores,
     marketData,
-    status: stores.connection.getState().status,
     setStatus,
-    snapshot: stores.market.getState().snapshot,
     setSnapshot,
-    latestCandle: stores.market.getState().latestCandle,
     setLatestCandle,
-    quote: stores.quote.getState().quote,
     setQuote,
-    instrument: stores.market.getState().instrument,
     setInstrument,
-    lastSymbolSelection: stores.market.getState().lastSymbolSelection,
     setLastSymbolSelection,
-    account: stores.account.getState().account,
     setAccount,
-    portfolio: stores.portfolio.getState().portfolio,
     setPortfolio,
-    symbolLoading: stores.market.getState().symbolLoading,
     setSymbolLoading,
-    chartError: stores.market.getState().chartError,
     setChartError,
     setHistoryWaitStartedAtMs,
     setHistoryUnavailable,
-    tauriAvailable: stores.connection.getState().tauriAvailable,
+    historyWaitSetters,
     setTauriAvailable,
-    loadingTimeframe: stores.market.getState().loadingTimeframe,
     setLoadingTimeframe,
     loadingTimeframeRef,
     pendingMetadata,
@@ -173,4 +165,20 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
   };
 }
 
-export type BridgeSessionState = ReturnType<typeof useBridgeSession>;
+type StoreState<Store extends { getState: () => unknown }> = ReturnType<Store['getState']>;
+
+/**
+ * Everything a bridge effect may read: the session's setters and refs (from
+ * `useBridgeSession`) plus the store fields. The actions are exposed apart, as
+ * `BridgeActions`. The provider supplies the store fields reactively, so the
+ * hook itself never reads them at render.
+ */
+export type BridgeSessionState = Omit<
+  ReturnType<typeof useBridgeSession>,
+  'requestHistory' | 'chooseSymbol' | 'chooseSymbolByName'
+> &
+  StoreState<BridgeSessionStores['connection']> &
+  StoreState<BridgeSessionStores['market']> &
+  StoreState<BridgeSessionStores['quote']> &
+  StoreState<BridgeSessionStores['account']> &
+  StoreState<BridgeSessionStores['portfolio']>;

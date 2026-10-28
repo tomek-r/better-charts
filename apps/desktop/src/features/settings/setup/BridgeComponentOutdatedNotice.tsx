@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { BridgeRefusal, bridgeRefusal } from '../../../shared/bridge/bridgeRefusal';
+import { BridgeRefusal } from '../../../shared/bridge/bridgeRefusal';
 import { Notification } from '../../../shared/ui/notification/Notification';
 import { useAppSettingsActions } from '../AppSettingsProvider';
-import { useBridgeConnectionSelector } from '../../bridge/BridgeSessionProvider';
+import { useBridgeRefusalMessage } from '../../bridge/useBridgeRefusal';
 
 /**
  * The one refusal the bundled MT5 files fix: the installed EA or tick reader is
@@ -12,9 +12,7 @@ import { useBridgeConnectionSelector } from '../../bridge/BridgeSessionProvider'
  * the bridge reaches any other state.
  */
 export function BridgeComponentOutdatedNotice() {
-  const message = useBridgeConnectionSelector(({ status }) =>
-    bridgeRefusal(status) === BridgeRefusal.ComponentOutdated ? status.message : undefined,
-  );
+  const message = useBridgeRefusalMessage(BridgeRefusal.ComponentOutdated);
   const { openSetupGuide } = useAppSettingsActions();
   const [dismissed, setDismissed] = useState<string>();
   if (!message || message === dismissed) {

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useBridgeConnectionSelector } from '../../bridge/BridgeSessionProvider';
+import { useBridgeConnectionSelector } from '../../bridge/bridgeSelectors';
 import { BridgeRefusal, bridgeRefusal } from '../../../shared/bridge/bridgeRefusal';
 import { LoadingMessage } from '../../../shared/ui/loading/LoadingMessage';
 import { useAppSettingsActions } from '../AppSettingsProvider';

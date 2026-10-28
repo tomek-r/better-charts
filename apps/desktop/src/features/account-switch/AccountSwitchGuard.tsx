@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEventCallback } from '../../shared/hooks/useEventCallback';
-import { useBridgeAccount } from '../bridge/BridgeSessionProvider';
+import { useBridgeAccount } from '../bridge/bridgeSelectors';
 import { useResetOrderTicket } from '../order-ticket/lifecycle/useResetOrderTicket';
 import { AccountSwitchDialog } from './AccountSwitchDialog';
 import { accountSwitchMessage, isAccountSwitch, type AccountIdentity } from './accountSwitch';

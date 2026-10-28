@@ -1,6 +1,6 @@
 import { useShallow } from 'zustand/react/shallow';
 import type { AccountSnapshot } from '../../shared/bridge/types';
-import { useBridgeAccountSelector } from '../bridge/BridgeSessionProvider';
+import { useBridgeAccountSelector } from '../bridge/bridgeSelectors';
 import { accountEnvironment, type AccountEnvironment } from './accountEnvironment';
 
 type EnvironmentInput = Parameters<typeof accountEnvironment>[0];

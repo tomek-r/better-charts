@@ -9,6 +9,30 @@ import type { BridgeSessionState } from './useBridgeSession';
 
 type BridgeStreamState = Pick<BridgeSessionState, 'snapshot' | 'instrument' | 'account' | 'portfolio' | 'quote'>;
 
+/** What the overlay needs to show prices and money for the symbol on screen; data of another symbol is ignored. */
+function overlayDisplayInputs({
+  symbol,
+  instrument,
+  accountCurrency,
+  currencyDigits,
+  quote,
+}: {
+  symbol: string | undefined;
+  instrument: BridgeStreamState['instrument'];
+  accountCurrency: string | undefined;
+  currencyDigits: number | undefined;
+  quote: { symbol: string | undefined; bid: string | undefined; ask: string | undefined };
+}) {
+  const matchingInstrument = instrument?.symbol === symbol ? instrument : undefined;
+  const pnlCurrency = accountCurrency?.trim() || undefined;
+  const quotePrecision =
+    quote.symbol === symbol && quote.bid !== undefined && quote.ask !== undefined
+      ? quoteDigits(quote.bid, quote.ask)
+      : undefined;
+  const estimatedMoney = accountMoneyBasis(matchingInstrument, pnlCurrency, currencyDigits);
+  return { matchingInstrument, pnlCurrency, quotePrecision, estimatedMoney };
+}
+
 export function useBridgeStreamEffects(
   session: BridgeStreamState,
   {
@@ -38,13 +62,13 @@ export function useBridgeStreamEffects(
       return;
     }
     try {
-      const matchingInstrument = instrument?.symbol === snapshot.symbol ? instrument : undefined;
-      const pnlCurrency = account?.currency.trim() || undefined;
-      const quotePrecision =
-        quoteSymbol === snapshot.symbol && quoteBid !== undefined && quoteAsk !== undefined
-          ? quoteDigits(quoteBid, quoteAsk)
-          : undefined;
-      const estimatedMoney = accountMoneyBasis(matchingInstrument, pnlCurrency, account?.currencyDigits);
+      const { matchingInstrument, pnlCurrency, quotePrecision, estimatedMoney } = overlayDisplayInputs({
+        symbol: snapshot.symbol,
+        instrument,
+        accountCurrency: account?.currency,
+        currencyDigits: account?.currencyDigits,
+        quote: { symbol: quoteSymbol, bid: quoteBid, ask: quoteAsk },
+      });
       const changed = syncPositionOverlay(
         positionOverlayState.current,
         portfolio,
@@ -55,15 +79,14 @@ export function useBridgeStreamEffects(
         account?.currencyDigits,
         partialCloseAvailable,
       );
-      if (submitSwapPendingRef.current) {
-        // The fill landed: swap the frozen staged rows for the live rows in ONE
-        // repaint (clearStagedWidget repaints when the widget was painted).
+      const swapPending = submitSwapPendingRef.current;
+      if (swapPending) {
         submitSwapPendingRef.current = false;
-        const had = clearStagedWidget();
-        if (!had && changed) {
-          instance.refreshOverlays();
-        }
-      } else if (changed) {
+      }
+      // The fill landed: swap the frozen staged rows for the live rows in ONE
+      // repaint (clearStagedWidget repaints when the widget was painted).
+      const stagedWidgetRepainted = swapPending && clearStagedWidget();
+      if (changed && !stagedWidgetRepainted) {
         instance.refreshOverlays();
       }
     } catch {

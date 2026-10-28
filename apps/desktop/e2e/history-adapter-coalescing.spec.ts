@@ -5,7 +5,9 @@ test('coalesces same-turn history selections and suppresses requests invalidated
   await gotoWithStub(page);
   const result = await page.evaluate(async () => {
     const adapterPath = '/src/features/chart/engine/bars/mt5DataAdapter.ts';
+    const transportPath = '/src/features/bridge/market/mt5HistoryTransport.ts';
     const { Mt5DataAdapter } = await import(/* @vite-ignore */ adapterPath);
+    const { mt5HistoryTransport } = await import(/* @vite-ignore */ transportPath);
     const internals = (
       window as unknown as {
         __TAURI_INTERNALS__: {
@@ -19,7 +21,7 @@ test('coalesces same-turn history selections and suppresses requests invalidated
       return undefined;
     };
 
-    const selections = new Mt5DataAdapter();
+    const selections = new Mt5DataAdapter(mt5HistoryTransport);
     const sequence = [
       selections.requestHistory('AUDUSD', 'M1', 10),
       selections.requestHistory('EURUSD', 'M1', 20),
@@ -29,18 +31,18 @@ test('coalesces same-turn history selections and suppresses requests invalidated
     const coalescedCalls = calls.splice(0);
     selections.resetRequests();
 
-    const duplicate = new Mt5DataAdapter();
+    const duplicate = new Mt5DataAdapter(mt5HistoryTransport);
     await Promise.all([duplicate.requestHistory('USDJPY', 'M5', 40), duplicate.requestHistory('USDJPY', 'M5', 50)]);
     const duplicateCalls = calls.splice(0);
     duplicate.resetRequests();
 
-    const resetBeforeDispatch = new Mt5DataAdapter();
+    const resetBeforeDispatch = new Mt5DataAdapter(mt5HistoryTransport);
     const resetRequest = resetBeforeDispatch.requestHistory('GBPUSD', 'M15');
     resetBeforeDispatch.resetRequests();
     await resetRequest;
     const resetCalls = calls.splice(0);
 
-    const disposeBeforeDispatch = new Mt5DataAdapter();
+    const disposeBeforeDispatch = new Mt5DataAdapter(mt5HistoryTransport);
     const disposeRequest = disposeBeforeDispatch.requestHistory('USDCAD', 'H1');
     disposeBeforeDispatch.dispose();
     await disposeRequest;

@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import { HISTORY_BARS, INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../../shared/bridge/config';
 import type { Candle, MarketSnapshot } from '../../../../shared/bridge/types';
 import { errorText } from '../../../../shared/errorText';
@@ -63,6 +62,12 @@ export interface Mt5HistoryError {
   kind: 'dispatch' | 'timeout' | 'page';
 }
 
+/** How the adapter reaches the bridge; the engine never knows what carries the requests. */
+export interface HistoryTransport {
+  requestHistory(request: { symbol: string; timeframe: string; bars: number }): Promise<unknown>;
+  requestHistoryPage(request: { symbol: string; timeframe: string; bars: number; beforeMs: number }): Promise<unknown>;
+}
+
 type HistoryListener = (failure: Mt5HistoryError) => void;
 interface PendingHistory {
   symbol: string;
@@ -90,6 +95,8 @@ export class Mt5DataAdapter {
   private listeners = new Set<HistoryListener>();
   private disposed = false;
   private selectionGeneration = 0;
+
+  constructor(private readonly transport: HistoryTransport) {}
 
   onError(listener: HistoryListener): () => void {
     if (this.disposed) {
@@ -139,7 +146,7 @@ export class Mt5DataAdapter {
       this.startTimeout(key, pending);
     }
     try {
-      await invoke('request_history', { symbol, timeframe, bars: clampBars(bars) });
+      await this.transport.requestHistory({ symbol, timeframe, bars: clampBars(bars) });
     } catch (error) {
       const message = errorText(error);
       this.settle(key, pending);
@@ -183,7 +190,7 @@ export class Mt5DataAdapter {
     this.pending.set(key, pending);
     this.startTimeout(key, pending, 'page');
     try {
-      await invoke('request_history_page', { symbol, timeframe, bars: clampBars(bars), beforeMs });
+      await this.transport.requestHistoryPage({ symbol, timeframe, bars: clampBars(bars), beforeMs });
     } catch (error) {
       this.settle(key, pending);
       if (generation === this.selectionGeneration) {

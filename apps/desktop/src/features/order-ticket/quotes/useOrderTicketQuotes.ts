@@ -1,5 +1,5 @@
 import { useStore } from 'zustand';
-import { useBridgeMarketSelector } from '../../bridge/BridgeSessionProvider';
+import { useBridgeMarketSelector } from '../../bridge/bridgeSelectors';
 import { useBridgeQuotePresentation } from '../../bridge/useBridgeQuotePresentation';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketQuoteProps } from '../orderTicketEditorProps';

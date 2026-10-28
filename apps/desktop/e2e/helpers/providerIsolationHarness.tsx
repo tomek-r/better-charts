@@ -10,16 +10,18 @@ import {
   useSideDrawerOpen,
 } from '../../src/features/side-drawers/SideDrawerProvider';
 import {
+  useBridgeSessionRuntime,
+  useBridgeSessionLifecycleRuntime,
+  BridgeSessionProvider,
+} from '../../src/features/bridge/BridgeSessionProvider';
+import {
   useBridgeAccount,
   useBridgeConnectionSelector,
   useBridgeMarket,
   useBridgeQuote,
   useBridgePortfolio,
-  useBridgeSessionRuntime,
-  useBridgeSessionLifecycleRuntime,
-  BridgeSessionProvider,
   useTauriAvailable,
-} from '../../src/features/bridge/BridgeSessionProvider';
+} from '../../src/features/bridge/bridgeSelectors';
 import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../../src/features/settings/setup/BridgeAwaitingScreen';
 import { BridgeScreen } from '../../src/features/settings/setup/BridgeScreen';
 import { ChartWorkspaceProvider, useChartResources } from '../../src/features/chart/ChartWorkspaceProvider';

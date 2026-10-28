@@ -1,5 +1,5 @@
 import { HistoryViewportMode, type ChartController } from '../../chart/engine/surface/chartController';
-import { toRenderBar, type Mt5DataAdapter, type Mt5HistoryError } from '../../chart/engine/bars/mt5DataAdapter';
+import type { Mt5DataAdapter, Mt5HistoryError } from '../../chart/engine/bars/mt5DataAdapter';
 import { listen } from '@tauri-apps/api/event';
 import type {
   BridgeStatus,
@@ -16,16 +16,19 @@ import type {
   SelectionFallback,
 } from '../../../shared/bridge/types';
 import {
-  normalizeCandle,
+  normalizeBarUpdate,
   normalizeHistoryPage,
   normalizeSnapshot,
   isValidCandle,
   normalizeQuote,
+  validCandlesOf,
 } from '../bridgePayloadNormalizers';
+import type { PayloadEvent } from '../bridgeEventTypes';
 import { HISTORY_BARS } from '../../../shared/bridge/config';
-import { DEFAULT_TIMEFRAME } from '../../../shared/bridge/timeframes';
 import type { BridgeSessionState } from '../useBridgeSession';
+import { applyAcceptedSnapshot } from './applyAcceptedSnapshot';
 import { endHistoryWait } from './historyWait';
+import { createIdlePrefetch } from './idlePrefetch';
 
 export interface BridgeEffectRun {
   disposed: boolean;
@@ -59,12 +62,15 @@ export type BridgeMarketResources = {
   adapterRef: { current: Mt5DataAdapter | null };
 };
 
-/** Longest the prefetch waits for an idle period before running anyway. */
-const PREFETCH_IDLE_TIMEOUT_MS = 2000;
-/** Stand-in for `requestIdleCallback` where it is missing. */
-const PREFETCH_FALLBACK_DELAY_MS = 200;
+interface PageState {
+  key: string;
+  symbol: string;
+  timeframe: string;
+  inFlight: boolean;
+  anchorMs: number | undefined;
+}
 
-type PayloadEvent<T> = { payload: T };
+const emptyPageState = (): PageState => ({ key: '', symbol: '', timeframe: '', inFlight: false, anchorMs: undefined });
 
 /** Market history, paging, profiles and live updates share one effect-run lifetime. */
 export function createBridgeMarketRuntime(
@@ -97,13 +103,7 @@ export function createBridgeMarketRuntime(
   const historyWaitSetters = { setHistoryWaitStartedAtMs, setHistoryUnavailable };
   const pendingCandles = new Map<number, Candle>();
   let candleFrame: number | undefined;
-  const pageState: {
-    key: string;
-    symbol: string;
-    timeframe: string;
-    inFlight: boolean;
-    anchorMs: number | undefined;
-  } = { key: '', symbol: '', timeframe: '', inFlight: false, anchorMs: undefined };
+  const pageState = emptyPageState();
 
   const cancelCandles = () => {
     if (candleFrame !== undefined) {
@@ -142,11 +142,7 @@ export function createBridgeMarketRuntime(
     }
     const key = `${symbol}|${timeframe}`;
     if (pageState.key !== key) {
-      pageState.key = key;
-      pageState.symbol = symbol;
-      pageState.timeframe = timeframe;
-      pageState.inFlight = false;
-      pageState.anchorMs = undefined;
+      Object.assign(pageState, emptyPageState(), { key, symbol, timeframe });
     }
     if (pageState.inFlight) {
       return;
@@ -155,60 +151,28 @@ export function createBridgeMarketRuntime(
     pageState.anchorMs = beforeMs;
     void adapter.requestHistoryPage(symbol, timeframe, HISTORY_BARS, beforeMs).catch(() => undefined);
   };
-  // One idle prefetch per accepted snapshot: it runs after the first view has
-  // painted, so the page that fills the history never competes with first
-  // render. A newer snapshot, a pending selection change or teardown cancels it.
-  let prefetchCancel: (() => void) | undefined;
-  const cancelPrefetch = () => {
-    prefetchCancel?.();
-    prefetchCancel = undefined;
-  };
-  const schedulePrefetch = (dataKey: string) => {
-    cancelPrefetch();
-    let cancelled = false;
-    let frame: number | undefined;
-    let idle: number | undefined;
-    let timer: number | undefined;
-    const runPrefetch = () => {
-      prefetchCancel = undefined;
-      if (
-        cancelled ||
-        run.disposed ||
-        dataKeyRef.current !== dataKey ||
-        loadingTimeframeRef.current !== undefined ||
-        targetSymbol.current !== undefined
-      ) {
-        return;
-      }
-      chartRef.current?.prefetchOlderHistory();
-    };
-    frame = requestAnimationFrame(() => {
-      frame = undefined;
-      if (typeof requestIdleCallback === 'function') {
-        idle = requestIdleCallback(runPrefetch, { timeout: PREFETCH_IDLE_TIMEOUT_MS });
-      } else {
-        timer = window.setTimeout(runPrefetch, PREFETCH_FALLBACK_DELAY_MS);
-      }
-    });
-    prefetchCancel = () => {
-      cancelled = true;
-      if (frame !== undefined) {
-        cancelAnimationFrame(frame);
-      }
-      if (idle !== undefined && typeof cancelIdleCallback === 'function') {
-        cancelIdleCallback(idle);
-      }
-      if (timer !== undefined) {
-        window.clearTimeout(timer);
-      }
-    };
-  };
+  const idlePrefetch = createIdlePrefetch({
+    isStillWanted: (dataKey) =>
+      !run.disposed &&
+      dataKeyRef.current === dataKey &&
+      loadingTimeframeRef.current === undefined &&
+      targetSymbol.current === undefined,
+    prefetch: () => chartRef.current?.prefetchOlderHistory(),
+  });
   const resetPageState = () => {
-    pageState.key = '';
-    pageState.symbol = '';
-    pageState.timeframe = '';
-    pageState.inFlight = false;
-    pageState.anchorMs = undefined;
+    Object.assign(pageState, emptyPageState());
+  };
+
+  /** The selection a live answer must belong to: the pick in flight, else what is on screen; unset matches anything. */
+  const expectedSelection = () => ({
+    symbol: targetSymbol.current ?? currentSymbolRef.current,
+    timeframe: loadingTimeframeRef.current ?? currentTimeframeRef.current,
+  });
+  const isExpectedSelection = (symbol: string | undefined, timeframe: string | undefined) => {
+    const expected = expectedSelection();
+    return (
+      (!expected.symbol || expected.symbol === symbol) && (!expected.timeframe || expected.timeframe === timeframe)
+    );
   };
 
   const releaseSymbolSelection = (symbol: string) => {
@@ -233,12 +197,7 @@ export function createBridgeMarketRuntime(
       }
       return;
     }
-    const expectedSymbol = targetSymbol.current ?? currentSymbolRef.current;
-    const expectedTimeframe = loadingTimeframeRef.current ?? currentTimeframeRef.current;
-    if (
-      (!expectedSymbol || expectedSymbol === failure.symbol) &&
-      (!expectedTimeframe || expectedTimeframe === failure.timeframe)
-    ) {
+    if (isExpectedSelection(failure.symbol, failure.timeframe)) {
       loadingTimeframeRef.current = undefined;
       setLoadingTimeframe(undefined);
       endHistoryWait(historyWaitSetters);
@@ -257,9 +216,7 @@ export function createBridgeMarketRuntime(
       return;
     }
     const { symbol, timeframe } = event.payload;
-    const expectedSymbol = targetSymbol.current ?? currentSymbolRef.current;
-    const expectedTimeframe = loadingTimeframeRef.current ?? currentTimeframeRef.current;
-    if ((expectedSymbol && expectedSymbol !== symbol) || (expectedTimeframe && expectedTimeframe !== timeframe)) {
+    if (!isExpectedSelection(symbol, timeframe)) {
       return;
     }
     marketAdapterRef.current?.acceptHistoryUnavailable(symbol, timeframe);
@@ -283,18 +240,28 @@ export function createBridgeMarketRuntime(
     setChartError(`${symbol} is not available on this account — showing ${shownSymbol}`);
   };
 
+  // The same symbol always carries the view over, measured from the newest
+  // bar: a timeframe change, and equally a window that replaces the series in
+  // place (a fresh answer to a history request), whose newest bar may be
+  // several bars later than the chart's. Pinning the old logical position
+  // there left the newest bars off the right edge. Only a new symbol or a
+  // fresh session (selection refs cleared) starts from the default view.
+  // Auto scale is off by default, so replaceHistory fits the scale to the
+  // new candles itself.
+  const viewportModeFor = (symbol: string | undefined) => {
+    const hasHistory = (chartRef.current?.getData().length ?? 0) > 0;
+    return currentSymbolRef.current === symbol && hasHistory
+      ? HistoryViewportMode.BarsFromEnd
+      : HistoryViewportMode.Reset;
+  };
+
   const onMarketSnapshot = (event: PayloadEvent<MarketSnapshot>) => {
     if (run.disposed || run.bridgeState !== 'connected') {
       return;
     }
     const next = normalizeSnapshot(event.payload);
     const targetSnapshot = targetSymbol.current === next.symbol;
-    const expectedSymbol = targetSymbol.current ?? currentSymbolRef.current;
-    const expectedTimeframe = loadingTimeframeRef.current ?? currentTimeframeRef.current;
-    if (
-      (expectedSymbol && next.symbol !== expectedSymbol) ||
-      (expectedTimeframe && next.timeframe !== expectedTimeframe)
-    ) {
+    if (!isExpectedSelection(next.symbol, next.timeframe)) {
       return;
     }
     endHistoryWait(historyWaitSetters);
@@ -308,7 +275,7 @@ export function createBridgeMarketRuntime(
       setSymbolLoading(false);
     }
     const previousLatest = latestCandleRef.current;
-    const validCandles = next.candles.filter((candle) => toRenderBar(candle) !== null);
+    const validCandles = validCandlesOf(next.candles);
     const nextLatest = validCandles[validCandles.length - 1];
     const sameSelection = currentSymbolRef.current === next.symbol && currentTimeframeRef.current === next.timeframe;
     if (sameSelection && previousLatest && nextLatest && nextLatest.timeMs < previousLatest.timeMs) {
@@ -321,41 +288,11 @@ export function createBridgeMarketRuntime(
     const accepted = { ...next, candles };
     cancelCandles();
     try {
-      marketAdapterRef.current?.acceptSnapshot(accepted);
-      const dataKey = `${accepted.symbol}:${accepted.timeframe}`;
-      const replaced = dataKeyRef.current !== dataKey || (chartRef.current?.getData().length ?? 0) === 0;
-      const chart = chartRef.current;
-      const hasHistory = (chart?.getData().length ?? 0) > 0;
-      // The same symbol always carries the view over, measured from the newest
-      // bar: a timeframe change, and equally a window that replaces the series in
-      // place (a fresh answer to a history request), whose newest bar may be
-      // several bars later than the chart's. Pinning the old logical position
-      // there left the newest bars off the right edge. Only a new symbol or a
-      // fresh session (selection refs cleared) starts from the default view.
-      // Auto scale is off by default, so replaceHistory fits the scale to the
-      // new candles itself.
-      const preserveViewport = currentSymbolRef.current === accepted.symbol && hasHistory;
-      const viewportMode = preserveViewport ? HistoryViewportMode.BarsFromEnd : HistoryViewportMode.Reset;
-      // Selection refs describe what is on screen, so set them before the swap:
-      // a carried viewport can request an older page inside replaceHistory.
-      dataKeyRef.current = dataKey;
-      currentSymbolRef.current = accepted.symbol;
-      currentTimeframeRef.current = accepted.timeframe;
-      latestCandleRef.current = accepted.candles[accepted.candles.length - 1];
-      setLatestCandle(latestCandleRef.current);
-      chartRef.current?.setSymbol(accepted.symbol ?? '');
-      const preserved =
-        chartRef.current?.replaceHistory(accepted.candles, accepted.timeframe ?? DEFAULT_TIMEFRAME, viewportMode) ??
-        false;
-      if (replaced && !preserved) {
-        chartRef.current?.resetView();
-      }
-      schedulePrefetch(dataKey);
-      setChartError(
-        next.candles.length > 0 && accepted.candles.length === 0
-          ? 'MT5 returned candles, but none of them contain valid OHLC values.'
-          : undefined,
-      );
+      applyAcceptedSnapshot({ chart: chartRef, adapter: marketAdapterRef.current, session }, accepted, {
+        receivedCandleCount: next.candles.length,
+        viewportMode: viewportModeFor(accepted.symbol),
+        afterReplace: idlePrefetch.schedule,
+      });
     } catch {
       setChartError('Chart data could not be rendered.');
     }
@@ -388,35 +325,29 @@ export function createBridgeMarketRuntime(
     pageState.inFlight = false;
     pageState.anchorMs = undefined;
     marketAdapterRef.current?.acceptHistoryPage(symbol, timeframe);
-    const candles = page.candles.filter((candle) => isValidCandle(candle));
-    chartRef.current?.appendOlderHistory(candles, page.complete);
+    chartRef.current?.appendOlderHistory(validCandlesOf(page.candles), page.complete);
   };
+
+  /** One `listen` per event; what this run accepts goes to the port's feed, and a disposed run forwards nothing. */
+  const forward = <T>(eventName: string, publish: (payload: T) => void) =>
+    listen<T>(eventName, (event) => {
+      if (!run.disposed) {
+        publish(event.payload);
+      }
+    });
 
   /**
    * Chart tools read market data through the narrow `MarketDataPort`, never through
-   * Tauri. This runtime keeps the single `listen` per event and forwards what its
-   * run accepts into the port's feed; a disposed run forwards nothing.
+   * Tauri; this feeds that port.
    */
   const forwardMarketDataEvents = () => [
-    listen<ProfileResult>('tick-profile', (event) => {
-      if (!run.disposed) {
-        publisher.publishTickProfile(event.payload);
-      }
-    }),
-    listen<ProfileCancelled>('tick-profile-cancelled', (event) => {
-      if (!run.disposed) {
-        publisher.publishTickProfileCancelled(event.payload);
-      }
-    }),
-    listen<ProfileError>('tick-profile-error', (event) => {
-      if (!run.disposed) {
-        publisher.publishTickProfileError(event.payload);
-      }
-    }),
+    forward<ProfileResult>('tick-profile', (payload) => publisher.publishTickProfile(payload)),
+    forward<ProfileCancelled>('tick-profile-cancelled', (payload) => publisher.publishTickProfileCancelled(payload)),
+    forward<ProfileError>('tick-profile-error', (payload) => publisher.publishTickProfileError(payload)),
   ];
 
   const onSymbolInfo = (event: PayloadEvent<BrokerSymbol>) => {
-    const expected = targetSymbol.current ?? currentSymbolRef.current;
+    const expected = expectedSelection().symbol;
     if (!run.disposed && expected && event.payload.symbol === expected) {
       setInstrument(event.payload);
     }
@@ -435,10 +366,10 @@ export function createBridgeMarketRuntime(
     if (run.disposed || run.bridgeState !== 'connected' || !chartRef.current) {
       return;
     }
-    const payload = event.payload;
-    const candle = normalizeCandle('candle' in payload ? payload.candle : payload);
-    const symbol = 'symbol' in payload ? payload.symbol : currentSymbolRef.current;
-    const timeframe = 'timeframe' in payload ? payload.timeframe : currentTimeframeRef.current;
+    const { candle, symbol, timeframe } = normalizeBarUpdate(event.payload, {
+      symbol: currentSymbolRef.current,
+      timeframe: currentTimeframeRef.current,
+    });
     if (symbol !== currentSymbolRef.current || timeframe !== currentTimeframeRef.current) {
       return;
     }
@@ -457,7 +388,7 @@ export function createBridgeMarketRuntime(
 
   return {
     cancelCandles,
-    cancelPrefetch,
+    cancelPrefetch: idlePrefetch.cancel,
     resetPageState,
     requestOlderHistory,
     onAdapterHistoryError,

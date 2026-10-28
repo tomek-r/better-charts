@@ -1,4 +1,4 @@
-import { useTauriAvailable } from '../bridge/BridgeSessionProvider';
+import { useTauriAvailable } from '../bridge/bridgeSelectors';
 import { AppSettingsProvider } from '../settings/AppSettingsProvider';
 import { AppSettingsView } from '../settings/AppSettingsView';
 import { BridgeScreen } from '../settings/setup/BridgeScreen';

@@ -5,7 +5,7 @@ import {
   useBridgeAccountSelector,
   useBridgeMarketSelector,
   useBridgeQuoteSelector,
-} from '../../bridge/BridgeSessionProvider';
+} from '../../bridge/bridgeSelectors';
 import { deriveStagedOrderDisplay } from '../stagedOrder/stagedOrderDisplay';
 import { stopDistanceGuard } from '../derivation/ticketRules';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';

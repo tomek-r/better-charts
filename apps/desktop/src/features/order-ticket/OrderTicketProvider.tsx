@@ -9,7 +9,7 @@ import {
   useBridgeConnection,
   useBridgeMarketSelector,
   useBridgeQuote,
-} from '../bridge/BridgeSessionProvider';
+} from '../bridge/bridgeSelectors';
 
 export function OrderTicketProvider({ children }: { children: ReactNode }) {
   const [stores] = useState(createOrderTicketStores);

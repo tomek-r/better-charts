@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useBridgeChartState, useBridgePortfolio } from '../bridge/BridgeSessionProvider';
+import { useBridgeChartState, useBridgePortfolio } from '../bridge/bridgeSelectors';
 import { useExecutionPortfolio } from '../execution/ExecutionProvider';
 import { PartialCloseMenu } from './PartialCloseMenu';
 import { PartialCloseVolumePopover } from './PartialCloseVolumePopover';

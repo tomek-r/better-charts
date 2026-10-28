@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { useBridgeAccountSelector, useBridgeQuote } from '../../bridge/BridgeSessionProvider';
+import { useBridgeAccountSelector, useBridgeQuote } from '../../bridge/bridgeSelectors';
 import { passedStopEntryGuidance } from '../pricing/passedStopEntry';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketReview } from './OrderTicketReview';

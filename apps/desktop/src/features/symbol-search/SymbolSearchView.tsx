@@ -5,7 +5,8 @@ import { SymbolSearchDialog } from './SymbolSearchDialog';
 import { useSymbolSearch } from './useSymbolSearch';
 import type { BrokerSymbol, SymbolSearchResult } from '../../shared/bridge/types';
 import { favoritesKey, recentKey, saveSymbols } from './symbolStorage';
-import { useBridgeActions, useBridgeConnection, useLastSymbolSelection } from '../bridge/BridgeSessionProvider';
+import { useBridgeActions } from '../bridge/BridgeSessionProvider';
+import { useBridgeConnection, useLastSymbolSelection } from '../bridge/bridgeSelectors';
 import { useSymbolSearchControls, useSymbolSearchOpen } from './SymbolSearchProvider';
 
 const toolFlyoutOpen = () => document.querySelector('.tool-flyout') !== null;

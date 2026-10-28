@@ -1,6 +1,6 @@
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { useBridgeMarketSelector, useBridgeQuoteSelector } from '../../bridge/BridgeSessionProvider';
+import { useBridgeMarketSelector, useBridgeQuoteSelector } from '../../bridge/bridgeSelectors';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketPricingProps } from '../orderTicketEditorProps';
 

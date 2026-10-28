@@ -1,4 +1,4 @@
-import { useBridgeConnectionSelector, useHasCandles } from './BridgeSessionProvider';
+import { useBridgeConnectionSelector, useHasCandles } from './bridgeSelectors';
 
 /**
  * Whether the workspace has no chart to draw: without Tauri the bridge is unreachable, and without

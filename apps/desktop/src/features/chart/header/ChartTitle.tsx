@@ -1,4 +1,4 @@
-import { useBridgeChartState } from '../../bridge/BridgeSessionProvider';
+import { useBridgeChartState } from '../../bridge/bridgeSelectors';
 
 export function ChartTitle() {
   const { symbol, symbolLoading, description } = useBridgeChartState();

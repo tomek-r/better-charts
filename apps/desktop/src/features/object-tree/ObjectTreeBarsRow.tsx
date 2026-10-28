@@ -1,4 +1,4 @@
-import { useBridgeChartState } from '../bridge/BridgeSessionProvider';
+import { useBridgeChartState } from '../bridge/bridgeSelectors';
 import { timeframeLabel } from '../../shared/bridge/timeframes';
 import { CandlesIcon } from './objectTreeIcons';
 import { ROW_NAME_CLASS } from './objectTreeRowFocus';

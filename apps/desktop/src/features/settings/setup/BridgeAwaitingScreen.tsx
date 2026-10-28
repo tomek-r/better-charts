@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { useBridgeConnectionSelector } from '../../bridge/BridgeSessionProvider';
+import { useBridgeRefusal } from '../../bridge/useBridgeRefusal';
 import { useChartCannotBeDrawn } from '../../bridge/useChartCannotBeDrawn';
 import { useReportBlurredScreen } from '../AppSettingsProvider';
-import { bridgeRefusal } from '../../../shared/bridge/bridgeRefusal';
 import { useDelayedReveal } from '../../../shared/hooks/useDelayedReveal';
 import { afterExitAnimation } from '../../../shared/ui/animation/afterExitAnimation';
 import { LoadingMessage } from '../../../shared/ui/loading/LoadingMessage';
@@ -28,7 +27,7 @@ export interface AwaitingBridgeData {
 export function useAwaitingBridgeData(): AwaitingBridgeData {
   const noChartToDraw = useChartCannotBeDrawn();
   // The refusal kind alone; each surface names the refusal it reports.
-  const refusal = useBridgeConnectionSelector(({ status }) => bridgeRefusal(status));
+  const refusal = useBridgeRefusal();
   const awaitingData = noChartToDraw && refusal === undefined;
   const waitingTooLong = useDelayedReveal(awaitingData, AWAITING_DATA_LIMIT_MS);
   return { screenShown: awaitingData && !waitingTooLong, waitingTooLong };

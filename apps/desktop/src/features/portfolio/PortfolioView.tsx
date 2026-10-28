@@ -1,5 +1,6 @@
 import { PortfolioCard } from './PortfolioCard';
-import { useBridgeActions, useBridgeAccount, useBridgePortfolio } from '../bridge/BridgeSessionProvider';
+import { useBridgeActions } from '../bridge/BridgeSessionProvider';
+import { useBridgeAccount, useBridgePortfolio } from '../bridge/bridgeSelectors';
 import { usePartialCloseAvailable } from '../partial-close/usePartialCloseAvailable';
 import { useExecutionPortfolio } from '../execution/ExecutionProvider';
 

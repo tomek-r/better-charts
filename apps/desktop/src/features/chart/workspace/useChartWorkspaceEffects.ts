@@ -2,9 +2,11 @@ import { useEffect, useLayoutEffect } from 'react';
 import { ChartController } from '../engine/surface/chartController';
 import { CHART_TOOL_PLUGINS, DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
 import { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
+import { bridgeIdentityKey } from '../../../shared/bridge/bridgeIdentity';
 import { quoteDigits } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
 import { popupOwnsKeyboard } from '../../../shared/ui/popup/popupKeyboardOwnership';
+import { mt5HistoryTransport } from '../../bridge/market/mt5HistoryTransport';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { BridgeSessionLifecycleState } from '../../bridge/BridgeSessionProvider';
 import type { QuoteSnapshot } from '../../../shared/bridge/types';
@@ -33,7 +35,7 @@ export function useChartWorkspaceInitEffects(
     if (!host) {
       return;
     }
-    const adapter = new Mt5DataAdapter();
+    const adapter = new Mt5DataAdapter(mt5HistoryTransport);
     adapterRef.current = adapter;
     let instance: ChartController | undefined;
     try {
@@ -140,7 +142,7 @@ export function useChartWorkspaceChartEffects(
     chart.current?.setConnectionStatus(
       status.state,
       status.message,
-      `${status.terminal ?? ''}|${status.account ?? ''}|${status.server ?? ''}`,
+      bridgeIdentityKey({ terminal: status.terminal, account: status.account, server: status.server }),
     );
   }, [chart, status.state, status.message, status.terminal, status.account, status.server]);
   useEffect(() => {

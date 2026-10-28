@@ -1,4 +1,4 @@
-import { useBridgeAccount } from '../bridge/BridgeSessionProvider';
+import { useBridgeAccount } from '../bridge/bridgeSelectors';
 import { accountAmount } from './accountAmount';
 
 const ACCOUNT_METRICS = [

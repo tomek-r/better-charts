@@ -1,6 +1,6 @@
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { useBridgeAccountSelector, useBridgeMarketSelector } from '../../bridge/BridgeSessionProvider';
+import { useBridgeAccountSelector, useBridgeMarketSelector } from '../../bridge/bridgeSelectors';
 import { deriveOrderRiskBasis } from './riskBasis';
 import { orderVolumeIssue } from '../derivation/ticketRules';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';

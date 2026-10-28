@@ -5,7 +5,7 @@ import {
   useBridgeConnectionSelector,
   useBridgeMarketSelector,
   useBridgeQuoteSelector,
-} from '../../bridge/BridgeSessionProvider';
+} from '../../bridge/bridgeSelectors';
 import { useOrderTicketStores } from '../draft/orderTicketContext';
 import { buildTicketDerivationInput } from '../derivation/ticketDerivation';
 import type { TicketDerivationBroker, TicketDerivationDraft } from '../derivation/ticketDerivation';

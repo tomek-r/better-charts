@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { errorText } from '../../../shared/errorText';
 import type { BridgeStatus } from '../../../shared/bridge/types';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
-import { useBridgeAccount, useBridgeChartState, useBridgeConnection } from '../../bridge/BridgeSessionProvider';
+import { useBridgeAccount, useBridgeChartState, useBridgeConnection } from '../../bridge/bridgeSelectors';
 import { accountIdentityKey } from '../../bridge/lastChartSelection/lastChartSelection';
 import { useChartResources } from '../ChartWorkspaceProvider';
 import type { ChartDrawingStore } from './chartDrawingStore';

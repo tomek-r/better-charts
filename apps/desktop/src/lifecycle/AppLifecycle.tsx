@@ -103,6 +103,7 @@ export function AppLifecycle() {
           latestCandleRef: session.latestCandleRef,
           dataKeyRef: session.dataKeyRef,
           marketData: session.marketData,
+          historyWaitSetters: session.historyWaitSetters,
         }}
         accountRefs={accountRefs}
         ticketActions={ticketActions}

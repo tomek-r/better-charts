@@ -1,11 +1,12 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect } from 'react';
+import type { AccountRefs } from '../features/bridge/bridgeEventTypes';
 import { useExecutionCommandEffects } from '../features/execution/useExecutionCommands';
 import type { ExecutionCommandState } from '../features/execution/useExecutionCommands';
 import { useBridgeBootstrapEffects } from '../features/bridge/useBridgeBootstrapEffects';
 import { useBridgeStreamEffects } from '../features/bridge/useBridgeStreamEffects';
 import { useLastChartSelectionEffects } from '../features/bridge/lastChartSelection/useLastChartSelectionEffects';
 import { usePartialCloseAvailable } from '../features/partial-close/usePartialCloseAvailable';
-import { useBridgeQuote } from '../features/bridge/BridgeSessionProvider';
+import { useBridgeQuote } from '../features/bridge/bridgeSelectors';
 import { useOrderTicketStores } from '../features/order-ticket/draft/orderTicketContext';
 import type { BridgeSessionLifecycleState } from '../features/bridge/BridgeSessionProvider';
 import {
@@ -80,6 +81,7 @@ type BootstrapSession = Pick<
   | 'latestCandleRef'
   | 'dataKeyRef'
   | 'marketData'
+  | 'historyWaitSetters'
 >;
 type PreviewSession = Pick<
   BridgeSessionLifecycleState,
@@ -87,10 +89,6 @@ type PreviewSession = Pick<
 >;
 type TicketControls = ReturnType<typeof useOrderTicketChartControls>;
 type TicketActions = ReturnType<typeof useOrderTicketChartActions>;
-type AccountRefs = {
-  accountLoginRef: RefObject<string | undefined>;
-  brokerServerRef: RefObject<string | undefined>;
-};
 
 export function LifecycleInitialization({
   workspace,

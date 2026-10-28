@@ -1,6 +1,6 @@
 import { useShallow } from 'zustand/react/shallow';
 import { accountMoneyBasis } from '../../../shared/money';
-import { useBridgeAccountSelector, useBridgeMarketSelector } from '../../bridge/BridgeSessionProvider';
+import { useBridgeAccountSelector, useBridgeMarketSelector } from '../../bridge/bridgeSelectors';
 import type { OrderTicketTickValueProps } from '../orderTicketEditorProps';
 
 export function useOrderTicketTickValueProps(): OrderTicketTickValueProps {

@@ -1,6 +1,7 @@
 import { toRenderBar } from '../chart/engine/bars/mt5DataAdapter';
 import type {
   AccountSnapshot,
+  BarUpdate,
   Candle,
   HistoryPage,
   MarketSnapshot,
@@ -47,6 +48,25 @@ export function normalizeHistoryPage(
 // Reject malformed rendering data before it reaches the chart or realtime state.
 export function isValidCandle(candle: Candle) {
   return toRenderBar(candle) !== null;
+}
+
+export function validCandlesOf(candles: Candle[]): Candle[] {
+  return candles.filter(isValidCandle);
+}
+
+/**
+ * A live update is either a full `BarUpdate` naming its series or a bare candle
+ * of the series on screen; a bare candle takes the selection that is current now.
+ */
+export function normalizeBarUpdate(
+  payload: BarUpdate | Candle,
+  current: { symbol: string | undefined; timeframe: string | undefined },
+) {
+  return {
+    candle: normalizeCandle('candle' in payload ? payload.candle : payload),
+    symbol: 'symbol' in payload ? payload.symbol : current.symbol,
+    timeframe: 'timeframe' in payload ? payload.timeframe : current.timeframe,
+  };
 }
 
 export type RawQuote = Partial<QuoteSnapshot> & { time_ms?: number; volume_real?: string | number };

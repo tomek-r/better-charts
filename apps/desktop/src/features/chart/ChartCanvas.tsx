@@ -1,4 +1,4 @@
-import { useBridgeChartState, useBridgeConnection } from '../bridge/BridgeSessionProvider';
+import { useBridgeChartState, useBridgeConnection } from '../bridge/bridgeSelectors';
 import { useChartResources } from './ChartWorkspaceProvider';
 import type { ReactNode } from 'react';
 import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';

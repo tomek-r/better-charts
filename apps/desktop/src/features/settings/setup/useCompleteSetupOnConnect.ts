@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { BridgeState } from '../../../shared/bridge/types';
-import { useBridgeConnection } from '../../bridge/BridgeSessionProvider';
+import { useBridgeConnection } from '../../bridge/bridgeSelectors';
 import { useAppSettingsView } from '../AppSettingsProvider';
 
 /**

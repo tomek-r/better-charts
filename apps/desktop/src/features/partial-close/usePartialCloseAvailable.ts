@@ -1,4 +1,4 @@
-import { useBridgeConnectionSelector } from '../bridge/BridgeSessionProvider';
+import { useBridgeConnectionSelector } from '../bridge/bridgeSelectors';
 
 /** Whether the connected bridge negotiated the partial-close capability. */
 export function usePartialCloseAvailable(): boolean {
