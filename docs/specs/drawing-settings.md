@@ -53,7 +53,7 @@ full set.
      exactly. A hidden level paints no line and reports no y; without Extend Right the lines stop at the range end.
    - Values: drawn after the bars and before the level lines, 11px system-ui, clipped to the range box. Each
      non-empty row shows its volumes 4px inside the anchor edge (left-aligned from the range start for Left,
-     right-aligned from the range end for Right), vertically centred: Up/Down `down×up` (down is the left bar),
+     right-aligned from the range end for Right), vertically centred: Up/Down `up×down` (TradingView's order),
      Total `up+down`, Delta `up-down` with a typographic minus. Numbers are compact: under 1000 at most 2 decimals,
      then 3 significant digits with K, M or B (`1.35K`). Every non-empty row is labelled, with a font of its own
      height minus 1px, capped at 11px and floored at 1px, centred on the row. A totals line, in the smallest row font, (same format over all rows) sits 4px under the lowest row whenever Values

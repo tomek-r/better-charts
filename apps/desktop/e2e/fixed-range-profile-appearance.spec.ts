@@ -320,7 +320,7 @@ test('with tall rows Values paints one label per row and the totals line, in the
   const { texts, hit } = paintValues({ ...VALUES_ON, 'values.color': '#112233' });
   expect(hit.valueLabels).toBe(3);
   // Bins are listed bottom first; rows are 40 px tall, so each label sits at its row's vertical middle.
-  expect(texts.map((text) => text.text)).toEqual(['6×40', '30×12', '3×50', '39×102']);
+  expect(texts.map((text) => text.text)).toEqual(['40×6', '12×30', '50×3', '102×39']);
   // The totals line (last) uses the same 11 px as the rows.
   expect(texts.every((text) => text.style === '#112233' && text.font === '400 11px system-ui, sans-serif')).toBe(true);
   expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
@@ -381,7 +381,7 @@ test('a row without volume gets no label, and fractional volumes are shortened',
   const bins = [bin(140, 150, 0, 0), bin(150, 160, 1350.25, 0.126)];
   const { texts, hit } = paintValues(VALUES_ON, bins);
   expect(hit.valueLabels).toBe(1);
-  expect(texts.map((text) => text.text)).toEqual(['1.35K×0.13', '1.35K×0.13']);
+  expect(texts.map((text) => text.text)).toEqual(['0.13×1.35K', '0.13×1.35K']);
 });
 
 test('rows shorter than 11 px each get a label sized to the row height minus 1 px, and the totals use the same size', () => {
@@ -389,7 +389,7 @@ test('rows shorter than 11 px each get a label sized to the row height minus 1 p
   const bins = [bin(140, 142, 6, 40), bin(142, 144, 30, 12)];
   const { texts, hit } = paintValues(VALUES_ON, bins);
   expect(hit.valueLabels).toBe(2);
-  expect(texts.map((text) => text.text)).toEqual(['6×40', '30×12', '36×52']);
+  expect(texts.map((text) => text.text)).toEqual(['40×6', '12×30', '52×36']);
   expect(texts.map((text) => text.font)).toEqual([
     '400 7px system-ui, sans-serif',
     '400 7px system-ui, sans-serif',

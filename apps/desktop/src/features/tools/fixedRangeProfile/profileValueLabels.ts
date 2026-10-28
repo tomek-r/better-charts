@@ -18,9 +18,9 @@ function rowFontPx(row: ProfileBarsLayout['rows'][number]): number {
 
 type WeightsText = (weights: RowWeights) => string;
 
-// Down is drawn left of up in the mirrored bars, so the text reads in the same order.
+// Up before down, the order TradingView's volume profile labels its rows.
 const VALUE_TEXT_BY_MODE: Readonly<Record<FixedRangeProfileVolumeMode, WeightsText>> = {
-  upDown: ({ up, down }) => `${formatCompactNumber(down)}×${formatCompactNumber(up)}`,
+  upDown: ({ up, down }) => `${formatCompactNumber(up)}×${formatCompactNumber(down)}`,
   total: ({ up, down }) => formatCompactNumber(up + down),
   delta: ({ up, down }) => formatCompactNumber(up - down),
 };
