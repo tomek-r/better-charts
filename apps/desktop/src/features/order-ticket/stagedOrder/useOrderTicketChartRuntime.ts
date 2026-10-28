@@ -112,10 +112,9 @@ export function useOrderTicketChartControls(): OrderTicketChartControls {
   };
 }
 
-export function useOrderTicketChartActions(): Pick<
-  TicketActions,
-  'clearStagedWidget' | 'unstageOrderDraft' | 'toggleExit'
-> {
+export type OrderTicketChartActions = Pick<TicketActions, 'clearStagedWidget' | 'unstageOrderDraft' | 'toggleExit'>;
+
+export function useOrderTicketChartActions(): OrderTicketChartActions {
   const actions = useOrderTicketActions();
   return {
     clearStagedWidget: actions.clearStagedWidget,

@@ -34,98 +34,25 @@ export function AppLifecycle() {
 
   return (
     <>
-      <LifecycleInitialization
-        workspace={workspace}
-        session={{
-          mounted: session.mounted,
-          setChartError: session.setChartError,
-          currentSymbol: session.currentSymbol,
-          stores: session.stores,
-          marketData: session.marketData,
-        }}
-        execution={execution}
-      />
-      <LifecyclePortfolioStream
-        session={{
-          snapshot: session.snapshot,
-          instrument: session.instrument,
-          account: session.account,
-          portfolio: session.portfolio,
-        }}
-        workspace={workspace}
-        ticket={ticketActions}
-      />
-      <LifecycleChartMarket
-        workspace={workspace}
-        session={{
-          instrument: session.instrument,
-          loadingTimeframe: session.loadingTimeframe,
-          snapshot: session.snapshot,
-          setLoadingTimeframe: session.setLoadingTimeframe,
-          setChartError: session.setChartError,
-          currentSymbol: session.currentSymbol,
-          setQuote: session.setQuote,
-          setInstrument: session.setInstrument,
-          targetSymbol: session.targetSymbol,
-          status: session.status,
-        }}
-        ticket={ticketActions}
-      />
+      <LifecycleInitialization workspace={workspace} session={session} execution={execution} />
+      <LifecyclePortfolioStream session={session} workspace={workspace} ticket={ticketActions} />
+      <LifecycleChartMarket workspace={workspace} session={session} ticket={ticketActions} />
       <LifecycleAccountAndCheck
         workspace={workspace}
-        session={{
-          account: session.account,
-          status: session.status,
-          snapshot: session.snapshot,
-          loadingTimeframeRef: session.loadingTimeframeRef,
-          targetSymbol: session.targetSymbol,
-          pendingMetadata: session.pendingMetadata,
-          setLoadingTimeframe: session.setLoadingTimeframe,
-          setQuote: session.setQuote,
-          setInstrument: session.setInstrument,
-          setAccount: session.setAccount,
-          setPortfolio: session.setPortfolio,
-          setSymbolLoading: session.setSymbolLoading,
-        }}
+        session={session}
         controls={ticketControls}
         accountRefs={accountRefs}
       />
       <LifecycleTicketEntry />
       <LifecycleBootstrapAndGestures
         workspace={workspace}
-        session={{
-          stores: session.stores,
-          loadingTimeframeRef: session.loadingTimeframeRef,
-          targetSymbol: session.targetSymbol,
-          pendingMetadata: session.pendingMetadata,
-          currentSymbol: session.currentSymbol,
-          currentTimeframe: session.currentTimeframe,
-          latestCandleRef: session.latestCandleRef,
-          dataKeyRef: session.dataKeyRef,
-          marketData: session.marketData,
-          historyWaitSetters: session.historyWaitSetters,
-        }}
+        session={session}
         accountRefs={accountRefs}
         ticketActions={ticketActions}
         ticketControls={ticketControls}
         bridgeTicket={bridgeTicket}
       />
-      <LifecycleTicketPreviewAndMirror
-        workspace={workspace}
-        session={{
-          instrument: session.instrument,
-          account: session.account,
-          snapshot: session.snapshot,
-          latestCandle: session.latestCandle,
-          status: session.status,
-        }}
-        execution={{
-          requestModifyDraft: execution.requestModifyDraft,
-          requestClosePosition: execution.requestClosePosition,
-          requestCancelOrder: execution.requestCancelOrder,
-        }}
-        dispatchEnabled={execution.executionQueue?.dispatchEnabled === true}
-      />
+      <LifecycleTicketPreviewAndMirror workspace={workspace} session={session} execution={execution} />
     </>
   );
 }
