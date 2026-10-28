@@ -1,3 +1,5 @@
+import { useId } from 'react';
+import { Select, type SelectOption } from '../../../../shared/ui/Select';
 import { installationFolder, targetKey, type InstallTarget } from './installTargets';
 
 /** The two MQL5 folder layouts named the way a user knows them, never by path. */
@@ -15,6 +17,10 @@ function InstallationFolder({ target }: { target: InstallTarget }) {
   );
 }
 
+function folderOption(target: InstallTarget): SelectOption {
+  return { value: targetKey(target), label: `${target.label} — ${LAYOUT_NAMES[target.layout]}` };
+}
+
 /** Where the install writes, named by the folder the chosen installation lives in. */
 export function DataFolderChoice({
   targets,
@@ -27,21 +33,22 @@ export function DataFolderChoice({
   disabled: boolean;
   onChoose: (key: string) => void;
 }) {
+  const fieldId = useId();
   if (targets.length === 1) {
     return <InstallationFolder target={selected} />;
   }
   return (
     <>
-      <label className="setup-guide-install-field">
-        MetaTrader 5 data folder
-        <select value={targetKey(selected)} disabled={disabled} onChange={(event) => onChoose(event.target.value)}>
-          {targets.map((target) => (
-            <option key={targetKey(target)} value={targetKey(target)}>
-              {target.label} — {LAYOUT_NAMES[target.layout]}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="setup-guide-install-field">
+        <label htmlFor={fieldId}>MetaTrader 5 data folder</label>
+        <Select
+          id={fieldId}
+          options={targets.map(folderOption)}
+          value={targetKey(selected)}
+          disabled={disabled}
+          onChange={onChoose}
+        />
+      </div>
       <InstallationFolder target={selected} />
     </>
   );

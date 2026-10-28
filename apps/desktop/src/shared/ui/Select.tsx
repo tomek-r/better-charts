@@ -13,6 +13,8 @@ interface SelectProps {
   readonly onChange: (value: string) => void;
   /** The button's id, which a `<label htmlFor>` points at. */
   readonly id?: string;
+  /** The accessible name when no visible `<label>` names the button. */
+  readonly ariaLabel?: string;
   readonly disabled?: boolean;
   readonly invalid?: boolean;
   readonly title?: string;
@@ -31,6 +33,7 @@ export function Select({
   value,
   onChange,
   id,
+  ariaLabel,
   disabled,
   invalid,
   title,
@@ -70,6 +73,7 @@ export function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
+        aria-label={ariaLabel}
         aria-describedby={describedBy}
         aria-invalid={invalid}
         title={title}

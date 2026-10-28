@@ -4,6 +4,7 @@ import { CHART_TOOL_PLUGINS, DEFAULT_CHART_TOOL_ID } from '../../tools/registry'
 import { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
 import { quoteDigits } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
+import { popupOwnsKeyboard } from '../../../shared/ui/openPopup';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { BridgeSessionLifecycleState } from '../../bridge/BridgeSessionProvider';
 import type { QuoteSnapshot } from '../../../shared/bridge/types';
@@ -85,6 +86,7 @@ export function useChartWorkspaceInitEffects(
     const cancelTool = (event: KeyboardEvent) => {
       if (
         event.key !== 'Escape' ||
+        popupOwnsKeyboard() ||
         event.target instanceof HTMLInputElement ||
         event.target instanceof HTMLTextAreaElement
       ) {
@@ -275,9 +277,10 @@ export function useChartWorkspaceHotkeyEffect(
       if (document.querySelector('[data-modal-dialog]')) {
         return;
       }
-      // The rail's tool flyout owns Escape while it is open (it closes itself and
-      // restores focus); the chart-level Escape shortcuts defer to it.
-      if (event.key === 'Escape' && toolFlyoutOpen()) {
+      // The rail's tool flyout and an open popup (drop-down list, colour picker) own
+      // Escape while open (each closes itself and restores focus); the chart-level
+      // Escape shortcuts defer to them.
+      if (event.key === 'Escape' && (toolFlyoutOpen() || popupOwnsKeyboard())) {
         return;
       }
       if (event.key === 'Escape') {

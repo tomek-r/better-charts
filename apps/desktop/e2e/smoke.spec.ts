@@ -153,10 +153,12 @@ test.describe('drawer regression (fullscreen chart layout)', () => {
   const SECTION_CHROME_PX = 80;
   // Width of the trade drawer when open.
   const DRAWER_PX = 330;
+  // Space the open drawer keeps off the right strip.
+  const DRAWER_GAP_PX = 8;
   // Closed-state budget: section chrome, side gap, left tool rail and right strip.
   const CLOSED_FRAME_MIN_WIDTH = 1440 - SECTION_CHROME_PX - SIDE_GAP_PX - TOOL_RAIL_PX - SIDE_DRAWER_STRIP_PX;
-  // Open-state dashboard padding: drawer, gap, and the right strip (396px total).
-  const OPEN_DASHBOARD_PADDING = `${DRAWER_PX + SIDE_GAP_PX + SIDE_DRAWER_STRIP_PX}px`;
+  // Open-state dashboard padding: drawer, its gap to the strip, the chart gap, and the right strip (404px total).
+  const OPEN_DASHBOARD_PADDING = `${DRAWER_PX + DRAWER_GAP_PX + SIDE_GAP_PX + SIDE_DRAWER_STRIP_PX}px`;
 
   // Fixed viewport: the width assertions below are calibrated for 1440px.
   test.use({ viewport: { width: 1440, height: 900 } });
@@ -187,7 +189,7 @@ test.describe('drawer regression (fullscreen chart layout)', () => {
     await expect(page.locator('main.dashboard')).toHaveCSS('padding-right', OPEN_DASHBOARD_PADDING);
     await expect(page.locator('aside.trade-panel')).toBeVisible();
     const openWidth = await settledFrameWidth(page);
-    // Opening adds 396px dashboard padding (330px panel + 14px gap + 52px
+    // Opening adds 404px dashboard padding (330px panel + 8px drawer gap + 14px gap + 52px
     // right strip) — the chart must give up at least 300px of its width.
     expect(closedWidth - openWidth).toBeGreaterThanOrEqual(300);
     expect(pageErrors).toEqual([]);
@@ -263,7 +265,9 @@ test.describe('portfolio card overflow regression', () => {
     expect(sizes.rowScroll).toBeLessThanOrEqual(sizes.rowWidth + 1);
     expect(sizes.panelScroll).toBeLessThanOrEqual(sizes.panelWidth + 1);
     // And no value is ellipsized away — the full string must stay rendered.
-    await expect(row).toContainText(/30375\.67\s*P\/L 80\.68 USD\s*Swap 0\.00 USD/);
+    await expect(row).toContainText(
+      /P\/L\s*80\.68 USD\s*Price\s*30375\.67\s*SL\s*30355\.63\s*TP\s*30385\.99\s*Swap\s*0\.00 USD/,
+    );
     expect(pageErrors).toEqual([]);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });

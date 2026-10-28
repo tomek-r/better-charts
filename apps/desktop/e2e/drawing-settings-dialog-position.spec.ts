@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openSavedProfileSettings } from './helpers/savedProfileSettings';
+import { escapeOpenList } from './helpers/select';
 
 /**
  * The drawing settings dialog on the real app: it hangs from a fixed offset below the window's top edge, so
@@ -32,15 +33,8 @@ test('the dialog keeps its top edge while the tabs change its height', async ({ 
 });
 
 test('Escape closes an open drop-down list first and the dialog only when none is open', async ({ page }) => {
-  const rowsLayout = page.getByLabel('Rows Layout', { exact: true });
-  await rowsLayout.click();
-  await expect(page.getByRole('listbox')).toBeVisible();
-
-  await page.keyboard.press('Escape');
-
-  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await escapeOpenList(page.getByLabel('Rows Layout', { exact: true }));
   await expect(settingsDialog(page)).toBeVisible();
-  await expect(rowsLayout).toBeFocused();
 
   await page.keyboard.press('Escape');
   await expect(settingsDialog(page)).toHaveCount(0);

@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
+import { chooseOption, expectOptionLabels } from './helpers/select';
 import type { RenderBar } from '../src/features/chart/engine/bars/mt5DataAdapter';
 import {
   gotoWithStub,
@@ -767,12 +768,12 @@ test('Stop Limit + TIF are wired to the ready backend', async ({ page }) => {
   await expect(cta).toBeEnabled();
   // TIF select: enabled, 4 options, default GTC; picking IOC lands in the args.
   await ticket.locator('.ticket-collapse-head', { hasText: 'Extra settings' }).click();
-  const tif = page.locator('[aria-label="Time in force"]');
+  const tif = ticket.getByRole('button', { name: 'Time in force', exact: true });
   await expect(tif).toBeEnabled();
-  await expect(tif.locator('option')).toHaveCount(4);
-  await expect(tif).toHaveValue('gtc');
-  await tif.selectOption('ioc');
-  await expect(tif).toHaveValue('ioc');
+  await expect(tif).toHaveAttribute('aria-haspopup', 'listbox');
+  await expectOptionLabels(tif, ['GTC', 'Day', 'IOC', 'FOK']);
+  await expect(tif).toHaveText('GTC');
+  await chooseOption(tif, 'IOC');
   // Preflight + send carry stop_limit, limitPrice and timeInForce.
   await cta.click();
   await expect(page.locator('.order-check-result')).toBeVisible();
@@ -1319,13 +1320,13 @@ test('switching side without SL or TP starts a fresh draft, and the price refere
   const ticket = page.locator('section.order-ticket');
   await stageAndPaint(page);
   await ticket.getByRole('button', { name: 'Limit', exact: true }).click();
-  const reference = page.getByLabel('Price reference');
+  const reference = page.getByRole('button', { name: 'Price reference', exact: true });
   await ticket.locator('.ticket-quote-side.sell').click();
   await expect(page.getByLabel('Stop loss enabled')).not.toBeChecked();
   await expect(page.getByLabel('Take profit enabled')).not.toBeChecked();
-  await expect(reference).toHaveValue('bid');
+  await expect(reference).toHaveText('Bid');
   await ticket.locator('.ticket-quote-side.buy').click();
-  await expect(reference).toHaveValue('ask');
+  await expect(reference).toHaveText('Ask');
   expectClean(collected);
 });
 

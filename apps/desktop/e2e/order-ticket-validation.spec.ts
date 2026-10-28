@@ -9,6 +9,7 @@ import {
 } from '../src/features/order-ticket/domain/ticketRules';
 import type { QuoteSnapshot } from '../src/shared/bridge/types';
 import { fillExitPrice, openTradePanel } from './helpers/panel';
+import { chooseOption, escapeOpenList, expectOptionLabels } from './helpers/select';
 import {
   brokerSymbolFixture,
   gotoWithStub,
@@ -349,7 +350,7 @@ test('review action reads the latest draft fields after editing', async ({ page 
   await page.getByLabel('Order price').fill('1.08000');
   await page.getByLabel('Units', { exact: true }).fill('0.25');
   await ticket.getByRole('button', { name: 'Extra settings' }).click();
-  await ticket.getByRole('combobox', { name: 'Time in force' }).selectOption('day');
+  await chooseOption(ticket.getByRole('button', { name: 'Time in force', exact: true }), 'Day');
   await ticket.locator('.ticket-cta').click();
   await expect(page.locator('.order-check-result')).toBeVisible();
   expect((await latestInvoke(page, 'request_order_check'))?.args).toMatchObject({
@@ -358,6 +359,16 @@ test('review action reads the latest draft fields after editing', async ({ page 
     timeInForce: 'day',
     orderKind: 'limit',
   });
+});
+
+test('Escape in an open ticket drop-down closes only the list and keeps the staged draft', async ({ page }) => {
+  const { ticket } = await openTicket(page);
+  await ticket.locator('.ticket-quote-side.buy').click();
+  const cta = ticket.locator('.ticket-cta');
+  await expect(cta).toBeEnabled();
+  await ticket.getByRole('button', { name: 'Extra settings' }).click();
+  await escapeOpenList(ticket.getByRole('button', { name: 'Time in force', exact: true }));
+  await expect(cta).toBeEnabled();
 });
 
 /** Starts the review of a Buy draft whose OrderCheck request the stub rejects with `reason`; returns the alerts. */
@@ -401,6 +412,11 @@ test('RR uses broker money estimates when they differ from price distances', () 
   expect(riskRewardRatio('buy', '100', '99', '101')).toBe('1.00');
 });
 
+/** The ticket's Ask/Bid drop-down that a price offset is measured from. */
+function priceReference(page: Page): Locator {
+  return page.getByRole('button', { name: 'Price reference', exact: true });
+}
+
 test('pending price offsets preserve entry on swap and follow the selected quote', async ({ page }) => {
   await openTicket(page);
   await page.locator('.ticket-quote-side.buy').click();
@@ -408,7 +424,7 @@ test('pending price offsets preserve entry on swap and follow the selected quote
   await page.getByLabel('Order price', { exact: true }).fill('1.08000');
   await page.getByRole('button', { name: 'Enter price as an offset from the reference', exact: true }).click();
   await expect(page.getByLabel('Price offset in ticks')).toHaveValue('-500');
-  await page.getByLabel('Price reference').selectOption('bid');
+  await chooseOption(priceReference(page), 'Bid');
   await page.getByLabel('Price offset in ticks').fill('-10');
   await page.getByRole('button', { name: 'Enter an absolute price', exact: true }).click();
   await expect(page.getByLabel('Order price', { exact: true })).toHaveValue('1.0845');
@@ -426,12 +442,12 @@ test('pending price offsets preserve entry on swap and follow the selected quote
   await page.getByRole('button', { name: 'Enter an absolute price', exact: true }).click();
   await expect(page.getByLabel('Order price', { exact: true })).toHaveValue('1.0859');
   await page.getByRole('button', { name: 'Enter price as an offset from the reference', exact: true }).click();
-  await page.getByLabel('Price reference').selectOption('ask');
+  await chooseOption(priceReference(page), 'Ask');
   await page.getByLabel('Price offset in ticks').fill('10');
   await page.getByRole('button', { name: 'Enter an absolute price', exact: true }).click();
   await expect(page.getByLabel('Order price', { exact: true })).toHaveValue('1.0864');
   await page.getByRole('button', { name: 'Enter price as an offset from the reference', exact: true }).click();
-  await expect(page.getByLabel('Price reference').locator('option')).toHaveText(['Ask', 'Bid']);
+  await expectOptionLabels(priceReference(page), ['Ask', 'Bid']);
   await page.getByLabel('Price offset in ticks').fill('');
   await expect(page.locator('section.order-ticket .ticket-cta')).toBeDisabled();
   await page.getByRole('button', { name: 'Market', exact: true }).click();

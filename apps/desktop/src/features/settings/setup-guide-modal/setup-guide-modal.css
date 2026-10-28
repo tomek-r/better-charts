@@ -188,15 +188,12 @@
   font-size: 12px;
 }
 
-.setup-guide-install-field select {
-  width: 100%;
+.setup-guide-install-field .select-button {
   min-width: 0;
   padding: 8px 10px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--border-radius);
+  border-color: var(--color-border-strong);
   background: var(--color-well);
   color: var(--color-text-secondary);
-  font: inherit;
   font-size: 12px;
 }
 

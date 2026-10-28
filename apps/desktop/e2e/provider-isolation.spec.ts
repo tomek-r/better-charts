@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
+import { chooseOption } from './helpers/select';
 import { gotoWithStub, STUB_NOW } from './helpers/tauriStub';
 
 interface ProbeCounts {
@@ -309,16 +310,16 @@ test('extra settings changes stay local to settings and preserve selection when 
   await mountHarness(page);
   const extra = page.getByRole('button', { name: 'Extra settings' });
   await extra.click();
-  await page.getByRole('combobox', { name: 'Time in force' }).selectOption('ioc');
-  await expect(page.getByRole('combobox', { name: 'Time in force' })).toHaveValue('ioc');
+  const timeInForce = page.getByRole('button', { name: 'Time in force', exact: true });
+  await chooseOption(timeInForce, 'IOC');
   const counts = await probeCounts(page);
   expect(counts['ticket-extra-settings']).toBeGreaterThan(0);
   expect(counts['ticket-quotes'] ?? 0).toBe(0);
   expect(counts['ticket-edit'] ?? 0).toBe(0);
   await extra.click();
-  await expect(page.getByRole('combobox', { name: 'Time in force' })).toHaveCount(0);
+  await expect(timeInForce).toHaveCount(0);
   await extra.click();
-  await expect(page.getByRole('combobox', { name: 'Time in force' })).toHaveValue('ioc');
+  await expect(timeInForce).toHaveText('IOC');
 });
 
 test('moving quotes keep unchanged sizing, exits and review action consumers idle', async ({ page }) => {
