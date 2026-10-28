@@ -1,4 +1,4 @@
-/* Account-specific content of the account switch modal (see shared/ui/modal-dialog.css). */
+/* Account-specific content of the account switch modal (see shared/ui/dialog/modal-dialog.css). */
 
 .account-switch-info {
   display: grid;

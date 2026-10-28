@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
-import { DownloadIcon } from '../../../shared/ui/DownloadIcon';
+import { DownloadIcon } from './DownloadIcon';
 import { useAppSettingsView } from '../AppSettingsProvider';
 
 // The EA and tick-history reader already ship with the app as Tauri resources

@@ -1,4 +1,4 @@
-import { OutlineIcon } from './OutlineIcon';
+import { OutlineIcon } from '../../shared/ui/icons/OutlineIcon';
 
 /** Outline circle holding a person's head and shoulders, with a small card (a dashed line across its
  * middle) overlapping the bottom right. Sized in em by its class. */

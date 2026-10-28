@@ -1,4 +1,4 @@
-import { LoadingMessage } from '../../../../shared/ui/LoadingMessage';
+import { LoadingMessage } from '../../../../shared/ui/loading/LoadingMessage';
 
 const CONNECT_CHECKLIST = [
   'BetterChartsBridge is attached to a chart',

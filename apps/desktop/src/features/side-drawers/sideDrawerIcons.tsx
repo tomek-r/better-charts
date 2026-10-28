@@ -1,4 +1,4 @@
-import { OutlineIcon } from '../../shared/ui/OutlineIcon';
+import { OutlineIcon } from '../../shared/ui/icons/OutlineIcon';
 
 /** Window with a right-hand column: the trade panel glyph, redrawn in the shared 24px frame. */
 export function TradePanelIcon() {

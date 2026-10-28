@@ -1,6 +1,6 @@
 import { BridgeComponentOutdatedNotice } from '../bridge/BridgeComponentOutdatedNotice';
-import { Notification } from '../../shared/ui/Notification';
-import { ErrorNotifications } from '../../shared/ui/ErrorNotifications';
+import { Notification } from '../../shared/ui/notification/Notification';
+import { ErrorNotifications } from '../../shared/ui/notification/ErrorNotifications';
 import { useAppSettingsView } from '../settings/AppSettingsProvider';
 
 /** Settings notifications: the configuration error and the restart reminder, plus a bridge refusal the bundled files fix. */

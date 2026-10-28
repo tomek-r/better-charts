@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { errorText } from '../../../shared/errorText';
 import type { BridgeStatus } from '../../../shared/bridge/types';
-import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
+import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
 import { useBridgeAccount, useBridgeChartState, useBridgeConnection } from '../../bridge/BridgeSessionProvider';
 import { accountIdentityKey } from '../../bridge/lastChartSelection';
 import { useChartResources } from '../ChartWorkspaceProvider';

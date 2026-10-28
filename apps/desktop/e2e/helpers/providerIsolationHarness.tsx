@@ -1,6 +1,6 @@
 import { Profiler, useRef, type ProfilerOnRenderCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ErrorNotificationsProvider } from '../../src/shared/ui/ErrorNotifications';
+import { ErrorNotificationsProvider } from '../../src/shared/ui/notification/ErrorNotifications';
 import type { ReactNode } from 'react';
 import { AppHeaderView } from '../../src/features/app-header/AppHeaderView';
 import { AccountBadge } from '../../src/features/account-badge/AccountBadge';

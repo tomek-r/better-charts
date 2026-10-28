@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
-import { Notification } from '../../shared/ui/Notification';
+import { Notification } from '../../shared/ui/notification/Notification';
 import { useAppSettingsActions } from '../settings/AppSettingsProvider';
 import { useBridgeConnectionSelector } from './BridgeSessionProvider';
 

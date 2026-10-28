@@ -8,7 +8,7 @@ import type { OrderTicketStores } from './orderTicketStores';
 import { buildTicketDerivationInput } from '../domain/ticketDerivation';
 import { passedStopEntryGuidance } from '../domain/passedStopEntry';
 import { ORDER_CHECK_REQUEST_FAILED, withoutStopLossTooClose } from '../domain/ticketRules';
-import { useErrorNotification } from '../../../shared/ui/ErrorNotifications';
+import { useErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
 
 export function useOrderTicketBrokerActions(
   inputs: Pick<OrderTicketInputs, 'instrument' | 'account' | 'quote' | 'snapshot' | 'status'>,

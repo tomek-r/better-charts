@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { movedOptionIndex, typedOptionIndex } from './selectNavigation';
-import { useOutsidePress } from './useOutsidePress';
-import { usePopupPlacement } from './usePopupPlacement';
+import { useOutsidePress } from '../popup/useOutsidePress';
+import { usePopupPlacement } from '../popup/usePopupPlacement';
 
 /** One choice of a `Select`: the stored value and the text the user reads. */
 export interface SelectOption {

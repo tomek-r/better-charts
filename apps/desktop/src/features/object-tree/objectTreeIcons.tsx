@@ -1,4 +1,4 @@
-import { OutlineIcon } from '../../shared/ui/OutlineIcon';
+import { OutlineIcon } from '../../shared/ui/icons/OutlineIcon';
 
 /** The class of a row glyph, which object-tree.css sizes like the tool icons beside it. */
 const ICON_CLASS = 'object-tree-row-icon';

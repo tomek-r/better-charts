@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useExitAnimation } from '../../../shared/hooks/useExitAnimation';
-import { popupOwnsKeyboard } from '../../../shared/ui/openPopup';
+import { popupOwnsKeyboard } from '../../../shared/ui/popup/openPopup';
 import { useAppSettingsView } from '../AppSettingsProvider';
 import { SetupGuideStep } from '../useAppSettings';
 import { useInstallToMt5 } from './installation/useInstallToMt5';

@@ -1,4 +1,4 @@
-import { OutlineIcon } from './OutlineIcon';
+import { OutlineIcon } from '../../shared/ui/icons/OutlineIcon';
 
 /** Outline classical bank kept minimal so it stays crisp at text size: a triangular roof, four evenly spaced plain
  * columns and one base line, all on whole or half units of the 24x24 box. Sized in em by its class. */

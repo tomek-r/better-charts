@@ -4,7 +4,7 @@ import { mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
 import { PLACEMENT } from './helpers/toolStyleFixtures';
 
 /**
- * The app's drop-down (shared/ui/Select) as the drawing settings dialog uses it: an ARIA listbox opened from a
+ * The app's drop-down (shared/ui/select/Select) as the drawing settings dialog uses it: an ARIA listbox opened from a
  * button, driven by mouse and keyboard, and used in place of the native select for the Inputs tab's string
  * options and the Style tab's choices.
  */

@@ -1,7 +1,7 @@
-import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
+import { ErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
 import { type Dispatch, type SetStateAction } from 'react';
 import type { AccountSnapshot, OrderCheckResult, RiskSide } from '../../../shared/bridge/types';
-import { Separated } from '../../../shared/ui/SeparatorIcon';
+import { Separated } from '../../../shared/ui/icons/SeparatorIcon';
 import { OrderCheckResult as OrderCheckResultView, type LocalOrderFigures } from './OrderCheckResult';
 
 function sendButtonLabel(submitting: boolean, checking: boolean): string {

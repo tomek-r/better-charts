@@ -7,7 +7,7 @@ import { ChartCanvas } from '../../src/features/chart/ChartCanvas';
 import { ExecutionProvider } from '../../src/features/execution/ExecutionProvider';
 import { OrderTicketProvider } from '../../src/features/order-ticket/OrderTicketProvider';
 import { useOrderTicketActions, useOrderTicketStores } from '../../src/features/order-ticket/state/orderTicketContext';
-import { ErrorNotificationsProvider } from '../../src/shared/ui/ErrorNotifications';
+import { ErrorNotificationsProvider } from '../../src/shared/ui/notification/ErrorNotifications';
 import type { Candle } from '../../src/shared/bridge/types';
 import { useStore } from 'zustand';
 

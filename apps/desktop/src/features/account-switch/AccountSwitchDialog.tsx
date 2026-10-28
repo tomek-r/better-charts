@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { formatAccountMoney, formatMarginThreshold, marginModeName } from '../../shared/accountFormat';
 import type { AccountSnapshot } from '../../shared/bridge/types';
-import { ModalDialog, ModalDialogButton } from '../../shared/ui/ModalDialog';
-import { Separated } from '../../shared/ui/SeparatorIcon';
+import { ModalDialog, ModalDialogButton } from '../../shared/ui/dialog/ModalDialog';
+import { Separated } from '../../shared/ui/icons/SeparatorIcon';
 
 /** Label/value rows of the new account; rows with a missing value are omitted. */
 function accountInfoRows(account: AccountSnapshot | undefined): Array<[label: string, value: ReactNode]> {

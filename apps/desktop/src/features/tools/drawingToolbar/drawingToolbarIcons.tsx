@@ -1,4 +1,4 @@
-import { OutlineIcon } from '../../../shared/ui/OutlineIcon';
+import { OutlineIcon } from '../../../shared/ui/icons/OutlineIcon';
 
 /** The class every toolbar glyph carries: drawing-toolbar.css sizes it for its 32 px button. */
 const ICON_CLASS = 'drawing-toolbar-icon';

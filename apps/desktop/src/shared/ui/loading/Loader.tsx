@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
-import { DEFAULT_LOADER_COLORS, drawLoader, LOADER_HEIGHT, LOADER_WIDTH } from '../canvas/loader';
+import { DEFAULT_LOADER_COLORS, drawLoader, LOADER_HEIGHT, LOADER_WIDTH } from '../../canvas/loader';
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 

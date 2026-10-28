@@ -4,8 +4,8 @@ import { useChartCannotBeDrawn } from './useChartCannotBeDrawn';
 import { useReportBlurredScreen } from '../settings/AppSettingsProvider';
 import { bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
 import { useDelayedReveal } from '../../shared/hooks/useDelayedReveal';
-import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
-import { LoadingMessage } from '../../shared/ui/LoadingMessage';
+import { afterExitAnimation } from '../../shared/ui/animation/afterExitAnimation';
+import { LoadingMessage } from '../../shared/ui/loading/LoadingMessage';
 
 /** How long the screen keeps the window before the notices beside it take the problem over. */
 const AWAITING_DATA_LIMIT_MS = 15_000;

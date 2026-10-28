@@ -5,8 +5,8 @@ import {
   timeframeSection,
   type TimeframeSection,
 } from '../../../../shared/bridge/timeframes';
-import { CaretIcon } from '../../../../shared/ui/CaretIcon';
-import { StarIcon } from '../../../../shared/ui/StarIcon';
+import { CaretIcon } from '../../../../shared/ui/icons/CaretIcon';
+import { StarIcon } from '../../../../shared/ui/icons/StarIcon';
 
 const sectionTitles: { section: TimeframeSection; title: string }[] = [
   { section: 'minutes', title: 'Minutes' },

@@ -3,7 +3,7 @@
  * backend receives); the ticks view converts through the instrument tick size
  * and is disabled when the tick size is unknown. */
 import type { KeyboardEvent } from 'react';
-import { CaretIcon } from '../../../shared/ui/CaretIcon';
+import { CaretIcon } from '../../../shared/ui/icons/CaretIcon';
 
 export function TicketExitRow({
   label,

@@ -1,4 +1,4 @@
-import { OutlineIcon } from './OutlineIcon';
+import { OutlineIcon } from '../../shared/ui/icons/OutlineIcon';
 
 /** Outline stack of banknotes: the front note has notched corners and a centre coin, two more notes
  * peek out behind it toward the top right. Sized in em by its class. */

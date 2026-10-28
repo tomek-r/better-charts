@@ -1,5 +1,5 @@
 /**
- * Canvas side of the app's one separator convention: the filled diamond of `shared/ui/SeparatorIcon.tsx`
+ * Canvas side of the app's one separator convention: the filled diamond of `shared/ui/icons/SeparatorIcon.tsx`
  * between text parts, a space either side. Canvas labels cannot render that component, so they draw it
  * here, with the same proportions as the 8×8 SVG path scaled to the current font.
  */

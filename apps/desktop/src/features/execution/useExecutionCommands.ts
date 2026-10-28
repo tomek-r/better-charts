@@ -15,7 +15,7 @@ import type {
   PendingModification,
 } from '../../shared/bridge/types';
 import type { PositionOverlayState } from '../chart/engine/trading/positionOverlay';
-import { useErrorNotification, useNotifyError } from '../../shared/ui/ErrorNotifications';
+import { useErrorNotification, useNotifyError } from '../../shared/ui/notification/ErrorNotifications';
 import { describeRejection } from './tradeRejection';
 import { useDomainField, type DomainStore } from '../../shared/state/domainStore';
 

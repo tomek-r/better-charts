@@ -1,4 +1,4 @@
-import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
+import { ErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
 import { equityAllocationIssue } from '../domain/ticketRules';
 import { UnitsSizingRow } from './UnitsSizingRow';
 import { useOrderTicketSizing } from './useOrderTicketSizing';

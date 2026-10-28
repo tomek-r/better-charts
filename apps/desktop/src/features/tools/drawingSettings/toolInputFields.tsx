@@ -5,7 +5,7 @@ import {
   type ToolInputValue,
 } from '../../chart/engine/drawings/toolInputs';
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
-import { Select, type SelectOption } from '../../../shared/ui/Select';
+import { Select, type SelectOption } from '../../../shared/ui/select/Select';
 
 /** What one field is given: its definition, the draft value, and the ids its label needs. */
 export interface ToolInputFieldProps<Kind extends ToolInputDefinition['kind']> {

@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import type { RiskSide } from '../../../shared/bridge/types';
 import { quoteDigits, ticketPrice } from '../../../shared/format';
-import { useNotifyError } from '../../../shared/ui/ErrorNotifications';
+import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
 import { defaultStopLossPrice } from '../domain/defaultStopLoss';
 import { defaultOrderVolume } from '../domain/defaultVolume';
 import { flipExits, sideReference } from '../domain/sideFlip';

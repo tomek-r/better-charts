@@ -7,7 +7,7 @@ import {
   type DrawingTimeframeVisibility,
 } from '../../chart/engine/drawings/timeframeVisibility';
 import { areToolSettingValuesValid } from '../../chart/engine/drawings/toolSettings';
-import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../../shared/ui/ModalDialog';
+import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../../shared/ui/dialog/ModalDialog';
 import { SettingsTabs } from './SettingsTabs';
 import { buildSettingsTabs, COORDINATES_TAB_ID, type DrawingSettingsSchema } from './settingsTabModel';
 import { useCoordinateDraft } from './useCoordinateDraft';

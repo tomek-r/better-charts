@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { Select, type SelectOption } from '../../../../shared/ui/Select';
+import { Select, type SelectOption } from '../../../../shared/ui/select/Select';
 import { installationFolder, targetKey, type InstallTarget } from './installTargets';
 
 /** The two MQL5 folder layouts named the way a user knows them, never by path. */

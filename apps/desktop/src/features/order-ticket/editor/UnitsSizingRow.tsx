@@ -1,6 +1,6 @@
 import { type Dispatch, type RefObject, type SetStateAction, useEffect, useRef, useState } from 'react';
 import { MAX_RISK_PERCENT } from '../domain/riskBasis';
-import { CaretIcon } from '../../../shared/ui/CaretIcon';
+import { CaretIcon } from '../../../shared/ui/icons/CaretIcon';
 import type { BrokerSymbol } from '../../../shared/bridge/types';
 import { unitsStepAttributes } from '../domain/defaultVolume';
 

@@ -1,4 +1,4 @@
-/* App settings content; the frame, header and footer come from shared/ui/modal-dialog.css. */
+/* App settings content; the frame, header and footer come from shared/ui/dialog/modal-dialog.css. */
 
 .settings-body {
   display: grid;

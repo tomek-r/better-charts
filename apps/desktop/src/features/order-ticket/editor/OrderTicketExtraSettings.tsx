@@ -1,5 +1,5 @@
 import type { TimeInForce } from '../../../shared/bridge/types';
-import { Select, type SelectOption } from '../../../shared/ui/Select';
+import { Select, type SelectOption } from '../../../shared/ui/select/Select';
 import { useOrderTicketExtraSettings } from './useOrderTicketExtraSettings';
 
 const TIME_IN_FORCE_OPTIONS: readonly SelectOption[] = [

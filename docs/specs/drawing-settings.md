@@ -97,7 +97,7 @@ Templates and Developing POC/VA come later.
   fields are wide enough for four digits and their spin buttons. `inline` stays in the schema (Pine v6), but no
   tool uses it by default.
 - Text is one step larger than before (15px body, 16px footer buttons), set once by the dialog's stylesheet.
-- Drop-downs (Inputs options and Style choices) are `shared/ui/Select`, an ARIA listbox: a button with
+- Drop-downs (Inputs options and Style choices) are `shared/ui/select/Select`, an ARIA listbox: a button with
   `aria-haspopup="listbox"` and `aria-expanded`, a portalled list with `role="option"` and `aria-selected`, a check
   mark on the chosen option. Enter, Space and the up and down arrows open it; arrows, Home, End and a typed first
   letter move; Enter or Space selects; Escape closes it and returns focus to the button; Tab and an outside press

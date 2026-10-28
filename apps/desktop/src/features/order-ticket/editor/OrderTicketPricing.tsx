@@ -1,5 +1,5 @@
-import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
-import { Select, type SelectOption } from '../../../shared/ui/Select';
+import { ErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
+import { Select, type SelectOption } from '../../../shared/ui/select/Select';
 import { useOrderTicketPricing } from './useOrderTicketPricing';
 
 const PRICE_REFERENCE_OPTIONS: readonly SelectOption[] = [

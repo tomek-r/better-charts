@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { withAlphaOf } from '../../theme/hexColor';
-import { useOutsidePress } from '../useOutsidePress';
-import { usePopupPlacement } from '../usePopupPlacement';
+import { useOutsidePress } from '../popup/useOutsidePress';
+import { usePopupPlacement } from '../popup/usePopupPlacement';
 import { ColorGrid } from './ColorGrid';
 import { CustomColors } from './CustomColors';
 import { addCustomColor, loadCustomColors, saveCustomColors } from './savedCustomColors';

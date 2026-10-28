@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
-import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
+import { ErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
 import type {
   AccountSnapshot,
   MarginRisk,
   OrderCheckResult as OrderCheckResultModel,
 } from '../../../shared/bridge/types';
 import { finiteNumber, formatAccountMoney, formatMarginThreshold } from '../../../shared/accountFormat';
-import { Separated } from '../../../shared/ui/SeparatorIcon';
+import { Separated } from '../../../shared/ui/icons/SeparatorIcon';
 import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
 
 type ReviewAccount = Pick<

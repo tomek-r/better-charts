@@ -1,6 +1,6 @@
-import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
-import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
-import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../shared/ui/ModalDialog';
+import { ErrorNotification } from '../../shared/ui/notification/ErrorNotifications';
+import { afterExitAnimation } from '../../shared/ui/animation/afterExitAnimation';
+import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../shared/ui/dialog/ModalDialog';
 import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { LazySetupGuideModal } from './setup-guide-modal/LazySetupGuideModal';

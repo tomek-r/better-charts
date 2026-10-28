@@ -3,8 +3,8 @@ import { useChartResources } from './ChartWorkspaceProvider';
 import type { ReactNode } from 'react';
 import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
 import type { BridgeStatus } from '../../shared/bridge/types';
-import { useErrorNotification } from '../../shared/ui/ErrorNotifications';
-import { LoadingMessage } from '../../shared/ui/LoadingMessage';
+import { useErrorNotification } from '../../shared/ui/notification/ErrorNotifications';
+import { LoadingMessage } from '../../shared/ui/loading/LoadingMessage';
 import { HistoryWaitNotice } from './HistoryWaitNotice';
 
 /** A protocol error nothing else explains is the only thing worth a toast: the setup screen below covers a token

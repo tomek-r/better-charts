@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useBridgeConnectionSelector } from '../bridge/BridgeSessionProvider';
 import { BridgeRefusal, bridgeRefusal } from '../../shared/bridge/bridgeRefusal';
-import { LoadingMessage } from '../../shared/ui/LoadingMessage';
+import { LoadingMessage } from '../../shared/ui/loading/LoadingMessage';
 import { useAppSettingsActions } from './AppSettingsProvider';
 import { preloadSetupGuide } from './setup-guide-modal/LazySetupGuideModal';
 

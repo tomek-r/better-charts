@@ -8,7 +8,7 @@ import {
 } from '../../chart/engine/drawings/toolStyles';
 import { ColorPickerButton } from '../../../shared/ui/colorPicker/ColorPickerButton';
 import type { LineOptions } from '../../../shared/ui/colorPicker/LineOptionsSection';
-import { Select } from '../../../shared/ui/Select';
+import { Select } from '../../../shared/ui/select/Select';
 import { VisibleCheckbox } from './styleControls';
 import { numberText, stringText } from './toolInputFields';
 

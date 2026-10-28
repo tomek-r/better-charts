@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
-import { CaretIcon } from '../../../shared/ui/CaretIcon';
+import { CaretIcon } from '../../../shared/ui/icons/CaretIcon';
 import { useBridgeActions, useBridgeChartState, useBridgeConnection } from '../../bridge/BridgeSessionProvider';
 import { TimeframeMenu } from './menu/TimeframeMenu';
 import { useTimeframeFavorites } from './useTimeframeFavorites';

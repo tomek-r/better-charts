@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
-import { CaretIcon } from './CaretIcon';
+import { CaretIcon } from '../icons/CaretIcon';
 import { SelectList, type SelectOption } from './SelectList';
 
 export type { SelectOption };

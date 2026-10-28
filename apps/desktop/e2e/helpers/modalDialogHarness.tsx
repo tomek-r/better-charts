@@ -1,6 +1,6 @@
 import { act, createElement, Fragment, useState, type ComponentProps, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../src/shared/ui/ModalDialog';
+import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../src/shared/ui/dialog/ModalDialog';
 
 type HarnessProps = Partial<ComponentProps<typeof ModalDialog>>;
 

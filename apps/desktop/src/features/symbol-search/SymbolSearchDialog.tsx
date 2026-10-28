@@ -1,7 +1,7 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
-import { StarIcon } from '../../shared/ui/StarIcon';
-import { ErrorNotification } from '../../shared/ui/ErrorNotifications';
-import { afterExitAnimation } from '../../shared/ui/afterExitAnimation';
+import { StarIcon } from '../../shared/ui/icons/StarIcon';
+import { ErrorNotification } from '../../shared/ui/notification/ErrorNotifications';
+import { afterExitAnimation } from '../../shared/ui/animation/afterExitAnimation';
 import type { BrokerSymbol } from '../../shared/bridge/types';
 
 function SymbolResultRow({

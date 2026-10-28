@@ -1,6 +1,6 @@
-import { AccountIcon } from '../../shared/ui/AccountIcon';
-import { BankIcon } from '../../shared/ui/BankIcon';
-import { MoneyIcon } from '../../shared/ui/MoneyIcon';
+import { AccountIcon } from './AccountIcon';
+import { BankIcon } from './BankIcon';
+import { MoneyIcon } from './MoneyIcon';
 import { useAccountEnvironment } from './useAccountEnvironment';
 
 /** Account environment (broker company, account number, kind) for the top bar — safety-relevant: which
