@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useEventCallback } from '../../../shared/hooks/useEventCallback';
 import { priceDigitsFor, ticketPrice } from '../../../shared/format';
 import { isPriceSwapDisabled, priceToTicks, tickSizeOf } from './priceTicks';
-import { orderEntryPrice } from '../derivation/ticketRules';
+import { orderEntryPrice } from './orderEntryPrice';
 import type { OrderTicketInputs } from '../draft/orderTicketInputs';
 import type { OrderTicketStores } from '../draft/orderTicketStores';
 

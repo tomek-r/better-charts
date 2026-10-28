@@ -1,5 +1,6 @@
 import { ErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
-import { SIZING_NEEDS_STOP_MESSAGE, equityAllocationIssue } from '../derivation/ticketRules';
+import { equityAllocationIssue } from './riskBasis';
+import { SIZING_NEEDS_STOP_MESSAGE } from './unitsModeCopy';
 import { UnitsSizingRow } from './UnitsSizingRow';
 import { useOrderTicketSizingProps } from './useOrderTicketSizingProps';
 

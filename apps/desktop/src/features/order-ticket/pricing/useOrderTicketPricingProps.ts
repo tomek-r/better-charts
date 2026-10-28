@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useBridgeMarketSelector, useBridgeQuoteSelector } from '../../bridge/bridgeSelectors';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketPricingProps } from '../orderTicketEditorProps';
-import { isLimitPriceValid } from '../derivation/ticketRules';
+import { isLimitPriceValid } from './orderEntryPrice';
 import { isPriceSwapDisabled, tickSizeOf } from './priceTicks';
 
 export function useOrderTicketPricingProps(): OrderTicketPricingProps {

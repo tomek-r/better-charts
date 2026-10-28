@@ -8,6 +8,9 @@ import type {
   OrderTicketStores,
 } from '../draft/orderTicketStores';
 
+/** How long a review waits for the OrderCheck result before it is discarded as timed out. */
+const ORDER_CHECK_TIMEOUT_MS = 15_000;
+
 // The OrderCheck reset [layout] and the volume auto-fill [passive] register
 // together, after the account-login sync and before the favorites/recent
 // persistence effects, so effect registration order stays fixed.
@@ -74,6 +77,8 @@ export function useOrderTicketOrderCheckEffects(ticket: OrderTicketOrderCheckEff
     riskVersion,
     setStopLoss,
   } = ticket;
+  // Ref-named aliases for the layout effect below: react-hooks/immutability only accepts `.current` writes there
+  // through a `*Ref` name.
   const orderCheckGenerationRef = orderCheckGeneration;
   const orderCheckPendingRef = orderCheckPending;
   useEffect(() => {
@@ -98,7 +103,7 @@ export function useOrderTicketOrderCheckEffects(ticket: OrderTicketOrderCheckEff
       setOrderCheck(undefined);
       setOrderCheckLoading(false);
       setOrderCheckError('OrderCheck timed out. Check the MT5 connection and start the review again.');
-    }, 15_000);
+    }, ORDER_CHECK_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
   }, [
     orderCheckLoading,

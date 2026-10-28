@@ -13,7 +13,7 @@ import {
   selectTicketDerivationDraft,
 } from '../derivation/ticketDerivation';
 import { usePassedStopEntry } from '../pricing/usePassedStopEntry';
-import { ORDER_CHECK_REQUEST_FAILED, withoutStopLossTooClose } from '../derivation/ticketRules';
+import { ORDER_CHECK_REQUEST_FAILED, withoutStopLossTooClose } from '../orderCheck/orderCheckErrors';
 import { useErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
 
 export function useOrderTicketBrokerActions(

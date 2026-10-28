@@ -9,6 +9,10 @@ type UnitsModeCopy = {
   infoAria: string;
 };
 
+/** Shown when risk sizing is selected while the stop loss is off. */
+export const SIZING_NEEDS_STOP_MESSAGE =
+  'Money/% sizing needs a stop distance — enable Stop loss or switch to Units mode.';
+
 export const UNITS_MODE_COPY: Record<UnitsMode, UnitsModeCopy> = {
   units: {
     rowLabel: 'Units',

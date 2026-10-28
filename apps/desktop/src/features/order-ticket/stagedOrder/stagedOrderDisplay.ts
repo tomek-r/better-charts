@@ -9,7 +9,7 @@ import type {
 import { formatSignedMoney } from '../../../shared/format';
 import { accountMoneyBasis, estimateLevelMoney } from '../../../shared/money';
 import { riskRewardRatio } from '../../../shared/trading/riskReward';
-import { orderEntryPrice } from '../derivation/ticketRules';
+import { orderEntryPrice } from '../pricing/orderEntryPrice';
 import type { UnitsMode } from '../sizing/unitsMode';
 
 export interface StagedOrderDisplayInput {

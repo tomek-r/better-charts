@@ -1,61 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { brokerSymbolFixture } from './helpers/tauriStub';
 import { deriveOrderTicket, type TicketDerivationInput } from '../src/features/order-ticket/derivation/ticketRules';
 import { createOrderTicketStores } from '../src/features/order-ticket/draft/orderTicketStores';
-import type { AccountSnapshot, BrokerSymbol, OrderCheckResult, RiskPreview } from '../src/shared/bridge/types';
-
-const account: AccountSnapshot = {
-  accountLogin: '123456',
-  brokerServer: 'Demo-Server',
-  currency: 'USD',
-  balance: '10000.00',
-  equity: '10000.00',
-  margin: '0.00',
-  freeMargin: '10000.00',
-  marginLevel: '0.00',
-  leverage: 100,
-  marginMode: 2,
-  tradeAllowed: true,
-  expertAllowed: true,
-};
-
-const instrument: BrokerSymbol = brokerSymbolFixture('TEST', 'Test instrument', {
-  digits: 2,
-  tickSize: '0.01',
-  pointSize: '0.01',
-  contractSize: '1',
-  tickValueProfit: undefined,
-  tickValueLoss: undefined,
-  tickValueCurrency: undefined,
-});
-
-const acceptedCheck: OrderCheckResult = {
-  draftVersion: 3,
-  draftId: 'draft-1',
-  accountLogin: account.accountLogin,
-  brokerServer: account.brokerServer,
-  symbol: 'TEST',
-  side: 'buy',
-  orderKind: 'market',
-  volume: '0.10',
-  requestedEntry: '100.00',
-  checkPrice: '100.00',
-  stopLoss: null,
-  takeProfit: null,
-  timeInForce: undefined,
-  limitPrice: null,
-  checkPassed: true,
-  retcode: 0,
-  lastError: 0,
-  balance: '10000.00',
-  equity: '10000.00',
-  profit: '0.00',
-  margin: '0.00',
-  freeMargin: '10000.00',
-  marginLevel: '0.00',
-  comment: '',
-  checkedAtMs: 1,
-};
+import type { OrderCheckResult, RiskPreview } from '../src/shared/bridge/types';
+import { eligibleTicket, ticketScenario } from './helpers/ticketFixtures';
 
 const currentPreview: RiskPreview = {
   symbol: 'TEST',
@@ -72,31 +19,6 @@ const currentPreview: RiskPreview = {
   rr: null,
   currency: 'USD',
   quotedAtMs: 1,
-};
-
-const eligibleTicket: TicketDerivationInput = {
-  symbol: 'TEST',
-  bridgeState: 'connected',
-  account,
-  stagedOnChart: true,
-  riskSide: 'buy',
-  entry: '100',
-  stopLoss: '99',
-  takeProfit: '',
-  slOn: false,
-  tpOn: false,
-  orderKind: 'market',
-  limitPrice: '',
-  timeInForce: 'gtc',
-  unitsMode: 'units',
-  orderVolume: '0.10',
-  orderCheck: acceptedCheck,
-  riskPreview: undefined,
-  draftVersion: 3,
-  riskLoading: false,
-  instrument,
-  quote: undefined,
-  marketOpen: true,
 };
 
 type PolicyCase = {
@@ -303,11 +225,7 @@ const cases: PolicyCase[] = [
 test('deriveOrderTicket preserves check, submit, and blocked-reason policy', () => {
   const stores = createOrderTicketStores();
   for (const scenario of cases) {
-    const input: TicketDerivationInput = {
-      ...eligibleTicket,
-      ...scenario.input,
-      orderCheck: scenario.check === null ? undefined : { ...acceptedCheck, ...scenario.check },
-    };
+    const input = ticketScenario(scenario.input, scenario.check);
     const result = deriveOrderTicket(input);
     const cachedResult = stores.deriveTicket(input);
     expect(cachedResult).toEqual(result);

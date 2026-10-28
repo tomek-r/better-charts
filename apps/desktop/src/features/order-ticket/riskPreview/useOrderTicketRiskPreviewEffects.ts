@@ -3,8 +3,9 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { RiskPreview } from '../../../shared/bridge/types';
 import type { OrderTicketInputs } from '../draft/orderTicketInputs';
 import type { OrderTicketCoordination, OrderTicketDraftStore, OrderTicketStores } from '../draft/orderTicketStores';
-import type { StopDistanceGuard } from '../derivation/ticketRules';
-import { equityAllocationIssue, orderEntryPrice } from '../derivation/ticketRules';
+import type { StopDistanceGuard } from '../exits/stopDistance';
+import { orderEntryPrice } from '../pricing/orderEntryPrice';
+import { MAX_RISK_PERCENT, equityAllocationIssue } from '../sizing/riskBasis';
 import type { RiskUnitsMode } from '../sizing/unitsMode';
 
 const RISK_PREVIEW_DEBOUNCE_MS = 100;
@@ -78,6 +79,7 @@ export function useOrderTicketRiskPreviewEffects(
     setRiskError,
     setRiskLoading,
   } = ticket;
+  // Ref-named alias: react-hooks/immutability only accepts `.current` writes through a `*Ref` name.
   const riskVersionRef = riskVersion;
   const sizingEntry = orderEntryPrice(orderKind, entry, limitPrice);
   const equity = account?.equity;
@@ -106,11 +108,9 @@ export function useOrderTicketRiskPreviewEffects(
     setRiskProjection(undefined);
     setRiskError(undefined);
     setRiskLoading(false);
-    // Sizing NEVER derives from an invalid stop distance (owner: "not less than
-    // the minimum required SL") — with the stop too close/crossed the preview
-    // math is garbage and must not touch the units ("why change units when it
-    // is 1"). The guard mirrors the EA preflight (distance > max(stopsLevel ×
-    // pointSize, 20 × tickSize), with the reference selected by order kind).
+    // Sizing never derives from an invalid stop distance: with the stop too close or crossed the preview
+    // math is meaningless and must not touch the units. The guard mirrors the EA preflight
+    // (see stopDistanceGuard), with the reference selected by order kind.
     const valid = Boolean(
       equityAllocationIssue(equityAllocationPercent) === undefined &&
       symbol &&
@@ -124,7 +124,9 @@ export function useOrderTicketRiskPreviewEffects(
       Number.isFinite(Number(sizingEntry)) &&
       Number(sizingEntry) > 0 &&
       Number.isFinite(Number(stopLoss)) &&
-      (riskMode === 'equity' ? Number(riskAmount) > 0 && Number(riskAmount) <= 100 : Number(effectiveRiskAmount) > 0) &&
+      (riskMode === 'equity'
+        ? Number(riskAmount) > 0 && Number(riskAmount) <= MAX_RISK_PERCENT
+        : Number(effectiveRiskAmount) > 0) &&
       !stopGuard?.slTooClose &&
       !stopGuard?.tpTooClose,
     );

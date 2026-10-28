@@ -3,7 +3,7 @@ import type { BrokerSymbol, RiskSide } from '../../../shared/bridge/types';
 import { defaultOrderVolume } from './defaultVolume';
 import { clampRiskPercentInput } from './riskBasis';
 import type { UnitsMode } from './unitsMode';
-import { orderEntryPrice } from '../derivation/ticketRules';
+import { orderEntryPrice } from '../pricing/orderEntryPrice';
 import type { OrderTicketStores } from '../draft/orderTicketStores';
 
 export function useOrderTicketSizingActions(

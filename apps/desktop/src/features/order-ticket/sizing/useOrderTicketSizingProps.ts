@@ -2,7 +2,7 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useBridgeAccountSelector, useBridgeMarketSelector } from '../../bridge/bridgeSelectors';
 import { deriveOrderRiskBasis } from './riskBasis';
-import { orderVolumeIssue } from '../derivation/ticketRules';
+import { orderVolumeIssue } from './volumeRules';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketSizingProps } from '../orderTicketEditorProps';
 

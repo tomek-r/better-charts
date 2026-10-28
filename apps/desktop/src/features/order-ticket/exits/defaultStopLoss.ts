@@ -1,5 +1,6 @@
 import type { BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide } from '../../../shared/bridge/types';
 import { priceDigitsFor, ticketPrice } from '../../../shared/format';
+import { STOP_DISTANCE_MIN_TICKS } from './stopDistance';
 
 export function defaultStopLossPrice(
   entry: number,
@@ -17,7 +18,7 @@ export function defaultStopLossPrice(
   const known = Number.isFinite(point) && point > 0 && Number.isFinite(tick) && tick > 0;
   const visible = range && Number.isFinite(range.min) && Number.isFinite(range.max) && range.max > range.min;
   const fallbackDistance = visible ? (range.max - range.min) * 0.25 : entry * 0.001;
-  const minimum = known ? Math.max((instrument?.stopsLevel ?? 0) * point, 20 * tick) : 0;
+  const minimum = known ? Math.max((instrument?.stopsLevel ?? 0) * point, STOP_DISTANCE_MIN_TICKS * tick) : 0;
   const bid = quote ? Number(quote.bid) : NaN;
   const ask = quote ? Number(quote.ask) : NaN;
   const hasQuote = Number.isFinite(bid) && bid > 0 && Number.isFinite(ask) && ask > 0;

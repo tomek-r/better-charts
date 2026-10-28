@@ -7,7 +7,7 @@ import {
   useBridgeQuoteSelector,
 } from '../../bridge/bridgeSelectors';
 import { deriveStagedOrderDisplay } from '../stagedOrder/stagedOrderDisplay';
-import { stopDistanceGuard } from '../derivation/ticketRules';
+import { stopDistanceGuard } from './stopDistance';
 import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
 import type { OrderTicketExitsProps } from '../orderTicketEditorProps';
 

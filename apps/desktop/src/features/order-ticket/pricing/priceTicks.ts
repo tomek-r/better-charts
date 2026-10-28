@@ -1,5 +1,5 @@
 import type { BrokerSymbol, OrderKind } from '../../../shared/bridge/types';
-import { orderEntryPrice } from '../derivation/ticketRules';
+import { orderEntryPrice } from './orderEntryPrice';
 
 /** The instrument's tick size; `tickKnown` is false while it is missing or not a positive number. */
 export function tickSizeOf(instrument: BrokerSymbol | undefined): { tickSize: number; tickKnown: boolean } {

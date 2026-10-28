@@ -9,142 +9,13 @@ import type {
   RiskSide,
   TimeInForce,
 } from '../../../shared/bridge/types';
-import { formatVolume, normalizedPrice, withMinusSign } from '../../../shared/format';
+import { normalizedPrice } from '../../../shared/format';
+import { stopDistanceGuard, type StopDistanceGuard } from '../exits/stopDistance';
+import { isLimitPriceValid } from '../pricing/orderEntryPrice';
+import { equityAllocationIssue } from '../sizing/riskBasis';
 import type { UnitsMode } from '../sizing/unitsMode';
-
-// Editable volume: positive decimal and — when instrument metadata is known — inside [volumeMin, volumeMax] and a whole multiple of volumeStep (the 1e-8 tolerance absorbs binary-float noise such as 0.3/0.1). Unknown instrument: plain positive decimal only; the backend/EA re-validates volume on the wire.
-export function orderVolumeIssue(value: string, instrument?: BrokerSymbol): string | undefined {
-  const trimmed = value.trim();
-  const volume = Number(trimmed);
-  if (!trimmed || !Number.isFinite(volume) || volume <= 0) {
-    return 'Volume must be a positive decimal.';
-  }
-  if (!instrument) {
-    return undefined;
-  }
-  const min = Number(instrument.volumeMin);
-  const max = Number(instrument.volumeMax);
-  const step = Number(instrument.volumeStep);
-  // Broker decimals carry padding ("0.10000000"); show them as a person would write them.
-  const shownMin = formatVolume(instrument.volumeMin);
-  const shownMax = formatVolume(instrument.volumeMax);
-  const range = `Volume must be between ${shownMin} and ${shownMax}.`;
-  if (Number.isFinite(min) && volume < min) {
-    return range;
-  }
-  if (Number.isFinite(max) && volume > max) {
-    return range;
-  }
-  if (Number.isFinite(step) && step > 0 && Math.abs(volume / step - Math.round(volume / step)) > 1e-8) {
-    return `Volume must respect ${formatVolume(instrument.volumeStep)} step (min ${shownMin}, max ${shownMax})`;
-  }
-  return undefined;
-}
-// stop-distance guard: a check/submit guard that
-// mirrors the EA/Rust preflight — required distance = max(stopsLevel × pointSize,
-// 20 × tickSize) in price units, rendered in points (price / pointSize).
-// Market levels are measured from live quote sides (BUY: SL vs bid, TP vs ask;
-// SELL mirrored). Pending levels use their executable entry reference, and
-// stop_limit uses its resting limit price rather than its trigger. A distance
-// at or below the minimum violates the EA's strict
-// "distance > min" requirement; unknown/invalid instrument sizes disable the guard.
-export type StopDistanceGuard = {
-  slTooClose: boolean;
-  tpTooClose: boolean;
-  reason?: string;
-};
-
-/** Leads the error shown when the OrderCheck request itself is rejected; the rejection reason may follow after ": ". */
-export const ORDER_CHECK_REQUEST_FAILED = 'OrderCheck could not be requested';
-
-const STOP_LOSS_TOO_CLOSE = 'stop_loss too close:';
-
-/**
- * The EA/Rust preflight's stop-distance rejection; the ticket shows it inline, so it raises no toast, whether it
- * arrives bare (check result) or behind the request-failed prefix (rejected command).
- */
-export function withoutStopLossTooClose(message: string | undefined): string | undefined {
-  const isStopLossTooClose =
-    message?.startsWith(STOP_LOSS_TOO_CLOSE) ||
-    message?.startsWith(`${ORDER_CHECK_REQUEST_FAILED}: ${STOP_LOSS_TOO_CLOSE}`);
-  return isStopLossTooClose ? undefined : message;
-}
-
-/** Price used for entry-relative risk sizing: stop_limit executes from its resting price. */
-export function orderEntryPrice(orderKind: OrderKind, entry: string, limitPrice: string): string {
-  return orderKind === 'stop_limit' ? limitPrice : entry;
-}
-
-export function stopDistanceGuard(
-  instrument: BrokerSymbol | undefined,
-  side: RiskSide,
-  entry: string,
-  stopLoss: string,
-  takeProfit: string,
-  quote: QuoteSnapshot | undefined,
-  orderKind: OrderKind = 'market',
-  limitPrice = '',
-): StopDistanceGuard | undefined {
-  if (!instrument) {
-    return undefined;
-  }
-  const point = Number(instrument.pointSize);
-  const tick = Number(instrument.tickSize);
-  if (!Number.isFinite(point) || point <= 0 || !Number.isFinite(tick) || tick <= 0) {
-    return undefined;
-  }
-  const minimum = Math.max(instrument.stopsLevel * point, 20 * tick);
-  const minimumPoints = Math.round(minimum / point);
-  const buy = side === 'buy';
-  const entryValue = Number(entry.trim());
-  const stopValue = Number(stopLoss.trim());
-  const takeText = takeProfit.trim();
-  const takeValue = Number(takeText);
-  const bid = quote ? Number(quote.bid) : NaN;
-  const ask = quote ? Number(quote.ask) : NaN;
-  const hasQuote = Number.isFinite(bid) && bid > 0 && Number.isFinite(ask) && ask > 0;
-  const referenceText = orderEntryPrice(orderKind, entry, limitPrice).trim();
-  const reference = Number(referenceText);
-  const hasReference = referenceText !== '' && Number.isFinite(reference) && reference > 0;
-  const useQuote = orderKind === 'market' && hasQuote;
-  let slReference = reference;
-  let tpReference = reference;
-  if (useQuote) {
-    slReference = buy ? bid : ask;
-    tpReference = buy ? ask : bid;
-  }
-  const hasEntry = entry.trim() !== '' && Number.isFinite(entryValue) && entryValue > 0;
-  const hasStop = stopLoss.trim() !== '' && Number.isFinite(stopValue) && stopValue > 0;
-  const hasTake = takeText !== '' && Number.isFinite(takeValue) && takeValue > 0;
-  let slDistance: number | undefined;
-  if (hasReference && hasEntry && hasStop) {
-    slDistance = buy ? slReference - stopValue : stopValue - slReference;
-  }
-  let tpDistance: number | undefined;
-  if (hasReference && hasEntry && hasTake) {
-    tpDistance = buy ? takeValue - tpReference : tpReference - takeValue;
-  }
-  const isTooClose = (distance: number | undefined, reference: number, level: number): boolean => {
-    if (distance === undefined) {
-      return false;
-    }
-    // Decimal prices such as 98.20 - 98 can land a few ULPs above 0.20.
-    // Keep the strict `distance > minimum` contract stable at that boundary.
-    const tolerance = Number.EPSILON * Math.max(Math.abs(reference), Math.abs(level), Math.abs(minimum), 1) * 4;
-    return distance <= minimum + tolerance;
-  };
-  const slTooClose = isTooClose(slDistance, slReference, stopValue);
-  const tpTooClose = isTooClose(tpDistance, tpReference, takeValue);
-  const points = (distance: number) => Math.round(distance / point);
-  let reason: string | undefined;
-  // A too-close stop blocks without wording (owner decision); the SL band keeps drafts out of it.
-  if (!slTooClose && tpTooClose && tpDistance !== undefined) {
-    // A take profit on the wrong side measures a negative distance, and this message is display text.
-    const distanceText = withMinusSign(String(points(tpDistance)));
-    reason = `take_profit too close: distance ${distanceText} pts, required >= ${minimumPoints} pts (20 ticks margin)`;
-  }
-  return { slTooClose, tpTooClose, reason };
-}
+import { orderVolumeIssue } from '../sizing/volumeRules';
+import { ticketBlockedReason } from './ticketBlockedReason';
 
 // Numeric echo comparison: the OrderCheck result must match the ticket fields
 // regardless of decimal formatting; null must stay null.
@@ -152,25 +23,6 @@ const samePrice = (echo: string | null | undefined, field: string | null): boole
   field === null
     ? echo === null || echo === undefined
     : echo !== null && echo !== undefined && Number(echo) === Number(field);
-
-/** Shown when risk sizing is selected while the stop loss is off. */
-export const SIZING_NEEDS_STOP_MESSAGE =
-  'Money/% sizing needs a stop distance — enable Stop loss or switch to Units mode.';
-
-/** Only stop_limit carries a resting limit price, and it must be a positive number. */
-export function isLimitPriceValid(orderKind: OrderKind, limitPrice: string): boolean {
-  return (
-    orderKind !== 'stop_limit' ||
-    (limitPrice.trim() !== '' && Number.isFinite(Number(limitPrice)) && Number(limitPrice) > 0)
-  );
-}
-
-export function equityAllocationIssue(value: string): string | undefined {
-  const percent = Number(value);
-  return value.trim() && Number.isFinite(percent) && percent > 0 && percent <= 100
-    ? undefined
-    : 'Equity allocation must be greater than 0 and at most 100%.';
-}
 
 export type TicketDerivationInput = {
   symbol: string | undefined;
@@ -216,9 +68,7 @@ export type TicketDerivation = {
   ticketBlockedReason: string | undefined;
 };
 
-// Derive ticket gates from App state. The ordered blocked-reason chain is
-// observable policy; overlapping failures retain their precedence, and `''`
-// is a distinct reason value.
+/** Derives the ticket gates from App state; the blocked reason follows the ordered chain in `ticketBlockedReason`. */
 export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivation {
   const orderCheckEntry = normalizedPrice(input.entry);
   const orderCheckStopLoss = input.slOn ? normalizedPrice(input.stopLoss) : null;
@@ -234,8 +84,8 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
   const sizingAllowed = input.slOn || input.unitsMode === 'units';
   // The risk preview (which itself REQUIRES a risk budget) is needed only for
   // money/% auto-sizing with a stop distance. Manual units volume runs the
-  // chain on the OrderCheck echo alone — the risk budget is then optional
-  // (estimates only), per owner: "if I typed units it must not require risk".
+  // chain on the OrderCheck echo alone, so the risk budget is then optional
+  // (estimates only): typing units must not require a risk budget.
   const previewRequired = input.slOn && input.unitsMode !== 'units';
   const orderKindDisplay = input.orderKind === 'stop_limit' ? 'Stop Limit' : input.orderKind;
   // Effective volume = what both flows send: the field's value (auto mode mirrors risk sizing, manual mode is the user's typed override).
@@ -256,7 +106,7 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
   // previewRequired); the manual-units and no-SL paths run on the OrderCheck
   // echo + field freshness (draftVersion === riskVersion.current, bumped by
   // every field edit) instead. An enabled SL must still carry a price.
-  // Owner flow: nothing is checkable until a staged order exists (Buy/Sell click
+  // Nothing is checkable until a staged order exists (Buy/Sell click
   // stages; (✕)/Esc/unstage clear the staged order again).
   const allocationIssue =
     input.unitsMode === 'units' ? undefined : equityAllocationIssue(input.equityAllocationPercent ?? '100');
@@ -349,44 +199,6 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
     stopDistanceAllowed &&
     (!previewRequired || previewCurrentForSubmit),
   );
-  let ticketBlockedReason: string | undefined;
-  if (!canSubmitOrder) {
-    if (!bridgeConnected) {
-      ticketBlockedReason = 'Bridge not connected.';
-    } else if (!accountAvailable) {
-      ticketBlockedReason = 'Account snapshot unavailable.';
-    } else if (input.marketOpen !== true) {
-      ticketBlockedReason =
-        input.marketOpen === false
-          ? 'Market is closed for this symbol — trading resumes when the session opens.'
-          : 'Market session is unavailable — waiting for the bridge heartbeat.';
-    } else if (!input.stagedOnChart) {
-      ticketBlockedReason = 'Staged order was cleared from the chart — stage it again to send.';
-    } else if (!orderVolumeValid) {
-      ticketBlockedReason =
-        effectiveVolume === '' ? 'Volume is required.' : (volumeIssue ?? 'Volume must be a positive decimal.');
-    } else if (stopDistanceReason !== undefined) {
-      ticketBlockedReason = stopDistanceReason;
-    } else if (allocationIssue) {
-      ticketBlockedReason = allocationIssue;
-    } else if (!sizingAllowed) {
-      ticketBlockedReason = SIZING_NEEDS_STOP_MESSAGE;
-    } else if (!limitPriceValid) {
-      ticketBlockedReason = 'Stop limit requires limit price — enter the resting limit price on the ticket.';
-    } else if (!acceptedCurrentCheck) {
-      ticketBlockedReason = 'Run OrderCheck in MT5 — an accepted result for the current draft is required.';
-    } else if (previewRequired && !previewCurrentForSubmit) {
-      ticketBlockedReason = '';
-    } else if (!orderCheckVolumeMatches) {
-      ticketBlockedReason = 'Volume changed — run OrderCheck in MT5 again.';
-    } else if (!orderCheckEntry || (input.slOn && !orderCheckStopLoss)) {
-      ticketBlockedReason = 'Entry and stop loss must be valid prices.';
-    } else if (!takeProfitInputValid) {
-      ticketBlockedReason = 'Take profit must be a valid price or empty.';
-    } else {
-      ticketBlockedReason = 'Order panel is not ready.';
-    }
-  }
   return {
     orderCheckEntry,
     orderCheckStopLoss,
@@ -402,6 +214,27 @@ export function deriveOrderTicket(input: TicketDerivationInput): TicketDerivatio
     stopGuard,
     canCheckOrder,
     canSubmitOrder,
-    ticketBlockedReason,
+    ticketBlockedReason: ticketBlockedReason({
+      canSubmitOrder,
+      bridgeConnected,
+      accountAvailable,
+      marketOpen: input.marketOpen,
+      stagedOnChart: input.stagedOnChart,
+      orderVolumeValid,
+      effectiveVolume,
+      volumeIssue,
+      stopDistanceReason,
+      allocationIssue,
+      sizingAllowed,
+      limitPriceValid,
+      acceptedCurrentCheck,
+      previewRequired,
+      previewCurrentForSubmit,
+      orderCheckVolumeMatches,
+      orderCheckEntry,
+      slOn: input.slOn,
+      orderCheckStopLoss,
+      takeProfitInputValid,
+    }),
   };
 }

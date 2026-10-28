@@ -1,6 +1,6 @@
 import { useStore } from 'zustand';
 import { deriveOrderRiskBasis } from '../sizing/riskBasis';
-import { stopDistanceGuard } from '../derivation/ticketRules';
+import { stopDistanceGuard } from '../exits/stopDistance';
 import type { OrderTicketRiskBasis, OrderTicketRiskPreviewEffectsInput } from './useOrderTicketRiskPreviewEffects';
 import type { OrderTicketInputs } from '../draft/orderTicketInputs';
 import { useOrderTicketStores } from '../draft/orderTicketContext';

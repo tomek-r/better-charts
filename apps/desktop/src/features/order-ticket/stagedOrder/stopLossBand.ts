@@ -2,7 +2,8 @@ import type { AccountSnapshot, BrokerSymbol, OrderKind, QuoteSnapshot, RiskSide 
 import { volumeWithUnit } from '../../../shared/format';
 import { accountMoneyBasis, lossPerPriceUnitPerLot } from '../../../shared/money';
 import type { StagedSlBand } from '../../chart/engine/trading/slBand';
-import { orderEntryPrice } from '../derivation/ticketRules';
+import { STOP_DISTANCE_MIN_TICKS } from '../exits/stopDistance';
+import { orderEntryPrice } from '../pricing/orderEntryPrice';
 import type { UnitsMode } from '../sizing/unitsMode';
 
 /** The chart engine owns the band shape; the ticket derives it from the order draft. */
@@ -58,8 +59,11 @@ export function deriveStopLossBand(input: StopLossBandInput): StopLossBand | und
   const buy = side === 'buy';
   const digits = instrument.digits;
 
-  // stopDistanceGuard requires distance > max(stopsLevel x point, 20 ticks).
-  const stopsMinimum = Math.max(Number.isFinite(point) && point > 0 ? instrument.stopsLevel * point : 0, 20 * tickSize);
+  // stopDistanceGuard requires distance > max(stopsLevel x point, STOP_DISTANCE_MIN_TICKS ticks).
+  const stopsMinimum = Math.max(
+    Number.isFinite(point) && point > 0 ? instrument.stopsLevel * point : 0,
+    STOP_DISTANCE_MIN_TICKS * tickSize,
+  );
   const brokerNear = (Math.floor(stopsMinimum / tickSize + GRID_EPSILON) + 1) * tickSize;
   // Closer than this the required volume would exceed volumeMax.
   const volumeNear = Math.ceil(budget / (volumeMax * lossPerUnitPerLot) / tickSize - GRID_EPSILON) * tickSize;

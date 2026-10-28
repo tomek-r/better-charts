@@ -1,8 +1,14 @@
-import { equityAllocationIssue } from '../derivation/ticketRules';
 import { currencyFractionDigits } from '../../../shared/money';
 import type { RiskUnitsMode, UnitsMode } from './unitsMode';
 
 export const MAX_RISK_PERCENT = 100;
+
+export function equityAllocationIssue(value: string): string | undefined {
+  const percent = Number(value);
+  return value.trim() && Number.isFinite(percent) && percent > 0 && percent <= MAX_RISK_PERCENT
+    ? undefined
+    : 'Equity allocation must be greater than 0 and at most 100%.';
+}
 
 export function clampRiskPercentInput(value: string): string {
   if (!value.trim()) {
