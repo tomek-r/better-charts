@@ -10,9 +10,7 @@ export function AccountBadge() {
   if (environment === undefined) {
     return null;
   }
-  // The label ends with the account number and then the kind; a company comes first when the EA reports one.
-  const [company, accountNumber, kindLabel] =
-    environment.labelParts.length > 2 ? environment.labelParts : [undefined, ...environment.labelParts];
+  const { company, accountNumber, kindLabel } = environment;
   // The icons mark the parts, so no separator; the real spaces keep the copied and read text apart.
   return (
     <span className="account-badge" title={environment.title}>

@@ -1,12 +1,10 @@
 import { useShallow } from 'zustand/react/shallow';
 import type { AccountSnapshot } from '../../shared/bridge/types';
 import { useBridgeAccountSelector } from '../bridge/bridgeSelectors';
-import { accountEnvironment, type AccountEnvironment } from './accountEnvironment';
-
-type EnvironmentInput = Parameters<typeof accountEnvironment>[0];
+import { accountEnvironment, type AccountEnvironment, type AccountEnvironmentInput } from './accountEnvironment';
 
 /** Only the fields the badge reads, so balance, equity or currency ticks leave it untouched. */
-function selectEnvironmentInput(account: AccountSnapshot | undefined): EnvironmentInput {
+function selectEnvironmentInput(account: AccountSnapshot | undefined): AccountEnvironmentInput | undefined {
   if (account === undefined) {
     return undefined;
   }

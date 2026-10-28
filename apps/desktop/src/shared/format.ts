@@ -1,6 +1,9 @@
 import { currencyFractionDigits } from './money';
 import type { QuoteSnapshot } from './bridge/types';
 
+/** What a value shows when it is missing or not a number. */
+export const EMPTY_VALUE = '—';
+
 export function quoteDigits(...values: string[]) {
   return Math.min(
     8,

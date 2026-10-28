@@ -1,5 +1,5 @@
 import type { AccountSnapshot } from '../../shared/bridge/types';
-import { accountEnvironment } from '../account-badge/accountEnvironment';
+import { accountEnvironment, environmentLabel } from '../account-badge/accountEnvironment';
 
 export type AccountIdentity = Pick<AccountSnapshot, 'accountLogin' | 'brokerServer'>;
 
@@ -17,6 +17,6 @@ export function isAccountSwitch(previous: AccountIdentity | undefined, next: Acc
 /** "Account was switched to Demo 19219321" — the environment is part of the safety message. */
 export function accountSwitchMessage(account: AccountSnapshot): string {
   const { kind } = accountEnvironment(account);
-  const environment = kind === 'unknown' ? '' : `${kind.charAt(0).toUpperCase()}${kind.slice(1)} `;
+  const environment = kind === 'unknown' ? '' : `${environmentLabel(kind)} `;
   return `Account was switched to ${environment}${account.accountLogin}`;
 }

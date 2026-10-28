@@ -3,6 +3,7 @@ import { formatAccountMoney, formatMarginThreshold, marginModeName } from '../..
 import type { AccountSnapshot } from '../../shared/bridge/types';
 import { ModalDialog, ModalDialogButton } from '../../shared/ui/dialog/ModalDialog';
 import { Separated } from '../../shared/ui/icons/SeparatorIcon';
+import { AlgoTradingIcon } from './AlgoTradingIcon';
 
 /** Label/value rows of the new account; rows with a missing value are omitted. */
 function accountInfoRows(account: AccountSnapshot | undefined): Array<[label: string, value: ReactNode]> {
@@ -24,45 +25,16 @@ function accountInfoRows(account: AccountSnapshot | undefined): Array<[label: st
   return rows.filter((row): row is [string, ReactNode] => Boolean(row[1]));
 }
 
-/** Check mark when algo trading is on, warning triangle when it is off; colour from `currentColor`. */
-function AlgoTradingIcon({ enabled }: { enabled: boolean }) {
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      data-algo-icon={enabled ? 'check' : 'warning'}
-    >
-      {enabled ? (
-        <>
-          <circle cx="12" cy="12" r="9.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
-          <path
-            d="m7.75 12.25 2.75 2.75 5.75-6"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </>
-      ) : (
-        <>
-          <path
-            d="M12 3.25 21.5 20H2.5L12 3.25Z"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-          />
-          <path d="M12 9.5v4.75" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-          <circle cx="12" cy="17.25" r="1.1" fill="currentColor" />
-        </>
-      )}
-    </svg>
-  );
-}
+const ALGO_TRADING_ENABLED = {
+  className: 'account-switch-algo',
+  dataState: 'enabled',
+  text: 'Algo trading is enabled',
+};
+const ALGO_TRADING_DISABLED = {
+  className: 'account-switch-algo warn',
+  dataState: 'disabled',
+  text: 'Turn on Algo Trading in MT5 in order to send orders',
+};
 
 /** Modal notice that the MT5 login changed; the only control is Dismiss. */
 export function AccountSwitchDialog({
@@ -76,6 +48,7 @@ export function AccountSwitchDialog({
   tradingEnabled: boolean;
   onDismiss: () => void;
 }) {
+  const algoTrading = tradingEnabled ? ALGO_TRADING_ENABLED : ALGO_TRADING_DISABLED;
   return (
     <ModalDialog
       title={message}
@@ -94,13 +67,9 @@ export function AccountSwitchDialog({
           </div>
         ))}
       </dl>
-      <p
-        role="status"
-        className={tradingEnabled ? 'account-switch-algo' : 'account-switch-algo warn'}
-        data-algo-trading={tradingEnabled ? 'enabled' : 'disabled'}
-      >
+      <p role="status" className={algoTrading.className} data-algo-trading={algoTrading.dataState}>
         <AlgoTradingIcon enabled={tradingEnabled} />
-        {tradingEnabled ? 'Algo trading is enabled' : 'Turn on Algo Trading in MT5 in order to send orders'}
+        {algoTrading.text}
       </p>
     </ModalDialog>
   );

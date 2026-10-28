@@ -100,6 +100,8 @@ export interface TauriStubOptions {
   recordedHistory?: RecordedHistory[];
   /** Advertise the negotiated `partialClose` capability in the default bridge status. */
   partialClose?: boolean;
+  /** Operating system reported in the default app settings (default `linux`). */
+  platform?: 'windows' | 'macos' | 'linux';
   /** Bars of the primary recording seeding `get_market_snapshot` (the configured history depth). */
   recordedSnapshotBars?: number;
   /** Holds `save_app_settings` open this long, to observe a dialog while it saves. */
@@ -537,6 +539,9 @@ export async function installTauriStub(
     }
     if (opts.partialClose !== undefined) {
       responses.get_bridge_status = { ...(responses.get_bridge_status as object), partialClose: opts.partialClose };
+    }
+    if (opts.platform !== undefined) {
+      responses.get_app_settings = { ...(responses.get_app_settings as object), platform: opts.platform };
     }
     const failures: Record<string, string> = { ...opts.failures };
     /** Commands a test holds open, to observe the UI they block. */

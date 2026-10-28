@@ -1,32 +1,38 @@
+import type { AccountSnapshot } from '../../shared/bridge/types';
+import { EMPTY_VALUE } from '../../shared/format';
 import { useBridgeAccount } from '../bridge/bridgeSelectors';
-import { accountAmount } from './accountAmount';
+import { accountAmount, formatAccountAmount } from './accountAmount';
 
-const ACCOUNT_METRICS = [
-  ['Balance', 'balance'],
-  ['Equity', 'equity'],
-  ['Margin', 'margin'],
-  ['Free margin', 'freeMargin'],
-  ['Margin level', 'marginLevel'],
-] as const;
+type AccountMetric = { label: string; key: 'balance' | 'equity' | 'margin' | 'freeMargin' | 'marginLevel' };
+
+const ACCOUNT_METRICS: AccountMetric[] = [
+  { label: 'Balance', key: 'balance' },
+  { label: 'Equity', key: 'equity' },
+  { label: 'Margin', key: 'margin' },
+  { label: 'Free margin', key: 'freeMargin' },
+  { label: 'Margin level', key: 'marginLevel' },
+];
+
+/** Margin level is a percentage; the other metrics are amounts in the account currency. */
+function formatMetric({ key }: AccountMetric, account: AccountSnapshot | undefined): string {
+  if (key !== 'marginLevel') {
+    return formatAccountAmount(account?.[key], account);
+  }
+  const level = accountAmount(account?.marginLevel);
+  return level === EMPTY_VALUE ? level : `${level} %`;
+}
 
 export function AccountSummary() {
   const account = useBridgeAccount();
 
   return (
     <dl className="portfolio-account" aria-label="Account state">
-      {ACCOUNT_METRICS.map(([label, key]) => {
-        const amount = accountAmount(
-          account?.[key],
-          key === 'marginLevel' ? undefined : account?.currency,
-          account?.currencyDigits,
-        );
-        return (
-          <div className="portfolio-account-row" key={key}>
-            <dt>{label}</dt>
-            <dd>{key === 'marginLevel' && amount !== '—' ? `${amount} %` : amount}</dd>
-          </div>
-        );
-      })}
+      {ACCOUNT_METRICS.map((metric) => (
+        <div className="portfolio-account-row" key={metric.key}>
+          <dt>{metric.label}</dt>
+          <dd>{formatMetric(metric, account)}</dd>
+        </div>
+      ))}
     </dl>
   );
 }

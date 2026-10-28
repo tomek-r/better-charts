@@ -99,6 +99,11 @@ function useSettingsSelector<T>(hookName: string, selector: (state: AppSettingsS
   return useStore(store, selector);
 }
 
+/** Operating system the app runs on; `undefined` until the settings load. */
+export function useAppPlatform(): AppSettingsData['platform'] | undefined {
+  return useSettingsSelector('useAppPlatform', (state) => state.settings?.platform);
+}
+
 /** Whether this device finished the setup, so the guide never opens on its own again. */
 export function useSetupCompleted(): boolean {
   return useSettingsSelector('useSetupCompleted', (state) => state.setupCompleted);

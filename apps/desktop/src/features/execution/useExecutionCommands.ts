@@ -31,6 +31,11 @@ export interface ExecutionStoreState {
     | undefined;
 }
 
+/** The in-flight target key of a full or partial close of one position. */
+export function closeTargetKey(positionId: string): string {
+  return `Close:position:${positionId}`;
+}
+
 export function useExecutionCommands({
   account,
   setPendingModification,
@@ -135,7 +140,7 @@ export function useExecutionCommands({
   ) =>
     runCloseCancel(
       source,
-      `Close:position:${positionId}`,
+      closeTargetKey(positionId),
       'Close',
       () =>
         invoke('close_position', {
