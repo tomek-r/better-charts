@@ -60,7 +60,6 @@ export function tagPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   ctx.closePath();
 }
 
-/** Draw a 20×20 cancel chip and return the circle that covers its painted area. */
 /** The square chip frame shared by the ✕ and ▾ segments (circumscribing circle r = 10). */
 function drawChipFrame(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): TradingHitCircle {
   const r = 10;
@@ -75,6 +74,7 @@ function drawChipFrame(ctx: CanvasRenderingContext2D, cx: number, cy: number, co
   return { x: cx, y: cy, r };
 }
 
+/** Draw a 20×20 cancel chip and return the circle that covers its painted area. */
 export function drawCancelChip(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): TradingHitCircle {
   const hit = drawChipFrame(ctx, cx, cy, color);
   const strokeHalfLength = 2.4;
@@ -160,7 +160,6 @@ export function drawHandle(
   ctx.closePath();
   ctx.fillStyle = color;
   ctx.fill();
-  ctx.fillStyle = color;
   ctx.fillText(`⋮⋮  ${label}`, x + 7, centerY + 0.5);
   if (trailing) {
     ctx.textAlign = 'right';

@@ -17,13 +17,6 @@ import { TickProfileRequestQueue } from './requests/tickProfileRequestQueue';
 import { sameRange, spanBetweenAnchors, type PlacedFixedRangeProfile } from './fixedRangeProfileRange';
 import { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES } from './fixedRangeProfileSettings';
 
-/**
- * The fixed range volume profile's settings live in `settings.ts`, apart from the drawing and the canvas code, so
- * the dialog and the specs can read them alone. Every drawing stores resolved values, so a setting added later
- * restores old drawings with its default.
- */
-export { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES };
-
 /** Where the two drag handles sit, in pane CSS px, and the range they delimit. */
 interface FixedRangeProfileBoundaries {
   fromX: number;
@@ -121,7 +114,8 @@ export class FixedRangeProfileTool implements ChartTool {
 
   cancelGesture(): void {
     this.pointerUp('cancelled');
-    this.first = this.hover = null;
+    this.first = null;
+    this.hover = null;
     this.host.requestRepaint();
   }
 
@@ -208,10 +202,12 @@ export class FixedRangeProfileTool implements ChartTool {
     if (commit) {
       const first = this.first;
       if (first === null) {
-        this.first = this.hover = anchor;
+        this.first = anchor;
+        this.hover = anchor;
       } else {
         this.placeDrawing(spanBetweenAnchors(this.host.barSeries, first, anchor));
-        this.first = this.hover = null;
+        this.first = null;
+        this.hover = null;
       }
     }
     this.host.requestRepaint();

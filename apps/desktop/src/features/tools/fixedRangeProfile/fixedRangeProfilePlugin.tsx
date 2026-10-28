@@ -1,6 +1,7 @@
 import type { ChartToolPlugin } from '../chartToolPlugin';
 import { FIXED_RANGE_PROFILE_POINTS } from './drawing/fixedRangeProfilePoints';
-import { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES, FixedRangeProfileTool } from './fixedRangeProfileTool';
+import { FIXED_RANGE_PROFILE_INPUTS, FIXED_RANGE_PROFILE_STYLES } from './fixedRangeProfileSettings';
+import { FixedRangeProfileTool } from './fixedRangeProfileTool';
 
 export const fixedRangeProfilePlugin: ChartToolPlugin<'fixedRangeProfile'> = {
   id: 'fixedRangeProfile',

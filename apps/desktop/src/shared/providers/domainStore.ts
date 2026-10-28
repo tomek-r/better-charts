@@ -13,6 +13,19 @@ export type DomainStore<T extends object> = StoreApi<T> & {
   setters: FieldSetters<T>;
 };
 
+function createFieldSetters<T extends object>(
+  store: Pick<StoreApi<T>, 'getState'> & Pick<DomainStore<T>, 'setField'>,
+): FieldSetters<T> {
+  const setters = {} as FieldSetters<T>;
+  for (const key of Object.keys(store.getState()) as Array<keyof T>) {
+    const setter = (action: SetStateAction<T[typeof key]>) => store.setField(key, action);
+    (setters as unknown as Record<string, (action: SetStateAction<T[typeof key]>) => void>)[
+      `set${String(key).charAt(0).toUpperCase()}${String(key).slice(1)}`
+    ] = setter;
+  }
+  return setters;
+}
+
 export function createDomainStore<T extends object>(initialState: T): DomainStore<T> {
   const store = createStore<T>()(() => initialState);
   const setField: DomainStore<T>['setField'] = (key, action) => {
@@ -25,19 +38,6 @@ export function createDomainStore<T extends object>(initialState: T): DomainStor
   const writableStore = Object.assign(store, { setField });
   const setters = createFieldSetters(writableStore);
   return Object.assign(writableStore, { setters });
-}
-
-function createFieldSetters<T extends object>(
-  store: Pick<StoreApi<T>, 'getState'> & Pick<DomainStore<T>, 'setField'>,
-): FieldSetters<T> {
-  const setters = {} as FieldSetters<T>;
-  for (const key of Object.keys(store.getState()) as Array<keyof T>) {
-    const setter = (action: SetStateAction<T[typeof key]>) => store.setField(key, action);
-    (setters as unknown as Record<string, (action: SetStateAction<T[typeof key]>) => void>)[
-      `set${String(key).charAt(0).toUpperCase()}${String(key).slice(1)}`
-    ] = setter;
-  }
-  return setters;
 }
 
 export function useDomainField<T extends object, K extends keyof T>(

@@ -13,7 +13,6 @@ const PAGE_TIMEOUT_MS = 10_000;
 const WINDOW_ANSWER_GRACE_MS = 2_000;
 const WINDOW_TIMEOUT_MS = INITIAL_HISTORY_SYNC_TIMEOUT_MS + WINDOW_ANSWER_GRACE_MS;
 const HISTORY_TIMEOUT_MESSAGE = 'History request timed out.';
-const MAX_BARS = HISTORY_BARS;
 
 /** Numeric values used only at the rendering boundary. Bridge models retain ms and decimal strings. */
 export interface RenderBar {
@@ -73,7 +72,16 @@ interface PendingHistory {
 }
 
 function clampBars(bars: number): number {
-  return Math.min(MAX_BARS, Math.max(1, Math.floor(bars) || MAX_BARS));
+  return Math.min(HISTORY_BARS, Math.max(1, Math.floor(bars) || HISTORY_BARS));
+}
+
+function pendingKey(symbol: string, timeframe: string): string {
+  return `${symbol}|${timeframe}`;
+}
+
+/** Older-history pages are tracked apart from the selection's window request. */
+function pageKey(symbol: string, timeframe: string): string {
+  return `${pendingKey(symbol, timeframe)}|older`;
 }
 
 /** Coordinates one outstanding history request per effective symbol/timeframe selection. */
@@ -91,7 +99,7 @@ export class Mt5DataAdapter {
     return () => this.listeners.delete(listener);
   }
 
-  async requestHistory(symbol: string, timeframe: string, bars = MAX_BARS): Promise<void> {
+  async requestHistory(symbol: string, timeframe: string, bars = HISTORY_BARS): Promise<void> {
     if (this.disposed) {
       throw new Error('Mt5DataAdapter is disposed.');
     }
@@ -247,13 +255,4 @@ export class Mt5DataAdapter {
       listener(failure);
     }
   }
-}
-
-function pendingKey(symbol: string, timeframe: string): string {
-  return `${symbol}|${timeframe}`;
-}
-
-/** Older-history pages are tracked apart from the selection's window request. */
-function pageKey(symbol: string, timeframe: string): string {
-  return `${pendingKey(symbol, timeframe)}|older`;
 }

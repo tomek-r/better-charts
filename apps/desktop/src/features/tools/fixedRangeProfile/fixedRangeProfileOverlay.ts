@@ -147,6 +147,43 @@ function drawHistogramBox(ctx: CanvasRenderingContext2D, box: HistogramBox, colo
 }
 
 /**
+ * The pane x of the two selection handles. The loading band spans exactly these: `state.range.toMs`
+ * is the request end clipped to the live edge, so it stops at the newest bar when the handle sits
+ * on a future slot.
+ */
+export interface HandleEdges {
+  fromX: number;
+  toX: number;
+}
+
+/** `20 Mar`: UTC day and short English month, independent of the browser locale. */
+function formatUtcDayMonth(ms: number): string {
+  const date = new Date(ms);
+  return `${date.getUTCDate()} ${SHORT_MONTHS[date.getUTCMonth()]}`;
+}
+
+/**
+ * Top-left corner of the range band, kept inside the pane when the band starts off screen. Canvas units are CSS
+ * pixels (the context is already scaled by the device pixel ratio), so the inset and font size need no DPR factor.
+ */
+function drawBarTimeframeLabel(
+  ctx: CanvasRenderingContext2D,
+  viewport: RenderViewport,
+  bandLeft: number,
+  timeframe: string,
+  coveredFromMs: number | null,
+): void {
+  const { x, y } = viewport.chartRect;
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = coveredFromMs === null ? BAR_LABEL_COLOR : BAR_LABEL_PARTIAL_COLOR;
+  ctx.font = BAR_LABEL_FONT;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  const parts = coveredFromMs === null ? [timeframe] : [timeframe, `from ${formatUtcDayMonth(coveredFromMs)}`];
+  drawSeparatedText(ctx, parts, Math.max(x, bandLeft) + BAR_LABEL_INSET, y + BAR_LABEL_INSET);
+}
+
+/**
  * The profile of the drawn range. The bars hang from the range start (placement left) or from the range end
  * (placement right) and never leave the range; `handles` gives the end x, which is otherwise the end of the
  * requested range.
@@ -211,46 +248,9 @@ export function drawFixedRangeProfile(
   state.hit = hit;
 }
 
-/**
- * Top-left corner of the range band, kept inside the pane when the band starts off screen. Canvas units are CSS
- * pixels (the context is already scaled by the device pixel ratio), so the inset and font size need no DPR factor.
- */
-function drawBarTimeframeLabel(
-  ctx: CanvasRenderingContext2D,
-  viewport: RenderViewport,
-  bandLeft: number,
-  timeframe: string,
-  coveredFromMs: number | null,
-): void {
-  const { x, y } = viewport.chartRect;
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = coveredFromMs === null ? BAR_LABEL_COLOR : BAR_LABEL_PARTIAL_COLOR;
-  ctx.font = BAR_LABEL_FONT;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  const parts = coveredFromMs === null ? [timeframe] : [timeframe, `from ${formatUtcDayMonth(coveredFromMs)}`];
-  drawSeparatedText(ctx, parts, Math.max(x, bandLeft) + BAR_LABEL_INSET, y + BAR_LABEL_INSET);
-}
-
-/** `20 Mar`: UTC day and short English month, independent of the browser locale. */
-function formatUtcDayMonth(ms: number): string {
-  const date = new Date(ms);
-  return `${date.getUTCDate()} ${SHORT_MONTHS[date.getUTCMonth()]}`;
-}
-
 const LOADING_WASH_COLOR = palette.raised;
 /** Translucent enough that candles under the wash stay faintly readable. */
 export const LOADING_WASH_ALPHA = 0.45;
-
-/**
- * The pane x of the two selection handles. The loading band spans exactly these: `state.range.toMs`
- * is the request end clipped to the live edge, so it stops at the newest bar when the handle sits
- * on a future slot.
- */
-export interface HandleEdges {
-  fromX: number;
-  toX: number;
-}
 
 /**
  * The band between the handles, clamped to the pane, or null when nothing should be drawn

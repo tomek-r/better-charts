@@ -55,7 +55,6 @@ export function useBridgeStreamEffects(
         account?.currencyDigits,
         partialCloseAvailable,
       );
-      // Repaint so the ui-layer overlay re-renders (the sync previously piggy-backed on setPositions' requestRender).
       if (submitSwapPendingRef.current) {
         // The fill landed: swap the frozen staged rows for the live rows in ONE
         // repaint (clearStagedWidget repaints when the widget was painted).

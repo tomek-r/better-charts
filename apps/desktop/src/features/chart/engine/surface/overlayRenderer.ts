@@ -4,7 +4,6 @@ export interface RenderViewport {
   priceRange: { min: number; max: number };
   visibleRange: { from: number; to: number };
   barWidth: number;
-  barSpacing: number;
   offset: number;
   priceToY: (price: number) => number;
   yToPrice: (y: number) => number;

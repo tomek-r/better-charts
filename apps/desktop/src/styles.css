@@ -19,7 +19,6 @@
 @import './features/symbol-search/symbol-search.css';
 @import './features/side-drawers/side-drawers.css';
 @import './features/object-tree/object-tree.css';
-@import './features/execution/execution.css';
 @import './shared/ui/styles/action-button.css';
 @import './shared/ui/styles/primary-button.css';
 @import './shared/ui/styles/visually-hidden.css';

@@ -435,7 +435,7 @@ export function createBridgeMarketRuntime(
     if (run.disposed || run.bridgeState !== 'connected' || !chartRef.current) {
       return;
     }
-    const payload = event.payload as BarUpdate | Candle;
+    const payload = event.payload;
     const candle = normalizeCandle('candle' in payload ? payload.candle : payload);
     const symbol = 'symbol' in payload ? payload.symbol : currentSymbolRef.current;
     const timeframe = 'timeframe' in payload ? payload.timeframe : currentTimeframeRef.current;

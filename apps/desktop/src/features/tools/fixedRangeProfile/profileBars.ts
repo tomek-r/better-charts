@@ -21,6 +21,11 @@ interface BarSegment {
   readonly side: 'up' | 'down';
 }
 
+export interface RowWeights {
+  readonly up: number;
+  readonly down: number;
+}
+
 interface ProfileRow {
   readonly top: number;
   readonly bottom: number;
@@ -35,11 +40,6 @@ export interface ProfileBarsLayout {
   readonly rows: readonly ProfileRow[];
   readonly reachLeft: number;
   readonly reachRight: number;
-}
-
-export interface RowWeights {
-  readonly up: number;
-  readonly down: number;
 }
 
 /** Turns a weight into a bar length in px. */
@@ -146,7 +146,7 @@ export function layoutProfileBars(
     }
     const binLow = Math.min(low, high);
     const binHigh = Math.max(low, high);
-    const isPoc: boolean = !pocClaimed && pocValid && pocPrice >= binLow && pocPrice <= binHigh;
+    const isPoc = !pocClaimed && pocValid && pocPrice >= binLow && pocPrice <= binHigh;
     if (isPoc) {
       pocClaimed = true;
     }

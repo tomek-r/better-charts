@@ -21,9 +21,8 @@ export type OrderTicketEntryEffectsInput = Pick<
   setTakeProfit: OrderTicketStores['setters']['draft']['setTakeProfit'];
 };
 
-// Effect slots (4) + (5): entry reseed from the live quote and the market
-// follow — registered at their former slot between the portfolio guard and the
-// bridge-listener effect.
+// Entry reseed from the live quote and the market follow register between the
+// portfolio guard and the bridge-listener effect, so effect order stays fixed.
 export function useOrderTicketEntryEffects(ticket: OrderTicketEntryEffectsInput): void {
   const previousMarketSelection = useRef<{ orderKind: OrderKind; riskSide: RiskSide } | undefined>(undefined);
   const {

@@ -13,6 +13,8 @@ interface PartialCloseMenuButtonProps {
   onCustomVolume: () => void;
 }
 
+function noop() {}
+
 /** The ▾ trigger and its preset menu. Independent of any host surface. */
 export function PartialCloseMenuButton({
   limits,
@@ -56,5 +58,3 @@ export function PartialCloseMenuButton({
     </span>
   );
 }
-
-function noop() {}

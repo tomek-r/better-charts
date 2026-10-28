@@ -11,9 +11,9 @@ import { useChartModificationDrafts } from './useChartModificationDrafts';
 
 export function useChartWorkspace() {
   // Shared (never re-created) state for the staged-order widget overlay: the
-  // renderer writes hit geometry every frame; App's mirror effect writes the
-  // ticket values; the host pointer handlers read both. No polling, no chart
-  // internals — see features/chart/engine/trading/stagedOrderOverlay.ts for the mechanism contract.
+  // renderer writes hit geometry every frame; the order ticket draft writes the
+  // ticket values; the host pointer handlers read both. See
+  // features/chart/engine/trading/stagedOrderOverlay.ts for the mechanism contract.
   const stagedOrderState = useRef<StagedOrderState>({ order: null, digits: 2, hit: {} });
   // Shared (never re-created) state for OUR position/order overlay: the painter
   // writes hit geometry every frame; the sync effect writes the portfolio
@@ -28,9 +28,8 @@ export function useChartWorkspace() {
   // Live bid/ask price lines overlay state — the quote effect writes the
   // prices, the painter writes hit geometry (see features/chart/engine/quotes/priceLinesOverlay.ts).
   const priceLinesState = useRef<PriceLinesState>({ digits: 2, hit: {} });
-  // The chart SL/TP drag handlers bind once at mount; they read this render's
-  // dispatch gate and auto-dispatch path through this ref (drag events arrive only
-  // after a commit, so the stored closure always carries fresh state).
+  // The overlay SL/TP drag handlers bind once at mount; they read the latest
+  // dispatch gate and auto-dispatch path through this ref.
   const dragModifyRef = useRef<{ enabled: boolean; dispatch: (draft: PendingModification) => void } | undefined>(
     undefined,
   );

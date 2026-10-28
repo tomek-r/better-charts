@@ -14,9 +14,6 @@ export const arrowPlugin: ChartToolPlugin<'arrow'> = {
         strokeWidth={1.1}
       />
     ),
-    strokeWidth: 2.2,
-    linecap: 'round',
-    linejoin: 'round',
   },
   railGroup: { id: 'pointers', label: 'Pointer tools' },
   placesDrawings: false,

@@ -47,11 +47,6 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
   } | null = null;
   /** Slop before a ✕ press counts as a drag (abandons the click) — staged grab slop. */
   const CHIP_CLICK_SLOP = STAGED_GRAB;
-  // Custom overlay (features/chart/engine/trading/positionOverlay.ts): ✕ chips first (small precise
-  // targets), then lines in the LIBRARY's hit order — order price, position
-  // SL, position TP — with its ±8px y tolerance; lines bounded to chartRect so
-  // the axis strip keeps its native scale-drag (the library's axis check ran
-  // before its trading hit-test too).
   // The ✕ and ▾ hit circles overlap (22px apart, grab slop on top): the nearer centre wins.
   const resolvePositionChip = (id: string, x: number, y: number): OverlayGrab | null => {
     const { hit } = positionOverlayState.current;
@@ -66,12 +61,14 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
     }
     return closeHit ? { kind: 'posClose', id } : null;
   };
+  // ✕ chips first (small precise targets), then lines in the order: order price,
+  // position SL, position TP, with a ±TRADING_GRAB y tolerance.
   const resolveOverlayGrab = (x: number, y: number): OverlayGrab | null => {
     const { hit } = positionOverlayState.current;
     const bounds = hit.chartRect;
-    // Full chartRect containment (incl. y): the library hit-tested inside the
-    // chart container only — toolbar/sidebar clicks must never claim a line
-    // or ✕ chip, and everything outside must keep panning/scale-dragging.
+    // Full chartRect containment (incl. y): toolbar/sidebar clicks must never
+    // claim a line or ✕ chip, and the price-axis strip and everything outside
+    // must keep panning/scale-dragging.
     if (!bounds || x < bounds.x || x > bounds.x + bounds.width || y < bounds.y || y > bounds.y + bounds.height) {
       return null;
     }
@@ -255,12 +252,8 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
         started: false,
         price: undefined,
         orderPrice: canMoveExits ? (orderPreview?.price ?? order.price) : undefined,
-        stopLoss: canMoveExits
-          ? (orderPreview?.stopLoss ?? order.stopLoss)
-          : (orderPreview?.stopLoss ?? order?.stopLoss),
-        takeProfit: canMoveExits
-          ? (orderPreview?.takeProfit ?? order.takeProfit)
-          : (orderPreview?.takeProfit ?? order?.takeProfit),
+        stopLoss: orderPreview?.stopLoss ?? order?.stopLoss,
+        takeProfit: orderPreview?.takeProfit ?? order?.takeProfit,
         canMoveExits,
         moveExits,
         preserveExits,

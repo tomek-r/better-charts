@@ -6,7 +6,7 @@ import type { TimeModel } from '../../chart/engine/viewport/viewportController';
  * A committed fixed-range volume profile window, `[fromMs, endMs)`. The end is
  * time-anchored: it is the end of the slot the user chose, a real bar or an empty
  * future slot, and never moves. Whether the range is still collecting ticks is
- * derived from the newest bar (see `FixedRangeProfileTool.barsChanged`).
+ * derived from the newest bar (see `isRangeOpen` and `FixedRangeProfileDrawing.barsChanged`).
  */
 export interface FixedRangeProfileRange {
   fromMs: number;
@@ -93,6 +93,26 @@ export function rangeEndingAtAnchor(barSeries: TimeModel, fromMs: number, anchor
   return { ...minuteAlignedWindow({ fromMs, endMs }), lastSlotOpenMs: anchor.timeMs };
 }
 
+/** The index of the newest bar that opened at or before `timeSeconds`; undefined when every bar is later. */
+function lastBarOpenedAtOrBefore(barSeries: TimeModel, timeSeconds: number): number | undefined {
+  const { bars } = barSeries;
+  if (bars[0].time > timeSeconds) {
+    return undefined;
+  }
+  // The newest bar at or before the instant, found by bisection: history can be thousands of bars long.
+  let low = 0;
+  let high = bars.length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (bars[middle].time <= timeSeconds) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return low;
+}
+
 /**
  * The open time of the slot that holds the instant `endMs - 1`, for a window that ends at `endMs`:
  * the last bar that opened at or before it, or, past the newest bar, the future slot the timeframe
@@ -113,24 +133,4 @@ export function lastSlotOpenBefore(barSeries: TimeModel, endMs: number): number 
   }
   const steps = Math.floor(timeframeBarOffset(timeframe, newest, lastInstantSeconds));
   return timeframeBarTime(timeframe, newest, steps) * 1000;
-}
-
-/** The index of the newest bar that opened at or before `timeSeconds`; undefined when every bar is later. */
-function lastBarOpenedAtOrBefore(barSeries: TimeModel, timeSeconds: number): number | undefined {
-  const { bars } = barSeries;
-  if (bars[0].time > timeSeconds) {
-    return undefined;
-  }
-  // The newest bar at or before the instant, found by bisection: history can be thousands of bars long.
-  let low = 0;
-  let high = bars.length - 1;
-  while (low < high) {
-    const middle = Math.ceil((low + high) / 2);
-    if (bars[middle].time <= timeSeconds) {
-      low = middle;
-    } else {
-      high = middle - 1;
-    }
-  }
-  return low;
 }

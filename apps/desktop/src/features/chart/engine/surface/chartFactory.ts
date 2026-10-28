@@ -66,7 +66,7 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
       minimumWidth: 70,
       scaleMargins: { top: 0.12, bottom: 0.18 },
       // Auto scale stays off: the range is fitted once per loaded series (see
-      // ChartController.fitPriceScale) and then holds, so a tick cannot rescale
+      // ViewportController.fitPriceScale) and then holds, so a tick cannot rescale
       // the pane under the pointer. `A`, a double-click on the axis and dragging
       // it are the ways back to a fitted range.
       autoScale: false,

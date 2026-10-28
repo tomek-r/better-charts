@@ -20,8 +20,8 @@ import {
 /**
  * TradingView-style staged-order widget, drawn as a `ui`-layer overlay. Native
  * price-axis labels render outside the chart pane. The overlay ONLY paints: all
- * input goes through capture-phase pointer/touch handlers App.tsx binds to the
- * chart host, which hit-test against the geometry recorded here on every frame
+ * input goes through capture-phase pointer/touch handlers bound to the
+ * chart host by the chart workspace pointer effects, which hit-test against the geometry recorded here on every frame
  * (`state.hit`, ±6px grab). Nothing is ever dispatched from this widget — it
  * only mirrors the ticket fields (entry / slOn+stopLoss / tpOn+takeProfit).
  *
@@ -59,7 +59,7 @@ export interface StagedOrderLevels {
 }
 
 export interface StagedOrderState {
-  /** null = not staged. Written by App every render via the mirror effect. */
+  /** null = not staged. Mirrored from the order ticket draft. */
   order: StagedOrderLevels | null;
   /** Why no SL is allowed (empty band); set by the gestures during an SL drag, cleared on release. */
   slClampHint?: string;
@@ -92,8 +92,7 @@ export interface StagedOrderState {
     tpCancel?: TradingHitCircle;
     /** Viewport snapshots for the dev-only test helper (pan/zoom assertions). */
     priceRange?: { min: number; max: number };
-    barSpacing?: number;
-    /** zoom() mutates barWidth (barSpacing stays fixed) — test watches this. */
+    /** zoom() mutates barWidth — test watches this. */
     barWidth?: number;
     offset?: number;
     visibleRange?: { from: number; to: number };
@@ -227,7 +226,6 @@ export function createStagedOrderOverlay(
         paintTradingLabel(ctx, viewport, hit.labels!, { source: 'staged', id: 'draft', level }, lineY, draw, labels);
       // Viewport snapshots for the dev test helper (pan/zoom E2E assertions).
       hit.priceRange = { min, max };
-      hit.barSpacing = viewport.barSpacing;
       hit.barWidth = viewport.barWidth;
       hit.offset = viewport.offset;
       hit.visibleRange = { from: viewport.visibleRange.from, to: viewport.visibleRange.to };
@@ -239,8 +237,7 @@ export function createStagedOrderOverlay(
       const toY = viewport.priceToY;
 
       const order = state.order;
-      const entryValid = order !== null && Number.isFinite(order.entry) && order.entry > 0;
-      if (!order || !entryValid) {
+      if (!order || !Number.isFinite(order.entry) || order.entry <= 0) {
         state.hit = hit;
         // Valid exit levels remain visible through native price lines while
         // the entry is temporarily cleared during ticket editing.

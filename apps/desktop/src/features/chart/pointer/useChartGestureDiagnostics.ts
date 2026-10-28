@@ -93,7 +93,6 @@ export function useChartGestureDiagnostics(workspace: ChartWorkspaceState): void
             : null,
           visibleRange: hit.visibleRange ?? null,
           priceRange: hit.priceRange ?? null,
-          barSpacing: hit.barSpacing ?? null,
           barWidth: hit.barWidth ?? null,
           digits: state.digits,
           // Panning geometry (for E2E gestures): where the viewport is, where

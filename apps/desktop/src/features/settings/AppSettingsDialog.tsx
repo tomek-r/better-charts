@@ -21,6 +21,13 @@ function DetectedHint({ detected, field }: { detected: DetectedSettingsField[]; 
   return <span className="settings-detected-hint">Detected on this computer</span>;
 }
 
+function SettingsContent({ loadRequest, children }: { loadRequest: Promise<void> | undefined; children: ReactNode }) {
+  if (loadRequest) {
+    use(loadRequest);
+  }
+  return children;
+}
+
 export function AppSettingsDialog({
   settings,
   loadRequest,
@@ -341,11 +348,4 @@ export function AppSettingsDialog({
       </div>
     </ModalDialog>
   );
-}
-
-function SettingsContent({ loadRequest, children }: { loadRequest: Promise<void> | undefined; children: ReactNode }) {
-  if (loadRequest) {
-    use(loadRequest);
-  }
-  return children;
 }

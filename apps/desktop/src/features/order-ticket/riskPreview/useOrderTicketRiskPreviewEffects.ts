@@ -8,10 +8,10 @@ import { equityAllocationIssue, orderEntryPrice } from '../derivation/ticketRule
 
 const RISK_PREVIEW_DEBOUNCE_MS = 100;
 
-// Effect slot (2): the debounced risk-preview request [layout] — registered at
-// its former slot between the timeframe reset and the staged-widget mirror.
-// `riskMode`/`effectiveRiskAmount` are App's risk-basis derivations (they
-// feed the display too), passed in as the effect's external inputs.
+// The debounced risk-preview request [layout] registers between the timeframe
+// reset and the staged-widget mirror, so effect order stays fixed.
+// `riskMode`/`effectiveRiskAmount` are the risk-basis derivations (they feed
+// the display too), passed in as the effect's external inputs.
 export type OrderTicketRiskPreviewEffectsInput = Pick<OrderTicketInputs, 'snapshot' | 'status' | 'account'> &
   Pick<
     OrderTicketDraftStore,

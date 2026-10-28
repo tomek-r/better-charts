@@ -8,10 +8,9 @@ import type {
   OrderTicketStores,
 } from '../draft/orderTicketStores';
 
-// Effect slots (1) + (3): the OrderCheck reset [layout] and the volume
-// auto-fill [passive] register together at their former App slot — after the
-// account-login sync, before the favorites/recent persistence effects — so
-// effect registration order stays 1:1 with the former inline effects in App.
+// The OrderCheck reset [layout] and the volume auto-fill [passive] register
+// together, after the account-login sync and before the favorites/recent
+// persistence effects, so effect registration order stays fixed.
 export type OrderTicketOrderCheckEffectsInput = Pick<OrderTicketInputs, 'snapshot' | 'status' | 'account'> &
   Pick<
     OrderTicketDraftStore,

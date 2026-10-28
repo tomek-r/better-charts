@@ -277,8 +277,7 @@ export class ViewportController {
     }
     this.traced('extendFuture', () => {
       const scale = this.chart.timeScale();
-      const spacing = barSpacing;
-      const count = neededFutureBarCount(scale.width(), spacing);
+      const count = neededFutureBarCount(scale.width(), barSpacing);
       const range = this.visibleRange();
       // Rebuilt only on a new real bar or resize; never on an existing-bar tick.
       this.future.setData(
@@ -289,7 +288,7 @@ export class ViewportController {
       );
       this.futureCount = count;
       if (range) {
-        this.restoreViewport(range.to, spacing);
+        this.restoreViewport(range.to, barSpacing);
       }
     });
   }
@@ -311,7 +310,6 @@ export class ViewportController {
       priceRange: { min, max },
       visibleRange: range,
       barWidth,
-      barSpacing: 0,
       offset: range.from * barWidth,
       priceToY: (price) => this.priceToY(price),
       yToPrice: (y) => this.yToPrice(y),

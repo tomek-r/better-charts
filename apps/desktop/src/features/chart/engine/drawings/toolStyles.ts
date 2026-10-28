@@ -7,12 +7,10 @@ import {
   type ToolInputValues,
 } from './toolInputs';
 
-/**
- * The Style tab of one drawing, modelled on what Pine Script's `plot()`, `hline()` and `fill()` expose in
- * TradingView's Style tab. Styles are declared apart from inputs, but a style is stored as scalar values in
- * the same map as the inputs: the store accepts only numbers, booleans and strings, so each style
- * flattens to the keys `toolStyleKey` names.
- */
+// The Style tab of one drawing, modelled on what Pine Script's `plot()`, `hline()` and `fill()` expose in
+// TradingView's Style tab. Styles are declared apart from inputs, but a style is stored as scalar values in
+// the same map as the inputs: the store accepts only numbers, booleans and strings, so each style
+// flattens to the keys `toolStyleKey` names.
 
 /** The line widths a `line` style offers, in CSS px. */
 export const TOOL_STYLE_LINE_WIDTHS = [1, 2, 3, 4] as const;

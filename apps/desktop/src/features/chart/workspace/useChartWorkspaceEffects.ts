@@ -245,8 +245,7 @@ export function useChartWorkspaceResetEffects(
   // SYMBOL change. Drawings are time/price anchored: a line drawn on one instrument
   // is noise on another (the stale-lines bug class), so every tool drops its drawing
   // and anything computed for it (their stale-event guards stay in place), and the
-  // ticket draft resets. Timeframe changes keep drawings (standard chart behavior);
-  // the tracked dateRange is evicted separately in the symbol/timeframe reset below.
+  // ticket draft resets. Timeframe changes keep drawings (standard chart behavior).
   useLayoutEffect(() => {
     chart.current?.resetTools('symbol');
     chart.current?.refreshOverlays();

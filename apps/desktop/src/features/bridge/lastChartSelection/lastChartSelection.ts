@@ -129,6 +129,6 @@ export function saveLastChartSelection(
     selections[accountKey] = { symbol: selection.symbol, timeframe: selection.timeframe };
     target.setItem(lastChartSelectionKey, JSON.stringify(selections));
   } catch {
-    /* storage is optional */
+    // A refusal is silent, as documented above.
   }
 }
