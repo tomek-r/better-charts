@@ -58,6 +58,11 @@ function rowAction(row: Locator, name: string): Locator {
   return row.getByRole('button', { name, exact: true });
 }
 
+/** The settings dialog of the seeded profile drawing. */
+function settingsDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: `${PROFILE_ROW_NAME} settings` });
+}
+
 /** Opens the drawer from the right-edge strip, which mounts the panel. */
 async function openObjectTree(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Object tree', exact: true }).click();
@@ -201,7 +206,59 @@ test('double-clicking a row opens the settings of its drawing', async ({ page })
 
   await rowName(drawingRow(page, 'first')).dblclick();
 
-  await expect(page.getByRole('dialog', { name: `${PROFILE_ROW_NAME} settings` })).toBeVisible();
+  await expect(settingsDialog(page)).toBeVisible();
+});
+
+test('a hovered row offers settings, lock, hide and remove, in the floating toolbar order', async ({ page }) => {
+  await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE)]);
+  const row = drawingRow(page, 'first');
+  await row.hover();
+
+  const actionNames = await row
+    .locator('.object-tree-row-actions')
+    .getByRole('button')
+    .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
+
+  expect(actionNames).toEqual(['Drawing settings', 'Lock drawing', 'Hide drawing', 'Remove drawing']);
+});
+
+test('the row settings button opens the settings of its drawing', async ({ page }) => {
+  await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE)]);
+  const row = drawingRow(page, 'first');
+  await row.hover();
+
+  await rowAction(row, 'Drawing settings').click();
+
+  await expect(settingsDialog(page)).toBeVisible();
+});
+
+test('Tab reaches the row settings button and Enter opens the settings', async ({ page }) => {
+  await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE)]);
+  const row = drawingRow(page, 'first');
+
+  await rowName(row).focus();
+  await page.keyboard.press('Tab');
+  await expect(rowAction(row, 'Drawing settings')).toBeFocused();
+  await page.keyboard.press('Enter');
+
+  await expect(settingsDialog(page)).toBeVisible();
+});
+
+test('the longest drawing name stays whole beside the row actions at the default drawer width', async ({ page }) => {
+  await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE)]);
+  const row = drawingRow(page, 'first');
+  await row.hover();
+
+  const label = row.locator('.object-tree-row-label');
+  const fit = await label.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+    labelRight: element.getBoundingClientRect().right,
+    actionsLeft: element.closest('li')?.querySelector('.object-tree-row-actions')?.getBoundingClientRect().left ?? 0,
+  }));
+
+  expect(fit.scrollWidth).toBeLessThanOrEqual(fit.clientWidth);
+  expect(fit.labelRight).toBeLessThanOrEqual(fit.actionsLeft);
 });
 
 test('locking from the toolbar updates the tree row', async ({ page }) => {

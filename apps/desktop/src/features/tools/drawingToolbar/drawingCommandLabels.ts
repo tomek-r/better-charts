@@ -6,6 +6,8 @@ import type { ToggleCommandLabels } from '../../../shared/ui/button/ToggleComman
  * the state it leads to: `off` while the drawing is unlocked or shown, `on` once it is locked or hidden.
  */
 
+export const DRAWING_SETTINGS_LABEL = 'Drawing settings';
+
 export const DRAWING_LOCK_LABELS: ToggleCommandLabels = { off: 'Lock drawing', on: 'Unlock drawing' };
 
 export const DRAWING_VISIBILITY_LABELS: ToggleCommandLabels = { off: 'Hide drawing', on: 'Show drawing' };

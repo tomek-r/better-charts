@@ -6,6 +6,7 @@ import { useOpenDrawingSettings } from '../tools/drawingSettings/DrawingSettings
 import { DrawingToolIcon } from '../tools/DrawingToolIcon';
 import {
   DRAWING_LOCK_LABELS,
+  DRAWING_SETTINGS_LABEL,
   DRAWING_VISIBILITY_LABELS,
   REMOVE_DRAWING_LABEL,
 } from '../tools/drawingToolbar/drawingCommandLabels';
@@ -14,6 +15,7 @@ import {
   EyeIcon,
   LockClosedIcon,
   LockOpenIcon,
+  SettingsIcon,
   TrashIcon,
 } from '../tools/drawingToolbar/drawingToolbarIcons';
 import type { RegisteredChartToolPlugin } from '../tools/registry';
@@ -42,7 +44,7 @@ export interface ObjectTreeRowProps {
 
 /**
  * One drawing of the object tree: its name selects the drawing on the chart and a double click opens
- * its settings, while the three small buttons beside it lock, hide and remove it.
+ * its settings, while the four small buttons beside it open its settings, lock, hide and remove it.
  */
 export function ObjectTreeRow({ record, plugin, selected, reorder }: ObjectTreeRowProps) {
   const openDrawingSettings = useOpenDrawingSettings();
@@ -94,6 +96,13 @@ export function ObjectTreeRow({ record, plugin, selected, reorder }: ObjectTreeR
         <span className="object-tree-row-label">{plugin.label}</span>
       </button>
       <div className="object-tree-row-actions">
+        <CommandButton
+          className={ROW_ACTION_CLASS}
+          label={DRAWING_SETTINGS_LABEL}
+          onClick={() => openDrawingSettings(plugin.id, record.id)}
+        >
+          <SettingsIcon />
+        </CommandButton>
         <ToggleCommandButton
           className={ROW_ACTION_CLASS}
           labels={DRAWING_LOCK_LABELS}

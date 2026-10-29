@@ -2,7 +2,12 @@ import { useState, type CSSProperties, type KeyboardEvent, type Ref } from 'reac
 import { CommandButton } from '../../../shared/ui/button/CommandButton';
 import { ToggleCommandButton } from '../../../shared/ui/button/ToggleCommandButton';
 import { arrowStep, wrapIndex, type ArrowSteps } from '../../../shared/ui/keyboard/arrowStep';
-import { DRAWING_LOCK_LABELS, DRAWING_VISIBILITY_LABELS, REMOVE_DRAWING_LABEL } from './drawingCommandLabels';
+import {
+  DRAWING_LOCK_LABELS,
+  DRAWING_SETTINGS_LABEL,
+  DRAWING_VISIBILITY_LABELS,
+  REMOVE_DRAWING_LABEL,
+} from './drawingCommandLabels';
 import {
   EyeCrossedIcon,
   EyeIcon,
@@ -108,7 +113,7 @@ export function DrawingToolbar({
         <GripIcon />
       </CommandButton>
       <CommandButton
-        label="Drawing settings"
+        label={DRAWING_SETTINGS_LABEL}
         className={TOOLBAR_BUTTON_CLASS}
         {...tabStop('settings')}
         onClick={onOpenSettings}

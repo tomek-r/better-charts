@@ -4,7 +4,7 @@
   /* Shared widths: the strip clears its own column in the dashboard padding and
      the drawer clears the strip, so both are defined once here. */
   --side-drawer-strip-width: 52px;
-  --side-drawer-width: 330px;
+  --side-drawer-width: 340px;
   /* The open drawer stands this far off the strip, like the 8px it keeps below the topbar. */
   --side-drawer-gap: 8px;
 }
