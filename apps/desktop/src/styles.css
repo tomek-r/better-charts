@@ -10,6 +10,7 @@
 @import './features/chart/engine/legend/chart-legend.css';
 @import './features/chart/engine/priceScale/price-scale-controls.css';
 @import './features/partial-close/chart-anchored-panel.css';
+@import './features/chart/contextMenu/chart-context-menu.css';
 @import './features/chart/chart-workspace.css';
 @import './features/chart/timeframes/chart-timeframes.css';
 @import './features/chart/timeframes/menu/timeframe-menu.css';

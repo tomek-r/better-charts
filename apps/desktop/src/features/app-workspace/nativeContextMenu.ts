@@ -1,8 +1,4 @@
-const TEXT_EDITING_SELECTOR = 'input, textarea, [contenteditable]:not([contenteditable="false"])';
-
-function offersTextEditing(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(TEXT_EDITING_SELECTOR) !== null;
-}
+import { offersTextEditing } from '../../shared/ui/textEditing/textEditingTarget';
 
 /**
  * The WebView's default context menu has no use in the app, and on macOS it holds the main thread while open, so
