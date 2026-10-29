@@ -4,11 +4,11 @@ import type { ChartToolHost } from '../../../chart/engine/tools/toolContract';
 import type { ExpectedFixedRangeProfile, FixedRangeProfileState } from '../profileState';
 import { currentQuoteTimeMs } from '../currentQuoteTimeMs';
 import type { FixedRangeProfileRange } from '../fixedRangeProfileRange';
-import { DEFAULT_ROW_COUNT, DEFAULT_VALUE_AREA_PERCENT, IN_FLIGHT_SAFETY_MS } from './profileRequestLimits';
+import { DEFAULT_TICKS_PER_ROW, DEFAULT_VALUE_AREA_PERCENT, IN_FLIGHT_SAFETY_MS } from './profileRequestLimits';
 
-/** The histogram settings of a profile whose owner supplies none: 128 rows and a 70% value area. */
+/** The histogram settings of a profile whose owner supplies none: 1 tick per row and a 70% value area. */
 export const DEFAULT_PROFILE_REQUEST_PARAMS: ProfileRequestParams = {
-  rowsLayout: { kind: 'rows', count: DEFAULT_ROW_COUNT },
+  rowsLayout: { kind: 'ticksPerRow', ticks: DEFAULT_TICKS_PER_ROW },
   valueAreaPercent: DEFAULT_VALUE_AREA_PERCENT,
 };
 const LIVE_PROFILE_REFRESH_MS = 2000;

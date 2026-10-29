@@ -590,12 +590,12 @@ fn profile_request_with_invalid_settings_queues_nothing() {
         (
             RowLayout::TicksPerRow { ticks: 0 },
             70,
-            "ticks per row must be between 1 and 1000",
+            "ticks per row must be between 1 and 100000",
         ),
         (
-            RowLayout::TicksPerRow { ticks: 1001 },
+            RowLayout::TicksPerRow { ticks: 100_001 },
             70,
-            "ticks per row must be between 1 and 1000",
+            "ticks per row must be between 1 and 100000",
         ),
         (
             RowLayout::default(),

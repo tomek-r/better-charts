@@ -214,6 +214,14 @@ export function isToolInputActive(definition: ToolInputDefinition, values: ToolI
   return activeWhen === undefined || values[activeWhen.inputId] === activeWhen.equals;
 }
 
+/**
+ * Whether the input's value stops the form from saving: only an input that is editable now can, because an
+ * inactive one is never read and never shown as invalid.
+ */
+export function isToolInputInvalid(definition: ToolInputDefinition, values: ToolInputValues): boolean {
+  return isToolInputActive(definition, values) && !isValidToolInputValue(definition, values[definition.id]);
+}
+
 /** Every definition's default value, keyed by input id: what nothing stored resolves to. */
 export function defaultToolInputValues(definitions: readonly ToolInputDefinition[]): ToolInputValues {
   return resolveToolInputValues(definitions, undefined);

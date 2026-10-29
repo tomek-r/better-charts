@@ -301,9 +301,24 @@ test('without extend right the level lines stop at the range end', () => {
   }
 });
 
-const VALUES_ON = { 'values.visible': true };
+// Right is set explicitly: the default is Center, and these tests measure the column right of the anchor line.
+const VALUES_ON = { 'values.visible': true, valuesPosition: 'Right' };
+const HEADER_TEXT = 'Bid×Ask';
+const HEADER_GAP = 4;
+const HEADER_FONT_PX = 11;
+const ROW_FONT = '400 11px system-ui, sans-serif';
+const LABEL_GAP = 4;
+// The recording context measures a text as 7 px per character. In Up/Down the widest text is the header
+// `Bid×Ask` (7 characters, 49 px); the rows are `6×40` (28), `30×12` (35) and `3×50` (28), all centred in a
+// 49 px column. In Total the widest is a row label such as `46` (2 characters, 14 px).
+const WIDEST_TEXT = 7 * 7;
+// Right of the anchor line the column starts LINE_GAP away, so its centre is anchor + 4 + 49 / 2.
+const RIGHT_COLUMN_OFFSET = LABEL_GAP + WIDEST_TEXT / 2;
 
-/** Paints the given bins under the stored settings and returns the value texts with the painted geometry. */
+/**
+ * Paints the given bins under the stored settings. `texts` are the row labels; the Bid×Ask headers
+ * are returned apart, top header first.
+ */
 function paintValues(stored: ToolInputValues, bins: TickProfileBin[] = BINS) {
   const state: FixedRangeProfileState = { range: RANGE, profile: { ...PROFILE, ...LEVELS, bins }, hit: {} };
   const ops: PaintOp[] = [];
@@ -314,64 +329,136 @@ function paintValues(stored: ToolInputValues, bins: TickProfileBin[] = BINS) {
     state,
     appearance,
   );
-  return { texts: ops.filter((op) => op.kind === 'fillText'), hit: state.hit, ops };
+  const allTexts = ops.filter((op) => op.kind === 'fillText');
+  return {
+    texts: allTexts.filter((op) => op.text !== HEADER_TEXT),
+    headers: allTexts.filter((op) => op.text === HEADER_TEXT),
+    hit: state.hit,
+    ops,
+  };
 }
 
-test('Values is off by default: no row labels and no totals line', () => {
+test('Values is off by default: no row labels', () => {
   expect(readFixedRangeProfileSettings(undefined).appearance.valuesVisible).toBe(false);
   expect(readFixedRangeProfileSettings(undefined).appearance.valuesColor).toBe(palette.text);
   const { texts, hit } = paintValues({});
   expect(texts).toHaveLength(0);
   expect(hit.valueLabels).toBe(0);
-  expect(hit.summaryY).toBeUndefined();
 });
 
-test('with tall rows Values paints one label per row and the totals line, in the values colour', () => {
-  const { texts, hit } = paintValues({ ...VALUES_ON, 'values.color': '#112233' });
+test('with tall rows Up/Down paints one label per row, bid first', () => {
+  const { texts, headers, hit } = paintValues({ ...VALUES_ON, 'values.color': '#112233' });
   expect(hit.valueLabels).toBe(3);
   // Bins are listed bottom first; rows are 40 px tall, so each label sits at its row's vertical middle.
-  expect(texts.map((text) => text.text)).toEqual(['40×6', '12×30', '50×3', '102×39']);
-  // The totals line (last) uses the same 11 px as the rows.
-  expect(texts.every((text) => text.style === '#112233' && text.font === '400 11px system-ui, sans-serif')).toBe(true);
+  // Bid (down) first, then ask (up).
+  expect(texts.map((text) => text.text)).toEqual(['6×40', '30×12', '3×50']);
+  expect([...texts, ...headers].every((text) => text.style === '#112233' && text.font === ROW_FONT)).toBe(true);
   expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
-  expect(texts.every((text) => text.x === START_X + 4)).toBe(true);
-  expect(hit.summaryY).toBe(viewport.priceToY(140) + 4);
-  expect(texts[3].y).toBe(hit.summaryY);
+  // The column centre: 73 + 4 + 49 / 2 = 101.5; every text, the 28 and 35 px rows too, is centred on it.
+  expect([...texts, ...headers].every((text) => text.x === START_X + RIGHT_COLUMN_OFFSET)).toBe(true);
 });
 
-test('placement right puts the labels 4 px right of the range end', () => {
+test('Total and Delta paint one label per row and nothing under the lowest row', () => {
+  for (const volume of ['Total', 'Delta']) {
+    const { texts, hit } = paintValues({ ...VALUES_ON, volume });
+    expect(texts, volume).toHaveLength(3);
+    expect(
+      texts.every((text) => text.font === ROW_FONT),
+      volume,
+    ).toBe(true);
+    expect(hit.valuesColumnBottom, volume).toBe(viewport.priceToY(140));
+  }
+});
+
+test('placement right starts the label column 4 px right of the range end', () => {
   const { texts } = paintValues({ ...VALUES_ON, placement: 'Right' });
-  expect(texts.every((text) => text.x === END_X + 4)).toBe(true);
+  expect(texts.every((text) => text.x === END_X + RIGHT_COLUMN_OFFSET)).toBe(true);
 });
 
-test('Values Position defaults to Right and reads Left; the old stored options read as the default', () => {
-  expect(readFixedRangeProfileSettings(undefined).appearance.valuesSide).toBe('right');
+test('Values Position defaults to Center and reads Left and Right; the old stored options read as the default', () => {
+  expect(readFixedRangeProfileSettings(undefined).appearance.valuesSide).toBe('center');
   expect(readFixedRangeProfileSettings({ valuesPosition: 'Left' }).appearance.valuesSide).toBe('left');
-  expect(readFixedRangeProfileSettings({ valuesPosition: 'Opposite Side' }).appearance.valuesSide).toBe('right');
-  expect(readFixedRangeProfileSettings({ valuesPosition: 'On Profile' }).appearance.valuesSide).toBe('right');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'Right' }).appearance.valuesSide).toBe('right');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'Opposite Side' }).appearance.valuesSide).toBe('center');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'On Profile' }).appearance.valuesSide).toBe('center');
 });
 
-test('Left puts the labels and the totals line 4 px left of the anchor line, right-aligned', () => {
+test('Values Position Right keeps the labels right of the anchor line in every volume mode', () => {
+  // Column centre = anchor + 4 + widest / 2, the widest text being its characters * 7 (the recording ctx).
+  const widestCharacters = { 'Up/Down': 7, Total: 2, Delta: 3 };
+  for (const [volume, characters] of Object.entries(widestCharacters)) {
+    const { texts, headers, hit } = paintValues({ 'values.visible': true, valuesPosition: 'Right', volume });
+    const centerX = START_X + LABEL_GAP + (characters * 7) / 2;
+    expect(
+      [...texts, ...headers].every((text) => text.x === centerX),
+      volume,
+    ).toBe(true);
+    expect(hit.valueLabelX, volume).toBe(centerX);
+  }
+});
+
+test('with Values on and no Values Position stored, the labels and headers centre on the anchor line', () => {
+  const { texts, headers, hit } = paintValues({ 'values.visible': true });
+  expect([...texts, ...headers].every((text) => text.x === START_X)).toBe(true);
+  expect(hit).toMatchObject({ valueLabelX: START_X, valueLabelAlign: 'center' });
+});
+
+test('Left ends the label column 4 px left of the anchor line, texts centred in it', () => {
+  // The column centre: anchor - 4 - 49 / 2 = anchor - 28.5.
   const cases = [
-    { placement: 'Left', x: START_X - 4 },
-    { placement: 'Right', x: END_X - 4 },
+    { placement: 'Left', x: START_X - RIGHT_COLUMN_OFFSET },
+    { placement: 'Right', x: END_X - RIGHT_COLUMN_OFFSET },
   ];
   for (const { placement, x } of cases) {
     const { texts, hit } = paintValues({ ...VALUES_ON, placement, valuesPosition: 'Left' });
     expect(texts.every((text) => text.x === x)).toBe(true);
     expect(hit.valueLabelX).toBe(x);
-    expect(hit.valueLabelAlign).toBe('right');
+    expect(hit.valueLabelAlign).toBe('center');
     expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
-    expect(texts.at(-1)?.y).toBe(hit.summaryY);
   }
 });
 
-test('Right anchors the labels 4 px right of the anchor line, left-aligned', () => {
-  expect(paintValues(VALUES_ON).hit).toMatchObject({ valueLabelX: START_X + 4, valueLabelAlign: 'left' });
-  expect(paintValues({ ...VALUES_ON, placement: 'Right' }).hit).toMatchObject({
-    valueLabelX: END_X + 4,
-    valueLabelAlign: 'left',
+test('Right starts the label column 4 px right of the anchor line, texts centred in it', () => {
+  expect(paintValues(VALUES_ON).hit).toMatchObject({
+    valueLabelX: START_X + RIGHT_COLUMN_OFFSET,
+    valueLabelAlign: 'center',
   });
+  expect(paintValues({ ...VALUES_ON, placement: 'Right' }).hit).toMatchObject({
+    valueLabelX: END_X + RIGHT_COLUMN_OFFSET,
+    valueLabelAlign: 'center',
+  });
+});
+
+test('the column is as wide as the widest text of the mode: Total centres on 73 + 4 + 14 / 2', () => {
+  const { texts, hit } = paintValues({ ...VALUES_ON, volume: 'Total' });
+  const centerX = START_X + LABEL_GAP + WIDEST_TOTAL_TEXT / 2;
+  expect(centerX).toBe(84);
+  expect(texts.every((text) => text.x === centerX)).toBe(true);
+  expect(hit.valueLabelX).toBe(centerX);
+});
+
+test('Center puts the labels and the headers on the anchor line, centre-aligned', () => {
+  const { texts, headers, hit } = paintValues({ ...VALUES_ON, valuesPosition: 'Center' });
+  expect([...texts, ...headers].every((text) => text.x === START_X)).toBe(true);
+  expect(hit).toMatchObject({ valueLabelX: START_X, valueLabelAlign: 'center' });
+});
+
+test('in Up/Down two Bid×Ask headers frame the labels: one above the highest row, one under the lowest row', () => {
+  const { headers, hit } = paintValues(VALUES_ON);
+  const highestRowTop = viewport.priceToY(170);
+  const lowestRowBottom = viewport.priceToY(140);
+  expect(headers.map((header) => header.y)).toEqual([highestRowTop - HEADER_GAP, lowestRowBottom + HEADER_GAP]);
+  expect(headers.map((header) => header.font)).toEqual([ROW_FONT, ROW_FONT]);
+  expect(hit.headerTopY).toBe(highestRowTop - HEADER_GAP);
+  expect(hit.headerBottomY).toBe(lowestRowBottom + HEADER_GAP);
+});
+
+test('Total and Delta paint no headers', () => {
+  for (const volume of ['Total', 'Delta']) {
+    const { headers, hit } = paintValues({ ...VALUES_ON, volume });
+    expect(headers).toHaveLength(0);
+    expect([hit.headerTopY, hit.headerBottomY]).toEqual([undefined, undefined]);
+  }
 });
 
 const BACKGROUND_COLOR = '#112233ff';
@@ -384,11 +471,7 @@ function valuesBox(stored: ToolInputValues) {
   return { ops, hit, boxes };
 }
 
-// The recording context measures a text as 7 px per character. The widest text is the totals line `102×39`
-// (6 characters, 42 px); the rows are `40×6` (28), `12×30` (35) and `50×3` (28).
-const WIDEST_TEXT = 6 * 7;
-const LABEL_GAP = 4;
-const TOTALS_FONT_PX = 11;
+const WIDEST_TOTAL_TEXT = 2 * 7;
 
 test('Values Background is transparent by default and paints no extra rect', () => {
   const { appearance } = readFixedRangeProfileSettings(undefined);
@@ -403,15 +486,16 @@ test('Values Background is transparent by default and paints no extra rect', () 
 test('Values Background on the right paints one box from the anchor line past the widest text, before the texts', () => {
   const { ops, hit, boxes } = valuesBox(WITH_BACKGROUND);
   expect(boxes).toHaveLength(1);
-  // Right of the anchor: x from 73 to textX 77 + widest 42 + gap 4 = 123.
-  // Vertically from the top of the highest row to the totals line bottom: summaryY + 11.
-  const top = viewport.priceToY(170);
-  const bottom = viewport.priceToY(140) + LABEL_GAP + TOTALS_FONT_PX;
+  // Right of the anchor: x from 73 to textX 77 + widest (the 49 px header) 49 + gap 4 = 130.
+  // Vertically from the top of the top header (highest row top - 4 - 11) to the bottom of the bottom
+  // header (lowest row bottom + 4 + 11): the headers count in the box, in height and in width.
+  const top = viewport.priceToY(170) - HEADER_GAP - HEADER_FONT_PX;
+  const bottom = viewport.priceToY(140) + HEADER_GAP + HEADER_FONT_PX;
   expect([boxes[0].minX, boxes[0].maxX]).toEqual([START_X, START_X + LABEL_GAP + WIDEST_TEXT + LABEL_GAP]);
   expect([boxes[0].minY, boxes[0].maxY]).toEqual([top, bottom]);
   expect(hit).toMatchObject({
     valuesBoxLeft: START_X,
-    valuesBoxRight: 123,
+    valuesBoxRight: 130,
     valuesBoxTop: top,
     valuesBoxBottom: bottom,
   });
@@ -424,9 +508,67 @@ test('Values Background on the right paints one box from the anchor line past th
 test('Values Background on the left ends at the anchor line and starts past the widest text', () => {
   const { hit, boxes } = valuesBox({ ...WITH_BACKGROUND, valuesPosition: 'Left' });
   expect(boxes).toHaveLength(1);
-  // Left of the anchor: textX 73 - 4 = 69, minus widest 42 and gap 4 = 23, up to the anchor 73.
+  // Left of the anchor: textX 73 - 4 = 69, minus widest 49 and gap 4 = 16, up to the anchor 73.
   expect([boxes[0].minX, boxes[0].maxX]).toEqual([START_X - LABEL_GAP - WIDEST_TEXT - LABEL_GAP, START_X]);
-  expect([hit.valuesBoxLeft, hit.valuesBoxRight]).toEqual([23, START_X]);
+  expect([hit.valuesBoxLeft, hit.valuesBoxRight]).toEqual([16, START_X]);
+});
+
+test('Values Background centred spans the anchor line by half the widest text plus the gap on each side', () => {
+  const { hit, boxes } = valuesBox({ ...WITH_BACKGROUND, valuesPosition: 'Center' });
+  expect(boxes).toHaveLength(1);
+  // Widest 49 / 2 = 24.5, plus gap 4 = 28.5 each side of the anchor 73: from 44.5 to 101.5.
+  expect([boxes[0].minX, boxes[0].maxX]).toEqual([44.5, 101.5]);
+  expect([hit.valuesBoxLeft, hit.valuesBoxRight]).toEqual([44.5, 101.5]);
+});
+
+test('the values column is reported with a transparent background too, and equals the box when one paints', () => {
+  const transparent = paintValues(VALUES_ON).hit;
+  expect(transparent.valuesBoxLeft).toBeUndefined();
+  // The column of the Values Background tests above: 73 to 130 horizontally, headers included vertically.
+  const column = {
+    valuesColumnLeft: START_X,
+    valuesColumnRight: 130,
+    valuesColumnTop: viewport.priceToY(170) - HEADER_GAP - HEADER_FONT_PX,
+    valuesColumnBottom: viewport.priceToY(140) + HEADER_GAP + HEADER_FONT_PX,
+  };
+  expect(transparent).toMatchObject(column);
+  expect(valuesBox(WITH_BACKGROUND).hit).toMatchObject({
+    ...column,
+    valuesBoxLeft: column.valuesColumnLeft,
+    valuesBoxRight: column.valuesColumnRight,
+    valuesBoxTop: column.valuesColumnTop,
+    valuesBoxBottom: column.valuesColumnBottom,
+  });
+});
+
+test('hidden Values reports no values column', () => {
+  const { hit } = paintValues({});
+  expect([hit.valuesColumnLeft, hit.valuesColumnRight, hit.valuesColumnTop, hit.valuesColumnBottom]).toEqual([
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  ]);
+});
+
+test('the painted histogram extent is reported: the bars horizontally, the rows vertically', () => {
+  const { hit } = paint();
+  expect([hit.profileTop, hit.profileBottom]).toEqual([viewport.priceToY(170), viewport.priceToY(140)]);
+  expect(hit.profileLeft).toBeLessThan(START_X);
+  expect(hit.profileRight).toBeGreaterThan(START_X);
+});
+
+test('without headers the box covers the highest row down to the lowest row', () => {
+  const { hit, boxes } = valuesBox({ ...WITH_BACKGROUND, volume: 'Total' });
+  expect(boxes).toHaveLength(1);
+  // Widest is a row label such as `46`: 14 px; right of the anchor 73 -> 77 + 14 + 4 = 95.
+  expect([boxes[0].minX, boxes[0].maxX]).toEqual([START_X, START_X + LABEL_GAP + WIDEST_TOTAL_TEXT + LABEL_GAP]);
+  expect([hit.valuesBoxTop, hit.valuesBoxBottom]).toEqual([viewport.priceToY(170), viewport.priceToY(140)]);
+});
+
+test('without headers the Delta box also ends at the lowest row', () => {
+  const { hit } = valuesBox({ ...WITH_BACKGROUND, volume: 'Delta' });
+  expect([hit.valuesBoxTop, hit.valuesBoxBottom]).toEqual([viewport.priceToY(170), viewport.priceToY(140)]);
 });
 
 test('hidden Values paints no background even with a colour', () => {
@@ -444,40 +586,26 @@ test('an invalid Values Background colour reads as the transparent default', () 
 });
 
 test('the label text follows the volume mode, with a typographic minus for a negative delta', () => {
-  expect(paintValues({ ...VALUES_ON, volume: 'Total' }).texts.map((text) => text.text)).toEqual([
-    '46',
-    '42',
-    '53',
-    '141',
-  ]);
-  expect(paintValues({ ...VALUES_ON, volume: 'Delta' }).texts.map((text) => text.text)).toEqual([
-    '34',
-    '−18',
-    '47',
-    '63',
-  ]);
+  expect(paintValues({ ...VALUES_ON, volume: 'Total' }).texts.map((text) => text.text)).toEqual(['46', '42', '53']);
+  expect(paintValues({ ...VALUES_ON, volume: 'Delta' }).texts.map((text) => text.text)).toEqual(['34', '−18', '47']);
 });
 
 test('a row without volume gets no label, and fractional volumes are shortened', () => {
   const bins = [bin(140, 150, 0, 0), bin(150, 160, 1350.25, 0.126)];
   const { texts, hit } = paintValues(VALUES_ON, bins);
   expect(hit.valueLabels).toBe(1);
-  expect(texts.map((text) => text.text)).toEqual(['0.13×1.35K', '0.13×1.35K']);
+  expect(texts.map((text) => text.text)).toEqual(['1.35K×0.13']);
 });
 
-test('rows shorter than 11 px each get a label sized to the row height minus 1 px, and the totals use the same size', () => {
+test('rows shorter than 11 px each get a label sized to the row height minus 1 px, and the headers use the same size', () => {
   // 2 price units are 8 px.
   const bins = [bin(140, 142, 6, 40), bin(142, 144, 30, 12)];
-  const { texts, hit } = paintValues(VALUES_ON, bins);
+  const { texts, headers, hit } = paintValues(VALUES_ON, bins);
   expect(hit.valueLabels).toBe(2);
-  expect(texts.map((text) => text.text)).toEqual(['40×6', '12×30', '52×36']);
-  expect(texts.map((text) => text.font)).toEqual([
-    '400 7px system-ui, sans-serif',
-    '400 7px system-ui, sans-serif',
-    '400 7px system-ui, sans-serif',
-  ]);
+  expect(texts.map((text) => text.text)).toEqual(['6×40', '30×12']);
+  expect([...texts, ...headers].map((text) => text.font)).toEqual(Array(4).fill('400 7px system-ui, sans-serif'));
   expect(texts[0].y).toBe((viewport.priceToY(140) + viewport.priceToY(142)) / 2);
-  expect(hit.summaryY).toBe(viewport.priceToY(140) + 4);
+  expect(hit.headerBottomY).toBe(viewport.priceToY(140) + HEADER_GAP);
 });
 
 test('a row of 1 px or less still gets a 1 px label', () => {

@@ -20,8 +20,8 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   partial profile is never shown as complete. Each profile logs its tick/bar
   choice, retries and reason to the `pnpm dev` terminal. The `request_tick_profile`
   command takes `rowsLayout` (`{ kind: 'rows', count }` with 1-128 rows, or
-  `{ kind: 'ticksPerRow', ticks }` with 1-1000 ticks per row) and `valueAreaPercent`
-  (an integer 1-100); the chart sends what the drawing's Inputs set (128 rows and 70%
+  `{ kind: 'ticksPerRow', ticks }` with 1-100000 ticks per row) and `valueAreaPercent`
+  (an integer 1-100); the chart sends what the drawing's Inputs set (1 tick per row and 70%
   by default). A range needing more than 1000 rows is coarsened to the smallest
   whole-tick row height that fits, and `actualRows` reports the rows used.
   The drawing's settings dialog has Inputs (Rows Layout with Row Size or Ticks Per Row,
@@ -155,6 +155,10 @@ Not implemented: break even, multiple charts or Pine Script execution.
   profile refreshes with ticks (at most every 2 s, old histogram kept until the
   new one arrives); when a bar opens at or after `endMs` it refreshes once more
   and the range is fixed. A range ended on an older bar never refreshes.
+  A press selects the profile on a handle, between the handles, on the painted
+  histogram bars (including the part outside the range, e.g. the down bars left of
+  the start line) and on the painted value labels column; with no profile painted
+  (previewing, no bins) only the handles and the band select it.
 - Price scale fits on load, then holds until rescaled; axis hover exposes `A`/`L`.
   The first history request covers only the visible pane (`initialHistoryBars`
   in `config/bridge.json`; the UI measures the pane), then one older page is

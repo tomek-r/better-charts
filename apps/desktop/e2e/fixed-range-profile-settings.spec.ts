@@ -50,8 +50,10 @@ function holdOneDrawing(storedInputs: ToolInputValues = {}) {
   return { collection, market, id, rowsAndValueArea };
 }
 
-test('the schema defaults map to 128 rows and a 70 percent value area', () => {
-  expect(readFixedRangeProfileSettings(undefined).requestParams).toEqual(DEFAULT_PROFILE_REQUEST_PARAMS);
+test('the schema defaults map to 1 tick per row and a 70 percent value area', () => {
+  const { requestParams } = readFixedRangeProfileSettings(undefined);
+  expect(requestParams).toEqual(DEFAULT_PROFILE_REQUEST_PARAMS);
+  expect(requestParams).toEqual({ rowsLayout: { kind: 'ticksPerRow', ticks: 1 }, valueAreaPercent: 70 });
 });
 
 test('a number-of-rows layout sends the row count, a ticks-per-row layout the tick count', () => {
@@ -70,9 +72,14 @@ test('values outside their bounds resolve to the defaults', () => {
   expect(settings.requestParams).toEqual(DEFAULT_PROFILE_REQUEST_PARAMS);
 });
 
-test('a drawing saved before any setting existed requests 128 rows and a 70 percent value area', () => {
+test('a drawing with no stored settings requests 1 tick per row and a 70 percent value area', () => {
   const { market, rowsAndValueArea } = holdOneDrawing({});
   expect(market.requests).toHaveLength(1);
+  expect(rowsAndValueArea()).toEqual([{ rowsLayout: { kind: 'ticksPerRow', ticks: 1 }, valueAreaPercent: 70 }]);
+});
+
+test('a drawing stored with the number-of-rows layout keeps requesting its rows', () => {
+  const { rowsAndValueArea } = holdOneDrawing({ rowsLayout: 'Number Of Rows', rowCount: 128 });
   expect(rowsAndValueArea()).toEqual([{ rowsLayout: { kind: 'rows', count: 128 }, valueAreaPercent: 70 }]);
 });
 
@@ -83,7 +90,7 @@ test('a drawing stored with its own rows asks for them in its first request', ()
 
 test('changing the row count, the layout or the value area asks for the profile again', () => {
   const { collection, id, rowsAndValueArea } = holdOneDrawing();
-  collection.setInputs(id, { ...DEFAULT_VALUES, rowCount: 64 });
+  collection.setInputs(id, { ...DEFAULT_VALUES, rowsLayout: 'Number Of Rows', rowCount: 64 });
   collection.setInputs(id, { ...DEFAULT_VALUES, rowCount: 64, rowsLayout: 'Ticks Per Row', ticksPerRow: 5 });
   collection.setInputs(id, {
     ...DEFAULT_VALUES,
@@ -93,7 +100,7 @@ test('changing the row count, the layout or the value area asks for the profile 
     valueAreaPercent: 90,
   });
   expect(rowsAndValueArea()).toEqual([
-    { rowsLayout: { kind: 'rows', count: 128 }, valueAreaPercent: 70 },
+    { rowsLayout: { kind: 'ticksPerRow', ticks: 1 }, valueAreaPercent: 70 },
     { rowsLayout: { kind: 'rows', count: 64 }, valueAreaPercent: 70 },
     { rowsLayout: { kind: 'ticksPerRow', ticks: 5 }, valueAreaPercent: 70 },
     { rowsLayout: { kind: 'ticksPerRow', ticks: 5 }, valueAreaPercent: 90 },
@@ -130,14 +137,14 @@ test('the width percent accepts 1 to 100 and falls back to 20 outside them', () 
 
 test('an inactive field changes nothing the backend would compute', () => {
   const { collection, market, id } = holdOneDrawing();
-  collection.setInputs(id, { ...DEFAULT_VALUES, ticksPerRow: 40 });
+  collection.setInputs(id, { ...DEFAULT_VALUES, rowCount: 40 });
   expect(market.requests).toHaveLength(1);
 });
 
 test('a hidden drawing asks for nothing until it is shown again, then with the new rows', () => {
   const { collection, id, rowsAndValueArea } = holdOneDrawing();
   collection.setVisible(id, false);
-  collection.setInputs(id, { ...DEFAULT_VALUES, rowCount: 32 });
+  collection.setInputs(id, { ...DEFAULT_VALUES, rowsLayout: 'Number Of Rows', rowCount: 32 });
   expect(rowsAndValueArea()).toHaveLength(1);
   collection.setVisible(id, true);
   expect(rowsAndValueArea().at(-1)).toEqual({ rowsLayout: { kind: 'rows', count: 32 }, valueAreaPercent: 70 });

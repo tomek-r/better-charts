@@ -1,5 +1,6 @@
 import {
   isToolInputActive,
+  isToolInputInvalid,
   type ToolInputDefinition,
   type ToolInputValue,
   type ToolInputValues,
@@ -67,6 +68,7 @@ function DrawingSettingsGroup({ group, values, onChange }: DrawingSettingsGroupP
       value={values[definition.id]}
       onChange={(value) => onChange(definition.id, value)}
       disabled={!isToolInputActive(definition, values)}
+      invalid={isToolInputInvalid(definition, values)}
     />
   );
   const rows = inputRows(group.inputs).map((row) =>

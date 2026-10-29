@@ -1,6 +1,12 @@
 /** Rows of a profile whose owner sets none. */
 export const DEFAULT_ROW_COUNT = 128;
 
+/** Ticks per row of a profile whose owner sets none; the backend coarsens a range that would need too many rows. */
+export const DEFAULT_TICKS_PER_ROW = 1;
+
+/** Largest ticks-per-row the backend accepts: `MAX_TICKS_PER_ROW` in `crates/trading-core/.../fixed_range.rs`. */
+export const MAX_TICKS_PER_ROW = 100_000;
+
 /** Share of the volume the value area covers, in percent, for a profile whose owner sets none. */
 export const DEFAULT_VALUE_AREA_PERCENT = 70;
 

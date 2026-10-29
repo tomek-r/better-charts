@@ -26,15 +26,25 @@ export interface FixedRangeProfileState {
     boxRight?: number;
     boxTop?: number;
     boxBottom?: number;
+    /** The painted histogram bars: horizontal reach and the rows' vertical extent. */
+    profileTop?: number;
+    profileBottom?: number;
+    /** The area the value labels cover, painted or not as a background; absent while Values is off. */
+    valuesColumnLeft?: number;
+    valuesColumnRight?: number;
+    valuesColumnTop?: number;
+    valuesColumnBottom?: number;
     /** The painted box behind the value labels; absent while nothing is painted for it. */
     valuesBoxLeft?: number;
     valuesBoxRight?: number;
     valuesBoxTop?: number;
     valuesBoxBottom?: number;
-    /** Row value labels painted; the totals line is reported by `summaryY` and absent when it is not painted. */
+    /** Row value labels painted. */
     valueLabels?: number;
-    summaryY?: number;
-    /** Where the labels and the totals line are anchored, and how their text is aligned there. */
+    /** The baselines of the Bid×Ask headers above and under the labels; absent outside Up/Down. */
+    headerTopY?: number;
+    headerBottomY?: number;
+    /** Where the labels are anchored, and how their text is aligned there. */
     valueLabelX?: number;
     valueLabelAlign?: CanvasTextAlign;
   };

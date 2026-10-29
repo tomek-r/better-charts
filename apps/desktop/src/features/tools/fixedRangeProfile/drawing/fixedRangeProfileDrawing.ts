@@ -25,6 +25,37 @@ import type { TickProfileRequestQueue } from '../requests/tickProfileRequestQueu
 import { fixedRangeProfilePoints } from './fixedRangeProfilePoints';
 import { boundaryAtX, drawHandles, handleXsFor, outsidePane, type HandleEdges } from './handles';
 
+/** Whether the point lies in a rectangle the last paint reported; an unreported edge means nothing was painted. */
+function isInsideReportedArea(
+  x: number,
+  y: number,
+  [left, right, top, bottom]: ReadonlyArray<number | undefined>,
+): boolean {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    top !== undefined &&
+    bottom !== undefined &&
+    x >= left &&
+    x <= right &&
+    y >= top &&
+    y <= bottom
+  );
+}
+
+/** Whether the point is on the painted bars or the painted value labels, wherever they reach. */
+function paintedAreaContains(hit: FixedRangeProfileState['hit'], x: number, y: number): boolean {
+  return (
+    isInsideReportedArea(x, y, [hit.profileLeft, hit.profileRight, hit.profileTop, hit.profileBottom]) ||
+    isInsideReportedArea(x, y, [
+      hit.valuesColumnLeft,
+      hit.valuesColumnRight,
+      hit.valuesColumnTop,
+      hit.valuesColumnBottom,
+    ])
+  );
+}
+
 /** How one drawing paints itself: the selection highlight, and the range a boundary drag previews. */
 export interface FixedRangeProfilePaintOptions {
   selected: boolean;
@@ -136,14 +167,21 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
     return placed === null ? null : boundaryAtX(this.handleXs(placed), x);
   }
 
-  /** Whether the pane point falls between its handles or on one of them: the band this profile covers. */
+  /**
+   * Whether the pane point selects this profile: on a handle, between the handles, on the painted bars (which
+   * may leave the band) or on the painted value labels.
+   */
   contains(x: number, y: number): boolean {
     const placed = this.placedRange();
     if (placed === null || outsidePane(this.host.geometry.viewport().chartRect, x, y)) {
       return false;
     }
     const { fromX, toX } = this.handleXs(placed);
-    return this.handleAt(x) !== null || (x >= Math.min(fromX, toX) && x <= Math.max(fromX, toX));
+    return (
+      this.handleAt(x) !== null ||
+      (x >= Math.min(fromX, toX) && x <= Math.max(fromX, toX)) ||
+      paintedAreaContains(this.state.hit, x, y)
+    );
   }
 
   /** A boundary preview hides the result until the drag is released or cancelled. */

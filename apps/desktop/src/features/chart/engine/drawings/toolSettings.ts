@@ -1,7 +1,10 @@
 import {
+  isToolInputActive,
+  isToolInputInvalid,
   isValidToolInputValue,
   resolveToolInputValues,
   type ToolInputDefinition,
+  type ToolInputValue,
   type ToolInputValues,
 } from './toolInputs';
 import { isValidToolStyleValues, resolveToolStyleValues, toolStyleKeys, type ToolStyleDefinition } from './toolStyles';
@@ -26,15 +29,33 @@ export function assertUniqueToolSettingKeys({ inputs = [], styles = [] }: ToolSe
   }
 }
 
-/** Whether every input and every style holds a value its own kind accepts. */
+/** Whether every active input and every style holds a value its own kind accepts. */
 export function areToolSettingValuesValid(
   { inputs = [], styles = [] }: ToolSettingsSchema,
   values: ToolInputValues,
 ): boolean {
   return (
-    inputs.every((definition) => isValidToolInputValue(definition, values[definition.id])) &&
+    inputs.every((definition) => !isToolInputInvalid(definition, values)) &&
     styles.every((definition) => isValidToolStyleValues(definition, values))
   );
+}
+
+/**
+ * The draft to save: an inactive input whose draft fails its kind takes the value the drawing already held,
+ * so nothing invalid is ever stored. `stored` is the resolved settings the form opened with.
+ */
+export function withStoredValuesForInvalidInactiveInputs(
+  { inputs = [] }: ToolSettingsSchema,
+  values: ToolInputValues,
+  stored: ToolInputValues,
+): ToolInputValues {
+  const replacements = inputs
+    .filter(
+      (definition) =>
+        !isToolInputActive(definition, values) && !isValidToolInputValue(definition, values[definition.id]),
+    )
+    .map((definition): [string, ToolInputValue] => [definition.id, stored[definition.id]]);
+  return { ...values, ...Object.fromEntries(replacements) };
 }
 
 /** The inputs and the flattened styles in one map, each resolved against its own definitions. */

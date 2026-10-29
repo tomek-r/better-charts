@@ -738,12 +738,12 @@ fn invalid_profile_settings_are_rejected() {
         Err(ProfileSettingError::TicksPerRowOutOfRange)
     );
     assert_eq!(
-        RowLayout::TicksPerRow { ticks: 1001 }.validate_request(),
+        RowLayout::TicksPerRow { ticks: 100_001 }.validate_request(),
         Err(ProfileSettingError::TicksPerRowOutOfRange)
     );
     assert_eq!(RowLayout::Rows { count: 128 }.validate_request(), Ok(()));
     assert_eq!(
-        RowLayout::TicksPerRow { ticks: 1000 }.validate_request(),
+        RowLayout::TicksPerRow { ticks: 100_000 }.validate_request(),
         Ok(())
     );
     assert_eq!(

@@ -2,13 +2,18 @@ import { withOpacityPercent } from '../../../shared/theme/hexColor';
 import { palette } from '../../../shared/theme/palette';
 import type { ToolInputDefinition } from '../../chart/engine/drawings/toolInputs';
 import type { ToolStyleDefinition } from '../../chart/engine/drawings/toolStyles';
-import { DEFAULT_ROW_COUNT, DEFAULT_VALUE_AREA_PERCENT } from './requests/profileRequestLimits';
+import {
+  DEFAULT_ROW_COUNT,
+  DEFAULT_TICKS_PER_ROW,
+  DEFAULT_VALUE_AREA_PERCENT,
+  MAX_TICKS_PER_ROW,
+} from './requests/profileRequestLimits';
 
 /**
- * What the fixed range volume profile lets the user set. The defaults reproduce the look and the request
- * this tool had before it had settings, so drawings saved earlier load unchanged: mirrored down/up bars
- * from the range start, a solid POC line, dashed VAH and VAL lines to the pane's right edge, 128 rows and
- * a 70% value area.
+ * What the fixed range volume profile lets the user set. The defaults give mirrored down/up bars from the
+ * range start, a solid POC line, dashed VAH and VAL lines to the pane's right edge, one tick per row (the
+ * backend coarsens a range that would need too many rows) and a 70% value area. A saved drawing keeps the
+ * rows layout it stored, because the collection stores every input resolved.
  */
 
 export const ROWS_BY_COUNT = 'Number Of Rows';
@@ -19,6 +24,7 @@ export const VOLUME_DELTA = 'Delta';
 export const PLACEMENT_LEFT = 'Left';
 export const PLACEMENT_RIGHT = 'Right';
 export const VALUES_LEFT_OF_LINE = 'Left';
+export const VALUES_CENTERED_ON_LINE = 'Center';
 export const VALUES_RIGHT_OF_LINE = 'Right';
 
 /**
@@ -30,8 +36,8 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
     kind: 'string',
     id: 'rowsLayout',
     title: 'Rows Layout',
-    defaultValue: ROWS_BY_COUNT,
-    options: [ROWS_BY_COUNT, ROWS_BY_TICKS],
+    defaultValue: ROWS_BY_TICKS,
+    options: [ROWS_BY_TICKS, ROWS_BY_COUNT],
   },
   {
     kind: 'int',
@@ -47,9 +53,9 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
     kind: 'int',
     id: 'ticksPerRow',
     title: 'Ticks Per Row',
-    defaultValue: 1,
+    defaultValue: DEFAULT_TICKS_PER_ROW,
     minValue: 1,
-    maxValue: 1000,
+    maxValue: MAX_TICKS_PER_ROW,
     step: 1,
     activeWhen: { inputId: 'rowsLayout', equals: ROWS_BY_TICKS },
   },
@@ -85,9 +91,10 @@ export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
     kind: 'choice',
     id: 'valuesPosition',
     title: 'Values Position',
-    defaultValue: VALUES_RIGHT_OF_LINE,
+    defaultValue: VALUES_CENTERED_ON_LINE,
     options: [
       { value: VALUES_LEFT_OF_LINE, title: VALUES_LEFT_OF_LINE },
+      { value: VALUES_CENTERED_ON_LINE, title: VALUES_CENTERED_ON_LINE },
       { value: VALUES_RIGHT_OF_LINE, title: VALUES_RIGHT_OF_LINE },
     ],
     parentId: 'values',

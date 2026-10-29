@@ -8,7 +8,9 @@ import {
   FIXED_RANGE_PROFILE_STYLES,
   PLACEMENT_RIGHT,
   ROWS_BY_TICKS,
+  VALUES_CENTERED_ON_LINE,
   VALUES_LEFT_OF_LINE,
+  VALUES_RIGHT_OF_LINE,
   VOLUME_DELTA,
   VOLUME_TOTAL,
   VOLUME_UP_DOWN,
@@ -19,6 +21,8 @@ export type FixedRangeProfileVolumeMode = 'upDown' | 'total' | 'delta';
 
 /** Which end of the range the bars hang from: the start growing right, or the end growing left. */
 export type FixedRangeProfilePlacement = 'left' | 'right';
+
+export type FixedRangeProfileValuesSide = 'left' | 'center' | 'right';
 
 /** One level line (POC, VAH or VAL) as the user styled it. */
 export interface FixedRangeProfileLevelStyle {
@@ -39,11 +43,11 @@ export interface FixedRangeProfileAppearance {
   readonly histogramBoxColor: string;
   readonly upColor: string;
   readonly downColor: string;
-  /** Per-row volume text and the totals line under the profile. */
+  /** Per-row volume text beside the profile. */
   readonly valuesVisible: boolean;
   readonly valuesColor: string;
-  /** Which side of the anchor line the labels and the totals line sit on. */
-  readonly valuesSide: 'left' | 'right';
+  /** Which side of the anchor line the labels sit on, or centred on it. */
+  readonly valuesSide: FixedRangeProfileValuesSide;
   /** The fill behind the value labels column; an alpha of 00 paints no box. */
   readonly valuesBackgroundColor: string;
   /** Share of the range width (handle to handle) the histogram's widest extent takes, in percent. */
@@ -63,6 +67,12 @@ const VOLUME_MODE_BY_OPTION: Readonly<Partial<Record<string, FixedRangeProfileVo
   [VOLUME_UP_DOWN]: 'upDown',
   [VOLUME_TOTAL]: 'total',
   [VOLUME_DELTA]: 'delta',
+};
+
+const VALUES_SIDE_BY_OPTION: Readonly<Partial<Record<string, FixedRangeProfileValuesSide>>> = {
+  [VALUES_LEFT_OF_LINE]: 'left',
+  [VALUES_CENTERED_ON_LINE]: 'center',
+  [VALUES_RIGHT_OF_LINE]: 'right',
 };
 
 /** The dash of each line style: dashed is the owner's 4 on, 3 off; dotted matches the dialog's preview. */
@@ -118,7 +128,7 @@ export function readFixedRangeProfileSettings(stored: unknown): FixedRangeProfil
       downColor: textOf(values, toolStyleKey('downVolume', 'color')),
       valuesVisible: values[toolStyleKey('values', 'visible')] === true,
       valuesColor: textOf(values, toolStyleKey('values', 'color')),
-      valuesSide: textOf(values, 'valuesPosition') === VALUES_LEFT_OF_LINE ? 'left' : 'right',
+      valuesSide: VALUES_SIDE_BY_OPTION[textOf(values, 'valuesPosition')] ?? 'center',
       valuesBackgroundColor: textOf(values, toolStyleKey('valuesBackground', 'color')),
       widthPercent: numberOf(values, 'widthPercent'),
       poc: levelStyleOf(values, 'poc'),

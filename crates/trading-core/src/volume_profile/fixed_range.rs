@@ -9,8 +9,9 @@ use super::{price_string, Tick, TICK_FLAG_ASK, TICK_FLAG_BID};
 pub const DEFAULT_PROFILE_ROWS: usize = 128;
 /// Largest row count a request may ask for.
 pub const MAX_REQUEST_ROWS: usize = 128;
-/// Largest ticks-per-row a request may ask for.
-pub const MAX_TICKS_PER_ROW: u32 = 1000;
+/// Largest ticks-per-row a request may ask for. The settings dialog's Ticks Per Row `maxValue` in
+/// `apps/desktop/src/features/tools/fixedRangeProfile/settingsSchema.ts` must match.
+pub const MAX_TICKS_PER_ROW: u32 = 100_000;
 /// Most rows any profile gets: a range that would need more is coarsened.
 pub const MAX_PROFILE_BINS: u32 = 1000;
 /// Value area share the default configuration covers, in percent.

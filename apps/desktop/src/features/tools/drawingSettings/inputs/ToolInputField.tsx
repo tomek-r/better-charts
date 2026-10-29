@@ -1,9 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import {
-  isValidToolInputValue,
-  type ToolInputDefinition,
-  type ToolInputValue,
-} from '../../../chart/engine/drawings/toolInputs';
+import type { ToolInputDefinition, ToolInputValue } from '../../../chart/engine/drawings/toolInputs';
 import { TOOL_INPUT_FIELDS, type ToolInputFieldProps } from './toolInputFields';
 
 /** The table indexed by one kind is the union of its entries; this names the one call, as the validators do. */
@@ -14,13 +10,15 @@ interface ToolInputFieldValues {
   readonly value: ToolInputValue;
   readonly onChange: (value: ToolInputValue) => void;
   readonly disabled: boolean;
+  /** Whether the draft stops the form from saving; see `isToolInputInvalid`. */
+  readonly invalid: boolean;
 }
 
 /**
  * One setting of a drawing: its title as a label, the control its kind asks for, and its tooltip as the
- * control's description. A draft value the kind rejects marks the control invalid.
+ * control's description. A draft value that blocks saving marks the control invalid.
  */
-export function ToolInputField({ definition, value, onChange, disabled }: ToolInputFieldValues) {
+export function ToolInputField({ definition, value, onChange, disabled, invalid }: ToolInputFieldValues) {
   const controlId = useId();
   const tooltipId = `${controlId}-tooltip`;
   const hasTooltip = definition.tooltip !== undefined;
@@ -36,7 +34,7 @@ export function ToolInputField({ definition, value, onChange, disabled }: ToolIn
         onChange,
         controlId,
         tooltipId: hasTooltip ? tooltipId : undefined,
-        invalid: !isValidToolInputValue(definition, value),
+        invalid,
         disabled,
       })}
       {hasTooltip ? (

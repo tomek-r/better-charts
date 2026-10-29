@@ -162,6 +162,8 @@ export function drawFixedRangeProfile(
     anchorX,
     profileLeft: anchorX + layout.reachLeft,
     profileRight: anchorX + layout.reachRight,
+    profileTop: Math.min(...layout.rows.map((row) => row.top)),
+    profileBottom: Math.max(...layout.rows.map((row) => row.bottom)),
   };
 
   ctx.save();
@@ -176,7 +178,17 @@ export function drawFixedRangeProfile(
   drawProfileBars(ctx, anchorX, layout, appearance);
   const valueLabels = drawProfileValueLabels(ctx, anchorX, layout, appearance);
   hit.valueLabels = valueLabels.rowLabels;
-  hit.summaryY = valueLabels.summaryY;
+  hit.headerTopY = valueLabels.headerTopY;
+  hit.headerBottomY = valueLabels.headerBottomY;
+  if (valueLabels.column !== undefined) {
+    const { left, right, top, bottom } = valueLabels.column;
+    Object.assign(hit, {
+      valuesColumnLeft: left,
+      valuesColumnRight: right,
+      valuesColumnTop: top,
+      valuesColumnBottom: bottom,
+    });
+  }
   if (valueLabels.box !== undefined) {
     const { left, right, top, bottom } = valueLabels.box;
     Object.assign(hit, { valuesBoxLeft: left, valuesBoxRight: right, valuesBoxTop: top, valuesBoxBottom: bottom });

@@ -6,7 +6,10 @@ import {
   DEFAULT_TIMEFRAME_VISIBILITY,
   type DrawingTimeframeVisibility,
 } from '../../chart/engine/drawings/timeframeVisibility';
-import { areToolSettingValuesValid } from '../../chart/engine/drawings/toolSettings';
+import {
+  areToolSettingValuesValid,
+  withStoredValuesForInvalidInactiveInputs,
+} from '../../chart/engine/drawings/toolSettings';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../../shared/ui/dialog/ModalDialog';
 import { SettingsTabs } from './SettingsTabs';
 import { buildSettingsTabs, COORDINATES_TAB_ID, type DrawingSettingsSchema } from './settingsTabModel';
@@ -62,7 +65,8 @@ export function DrawingSettingsForm({
   const valid = areToolSettingValuesValid(settings, values) && coordinates.valid;
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
-    if (valid && !onSave(values, coordinates.changedPoints(), timeframeVisibility.changedValue())) {
+    const savedValues = withStoredValuesForInvalidInactiveInputs(settings, values, initialValues);
+    if (valid && !onSave(savedValues, coordinates.changedPoints(), timeframeVisibility.changedValue())) {
       coordinates.reject();
       setSelectedTabId(COORDINATES_TAB_ID);
     }
