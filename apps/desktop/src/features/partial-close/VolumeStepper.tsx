@@ -1,5 +1,5 @@
 import { volumeWithUnit } from '../../shared/format';
-import { stepVolumeText, snapVolumeText, type PartialCloseLimits } from './partialCloseVolume';
+import { stepVolumeText, snapVolumeText, type PartialCloseLimits } from '../../shared/trading/partialCloseVolume';
 
 interface VolumeStepperProps {
   limits: PartialCloseLimits;

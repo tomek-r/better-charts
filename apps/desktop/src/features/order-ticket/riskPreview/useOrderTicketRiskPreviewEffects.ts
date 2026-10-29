@@ -1,0 +1,233 @@
+import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import type { RiskPreview } from '../../../shared/bridge/types';
+import type { OrderTicketInputs } from '../draft/orderTicketInputs';
+import type { OrderTicketCoordination, OrderTicketDraftStore, OrderTicketStores } from '../draft/orderTicketStores';
+import type { StopDistanceGuard } from '../exits/stopDistance';
+import { orderEntryPrice } from '../pricing/orderEntryPrice';
+import { MAX_RISK_PERCENT, equityAllocationIssue } from '../sizing/riskBasis';
+import type { RiskUnitsMode } from '../sizing/unitsMode';
+
+const RISK_PREVIEW_DEBOUNCE_MS = 100;
+
+// The debounced risk-preview request [layout] registers between the timeframe
+// reset and the staged-widget mirror, so effect order stays fixed.
+// `riskMode`/`effectiveRiskAmount` are the risk-basis derivations (they feed
+// the display too), passed in as the effect's external inputs.
+export type OrderTicketRiskPreviewEffectsInput = Pick<OrderTicketInputs, 'snapshot' | 'status' | 'account'> &
+  Pick<
+    OrderTicketDraftStore,
+    | 'riskSide'
+    | 'entry'
+    | 'orderKind'
+    | 'limitPrice'
+    | 'stopLoss'
+    | 'takeProfit'
+    | 'equityAllocationPercent'
+    | 'riskAmount'
+    | 'slOn'
+    | 'tpOn'
+    | 'ticketStage'
+    | 'unitsMode'
+    | 'volumeManual'
+  > &
+  Pick<
+    OrderTicketCoordination,
+    'riskBrokerVersion' | 'riskPreviewDisplayRef' | 'riskVersion' | 'pendingRiskRequestRef'
+  > & {
+    stopGuard: StopDistanceGuard | undefined;
+    setRiskProjection: OrderTicketStores['setters']['broker']['setRiskProjection'];
+    setOrderVolume: OrderTicketStores['setters']['draft']['setOrderVolume'];
+    setDraftVersion: OrderTicketStores['setters']['draft']['setDraftVersion'];
+    setRiskPreview: OrderTicketStores['setters']['broker']['setRiskPreview'];
+    setRiskError: OrderTicketStores['setters']['broker']['setRiskError'];
+    setRiskLoading: OrderTicketStores['setters']['broker']['setRiskLoading'];
+  };
+
+export type OrderTicketRiskBasis = { riskMode: RiskUnitsMode; effectiveRiskAmount: string };
+
+export function useOrderTicketRiskPreviewEffects(
+  ticket: OrderTicketRiskPreviewEffectsInput,
+  { riskMode, effectiveRiskAmount }: OrderTicketRiskBasis,
+): void {
+  const {
+    snapshot,
+    status,
+    account,
+    riskSide,
+    entry,
+    orderKind,
+    limitPrice,
+    stopLoss,
+    takeProfit,
+    equityAllocationPercent,
+    riskAmount,
+    slOn,
+    tpOn,
+    stopGuard,
+    ticketStage,
+    unitsMode,
+    volumeManual,
+    riskBrokerVersion,
+    setRiskProjection,
+    riskPreviewDisplayRef,
+    setOrderVolume,
+    riskVersion,
+    pendingRiskRequestRef,
+    setDraftVersion,
+    setRiskPreview,
+    setRiskError,
+    setRiskLoading,
+  } = ticket;
+  // Ref-named alias: react-hooks/immutability only accepts `.current` writes through a `*Ref` name.
+  const riskVersionRef = riskVersion;
+  const sizingEntry = orderEntryPrice(orderKind, entry, limitPrice);
+  const equity = account?.equity;
+  const pendingTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(pendingTimer.current), []);
+  const currentStage = useRef(ticketStage);
+  useLayoutEffect(() => {
+    currentStage.current = ticketStage;
+  }, [ticketStage]);
+  useLayoutEffect(() => {
+    // Review pins the explicit request's prices and volume. Floating equity
+    // must not create another draft or cancel its outstanding sizing response.
+    if (ticketStage === 'review') {
+      // A queued sizing command clears the backend's pending OrderCheck.
+      // The review action flushes sizing before queuing its check.
+      window.clearTimeout(pendingTimer.current);
+      return;
+    }
+    window.clearTimeout(pendingTimer.current);
+    pendingRiskRequestRef.current = undefined;
+    const version = ++riskVersionRef.current;
+    // Update the rendered freshness gate before paint, including the no-SL path.
+    setDraftVersion(version);
+    const symbol = snapshot.symbol;
+    setRiskPreview(undefined);
+    setRiskProjection(undefined);
+    setRiskError(undefined);
+    setRiskLoading(false);
+    // Sizing never derives from an invalid stop distance: with the stop too close or crossed the preview
+    // math is meaningless and must not touch the units. The guard mirrors the EA preflight
+    // (see stopDistanceGuard), with the reference selected by order kind.
+    const valid = Boolean(
+      equityAllocationIssue(equityAllocationPercent) === undefined &&
+      symbol &&
+      account?.accountLogin &&
+      account.currency &&
+      status.state === 'connected' &&
+      sizingEntry.trim() &&
+      slOn &&
+      stopLoss.trim() &&
+      effectiveRiskAmount.trim() &&
+      Number.isFinite(Number(sizingEntry)) &&
+      Number(sizingEntry) > 0 &&
+      Number.isFinite(Number(stopLoss)) &&
+      (riskMode === 'equity'
+        ? Number(riskAmount) > 0 && Number(riskAmount) <= MAX_RISK_PERCENT
+        : Number(effectiveRiskAmount) > 0) &&
+      !stopGuard?.slTooClose &&
+      !stopGuard?.tpTooClose,
+    );
+    if (!valid || !symbol || !account?.accountLogin || !account.currency) {
+      return;
+    }
+    setRiskLoading(true);
+    const data = {
+      symbol,
+      side: riskSide,
+      entry: sizingEntry,
+      stopLoss: slOn ? stopLoss : '',
+      takeProfit: tpOn && takeProfit.trim() ? takeProfit.trim() : null,
+      riskAmount: effectiveRiskAmount,
+      riskPercent: riskMode === 'equity' ? riskAmount : null,
+      equityAllocationPercent,
+      draftVersion: version,
+    };
+    if (unitsMode !== 'units' && !volumeManual && riskPreviewDisplayRef.current) {
+      // Native Decimal sizing projects the cached broker quote immediately.
+      // Keep it separate from riskPreview: only MT5 can satisfy freshness.
+      void invoke<RiskPreview | null>('project_risk_preview', data)
+        .then((projected) => {
+          if (
+            projected &&
+            version === riskVersionRef.current &&
+            currentStage.current === 'edit' &&
+            riskBrokerVersion.current !== version
+          ) {
+            setRiskProjection(projected);
+            setOrderVolume(projected.volume);
+          }
+        })
+        .catch((error: unknown) => {
+          // Native sizing rejections (e.g. risk below the minimum volume) are
+          // user-facing sizing messages; surface them without waiting for MT5.
+          if (
+            typeof error === 'string' &&
+            version === riskVersionRef.current &&
+            currentStage.current === 'edit' &&
+            riskBrokerVersion.current !== version
+          ) {
+            setRiskError(error);
+          }
+        });
+    }
+    const request = () => {
+      window.clearTimeout(pendingTimer.current);
+      pendingRiskRequestRef.current = undefined;
+      return invoke('request_risk_preview', data).catch((error) => {
+        if (version === riskVersionRef.current) {
+          setRiskLoading(false);
+          setRiskError('Risk preview is unavailable.');
+        }
+        throw error;
+      });
+    };
+    pendingRiskRequestRef.current = request;
+    pendingTimer.current = window.setTimeout(() => {
+      if (currentStage.current !== 'edit' || version !== riskVersionRef.current) {
+        return;
+      }
+      void request().catch(() => undefined);
+    }, RISK_PREVIEW_DEBOUNCE_MS);
+  }, [
+    snapshot.symbol,
+    snapshot.timeframe,
+    status.state,
+    ticketStage,
+    unitsMode,
+    volumeManual,
+    riskPreviewDisplayRef,
+    setOrderVolume,
+    setRiskProjection,
+    riskBrokerVersion,
+    account?.accountLogin,
+    account?.brokerServer,
+    account?.currency,
+    account?.currencyDigits,
+    riskSide,
+    entry,
+    orderKind,
+    limitPrice,
+    sizingEntry,
+    stopLoss,
+    takeProfit,
+    riskAmount,
+    riskMode,
+    equityAllocationPercent,
+    account?.freeMargin,
+    slOn,
+    tpOn,
+    effectiveRiskAmount,
+    stopGuard?.slTooClose,
+    stopGuard?.tpTooClose,
+    equity,
+    riskVersionRef,
+    pendingRiskRequestRef,
+    setDraftVersion,
+    setRiskPreview,
+    setRiskError,
+    setRiskLoading,
+  ]);
+}

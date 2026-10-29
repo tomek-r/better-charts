@@ -1,0 +1,14 @@
+import { useStore } from 'zustand';
+import { useBridgeMarketSelector } from '../../bridge/bridgeSelectors';
+import { useBridgeQuotePresentation } from '../../bridge/useBridgeQuotePresentation';
+import { useOrderTicketActions, useOrderTicketStores } from '../draft/orderTicketContext';
+import type { OrderTicketQuoteProps } from '../orderTicketEditorProps';
+
+export function useOrderTicketQuotes(): OrderTicketQuoteProps {
+  const stores = useOrderTicketStores();
+  const actions = useOrderTicketActions();
+  const pointSize = useBridgeMarketSelector((market) => market.instrument?.pointSize);
+  const side = useStore(stores.draft, (state) => state.riskSide);
+  const { bidText, askText, spreadText, spreadPoints } = useBridgeQuotePresentation(pointSize);
+  return { bidText, askText, spreadText, spreadPoints, side, stageFromQuote: actions.stageFromQuote };
+}

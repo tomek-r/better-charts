@@ -1,6 +1,7 @@
 import { palette } from '../../../../shared/theme/palette';
 import { drawSeparatedText, separatedTextWidth } from '../../../../shared/canvas/separatedText';
-import type { RenderViewport } from '../surface/overlayTypes';
+import type { RenderViewport } from '../surface/overlayRenderer';
+import type { RiskSide } from '../../../../shared/bridge/types';
 
 export interface TradingHitRect {
   x: number;
@@ -31,6 +32,10 @@ export const ROW_INSET = 24;
 export const CANCEL_CHIP_X = ROW_INSET + 10;
 export const HANDLE_X = ROW_INSET + 26;
 
+/** The canvas fonts of the row text in staged and live trading overlays. */
+export const ROW_FONT_REGULAR = '400 12px system-ui, sans-serif';
+export const ROW_FONT_SEMIBOLD = '600 12px system-ui, sans-serif';
+
 /** Which half of the two-pass z-order a row overlay paints. */
 export type OverlayPass = 'lines' | 'labels';
 
@@ -60,7 +65,6 @@ export function tagPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   ctx.closePath();
 }
 
-/** Draw a 20×20 cancel chip and return the circle that covers its painted area. */
 /** The square chip frame shared by the ✕ and ▾ segments (circumscribing circle r = 10). */
 function drawChipFrame(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): TradingHitCircle {
   const r = 10;
@@ -75,6 +79,7 @@ function drawChipFrame(ctx: CanvasRenderingContext2D, cx: number, cy: number, co
   return { x: cx, y: cy, r };
 }
 
+/** Draw a 20×20 cancel chip and return the circle that covers its painted area. */
 export function drawCancelChip(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): TradingHitCircle {
   const hit = drawChipFrame(ctx, cx, cy, color);
   const strokeHalfLength = 2.4;
@@ -129,7 +134,7 @@ export function drawHandle(
   tipDown: boolean,
   trailing?: HandleTrailing,
 ): TradingHitRect {
-  ctx.font = '400 12px system-ui, sans-serif';
+  ctx.font = ROW_FONT_REGULAR;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   const leadingWidth = ctx.measureText(`⋮⋮  ${label}`).width;
@@ -160,7 +165,6 @@ export function drawHandle(
   ctx.closePath();
   ctx.fillStyle = color;
   ctx.fill();
-  ctx.fillStyle = color;
   ctx.fillText(`⋮⋮  ${label}`, x + 7, centerY + 0.5);
   if (trailing) {
     ctx.textAlign = 'right';
@@ -169,6 +173,67 @@ export function drawHandle(
     drawSeparatedText(ctx, trailingParts, x + 7 + trailingOffset, centerY + 0.5);
   }
   return { x, y: top, w, h };
+}
+
+/** Row geometry: every row is 20px tall and centred on its line. */
+export const ROW_HEIGHT = 20;
+export const ROW_HALF_HEIGHT = ROW_HEIGHT / 2;
+/** A floating SL/TP handle sits this far from the entry row, away from the price it protects. */
+const FLOATING_EXIT_OFFSET = 32;
+
+export const titleCase = (label: string) => label.toLowerCase().replace(/(^|\s)\S/g, (char) => char.toUpperCase());
+
+/** Left edge shared by every row: the ✕ chip's left side. */
+const rowLeftEdge = (chartX: number) => chartX + CANCEL_CHIP_X - ROW_HALF_HEIGHT;
+
+/** Hit rectangle of a row that starts at the ✕ chip and ends at `right`. */
+export function rowRectTo(chartX: number, labelY: number, right: number): TradingHitRect {
+  const left = rowLeftEdge(chartX);
+  return { x: left, y: labelY - ROW_HALF_HEIGHT, w: right - left, h: ROW_HEIGHT };
+}
+
+/** Hit rectangle of an SL/TP row: the ✕ chip through the end of its handle box. */
+export const exitRowRect = (chartX: number, labelY: number, box: TradingHitRect): TradingHitRect =>
+  rowRectTo(chartX, labelY, box.x + box.w);
+
+/** Outlined text tag ("⋮⋮  |  1  |  Limit") returning where the next element starts. */
+export function qtyTag(ctx: CanvasRenderingContext2D, cx: number, lineY: number, text: string, color: string): number {
+  ctx.font = ROW_FONT_SEMIBOLD;
+  const tagW = ctx.measureText(text).width + 16;
+  tagPath(ctx, cx, lineY - ROW_HALF_HEIGHT, tagW + 8, ROW_HEIGHT, 7);
+  ctx.fillStyle = TRADING_COLORS.surface;
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = TRADING_COLORS.text;
+  ctx.fillText(text, cx + 8, lineY + 0.5);
+  return cx + tagW + 6;
+}
+
+/** SL/TP handle ("⋮⋮  SL -$50", plain "⋮⋮  SL" without money); its tip points toward the entry line. */
+export function exitHandle(
+  ctx: CanvasRenderingContext2D,
+  chartX: number,
+  lineY: number,
+  kind: 'sl' | 'tp',
+  money: string | undefined,
+  entryY: number,
+): TradingHitRect {
+  return drawHandle(
+    ctx,
+    chartX + HANDLE_X,
+    lineY,
+    `${kind === 'sl' ? 'SL' : 'TP'}${money ? ` ${money}` : ''}`,
+    kind === 'sl' ? TRADING_COLORS.sl : TRADING_COLORS.tp,
+    lineY < entryY,
+  );
+}
+
+/** Where a level-less SL/TP handle floats: SL below a buy and TP above it, mirrored for a sell. */
+export function floatingExitY(entryY: number, kind: 'sl' | 'tp', side: RiskSide): number {
+  const aboveEntry = kind === 'sl' ? side === 'sell' : side === 'buy';
+  return entryY + (aboveEntry ? -1 : 1) * FLOATING_EXIT_OFFSET;
 }
 
 /**

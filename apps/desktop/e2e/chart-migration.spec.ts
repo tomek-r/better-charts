@@ -26,7 +26,7 @@ import {
   stubInvocations,
 } from './helpers/tauriStub';
 import type { Candle } from '../src/shared/bridge/types';
-import { LOADING_WASH_ALPHA } from '../src/features/tools/fixedRangeProfile/overlay';
+import { LOADING_WASH_ALPHA } from '../src/features/tools/fixedRangeProfile/loadingIndicator';
 import { LOADER_MAX_WIDTH, LOADER_ROW_COUNT, LOADER_ROW_HEIGHT } from '../src/shared/canvas/loader';
 import { palette } from '../src/shared/theme/palette';
 

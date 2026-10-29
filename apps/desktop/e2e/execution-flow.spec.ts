@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { profileSelection } from './helpers/chartTest';
 import { openTradePanel } from './helpers/panel';
 import { chooseOption, expectOptionLabels } from './helpers/select';
-import type { RenderBar } from '../src/features/chart/engine/bars/mt5DataAdapter';
+import type { RenderBar } from '../src/features/chart/engine/bars/renderBar';
 import {
   gotoWithStub,
   pausePageClockAhead,
@@ -78,7 +78,6 @@ interface StagedGeom {
   chartRect: { x: number; y: number; width: number; height: number } | null;
   visibleRange: { from: number; to: number } | null;
   priceRange: { min: number; max: number } | null;
-  barSpacing: number | null;
   barWidth: number | null;
   digits: number;
   offset: number | null;

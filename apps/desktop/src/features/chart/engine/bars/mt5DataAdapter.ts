@@ -1,6 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { HISTORY_BARS, INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../../shared/bridge/limits';
-import type { Candle, MarketSnapshot } from '../../../../shared/bridge/types';
+import { HISTORY_BARS, INITIAL_HISTORY_SYNC_TIMEOUT_MS } from '../../../../shared/bridge/config';
+import type { MarketSnapshot } from '../../../../shared/bridge/types';
 import { errorText } from '../../../../shared/errorText';
 
 /** Older pages wait for the EA's own page deadline (BRIDGE_HISTORY_PAGE_DEADLINE_MS). */
@@ -13,48 +12,6 @@ const PAGE_TIMEOUT_MS = 10_000;
 const WINDOW_ANSWER_GRACE_MS = 2_000;
 const WINDOW_TIMEOUT_MS = INITIAL_HISTORY_SYNC_TIMEOUT_MS + WINDOW_ANSWER_GRACE_MS;
 const HISTORY_TIMEOUT_MESSAGE = 'History request timed out.';
-const MAX_BARS = HISTORY_BARS;
-
-/** Numeric values used only at the rendering boundary. Bridge models retain ms and decimal strings. */
-export interface RenderBar {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-export function toRenderBar(candle: Candle): RenderBar | null {
-  const bar = {
-    time: Math.floor(candle.timeMs / 1000),
-    open: Number(candle.open),
-    high: Number(candle.high),
-    low: Number(candle.low),
-    close: Number(candle.close),
-    volume: Number(candle.tickVolume),
-  };
-  if (
-    !Number.isFinite(bar.time) ||
-    bar.time <= 0 ||
-    !Number.isFinite(bar.open) ||
-    bar.open < 0 ||
-    !Number.isFinite(bar.high) ||
-    bar.high < 0 ||
-    !Number.isFinite(bar.low) ||
-    bar.low < 0 ||
-    !Number.isFinite(bar.close) ||
-    bar.close < 0 ||
-    !Number.isFinite(bar.volume) ||
-    bar.volume < 0 ||
-    bar.high < bar.low ||
-    bar.high < Math.max(bar.open, bar.close) ||
-    bar.low > Math.min(bar.open, bar.close)
-  ) {
-    return null;
-  }
-  return bar;
-}
 
 export interface Mt5HistoryError {
   message: string;
@@ -62,6 +19,12 @@ export interface Mt5HistoryError {
   timeframe: string;
   /** `page` marks a lazy-loading failure, which never surfaces as a chart error. */
   kind: 'dispatch' | 'timeout' | 'page';
+}
+
+/** How the adapter reaches the bridge; the engine never knows what carries the requests. */
+export interface HistoryTransport {
+  requestHistory(request: { symbol: string; timeframe: string; bars: number }): Promise<unknown>;
+  requestHistoryPage(request: { symbol: string; timeframe: string; bars: number; beforeMs: number }): Promise<unknown>;
 }
 
 type HistoryListener = (failure: Mt5HistoryError) => void;
@@ -73,7 +36,16 @@ interface PendingHistory {
 }
 
 function clampBars(bars: number): number {
-  return Math.min(MAX_BARS, Math.max(1, Math.floor(bars) || MAX_BARS));
+  return Math.min(HISTORY_BARS, Math.max(1, Math.floor(bars) || HISTORY_BARS));
+}
+
+function pendingKey(symbol: string, timeframe: string): string {
+  return `${symbol}|${timeframe}`;
+}
+
+/** Older-history pages are tracked apart from the selection's window request. */
+function pageKey(symbol: string, timeframe: string): string {
+  return `${pendingKey(symbol, timeframe)}|older`;
 }
 
 /** Coordinates one outstanding history request per effective symbol/timeframe selection. */
@@ -83,6 +55,8 @@ export class Mt5DataAdapter {
   private disposed = false;
   private selectionGeneration = 0;
 
+  constructor(private readonly transport: HistoryTransport) {}
+
   onError(listener: HistoryListener): () => void {
     if (this.disposed) {
       return () => undefined;
@@ -91,7 +65,7 @@ export class Mt5DataAdapter {
     return () => this.listeners.delete(listener);
   }
 
-  async requestHistory(symbol: string, timeframe: string, bars = MAX_BARS): Promise<void> {
+  async requestHistory(symbol: string, timeframe: string, bars = HISTORY_BARS): Promise<void> {
     if (this.disposed) {
       throw new Error('Mt5DataAdapter is disposed.');
     }
@@ -105,11 +79,7 @@ export class Mt5DataAdapter {
     }
     const generation = ++this.selectionGeneration;
 
-    for (const [otherKey, other] of [...this.pending]) {
-      if (otherKey !== key) {
-        this.settle(otherKey, other);
-      }
-    }
+    this.settleAll(key);
     const pending: PendingHistory = {
       symbol,
       timeframe,
@@ -131,7 +101,7 @@ export class Mt5DataAdapter {
       this.startTimeout(key, pending);
     }
     try {
-      await invoke('request_history', { symbol, timeframe, bars: clampBars(bars) });
+      await this.transport.requestHistory({ symbol, timeframe, bars: clampBars(bars) });
     } catch (error) {
       const message = errorText(error);
       this.settle(key, pending);
@@ -175,7 +145,7 @@ export class Mt5DataAdapter {
     this.pending.set(key, pending);
     this.startTimeout(key, pending, 'page');
     try {
-      await invoke('request_history_page', { symbol, timeframe, bars: clampBars(bars), beforeMs });
+      await this.transport.requestHistoryPage({ symbol, timeframe, bars: clampBars(bars), beforeMs });
     } catch (error) {
       this.settle(key, pending);
       if (generation === this.selectionGeneration) {
@@ -196,17 +166,13 @@ export class Mt5DataAdapter {
       return;
     }
     this.disposed = true;
-    for (const [key, pending] of [...this.pending]) {
-      this.settle(key, pending);
-    }
+    this.settleAll();
     this.listeners.clear();
   }
 
   resetRequests(): void {
     this.selectionGeneration += 1;
-    for (const [key, pending] of [...this.pending]) {
-      this.settle(key, pending);
-    }
+    this.settleAll();
   }
 
   private startTimeout(key: string, pending: PendingHistory, kind: 'timeout' | 'page' = 'timeout'): void {
@@ -223,6 +189,15 @@ export class Mt5DataAdapter {
         kind,
       });
     }, timeoutMs);
+  }
+
+  /** Settles every outstanding request, except the one under `keptKey` when given. */
+  private settleAll(keptKey?: string): void {
+    for (const [key, pending] of [...this.pending]) {
+      if (key !== keptKey) {
+        this.settle(key, pending);
+      }
+    }
   }
 
   private settleKey(key: string): void {
@@ -247,13 +222,4 @@ export class Mt5DataAdapter {
       listener(failure);
     }
   }
-}
-
-function pendingKey(symbol: string, timeframe: string): string {
-  return `${symbol}|${timeframe}`;
-}
-
-/** Older-history pages are tracked apart from the selection's window request. */
-function pageKey(symbol: string, timeframe: string): string {
-  return `${pendingKey(symbol, timeframe)}|older`;
 }

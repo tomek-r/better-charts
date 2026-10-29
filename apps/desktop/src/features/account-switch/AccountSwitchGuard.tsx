@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useEventCallback } from '../../shared/hooks/useEventCallback';
-import { useBridgeAccount } from '../bridge/BridgeSessionProvider';
-import { useResetTradingTicket } from '../order-ticket/state/useResetTradingTicket';
+import { useEventCallback } from '../../shared/identity/useEventCallback';
+import { useBridgeAccount } from '../bridge/bridgeSelectors';
+import { useResetOrderTicket } from '../order-ticket/lifecycle/useResetOrderTicket';
 import { AccountSwitchDialog } from './AccountSwitchDialog';
 import { accountSwitchMessage, isAccountSwitch, type AccountIdentity } from './accountSwitch';
 import { useTradingEnabled } from './useTradingEnabled';
@@ -16,7 +16,7 @@ import { useTradingEnabled } from './useTradingEnabled';
 export function AccountSwitchGuard() {
   const account = useBridgeAccount();
   const tradingEnabled = useTradingEnabled();
-  const resetTradingTicket = useResetTradingTicket();
+  const resetTradingTicket = useResetOrderTicket();
   const lastIdentity = useRef<AccountIdentity | undefined>(undefined);
   const [notice, setNotice] = useState<string>();
   const dismiss = useCallback(() => setNotice(undefined), []);

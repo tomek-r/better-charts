@@ -152,12 +152,12 @@ test.describe('drawer regression (fullscreen chart layout)', () => {
   // Dashboard and section chrome that takes width off the viewport.
   const SECTION_CHROME_PX = 80;
   // Width of the trade drawer when open.
-  const DRAWER_PX = 330;
+  const DRAWER_PX = 340;
   // Space the open drawer keeps off the right strip.
   const DRAWER_GAP_PX = 8;
   // Closed-state budget: section chrome, side gap, left tool rail and right strip.
   const CLOSED_FRAME_MIN_WIDTH = 1440 - SECTION_CHROME_PX - SIDE_GAP_PX - TOOL_RAIL_PX - SIDE_DRAWER_STRIP_PX;
-  // Open-state dashboard padding: drawer, its gap to the strip, the chart gap, and the right strip (404px total).
+  // Open-state dashboard padding: drawer, its gap to the strip, the chart gap, and the right strip (414px total).
   const OPEN_DASHBOARD_PADDING = `${DRAWER_PX + DRAWER_GAP_PX + SIDE_GAP_PX + SIDE_DRAWER_STRIP_PX}px`;
 
   // Fixed viewport: the width assertions below are calibrated for 1440px.
@@ -189,7 +189,7 @@ test.describe('drawer regression (fullscreen chart layout)', () => {
     await expect(page.locator('main.dashboard')).toHaveCSS('padding-right', OPEN_DASHBOARD_PADDING);
     await expect(page.locator('aside.trade-panel')).toBeVisible();
     const openWidth = await settledFrameWidth(page);
-    // Opening adds 404px dashboard padding (330px panel + 8px drawer gap + 14px gap + 52px
+    // Opening adds 414px dashboard padding (340px panel + 8px drawer gap + 14px gap + 52px
     // right strip) — the chart must give up at least 300px of its width.
     expect(closedWidth - openWidth).toBeGreaterThanOrEqual(300);
     expect(pageErrors).toEqual([]);

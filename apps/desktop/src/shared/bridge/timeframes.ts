@@ -37,6 +37,8 @@ export function timeframeLabel(wire: string): string {
   return `${amount}${unit}`;
 }
 
+const LONG_UNITS: Record<string, string> = { M: 'minute', H: 'hour', D: 'day', W: 'week', MN: 'month' };
+
 /** `M3` → `3 minutes`, `H1` → `1 hour`, `MN1` → `1 month`; an unexpected code is shown as it came. */
 export function timeframeLongLabel(wire: string): string {
   const match = WIRE_CODE.exec(wire);
@@ -46,8 +48,6 @@ export function timeframeLongLabel(wire: string): string {
   }
   return `${match[2]} ${unit}${match[2] === '1' ? '' : 's'}`;
 }
-
-const LONG_UNITS: Record<string, string> = { M: 'minute', H: 'hour', D: 'day', W: 'week', MN: 'month' };
 
 export type TimeframeSection = 'minutes' | 'hours' | 'days';
 
@@ -60,13 +60,13 @@ export function timeframeSection(wire: string): TimeframeSection {
   return unit === 'H' ? 'hours' : 'days';
 }
 
+const defaultEntry = config.timeframes.find((entry) => entry.code === config.default) ?? config.timeframes[0];
+
 /** Nominal seconds per bar; MN1 boundaries use calendar months below. */
 export function timeframeSeconds(wire: string): number {
   const entry = config.timeframes.find((candidate) => candidate.code === wire) ?? defaultEntry;
   return entry.seconds;
 }
-
-const defaultEntry = config.timeframes.find((entry) => entry.code === config.default) ?? config.timeframes[0];
 
 /** Bar boundary after an offset. MT5 monthly bars follow calendar months. */
 export function timeframeBarTime(wire: string, startSeconds: number, offset: number): number {

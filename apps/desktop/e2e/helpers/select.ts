@@ -1,6 +1,6 @@
 import { expect, type Locator } from '@playwright/test';
 
-/** Opens an app drop-down (shared/ui/Select) and clicks the option with the given label. */
+/** Opens an app drop-down (shared/ui/select/Select) and clicks the option with the given label. */
 export async function chooseOption(select: Locator, label: string): Promise<void> {
   await select.click();
   await select.page().getByRole('option', { name: label, exact: true }).click();

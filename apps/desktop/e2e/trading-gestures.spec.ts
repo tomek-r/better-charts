@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { brokerSymbolFixture, gotoWithStub, pushEvent, STUB_NOW, stubInvocations } from './helpers/tauriStub';
+import { brokerSymbolFixture, gotoWithStub, pushEvent, stubInvocations } from './helpers/tauriStub';
 import type { PortfolioSnapshot } from '../src/shared/bridge/types';
 import { observeFillText } from './helpers/canvasText';
 import { fillExitPrice, openTradePanel } from './helpers/panel';
+import { tradingPortfolio } from './helpers/tradingPortfolio';
 
 interface TradingGeometry {
   labels: Array<{
@@ -21,43 +22,7 @@ interface TradingGeometry {
   tpLines: Array<{ id: string; y: number }>;
   orderLines: Array<{ id: string; y: number }>;
 }
-const portfolio: PortfolioSnapshot = {
-  accountLogin: '50123456',
-  capturedAtMs: STUB_NOW,
-  positions: [
-    {
-      ticket: '1001',
-      positionId: '885001',
-      symbol: 'EURUSD',
-      timeMs: STUB_NOW,
-      magic: '0',
-      side: 'buy',
-      volume: '0.10',
-      priceOpen: '1.0850',
-      priceCurrent: '1.0852',
-      profit: '1.20',
-      swap: '0.00',
-      stopLoss: '1.0840',
-      takeProfit: '1.0860',
-    },
-  ],
-  orders: [
-    {
-      orderId: '990001',
-      symbol: 'EURUSD',
-      timeSetupMs: STUB_NOW,
-      magic: '0',
-      orderType: 'sell_limit',
-      state: 'placed',
-      volumeInitial: '0.20',
-      volumeCurrent: '0.20',
-      priceOpen: '1.0855',
-      priceCurrent: '1.0855',
-      stopLoss: null,
-      takeProfit: null,
-    },
-  ],
-};
+const portfolio: PortfolioSnapshot = tradingPortfolio;
 const instrument = brokerSymbolFixture('EURUSD', 'Euro vs US Dollar', {
   digits: 4,
   tickSize: '0.0001',

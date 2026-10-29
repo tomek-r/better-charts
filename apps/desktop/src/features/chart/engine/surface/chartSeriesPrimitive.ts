@@ -7,6 +7,7 @@ import type {
   SeriesType,
   Time,
 } from 'lightweight-charts';
+import { CHART_FONT_SIZE } from './chartFont';
 
 /**
  * Holds the handles the library hands a series primitive on attach and drops
@@ -48,10 +49,16 @@ export abstract class ChartSeriesPrimitive implements ISeriesPrimitive<Time> {
 
   /** The chart's label font size, which the library sizes its own labels from. */
   protected labelFontSize(): number {
-    return this.chart?.options().layout.fontSize ?? 11;
+    return this.chart?.options().layout.fontSize ?? CHART_FONT_SIZE;
   }
 
   protected labelFontFamily(): string {
     return this.chart?.options().layout.fontFamily ?? 'sans-serif';
+  }
+
+  /** The canvas font of the chart's labels; a weight is written first when given. */
+  protected labelFont(weight?: number): string {
+    const sizeAndFamily = `${this.labelFontSize()}px ${this.labelFontFamily()}`;
+    return weight === undefined ? sizeAndFamily : `${weight} ${sizeAndFamily}`;
   }
 }

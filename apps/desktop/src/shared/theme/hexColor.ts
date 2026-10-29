@@ -63,6 +63,11 @@ export function colorOpacityPercent(text: string): number {
   return alphaToOpacityPercent(parsed?.alpha ?? OPAQUE_ALPHA);
 }
 
+/** Whether the text is a colour with alpha 00, which paints nothing. */
+export function isFullyTransparent(text: string): boolean {
+  return parseHexColor(text)?.alpha === 0;
+}
+
 /** The same colour at another opacity; text that is no colour comes back unchanged. */
 export function withOpacityPercent(text: string, percent: number): string {
   const parsed = parseHexColor(text);

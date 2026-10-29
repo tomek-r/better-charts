@@ -7,14 +7,14 @@ import {
   type PaintOp,
   type TestViewport,
 } from './helpers/overlayHarness';
+import { drawFixedRangeProfile } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
 import {
-  drawFixedRangeProfile,
   drawFixedRangeProfileSpinner,
   drawFixedRangeProfileLoadingWash,
   LOADING_WASH_ALPHA,
-  type FixedRangeProfileState,
-  type HandleEdges,
-} from '../src/features/tools/fixedRangeProfile/overlay';
+} from '../src/features/tools/fixedRangeProfile/loadingIndicator';
+import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/profileState';
+import type { HandleEdges } from '../src/features/tools/fixedRangeProfile/drawing/handles';
 import {
   drawLoader,
   LOADER_LINE_MARGIN,
@@ -35,7 +35,7 @@ import { formatDayMonth, MS_PER_DAY, STUB_NOW } from './helpers/stubClock';
  * so the assertions run on the recorded op sequence — exactly what the pixels
  * would show.
  *
- * Contract locked down here (see tools/fixedRangeProfile/overlay.ts):
+ * Contract locked down here (see tools/fixedRangeProfile/fixedRangeProfileOverlay.ts):
  *  - time→x anchor = the public viewport mapping (bar center): chartRect.x + i*(barWidth+barSpacing) - offset + barWidth/2,
  *    with i located by binary search over bar times (interpolate inside, clamp outside);
  *  - mirrored rows around the anchor (BID left / ASK right), ONE common weight denominator;
@@ -68,11 +68,11 @@ const ANCHOR_X = 73;
 const BID_COLOR = '#f7525f';
 const ASK_COLOR = '#26a69a';
 
-// The range runs 5 bars (50 px) from the anchor: the histogram extent is 20% of it = 10 px, the mirror axis sits
-// half of that (5 px) inside the range, and each mirrored side is at most 5 px.
-const AXIS_X = ANCHOR_X + 5;
-// maxWeight = 50 stands for 5 px: bid widths 0.6/1.2/0.3 (maxBid 1.2 → profileLeft = 76.8) and ask widths 4/1.2/5
-// (maxAsk 5 → profileRight = 83).
+// The range runs 5 bars (50 px) from the anchor: the histogram extent is 20% of it = 10 px, the anchor line is the
+// mirror axis, and each mirrored side is at most 5 px.
+const AXIS_X = ANCHOR_X;
+// maxWeight = 50 stands for 5 px: bid widths 0.6/1.2/0.3 (maxBid 1.2 → profileLeft = 71.8) and ask widths 4/1.2/5
+// (maxAsk 5 → profileRight = 78).
 // Row geometry (priceY): tops 245/205/165, bottom = top+40 → drawHeight 39.
 const TICK_SOURCE = { source: 'ticks', barTimeframe: null, coveredFromMs: null } as const;
 const BAR_SOURCE = { source: 'bars', barTimeframe: 'M1', coveredFromMs: null } as const;
@@ -184,7 +184,7 @@ test('every bid row lies left of the anchor, every ask row right of it', () => {
   expect(bids).toBe(3);
   expect(asks).toBe(3);
 
-  // hit geometry: profileLeft = axis − maxBidWidth(1.2) = 76.8, profileRight = axis + maxAskWidth(5) = 83.
+  // hit geometry: profileLeft = axis − maxBidWidth(1.2) = 71.8, profileRight = axis + maxAskWidth(5) = 78.
   expect(state.hit.anchorX).toBe(ANCHOR_X);
   expect(state.hit.profileLeft).toBeCloseTo(AXIS_X - 1.2, 9);
   expect(state.hit.profileRight).toBeCloseTo(AXIS_X + 5, 9);

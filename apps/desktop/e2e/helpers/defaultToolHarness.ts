@@ -1,7 +1,7 @@
 import { ChartController } from '../../src/features/chart/engine/surface/chartController';
-import { arrowPlugin } from '../../src/features/tools/arrow/plugin';
-import { crosshairPlugin } from '../../src/features/tools/crosshair/plugin';
-import { fixedRangeProfilePlugin } from '../../src/features/tools/fixedRangeProfile/plugin';
+import { arrowPlugin } from '../../src/features/tools/arrow/arrowPlugin';
+import { crosshairPlugin } from '../../src/features/tools/crosshair/crosshairPlugin';
+import { fixedRangeProfilePlugin } from '../../src/features/tools/fixedRangeProfile/fixedRangeProfilePlugin';
 import type { ChartToolDefinition } from '../../src/features/chart/engine/tools/toolContract';
 
 const NO_MARKET_DATA = {

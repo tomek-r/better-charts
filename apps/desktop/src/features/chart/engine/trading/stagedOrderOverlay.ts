@@ -1,7 +1,9 @@
 import { paintTradingLabel } from './labels/paintTradingLabel';
 import type { TradingLabelHit, TradingLabelLayoutState, TradingLabelTarget } from './labels/tradingLabelTypes';
-import type { OverlayRenderer } from '../surface/overlayTypes';
+import type { OverlayRenderer } from '../surface/overlayRenderer';
 import type { RiskSide } from '../../../../shared/bridge/types';
+import { isPositiveFinite } from '../../../../shared/finiteNumber';
+import type { StagedSlBand } from './stopLossClamp';
 import { palette } from '../../../../shared/theme/palette';
 import {
   CANCEL_CHIP_X,
@@ -11,6 +13,7 @@ import {
   drawHandle,
   HANDLE_X,
   tagPath,
+  ROW_FONT_SEMIBOLD,
   TRADING_COLORS,
   type TradingHitCircle,
   type TradingHitRect,
@@ -20,23 +23,14 @@ import {
 /**
  * TradingView-style staged-order widget, drawn as a `ui`-layer overlay. Native
  * price-axis labels render outside the chart pane. The overlay ONLY paints: all
- * input goes through capture-phase pointer/touch handlers App.tsx binds to the
- * chart host, which hit-test against the geometry recorded here on every frame
+ * input goes through capture-phase pointer/touch handlers bound to the
+ * chart host by the chart workspace pointer effects, which hit-test against the geometry recorded here on every frame
  * (`state.hit`, ±6px grab). Nothing is ever dispatched from this widget — it
  * only mirrors the ticket fields (entry / slOn+stopLoss / tpOn+takeProfit).
  *
  * Rendering and input use chart-host CSS pixels. The series primitive handles
  * Retina backing-store scaling; capture handlers claim only actual gestures.
  */
-
-/** Allowed SL prices for a risk-sized draft (mirrors the order-ticket domain band). */
-export interface StagedSlBand {
-  nearPrice: number;
-  farPrice: number;
-  /** No price satisfies both edges: nothing is shaded or clamped. */
-  empty: boolean;
-  emptyHint: string;
-}
 
 export interface StagedOrderLevels {
   side: RiskSide;
@@ -59,7 +53,7 @@ export interface StagedOrderLevels {
 }
 
 export interface StagedOrderState {
-  /** null = not staged. Written by App every render via the mirror effect. */
+  /** null = not staged. Mirrored from the order ticket draft. */
   order: StagedOrderLevels | null;
   /** Why no SL is allowed (empty band); set by the gestures during an SL drag, cleared on release. */
   slClampHint?: string;
@@ -92,8 +86,7 @@ export interface StagedOrderState {
     tpCancel?: TradingHitCircle;
     /** Viewport snapshots for the dev-only test helper (pan/zoom assertions). */
     priceRange?: { min: number; max: number };
-    barSpacing?: number;
-    /** zoom() mutates barWidth (barSpacing stays fixed) — test watches this. */
+    /** zoom() mutates barWidth — test watches this. */
     barWidth?: number;
     offset?: number;
     visibleRange?: { from: number; to: number };
@@ -227,7 +220,6 @@ export function createStagedOrderOverlay(
         paintTradingLabel(ctx, viewport, hit.labels!, { source: 'staged', id: 'draft', level }, lineY, draw, labels);
       // Viewport snapshots for the dev test helper (pan/zoom E2E assertions).
       hit.priceRange = { min, max };
-      hit.barSpacing = viewport.barSpacing;
       hit.barWidth = viewport.barWidth;
       hit.offset = viewport.offset;
       hit.visibleRange = { from: viewport.visibleRange.from, to: viewport.visibleRange.to };
@@ -239,8 +231,7 @@ export function createStagedOrderOverlay(
       const toY = viewport.priceToY;
 
       const order = state.order;
-      const entryValid = order !== null && Number.isFinite(order.entry) && order.entry > 0;
-      if (!order || !entryValid) {
+      if (!order || !isPositiveFinite(order.entry)) {
         state.hit = hit;
         // Valid exit levels remain visible through native price lines while
         // the entry is temporarily cleared during ticket editing.
@@ -308,7 +299,7 @@ export function createStagedOrderOverlay(
             const cx = sideBox.x + sideBox.w + 6;
 
             // Pointed tag: grip dots + qty + order type, " | " separators (TV look).
-            ctx.font = '600 12px system-ui, sans-serif';
+            ctx.font = ROW_FONT_SEMIBOLD;
             const qty = order.volume.trim() || '—';
             const tagText = `⋮⋮  |  ${qty}  |  ${order.orderKindLabel}${order.riskRewardLabel ? `  |  RR ${order.riskRewardLabel}` : ''}`;
             const tagW = ctx.measureText(tagText).width + 16;
@@ -334,13 +325,13 @@ export function createStagedOrderOverlay(
         hit.entryLineY = entryY;
       }
 
-      ctx.font = '600 12px system-ui, sans-serif';
+      ctx.font = ROW_FONT_SEMIBOLD;
 
       // ── SL: dotted line when set (✕ chip to unset), handle always present.
       // Unset handle floats on the SL side of the entry line FOR THE ORDER SIDE
       // (SELL: SL is above entry → handle above, tip points down at the line;
       //  BUY: SL is below entry → handle below, tip points up).
-      if (order.stopLoss !== null && Number.isFinite(order.stopLoss) && order.stopLoss > 0) {
+      if (isPositiveFinite(order.stopLoss)) {
         const slY = toY(order.stopLoss);
         if (slY >= y - 20 && slY <= y + height + 20) {
           if (drawLabels) {
@@ -370,7 +361,7 @@ export function createStagedOrderOverlay(
       }
 
       // ── TP: mirrored below the entry line when unset.
-      if (order.takeProfit !== null && Number.isFinite(order.takeProfit) && order.takeProfit > 0) {
+      if (isPositiveFinite(order.takeProfit)) {
         const tpY = toY(order.takeProfit);
         if (tpY >= y - 20 && tpY <= y + height + 20) {
           if (drawLabels) {

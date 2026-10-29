@@ -1,8 +1,8 @@
-import { OrderTicketEditor } from './editor/OrderTicketEditor';
+import { OrderTicketEditor } from './OrderTicketEditor';
 import { OrderTicketReview } from './review/OrderTicketReview';
-import { useOrderTicketHeader } from './editor/useOrderTicketHeader';
-import { useOrderTicketReviewProps } from './editor/useOrderTicketReviewProps';
-import { useOrderTicketStage } from './editor/useOrderTicketStage';
+import { useOrderTicketHeader } from './useOrderTicketHeader';
+import { useOrderTicketReviewProps } from './review/useOrderTicketReviewProps';
+import { useOrderTicketStage } from './useOrderTicketStage';
 
 function OrderTicketReviewBody() {
   return <OrderTicketReview {...useOrderTicketReviewProps()} />;

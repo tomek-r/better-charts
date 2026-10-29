@@ -10,7 +10,8 @@ import {
   TIME_AXIS_ABOVE_TRADING_OVERLAYS,
   type RenderTarget,
 } from '../surface/drawTarget';
-import type { ChartDrawLayer, ChartDrawTarget, RenderViewport } from '../tools/toolContract';
+import type { RenderViewport } from '../surface/overlayRenderer';
+import type { ChartDrawLayer, ChartDrawTarget } from '../tools/toolContract';
 
 /**
  * Pointer price/time labels shown for every tool, plus the tools' layer above the trading overlays.
@@ -201,8 +202,8 @@ export class PointerReadoutPrimitive extends ChartSeriesPrimitive {
     }
     const paneWidth = chart.timeScale().width();
     const priceAxis = { width: chart.priceScale('right').width(), height: chart.panes()[0]?.getHeight() ?? 0 };
-    const font = this.labelFont();
-    const fontSize = this.fontSize();
+    const font = this.labelFont(LABEL_FONT_WEIGHT);
+    const fontSize = this.labelFontSize();
     const time = this.timeAt(point.x);
     const price = this.priceAt(point.y);
     return {
@@ -233,7 +234,7 @@ export class PointerReadoutPrimitive extends ChartSeriesPrimitive {
     }
     const paneWidth = chart.timeScale().width();
     target.useMediaCoordinateSpace(({ context, mediaSize }) => {
-      const font = this.labelFont();
+      const font = this.labelFont(LABEL_FONT_WEIGHT);
       const box = timeLabelBox(time.text, point.x, paneWidth, mediaSize.height, font);
       context.save();
       this.drawLabel(context, box, time.text, font, 'top');
@@ -249,8 +250,8 @@ export class PointerReadoutPrimitive extends ChartSeriesPrimitive {
       return;
     }
     target.useMediaCoordinateSpace(({ context, mediaSize }) => {
-      const font = this.labelFont();
-      const box = priceLabelBox(point.y, mediaSize, this.fontSize());
+      const font = this.labelFont(LABEL_FONT_WEIGHT);
+      const box = priceLabelBox(point.y, mediaSize, this.labelFontSize());
       context.save();
       this.drawLabel(context, box, price.text, font, 'left');
       context.restore();
@@ -310,14 +311,5 @@ export class PointerReadoutPrimitive extends ChartSeriesPrimitive {
     }
     const formatter = series.priceFormatter();
     return { price, text: formatter === undefined ? String(price) : formatter.format(price) };
-  }
-
-  private fontSize(): number {
-    return this.chart?.options().layout.fontSize ?? 11;
-  }
-
-  private labelFont(): string {
-    const family = this.chart?.options().layout.fontFamily ?? 'sans-serif';
-    return `${LABEL_FONT_WEIGHT} ${this.fontSize()}px ${family}`;
   }
 }

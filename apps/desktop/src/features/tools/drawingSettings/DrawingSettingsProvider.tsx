@@ -8,9 +8,9 @@ import {
 import type { ToolInputValues } from '../../chart/engine/drawings/toolInputs';
 import { resolveToolSettingValues, type ToolSettingsSchema } from '../../chart/engine/drawings/toolSettings';
 import { useChartResources } from '../../chart/ChartWorkspaceProvider';
-import { useRequiredContext } from '../../../shared/state/useRequiredContext';
+import { useRequiredContext } from '../../../shared/context/useRequiredContext';
 import { useDrawingSelection } from '../drawingToolbar/useDrawingSelection';
-import { CHART_TOOL_PLUGINS } from '../registry';
+import { findChartToolPlugin } from '../registry';
 import { DrawingSettingsDialog, type DrawingSettingsDialogProps } from './DrawingSettingsDialog';
 
 /** The drawing whose settings are open, with the values the dialog started from. */
@@ -76,7 +76,7 @@ function OpenDrawingSettingsDialog({ target, selection, onSave, onClose }: OpenD
   if (target === null) {
     return null;
   }
-  const plugin = CHART_TOOL_PLUGINS.find((entry) => entry.id === target.toolId);
+  const plugin = findChartToolPlugin(target.toolId);
   if (plugin === undefined) {
     return null;
   }
@@ -113,7 +113,7 @@ export function DrawingSettingsProvider({ children }: DrawingSettingsProviderPro
   const openDrawingSettings = useCallback(
     (toolId: string, drawingId: string) => {
       const drawings = drawingsOf(chart);
-      const plugin = CHART_TOOL_PLUGINS.find((entry) => entry.id === toolId);
+      const plugin = findChartToolPlugin(toolId);
       if (plugin === undefined) {
         return;
       }

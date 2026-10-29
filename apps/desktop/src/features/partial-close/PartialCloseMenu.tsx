@@ -1,6 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { volumeWithUnit } from '../../shared/format';
-import { PARTIAL_CLOSE_PERCENTS, presetVolume, type PartialCloseLimits } from './partialCloseVolume';
+import { PARTIAL_CLOSE_PERCENTS, presetVolume, type PartialCloseLimits } from '../../shared/trading/partialCloseVolume';
 
 interface PartialCloseMenuProps {
   limits: PartialCloseLimits;

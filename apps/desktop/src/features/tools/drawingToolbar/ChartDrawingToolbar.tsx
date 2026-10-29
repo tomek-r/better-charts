@@ -1,9 +1,11 @@
 import { useState, type RefObject } from 'react';
+import type { ChartDrawingSelection } from '../../chart/engine/drawings/drawingRecord';
 import { useChartResources } from '../../chart/ChartWorkspaceProvider';
 import { useOpenDrawingSettings } from '../drawingSettings/DrawingSettingsProvider';
-import { CHART_TOOL_PLUGINS } from '../registry';
-import { DrawingToolbar } from './DrawingToolbar';
-import { useDraggablePosition } from './useDraggablePosition';
+import { findChartToolPlugin } from '../registry';
+import { useDrawingCommands } from '../useDrawingCommands';
+import { DrawingToolbar, type DrawingToolbarProps } from './DrawingToolbar';
+import { useDrawingToolbarPosition } from './useDrawingToolbarPosition';
 import { useDrawingSelection } from './useDrawingSelection';
 
 /** Hands the keyboard back to the chart once the toolbar the command was pressed on is gone. */
@@ -13,33 +15,28 @@ function focusChartHost(chartHost: RefObject<HTMLDivElement | null>): void {
 
 /** Whether the app registered the drawing's tool: only a registered tool can place a drawing. */
 function isRegisteredTool(toolId: string): boolean {
-  return CHART_TOOL_PLUGINS.some((entry) => entry.id === toolId);
+  return findChartToolPlugin(toolId) !== undefined;
 }
 
-/**
- * The toolbar of the selected drawing: the one place the app commands a drawing. It renders nothing
- * while nothing is selected, which is how the pointer tools get no toolbar. The settings dialog its
- * settings button opens lives in DrawingSettingsProvider, which the object tree opens too.
- */
-export function ChartDrawingToolbar() {
-  const { chart, chartHost } = useChartResources();
-  const selection = useDrawingSelection();
+interface SelectedDrawingToolbarProps extends Pick<DrawingToolbarProps, 'position' | 'gripHandlers' | 'panelRef'> {
+  readonly selection: ChartDrawingSelection;
+}
+
+/** The toolbar of one selected drawing, whose commands run through that drawing's ids. */
+function SelectedDrawingToolbar({ selection, position, gripHandlers, panelRef }: SelectedDrawingToolbarProps) {
+  const { chartHost } = useChartResources();
   const openDrawingSettings = useOpenDrawingSettings();
-  const [panel, setPanel] = useState<HTMLDivElement | null>(null);
-  const { position, gripHandlers } = useDraggablePosition(panel);
-  if (selection === null || !isRegisteredTool(selection.toolId)) {
-    return null;
-  }
+  const commands = useDrawingCommands(selection.toolId, selection.drawingId);
   const openSettings = () => openDrawingSettings(selection.toolId, selection.drawingId);
   const toggleLock = () => {
-    chart.current?.drawings.setSelectedLocked(!selection.locked);
+    commands.setLocked(!selection.locked);
   };
   const removeDrawing = () => {
-    chart.current?.drawings.deleteSelected();
+    commands.remove();
     focusChartHost(chartHost);
   };
   const toggleVisibility = () => {
-    chart.current?.drawings.setVisible(selection.toolId, selection.drawingId, !selection.visible);
+    commands.setVisible(!selection.visible);
     if (selection.visible) {
       // Hiding clears the selection with it, so the toolbar goes and the chart keeps the keyboard.
       focusChartHost(chartHost);
@@ -52,11 +49,29 @@ export function ChartDrawingToolbar() {
       locked={selection.locked}
       visible={selection.visible}
       gripHandlers={gripHandlers}
-      panelRef={setPanel}
+      panelRef={panelRef}
       onOpenSettings={openSettings}
       onToggleLock={toggleLock}
       onToggleVisibility={toggleVisibility}
       onRemove={removeDrawing}
     />
+  );
+}
+
+/**
+ * The toolbar of the selected drawing: the one place the app commands a drawing. It renders nothing
+ * while nothing is selected, which is how the pointer tools get no toolbar. The settings dialog its
+ * settings button opens lives in DrawingSettingsProvider, which the object tree opens too. The place
+ * the user dragged it to is held here, so it survives the toolbar going away between selections.
+ */
+export function ChartDrawingToolbar() {
+  const selection = useDrawingSelection();
+  const [panel, setPanel] = useState<HTMLDivElement | null>(null);
+  const { position, gripHandlers } = useDrawingToolbarPosition(panel);
+  if (selection === null || !isRegisteredTool(selection.toolId)) {
+    return null;
+  }
+  return (
+    <SelectedDrawingToolbar selection={selection} position={position} gripHandlers={gripHandlers} panelRef={setPanel} />
   );
 }

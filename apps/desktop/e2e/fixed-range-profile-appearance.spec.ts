@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { profileResultFor } from './helpers/fakeMarketDataPort';
 import { createRecordingCtx, createTestViewport, renderArgsFor, type PaintOp } from './helpers/overlayHarness';
-import { drawFixedRangeProfile, type FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/overlay';
+import { drawFixedRangeProfile } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
+import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/profileState';
 import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
-import { readFixedRangeProfileSettings } from '../src/features/tools/fixedRangeProfile/settings';
+import { readFixedRangeProfileSettings } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileSettings';
 import type { TickProfileBin } from '../src/shared/bridge/types';
+import { parseHexColor } from '../src/shared/theme/hexColor';
 import { palette } from '../src/shared/theme/palette';
 
 /**
@@ -24,9 +26,9 @@ const DOWN_COLOR = '#f7525f';
 // The width setting is a share of the range, handle to handle: 45 px here, so the default 20% is 9 px.
 const RANGE_WIDTH = END_X - START_X;
 const FULL_LENGTH = RANGE_WIDTH * 0.2;
-// Up/Down mirrors around an axis half that extent inside the range, from its start (Left) or its end (Right).
-const LEFT_AXIS_X = START_X + FULL_LENGTH / 2;
-const RIGHT_AXIS_X = END_X - FULL_LENGTH / 2;
+// Up/Down mirrors around the anchor line itself: the range start (Left) or the range end (Right).
+const LEFT_AXIS_X = START_X;
+const RIGHT_AXIS_X = END_X;
 
 const bin = (low: number, high: number, down: number, up: number): TickProfileBin => ({
   low: String(low),
@@ -71,7 +73,7 @@ test('no stored settings paint exactly what the defaults paint, and what the too
   expect(paint({}).ops).toEqual(defaults.ops);
   expect(defaults.rows).toHaveLength(6);
   // The mirrored bars share the extent: each side's longest is at most half of it, so the up weight 50 (the
-  // common maximum) takes half the extent and the down weight 30 takes 30/50 of that, around the axis.
+  // common maximum) takes half the extent and the down weight 30 takes 30/50 of that, around the anchor line.
   expect(defaults.hit.anchorX).toBe(START_X);
   expect(defaults.hit.profileLeft).toBeCloseTo(LEFT_AXIS_X - (FULL_LENGTH / 2) * (30 / 50), 9);
   expect(defaults.hit.profileRight).toBeCloseTo(LEFT_AXIS_X + FULL_LENGTH / 2, 9);
@@ -193,7 +195,7 @@ test('placement right hangs the bars from the range end: mirrored for up/down, g
   const mirrored = paint({ placement: 'Right' });
   expect(mirrored.hit.anchorX).toBe(END_X);
   expect(mirrored.hit.profileLeft).toBeCloseTo(RIGHT_AXIS_X - (FULL_LENGTH / 2) * (30 / 50), 9);
-  expect(mirrored.hit.profileRight).toBeCloseTo(END_X, 9);
+  expect(mirrored.hit.profileRight).toBeCloseTo(RIGHT_AXIS_X + FULL_LENGTH / 2, 9);
 
   for (const volume of ['Total', 'Delta']) {
     const { hit, rows } = paint({ placement: 'Right', volume });
@@ -220,25 +222,34 @@ function paintedBounds(stored: ToolInputValues): { left: number; right: number }
   return { left: state.hit.profileLeft!, right: state.hit.profileRight! };
 }
 
-test('the width percent is the share of the range the histogram spans, and the bars stay inside the range', () => {
+test('the width percent is the share of the range the histogram spans: inward for Total and Delta, centred on the anchor line for Up/Down', () => {
   for (const volume of ['Up/Down', 'Total', 'Delta']) {
     for (const placement of ['Left', 'Right']) {
       for (const widthPercent of [1, 20, 100]) {
         // Every row of the balanced profile is the maximum of its mode (50 down or up, total 55, delta 45).
         const { left, right } = paintedBounds({ volume, placement, widthPercent });
-        expect(Math.abs(right - left - (RANGE_WIDTH * widthPercent) / 100)).toBeLessThanOrEqual(1);
-        expect(left).toBeGreaterThanOrEqual(START_X - 1e-9);
-        expect(right).toBeLessThanOrEqual(END_X + 1e-9);
+        const extent = (RANGE_WIDTH * widthPercent) / 100;
+        expect(Math.abs(right - left - extent)).toBeLessThanOrEqual(1);
+        if (volume === 'Up/Down') {
+          const anchorX = placement === 'Left' ? START_X : END_X;
+          expect(left).toBeCloseTo(anchorX - extent / 2, 9);
+          expect(right).toBeCloseTo(anchorX + extent / 2, 9);
+        } else {
+          expect(left).toBeGreaterThanOrEqual(START_X - 1e-9);
+          expect(right).toBeLessThanOrEqual(END_X + 1e-9);
+        }
       }
     }
   }
 });
 
 test('at 100 percent the widest row spans the whole range, with no pixel cap', () => {
-  for (const volume of ['Up/Down', 'Total', 'Delta']) {
+  for (const volume of ['Total', 'Delta']) {
     const { left, right } = paintedBounds({ volume, widthPercent: 100 });
     expect([left, right]).toEqual([START_X, END_X]);
   }
+  const mirrored = paintedBounds({ volume: 'Up/Down', widthPercent: 100 });
+  expect([mirrored.left, mirrored.right]).toEqual([START_X - RANGE_WIDTH / 2, START_X + RANGE_WIDTH / 2]);
 });
 
 test('a one-sided bar takes the whole extent from its anchor', () => {
@@ -246,11 +257,10 @@ test('a one-sided bar takes the whole extent from its anchor', () => {
   expect(paint({ volume: 'Delta', widthPercent: 100 }).hit.profileRight).toBeCloseTo(END_X, 9);
 });
 
-test('the bars are clipped to the range box as well as to the pane, and the level lines are not', () => {
+test('the bars, labels and level lines are clipped to the pane only', () => {
   const clips = paint().ops.filter((op) => op.kind === 'clip');
-  expect(clips).toHaveLength(2);
-  expect([clips[1].minX, clips[1].maxX]).toEqual([START_X, END_X]);
-  expect(clips[0].minX).toBe(chartRect.x);
+  expect(clips).toHaveLength(1);
+  expect([clips[0].minX, clips[0].maxX]).toEqual([chartRect.x, chartRect.x + chartRect.width]);
 });
 
 test('the up and down colours restyle the bars', () => {
@@ -291,9 +301,24 @@ test('without extend right the level lines stop at the range end', () => {
   }
 });
 
-const VALUES_ON = { 'values.visible': true };
+// Right is set explicitly: the default is Center, and these tests measure the column right of the anchor line.
+const VALUES_ON = { 'values.visible': true, valuesPosition: 'Right' };
+const HEADER_TEXT = 'Bid×Ask';
+const HEADER_GAP = 4;
+const HEADER_FONT_PX = 11;
+const ROW_FONT = '400 11px system-ui, sans-serif';
+const LABEL_GAP = 4;
+// The recording context measures a text as 7 px per character. In Up/Down the widest text is the header
+// `Bid×Ask` (7 characters, 49 px); the rows are `6×40` (28), `30×12` (35) and `3×50` (28), all centred in a
+// 49 px column. In Total the widest is a row label such as `46` (2 characters, 14 px).
+const WIDEST_TEXT = 7 * 7;
+// Right of the anchor line the column starts LINE_GAP away, so its centre is anchor + 4 + 49 / 2.
+const RIGHT_COLUMN_OFFSET = LABEL_GAP + WIDEST_TEXT / 2;
 
-/** Paints the given bins under the stored settings and returns the value texts with the painted geometry. */
+/**
+ * Paints the given bins under the stored settings. `texts` are the row labels; the Bid×Ask headers
+ * are returned apart, top header first.
+ */
 function paintValues(stored: ToolInputValues, bins: TickProfileBin[] = BINS) {
   const state: FixedRangeProfileState = { range: RANGE, profile: { ...PROFILE, ...LEVELS, bins }, hit: {} };
   const ops: PaintOp[] = [];
@@ -304,99 +329,283 @@ function paintValues(stored: ToolInputValues, bins: TickProfileBin[] = BINS) {
     state,
     appearance,
   );
-  return { texts: ops.filter((op) => op.kind === 'fillText'), hit: state.hit, ops };
+  const allTexts = ops.filter((op) => op.kind === 'fillText');
+  return {
+    texts: allTexts.filter((op) => op.text !== HEADER_TEXT),
+    headers: allTexts.filter((op) => op.text === HEADER_TEXT),
+    hit: state.hit,
+    ops,
+  };
 }
 
-test('Values is off by default: no row labels and no totals line', () => {
+test('Values is off by default: no row labels', () => {
   expect(readFixedRangeProfileSettings(undefined).appearance.valuesVisible).toBe(false);
   expect(readFixedRangeProfileSettings(undefined).appearance.valuesColor).toBe(palette.text);
   const { texts, hit } = paintValues({});
   expect(texts).toHaveLength(0);
   expect(hit.valueLabels).toBe(0);
-  expect(hit.summaryY).toBeUndefined();
 });
 
-test('with tall rows Values paints one label per row and the totals line, in the values colour', () => {
-  const { texts, hit } = paintValues({ ...VALUES_ON, 'values.color': '#112233' });
+test('with tall rows Up/Down paints one label per row, bid first', () => {
+  const { texts, headers, hit } = paintValues({ ...VALUES_ON, 'values.color': '#112233' });
   expect(hit.valueLabels).toBe(3);
   // Bins are listed bottom first; rows are 40 px tall, so each label sits at its row's vertical middle.
-  expect(texts.map((text) => text.text)).toEqual(['40×6', '12×30', '50×3', '102×39']);
-  // The totals line (last) uses the same 11 px as the rows.
-  expect(texts.every((text) => text.style === '#112233' && text.font === '400 11px system-ui, sans-serif')).toBe(true);
+  // Bid (down) first, then ask (up).
+  expect(texts.map((text) => text.text)).toEqual(['6×40', '30×12', '3×50']);
+  expect([...texts, ...headers].every((text) => text.style === '#112233' && text.font === ROW_FONT)).toBe(true);
   expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
-  expect(texts.every((text) => text.x === START_X + 4)).toBe(true);
-  expect(hit.summaryY).toBe(viewport.priceToY(140) + 4);
-  expect(texts[3].y).toBe(hit.summaryY);
+  // The column centre: 73 + 4 + 49 / 2 = 101.5; every text, the 28 and 35 px rows too, is centred on it.
+  expect([...texts, ...headers].every((text) => text.x === START_X + RIGHT_COLUMN_OFFSET)).toBe(true);
 });
 
-test('placement right puts the labels 4 px inside the range end', () => {
-  const { texts } = paintValues({ ...VALUES_ON, placement: 'Right' });
-  expect(texts.every((text) => text.x === END_X - 4)).toBe(true);
-});
-
-test('Values Position defaults to On Profile and reads Opposite Side as the opposite edge', () => {
-  expect(readFixedRangeProfileSettings(undefined).appearance.valuesSide).toBe('profile');
-  expect(readFixedRangeProfileSettings({ valuesPosition: 'Opposite Side' }).appearance.valuesSide).toBe('opposite');
-});
-
-test('Opposite Side puts the labels and the totals line at the other edge of the range box', () => {
-  const cases = [
-    { placement: 'Left', x: END_X - 4, align: 'right' },
-    { placement: 'Right', x: START_X + 4, align: 'left' },
-  ];
-  for (const { placement, x, align } of cases) {
-    const { texts, hit } = paintValues({ ...VALUES_ON, placement, valuesPosition: 'Opposite Side' });
-    expect(texts.every((text) => text.x === x)).toBe(true);
-    expect(hit.valueLabelX).toBe(x);
-    expect(hit.valueLabelAlign).toBe(align);
-    expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
-    expect(texts.at(-1)?.y).toBe(hit.summaryY);
+test('Total and Delta paint one label per row and nothing under the lowest row', () => {
+  for (const volume of ['Total', 'Delta']) {
+    const { texts, hit } = paintValues({ ...VALUES_ON, volume });
+    expect(texts, volume).toHaveLength(3);
+    expect(
+      texts.every((text) => text.font === ROW_FONT),
+      volume,
+    ).toBe(true);
+    expect(hit.valuesColumnBottom, volume).toBe(viewport.priceToY(140));
   }
 });
 
-test('On Profile anchors the labels at the edge the bars hang from', () => {
-  expect(paintValues(VALUES_ON).hit).toMatchObject({ valueLabelX: START_X + 4, valueLabelAlign: 'left' });
+test('placement right starts the label column 4 px right of the range end', () => {
+  const { texts } = paintValues({ ...VALUES_ON, placement: 'Right' });
+  expect(texts.every((text) => text.x === END_X + RIGHT_COLUMN_OFFSET)).toBe(true);
+});
+
+test('Values Position defaults to Center and reads Left and Right; the old stored options read as the default', () => {
+  expect(readFixedRangeProfileSettings(undefined).appearance.valuesSide).toBe('center');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'Left' }).appearance.valuesSide).toBe('left');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'Right' }).appearance.valuesSide).toBe('right');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'Opposite Side' }).appearance.valuesSide).toBe('center');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'On Profile' }).appearance.valuesSide).toBe('center');
+});
+
+test('Values Position Right keeps the labels right of the anchor line in every volume mode', () => {
+  // Column centre = anchor + 4 + widest / 2, the widest text being its characters * 7 (the recording ctx).
+  const widestCharacters = { 'Up/Down': 7, Total: 2, Delta: 3 };
+  for (const [volume, characters] of Object.entries(widestCharacters)) {
+    const { texts, headers, hit } = paintValues({ 'values.visible': true, valuesPosition: 'Right', volume });
+    const centerX = START_X + LABEL_GAP + (characters * 7) / 2;
+    expect(
+      [...texts, ...headers].every((text) => text.x === centerX),
+      volume,
+    ).toBe(true);
+    expect(hit.valueLabelX, volume).toBe(centerX);
+  }
+});
+
+test('with Values on and no Values Position stored, the labels and headers centre on the anchor line', () => {
+  const { texts, headers, hit } = paintValues({ 'values.visible': true });
+  expect([...texts, ...headers].every((text) => text.x === START_X)).toBe(true);
+  expect(hit).toMatchObject({ valueLabelX: START_X, valueLabelAlign: 'center' });
+});
+
+test('Left ends the label column 4 px left of the anchor line, texts centred in it', () => {
+  // The column centre: anchor - 4 - 49 / 2 = anchor - 28.5.
+  const cases = [
+    { placement: 'Left', x: START_X - RIGHT_COLUMN_OFFSET },
+    { placement: 'Right', x: END_X - RIGHT_COLUMN_OFFSET },
+  ];
+  for (const { placement, x } of cases) {
+    const { texts, hit } = paintValues({ ...VALUES_ON, placement, valuesPosition: 'Left' });
+    expect(texts.every((text) => text.x === x)).toBe(true);
+    expect(hit.valueLabelX).toBe(x);
+    expect(hit.valueLabelAlign).toBe('center');
+    expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
+  }
+});
+
+test('Right starts the label column 4 px right of the anchor line, texts centred in it', () => {
+  expect(paintValues(VALUES_ON).hit).toMatchObject({
+    valueLabelX: START_X + RIGHT_COLUMN_OFFSET,
+    valueLabelAlign: 'center',
+  });
   expect(paintValues({ ...VALUES_ON, placement: 'Right' }).hit).toMatchObject({
-    valueLabelX: END_X - 4,
-    valueLabelAlign: 'right',
+    valueLabelX: END_X + RIGHT_COLUMN_OFFSET,
+    valueLabelAlign: 'center',
   });
 });
 
+test('the column is as wide as the widest text of the mode: Total centres on 73 + 4 + 14 / 2', () => {
+  const { texts, hit } = paintValues({ ...VALUES_ON, volume: 'Total' });
+  const centerX = START_X + LABEL_GAP + WIDEST_TOTAL_TEXT / 2;
+  expect(centerX).toBe(84);
+  expect(texts.every((text) => text.x === centerX)).toBe(true);
+  expect(hit.valueLabelX).toBe(centerX);
+});
+
+test('Center puts the labels and the headers on the anchor line, centre-aligned', () => {
+  const { texts, headers, hit } = paintValues({ ...VALUES_ON, valuesPosition: 'Center' });
+  expect([...texts, ...headers].every((text) => text.x === START_X)).toBe(true);
+  expect(hit).toMatchObject({ valueLabelX: START_X, valueLabelAlign: 'center' });
+});
+
+test('in Up/Down two Bid×Ask headers frame the labels: one above the highest row, one under the lowest row', () => {
+  const { headers, hit } = paintValues(VALUES_ON);
+  const highestRowTop = viewport.priceToY(170);
+  const lowestRowBottom = viewport.priceToY(140);
+  expect(headers.map((header) => header.y)).toEqual([highestRowTop - HEADER_GAP, lowestRowBottom + HEADER_GAP]);
+  expect(headers.map((header) => header.font)).toEqual([ROW_FONT, ROW_FONT]);
+  expect(hit.headerTopY).toBe(highestRowTop - HEADER_GAP);
+  expect(hit.headerBottomY).toBe(lowestRowBottom + HEADER_GAP);
+});
+
+test('Total and Delta paint no headers', () => {
+  for (const volume of ['Total', 'Delta']) {
+    const { headers, hit } = paintValues({ ...VALUES_ON, volume });
+    expect(headers).toHaveLength(0);
+    expect([hit.headerTopY, hit.headerBottomY]).toEqual([undefined, undefined]);
+  }
+});
+
+const BACKGROUND_COLOR = '#112233ff';
+const WITH_BACKGROUND = { ...VALUES_ON, 'valuesBackground.color': BACKGROUND_COLOR };
+
+/** The one rect painted in the values background colour, and the hit fields that report it. */
+function valuesBox(stored: ToolInputValues) {
+  const { ops, hit } = paintValues(stored);
+  const boxes = ops.filter((op) => op.kind === 'fillRect' && op.style === BACKGROUND_COLOR);
+  return { ops, hit, boxes };
+}
+
+const WIDEST_TOTAL_TEXT = 2 * 7;
+
+test('Values Background is transparent by default and paints no extra rect', () => {
+  const { appearance } = readFixedRangeProfileSettings(undefined);
+  expect(parseHexColor(appearance.valuesBackgroundColor)?.alpha).toBe(0);
+  const withoutColor = paintValues(VALUES_ON);
+  const withDefault = paint({ ...VALUES_ON, 'valuesBackground.color': appearance.valuesBackgroundColor });
+  expect(withoutColor.ops.filter((op) => op.kind === 'fillRect')).toHaveLength(6);
+  expect(withDefault.rows).toHaveLength(6);
+  expect(withoutColor.hit.valuesBoxLeft).toBeUndefined();
+});
+
+test('Values Background on the right paints one box from the anchor line past the widest text, before the texts', () => {
+  const { ops, hit, boxes } = valuesBox(WITH_BACKGROUND);
+  expect(boxes).toHaveLength(1);
+  // Right of the anchor: x from 73 to textX 77 + widest (the 49 px header) 49 + gap 4 = 130.
+  // Vertically from the top of the top header (highest row top - 4 - 11) to the bottom of the bottom
+  // header (lowest row bottom + 4 + 11): the headers count in the box, in height and in width.
+  const top = viewport.priceToY(170) - HEADER_GAP - HEADER_FONT_PX;
+  const bottom = viewport.priceToY(140) + HEADER_GAP + HEADER_FONT_PX;
+  expect([boxes[0].minX, boxes[0].maxX]).toEqual([START_X, START_X + LABEL_GAP + WIDEST_TEXT + LABEL_GAP]);
+  expect([boxes[0].minY, boxes[0].maxY]).toEqual([top, bottom]);
+  expect(hit).toMatchObject({
+    valuesBoxLeft: START_X,
+    valuesBoxRight: 130,
+    valuesBoxTop: top,
+    valuesBoxBottom: bottom,
+  });
+  const boxIndex = ops.findIndex((op) => op === boxes[0]);
+  const barIndexes = ops.flatMap((op, index) => (op.kind === 'fillRect' && op !== boxes[0] ? [index] : []));
+  expect(boxIndex).toBeGreaterThan(Math.max(...barIndexes));
+  expect(boxIndex).toBeLessThan(ops.findIndex((op) => op.kind === 'fillText'));
+});
+
+test('Values Background on the left ends at the anchor line and starts past the widest text', () => {
+  const { hit, boxes } = valuesBox({ ...WITH_BACKGROUND, valuesPosition: 'Left' });
+  expect(boxes).toHaveLength(1);
+  // Left of the anchor: textX 73 - 4 = 69, minus widest 49 and gap 4 = 16, up to the anchor 73.
+  expect([boxes[0].minX, boxes[0].maxX]).toEqual([START_X - LABEL_GAP - WIDEST_TEXT - LABEL_GAP, START_X]);
+  expect([hit.valuesBoxLeft, hit.valuesBoxRight]).toEqual([16, START_X]);
+});
+
+test('Values Background centred spans the anchor line by half the widest text plus the gap on each side', () => {
+  const { hit, boxes } = valuesBox({ ...WITH_BACKGROUND, valuesPosition: 'Center' });
+  expect(boxes).toHaveLength(1);
+  // Widest 49 / 2 = 24.5, plus gap 4 = 28.5 each side of the anchor 73: from 44.5 to 101.5.
+  expect([boxes[0].minX, boxes[0].maxX]).toEqual([44.5, 101.5]);
+  expect([hit.valuesBoxLeft, hit.valuesBoxRight]).toEqual([44.5, 101.5]);
+});
+
+test('the values column is reported with a transparent background too, and equals the box when one paints', () => {
+  const transparent = paintValues(VALUES_ON).hit;
+  expect(transparent.valuesBoxLeft).toBeUndefined();
+  // The column of the Values Background tests above: 73 to 130 horizontally, headers included vertically.
+  const column = {
+    valuesColumnLeft: START_X,
+    valuesColumnRight: 130,
+    valuesColumnTop: viewport.priceToY(170) - HEADER_GAP - HEADER_FONT_PX,
+    valuesColumnBottom: viewport.priceToY(140) + HEADER_GAP + HEADER_FONT_PX,
+  };
+  expect(transparent).toMatchObject(column);
+  expect(valuesBox(WITH_BACKGROUND).hit).toMatchObject({
+    ...column,
+    valuesBoxLeft: column.valuesColumnLeft,
+    valuesBoxRight: column.valuesColumnRight,
+    valuesBoxTop: column.valuesColumnTop,
+    valuesBoxBottom: column.valuesColumnBottom,
+  });
+});
+
+test('hidden Values reports no values column', () => {
+  const { hit } = paintValues({});
+  expect([hit.valuesColumnLeft, hit.valuesColumnRight, hit.valuesColumnTop, hit.valuesColumnBottom]).toEqual([
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  ]);
+});
+
+test('the painted histogram extent is reported: the bars horizontally, the rows vertically', () => {
+  const { hit } = paint();
+  expect([hit.profileTop, hit.profileBottom]).toEqual([viewport.priceToY(170), viewport.priceToY(140)]);
+  expect(hit.profileLeft).toBeLessThan(START_X);
+  expect(hit.profileRight).toBeGreaterThan(START_X);
+});
+
+test('without headers the box covers the highest row down to the lowest row', () => {
+  const { hit, boxes } = valuesBox({ ...WITH_BACKGROUND, volume: 'Total' });
+  expect(boxes).toHaveLength(1);
+  // Widest is a row label such as `46`: 14 px; right of the anchor 73 -> 77 + 14 + 4 = 95.
+  expect([boxes[0].minX, boxes[0].maxX]).toEqual([START_X, START_X + LABEL_GAP + WIDEST_TOTAL_TEXT + LABEL_GAP]);
+  expect([hit.valuesBoxTop, hit.valuesBoxBottom]).toEqual([viewport.priceToY(170), viewport.priceToY(140)]);
+});
+
+test('without headers the Delta box also ends at the lowest row', () => {
+  const { hit } = valuesBox({ ...WITH_BACKGROUND, volume: 'Delta' });
+  expect([hit.valuesBoxTop, hit.valuesBoxBottom]).toEqual([viewport.priceToY(170), viewport.priceToY(140)]);
+});
+
+test('hidden Values paints no background even with a colour', () => {
+  const { boxes, hit } = valuesBox({ 'valuesBackground.color': BACKGROUND_COLOR });
+  expect(boxes).toHaveLength(0);
+  expect(hit.valuesBoxLeft).toBeUndefined();
+});
+
+test('an invalid Values Background colour reads as the transparent default', () => {
+  const { appearance } = readFixedRangeProfileSettings({ 'valuesBackground.color': 'not a colour' });
+  expect(appearance.valuesBackgroundColor).toBe(
+    readFixedRangeProfileSettings(undefined).appearance.valuesBackgroundColor,
+  );
+  expect(parseHexColor(appearance.valuesBackgroundColor)?.alpha).toBe(0);
+});
+
 test('the label text follows the volume mode, with a typographic minus for a negative delta', () => {
-  expect(paintValues({ ...VALUES_ON, volume: 'Total' }).texts.map((text) => text.text)).toEqual([
-    '46',
-    '42',
-    '53',
-    '141',
-  ]);
-  expect(paintValues({ ...VALUES_ON, volume: 'Delta' }).texts.map((text) => text.text)).toEqual([
-    '34',
-    '−18',
-    '47',
-    '63',
-  ]);
+  expect(paintValues({ ...VALUES_ON, volume: 'Total' }).texts.map((text) => text.text)).toEqual(['46', '42', '53']);
+  expect(paintValues({ ...VALUES_ON, volume: 'Delta' }).texts.map((text) => text.text)).toEqual(['34', '−18', '47']);
 });
 
 test('a row without volume gets no label, and fractional volumes are shortened', () => {
   const bins = [bin(140, 150, 0, 0), bin(150, 160, 1350.25, 0.126)];
   const { texts, hit } = paintValues(VALUES_ON, bins);
   expect(hit.valueLabels).toBe(1);
-  expect(texts.map((text) => text.text)).toEqual(['0.13×1.35K', '0.13×1.35K']);
+  expect(texts.map((text) => text.text)).toEqual(['1.35K×0.13']);
 });
 
-test('rows shorter than 11 px each get a label sized to the row height minus 1 px, and the totals use the same size', () => {
+test('rows shorter than 11 px each get a label sized to the row height minus 1 px, and the headers use the same size', () => {
   // 2 price units are 8 px.
   const bins = [bin(140, 142, 6, 40), bin(142, 144, 30, 12)];
-  const { texts, hit } = paintValues(VALUES_ON, bins);
+  const { texts, headers, hit } = paintValues(VALUES_ON, bins);
   expect(hit.valueLabels).toBe(2);
-  expect(texts.map((text) => text.text)).toEqual(['40×6', '12×30', '52×36']);
-  expect(texts.map((text) => text.font)).toEqual([
-    '400 7px system-ui, sans-serif',
-    '400 7px system-ui, sans-serif',
-    '400 7px system-ui, sans-serif',
-  ]);
+  expect(texts.map((text) => text.text)).toEqual(['6×40', '30×12']);
+  expect([...texts, ...headers].map((text) => text.font)).toEqual(Array(4).fill('400 7px system-ui, sans-serif'));
   expect(texts[0].y).toBe((viewport.priceToY(140) + viewport.priceToY(142)) / 2);
-  expect(hit.summaryY).toBe(viewport.priceToY(140) + 4);
+  expect(hit.headerBottomY).toBe(viewport.priceToY(140) + HEADER_GAP);
 });
 
 test('a row of 1 px or less still gets a 1 px label', () => {
@@ -405,7 +614,7 @@ test('a row of 1 px or less still gets a 1 px label', () => {
   expect(texts[0].font).toBe('400 1px system-ui, sans-serif');
 });
 
-test('the value labels are painted after the bars and before the level lines, inside the range box clip', () => {
+test('the value labels are painted after the bars and before the level lines, under the pane clip only', () => {
   const { ops } = paintValues(VALUES_ON);
   const indexesOf = (kind: PaintOp['kind']) => ops.flatMap((op, index) => (op.kind === kind ? [index] : []));
   const bars = indexesOf('fillRect');
@@ -413,7 +622,7 @@ test('the value labels are painted after the bars and before the level lines, in
   const lines = indexesOf('stroke');
   expect(bars.at(-1)).toBeLessThan(texts[0]);
   expect(texts.at(-1)).toBeLessThan(lines[0]);
-  expect(ops.filter((op) => op.kind === 'clip')).toHaveLength(2);
+  expect(ops.filter((op) => op.kind === 'clip')).toHaveLength(1);
 });
 
 test('the paint stays clipped to the pane under every setting', () => {

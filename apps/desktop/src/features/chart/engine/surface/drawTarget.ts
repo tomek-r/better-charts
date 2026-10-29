@@ -1,5 +1,6 @@
 import type { IPrimitivePaneRenderer } from 'lightweight-charts';
-import type { ChartDrawLayer, ChartDrawingPaintTarget, ChartDrawTarget, RenderViewport } from '../tools/toolContract';
+import type { ChartDrawLayer, ChartDrawingPaintTarget, ChartDrawTarget } from '../tools/toolContract';
+import type { RenderViewport } from './overlayRenderer';
 
 /** The canvas target a primitive renderer draws on (fancy-canvas' `CanvasRenderingTarget2D`). */
 export type RenderTarget = Parameters<IPrimitivePaneRenderer['draw']>[0];

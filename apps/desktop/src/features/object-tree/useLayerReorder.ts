@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type RefObject } from 'react';
+import { arrowStep, type ArrowSteps } from '../../shared/ui/keyboard/arrowStep';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 import { dropEdgeAt, dropTargetIndex, type DropEdge, type LayerDropIndicator } from './layerDropTarget';
 import { focusLayerNameAt, walkRowFocus } from './objectTreeRowFocus';
@@ -32,7 +33,7 @@ export interface LayerReorder {
 }
 
 /** Alt+Arrow moves the row one place: up the tree is toward the top of the list. */
-const MOVE_STEPS: Readonly<Partial<Record<string, number>>> = { ArrowUp: -1, ArrowDown: 1 };
+const MOVE_STEPS: ArrowSteps = { ArrowUp: -1, ArrowDown: 1 };
 
 /**
  * Reordering of the topmost-first layer list: a row drags with HTML5 drag and drop, or moves with
@@ -108,7 +109,7 @@ export function useLayerReorder(layerCount: number): LayerReorder {
       onDragEnd: endDrag,
     },
     onNameKeyDown: (event) => {
-      const step = MOVE_STEPS[event.key];
+      const step = arrowStep(event.key, MOVE_STEPS);
       if (event.altKey && step !== undefined) {
         event.preventDefault();
         moveRowByKey(layerIndex, step);

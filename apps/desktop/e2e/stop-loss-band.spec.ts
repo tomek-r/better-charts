@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { deriveStopLossBand, type StopLossBandInput } from '../src/features/order-ticket/domain/stopLossBand';
-import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
+import { deriveStopLossBand, type StopLossBandInput } from '../src/features/order-ticket/stagedOrder/stopLossBand';
+import { deriveOrderRiskBasis } from '../src/features/order-ticket/sizing/riskBasis';
 import { accountMoneyBasis, estimateLevelMoney } from '../src/shared/money';
 import { brokerSymbolFixture } from './helpers/tauriStub';
 

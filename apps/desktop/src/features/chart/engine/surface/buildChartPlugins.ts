@@ -1,7 +1,8 @@
 import type { TradingLabelLayoutState } from '../trading/labels/tradingLabelTypes';
 import { createTradingLabelsOverlay } from '../trading/labels/tradingLabelsOverlay';
-import type { OverlayRenderer } from './overlayTypes';
-import { createPositionOverlay, type PositionOverlayState } from '../trading/positionOverlay';
+import type { OverlayRenderer } from './overlayRenderer';
+import { createPositionOverlay } from '../trading/positionOverlay';
+import type { PositionOverlayState } from '../trading/positionOverlayTypes';
 import { createStagedOrderOverlay, type StagedOrderState } from '../trading/stagedOrderOverlay';
 import { createPriceLinesOverlay, type PriceLinesState } from '../quotes/priceLinesOverlay';
 

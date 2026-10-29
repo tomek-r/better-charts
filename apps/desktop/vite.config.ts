@@ -39,6 +39,16 @@ export default defineConfig({
   clearScreen: false,
   server: { port: 1420, strictPort: true },
   envPrefix: ['VITE_', 'TAURI_'],
+  // Emitted file names carry only a content hash, never a component or module name.
+  build: {
+    rolldownOptions: {
+      output: {
+        entryFileNames: 'assets/[hash].js',
+        chunkFileNames: 'assets/[hash].js',
+        assetFileNames: 'assets/[hash][extname]',
+      },
+    },
+  },
   // Single source of truth for the version shown in the UI (owner: 'nie
   // hardkoduj' — it is read from package.json at build time).
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },

@@ -6,12 +6,15 @@ import {
   DEFAULT_TIMEFRAME_VISIBILITY,
   type DrawingTimeframeVisibility,
 } from '../../chart/engine/drawings/timeframeVisibility';
-import { areToolSettingValuesValid } from '../../chart/engine/drawings/toolSettings';
-import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../../shared/ui/ModalDialog';
+import {
+  areToolSettingValuesValid,
+  withStoredValuesForInvalidInactiveInputs,
+} from '../../chart/engine/drawings/toolSettings';
+import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../../shared/ui/dialog/ModalDialog';
 import { SettingsTabs } from './SettingsTabs';
 import { buildSettingsTabs, COORDINATES_TAB_ID, type DrawingSettingsSchema } from './settingsTabModel';
-import { useCoordinateDraft } from './useCoordinateDraft';
-import { useTimeframeVisibilityDraft } from './useTimeframeVisibilityDraft';
+import { useCoordinateDraft } from './coordinates/useCoordinateDraft';
+import { useTimeframeVisibilityDraft } from './visibility/useTimeframeVisibilityDraft';
 
 /** The no-anchor default, one list so a form without anchors keeps a stable prop. */
 const NO_POINTS: readonly ChartDrawingPoint[] = [];
@@ -62,7 +65,8 @@ export function DrawingSettingsForm({
   const valid = areToolSettingValuesValid(settings, values) && coordinates.valid;
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
-    if (valid && !onSave(values, coordinates.changedPoints(), timeframeVisibility.changedValue())) {
+    const savedValues = withStoredValuesForInvalidInactiveInputs(settings, values, initialValues);
+    if (valid && !onSave(savedValues, coordinates.changedPoints(), timeframeVisibility.changedValue())) {
       coordinates.reject();
       setSelectedTabId(COORDINATES_TAB_ID);
     }
@@ -74,6 +78,7 @@ export function DrawingSettingsForm({
       ) : (
         <SettingsTabs
           tabs={tabs}
+          settings={settings}
           selectedId={selectedTabId}
           onSelect={setSelectedTabId}
           values={values}

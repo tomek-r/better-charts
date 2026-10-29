@@ -50,6 +50,8 @@ export interface TauriStubOptions {
   responses?: Record<string, unknown>;
   /** Command → message; `invoke(cmd)` rejects with `new Error(message)`. */
   failures?: Record<string, string>;
+  /** Command → message; `invoke(cmd)` rejects with the bare string, as a Tauri command returning `Err(String)` does. */
+  stringRejections?: Record<string, string>;
   /** Event names whose registration fails, after other listeners may succeed. */
   listenerFailures?: string[];
   /** Delay automatic market-snapshot replies to exercise overlapping selection requests. */
@@ -100,6 +102,8 @@ export interface TauriStubOptions {
   recordedHistory?: RecordedHistory[];
   /** Advertise the negotiated `partialClose` capability in the default bridge status. */
   partialClose?: boolean;
+  /** Operating system reported in the default app settings (default `linux`). */
+  platform?: 'windows' | 'macos' | 'linux';
   /** Bars of the primary recording seeding `get_market_snapshot` (the configured history depth). */
   recordedSnapshotBars?: number;
   /** Holds `save_app_settings` open this long, to observe a dialog while it saves. */
@@ -371,7 +375,6 @@ export async function installTauriStub(
         },
         configured: true,
         firstLaunch: false,
-        restartRequired: false,
         platform: 'linux',
         overriddenKeys: [],
         detectedFields: [],
@@ -469,7 +472,12 @@ export async function installTauriStub(
         message: null,
       },
       get_execution_recovery_snapshot: { safety, entries: [] },
-      get_mt5_backend_status: { running: true, configured: true, autoStartEnabled: false },
+      get_mt5_backend_status: {
+        running: true,
+        terminalProcess: 'running',
+        configured: true,
+        autoStartEnabled: false,
+      },
       get_execution_queue_status: { pending: 0, inFlight: null, dispatchEnabled: true },
       search_symbols: opts.brokerSymbols ? 'reactive' : null,
       request_tick_profile: null,
@@ -538,7 +546,11 @@ export async function installTauriStub(
     if (opts.partialClose !== undefined) {
       responses.get_bridge_status = { ...(responses.get_bridge_status as object), partialClose: opts.partialClose };
     }
+    if (opts.platform !== undefined) {
+      responses.get_app_settings = { ...(responses.get_app_settings as object), platform: opts.platform };
+    }
     const failures: Record<string, string> = { ...opts.failures };
+    const stringRejections: Record<string, string> = { ...opts.stringRejections };
     /** Commands a test holds open, to observe the UI they block. */
     const delays: Record<string, number | undefined> = {
       save_app_settings: opts.saveDelayMs,
@@ -866,6 +878,10 @@ export async function installTauriStub(
       if (Object.prototype.hasOwnProperty.call(failures, cmd)) {
         throw new Error(failures[cmd]);
       }
+      if (Object.prototype.hasOwnProperty.call(stringRejections, cmd)) {
+        // Tauri rejects with the bare string, not an Error.
+        throw stringRejections[cmd];
+      }
       if (!Object.prototype.hasOwnProperty.call(responses, cmd)) {
         throw new Error(`E2E Tauri stub has no scripted response for command "${cmd}".`);
       }
@@ -880,7 +896,6 @@ export async function installTauriStub(
           mt5BridgeSettings: args.settings,
           configured: true,
           firstLaunch: false,
-          restartRequired: true,
           // A saved field is the user's own value, so the detection hint clears.
           detectedFields: [],
         };
@@ -920,6 +935,9 @@ export async function installTauriStub(
       invocations,
       deliveries,
       emit,
+      setResponse: (cmd: string, response: unknown) => {
+        responses[cmd] = response;
+      },
       listenerCount: (event: string) => (listeners.get(event) ?? []).filter((id) => callbacks.has(id)).length,
     };
   }, stubArgument);
@@ -1028,6 +1046,18 @@ export async function storedDrawingIds(page: Page, accountKey: string, symbol: s
 export async function chartDrawingSaveCount(page: Page): Promise<number> {
   const all = await stubInvocations(page);
   return all.filter((entry) => entry.cmd === 'save_chart_drawings').length;
+}
+
+/** Changes what the stub answers for `cmd` from now on, as a backend whose state moved on. */
+export async function setStubResponse(page: Page, cmd: string, response: unknown): Promise<void> {
+  await page.evaluate(
+    (change) => {
+      const stub = (window as unknown as { __E2E_TAURI_STUB__: { setResponse: (cmd: string, body: unknown) => void } })
+        .__E2E_TAURI_STUB__;
+      stub.setResponse(change.cmd, change.response);
+    },
+    { cmd, response },
+  );
 }
 
 /** Pushes a bridge event through the same registry `listen()` wrote into. */

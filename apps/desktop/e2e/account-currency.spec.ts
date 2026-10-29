@@ -3,8 +3,8 @@ import { levelMoneyText } from '../src/features/chart/engine/trading/moneyLabels
 import { toPositionLine, toOrderLine } from '../src/features/chart/engine/trading/overlayLines';
 import { formatSignedMoney } from '../src/shared/format';
 import { accountMoneyBasis } from '../src/shared/money';
-import { deriveStagedOrderDisplay } from '../src/features/order-ticket/domain/stagedOrderDisplay';
-import { deriveOrderRiskBasis } from '../src/features/order-ticket/domain/riskBasis';
+import { deriveStagedOrderDisplay } from '../src/features/order-ticket/stagedOrder/stagedOrderDisplay';
+import { deriveOrderRiskBasis } from '../src/features/order-ticket/sizing/riskBasis';
 import { gotoWithStub, stubInvocations } from './helpers/tauriStub';
 import { openTradePanel } from './helpers/panel';
 

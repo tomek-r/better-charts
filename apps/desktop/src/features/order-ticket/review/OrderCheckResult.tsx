@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
-import { ErrorNotification } from '../../../shared/ui/ErrorNotifications';
+import { ErrorNotification } from '../../../shared/ui/notification/ErrorNotifications';
 import type {
   AccountSnapshot,
   MarginRisk,
   OrderCheckResult as OrderCheckResultModel,
 } from '../../../shared/bridge/types';
-import { finiteNumber, formatAccountMoney, formatMarginThreshold } from '../../../shared/accountFormat';
-import { Separated } from '../../../shared/ui/SeparatorIcon';
-import { formatOrderMetric, formatQuoted } from '../domain/ticketFormatting';
+import { formatAccountMoney, formatMarginThreshold } from '../../../shared/accountFormat';
+import { parseToFiniteNumber } from '../../../shared/finiteNumber';
+import { Separated } from '../../../shared/ui/icons/SeparatorIcon';
+import { formatOrderMetric, formatQuoted } from './ticketFormatting';
 
 type ReviewAccount = Pick<
   AccountSnapshot,
@@ -50,7 +51,7 @@ export function OrderCheckResult({
   account: ReviewAccount | undefined;
 }) {
   const money = (value: string | null | undefined) => formatAccountMoney(value, account) ?? '—';
-  const levelAfterFill = finiteNumber(orderCheck?.marginLevelAfterFill);
+  const levelAfterFill = parseToFiniteNumber(orderCheck?.marginLevelAfterFill);
   const levelText = levelAfterFill === undefined ? '—' : `${levelAfterFill.toFixed(2)}%`;
   const threshold = (value: string | null | undefined) => formatMarginThreshold(value, account) ?? '—';
   const warning = MARGIN_WARNING[orderCheck?.marginRisk ?? 'unknown'];

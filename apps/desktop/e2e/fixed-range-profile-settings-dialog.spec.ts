@@ -5,7 +5,7 @@ import { chooseOption, mountSettingsForm, savedValues } from './helpers/drawingS
 import {
   FIXED_RANGE_PROFILE_INPUTS,
   FIXED_RANGE_PROFILE_STYLES,
-} from '../src/features/tools/fixedRangeProfile/settings';
+} from '../src/features/tools/fixedRangeProfile/settingsSchema';
 
 /** The fixed range volume profile's declarations as the settings dialog shows them, over the real form. */
 
@@ -29,7 +29,7 @@ test('the Inputs tab lists the rows, volume, value area and extend right setting
   for (const title of ['Rows Layout', 'Row Size', 'Ticks Per Row', 'Volume', 'Value Area Volume %', 'Extend Right']) {
     await expect(label(page, title)).toBeVisible();
   }
-  await expect(label(page, 'Rows Layout')).toHaveText('Number Of Rows');
+  await expect(label(page, 'Rows Layout')).toHaveText('Ticks Per Row');
   await expect(label(page, 'Row Size')).toHaveValue('128');
   await expect(label(page, 'Volume')).toHaveText('Up/Down');
   await expect(label(page, 'Value Area Volume %')).toHaveValue('70');
@@ -37,28 +37,57 @@ test('the Inputs tab lists the rows, volume, value area and extend right setting
 });
 
 test('only the row field of the chosen layout is editable, and the other keeps its value', async ({ page }) => {
-  await expect(label(page, 'Row Size')).toBeEnabled();
-  await expect(label(page, 'Ticks Per Row')).toBeDisabled();
-
-  await label(page, 'Row Size').fill('64');
-  await chooseOption(page, 'Rows Layout', 'Ticks Per Row');
   await expect(label(page, 'Row Size')).toBeDisabled();
-  await expect(label(page, 'Row Size')).toHaveValue('64');
   await expect(label(page, 'Ticks Per Row')).toBeEnabled();
+
+  await label(page, 'Ticks Per Row').fill('7');
+  await chooseOption(page, 'Rows Layout', 'Number Of Rows');
+  await expect(label(page, 'Ticks Per Row')).toBeDisabled();
+  await expect(label(page, 'Ticks Per Row')).toHaveValue('7');
+  await expect(label(page, 'Row Size')).toBeEnabled();
 });
 
 test('row size and ticks per row each keep their own bounds', async ({ page }) => {
   const ok = page.getByRole('button', { name: 'OK', exact: true });
+  await chooseOption(page, 'Rows Layout', 'Number Of Rows');
   await label(page, 'Row Size').fill('129');
   await expect(ok).toBeDisabled();
   await label(page, 'Row Size').fill('128');
   await expect(ok).toBeEnabled();
 
   await chooseOption(page, 'Rows Layout', 'Ticks Per Row');
-  await label(page, 'Ticks Per Row').fill('1000');
+  await label(page, 'Ticks Per Row').fill('100000');
   await expect(ok).toBeEnabled();
-  await label(page, 'Ticks Per Row').fill('1001');
+  await label(page, 'Ticks Per Row').fill('100001');
   await expect(ok).toBeDisabled();
+});
+
+/** Rows Layout by count, a Row Size above its maximum, then Rows Layout by ticks: Row Size is now inactive. */
+async function leaveInvalidRowSizeInactive(page: Page) {
+  await chooseOption(page, 'Rows Layout', 'Number Of Rows');
+  await label(page, 'Row Size').fill('512');
+  await expect(label(page, 'Row Size')).toHaveAttribute('aria-invalid', 'true');
+  await chooseOption(page, 'Rows Layout', 'Ticks Per Row');
+}
+
+test('an invalid draft in a field that went inactive neither shows invalid nor blocks OK', async ({ page }) => {
+  await leaveInvalidRowSizeInactive(page);
+  await expect(label(page, 'Row Size')).toBeDisabled();
+  await expect(label(page, 'Row Size')).toHaveAttribute('aria-invalid', 'false');
+  await expect(page.getByRole('button', { name: 'OK', exact: true })).toBeEnabled();
+});
+
+test('saving with an invalid inactive draft stores the value the drawing already held', async ({ page }) => {
+  await leaveInvalidRowSizeInactive(page);
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  expect((await savedValues(page))[0]).toMatchObject({ rowsLayout: 'Ticks Per Row', rowCount: 128 });
+});
+
+test('switching back to the layout that makes the invalid draft active blocks OK again', async ({ page }) => {
+  await leaveInvalidRowSizeInactive(page);
+  await chooseOption(page, 'Rows Layout', 'Number Of Rows');
+  await expect(label(page, 'Row Size')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByRole('button', { name: 'OK', exact: true })).toBeDisabled();
 });
 
 test('the Style tab lists the colours, the three level lines, the width and the placement', async ({ page }) => {
@@ -110,12 +139,12 @@ test('the Values row has a checkbox, unchecked by default, and a colour swatch',
   expect((await savedValues(page))[0]['values.visible']).toBe(true);
 });
 
-test('Values Position sits indented under Values, disabled while Values is off, defaulting to On Profile', async ({
+test('Values Position sits indented under Values, disabled while Values is off, defaulting to Center', async ({
   page,
 }) => {
   await page.getByRole('tab', { name: 'Style' }).click();
   const position = label(page, 'Values Position');
-  await expect(position).toHaveText('On Profile');
+  await expect(position).toHaveText('Center');
   await expect(position).toBeDisabled();
   const values = await page.getByRole('checkbox', { name: 'Values' }).boundingBox();
   const indented = await position.boundingBox();
@@ -124,9 +153,32 @@ test('Values Position sits indented under Values, disabled while Values is off, 
 
   await page.getByRole('checkbox', { name: 'Values' }).check();
   await expect(position).toBeEnabled();
-  await chooseOption(page, 'Values Position', 'Opposite Side');
+  await chooseOption(page, 'Values Position', 'Left');
   await page.getByRole('button', { name: 'OK', exact: true }).click();
-  expect((await savedValues(page))[0].valuesPosition).toBe('Opposite Side');
+  expect((await savedValues(page))[0].valuesPosition).toBe('Left');
+});
+
+test('Values Position offers Left, Center and Right, and saves Right', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Style' }).click();
+  await page.getByRole('checkbox', { name: 'Values' }).check();
+  await label(page, 'Values Position').click();
+  await expect(page.getByRole('option')).toHaveText([/^Left/, /^Center/, /^Right/]);
+  await page.getByRole('option', { name: 'Right', exact: true }).click();
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  expect((await savedValues(page))[0].valuesPosition).toBe('Right');
+});
+
+test('Values Background is an indented swatch with no checkbox, disabled while Values is off', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Style' }).click();
+  const background = label(page, 'Values Background');
+  await expect(page.getByRole('checkbox', { name: 'Values Background' })).toHaveCount(0);
+  await expect(background).toBeDisabled();
+  const position = await label(page, 'Values Position').boundingBox();
+  expect((await background.boundingBox())!.y).toBeGreaterThan(position!.y);
+  await expect(background.locator('xpath=ancestor::*[@data-child][1]')).toHaveAttribute('data-child', 'true');
+
+  await page.getByRole('checkbox', { name: 'Values' }).check();
+  await expect(background).toBeEnabled();
 });
 
 test('every input sits on its own row, its label on the left and its control on the right', async ({ page }) => {
@@ -158,7 +210,7 @@ test('saving without a change hands back the defaults that reproduce the current
   await page.getByRole('button', { name: 'OK', exact: true }).click();
   expect(await savedValues(page)).toEqual([
     {
-      rowsLayout: 'Number Of Rows',
+      rowsLayout: 'Ticks Per Row',
       rowCount: 128,
       ticksPerRow: 1,
       volume: 'Up/Down',
@@ -168,7 +220,8 @@ test('saving without a change hands back the defaults that reproduce the current
       'downVolume.color': palette.sell,
       'values.visible': false,
       'values.color': palette.text,
-      valuesPosition: 'On Profile',
+      valuesPosition: 'Center',
+      'valuesBackground.color': `${palette.raised}00`,
       'poc.visible': true,
       'poc.color': palette.profilePoc,
       'poc.width': 1,

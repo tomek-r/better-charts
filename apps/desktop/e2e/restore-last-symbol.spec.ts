@@ -12,7 +12,7 @@ import {
   restorableSelection,
   saveLastChartSelection,
   type LastChartSelection,
-} from '../src/features/bridge/lastChartSelection';
+} from '../src/features/bridge/lastChartSelection/lastChartSelection';
 
 // The account the stub's bridge status, account snapshot and portfolio all report.
 const ACCOUNT_KEY = '50123456@Broker-Demo';

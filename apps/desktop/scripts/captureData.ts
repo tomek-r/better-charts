@@ -1,7 +1,7 @@
 import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import timeframeConfig from '../../../config/timeframes.json' with { type: 'json' };
-import { HISTORY_BARS } from '../src/shared/bridge/limits';
+import { HISTORY_BARS } from '../src/shared/bridge/config';
 import type { BrokerSymbol, Candle } from '../src/shared/bridge/types';
 import { brokerSymbolFixture, type RecordedHistory } from '../e2e/helpers/tauriStub';
 

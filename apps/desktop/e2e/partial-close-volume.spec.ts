@@ -12,7 +12,7 @@ import {
   volumeSliderPosition,
   volumeSliderScale,
   type PartialCloseLimits,
-} from '../src/features/partial-close/partialCloseVolume';
+} from '../src/shared/trading/partialCloseVolume';
 
 // Pure-module coverage (no browser): the rules mirror the Rust domain module.
 const limits = (volume: string, min = '0.01', step = '0.01'): PartialCloseLimits => ({ volume, min, step });

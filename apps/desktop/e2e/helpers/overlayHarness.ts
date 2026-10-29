@@ -1,4 +1,4 @@
-import type { OverlayRenderer } from '../../src/features/chart/engine/surface/overlayTypes';
+import type { OverlayRenderer } from '../../src/features/chart/engine/surface/overlayRenderer';
 
 /**
  * Shared Node-side harness for overlay paint specs: a fixed linear viewport and

@@ -1,9 +1,10 @@
 import { formatVolume, normalizedPrice } from '../../../../shared/format';
 import type { AccountMoneyBasis } from '../../../../shared/money';
 import type { OpenPosition, PendingOrder, PortfolioSnapshot } from '../../../../shared/bridge/types';
-import { partialCloseLimits } from '../../../partial-close/partialCloseVolume';
+import { partialCloseLimits } from '../../../../shared/trading/partialCloseVolume';
 import { levelMoneyText, pnlMoneyText } from './moneyLabels';
-import type { OrderLine, PositionLine, PositionOverlayState } from './positionOverlay';
+import { orderOverlayId } from './overlayIds';
+import type { OrderLine, PositionLine, PositionOverlayState } from './positionOverlayTypes';
 
 /** `buy_limit`, `sell_stop_limit`, … — compiled once, not per order line. */
 const ORDER_TYPE = /^(buy|sell)_(limit|stop|stop_limit)$/;
@@ -154,7 +155,7 @@ export function syncPositionOverlay(
       level = orders.find((item) => item.id === drag.id)?.price;
     } else {
       const position = positions.find((item) => item.id === drag.id);
-      const order = orders.find((item) => `order:${item.id}` === drag.id);
+      const order = orders.find((item) => orderOverlayId(item.id) === drag.id);
       level =
         drag.kind === 'sl' ? (position?.stopLoss ?? order?.stopLoss) : (position?.takeProfit ?? order?.takeProfit);
     }

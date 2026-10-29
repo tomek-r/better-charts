@@ -176,7 +176,7 @@
   margin: 8px 0 0;
 }
 
-/* UX clarity pass: portfolio close/cancel row actions (their status line reuses .command-status) */
+/* UX clarity pass: portfolio close/cancel row actions */
 .portfolio-actions {
   position: relative;
   z-index: 1;

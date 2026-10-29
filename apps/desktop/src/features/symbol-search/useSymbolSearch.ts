@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { BrokerSymbol } from '../../shared/bridge/types';
-import { favoritesKey, recentKey, loadSymbols } from './symbolStorage';
+import { favoritesKey, recentKey, loadSymbols, MAX_SAVED_SYMBOLS } from './symbolStorage';
 
 export function useSymbolSearch() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -15,7 +15,7 @@ export function useSymbolSearch() {
     setFavorites((previous) =>
       previous.some((entry) => entry.symbol === item.symbol)
         ? previous.filter((entry) => entry.symbol !== item.symbol)
-        : [item, ...previous.filter((entry) => entry.symbol !== item.symbol)].slice(0, 10),
+        : [item, ...previous.filter((entry) => entry.symbol !== item.symbol)].slice(0, MAX_SAVED_SYMBOLS),
     );
   }, []);
 

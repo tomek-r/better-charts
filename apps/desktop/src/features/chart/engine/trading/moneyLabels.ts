@@ -2,8 +2,6 @@ import { formatSignedMoney } from '../../../../shared/format';
 import { estimateLevelMoney, type AccountMoneyBasis } from '../../../../shared/money';
 import type { RiskSide } from '../../../../shared/bridge/types';
 
-/** Account-currency money text for chart labels: a level's estimated result and a position's P&L. */
-
 /** Account-currency display estimates shared by live and staged labels. */
 export function levelMoneyText(
   entry: number,

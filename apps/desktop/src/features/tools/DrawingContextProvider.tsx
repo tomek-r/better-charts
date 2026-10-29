@@ -1,5 +1,5 @@
 import { createContext, useMemo, type ReactNode } from 'react';
-import { useRequiredContext } from '../../shared/state/useRequiredContext';
+import { useRequiredContext } from '../../shared/context/useRequiredContext';
 import type { ChartToolId } from './registry';
 
 export interface DrawingState {

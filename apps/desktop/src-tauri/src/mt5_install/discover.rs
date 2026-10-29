@@ -346,10 +346,9 @@ pub fn discover_installations(
     discover_installations_with(env, host_os, &HostProbe)
 }
 
-/// Every usable installation on the machine this process runs on, read from the
-/// process environment. The one entry point for a fresh scan of this computer.
-pub fn discover_this_machine() -> Vec<Mt5Installation> {
-    let env: &dyn Fn(&str) -> Option<String> = &|name: &str| std::env::var(name).ok();
+/// Every usable installation on the machine this process runs on, with the variables
+/// read through `env`. The one entry point for a fresh scan of this computer.
+pub fn discover_this_machine(env: &dyn Fn(&str) -> Option<String>) -> Vec<Mt5Installation> {
     discover_installations(env, super::locate::current_host_os())
 }
 

@@ -1,8 +1,8 @@
 import { createContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { createDomainStore } from '../../shared/state/domainStore';
-import { useRequiredContext } from '../../shared/state/useRequiredContext';
+import { createFieldStore } from '../../shared/store/fieldStore';
+import { useRequiredContext } from '../../shared/context/useRequiredContext';
 import {
   useAppSettings,
   initialAppSettingsState,
@@ -11,10 +11,7 @@ import {
   type AppSettingsStore,
   type SetupGuideStep,
 } from './useAppSettings';
-import type { AppSettingsData } from './settingsTypes';
-
-/** The two ways into the setup surfaces, which the header and the notices call. */
-type AppSettingsActions = Pick<AppSettingsHandlers, 'openSettings' | 'openSetupGuide'>;
+import type { AppSettingsData } from './appSettingsData';
 
 export type AppSettingsViewState = AppSettingsHandlers & {
   settings: AppSettingsData | undefined;
@@ -29,7 +26,6 @@ export type AppSettingsViewState = AppSettingsHandlers & {
   setupCompleted: boolean;
   loadError: string | undefined;
   notificationRevision: number;
-  restartNoticeVisible: boolean;
   configurationNotice: string | null | undefined;
 };
 
@@ -50,12 +46,17 @@ function useSettingsStore(hookName: string): AppSettingsStore {
 }
 
 export function AppSettingsProvider({ children, tauriAvailable }: { children: ReactNode; tauriAvailable: boolean }) {
-  const [store] = useState(() => createDomainStore(initialAppSettingsState));
+  const [store] = useState(() => createFieldStore(initialAppSettingsState));
   const handlers = useAppSettings(store, tauriAvailable);
   const contextValue = useMemo(() => ({ store, actions: handlers }), [handlers, store]);
 
   return <AppSettingsContext value={contextValue}>{children}</AppSettingsContext>;
 }
+
+const selectConfigurationNotice = (state: AppSettingsState) =>
+  state.settings?.configurationError !== state.dismissedConfigurationError
+    ? state.settings?.configurationError
+    : undefined;
 
 export function useAppSettingsView(): AppSettingsViewState {
   const { store, actions } = useSettingsContext('useAppSettingsView');
@@ -74,11 +75,7 @@ export function useAppSettingsView(): AppSettingsViewState {
       setupCompleted: state.setupCompleted,
       loadError: state.loadError,
       notificationRevision: state.notificationRevision,
-      restartNoticeVisible: state.restartRequired && !state.restartNoticeDismissed,
-      configurationNotice:
-        state.settings?.configurationError !== state.dismissedConfigurationError
-          ? state.settings?.configurationError
-          : undefined,
+      configurationNotice: selectConfigurationNotice(state),
     })),
   );
 
@@ -86,7 +83,7 @@ export function useAppSettingsView(): AppSettingsViewState {
 }
 
 /** The handlers object is stable, so its identity never changes and no consumer re-renders through it. */
-export function useAppSettingsActions(): AppSettingsActions {
+export function useAppSettingsActions(): AppSettingsHandlers {
   return useSettingsContext('useAppSettingsActions').actions;
 }
 
@@ -97,6 +94,51 @@ export function useAppSettingsActions(): AppSettingsActions {
 function useSettingsSelector<T>(hookName: string, selector: (state: AppSettingsState) => T): T {
   const store = useSettingsStore(hookName);
   return useStore(store, selector);
+}
+
+/** The step of the setup guide on screen. */
+export function useSetupGuideStep(): SetupGuideStep {
+  return useSettingsSelector('useSetupGuideStep', (state) => state.setupGuideStep);
+}
+
+/** Whether the setup guide is open, over the settings dialog or over the window. */
+export function useSetupGuideOpen(): boolean {
+  return useSettingsSelector('useSetupGuideOpen', (state) => state.setupGuideOpen);
+}
+
+/** Whether the finished screen stands over the chart. */
+export function useSetupCompleteShown(): boolean {
+  return useSettingsSelector('useSetupCompleteShown', (state) => state.setupCompleteShown);
+}
+
+/** Whether the settings dialog is open. */
+export function useSettingsDialogOpen(): boolean {
+  return useSettingsSelector('useSettingsDialogOpen', (state) => state.isOpen);
+}
+
+/** Whether the finished screen replaces a blurred screen, so its backdrop stands at once. */
+export function useSetupCompleteOverSetupScreen(): boolean {
+  return useSettingsSelector('useSetupCompleteOverSetupScreen', (state) => state.setupCompleteOverSetupScreen);
+}
+
+/** The bridge token of the saved settings; `undefined` until the settings load. */
+export function useBridgeToken(): string | undefined {
+  return useSettingsSelector('useBridgeToken', (state) => state.settings?.mt5BridgeSettings.token);
+}
+
+/** The configuration error to show, `undefined` once dismissed. */
+export function useConfigurationNotice(): string | null | undefined {
+  return useSettingsSelector('useConfigurationNotice', selectConfigurationNotice);
+}
+
+/** Changes whenever settings are saved, so a notice that was dismissed shows again. */
+export function useNotificationRevision(): number {
+  return useSettingsSelector('useNotificationRevision', (state) => state.notificationRevision);
+}
+
+/** Operating system the app runs on; `undefined` until the settings load. */
+export function useAppPlatform(): AppSettingsData['platform'] | undefined {
+  return useSettingsSelector('useAppPlatform', (state) => state.settings?.platform);
 }
 
 /** Whether this device finished the setup, so the guide never opens on its own again. */

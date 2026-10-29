@@ -1,6 +1,6 @@
 import { useShallow } from 'zustand/react/shallow';
 import { deriveQuotePresentation } from '../../shared/format';
-import { useBridgeQuoteSelector } from './BridgeSessionProvider';
+import { useBridgeQuoteSelector } from './bridgeSelectors';
 
 export function useBridgeQuotePresentation(pointSize?: string) {
   const quote = useBridgeQuoteSelector(

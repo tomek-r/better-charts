@@ -538,6 +538,98 @@ fn session_close_strands_queued_commands_and_unknowns_the_in_flight_one() {
     );
 }
 
+/// An adapter with an open session, complete reconciliation and `queued` commands
+/// named `cmd-a`, `cmd-b`, ... already enqueued.
+fn ready_adapter_with_queue(temp: &Temp, queued: &[&str]) -> ExecutionAdapterState {
+    let adapter = ExecutionAdapterState::new_with_gate(ExecutionSafetyState::open(&temp.0), true);
+    adapter.session_started_for_session("session-1", true, "001234", "Broker-Demo");
+    adapter.set_reconciliation_complete(true);
+    for id in queued {
+        enqueue(&adapter, id).unwrap();
+    }
+    adapter
+}
+
+#[test]
+fn disabling_trading_drops_queued_commands_and_lets_the_in_flight_one_finish() {
+    let temp = Temp::new();
+    let adapter = ready_adapter_with_queue(&temp, &["cmd-a", "cmd-b", "cmd-c"]);
+    let claimed = adapter.next_wire_message_for_session("session-1").unwrap();
+    assert_eq!(claimed.command_id, "cmd-a");
+
+    adapter.set_local_trading_enabled(false);
+
+    let view = adapter.queue_status();
+    assert_eq!(view.in_flight.as_deref(), Some("cmd-a"));
+    assert_eq!(view.pending, 0);
+    assert_eq!(view.stranded, 2);
+    assert!(!view.dispatch_enabled);
+    assert!(adapter.submission_gate().is_err());
+    assert!(matches!(
+        enqueue(&adapter, "cmd-late"),
+        Err(ExecutionAdapterError::TradingDisabled)
+    ));
+    assert!(adapter.next_wire_message_for_session("session-1").is_none());
+    // The in-flight command settles through the normal journaled path.
+    for (at_update, updated_at_ms, status) in [
+        (1, 11, "accepted"),
+        (2, 12, "dispatching"),
+        (3, 13, "server_accepted"),
+    ] {
+        let applied = adapter
+            .apply_command_update_for_session(
+                "session-1",
+                update("cmd-a", at_update, updated_at_ms, status),
+            )
+            .unwrap();
+        assert!(applied.is_some());
+    }
+    assert_eq!(adapter.queue_status().in_flight, None);
+    drop(adapter);
+    assert_eq!(
+        queue_dropped_ids(&temp.0),
+        vec![vec!["cmd-b".to_owned(), "cmd-c".to_owned()]],
+        "QueueDropped names exactly the unsent commands"
+    );
+}
+
+#[test]
+fn disabling_trading_with_an_empty_queue_journals_nothing() {
+    let temp = Temp::new();
+    let adapter = ready_adapter_with_queue(&temp, &[]);
+
+    adapter.set_local_trading_enabled(false);
+
+    assert_eq!(adapter.queue_status().stranded, 0);
+    drop(adapter);
+    assert!(queue_dropped_ids(&temp.0).is_empty());
+}
+
+#[test]
+fn re_enabling_trading_accepts_submissions_again_and_never_restores_dropped_commands() {
+    let temp = Temp::new();
+    let adapter = ready_adapter_with_queue(&temp, &["cmd-a"]);
+    adapter.set_local_trading_enabled(false);
+    assert_eq!(adapter.queue_status().pending, 0);
+
+    adapter.set_local_trading_enabled(true);
+
+    assert!(adapter.submission_gate().is_ok());
+    assert!(adapter.queue_status().dispatch_enabled);
+    assert!(
+        adapter.next_wire_message_for_session("session-1").is_none(),
+        "the dropped command is never dispatched"
+    );
+    enqueue(&adapter, "cmd-b").unwrap();
+    assert_eq!(
+        adapter
+            .next_wire_message_for_session("session-1")
+            .unwrap()
+            .command_id,
+        "cmd-b"
+    );
+}
+
 #[test]
 fn claim_gate_requires_trading_enabled_and_complete_reconciliation() {
     let temp = Temp::new();

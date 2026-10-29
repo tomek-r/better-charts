@@ -1,6 +1,6 @@
 import { Profiler, useRef, type ProfilerOnRenderCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ErrorNotificationsProvider } from '../../src/shared/ui/ErrorNotifications';
+import { ErrorNotificationsProvider } from '../../src/shared/ui/notification/ErrorNotifications';
 import type { ReactNode } from 'react';
 import { AppHeaderView } from '../../src/features/app-header/AppHeaderView';
 import { AccountBadge } from '../../src/features/account-badge/AccountBadge';
@@ -10,36 +10,38 @@ import {
   useSideDrawerOpen,
 } from '../../src/features/side-drawers/SideDrawerProvider';
 import {
+  useBridgeSessionRuntime,
+  useBridgeSessionLifecycleRuntime,
+  BridgeSessionProvider,
+} from '../../src/features/bridge/BridgeSessionProvider';
+import {
   useBridgeAccount,
   useBridgeConnectionSelector,
   useBridgeMarket,
   useBridgeQuote,
   useBridgePortfolio,
-  useBridgeSessionRuntime,
-  useBridgeSessionLifecycleRuntime,
-  BridgeSessionProvider,
   useTauriAvailable,
-} from '../../src/features/bridge/BridgeSessionProvider';
-import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../../src/features/bridge/BridgeAwaitingScreen';
-import { BridgeScreen } from '../../src/features/settings/BridgeScreen';
+} from '../../src/features/bridge/bridgeSelectors';
+import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../../src/features/settings/setup/BridgeAwaitingScreen';
+import { BridgeScreen } from '../../src/features/settings/setup/BridgeScreen';
 import { ChartWorkspaceProvider, useChartResources } from '../../src/features/chart/ChartWorkspaceProvider';
-import { ChartTitle } from '../../src/features/chart/ChartTitle';
-import { ChartQuotes } from '../../src/features/chart/ChartQuotes';
+import { ChartTitle } from '../../src/features/chart/header/ChartTitle';
+import { ChartQuotes } from '../../src/features/chart/header/ChartQuotes';
 import { ChartCanvas } from '../../src/features/chart/ChartCanvas';
 import { ChartTimeframes } from '../../src/features/chart/timeframes/ChartTimeframes';
 import { ExecutionProvider } from '../../src/features/execution/ExecutionProvider';
 import type { AccountSnapshot, BrokerSymbol, QuoteSnapshot, RiskPreview } from '../../src/shared/bridge/types';
 import { OrderTicketProvider } from '../../src/features/order-ticket/OrderTicketProvider';
-import { useOrderTicketActions, useOrderTicketStores } from '../../src/features/order-ticket/state/orderTicketContext';
-import { useOrderTicketAction } from '../../src/features/order-ticket/editor/useOrderTicketAction';
-import { useOrderTicketHeader } from '../../src/features/order-ticket/editor/useOrderTicketHeader';
-import { useOrderTicketPricing } from '../../src/features/order-ticket/editor/useOrderTicketPricing';
-import { OrderTicketTickValue } from '../../src/features/order-ticket/editor/OrderTicketTickValue';
-import { OrderTicketSizing } from '../../src/features/order-ticket/editor/OrderTicketSizing';
-import { OrderTicketExits } from '../../src/features/order-ticket/editor/OrderTicketExits';
-import { OrderTicketReviewAction } from '../../src/features/order-ticket/editor/OrderTicketReviewAction';
-import { OrderTicketQuotes } from '../../src/features/order-ticket/editor/OrderTicketQuotes';
-import { OrderTicketExtraSettings } from '../../src/features/order-ticket/editor/OrderTicketExtraSettings';
+import { useOrderTicketActions, useOrderTicketStores } from '../../src/features/order-ticket/draft/orderTicketContext';
+import { useOrderTicketAction } from '../../src/features/order-ticket/submit/useOrderTicketAction';
+import { useOrderTicketHeader } from '../../src/features/order-ticket/useOrderTicketHeader';
+import { useOrderTicketPricingProps } from '../../src/features/order-ticket/pricing/useOrderTicketPricingProps';
+import { OrderTicketTickValue } from '../../src/features/order-ticket/sizing/OrderTicketTickValue';
+import { OrderTicketSizing } from '../../src/features/order-ticket/sizing/OrderTicketSizing';
+import { OrderTicketExits } from '../../src/features/order-ticket/exits/OrderTicketExits';
+import { OrderTicketReviewAction } from '../../src/features/order-ticket/review/OrderTicketReviewAction';
+import { OrderTicketQuotes } from '../../src/features/order-ticket/quotes/OrderTicketQuotes';
+import { OrderTicketExtraSettings } from '../../src/features/order-ticket/exits/OrderTicketExtraSettings';
 import { SymbolSearchView } from '../../src/features/symbol-search/SymbolSearchView';
 import { SymbolSearchProvider } from '../../src/features/symbol-search/SymbolSearchProvider';
 import { AppSettingsProvider, useAppSettingsView } from '../../src/features/settings/AppSettingsProvider';
@@ -100,6 +102,7 @@ function MarketProbe() {
 }
 
 function ChartHeaderProbes() {
+  const tauriAvailable = useTauriAvailable();
   return (
     <div data-testid="probe-chart-header">
       <Probe id="chart-title">
@@ -111,9 +114,12 @@ function ChartHeaderProbes() {
       <Probe id="chart-timeframes">
         <ChartTimeframes />
       </Probe>
-      <Probe id="chart-canvas">
-        <ChartCanvas />
-      </Probe>
+      {/* The canvas reads the setup flow to know whether a reconnect loader may show. */}
+      <AppSettingsProvider tauriAvailable={tauriAvailable}>
+        <Probe id="chart-canvas">
+          <ChartCanvas />
+        </Probe>
+      </AppSettingsProvider>
     </div>
   );
 }
@@ -178,11 +184,7 @@ function SecondaryBridgeProbes() {
 
 function SettingsProbe() {
   const settings = useAppSettingsView();
-  return (
-    <output data-testid="probe-settings">
-      {settings.settings?.mt5BridgeSettings.address ?? 'loading'}|restart:{String(settings.restartNoticeVisible)}
-    </output>
-  );
+  return <output data-testid="probe-settings">{settings.settings?.mt5BridgeSettings.address ?? 'loading'}</output>;
 }
 
 function ChartResourcesProbe() {
@@ -191,7 +193,7 @@ function ChartResourcesProbe() {
 }
 
 function TicketEditProbe() {
-  const pricing = useOrderTicketPricing();
+  const pricing = useOrderTicketPricingProps();
   return <output data-testid="probe-ticket-edit">{pricing.entry}</output>;
 }
 
@@ -464,7 +466,10 @@ function SettingsControls() {
   const settings = useAppSettingsView();
   const saveSettings = () => {
     if (settings.settings) {
-      settings.saved({ ...settings.settings, restartRequired: true });
+      settings.saved({
+        ...settings.settings,
+        mt5BridgeSettings: { ...settings.settings.mt5BridgeSettings, address: '127.0.0.1:9911' },
+      });
     }
   };
   return (

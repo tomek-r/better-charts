@@ -1,8 +1,6 @@
 import type { OrderCheckError, OrderCheckResult, RiskPreview, RiskPreviewError } from '../../shared/bridge/types';
-import type { OrderTicketCoordination, OrderTicketStores } from '../order-ticket/state/orderTicketStores';
-import type { BridgeSessionState } from './useBridgeSession';
-
-type PayloadEvent<T> = { payload: T };
+import type { OrderTicketCoordination, OrderTicketStores } from '../order-ticket/draft/orderTicketStores';
+import type { AccountRefs, PayloadEvent } from './bridgeEventTypes';
 
 export type BridgeTicketResponsePort = Pick<
   OrderTicketCoordination,
@@ -18,14 +16,11 @@ export type BridgeTicketResponsePort = Pick<
     | 'setOrderCheckError'
   >;
 
-type BridgeTicketSession = Pick<BridgeSessionState, 'currentSymbol'>;
-
 export function createBridgeTicketResponseHandlers(
   run: { disposed: boolean },
-  session: BridgeTicketSession,
+  currentSymbol: { current: string | undefined },
   ticket: BridgeTicketResponsePort,
-  accountLoginRef: { current: string | undefined },
-  brokerServerRef: { current: string | undefined },
+  { accountLoginRef, brokerServerRef }: AccountRefs,
 ) {
   const {
     riskVersion,
@@ -40,7 +35,27 @@ export function createBridgeTicketResponseHandlers(
     setOrderCheckLoading,
     setOrderCheckError,
   } = ticket;
-  const { currentSymbol } = session;
+
+  /** The check still awaiting an answer, when this answer belongs to its generation and draft. */
+  const pendingCheckFor = (draftVersion: number) => {
+    const pending = orderCheckPending.current;
+    if (
+      pending &&
+      pending.generation === orderCheckGeneration.current &&
+      pending.draftVersion === riskVersion.current &&
+      draftVersion === pending.draftVersion
+    ) {
+      return pending;
+    }
+    return undefined;
+  };
+
+  const settleOrderCheck = (outcome: { check: OrderCheckResult | undefined; error: string | undefined }) => {
+    setOrderCheck(outcome.check);
+    setOrderCheckLoading(false);
+    setOrderCheckError(outcome.error);
+    orderCheckPending.current = undefined;
+  };
 
   const onRiskPreview = (event: PayloadEvent<RiskPreview>) => {
     if (
@@ -64,14 +79,11 @@ export function createBridgeTicketResponseHandlers(
   };
 
   const onOrderCheckResult = (event: PayloadEvent<OrderCheckResult>) => {
-    const pending = orderCheckPending.current;
     const result = event.payload;
+    const pending = pendingCheckFor(result.draftVersion);
     if (
       !run.disposed &&
       pending &&
-      pending.generation === orderCheckGeneration.current &&
-      pending.draftVersion === riskVersion.current &&
-      result.draftVersion === pending.draftVersion &&
       result.symbol === pending.symbol &&
       result.accountLogin === pending.accountLogin &&
       result.brokerServer === pending.brokerServer &&
@@ -79,27 +91,14 @@ export function createBridgeTicketResponseHandlers(
       result.accountLogin === accountLoginRef.current &&
       result.brokerServer === brokerServerRef.current
     ) {
-      setOrderCheck(result);
-      setOrderCheckLoading(false);
-      setOrderCheckError(undefined);
-      orderCheckPending.current = undefined;
+      settleOrderCheck({ check: result, error: undefined });
     }
   };
 
   const onOrderCheckError = (event: PayloadEvent<OrderCheckError>) => {
-    const pending = orderCheckPending.current;
     const error = event.payload;
-    if (
-      !run.disposed &&
-      pending &&
-      pending.generation === orderCheckGeneration.current &&
-      pending.draftVersion === riskVersion.current &&
-      error.draftVersion === pending.draftVersion
-    ) {
-      setOrderCheck(undefined);
-      setOrderCheckLoading(false);
-      setOrderCheckError(error.message);
-      orderCheckPending.current = undefined;
+    if (!run.disposed && pendingCheckFor(error.draftVersion)) {
+      settleOrderCheck({ check: undefined, error: error.message });
     }
   };
 

@@ -34,9 +34,7 @@ function sourceHash(root) {
 
 function exportedHookFile(srcRoot, hook) {
   const roots = [
-    path.join(srcRoot, "features/order-ticket/editor"),
-    path.join(srcRoot, "features/order-ticket/state"),
-    path.join(srcRoot, "features/order-ticket/OrderTicketProvider.tsx"),
+    path.join(srcRoot, "features/order-ticket"),
   ];
   // Only context hooks with no parameters are safe to call without arguments.
   // The baseline also has parameterized `use*` helpers with these names (for

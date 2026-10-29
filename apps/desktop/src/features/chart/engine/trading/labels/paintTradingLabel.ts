@@ -1,4 +1,4 @@
-import type { RenderViewport } from '../../surface/overlayTypes';
+import type { RenderViewport } from '../../surface/overlayRenderer';
 import type { TradingLabelHit, TradingLabelLayoutState, TradingLabelTarget } from './tradingLabelTypes';
 
 /** Paints a trading label clipped to the pane and records its hit rectangle; with a layout queue

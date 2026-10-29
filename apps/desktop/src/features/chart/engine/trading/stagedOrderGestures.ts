@@ -1,49 +1,27 @@
 import type { TradingLabelTarget } from './labels/tradingLabelTypes';
-import { hitCircle, hitRect, STAGED_GRAB, type StagedOrderLevels, type StagedSlBand } from './stagedOrderOverlay';
-import type { RiskSide } from '../../../../shared/bridge/types';
+import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
+import { clampStopLoss, entryCarriedBand, type StagedSlBand } from './stopLossClamp';
+import { releaseCapture } from './pointerCapture';
 import { ticketPrice } from '../../../../shared/format';
-import type { OrderTicketStores } from '../../../order-ticket/state/orderTicketStores';
-import type { ChartWorkspaceState } from '../../state/useChartWorkspace';
+import type { StagedGestureWorkspace } from './gestureWorkspace';
 
-type StagedGestureWorkspace = Pick<ChartWorkspaceState, 'stagedOrderState'> &
-  Partial<Pick<ChartWorkspaceState, 'chart'>>;
+type StagedGrabTarget = 'entryCancel' | 'slCancel' | 'tpCancel' | 'entry' | 'sl' | 'tp';
+type StagedDragLevel = 'entry' | 'sl' | 'tp';
 
-/** Holds a dragged SL inside the allowed band; `edge` names the edge that caught it. */
-export function clampStopLoss(
-  price: number,
-  side: RiskSide,
-  band: StagedSlBand | undefined,
-): { price: number; edge: 'near' | 'far' | null } {
-  if (!band || band.empty) {
-    return { price, edge: null };
-  }
-  // BUY stops sit below the entry: far = lowest allowed, near = highest allowed.
-  const [lowest, highest] = side === 'buy' ? [band.farPrice, band.nearPrice] : [band.nearPrice, band.farPrice];
-  if (price < lowest) {
-    return { price: lowest, edge: side === 'buy' ? 'far' : 'near' };
-  }
-  if (price > highest) {
-    return { price: highest, edge: side === 'buy' ? 'near' : 'far' };
-  }
-  return { price, edge: null };
-}
-/**
- * The band edges' distances from the entry when the band is measured from the entry itself (Limit and Stop;
- * a Stop Limit measures from its fixed limit price, a Market order follows the quote). null = the band does
- * not move with an entry drag.
- */
-function entryCarriedBand(order: StagedOrderLevels): { near: number; far: number } | null {
-  const { slBand } = order;
-  if (!slBand || slBand.empty || (order.orderKindLabel !== 'Limit' && order.orderKindLabel !== 'Stop')) {
-    return null;
-  }
-  return { near: Math.abs(slBand.nearPrice - order.entry), far: Math.abs(slBand.farPrice - order.entry) };
+/** Cancel chips act on press; every other grab target starts a drag. */
+function isCancelTarget(target: StagedGrabTarget): target is 'entryCancel' | 'slCancel' | 'tpCancel' {
+  return target === 'entryCancel' || target === 'slCancel' || target === 'tpCancel';
 }
 
-export type StagedOrderGestureTicket = Pick<
-  OrderTicketStores['setters']['draft'],
-  'setEntry' | 'setSlOn' | 'setStopLoss' | 'setTpOn' | 'setTakeProfit' | 'setStagedDragging' | 'setDragSlMoney'
-> & {
+/** The ticket draft writes a staged-order drag performs; the order ticket supplies them. */
+export type StagedOrderGestureTicket = {
+  setEntry: (price: string) => void;
+  setSlOn: (on: boolean) => void;
+  setStopLoss: (price: string) => void;
+  setTpOn: (on: boolean) => void;
+  setTakeProfit: (price: string) => void;
+  setStagedDragging: (dragging: boolean) => void;
+  setDragSlMoney: (money: string | undefined) => void;
   unstageOrderDraft: () => void;
   toggleExit: (kind: 'sl' | 'tp', on: boolean) => void;
 };
@@ -66,7 +44,7 @@ export function createStagedOrderGestures(
     setStagedDragging,
     setDragSlMoney,
   } = ticket;
-  let drag: 'entry' | 'sl' | 'tp' | null = null;
+  let drag: StagedDragLevel | null = null;
   let stagedEntryDrag: {
     entry: number;
     stopLoss: number | null;
@@ -79,10 +57,7 @@ export function createStagedOrderGestures(
   // Shared grab resolver: cancel chips first (small targets), then handles,
   // then the entry line — never for market orders (the ticket price row is
   // disabled then and entry follows the quote, so the line must pan instead).
-  const resolveGrab = (
-    x: number,
-    y: number,
-  ): 'entryCancel' | 'slCancel' | 'tpCancel' | 'entry' | 'sl' | 'tp' | null => {
+  const resolveGrab = (x: number, y: number): StagedGrabTarget | null => {
     const state = stagedOrderState.current;
     const bounds = state.hit.chartRect;
     const order = state.order;
@@ -129,27 +104,24 @@ export function createStagedOrderGestures(
     }
     return level !== 'entry' || order?.orderKindLabel !== 'Market' ? level : null;
   };
+  const cancelActions = {
+    entryCancel: () => unstageOrderDraft(),
+    slCancel: () => toggleExit('sl', false),
+    tpCancel: () => toggleExit('tp', false),
+  };
   // Consumes the event as a widget grab/click (stop + prevent = only-on-grab).
   // Returns true when a drag target was claimed.
   const applyGrab = (
-    target: 'entryCancel' | 'slCancel' | 'tpCancel' | 'entry' | 'sl' | 'tp',
+    target: StagedGrabTarget,
     event: { stopPropagation(): void; preventDefault(): void; shiftKey?: boolean },
   ): boolean => {
     event.stopPropagation();
     event.preventDefault();
-    if (target === 'entryCancel') {
-      unstageOrderDraft();
+    if (isCancelTarget(target)) {
+      cancelActions[target]();
       return false;
     }
-    if (target === 'slCancel') {
-      toggleExit('sl', false);
-      return false;
-    }
-    if (target === 'tpCancel') {
-      toggleExit('tp', false);
-      return false;
-    }
-    drag = target as 'entry' | 'sl' | 'tp';
+    drag = target;
     const stagedOrder = stagedOrderState.current.order;
     setDragSlMoney(stagedOrder?.slMoney);
     setStagedDragging(true);
@@ -271,13 +243,7 @@ export function createStagedOrderGestures(
       return;
     }
     reset();
-    if (event.pointerId !== undefined) {
-      try {
-        host.releasePointerCapture(event.pointerId);
-      } catch {
-        /* already released */
-      }
-    }
+    releaseCapture(host, event);
   };
   return {
     get active() {

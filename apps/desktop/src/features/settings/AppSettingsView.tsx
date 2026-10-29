@@ -1,7 +1,7 @@
 import { AppSettingsDialog } from './AppSettingsDialog';
 import { useAppSettingsView } from './AppSettingsProvider';
-import { LazySetupGuideModal } from './setup-guide-modal/LazySetupGuideModal';
-import { useCompleteSetupOnConnect } from './useCompleteSetupOnConnect';
+import { LazySetupGuideModal } from './setup/setup-guide-modal/LazySetupGuideModal';
+import { useCompleteSetupOnConnect } from './setup/useCompleteSetupOnConnect';
 
 export function AppSettingsView() {
   const settings = useAppSettingsView();

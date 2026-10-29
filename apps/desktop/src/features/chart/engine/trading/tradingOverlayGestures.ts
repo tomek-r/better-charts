@@ -1,20 +1,10 @@
 import type { TradingLabelHit } from './labels/tradingLabelTypes';
 import { hitCircle, hitRect, STAGED_GRAB } from './stagedOrderOverlay';
-import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlay';
+import { TRADING_GRAB, LINE_DRAG_THRESHOLD } from './positionOverlayTypes';
 import { levelMoneyText } from './moneyLabels';
-import type { ChartWorkspaceState } from '../../state/useChartWorkspace';
-
-type TradingGestureWorkspace = Pick<
-  ChartWorkspaceState,
-  | 'positionOverlayState'
-  | 'chart'
-  | 'applyOrderModify'
-  | 'applyOrderLevelModify'
-  | 'applyPositionModify'
-  | 'applyLevelClear'
-  | 'closeActionsRef'
-  | 'partialCloseChipPortRef'
->;
+import type { TradingGestureWorkspace } from './gestureWorkspace';
+import { orderOverlayId, parseOverlayId } from './overlayIds';
+import { releaseCapture } from './pointerCapture';
 
 /** Grab targets of OUR position/order overlay (capture-phase handlers here). */
 type OverlayGrab =
@@ -59,11 +49,6 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
   } | null = null;
   /** Slop before a ✕ press counts as a drag (abandons the click) — staged grab slop. */
   const CHIP_CLICK_SLOP = STAGED_GRAB;
-  // Custom overlay (features/chart/engine/trading/positionOverlay.ts): ✕ chips first (small precise
-  // targets), then lines in the LIBRARY's hit order — order price, position
-  // SL, position TP — with its ±8px y tolerance; lines bounded to chartRect so
-  // the axis strip keeps its native scale-drag (the library's axis check ran
-  // before its trading hit-test too).
   // The ✕ and ▾ hit circles overlap (22px apart, grab slop on top): the nearer centre wins.
   const resolvePositionChip = (id: string, x: number, y: number): OverlayGrab | null => {
     const { hit } = positionOverlayState.current;
@@ -78,12 +63,14 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
     }
     return closeHit ? { kind: 'posClose', id } : null;
   };
+  // ✕ chips first (small precise targets), then lines in the order: order price,
+  // position SL, position TP, with a ±TRADING_GRAB y tolerance.
   const resolveOverlayGrab = (x: number, y: number): OverlayGrab | null => {
     const { hit } = positionOverlayState.current;
     const bounds = hit.chartRect;
-    // Full chartRect containment (incl. y): the library hit-tested inside the
-    // chart container only — toolbar/sidebar clicks must never claim a line
-    // or ✕ chip, and everything outside must keep panning/scale-dragging.
+    // Full chartRect containment (incl. y): toolbar/sidebar clicks must never
+    // claim a line or ✕ chip, and the price-axis strip and everything outside
+    // must keep panning/scale-dragging.
     if (!bounds || x < bounds.x || x > bounds.x + bounds.width || y < bounds.y || y > bounds.y + bounds.height) {
       return null;
     }
@@ -139,8 +126,8 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
   const resolveLabelGrab = (row: TradingLabelHit, x: number, y: number): OverlayGrab | null => {
     const { hit } = positionOverlayState.current;
     if (row.level === 'entry') {
-      if (row.id.startsWith('order:')) {
-        const id = row.id.slice('order:'.length);
+      const { isOrder, rawId: id } = parseOverlayId(row.id);
+      if (isOrder) {
         const chip = hit.orderCancels?.find((item) => item.id === id);
         return hitCircle(chip, x, y) ? { kind: 'orderCancel', id } : { kind: 'line', line: 'order', id };
       }
@@ -167,7 +154,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
       return undefined;
     }
     const position = state.positions.find((item) => item.id === id);
-    const order = state.orders.find((item) => `order:${item.id}` === id);
+    const order = state.orders.find((item) => orderOverlayId(item.id) === id);
     const entry = position?.entry ?? order?.price;
     const side = position?.side ?? order?.side;
     let volume = NaN;
@@ -267,12 +254,8 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
         started: false,
         price: undefined,
         orderPrice: canMoveExits ? (orderPreview?.price ?? order.price) : undefined,
-        stopLoss: canMoveExits
-          ? (orderPreview?.stopLoss ?? order.stopLoss)
-          : (orderPreview?.stopLoss ?? order?.stopLoss),
-        takeProfit: canMoveExits
-          ? (orderPreview?.takeProfit ?? order.takeProfit)
-          : (orderPreview?.takeProfit ?? order?.takeProfit),
+        stopLoss: orderPreview?.stopLoss ?? order?.stopLoss,
+        takeProfit: orderPreview?.takeProfit ?? order?.takeProfit,
         canMoveExits,
         moveExits,
         preserveExits,
@@ -309,16 +292,11 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
     // until the portfolio sync settles it (the synced level matches the
     // dragged one) or the modify is rejected. Clearing it here snapped the
     // line back to its pre-drag price for a few frames = the release flicker.
-    if (event.pointerId !== undefined) {
-      try {
-        host.releasePointerCapture(event.pointerId);
-      } catch {
-        /* already released */
-      }
-    }
+    releaseCapture(host, event);
     if (!dispatch || !current.started || current.price === undefined || current.price <= 0) {
       return;
     }
+    const lineOverlayId = parseOverlayId(current.id);
     if (current.line === 'order') {
       const delta = current.moveExits && current.orderPrice !== undefined ? current.price - current.orderPrice : 0;
       const includeExits = current.moveExits || current.preserveExits;
@@ -336,8 +314,8 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
         takeProfit: shifted(current.takeProfit),
         autoDispatch: current.canMoveExits === true,
       });
-    } else if (current.id.startsWith('order:')) {
-      const orderId = current.id.slice('order:'.length);
+    } else if (lineOverlayId.isOrder) {
+      const orderId = lineOverlayId.rawId;
       if (current.line === 'sl') {
         applyOrderLevelModify({ orderId, stopLoss: current.price });
       } else {
@@ -375,13 +353,7 @@ export function createTradingOverlayGestures(host: HTMLElement, workspace: Tradi
       return;
     }
     chipPress = null;
-    if (event.pointerId !== undefined) {
-      try {
-        host.releasePointerCapture(event.pointerId);
-      } catch {
-        /* already released */
-      }
-    }
+    releaseCapture(host, event);
     if (!dispatch || current.moved) {
       return;
     }

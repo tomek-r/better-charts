@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import type { DomainStore } from '../../shared/state/domainStore';
-import { readSetupCompleted, saveSetupCompleted } from './setupCompletion';
-import type { AppSettingsData } from './settingsTypes';
+import type { FieldStore } from '../../shared/store/fieldStore';
+import { loadAppSettings } from './appSettingsCommands';
+import { readSetupCompleted, saveSetupCompleted } from './setup/setupCompletion';
+import type { AppSettingsData } from './appSettingsData';
 
 /** The three steps of the setup guide, in the order it walks them. */
 export enum SetupGuideStep {
@@ -31,8 +31,6 @@ export interface AppSettingsState {
   /** This device finished the setup, so the guide never opens on its own again. */
   setupCompleted: boolean;
   loadError: string | undefined;
-  restartRequired: boolean;
-  restartNoticeDismissed: boolean;
   dismissedConfigurationError: string | undefined;
   notificationRevision: number;
 }
@@ -50,13 +48,11 @@ export const initialAppSettingsState: AppSettingsState = {
   blurredScreenShown: false,
   setupCompleted: readSetupCompleted(),
   loadError: undefined,
-  restartRequired: false,
-  restartNoticeDismissed: false,
   dismissedConfigurationError: undefined,
   notificationRevision: 0,
 };
 
-export type AppSettingsStore = DomainStore<AppSettingsState>;
+export type AppSettingsStore = FieldStore<AppSettingsState>;
 
 /**
  * First launch: the app has just generated the bridge token, so an EA already attached in MT5
@@ -70,7 +66,7 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
   const loadSettings = useCallback(
     (errorMessage: string, onLoaded?: (next: AppSettingsData) => void) => {
       const generation = ++settingsLoadGeneration.current;
-      const loadRequest = invoke<AppSettingsData>('get_app_settings')
+      const loadRequest = loadAppSettings()
         .then((next) => {
           if (generation !== settingsLoadGeneration.current) {
             return;
@@ -99,7 +95,6 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
       return;
     }
     loadSettings('Could not load app settings. Reopen settings to try again.', (next) => {
-      store.setField('restartRequired', next.restartRequired);
       if (next.configurationError) {
         store.setField('isOpen', true);
       }
@@ -140,7 +135,6 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     store.setField('closing', false);
     store.setField('setupGuideOpen', false);
   }, [store]);
-  const dismissRestartNotice = useCallback(() => store.setField('restartNoticeDismissed', true), [store]);
   const showSetupComplete = useCallback(() => store.setField('setupCompleteShown', true), [store]);
   // "Happy trading" is the one place the setup counts as done: this device remembers it,
   // so the setup screen and the guide stay away from then on, connected or not.
@@ -180,8 +174,6 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
     (next: AppSettingsData) => {
       settingsLoadGeneration.current += 1;
       store.setField('settings', next);
-      store.setField('restartRequired', next.restartRequired);
-      store.setField('restartNoticeDismissed', false);
       store.setField('notificationRevision', (revision) => revision + 1);
       store.setField('dismissedConfigurationError', undefined);
       close();
@@ -198,7 +190,6 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
       close,
       exited,
       saved,
-      dismissRestartNotice,
       dismissConfigurationNotice,
       dismissSetupComplete,
       completeSetup,
@@ -212,7 +203,6 @@ export function useAppSettings(store: AppSettingsStore, tauriAvailable: boolean)
       close,
       exited,
       saved,
-      dismissRestartNotice,
       dismissConfigurationNotice,
       dismissSetupComplete,
       completeSetup,

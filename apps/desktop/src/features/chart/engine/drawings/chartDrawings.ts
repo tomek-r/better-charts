@@ -1,24 +1,23 @@
 import type { ChartDrawingPoint, ChartDrawingRecord, ChartDrawingSelection } from './drawingRecord';
 import type { DrawingTimeframeVisibility } from './timeframeVisibility';
+import type { DrawingStackEntry } from './drawingStack';
 import type { ToolInputValues } from './toolInputs';
-import type { ChartToolSet } from '../tools/toolSet';
 
-/** The drawing commands the class needs: the tool set's drawing API, not the whole set. */
-export type ChartDrawingCommands = Pick<
-  ChartToolSet,
-  | 'selectedDrawing'
-  | 'selectDrawing'
-  | 'deleteDrawing'
-  | 'setDrawingLocked'
-  | 'setDrawingVisible'
-  | 'setDrawingInputs'
-  | 'setDrawingTimeframeVisibility'
-  | 'setDrawingPoints'
-  | 'exportDrawings'
-  | 'replaceDrawings'
-  | 'drawingStack'
-  | 'moveStackEntry'
->;
+/** The drawing commands the class needs; the tool set implements them, so drawings never import the tool set. */
+export interface ChartDrawingCommands {
+  selectedDrawing(): ChartDrawingSelection | null;
+  selectDrawing(toolId: string, drawingId: string): void;
+  deleteDrawing(toolId: string, drawingId: string): boolean;
+  setDrawingLocked(toolId: string, drawingId: string, locked: boolean): void;
+  setDrawingVisible(toolId: string, drawingId: string, visible: boolean): void;
+  setDrawingInputs(toolId: string, drawingId: string, inputs: ToolInputValues): void;
+  setDrawingTimeframeVisibility(toolId: string, drawingId: string, visibility: DrawingTimeframeVisibility): void;
+  setDrawingPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean;
+  exportDrawings(): ChartDrawingRecord[];
+  replaceDrawings(records: readonly ChartDrawingRecord[]): void;
+  drawingStack(): readonly DrawingStackEntry[];
+  moveStackEntry(fromIndex: number, toIndex: number): boolean;
+}
 
 /**
  * One row of the object tree: a drawing with its saved record, or the price bars the drawings above

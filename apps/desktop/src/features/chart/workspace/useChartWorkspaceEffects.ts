@@ -1,0 +1,288 @@
+import { useEffect, useLayoutEffect } from 'react';
+import { ChartController } from '../engine/surface/chartController';
+import { CHART_TOOL_PLUGINS, DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
+import { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
+import { bridgeIdentityKey } from '../../../shared/bridge/bridgeIdentity';
+import { quoteDigits } from '../../../shared/format';
+import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
+import { popupOwnsKeyboard, toolFlyoutOpen } from '../../../shared/ui/popup/popupKeyboardOwnership';
+import { mt5HistoryTransport } from '../../bridge/market/mt5HistoryTransport';
+import type { BridgeSessionState } from '../../bridge/useBridgeSession';
+import type { BridgeSessionLifecycleState } from '../../bridge/BridgeSessionProvider';
+import type { QuoteSnapshot } from '../../../shared/bridge/types';
+import type { OrderTicketStores } from '../../order-ticket/draft/orderTicketStores';
+import type { ChartWorkspaceState } from './useChartWorkspace';
+
+export function useChartWorkspaceInitEffects(
+  workspace: ChartWorkspaceState,
+  session: Pick<BridgeSessionState, 'setChartError' | 'currentSymbol' | 'stores' | 'marketData'>,
+): void {
+  const notifyError = useNotifyError();
+  const { chartHost, chart, adapterRef, positionOverlayState, stagedOrderState, priceLinesState, selectChartTool } =
+    workspace;
+  const { setChartError, currentSymbol, stores, marketData } = session;
+  const chartRef = chart;
+  useLayoutEffect(() => {
+    const host = chartHost.current;
+    if (!host) {
+      return;
+    }
+    const adapter = new Mt5DataAdapter(mt5HistoryTransport);
+    adapterRef.current = adapter;
+    let instance: ChartController | undefined;
+    try {
+      instance = new ChartController(
+        host,
+        {
+          positions: positionOverlayState.current,
+          staged: stagedOrderState.current,
+          priceLines: priceLinesState.current,
+        },
+        {
+          // Tools read the app's accepted selection and talk to market data only through this port.
+          currentMarket: { symbol: () => currentSymbol.current, quote: () => stores.quote.getState().quote },
+          marketDataPort: marketData.port,
+          notifyError,
+          toolDefinitions: CHART_TOOL_PLUGINS,
+          defaultToolId: DEFAULT_CHART_TOOL_ID,
+        },
+      );
+      chartRef.current = instance;
+      instance.onToolRelease = () => selectChartTool(DEFAULT_CHART_TOOL_ID);
+    } catch {
+      setChartError('Chart renderer could not be initialized.');
+    }
+    return () => {
+      instance?.destroy();
+      adapter.dispose();
+      if (chartRef.current === instance) {
+        chartRef.current = null;
+      }
+      if (adapterRef.current === adapter) {
+        adapterRef.current = null;
+      }
+    };
+  }, [
+    adapterRef,
+    chartHost,
+    chartRef,
+    currentSymbol,
+    marketData,
+    notifyError,
+    positionOverlayState,
+    setChartError,
+    selectChartTool,
+    stagedOrderState,
+    priceLinesState,
+    stores,
+  ]);
+  useEffect(() => {
+    const cancelTool = (event: KeyboardEvent) => {
+      if (
+        event.key !== 'Escape' ||
+        popupOwnsKeyboard() ||
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      chartRef.current?.selectChartTool(DEFAULT_CHART_TOOL_ID);
+      selectChartTool(DEFAULT_CHART_TOOL_ID);
+    };
+    window.addEventListener('keydown', cancelTool);
+    return () => window.removeEventListener('keydown', cancelTool);
+  }, [chartRef, selectChartTool]);
+}
+
+export function useChartWorkspaceChartEffects(
+  workspace: ChartWorkspaceState,
+  session: Pick<
+    BridgeSessionLifecycleState,
+    | 'instrument'
+    | 'loadingTimeframe'
+    | 'snapshot'
+    | 'setLoadingTimeframe'
+    | 'setChartError'
+    | 'currentSymbol'
+    | 'setQuote'
+    | 'setInstrument'
+    | 'targetSymbol'
+    | 'status'
+  > & {
+    quote: QuoteSnapshot | undefined;
+  },
+  ticket: { clearStagedWidget: () => boolean },
+): void {
+  const { chart, setPendingModification, priceLinesState } = workspace;
+  const {
+    instrument,
+    quote,
+    loadingTimeframe,
+    snapshot,
+    setLoadingTimeframe,
+    setChartError,
+    currentSymbol,
+    setQuote,
+    setInstrument,
+    targetSymbol,
+    status,
+  } = session;
+  const { clearStagedWidget } = ticket;
+  const priceLinesRef = priceLinesState;
+  const currentSymbolRef = currentSymbol;
+  useEffect(() => {
+    chart.current?.setConnectionStatus(
+      status.state,
+      status.message,
+      bridgeIdentityKey({ terminal: status.terminal, account: status.account, server: status.server }),
+    );
+  }, [chart, status.state, status.message, status.terminal, status.account, status.server]);
+  useEffect(() => {
+    setPendingModification(undefined);
+    clearStagedWidget();
+  }, [clearStagedWidget, setPendingModification, snapshot.symbol, snapshot.timeframe]);
+  // Live bid/ask price lines use the series' public Lightweight Charts API;
+  // custom axis tags still use the overlay for spread-collision handling.
+  useEffect(() => {
+    const state = priceLinesRef.current;
+    state.digits = instrument?.digits ?? (quote ? quoteDigits(quote.bid, quote.ask) : 2);
+    chart.current?.setPricePrecision(state.digits);
+    state.ask = quote && Number(quote.ask) > 0 ? Number(quote.ask) : undefined;
+    state.bid = quote && Number(quote.bid) > 0 ? Number(quote.bid) : undefined;
+    chart.current?.setBidAskPrices(state.ask, state.bid);
+    chart.current?.setQuoteClock(quote);
+  }, [chart, instrument?.digits, priceLinesRef, quote]);
+  useEffect(() => {
+    chart.current?.setCountdownPending(loadingTimeframe !== undefined);
+    if (loadingTimeframe && snapshot.timeframe === loadingTimeframe) {
+      setLoadingTimeframe(undefined);
+      setChartError(undefined);
+    }
+  }, [chart, loadingTimeframe, setChartError, setLoadingTimeframe, snapshot.timeframe]);
+  useEffect(() => {
+    currentSymbolRef.current = snapshot.symbol;
+    setQuote((previous) => (previous && previous.symbol === snapshot.symbol ? previous : undefined));
+    setInstrument((previous) => {
+      if (previous?.symbol === snapshot.symbol) {
+        return previous;
+      }
+      if (targetSymbol.current === snapshot.symbol) {
+        return previous;
+      }
+      return undefined;
+    });
+  }, [currentSymbolRef, setInstrument, setQuote, snapshot.symbol, targetSymbol]);
+}
+
+export function useChartWorkspaceResetEffects(
+  workspace: ChartWorkspaceState,
+  session: Pick<
+    BridgeSessionLifecycleState,
+    | 'status'
+    | 'snapshot'
+    | 'loadingTimeframeRef'
+    | 'targetSymbol'
+    | 'pendingMetadata'
+    | 'setLoadingTimeframe'
+    | 'setQuote'
+    | 'setInstrument'
+    | 'setAccount'
+    | 'setPortfolio'
+    | 'setSymbolLoading'
+  >,
+  ticket: Pick<OrderTicketStores['setters']['draft'], 'setEntry' | 'setStopLoss' | 'setTakeProfit'>,
+): void {
+  const { chart } = workspace;
+  const {
+    status,
+    snapshot,
+    loadingTimeframeRef,
+    targetSymbol,
+    pendingMetadata,
+    setLoadingTimeframe,
+    setQuote,
+    setInstrument,
+    setAccount,
+    setPortfolio,
+    setSymbolLoading,
+  } = session;
+  const { setEntry, setStopLoss, setTakeProfit } = ticket;
+  const targetSymbolRef = targetSymbol;
+  const pendingMetadataRef = pendingMetadata;
+  useEffect(() => {
+    if (status.state !== 'connected') {
+      setLoadingTimeframe(undefined);
+      loadingTimeframeRef.current = undefined;
+      chart.current?.resetTools('disconnect');
+      chart.current?.refreshOverlays();
+      setSymbolLoading(false);
+      targetSymbolRef.current = undefined;
+      pendingMetadataRef.current = undefined;
+      setQuote(undefined);
+      setInstrument(undefined);
+      setAccount(undefined);
+      setPortfolio(undefined);
+    }
+  }, [
+    chart,
+    loadingTimeframeRef,
+    pendingMetadataRef,
+    setAccount,
+    setInstrument,
+    setLoadingTimeframe,
+    setPortfolio,
+    setQuote,
+    setSymbolLoading,
+    status.state,
+    targetSymbolRef,
+  ]);
+  // SYMBOL change. Drawings are time/price anchored: a line drawn on one instrument
+  // is noise on another (the stale-lines bug class), so every tool drops its drawing
+  // and anything computed for it (their stale-event guards stay in place), and the
+  // ticket draft resets. Timeframe changes keep drawings (standard chart behavior).
+  useLayoutEffect(() => {
+    chart.current?.resetTools('symbol');
+    chart.current?.refreshOverlays();
+    setEntry('');
+    setStopLoss('');
+    setTakeProfit('');
+  }, [chart, setEntry, setStopLoss, setTakeProfit, snapshot.symbol]);
+  // TIMEFRAME change: the profile is tick-based over a FIXED TIME range and the
+  // drawing's anchors are time-based — both survive the switch. Only the layout
+  // resize (new bar spacing) and the unrelated ticket reset apply here.
+  useLayoutEffect(() => {
+    chart.current?.refreshOverlays();
+    setEntry('');
+    setStopLoss('');
+    setTakeProfit('');
+  }, [chart, setEntry, setStopLoss, setTakeProfit, snapshot.timeframe]);
+}
+
+export function useChartWorkspaceHotkeyEffect(
+  workspace: ChartWorkspaceState,
+  ticket: { unstageOrderDraft: () => void },
+): void {
+  const { stagedActiveRef } = workspace;
+  const { unstageOrderDraft } = ticket;
+  // Escape also reaches the chart's document handler to cancel drawing tools.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (document.querySelector('[data-modal-dialog]')) {
+        return;
+      }
+      // The rail's tool flyout and an open popup (drop-down list, colour picker) own
+      // Escape while open (each closes itself and restores focus); the chart-level
+      // Escape shortcuts defer to them.
+      if (event.key === 'Escape' && (toolFlyoutOpen() || popupOwnsKeyboard())) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        if (stagedActiveRef.current) {
+          unstageOrderDraft();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [stagedActiveRef, unstageOrderDraft]);
+}

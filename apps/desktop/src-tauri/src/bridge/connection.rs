@@ -8,16 +8,21 @@
 //! error frame and publishing the protocol-error status.
 
 use super::{
-    account_snapshot, bar_update, disconnect, flush_outbound, heartbeat, history_snapshot,
-    order_check_error, order_check_result, order_command_error, order_command_update,
-    portfolio_snapshot, protocol_error, protocol_error_session, publish, quote_update, read_one,
-    reconcile_error, reconcile_snapshot, risk_quote_error, risk_quote_result, run_handshake,
-    send_error, symbol_info, symbol_search, tauri_events, tick_history, tick_history_error,
-    tick_price_history, BridgeConnectionState, BridgeEvents, BridgeState, ExecutionAdapterState,
-    FrameSource, DEFAULT_ADDR, HEARTBEAT_TIMEOUT,
+    account_snapshot, bar_update, disconnect, end_current_session, flush_outbound, heartbeat,
+    history_snapshot, order_check_error, order_check_result, order_command_error,
+    order_command_update, portfolio_snapshot, protocol_error, protocol_error_session, publish,
+    quote_update, read_one, reconcile_error, reconcile_snapshot, risk_quote_error,
+    risk_quote_result, run_handshake, send_error, symbol_info, symbol_search, tauri_events,
+    tick_history, tick_history_error, tick_price_history, BridgeConnectionState, BridgeEvents,
+    BridgeState, ExecutionAdapterState, FrameSource, HEARTBEAT_TIMEOUT,
 };
-use std::{env, net::SocketAddr, sync::Arc};
-use tokio::net::{TcpListener, TcpStream};
+use crate::bridge::endpoint::BridgeEndpoint;
+use std::{net::SocketAddr, sync::Arc};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::watch,
+    task::JoinSet,
+};
 use trading_core::protocol::{ErrorCode, MessageType, PROTOCOL_VERSION};
 
 /// Shared context for one inbound frame, built after the version and
@@ -53,7 +58,7 @@ pub(crate) async fn handle_connection(
     events: Arc<dyn BridgeEvents>,
     state: BridgeState,
     adapter: ExecutionAdapterState,
-    expected_token: Arc<String>,
+    endpoint: Arc<BridgeEndpoint>,
     session_number: u64,
 ) {
     // Small control frames should not wait behind Nagle coalescing. MQL5 does
@@ -67,7 +72,7 @@ pub(crate) async fn handle_connection(
         &events,
         &state,
         &adapter,
-        &expected_token,
+        &endpoint,
         session_number,
     )
     .await
@@ -264,33 +269,73 @@ pub(crate) async fn run_server(
     app: tauri::AppHandle,
     state: BridgeState,
     adapter: ExecutionAdapterState,
+    endpoints: watch::Receiver<BridgeEndpoint>,
 ) {
-    let events = tauri_events(&app);
-    let address = env::var("MT5_BRIDGE_ADDR").unwrap_or_else(|_| DEFAULT_ADDR.into());
-    let address = match validate_bind_address(&address) {
-        Ok(address) => address,
-        Err(message) => {
-            protocol_error(&events, &state, message);
-            return;
-        }
-    };
-    let listener = bind_listener(address, &events, &state).await;
-    let token = Arc::new(env::var("MT5_BRIDGE_TOKEN").unwrap_or_default());
+    serve_endpoints(tauri_events(&app), state, adapter, endpoints).await;
+}
+
+/// Serves the bridge on the endpoint `endpoints` currently holds, and follows it: when
+/// a settings save publishes a different endpoint, the open connections are closed, the
+/// current session ends through the usual session-end path, and the listener is bound
+/// again on the new address. Returns only when the endpoint publisher is gone.
+pub(crate) async fn serve_endpoints(
+    events: Arc<dyn BridgeEvents>,
+    state: BridgeState,
+    adapter: ExecutionAdapterState,
+    mut endpoints: watch::Receiver<BridgeEndpoint>,
+) {
     let mut session_number = 0u64;
     loop {
-        let (stream, _) = match listener.accept().await {
-            Ok(v) => v,
-            Err(_) => continue,
+        let endpoint = Arc::new(endpoints.borrow_and_update().clone());
+        let address = match validate_bind_address(&endpoint.address) {
+            Ok(address) => address,
+            Err(message) => {
+                protocol_error(&events, &state, message);
+                if endpoints.changed().await.is_err() {
+                    return;
+                }
+                continue;
+            }
         };
-        session_number = session_number.wrapping_add(1);
-        tauri::async_runtime::spawn(handle_connection(
-            stream,
-            Arc::clone(&events),
-            state.clone(),
-            adapter.clone(),
-            token.clone(),
-            session_number,
-        ));
+        let listener = tokio::select! {
+            listener = bind_listener(address, &events, &state) => listener,
+            changed = endpoints.changed() => {
+                if changed.is_err() {
+                    return;
+                }
+                continue;
+            }
+        };
+        let mut connections = JoinSet::new();
+        let publisher_alive = loop {
+            tokio::select! {
+                accepted = listener.accept() => {
+                    let Ok((stream, _)) = accepted else {
+                        continue;
+                    };
+                    session_number = session_number.wrapping_add(1);
+                    connections.spawn(handle_connection(
+                        stream,
+                        Arc::clone(&events),
+                        state.clone(),
+                        adapter.clone(),
+                        Arc::clone(&endpoint),
+                        session_number,
+                    ));
+                }
+                changed = endpoints.changed() => break changed.is_ok(),
+                Some(_) = connections.join_next() => {}
+            }
+        };
+        // Cancelled connections are awaited, so none can establish a session after
+        // the current one ends below; the listener closes when this iteration ends,
+        // which frees the port before the next bind.
+        connections.abort_all();
+        while connections.join_next().await.is_some() {}
+        end_current_session(&events, &state, &adapter);
+        if !publisher_alive {
+            return;
+        }
     }
 }
 

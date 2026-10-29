@@ -1,8 +1,12 @@
 import type { ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { Candle } from '../../../../shared/bridge/types';
-import { toRenderBar, type RenderBar } from './mt5DataAdapter';
+import { toRenderBar, type RenderBar } from './renderBar';
 import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../../shared/bridge/timeframes';
 import { palette } from '../../../../shared/theme/palette';
+
+function toCandleData(bar: RenderBar) {
+  return { ...bar, time: bar.time as UTCTimestamp };
+}
 
 /**
  * Owns the renderable bar cache and the two series it feeds, so every mutation
@@ -34,6 +38,11 @@ export class BarSeriesController {
     return this.period;
   }
 
+  /** The digits of the price format on the candle series. */
+  get pricePrecision(): number {
+    return this.priceDigits;
+  }
+
   lastBar(): RenderBar | undefined {
     return this.cache[this.cache.length - 1];
   }
@@ -50,8 +59,7 @@ export class BarSeriesController {
     }
     this.period = timeframe;
     this.cache = bars;
-    this.candles.setData(bars.map((bar) => ({ ...bar, time: bar.time as UTCTimestamp })));
-    this.volume.setData(bars.map((bar) => this.volumeBar(bar)));
+    this.writeAll(bars);
     return true;
   }
 
@@ -86,8 +94,7 @@ export class BarSeriesController {
     }
     const bars = [...older, ...this.cache];
     this.cache = bars;
-    this.candles.setData(bars.map((bar) => ({ ...bar, time: bar.time as UTCTimestamp })));
-    this.volume.setData(bars.map((bar) => this.volumeBar(bar)));
+    this.writeAll(bars);
     return older.length;
   }
 
@@ -104,7 +111,7 @@ export class BarSeriesController {
     } else {
       this.cache[this.cache.length - 1] = bar;
     }
-    this.candles.update({ ...bar, time: bar.time as UTCTimestamp });
+    this.candles.update(toCandleData(bar));
     this.volume.update(this.volumeBar(bar));
     return appended;
   }
@@ -117,6 +124,12 @@ export class BarSeriesController {
     this.priceDigits = digits;
     this.candles.applyOptions({ priceFormat: { type: 'price', precision: digits, minMove: 10 ** -digits } });
     return true;
+  }
+
+  /** Rewrites both series from the whole bar list. */
+  private writeAll(bars: readonly RenderBar[]): void {
+    this.candles.setData(bars.map(toCandleData));
+    this.volume.setData(bars.map((bar) => this.volumeBar(bar)));
   }
 
   private volumeBar(bar: RenderBar) {

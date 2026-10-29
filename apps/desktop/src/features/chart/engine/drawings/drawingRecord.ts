@@ -2,12 +2,6 @@ import { readTimeframeVisibility, type DrawingTimeframeVisibility } from './time
 import { isPlainRecord, isToolInputValues, type ToolInputValues } from './toolInputs';
 
 /**
- * A drawing as the engine carries it: its settings and the anchor points its own tool wrote.
- * Every tool stores the same ordered point list, so the engine can check the shape of any
- * record without knowing which tool drew it.
- */
-
-/**
  * One anchor of a drawing: the epoch milliseconds of the slot it holds, the price it holds as
  * decimal text, or both. At least one of the two is set.
  */
@@ -17,7 +11,11 @@ export interface ChartDrawingPoint {
   readonly price: string | null;
 }
 
-/** What one tool exports and imports: one of its drawings. */
+/**
+ * What one tool exports and imports: one of its drawings, as the engine carries it. Every tool
+ * stores the same ordered point list, so the engine can check the shape of any record without
+ * knowing which tool drew it.
+ */
 export interface ChartToolDrawingRecord {
   readonly id: string;
   /** A locked drawing ignores edit gestures until it is unlocked. */

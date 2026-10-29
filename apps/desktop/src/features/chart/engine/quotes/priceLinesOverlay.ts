@@ -1,4 +1,5 @@
-import type { OverlayRenderer } from '../surface/overlayTypes';
+import { isPositiveFinite } from '../../../../shared/finiteNumber';
+import type { OverlayRenderer } from '../surface/overlayRenderer';
 import type { OverlayPass } from '../trading/tradingOverlayDrawing';
 
 /**
@@ -34,7 +35,7 @@ export function createPriceLinesOverlay(state: PriceLinesState, pass: OverlayPas
       }
       const toY = viewport.priceToY;
       const line = (price: number | undefined): number | undefined => {
-        if (price === undefined || !Number.isFinite(price) || price <= 0) {
+        if (!isPositiveFinite(price)) {
           return undefined;
         }
         const py = toY(price);

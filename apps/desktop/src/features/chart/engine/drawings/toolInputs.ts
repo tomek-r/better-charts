@@ -1,10 +1,8 @@
 import { timeframeOptions } from '../../../../shared/bridge/timeframes';
 
-/**
- * The settings schema of one drawing, modelled on Pine Script v6's `input.*` functions: a
- * definition states what to ask the user for, which value to start from and how a stored
- * value is checked. The engine stores and forwards values; the tool owns its schema.
- */
+// The settings schema of one drawing, modelled on Pine Script v6's `input.*` functions: a
+// definition states what to ask the user for, which value to start from and how a stored
+// value is checked. The engine stores and forwards values; the tool owns its schema.
 
 /** The chart series a `source` input may name, in Pine Script's `input.source` order. */
 export const TOOL_INPUT_SOURCES = ['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4'] as const;
@@ -214,6 +212,14 @@ export function resolveToolInputValues(definitions: readonly ToolInputDefinition
 export function isToolInputActive(definition: ToolInputDefinition, values: ToolInputValues): boolean {
   const { activeWhen } = definition;
   return activeWhen === undefined || values[activeWhen.inputId] === activeWhen.equals;
+}
+
+/**
+ * Whether the input's value stops the form from saving: only an input that is editable now can, because an
+ * inactive one is never read and never shown as invalid.
+ */
+export function isToolInputInvalid(definition: ToolInputDefinition, values: ToolInputValues): boolean {
+  return isToolInputActive(definition, values) && !isValidToolInputValue(definition, values[definition.id]);
 }
 
 /** Every definition's default value, keyed by input id: what nothing stored resolves to. */

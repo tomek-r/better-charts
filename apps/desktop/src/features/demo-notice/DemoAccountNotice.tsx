@@ -1,3 +1,4 @@
+import { isSimulatedEnvironment } from '../account-badge/accountEnvironment';
 import { useAccountEnvironment } from '../account-badge/useAccountEnvironment';
 
 /**
@@ -18,8 +19,7 @@ const NOTICE_SENTENCES = [
  */
 export function DemoAccountNotice() {
   const environment = useAccountEnvironment();
-  const demoEnvironment = environment?.kind === 'demo' || environment?.kind === 'contest';
-  if (!demoEnvironment) {
+  if (!isSimulatedEnvironment(environment?.kind)) {
     return null;
   }
   // The strip is absolutely positioned against the bar (demo-notice.css), so arriving with the first

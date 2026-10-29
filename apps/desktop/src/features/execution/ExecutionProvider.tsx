@@ -1,11 +1,11 @@
 import { createContext, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { createDomainStore, type DomainStore } from '../../shared/state/domainStore';
-import { useRequiredContext } from '../../shared/state/useRequiredContext';
-import { useEventCallback } from '../../shared/hooks/useEventCallback';
+import { createFieldStore, type FieldStore } from '../../shared/store/fieldStore';
+import { useRequiredContext } from '../../shared/context/useRequiredContext';
+import { useStableActions } from '../../shared/identity/useStableActions';
 import { useExecutionCommands, type ExecutionCommandState, type ExecutionStoreState } from './useExecutionCommands';
-import { useBridgeAccount } from '../bridge/BridgeSessionProvider';
+import { useBridgeAccount } from '../bridge/bridgeSelectors';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 
 type ExecutionActions = Pick<
@@ -15,7 +15,7 @@ type ExecutionActions = Pick<
 type PortfolioActions = Pick<ExecutionCommandState, 'closingTarget' | 'closeCancelStatus' | 'requestClosePosition'>;
 
 interface ExecutionContextValue {
-  store: DomainStore<ExecutionStoreState>;
+  store: FieldStore<ExecutionStoreState>;
   actions: ExecutionActions;
 }
 
@@ -25,28 +25,20 @@ export function ExecutionProvider({ children }: { children: ReactNode }) {
   const account = useBridgeAccount();
   const { chart, positionOverlayState, setPendingModification } = useChartResources();
   const [store] = useState(() =>
-    createDomainStore<ExecutionStoreState>({
+    createFieldStore<ExecutionStoreState>({
       executionQueue: undefined,
       closingTarget: undefined,
       closeCancelStatus: undefined,
     }),
   );
   const execution = useExecutionCommands({ account, setPendingModification, positionOverlayState, chart, store });
-  const setExecutionQueue = useEventCallback(execution.setExecutionQueue);
-  const runCloseCancel = useEventCallback(execution.runCloseCancel);
-  const requestClosePosition = useEventCallback(execution.requestClosePosition);
-  const requestCancelOrder = useEventCallback(execution.requestCancelOrder);
-  const requestModifyDraft = useEventCallback(execution.requestModifyDraft);
-  const actions = useMemo<ExecutionActions>(
-    () => ({
-      setExecutionQueue,
-      runCloseCancel,
-      requestClosePosition,
-      requestCancelOrder,
-      requestModifyDraft,
-    }),
-    [requestCancelOrder, requestClosePosition, requestModifyDraft, runCloseCancel, setExecutionQueue],
-  );
+  const actions = useStableActions<ExecutionActions>({
+    setExecutionQueue: execution.setExecutionQueue,
+    runCloseCancel: execution.runCloseCancel,
+    requestClosePosition: execution.requestClosePosition,
+    requestCancelOrder: execution.requestCancelOrder,
+    requestModifyDraft: execution.requestModifyDraft,
+  });
   const contextValue = useMemo(() => ({ store, actions }), [actions, store]);
 
   return <ExecutionContext value={contextValue}>{children}</ExecutionContext>;

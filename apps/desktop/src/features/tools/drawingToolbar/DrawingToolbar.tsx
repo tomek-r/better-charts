@@ -1,9 +1,12 @@
-import { useState, type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from 'react';
+import { useState, type CSSProperties, type KeyboardEvent, type Ref } from 'react';
+import { CommandButton } from '../../../shared/ui/button/CommandButton';
+import { ToggleCommandButton } from '../../../shared/ui/button/ToggleCommandButton';
+import { arrowStep, wrapIndex, type ArrowSteps } from '../../../shared/ui/keyboard/arrowStep';
 import {
   DRAWING_LOCK_LABELS,
+  DRAWING_SETTINGS_LABEL,
   DRAWING_VISIBILITY_LABELS,
   REMOVE_DRAWING_LABEL,
-  type DrawingToggleLabels,
 } from './drawingCommandLabels';
 import {
   EyeCrossedIcon,
@@ -14,17 +17,23 @@ import {
   SettingsIcon,
   TrashIcon,
 } from './drawingToolbarIcons';
-import type { DrawingToolbarPosition, GripHandlers } from './useDraggablePosition';
+import type { DrawingToolbarPosition, GripHandlers } from './useDrawingToolbarPosition';
 
 /** Distance of the default position from the frame's top edge, in CSS px. */
 const DEFAULT_TOP_INSET_PX = 12;
 /** Arrow keys walk the buttons in reading order: right and left, with up and down as their vertical twins. */
-const FOCUS_STEPS: Readonly<Partial<Record<string, number>>> = {
+const FOCUS_STEPS: ArrowSteps = {
   ArrowRight: 1,
   ArrowDown: 1,
   ArrowLeft: -1,
   ArrowUp: -1,
 };
+
+const TOOLBAR_BUTTON_CLASS = 'drawing-toolbar-button';
+
+/** The toolbar's buttons in reading order, which is also their order in the arrow-key walk. */
+const BUTTON_ORDER = ['grip', 'settings', 'lock', 'visibility', 'remove'] as const;
+type ToolbarButtonId = (typeof BUTTON_ORDER)[number];
 
 /** The toolbar's place inside the chart frame; the default centres it over the top edge. */
 function toolbarStyle(position: DrawingToolbarPosition): CSSProperties {
@@ -32,68 +41,6 @@ function toolbarStyle(position: DrawingToolbarPosition): CSSProperties {
     return { left: position.left, top: position.top };
   }
   return { left: '50%', top: DEFAULT_TOP_INSET_PX, transform: 'translateX(-50%)' };
-}
-
-interface ToolbarButtonProps {
-  readonly label: string;
-  /** 0 for the one button Tab reaches; every other button is reached with the arrow keys. */
-  readonly tabIndex: number;
-  readonly onFocus: () => void;
-  readonly onClick: () => void;
-  /** Only the toggles set it: their pressed state is the drawing's lock or its hidden flag. */
-  readonly pressed?: boolean;
-  readonly children: ReactNode;
-}
-
-function ToolbarButton({ label, tabIndex, onFocus, onClick, pressed, children }: ToolbarButtonProps) {
-  return (
-    <button
-      type="button"
-      className="drawing-toolbar-button"
-      aria-label={label}
-      title={label}
-      tabIndex={tabIndex}
-      aria-pressed={pressed}
-      onFocus={onFocus}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-interface ToolbarToggleButtonProps {
-  /** The command's two faces: what it does while its toggle is off, and what it does while it is on. */
-  readonly labels: DrawingToggleLabels;
-  readonly offIcon: ReactNode;
-  readonly onIcon: ReactNode;
-  readonly pressed: boolean;
-  readonly tabIndex: number;
-  readonly onFocus: () => void;
-  readonly onClick: () => void;
-}
-
-/** A button that names the next command: one face while the toggle is off, another while it is on. */
-function ToolbarToggleButton({
-  labels,
-  offIcon,
-  onIcon,
-  pressed,
-  tabIndex,
-  onFocus,
-  onClick,
-}: ToolbarToggleButtonProps) {
-  return (
-    <ToolbarButton
-      label={pressed ? labels.on : labels.off}
-      pressed={pressed}
-      tabIndex={tabIndex}
-      onFocus={onFocus}
-      onClick={onClick}
-    >
-      {pressed ? onIcon : offIcon}
-    </ToolbarButton>
-  );
 }
 
 export interface DrawingToolbarProps {
@@ -126,12 +73,16 @@ export function DrawingToolbar({
   onRemove,
 }: DrawingToolbarProps) {
   const [tabStopIndex, setTabStopIndex] = useState(0);
-  const tabStop = (index: number) => ({
-    tabIndex: tabStopIndex === index ? 0 : -1,
-    onFocus: () => setTabStopIndex(index),
-  });
+  /** 0 for the one button Tab reaches; every other button is reached with the arrow keys. */
+  const tabStop = (button: ToolbarButtonId) => {
+    const index = BUTTON_ORDER.indexOf(button);
+    return {
+      tabIndex: tabStopIndex === index ? 0 : -1,
+      onFocus: () => setTabStopIndex(index),
+    };
+  };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = FOCUS_STEPS[event.key];
+    const step = arrowStep(event.key, FOCUS_STEPS);
     if (step === undefined) {
       return;
     }
@@ -141,7 +92,7 @@ export function DrawingToolbar({
       return;
     }
     event.preventDefault();
-    buttons[(focusedIndex + step + buttons.length) % buttons.length]?.focus();
+    buttons[wrapIndex(focusedIndex, step, buttons.length)]?.focus();
   };
 
   return (
@@ -153,38 +104,48 @@ export function DrawingToolbar({
       style={toolbarStyle(position)}
       onKeyDown={onKeyDown}
     >
-      <button
-        type="button"
-        className="drawing-toolbar-button drawing-toolbar-grip"
-        aria-label="Move toolbar"
-        title="Move toolbar"
-        {...tabStop(0)}
+      <CommandButton
+        label="Move toolbar"
+        className={`${TOOLBAR_BUTTON_CLASS} drawing-toolbar-grip`}
+        {...tabStop('grip')}
         {...gripHandlers}
       >
         <GripIcon />
-      </button>
-      <ToolbarButton label="Drawing settings" {...tabStop(1)} onClick={onOpenSettings}>
+      </CommandButton>
+      <CommandButton
+        label={DRAWING_SETTINGS_LABEL}
+        className={TOOLBAR_BUTTON_CLASS}
+        {...tabStop('settings')}
+        onClick={onOpenSettings}
+      >
         <SettingsIcon />
-      </ToolbarButton>
-      <ToolbarToggleButton
+      </CommandButton>
+      <ToggleCommandButton
         labels={DRAWING_LOCK_LABELS}
         offIcon={<LockOpenIcon />}
         onIcon={<LockClosedIcon />}
         pressed={locked}
-        {...tabStop(2)}
+        className={TOOLBAR_BUTTON_CLASS}
+        {...tabStop('lock')}
         onClick={onToggleLock}
       />
-      <ToolbarToggleButton
+      <ToggleCommandButton
         labels={DRAWING_VISIBILITY_LABELS}
         offIcon={<EyeIcon />}
         onIcon={<EyeCrossedIcon />}
         pressed={!visible}
-        {...tabStop(3)}
+        className={TOOLBAR_BUTTON_CLASS}
+        {...tabStop('visibility')}
         onClick={onToggleVisibility}
       />
-      <ToolbarButton label={REMOVE_DRAWING_LABEL} {...tabStop(4)} onClick={onRemove}>
+      <CommandButton
+        label={REMOVE_DRAWING_LABEL}
+        className={TOOLBAR_BUTTON_CLASS}
+        {...tabStop('remove')}
+        onClick={onRemove}
+      >
         <TrashIcon />
-      </ToolbarButton>
+      </CommandButton>
     </div>
   );
 }

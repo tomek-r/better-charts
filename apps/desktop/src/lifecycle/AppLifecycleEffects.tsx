@@ -1,96 +1,41 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect } from 'react';
+import type { AccountRefs } from '../features/bridge/bridgeEventTypes';
 import { useExecutionCommandEffects } from '../features/execution/useExecutionCommands';
 import type { ExecutionCommandState } from '../features/execution/useExecutionCommands';
-import { useBridgeBootstrapEffects } from '../features/bridge/effects/useBridgeBootstrapEffects';
-import { useBridgeStreamEffects } from '../features/bridge/effects/useBridgeStreamEffects';
-import { useLastChartSelectionEffects } from '../features/bridge/effects/useLastChartSelectionEffects';
+import { useBridgeBootstrapEffects } from '../features/bridge/useBridgeBootstrapEffects';
+import { useBridgeStreamEffects } from '../features/bridge/useBridgeStreamEffects';
+import { useLastChartSelectionEffects } from '../features/bridge/lastChartSelection/useLastChartSelectionEffects';
 import { usePartialCloseAvailable } from '../features/partial-close/usePartialCloseAvailable';
-import { useBridgeQuote } from '../features/bridge/BridgeSessionProvider';
-import { useOrderTicketStores } from '../features/order-ticket/state/orderTicketContext';
+import { useBridgeQuote } from '../features/bridge/bridgeSelectors';
+import { useOrderTicketStores } from '../features/order-ticket/draft/orderTicketContext';
 import type { BridgeSessionLifecycleState } from '../features/bridge/BridgeSessionProvider';
 import {
   useChartWorkspaceInitEffects,
   useChartWorkspaceChartEffects,
   useChartWorkspaceResetEffects,
   useChartWorkspaceHotkeyEffect,
-} from '../features/chart/effects/useChartLifecycle';
-import { useChartWorkspacePointerEffects } from '../features/chart/effects/useChartGestures';
+} from '../features/chart/workspace/useChartWorkspaceEffects';
+import { useChartWorkspacePointerEffects } from '../features/chart/pointer/useChartWorkspacePointerEffects';
 import {
   useChartWorkspaceMirrorRefEffect,
   useChartWorkspaceMirrorLayoutEffect,
-} from '../features/chart/effects/useChartOverlaySync';
-import { useOrderTicketEntryEffects } from '../features/order-ticket/effects/useOrderTicketEntryEffects';
-import { useOrderTicketDefaultVolume } from '../features/order-ticket/effects/useOrderTicketDefaultVolume';
-import { useOrderTicketStopLossSnap } from '../features/order-ticket/effects/useOrderTicketStopLossSnap';
-import { useOrderTicketOrderCheckEffects } from '../features/order-ticket/effects/useOrderTicketOrderCheckEffects';
-import { useOrderTicketRiskPreviewEffects } from '../features/order-ticket/effects/useOrderTicketRiskPreviewEffects';
-import { usePortfolioAccountResetEffect } from '../features/portfolio/usePortfolio';
-import type { ChartWorkspaceState } from '../features/chart/state/useChartWorkspace';
-import { useOrderTicketEntryRuntime } from '../features/order-ticket/state/useOrderTicketEntryRuntime';
-import { useOrderTicketCheckRuntime } from '../features/order-ticket/state/useOrderTicketCheckRuntime';
-import { useOrderTicketPreviewRuntime } from '../features/order-ticket/state/useOrderTicketPreviewRuntime';
+} from '../features/chart/workspace/useChartWorkspaceMirrorEffects';
+import { useOrderTicketEntryEffects } from '../features/order-ticket/pricing/useOrderTicketEntryEffects';
+import { useOrderTicketDefaultVolume } from '../features/order-ticket/sizing/useOrderTicketDefaultVolume';
+import { useOrderTicketStopLossSnap } from '../features/order-ticket/stagedOrder/useOrderTicketStopLossSnap';
+import { useOrderTicketOrderCheckEffects } from '../features/order-ticket/orderCheck/useOrderTicketOrderCheckEffects';
+import { useOrderTicketRiskPreviewEffects } from '../features/order-ticket/riskPreview/useOrderTicketRiskPreviewEffects';
+import { usePortfolioAccountResetEffect } from '../features/portfolio/usePortfolioAccountResetEffect';
+import type { ChartWorkspaceState } from '../features/chart/workspace/useChartWorkspace';
+import { useOrderTicketEntryRuntime } from '../features/order-ticket/pricing/useOrderTicketEntryRuntime';
+import { useOrderTicketCheckRuntime } from '../features/order-ticket/orderCheck/useOrderTicketCheckRuntime';
+import { useOrderTicketPreviewRuntime } from '../features/order-ticket/riskPreview/useOrderTicketPreviewRuntime';
 import {
-  useOrderTicketChartActions,
-  useOrderTicketChartControls,
   useOrderTicketChartRuntime,
-} from '../features/order-ticket/state/useOrderTicketChartRuntime';
+  type OrderTicketChartActions,
+  type OrderTicketChartControls,
+} from '../features/order-ticket/stagedOrder/useOrderTicketChartRuntime';
 import type { BridgeTicketResponsePort } from '../features/bridge/bridgeTicketResponseHandlers';
-
-type InitializationSession = Pick<
-  BridgeSessionLifecycleState,
-  'mounted' | 'setChartError' | 'currentSymbol' | 'stores' | 'marketData'
->;
-type StreamSession = Pick<BridgeSessionLifecycleState, 'snapshot' | 'instrument' | 'account' | 'portfolio'>;
-type ChartSession = Pick<
-  BridgeSessionLifecycleState,
-  | 'instrument'
-  | 'loadingTimeframe'
-  | 'snapshot'
-  | 'setLoadingTimeframe'
-  | 'setChartError'
-  | 'currentSymbol'
-  | 'setQuote'
-  | 'setInstrument'
-  | 'targetSymbol'
-  | 'status'
->;
-type AccountSession = Pick<
-  BridgeSessionLifecycleState,
-  | 'account'
-  | 'status'
-  | 'snapshot'
-  | 'loadingTimeframeRef'
-  | 'targetSymbol'
-  | 'pendingMetadata'
-  | 'setLoadingTimeframe'
-  | 'setQuote'
-  | 'setInstrument'
-  | 'setAccount'
-  | 'setPortfolio'
-  | 'setSymbolLoading'
->;
-type BootstrapSession = Pick<
-  BridgeSessionLifecycleState,
-  | 'stores'
-  | 'loadingTimeframeRef'
-  | 'targetSymbol'
-  | 'pendingMetadata'
-  | 'currentSymbol'
-  | 'currentTimeframe'
-  | 'latestCandleRef'
-  | 'dataKeyRef'
-  | 'marketData'
->;
-type PreviewSession = Pick<
-  BridgeSessionLifecycleState,
-  'instrument' | 'account' | 'snapshot' | 'latestCandle' | 'status'
->;
-type TicketControls = ReturnType<typeof useOrderTicketChartControls>;
-type TicketActions = ReturnType<typeof useOrderTicketChartActions>;
-type AccountRefs = {
-  accountLoginRef: RefObject<string | undefined>;
-  brokerServerRef: RefObject<string | undefined>;
-};
 
 export function LifecycleInitialization({
   workspace,
@@ -98,7 +43,7 @@ export function LifecycleInitialization({
   execution,
 }: {
   workspace: ChartWorkspaceState;
-  session: InitializationSession;
+  session: BridgeSessionLifecycleState;
   execution: ExecutionCommandState;
 }) {
   const { mounted: mountedRef, setChartError, currentSymbol, stores, marketData } = session;
@@ -118,21 +63,15 @@ export function LifecyclePortfolioStream({
   workspace,
   ticket,
 }: {
-  session: StreamSession;
+  session: BridgeSessionLifecycleState;
   workspace: ChartWorkspaceState;
-  ticket: Pick<TicketActions, 'clearStagedWidget'>;
+  ticket: Pick<OrderTicketChartActions, 'clearStagedWidget'>;
 }) {
   const quote = useBridgeQuote();
   const partialCloseAvailable = usePartialCloseAvailable();
   const submitSwapPendingRef = useOrderTicketStores().coordination.submitSwapPendingRef;
   useBridgeStreamEffects(
-    {
-      snapshot: session.snapshot,
-      instrument: session.instrument,
-      account: session.account,
-      portfolio: session.portfolio,
-      quote,
-    },
+    { ...session, quote },
     {
       chart: workspace.chart,
       positionOverlayState: workspace.positionOverlayState,
@@ -151,27 +90,11 @@ export function LifecycleChartMarket({
   ticket,
 }: {
   workspace: ChartWorkspaceState;
-  session: ChartSession;
-  ticket: Pick<TicketActions, 'clearStagedWidget'>;
+  session: BridgeSessionLifecycleState;
+  ticket: Pick<OrderTicketChartActions, 'clearStagedWidget'>;
 }) {
   const quote = useBridgeQuote();
-  useChartWorkspaceChartEffects(
-    workspace,
-    {
-      instrument: session.instrument,
-      loadingTimeframe: session.loadingTimeframe,
-      snapshot: session.snapshot,
-      setLoadingTimeframe: session.setLoadingTimeframe,
-      setChartError: session.setChartError,
-      currentSymbol: session.currentSymbol,
-      setQuote: session.setQuote,
-      setInstrument: session.setInstrument,
-      targetSymbol: session.targetSymbol,
-      status: session.status,
-      quote,
-    },
-    ticket,
-  );
+  useChartWorkspaceChartEffects(workspace, { ...session, quote }, ticket);
   return null;
 }
 
@@ -182,8 +105,8 @@ export function LifecycleAccountAndCheck({
   accountRefs,
 }: {
   workspace: ChartWorkspaceState;
-  session: AccountSession;
-  controls: TicketControls;
+  session: BridgeSessionLifecycleState;
+  controls: OrderTicketChartControls;
   accountRefs: AccountRefs;
 }) {
   const { accountLoginRef, brokerServerRef } = accountRefs;
@@ -192,11 +115,7 @@ export function LifecycleAccountAndCheck({
     brokerServerRef.current = session.account?.brokerServer;
   }, [accountLoginRef, brokerServerRef, session.account?.accountLogin, session.account?.brokerServer]);
   useLastChartSelectionEffects(session.snapshot, session.status, session.account);
-  const check = useOrderTicketCheckRuntime({
-    snapshot: session.snapshot,
-    status: session.status,
-    account: session.account,
-  });
+  const check = useOrderTicketCheckRuntime(session);
   useOrderTicketOrderCheckEffects(check);
   useChartWorkspaceResetEffects(workspace, session, {
     setEntry: controls.setEntry,
@@ -223,10 +142,10 @@ export function LifecycleBootstrapAndGestures({
   bridgeTicket,
 }: {
   workspace: ChartWorkspaceState;
-  session: BootstrapSession;
+  session: BridgeSessionLifecycleState;
   accountRefs: AccountRefs;
-  ticketActions: TicketActions;
-  ticketControls: TicketControls;
+  ticketActions: OrderTicketChartActions;
+  ticketControls: OrderTicketChartControls;
   bridgeTicket: BridgeTicketResponsePort;
 }) {
   const { chart, adapterRef } = workspace;
@@ -251,12 +170,10 @@ export function LifecycleTicketPreviewAndMirror({
   workspace,
   session,
   execution,
-  dispatchEnabled,
 }: {
   workspace: ChartWorkspaceState;
-  session: PreviewSession;
-  execution: Pick<ExecutionCommandState, 'requestModifyDraft' | 'requestClosePosition' | 'requestCancelOrder'>;
-  dispatchEnabled: boolean;
+  session: BridgeSessionLifecycleState;
+  execution: ExecutionCommandState;
 }) {
   const quote = useBridgeQuote();
   const ticketInputs = {
@@ -280,12 +197,8 @@ export function LifecycleTicketPreviewAndMirror({
     workspace,
     { instrument: session.instrument },
     { stagedOnChart: ticketChart.stagedOnChart },
-    {
-      requestModifyDraft: execution.requestModifyDraft,
-      requestClosePosition: execution.requestClosePosition,
-      requestCancelOrder: execution.requestCancelOrder,
-    },
-    dispatchEnabled,
+    execution,
+    execution.executionQueue?.dispatchEnabled === true,
   );
   useChartWorkspaceMirrorLayoutEffect(
     workspace,

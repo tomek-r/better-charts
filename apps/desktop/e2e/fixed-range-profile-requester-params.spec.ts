@@ -6,7 +6,7 @@ import {
   DEFAULT_PROFILE_REQUEST_PARAMS,
   FixedRangeProfileRequester,
 } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
-import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/overlay';
+import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/profileState';
 
 /** The requester sends the histogram settings its owner supplies, and today's defaults when it supplies none. */
 
@@ -34,7 +34,7 @@ function createRequester(requestParams?: () => ProfileRequestParams) {
   return { requester, market };
 }
 
-test('without an owner the request carries 128 rows and a 70 percent value area', () => {
+test('without an owner the request carries 1 tick per row and a 70 percent value area', () => {
   const { requester, market } = createRequester();
   requester.requestProfile({ fromMs: FROM_MS, endMs: END_MS });
   expect(market.requests).toHaveLength(1);
@@ -42,7 +42,7 @@ test('without an owner the request carries 128 rows and a 70 percent value area'
     symbol: SYMBOL,
     fromMs: FROM_MS,
     endMs: END_MS,
-    rowsLayout: { kind: 'rows', count: 128 },
+    rowsLayout: { kind: 'ticksPerRow', ticks: 1 },
     valueAreaPercent: 70,
   });
   expect(market.requests[0]).toMatchObject({ ...DEFAULT_PROFILE_REQUEST_PARAMS });

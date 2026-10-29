@@ -19,7 +19,6 @@
 //! the user picked. The restart adds the two startup files `restart`
 //! documents, which it deletes again as soon as the terminal has read them.
 
-use std::env;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -43,9 +42,10 @@ use super::restart::{
 };
 use crate::app_settings::AppSettingsState;
 use crate::bridge::accept::expect_restarted_terminal;
-use crate::bridge::state::{tauri_events, BridgeConnectionState, BridgeState, DEFAULT_ADDR};
+use crate::bridge::state::{tauri_events, BridgeConnectionState, BridgeState};
 use crate::download_resources::{EXPERT_ADVISOR_RESOURCE, INDICATOR_RESOURCE};
 use crate::execution_adapter::{ExecutionAdapterState, ExecutionQueueView};
+use crate::mt5_backend::Mt5BackendState;
 
 /// Reported when a located data folder has no parent to compile in. A located folder
 /// always has one, so this only guards the impossible case instead of panicking.
@@ -312,11 +312,15 @@ pub(super) fn matched_target(
 /// row per terminal. The scan is repeated per command on purpose: a terminal installed
 /// since the window opened is then offered, and an installation that has disappeared
 /// is refused instead of written into.
-fn installations_on_this_machine(chosen: Option<Mt5Installation>) -> Vec<LocatedInstallation> {
-    let discovered: Vec<Mt5Installation> = discover_this_machine()
-        .into_iter()
-        .filter(|installation| !stands_for(installation, chosen.as_ref()))
-        .collect();
+fn installations_on_this_machine(
+    settings: &AppSettingsState,
+    chosen: Option<Mt5Installation>,
+) -> Vec<LocatedInstallation> {
+    let discovered: Vec<Mt5Installation> =
+        discover_this_machine(&|name| settings.variable_or_process_env(name))
+            .into_iter()
+            .filter(|installation| !stands_for(installation, chosen.as_ref()))
+            .collect();
     chosen
         .into_iter()
         .chain(discovered)
@@ -352,7 +356,10 @@ fn resolve_target(
     terminal_path: &str,
     mql5_path: &str,
 ) -> Result<InstallTarget, String> {
-    let installations = installations_on_this_machine(app.state::<ChosenInstallation>().get());
+    let installations = installations_on_this_machine(
+        &app.state::<AppSettingsState>(),
+        app.state::<ChosenInstallation>().get(),
+    );
     matched_target(&installations, terminal_path, mql5_path)
 }
 
@@ -406,8 +413,9 @@ fn install_and_compile(
 #[tauri::command]
 pub(crate) fn list_mt5_installations(
     chosen: tauri::State<'_, ChosenInstallation>,
+    settings: tauri::State<'_, AppSettingsState>,
 ) -> Vec<Mt5InstallationView> {
-    installation_views(&installations_on_this_machine(chosen.get()))
+    installation_views(&installations_on_this_machine(&settings, chosen.get()))
 }
 
 /// Folder below a Wine prefix that MT5 installs into by default.
@@ -466,9 +474,10 @@ fn picker_start_folder(
 #[tauri::command]
 pub(crate) fn mt5_picker_start_folder(
     chosen: tauri::State<'_, ChosenInstallation>,
+    settings: tauri::State<'_, AppSettingsState>,
 ) -> Option<String> {
-    let env: &dyn Fn(&str) -> Option<String> = &|name: &str| env::var(name).ok();
-    let installations = installations_on_this_machine(chosen.get());
+    let env: &dyn Fn(&str) -> Option<String> = &|name| settings.variable_or_process_env(name);
+    let installations = installations_on_this_machine(&settings, chosen.get());
     picker_start_folder(
         env,
         current_host_os(),
@@ -485,6 +494,7 @@ pub(crate) fn mt5_picker_start_folder(
 /// `terminal64.exe` instead of asking for a path to type. The pick applies at once —
 /// the list, the install, and the restart all use it without restarting Better
 /// Charts — and its paths are saved for the next launch.
+/// The process manager takes the picked paths at once too.
 ///
 /// The pick is validated before it is kept, so a file that is not MT5's terminal, a
 /// path outside a Wine prefix, and a machine without Wine are refused with a message
@@ -494,16 +504,25 @@ pub(crate) fn choose_mt5_installation(
     app: AppHandle,
     path: String,
 ) -> Result<Vec<Mt5InstallationView>, String> {
-    let env: &dyn Fn(&str) -> Option<String> = &|name: &str| env::var(name).ok();
+    let settings = app.state::<AppSettingsState>();
+    let env: &dyn Fn(&str) -> Option<String> = &|name| settings.variable_or_process_env(name);
     let installation =
         installation_from_executable(Path::new(&path), current_host_os(), env, &HostProbe)
             .map_err(|error| error.to_string())?;
     app.state::<ChosenInstallation>().set(installation.clone());
-    app.state::<AppSettingsState>()
-        .store_chosen_installation(&installation);
-    Ok(installation_views(&installations_on_this_machine(Some(
-        installation,
-    ))))
+    settings.store_chosen_installation(&installation);
+    apply_saved_paths_to_backend(&app);
+    Ok(installation_views(&installations_on_this_machine(
+        &settings,
+        Some(installation),
+    )))
+}
+
+/// Hands the MT5 paths now in force to the process manager, so the next manual start,
+/// stop or restart uses a path a pick or an install just stored.
+fn apply_saved_paths_to_backend(app: &AppHandle) {
+    let backend_config = app.state::<AppSettingsState>().backend_config();
+    app.state::<Mt5BackendState>().reconfigure(backend_config);
 }
 
 /// Runs [`install_and_compile`] on a blocking thread, because MetaEditor takes
@@ -545,21 +564,8 @@ pub(crate) async fn install_to_mt5(
     let report = blocking_install(target, sources, queue).await?;
     app.state::<AppSettingsState>()
         .fill_from_installation(&installation);
+    apply_saved_paths_to_backend(&app);
     Ok(report)
-}
-
-/// Environment variable of the bridge bind address, read the way `run_server` reads
-/// it, so the startup preset names exactly the address the app listens on.
-const BRIDGE_ADDRESS_VARIABLE: &str = "MT5_BRIDGE_ADDR";
-/// Environment variable of the bridge token the advisor has to present.
-const BRIDGE_TOKEN_VARIABLE: &str = "MT5_BRIDGE_TOKEN";
-
-/// The bridge endpoint a restarted terminal has to reach: the address the bridge
-/// listens on, and the token it expects.
-fn bridge_endpoint() -> (String, String) {
-    let address = env::var(BRIDGE_ADDRESS_VARIABLE).unwrap_or_else(|_| DEFAULT_ADDR.to_string());
-    let token = env::var(BRIDGE_TOKEN_VARIABLE).unwrap_or_default();
-    (address, token)
 }
 
 /// Connection state and session id the bridge reports right now.
@@ -614,8 +620,8 @@ async fn blocking_restart(
 /// Deletes the startup files an interrupted restart left behind in every installation
 /// this machine has. Run once at app start: the preset holds the bridge token, so
 /// nothing of it may stay on disk. Best effort, and never fails startup.
-pub(crate) fn remove_leftover_startup_files() {
-    for located in installations_on_this_machine(None) {
+pub(crate) fn remove_leftover_startup_files(settings: &AppSettingsState) {
+    for located in installations_on_this_machine(settings, None) {
         remove_startup_files_in(&located.installation, &located.data_folders);
     }
 }
@@ -646,12 +652,14 @@ pub(crate) async fn restart_mt5_with_ea(
     // Sampled right before the restart, so an order submitted while the scan ran still
     // leaves the terminal untouched.
     let queue = app.state::<ExecutionAdapterState>().queue_status();
-    let (address, token) = bridge_endpoint();
+    // The endpoint the bridge listens on right now, so the startup preset names the
+    // address and token this app serves with.
+    let endpoint = app.state::<AppSettingsState>().bridge_endpoint();
     let request = RestartRequest {
         installation: target.installation,
         data_folder: target.data_folder,
-        address,
-        token,
+        address: endpoint.address,
+        token: endpoint.token,
     };
     let files = blocking_restart(request, queue).await?;
     let bridge = app.state::<BridgeState>().inner().clone();

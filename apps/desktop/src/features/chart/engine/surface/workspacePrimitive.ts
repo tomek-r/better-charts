@@ -11,7 +11,8 @@ import {
   PANE_BELOW_TRADING_OVERLAYS,
   PRICE_AXIS_BELOW_TRADING_OVERLAYS,
 } from './drawTarget';
-import type { ChartDrawingPaintTarget, ChartDrawTarget, RenderViewport } from '../tools/toolContract';
+import type { ChartDrawingPaintTarget, ChartDrawTarget } from '../tools/toolContract';
+import type { RenderViewport } from './overlayRenderer';
 
 /**
  * The render-facing surface the workspace primitive needs from the chart host:

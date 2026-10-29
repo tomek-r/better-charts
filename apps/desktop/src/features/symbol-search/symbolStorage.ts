@@ -3,6 +3,9 @@ import type { BrokerSymbol } from '../../shared/bridge/types';
 export const favoritesKey = 'better-charts.symbol-favorites.v1';
 export const recentKey = 'better-charts.symbol-recent.v1';
 
+/** Each saved list (favorites, recent) keeps this many symbols. */
+export const MAX_SAVED_SYMBOLS = 10;
+
 export function loadSymbols(key: string) {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(key) ?? '[]');
@@ -32,14 +35,14 @@ export function loadSymbols(key: string) {
     );
     return valid
       .filter((item, index, all) => all.findIndex((candidate) => candidate.symbol === item.symbol) === index)
-      .slice(0, 10);
+      .slice(0, MAX_SAVED_SYMBOLS);
   } catch {
     return [];
   }
 }
 export function saveSymbols(key: string, symbols: BrokerSymbol[]) {
   try {
-    localStorage.setItem(key, JSON.stringify(symbols.slice(0, 10)));
+    localStorage.setItem(key, JSON.stringify(symbols.slice(0, MAX_SAVED_SYMBOLS)));
   } catch {
     /* storage is optional */
   }

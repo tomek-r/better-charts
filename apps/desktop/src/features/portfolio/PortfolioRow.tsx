@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { AccountSnapshot, OpenPosition } from '../../shared/bridge/types';
 import { PartialCloseMenuButton } from '../partial-close/PartialCloseMenuButton';
 import { PartialCloseVolumePopover } from '../partial-close/PartialCloseVolumePopover';
-import { partialCloseLimits, partialCloseTitle } from '../partial-close/partialCloseVolume';
-import { volumeWithUnit } from '../../shared/format';
-import { accountAmount } from './accountAmount';
+import { partialCloseLimits, partialCloseTitle } from '../../shared/trading/partialCloseVolume';
+import { EMPTY_VALUE, volumeWithUnit } from '../../shared/format';
+import { formatAccountAmount } from './accountAmount';
 
 interface PortfolioRowProps {
   position: OpenPosition;
@@ -38,19 +38,10 @@ export function PortfolioRow({
   const limits = partialCloseLimits(position, partialCloseAvailable);
   const accountUnavailable = !account?.accountLogin || !account?.brokerServer;
   const locked = accountUnavailable || commandInFlight;
-  const itemRef = useRef<HTMLDivElement>(null);
-  const profitText = accountAmount(position.profit, account?.currency, account?.currencyDigits);
-
-  // The popover floats below the row inside the scrolling drawer; for the last row it extends
-  // the drawer's scroll area rather than being clipped, so bring it into view when it opens.
-  useEffect(() => {
-    if (customVolumeOpen) {
-      itemRef.current?.querySelector('.partial-popover')?.scrollIntoView({ block: 'nearest' });
-    }
-  }, [customVolumeOpen]);
+  const profitText = formatAccountAmount(position.profit, account);
 
   return (
-    <div className="portfolio-item" ref={itemRef}>
+    <div className="portfolio-item">
       <div className="portfolio-row">
         <div className="portfolio-header">
           {/* The header is ONE button that opens the symbol on the chart (its ::after stretches over
@@ -95,13 +86,13 @@ export function PortfolioRow({
           <dt>Price</dt>
           <dd>{position.priceCurrent}</dd>
           <dt>SL</dt>
-          <dd>{position.stopLoss ?? '—'}</dd>
+          <dd>{position.stopLoss ?? EMPTY_VALUE}</dd>
           <dt>TP</dt>
-          <dd>{position.takeProfit ?? '—'}</dd>
+          <dd>{position.takeProfit ?? EMPTY_VALUE}</dd>
           {position.swap && (
             <>
               <dt>Swap</dt>
-              <dd>{accountAmount(position.swap, account?.currency, account?.currencyDigits)}</dd>
+              <dd>{formatAccountAmount(position.swap, account)}</dd>
             </>
           )}
         </dl>

@@ -8,6 +8,7 @@
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, RwLock};
 use std::{env, ffi::OsStr};
 
 use serde::{Deserialize, Serialize};
@@ -50,12 +51,6 @@ pub(crate) fn non_empty_env(get: &dyn Fn(&str) -> Option<String>, key: &str) -> 
 }
 
 impl Mt5BackendConfig {
-    /// Reads explicit installation settings from the process environment.
-    pub fn from_env() -> Self {
-        let get = |key: &str| std::env::var(key).ok();
-        Self::resolve(&get)
-    }
-
     #[cfg(test)]
     pub fn from_env_with<F>(get: F) -> Self
     where
@@ -98,9 +93,31 @@ impl Mt5BackendConfig {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Mt5BackendStatus {
+    /// Legacy flag: `Unknown` reads as `false`. Prefer `terminal_process`.
     pub running: bool,
+    pub terminal_process: TerminalProcess,
     pub configured: bool,
     pub auto_start_enabled: bool,
+}
+
+/// What the process inspection found, as the frontend reads it. Unlike
+/// `running`, a failed inspection stays distinguishable from a stopped terminal.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalProcess {
+    Running,
+    NotRunning,
+    Unknown,
+}
+
+impl From<ProcessCheck> for TerminalProcess {
+    fn from(check: ProcessCheck) -> Self {
+        match check {
+            ProcessCheck::Running => Self::Running,
+            ProcessCheck::NotRunning => Self::NotRunning,
+            ProcessCheck::Unknown => Self::Unknown,
+        }
+    }
 }
 
 /// Optional startup arguments, shared by native Windows and Wine launches.
@@ -351,13 +368,14 @@ where
 
 /// Point-in-time backend status for the status command.
 pub fn status(config: &Mt5BackendConfig) -> Mt5BackendStatus {
-    status_with(config, is_terminal_running())
+    status_with(config, inspect_terminal())
 }
 
-/// Status core with an injected running flag so the shape is testable.
-fn status_with(config: &Mt5BackendConfig, running: bool) -> Mt5BackendStatus {
+/// Status core with an injected inspection so the shape is testable.
+fn status_with(config: &Mt5BackendConfig, check: ProcessCheck) -> Mt5BackendStatus {
     Mt5BackendStatus {
-        running,
+        running: check == ProcessCheck::Running,
+        terminal_process: check.into(),
         configured: is_configured(config),
         auto_start_enabled: config.enabled,
     }
@@ -449,27 +467,40 @@ fn auto_start_plan(
 }
 
 /// Tauri-managed backend state; holds the resolved config and exposes the
-/// health/control operations behind the `mt5_backend` commands.
+/// health/control operations behind the `mt5_backend` commands. Clones share the
+/// config, so a settings save reconfigures every holder at once.
 #[derive(Debug, Clone)]
 pub struct Mt5BackendState {
-    config: Mt5BackendConfig,
+    config: Arc<RwLock<Mt5BackendConfig>>,
 }
 
 impl Mt5BackendState {
-    pub fn from_env() -> Self {
+    pub fn new(config: Mt5BackendConfig) -> Self {
         Self {
-            config: Mt5BackendConfig::from_env(),
+            config: Arc::new(RwLock::new(config)),
         }
     }
 
+    /// Replaces the installation settings; the next start, stop or status uses them.
+    pub fn reconfigure(&self, config: Mt5BackendConfig) {
+        *self.config.write().expect("backend config lock poisoned") = config;
+    }
+
+    fn config(&self) -> Mt5BackendConfig {
+        self.config
+            .read()
+            .expect("backend config lock poisoned")
+            .clone()
+    }
+
     pub fn status(&self) -> Mt5BackendStatus {
-        status(&self.config)
+        status(&self.config())
     }
 
     /// Manual control op: allowed regardless of the auto-start flag; refuses
     /// to double-start an already-running terminal.
     pub fn start(&self) -> Result<Mt5BackendStatus, String> {
-        start_terminal(&self.config)?;
+        start_terminal(&self.config())?;
         Ok(self.status())
     }
 
@@ -489,11 +520,12 @@ impl Mt5BackendState {
     /// stderr — and no outcome ever panics the app. Idempotent: a second call
     /// observes the running terminal and reports `already running`.
     pub fn auto_start_best_effort(&self, bridge_session_active: bool) {
+        let config = self.config();
         let plan = auto_start_plan(
             bridge_session_active,
             inspect_terminal,
-            self.config.enabled,
-            is_configured(&self.config),
+            config.enabled,
+            is_configured(&config),
         );
         let line = match plan {
             AutoStartPlan::SessionActive => "skipped (bridge session active)".to_string(),
@@ -501,7 +533,7 @@ impl Mt5BackendState {
             AutoStartPlan::InspectUnknown => "skipped (cannot inspect processes)".to_string(),
             AutoStartPlan::Disabled => "skipped (disabled by MT5_BACKEND_ENABLED)".to_string(),
             AutoStartPlan::Unconfigured => "skipped (unconfigured installation)".to_string(),
-            AutoStartPlan::Start => match start_terminal(&self.config) {
+            AutoStartPlan::Start => match start_terminal(&config) {
                 Ok(pid) => {
                     eprintln!("[mt5-backend] auto-start: started (pid {pid})");
                     return;

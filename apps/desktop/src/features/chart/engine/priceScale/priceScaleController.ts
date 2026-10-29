@@ -4,6 +4,20 @@ import { setPriceScaleRange } from './priceScaleRange';
 /** The scale the candles and the price axis are bound to. */
 const PRICE_SCALE_ID = 'right';
 
+function control(glyph: string, label: string): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = glyph;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  return button;
+}
+
+function setPressed(button: HTMLButtonElement, pressed: boolean): void {
+  button.setAttribute('aria-pressed', String(pressed));
+  button.classList.toggle('price-scale-control-on', pressed);
+}
+
 /**
  * Hover-revealed toggles on the right price scale: `A` fits the visible data
  * (auto scale) and `L` switches the scale to logarithmic prices.
@@ -172,18 +186,4 @@ export class PriceScaleController {
     this.revealed = false;
     this.root.classList.remove('price-scale-controls-revealed');
   }
-}
-
-function control(glyph: string, label: string): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.textContent = glyph;
-  button.title = label;
-  button.setAttribute('aria-label', label);
-  return button;
-}
-
-function setPressed(button: HTMLButtonElement, pressed: boolean): void {
-  button.setAttribute('aria-pressed', String(pressed));
-  button.classList.toggle('price-scale-control-on', pressed);
 }

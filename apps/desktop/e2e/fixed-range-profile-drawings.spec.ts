@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createFakeMarketDataPort, profileResultFor } from './helpers/fakeMarketDataPort';
 import { createFakeToolHost, oneMinuteBars, SLOT_WIDTH_PX, FAKE_SYMBOL } from './helpers/fakeToolHost';
-import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/tool';
+import { FixedRangeProfileTool } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileTool';
 import { readFixedRangeProfilePoints } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfilePoints';
 import type { ChartDrawingPaintTarget, ChartDrawTarget } from '../src/features/chart/engine/tools/toolContract';
 

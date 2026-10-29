@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { formatVolume } from '../../shared/format';
 import { CloseKeepSlider } from './CloseKeepSlider';
 import {
@@ -8,8 +8,8 @@ import {
   partialVolumeMessage,
   presetVolume,
   type PartialCloseLimits,
-} from './partialCloseVolume';
-import { useEscapeDismissal } from './useDismissal';
+} from '../../shared/trading/partialCloseVolume';
+import { useEscapeDismissal } from '../../shared/ui/popup/useDismissal';
 import { VolumeStepper } from './VolumeStepper';
 
 interface PartialCloseVolumePopoverProps {
@@ -24,7 +24,13 @@ interface PartialCloseVolumePopoverProps {
 /** Custom volume form: stepper, shortcut chips, close/keep bar, validation and Cancel / Close. */
 export function PartialCloseVolumePopover({ title, limits, onConfirm, onDismiss }: PartialCloseVolumePopoverProps) {
   const [value, setValue] = useState(() => presetVolume(limits, 50) ?? formatVolume(limits.min));
+  const formRef = useRef<HTMLFormElement>(null);
   useEscapeDismissal(onDismiss);
+  // The popover floats below its anchor inside a scrolling drawer; for the last row it extends
+  // the drawer's scroll area rather than being clipped, so bring it into view when it opens.
+  useEffect(() => {
+    formRef.current?.scrollIntoView({ block: 'nearest' });
+  }, []);
   const check = checkPartialVolume(limits, value);
   const message = check.ok ? undefined : partialVolumeMessage(check.issue, limits);
 
@@ -36,7 +42,7 @@ export function PartialCloseVolumePopover({ title, limits, onConfirm, onDismiss 
   };
 
   return (
-    <form className="partial-popover" aria-label={title} onSubmit={submit}>
+    <form ref={formRef} className="partial-popover" aria-label={title} onSubmit={submit}>
       <div className="partial-popover-header">
         <strong>{title}</strong>
         <button type="button" className="partial-dismiss" aria-label="Dismiss partial close" onClick={onDismiss}>

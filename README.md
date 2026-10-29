@@ -90,8 +90,10 @@ remain the fallback, for example when MT5 is not found.
    execution. Reattach the EA if MT5 trading permissions change after connecting.
 
 Trading and MT5 auto-start are disabled by default. The gear icon reopens
-settings; saved changes apply after restart. Release builds require a nonempty
-token. Keep the listener on loopback.
+settings; saved changes apply at once (a new bridge address, token or frame size
+restarts the listener and is refused while an order is queued or in flight; MT5
+auto-start runs at the next launch). Release builds require a nonempty token.
+Keep the listener on loopback.
 
 Settings, the execution journal and symbol cache live in the app's user-data
 folder (`com.bettercharts.desktop`): Application Support on macOS, `%APPDATA%`
