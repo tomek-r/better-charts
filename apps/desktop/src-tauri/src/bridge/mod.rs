@@ -7,6 +7,7 @@ pub(crate) mod accept;
 pub(crate) mod chart_selection;
 pub(crate) mod commands;
 pub(crate) mod connection;
+pub(crate) mod endpoint;
 pub(crate) mod handshake;
 pub(crate) mod inbound_control;
 pub(crate) mod inbound_execution;

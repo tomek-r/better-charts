@@ -431,6 +431,25 @@ pub(crate) fn expect_restarted_terminal(events: &Arc<dyn BridgeEvents>, state: &
     });
 }
 
+/// Ends the current bridge session, if any, through the same teardown a lost
+/// connection runs: queued commands are dropped and the in-flight one goes `unknown`.
+/// A connection task that is still running notices the cleared session and closes its
+/// socket.
+pub(crate) fn end_current_session(
+    events: &Arc<dyn BridgeEvents>,
+    state: &BridgeState,
+    adapter: &ExecutionAdapterState,
+) {
+    let current = state
+        .current_session
+        .lock()
+        .expect("session mutex poisoned")
+        .clone();
+    if let Some(session_id) = current {
+        disconnect(events, state, adapter, &session_id);
+    }
+}
+
 pub(crate) fn disconnect(
     events: &Arc<dyn BridgeEvents>,
     state: &BridgeState,

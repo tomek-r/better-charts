@@ -104,6 +104,17 @@ fn from_env_with_applies_overrides_and_enabled_flag() {
     assert_eq!(empty_ini.config_ini_windows, None);
 }
 
+#[test]
+fn reconfigure_changes_the_settings_of_every_clone_at_once() {
+    let state = Mt5BackendState::new(config_with(env_map(&[("MT5_BACKEND_ENABLED", "false")])));
+    let other_holder = state.clone();
+    assert!(!state.config().enabled);
+
+    other_holder.reconfigure(config_with(env_map(&[("MT5_BACKEND_ENABLED", "true")])));
+
+    assert!(state.config().enabled);
+}
+
 fn fresh_temp_dir(tag: &str) -> PathBuf {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -347,11 +358,12 @@ fn status_serializes_to_camel_case_shape() {
         ("HOME", "/synthetic/home"),
         ("MT5_BACKEND_ENABLED", "yes"),
     ]));
-    let status = status_with(&config, true);
+    let status = status_with(&config, ProcessCheck::Running);
     assert_eq!(
         status,
         Mt5BackendStatus {
             running: true,
+            terminal_process: TerminalProcess::Running,
             configured: false,
             auto_start_enabled: true,
         }
@@ -363,9 +375,53 @@ fn status_serializes_to_camel_case_shape() {
             keys.sort();
             keys
         }),
-        Some(vec!["autoStartEnabled", "configured", "running"])
+        Some(vec![
+            "autoStartEnabled",
+            "configured",
+            "running",
+            "terminalProcess"
+        ])
     );
     assert_eq!(json["running"].as_bool(), Some(true));
+    assert_eq!(json["terminalProcess"].as_str(), Some("running"));
     assert_eq!(json["configured"].as_bool(), Some(false));
     assert_eq!(json["autoStartEnabled"].as_bool(), Some(true));
+}
+
+#[test]
+fn terminal_process_maps_every_inspection_outcome() {
+    assert_eq!(
+        TerminalProcess::from(ProcessCheck::Running),
+        TerminalProcess::Running
+    );
+    assert_eq!(
+        TerminalProcess::from(ProcessCheck::NotRunning),
+        TerminalProcess::NotRunning
+    );
+    assert_eq!(
+        TerminalProcess::from(ProcessCheck::Unknown),
+        TerminalProcess::Unknown
+    );
+}
+
+#[test]
+fn terminal_process_serializes_to_snake_case_strings() {
+    let words: Vec<String> = [
+        TerminalProcess::Running,
+        TerminalProcess::NotRunning,
+        TerminalProcess::Unknown,
+    ]
+    .iter()
+    .map(|process| serde_json::to_value(process).unwrap())
+    .map(|value| value.as_str().unwrap().to_string())
+    .collect();
+    assert_eq!(words, ["running", "not_running", "unknown"]);
+}
+
+#[test]
+fn unknown_inspection_keeps_the_legacy_running_flag_false() {
+    let config = config_with(env_map(&[("HOME", "/synthetic/home")]));
+    for check in [ProcessCheck::NotRunning, ProcessCheck::Unknown] {
+        assert!(!status_with(&config, check).running);
+    }
 }

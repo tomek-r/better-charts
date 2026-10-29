@@ -7,6 +7,7 @@ use super::{
     MarketSnapshot, PendingReconciliation, ReconciliationStatus, TerminalIdentity,
     HANDSHAKE_TIMEOUT,
 };
+use crate::bridge::endpoint::BridgeEndpoint;
 use std::{sync::atomic::Ordering, sync::Arc};
 use tokio::net::TcpStream;
 use trading_core::protocol::{
@@ -53,7 +54,7 @@ pub(crate) async fn run_handshake(
     events: &Arc<dyn BridgeEvents>,
     state: &BridgeState,
     adapter: &ExecutionAdapterState,
-    expected_token: &Arc<String>,
+    endpoint: &BridgeEndpoint,
     session_number: u64,
 ) -> Option<String> {
     let hello = match read_one(stream, source, HANDSHAKE_TIMEOUT).await {
@@ -142,8 +143,8 @@ pub(crate) async fn run_handshake(
             return None;
         }
     };
-    if (expected_token.is_empty() && !cfg!(debug_assertions))
-        || hello_payload.token != expected_token.as_str()
+    if (endpoint.token.is_empty() && !cfg!(debug_assertions))
+        || hello_payload.token != endpoint.token
     {
         send_error(
             stream,
@@ -172,24 +173,24 @@ pub(crate) async fn run_handshake(
                 return None;
             }
         };
-    let configured_frame = std::env::var("MT5_BRIDGE_MAX_FRAME_BYTES").ok();
-    let transfer_limits = match configured_transfer_limits(configured_frame.as_deref())
-        .and_then(|limits| limits.negotiate(hello_payload.transfer_limits))
-    {
-        Ok(limits) => limits,
-        Err(message) => {
-            send_error(
-                stream,
-                "rust-error".into(),
-                None,
-                ErrorCode::InvalidMessage,
-                message,
-            )
-            .await;
-            protocol_error(events, state, message);
-            return None;
-        }
-    };
+    let transfer_limits =
+        match configured_transfer_limits(Some(&endpoint.max_frame_bytes.to_string()))
+            .and_then(|limits| limits.negotiate(hello_payload.transfer_limits))
+        {
+            Ok(limits) => limits,
+            Err(message) => {
+                send_error(
+                    stream,
+                    "rust-error".into(),
+                    None,
+                    ErrorCode::InvalidMessage,
+                    message,
+                )
+                .await;
+                protocol_error(events, state, message);
+                return None;
+            }
+        };
     source.set_max_frame_size(transfer_limits.max_frame_bytes as usize);
     let session_start = state
         .chart_selection

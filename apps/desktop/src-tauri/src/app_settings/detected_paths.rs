@@ -27,8 +27,11 @@ const WINE_BINARY_FIELD: &str = "wineBinary";
 ///
 /// A configured `MT5_TERMINAL_EXE` yields [`InstallationSource::Configured`], which
 /// is the user's own choice and therefore never filled in.
+///
+/// Reads the process environment, because it runs at startup before any settings are
+/// in force.
 pub(super) fn discovered_installation() -> Option<Mt5Installation> {
-    discover_this_machine()
+    discover_this_machine(&|name| std::env::var(name).ok())
         .into_iter()
         .find(|installation| installation.source == InstallationSource::Discovered)
 }

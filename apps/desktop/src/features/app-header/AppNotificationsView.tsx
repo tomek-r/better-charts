@@ -5,7 +5,6 @@ import {
   useAppSettingsActions,
   useConfigurationNotice,
   useNotificationRevision,
-  useRestartNoticeVisible,
 } from '../settings/AppSettingsProvider';
 
 function ConfigurationNotice() {
@@ -23,29 +22,13 @@ function ConfigurationNotice() {
   );
 }
 
-function RestartNotice() {
-  const restartNoticeVisible = useRestartNoticeVisible();
-  const notificationRevision = useNotificationRevision();
-  const { dismissRestartNotice } = useAppSettingsActions();
-  if (!restartNoticeVisible) {
-    return null;
-  }
-  return (
-    <Notification.Status key={`restart-${notificationRevision}`}>
-      <span>Settings saved. Restart Better Charts to apply changes.</span>
-      <Notification.Dismiss label="Dismiss settings saved notification" onDismiss={dismissRestartNotice} />
-    </Notification.Status>
-  );
-}
-
-/** Settings notifications: the configuration error and the restart reminder, plus a bridge refusal the bundled files fix. */
+/** Settings notifications: the configuration error, plus a bridge refusal the bundled files fix. */
 export function AppNotificationsView() {
   return (
     <Notification.Region>
       <ErrorNotifications />
       <BridgeComponentOutdatedNotice />
       <ConfigurationNotice />
-      <RestartNotice />
     </Notification.Region>
   );
 }

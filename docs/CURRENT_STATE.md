@@ -102,6 +102,16 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   stays open. The chart's connection dot appears only once a chart is rendered, and the
   install section names the data folder in words ("Installs into MetaTrader 5." or
   a portable/user folder choice) instead of showing its path.
+- A drawn chart whose bridge drops stays unchanged for 3 s, so a blip is invisible. From
+  3 s the app's loader covers the chart ("Reconnecting to MetaTrader 5…"), and from 12 s
+  (past the EA's longest 10 s retry gap) the loader gives way to the not-connected
+  notice. The notice asks `get_mt5_backend_status` (`terminalProcess`: `running`,
+  `not_running` or `unknown`; the command inspects off the main thread) once when it
+  shows and every 5 s while it stays, and words itself after the answer: "MetaTrader 5 is
+  not running.", "MetaTrader 5 is running, but the EA is not connected.", or, while
+  unanswered, failed or `unknown`, "MetaTrader 5 is not connected."; no check is made
+  before the notice shows. Connecting again removes both at once; a refusal or the setup
+  flow on screen shows neither.
 - On first launch no dialog opens by itself: the setup screen stands in for the
   chart (until the setup is completed) and its "Open setup guide" button leads on.
   That launch generates a random
@@ -253,8 +263,8 @@ A strip down the chart's right edge holds the Trade panel and Object tree button
 drawer is open at a time, and the chart shrinks beside the open drawer instead of sitting
 under it. The Object tree lists every drawing of the account and symbol, topmost first,
 the way TradingView lists its objects. A click on a row selects that drawing on the chart,
-hovering a row reveals Lock, Hide/Show and Remove buttons, a double click opens the
-drawing's settings dialog, and Delete or Backspace removes the drawing of the focused row.
+hovering a row reveals Settings, Lock, Hide/Show and Remove buttons (the floating
+toolbar's order), a double click or the Settings button opens the drawing's settings dialog, and Delete or Backspace removes the drawing of the focused row.
 Arrow keys walk the rows. The price bars have a row of their own (the chart's symbol and
 timeframe, e.g. "EURUSD, 1H", with a candlestick icon) at their place in the stacking order,
 and it has no action buttons. Any row, the bars row included, drags with the mouse or moves
@@ -278,7 +288,12 @@ refuse while an order is queued or in flight, because a recompile drops the brid
 session and closing the terminal would lose the order.
 
 Trading/MT5 auto-start default off; disabled auto-start skips startup process
-inspection on every platform. Settings apply after restart. Precedence:
+inspection on every platform. Saved settings apply at once: the trading
+permission takes effect immediately (turning it off refuses new submissions and
+drops unsent queued orders; an in-flight order finishes); a new bridge address,
+token or maximum frame size restarts the bridge listener so the EA reconnects,
+and the save is refused while an order is queued or in flight; MT5 paths apply
+at once; MT5 auto-start runs only at launch. Precedence:
 process environment → first applicable `.env` → saved settings; only `MT5_` keys
 load. Invalid configuration disables trading/auto-start. See [setup](../README.md#connect-to-metatrader-5).
 

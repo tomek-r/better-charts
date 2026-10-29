@@ -26,7 +26,6 @@ export type AppSettingsViewState = AppSettingsHandlers & {
   setupCompleted: boolean;
   loadError: string | undefined;
   notificationRevision: number;
-  restartNoticeVisible: boolean;
   configurationNotice: string | null | undefined;
 };
 
@@ -54,8 +53,6 @@ export function AppSettingsProvider({ children, tauriAvailable }: { children: Re
   return <AppSettingsContext value={contextValue}>{children}</AppSettingsContext>;
 }
 
-const selectRestartNoticeVisible = (state: AppSettingsState) => state.restartRequired && !state.restartNoticeDismissed;
-
 const selectConfigurationNotice = (state: AppSettingsState) =>
   state.settings?.configurationError !== state.dismissedConfigurationError
     ? state.settings?.configurationError
@@ -78,7 +75,6 @@ export function useAppSettingsView(): AppSettingsViewState {
       setupCompleted: state.setupCompleted,
       loadError: state.loadError,
       notificationRevision: state.notificationRevision,
-      restartNoticeVisible: selectRestartNoticeVisible(state),
       configurationNotice: selectConfigurationNotice(state),
     })),
   );
@@ -133,11 +129,6 @@ export function useBridgeToken(): string | undefined {
 /** The configuration error to show, `undefined` once dismissed. */
 export function useConfigurationNotice(): string | null | undefined {
   return useSettingsSelector('useConfigurationNotice', selectConfigurationNotice);
-}
-
-/** Whether the "settings saved, restart" reminder is showing. */
-export function useRestartNoticeVisible(): boolean {
-  return useSettingsSelector('useRestartNoticeVisible', selectRestartNoticeVisible);
 }
 
 /** Changes whenever settings are saved, so a notice that was dismissed shows again. */

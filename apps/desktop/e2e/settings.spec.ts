@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { setupGuideDialog, setupScreen } from './helpers/setupGuide';
-import { gotoWithStub, stubInvocations, type StubInternals } from './helpers/tauriStub';
+import { gotoWithStub, stubInvocations, type StubInternals, type TauriStubOptions } from './helpers/tauriStub';
 import type { AppSettingsData } from '../src/features/settings/appSettingsData';
 
 const firstLaunch: AppSettingsData = {
@@ -17,7 +17,6 @@ const firstLaunch: AppSettingsData = {
   },
   configured: false,
   firstLaunch: true,
-  restartRequired: false,
   platform: 'linux',
   overriddenKeys: [],
   detectedFields: [],
@@ -119,71 +118,67 @@ async function expectBannerTextUncovered(banner: Locator) {
   expect(uncovered).toBe(true);
 }
 
-test('settings notifications stack in the bottom right and clear drawing tools at small viewports', async ({
-  page,
-}) => {
+/** Stub options whose `get_app_settings` answers `firstLaunch` with `overrides` applied. */
+const settingsResponse = (overrides: Partial<AppSettingsData>) => ({
+  responses: { get_app_settings: { ...firstLaunch, ...overrides } },
+});
+
+const DISMISS_CONFIGURATION_NOTICE = 'Dismiss configuration notification';
+
+/** Loads a saved configuration with an override error: settings open by themselves, then Cancel leaves the notice. */
+async function loadWithSettingsDialogClosed(page: Page) {
   await gotoWithStub(
     page,
     settingsResponse({
+      mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'demo-token' },
       firstLaunch: false,
-      restartRequired: true,
       configurationError: 'Invalid environment configuration. Fix the override and restart.',
     }),
   );
-  await page.getByRole('dialog', { name: 'App settings' }).getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'App settings' })).toBeHidden();
+  const dialog = page.getByRole('dialog', { name: 'App settings' });
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  return { dialog, notice: page.getByRole('alert') };
+}
+
+/** Dismisses the configuration notice and opens settings in the same task, so the notice's exit overlaps the dialog. */
+const dismissConfigurationNoticeThenOpenSettings = (page: Page) =>
+  page.evaluate((dismissLabel) => {
+    document.querySelector<HTMLButtonElement>(`[aria-label="${dismissLabel}"]`)!.click();
+    document.querySelector<HTMLButtonElement>('[aria-label="App settings"]')!.click();
+  }, DISMISS_CONFIGURATION_NOTICE);
+
+test('the settings notification sits in the bottom right and clears drawing tools at small viewports', async ({
+  page,
+}) => {
+  const { notice } = await loadWithSettingsDialogClosed(page);
   for (const width of [390, 1280]) {
     for (const height of [480, 800]) {
       await page.setViewportSize({ width, height });
-      await expectBannerTextUncovered(page.getByRole('alert'));
-      await expect(page.getByRole('alert')).toHaveCSS('color', 'rgb(242, 245, 250)');
-      await expectBannerTextUncovered(page.getByRole('status').filter({ hasText: 'Restart Better Charts' }));
-      await expect(page.getByRole('status').filter({ hasText: 'Restart Better Charts' })).toHaveCSS(
-        'color',
-        'rgb(242, 245, 250)',
-      );
+      await expectBannerTextUncovered(notice);
+      await expect(notice).toHaveCSS('color', 'rgb(242, 245, 250)');
       const region = page.locator('.notification-region');
       await expect(region).toHaveCSS('position', 'absolute');
       const box = await region.boundingBox();
       expect(box).not.toBeNull();
       expect(box!.x + box!.width).toBe(width - 16);
       expect(box!.y + box!.height).toBe(height - 16);
-      const alert = await page.getByRole('alert').boundingBox();
-      const status = await page.getByRole('status').filter({ hasText: 'Restart Better Charts' }).boundingBox();
-      expect(alert!.y + alert!.height).toBeLessThan(status!.y);
     }
   }
 });
 
-test('saving settings shows a dark shadowed notification without moving the chart', async ({ page }) => {
+test('saving settings shows no restart notice and does not move the chart', async ({ page }) => {
   await gotoWithStub(page);
   const chart = page.locator('.chart-section');
   const before = await chart.boundingBox();
   await page.getByRole('button', { name: 'App settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'App settings' });
+  await expect(dialog.getByText('apply after restarting', { exact: false })).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toBeHidden();
-  const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
-  await expect(notice).toHaveCSS('background-color', 'rgb(18, 25, 35)');
-  await expect(notice).not.toHaveCSS('box-shadow', 'none');
-  await expect(notice.locator('.notification-icon')).toBeVisible();
-  const typography = (locator: typeof notice) =>
-    locator.evaluate((element) => {
-      const style = getComputedStyle(element);
-      return { fontSize: style.fontSize, fontWeight: style.fontWeight, lineHeight: style.lineHeight };
-    });
-  const statusType = await typography(notice);
-  expect(statusType.fontSize).toBe('13px');
-  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText('Restart Better Charts', { exact: false })).toHaveCount(0);
+  await expect(page.locator('.notification')).toHaveCount(0);
   expect(await chart.boundingBox()).toEqual(before);
-  await page.getByRole('button', { name: 'App settings', exact: true }).click();
-  await expect(dialog).toBeVisible();
-  const modalAboveNotice = await notice.evaluate((element) => {
-    const box = element.getBoundingClientRect();
-    const topmost = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-    return topmost !== null && topmost.closest('.settings-backdrop') !== null;
-  });
-  expect(modalAboveNotice).toBe(true);
 });
 
 /** A settings read that was already in flight when newer state was accepted. */
@@ -191,18 +186,6 @@ const staleSettings: AppSettingsData = {
   ...firstLaunch,
   mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'older-token' },
 };
-
-/** Stub options whose `get_app_settings` answers `firstLaunch` with `overrides` applied. */
-const settingsResponse = (overrides: Partial<AppSettingsData>) => ({
-  responses: { get_app_settings: { ...firstLaunch, ...overrides } },
-});
-
-/** Dismisses the restart notice and opens settings in the same task, so the notice's exit overlaps the dialog. */
-const dismissRestartNoticeThenOpenSettings = (page: Page) =>
-  page.evaluate(() => {
-    document.querySelector<HTMLButtonElement>('[aria-label="Dismiss settings saved notification"]')!.click();
-    document.querySelector<HTMLButtonElement>('[aria-label="App settings"]')!.click();
-  });
 
 /** Waits for startup to finish its two reads, then parks every later `get_app_settings` until a test resolves it. */
 async function holdSettingsReads(page: Page) {
@@ -276,54 +259,31 @@ test('a settings read started before save cannot overwrite the saved settings', 
   await expect(dialog).toBeHidden();
 
   await resolveHeldSettingsRead(page, 0, staleSettings);
-  await expect(page.getByRole('status').filter({ hasText: 'Restart Better Charts' })).toBeVisible();
 
   await gear.click();
   await expect(dialog.getByLabel('Token', { exact: true })).toHaveValue('saved-token');
 });
 
-test('notification dismiss buttons hide independently and saving or reopening restores the notice', async ({
-  page,
-}) => {
-  await gotoWithStub(
-    page,
-    settingsResponse({
-      mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'demo-token' },
-      firstLaunch: false,
-      restartRequired: true,
-      configurationError: 'Invalid environment configuration. Fix the override and restart.',
-    }),
-  );
-  const dialog = page.getByRole('dialog', { name: 'App settings' });
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(dialog).toBeHidden();
-  const restart = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
-  const error = page.getByRole('alert');
-  await restart.getByRole('button', { name: 'Dismiss settings saved notification' }).focus();
+test('the dismissed configuration notice returns when settings reopen and stays after saving', async ({ page }) => {
+  const { dialog, notice } = await loadWithSettingsDialogClosed(page);
+  await notice.getByRole('button', { name: DISMISS_CONFIGURATION_NOTICE }).focus();
   await page.keyboard.press('Enter');
-  await expect(restart).toBeHidden();
-  await expect(error).toBeVisible();
-  await error.getByRole('button', { name: 'Dismiss configuration notification' }).click();
-  await expect(error).toBeHidden();
+  await expect(notice).toBeHidden();
   await page.getByRole('button', { name: 'App settings', exact: true }).click();
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(error).toBeVisible();
-  await expect(restart).toBeHidden();
+  await expect(notice).toBeVisible();
   await page.getByRole('button', { name: 'App settings', exact: true }).click();
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(restart).toBeVisible();
-  await expect(error).toBeVisible();
-  await expect(error).toContainText('Invalid environment configuration');
+  await expect(notice).toContainText('Invalid environment configuration');
 });
 
 test('notification enters and exits with fade and slide while dismissal waits for the exit', async ({ page }) => {
-  await gotoWithStub(page, settingsResponse({ firstLaunch: false, restartRequired: true }));
-  const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
+  const { notice } = await loadWithSettingsDialogClosed(page);
   await expect(notice).toHaveCSS('animation-name', 'notification-in');
   await expect(notice).toHaveCSS('animation-duration', '0.18s');
-  const dismiss = notice.getByRole('button', { name: 'Dismiss settings saved notification' });
+  const dismiss = notice.getByRole('button', { name: DISMISS_CONFIGURATION_NOTICE });
   await dismiss.click();
   await expect(notice).toHaveClass(/is-closing/);
   await expect(notice).toHaveCSS('animation-name', 'notification-out');
@@ -331,23 +291,13 @@ test('notification enters and exits with fade and slide while dismissal waits fo
   await expect(notice).toBeHidden();
 });
 
-test('opening and closing Settings keeps existing notification elements and completed animations', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: {
-      get_app_settings: {
-        ...firstLaunch,
-        firstLaunch: false,
-        restartRequired: true,
-        configurationError: 'Invalid environment configuration. Fix the override and restart.',
-      },
-    },
-  });
-  const dialog = page.getByRole('dialog', { name: 'App settings' });
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(dialog).toBeHidden();
+test('opening and closing Settings keeps the existing notification element and its completed animation', async ({
+  page,
+}) => {
+  const { dialog } = await loadWithSettingsDialogClosed(page);
   const notices = page.locator('.notification');
   const originalElements = await notices.elementHandles();
-  expect(originalElements).toHaveLength(2);
+  expect(originalElements).toHaveLength(1);
   for (const element of originalElements) {
     await element.evaluate(async (notice) => {
       await Promise.all((notice as Element).getAnimations().map((animation: Animation) => animation.finished));
@@ -367,13 +317,9 @@ test('opening and closing Settings keeps existing notification elements and comp
 });
 
 test('opening Settings lets an existing notification finish its dismissal', async ({ page }) => {
-  await gotoWithStub(page, {
-    responses: { get_app_settings: { ...firstLaunch, firstLaunch: false, restartRequired: true } },
-  });
-  const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
+  const { dialog, notice } = await loadWithSettingsDialogClosed(page);
   await expect(notice).toBeVisible();
-  await dismissRestartNoticeThenOpenSettings(page);
-  const dialog = page.getByRole('dialog', { name: 'App settings' });
+  await dismissConfigurationNoticeThenOpenSettings(page);
   await expect(dialog).toBeVisible();
   await expect(notice).toHaveClass(/is-closing/);
   await expect(notice).toBeHidden();
@@ -382,19 +328,12 @@ test('opening Settings lets an existing notification finish its dismissal', asyn
   await expect(notice).toBeHidden();
 });
 
-test('saving during a notification exit prevents the old dismissal from hiding the new reminder', async ({ page }) => {
-  await gotoWithStub(
-    page,
-    settingsResponse({
-      mt5BridgeSettings: { ...firstLaunch.mt5BridgeSettings, token: 'demo-token' },
-      firstLaunch: false,
-      restartRequired: true,
-    }),
-  );
-  const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
+test('saving during a notification exit prevents the old dismissal from hiding the restored notice', async ({
+  page,
+}) => {
+  const { dialog, notice } = await loadWithSettingsDialogClosed(page);
   await expect(notice).toBeVisible();
-  await dismissRestartNoticeThenOpenSettings(page);
-  const dialog = page.getByRole('dialog', { name: 'App settings' });
+  await dismissConfigurationNoticeThenOpenSettings(page);
   // Submit before the old notification's 180ms exit has finished.
   await dialog
     .getByRole('button', { name: 'Save', exact: true })
@@ -404,17 +343,14 @@ test('saving during a notification exit prevents the old dismissal from hiding t
   // Wait beyond the old exit deadline to ensure it cannot dismiss this notice.
   await page.waitForTimeout(220);
   await expect(notice).toBeVisible();
-  await expect(notice.getByRole('button', { name: 'Dismiss settings saved notification' })).toBeEnabled();
+  await expect(notice.getByRole('button', { name: DISMISS_CONFIGURATION_NOTICE })).toBeEnabled();
 });
 
 test('notification reduced motion skips animation and removes immediately on dismiss', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await gotoWithStub(page, {
-    responses: { get_app_settings: { ...firstLaunch, firstLaunch: false, restartRequired: true } },
-  });
-  const notice = page.getByRole('status').filter({ hasText: 'Restart Better Charts' });
+  const { notice } = await loadWithSettingsDialogClosed(page);
   await expect(notice).toHaveCSS('animation-name', 'none');
-  await notice.getByRole('button', { name: 'Dismiss settings saved notification' }).click();
+  await notice.getByRole('button', { name: DISMISS_CONFIGURATION_NOTICE }).click();
   await expect(notice).toHaveCount(0);
 });
 
@@ -451,7 +387,6 @@ test('first launch App settings welcomes, validates and saves all settings', asy
   await dialog.getByLabel('Startup configuration path').fill('/home/demo/mt5.ini');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expectBannerTextUncovered(page.getByRole('status').filter({ hasText: 'Restart Better Charts' }));
   const pointerUncovered = await page
     .getByRole('button', { name: 'Pointer tools', exact: true })
     .evaluate((element) => {
@@ -534,17 +469,31 @@ test('gear opens layout, traps focus, ignores chart shortcuts and cancel keeps s
   expect((await stubInvocations(page)).filter(({ cmd }) => cmd === 'save_app_settings')).toHaveLength(0);
 });
 
-test('failed save stays open and preserves input', async ({ page }) => {
-  await gotoWithStub(page, { failures: { save_app_settings: 'disk unavailable' } });
+/** Saves with `stubOptions` rejecting, then expects the dialog open with the input kept and `message` shown. */
+async function expectRefusedSaveKeepsDialog(page: Page, stubOptions: TauriStubOptions, message: string) {
+  await gotoWithStub(page, stubOptions);
   await page.getByRole('button', { name: 'App settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'App settings' });
   await dialog.getByLabel('Token', { exact: true }).fill('keep-this-token');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(
-    page.locator('.notification-region [role=alert]').filter({ hasText: 'Could not save settings' }),
-  ).toBeVisible();
+  await expect(page.locator('.notification-region [role=alert]').filter({ hasText: message })).toBeVisible();
+  await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel('Token', { exact: true })).toHaveValue('keep-this-token');
   await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+}
+
+test('failed save stays open and preserves input', async ({ page }) => {
+  await expectRefusedSaveKeepsDialog(page, { failures: { save_app_settings: 'disk unavailable' } }, 'Could not save');
+});
+
+test('a save the backend refuses shows the backend message and keeps the dialog open', async ({ page }) => {
+  const orderPendingMessage =
+    'An order is queued or in flight. Wait for it to settle before changing the bridge connection.';
+  await expectRefusedSaveKeepsDialog(
+    page,
+    { stringRejections: { save_app_settings: orderPendingMessage } },
+    orderPendingMessage,
+  );
 });
 
 test('Windows startup hides Wine fields and settings fit a small viewport', async ({ page }) => {

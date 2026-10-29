@@ -246,7 +246,7 @@ test('irrelevant account fields stay out of ticket views while currency changes 
 test('settings updates do not rerender the header action consumer', async ({ page }) => {
   await mountHarness(page);
   await page.getByRole('button', { name: 'Save settings state' }).click();
-  await expect(page.getByTestId('probe-settings')).toContainText('restart:true');
+  await expect(page.getByTestId('probe-settings')).toHaveText('127.0.0.1:9911');
 
   const counts = await probeCounts(page);
   expect(counts.settings).toBeGreaterThan(0);

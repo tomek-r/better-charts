@@ -22,6 +22,7 @@ use bridge::commands::{
     search_symbols, start_mt5_backend, stop_mt5_backend, submit_order,
 };
 use bridge::connection::run_server;
+use bridge::endpoint::BridgeEndpointControl;
 use bridge::state::BridgeState;
 use chart_drawings::{load_chart_drawings, save_chart_drawings, ChartDrawingsState};
 use download_resources::save_bundled_resource;
@@ -140,15 +141,18 @@ pub fn run() {
         .err()
         .map(|error| format!("{error}; fix or remove the runtime .env file and restart"));
     let app_settings = AppSettingsState::load(runtime_error);
-    let trading_enabled = app_settings.startup_trading_enabled();
+    let trading_enabled = app_settings.trading_enabled();
     // Saved drawings live under the same app data folder as the journal; without one
     // their store refuses every call instead of losing what the user drew.
     let chart_drawings = ChartDrawingsState::open(app_data_dir());
     let bridge_state = BridgeState::default();
-    let mt5_backend = Mt5BackendState::from_env();
+    let mt5_backend = Mt5BackendState::new(app_settings.backend_config());
+    let bridge_endpoint = BridgeEndpointControl::new(app_settings.bridge_endpoint());
+    let bridge_endpoint_changes = bridge_endpoint.subscribe();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(app_settings)
+        .manage(bridge_endpoint)
         .manage(chart_drawings)
         .manage(ChosenInstallation::default())
         .manage(bridge_state.clone())
@@ -222,11 +226,12 @@ pub fn run() {
                 app.handle().clone(),
                 bridge_state.clone(),
                 adapter,
+                bridge_endpoint_changes,
             ));
             // A restart that was interrupted by a crash can leave the bridge token in
             // a preset on disk; deleting those files is best effort and never fails
             // startup.
-            mt5_install::commands::remove_leftover_startup_files();
+            mt5_install::commands::remove_leftover_startup_files(&app.state::<AppSettingsState>());
             // Saved settings or explicit runtime overrides opt into auto-start.
             // Existing sessions, unknown process state, and missing installation
             // paths suppress startup; failures do not prevent opening settings.

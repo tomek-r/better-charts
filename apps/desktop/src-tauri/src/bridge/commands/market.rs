@@ -14,9 +14,16 @@ use super::super::{
 use tauri::Emitter;
 use trading_core::volume_profile::{value_area_fraction, RowLayout};
 
+/// Async so the process inspection (PowerShell on Windows takes hundreds of
+/// milliseconds) runs off the main thread, which sync commands would block.
 #[tauri::command]
-pub(crate) fn get_mt5_backend_status(state: State<'_, Mt5BackendState>) -> Mt5BackendStatus {
-    state.status()
+pub(crate) async fn get_mt5_backend_status(
+    state: State<'_, Mt5BackendState>,
+) -> Result<Mt5BackendStatus, String> {
+    let backend = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || backend.status())
+        .await
+        .map_err(|error| format!("MT5 status inspection failed: {error}"))
 }
 
 /// Manual control op — allowed regardless of the auto-start flag; refuses to

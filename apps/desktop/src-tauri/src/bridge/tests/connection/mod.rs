@@ -8,6 +8,7 @@
 //! order — areas that previously had zero test coverage.
 use super::*;
 use crate::bridge::connection::handle_connection;
+use crate::bridge::endpoint::BridgeEndpoint;
 use crate::execution_journal::JournalError;
 use trading_core::execution::{
     ExecutionIntent, ExecutionOperation, OrderKind as ExecOrderKind, OrderSide as ExecOrderSide,
@@ -17,6 +18,7 @@ use trading_core::protocol::{OrderKind, OrderSide};
 
 mod account_switch_tests;
 mod connection_errors_tests;
+mod endpoint_change_tests;
 mod handshake_history_tests;
 mod heartbeat_outbound_tests;
 mod history_page_tests;
@@ -166,7 +168,7 @@ async fn start_bridge(state: BridgeState, adapter: ExecutionAdapterState) -> Bri
         .expect("bind loopback listener");
     let addr = listener.local_addr().expect("listener address");
     let events = RecordingEvents::new();
-    let token = Arc::new(TEST_TOKEN.to_owned());
+    let endpoint = test_endpoint(addr);
     let events_dyn: Arc<dyn BridgeEvents> = events.clone();
     let harness = BridgeHarness {
         addr,
@@ -178,9 +180,19 @@ async fn start_bridge(state: BridgeState, adapter: ExecutionAdapterState) -> Bri
         let Ok((stream, _)) = listener.accept().await else {
             return;
         };
-        handle_connection(stream, events_dyn, state, adapter, token, 1).await;
+        handle_connection(stream, events_dyn, state, adapter, endpoint, 1).await;
     });
     harness
+}
+
+/// The endpoint every test connection is served with: the shared test token and the
+/// default frame limit.
+fn test_endpoint(addr: SocketAddr) -> Arc<BridgeEndpoint> {
+    Arc::new(BridgeEndpoint {
+        address: addr.to_string(),
+        token: TEST_TOKEN.to_owned(),
+        max_frame_bytes: trading_core::protocol::default_frame_bytes(),
+    })
 }
 
 /// A handshake that always succeeds: valid v1 Hello, correct token, trading

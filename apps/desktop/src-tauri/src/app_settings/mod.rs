@@ -1,4 +1,8 @@
-//! Private desktop configuration. Saved edits take effect on the next launch.
+//! Private desktop configuration. A saved edit takes effect at once, without a restart:
+//! the settings in force (the saved values with the `MT5_*` overrides applied, see
+//! [`AppSettingsState::runtime_variable`]) are what every reader of a setting asks, the
+//! execution permission and the MT5 paths are re-applied by the save, and a changed
+//! bridge endpoint makes the bridge server re-bind (see `bridge::endpoint`).
 //!
 //! Installation paths the user has not set are filled from an MT5 installation
 //! detected on this machine (see `detected_paths`). A value the user set, and any
@@ -10,8 +14,15 @@
 mod detected_paths;
 
 use crate::{
-    bridge::{connection::validate_bind_address, handshake::configured_transfer_limits},
+    bridge::{
+        connection::validate_bind_address,
+        endpoint::{BridgeEndpoint, BridgeEndpointControl},
+        handshake::configured_transfer_limits,
+        state::DEFAULT_ADDR,
+    },
+    execution_adapter::{ExecutionAdapterState, ExecutionQueueView},
     execution_journal::app_data_dir,
+    mt5_backend::{Mt5BackendConfig, Mt5BackendState},
     mt5_install::discover::Mt5Installation,
 };
 use detected_paths::{chosen_installation_paths, discovered_installation, fill_detected_paths};
@@ -23,7 +34,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Mutex, MutexGuard,
+        Mutex,
     },
 };
 
@@ -33,6 +44,9 @@ const SETTINGS_FILE: &str = "settings.json";
 const MAX_SETTINGS_BYTES: u64 = 64 * 1024;
 /// Bytes of a generated bridge token; its hex form is twice as long.
 const GENERATED_TOKEN_BYTES: usize = 32;
+/// Why a save that would restart the bridge listener is refused.
+const BRIDGE_CHANGE_REFUSED: &str =
+    "An order is queued or in flight. Wait for it to settle before changing the bridge connection.";
 
 // Deliberately no Debug: this model contains an authentication secret.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,7 +67,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             token: String::new(),
-            address: "127.0.0.1:8765".into(),
+            address: DEFAULT_ADDR.into(),
             max_frame_bytes: trading_core::protocol::default_frame_bytes(),
             trading_enabled: false,
             auto_start_mt5: false,
@@ -119,6 +133,27 @@ impl AppSettings {
         ]
     }
 
+    fn variable(&self, name: &str) -> Option<String> {
+        self.variables()
+            .into_iter()
+            .find(|(key, _)| *key == name)
+            .map(|(_, value)| value)
+    }
+
+    /// The MT5 process settings these values describe, read the way the backend reads
+    /// its `MT5_*` variables.
+    pub(crate) fn backend_config(&self) -> Mt5BackendConfig {
+        Mt5BackendConfig::resolve(&|name| self.variable(name))
+    }
+
+    fn bridge_endpoint(&self) -> BridgeEndpoint {
+        BridgeEndpoint {
+            address: self.address.clone(),
+            token: self.token.clone(),
+            max_frame_bytes: self.max_frame_bytes,
+        }
+    }
+
     fn with_overrides(mut self, overrides: &HashMap<String, String>) -> (Self, Vec<String>) {
         let mut keys = Vec::new();
         for (env_key, field) in [
@@ -167,7 +202,6 @@ pub(crate) struct AppSettingsView {
     pub mt5_bridge_settings: AppSettings,
     pub configured: bool,
     pub first_launch: bool,
-    pub restart_required: bool,
     pub platform: &'static str,
     pub overridden_keys: Vec<String>,
     /// Fields this load filled from an MT5 installation detected on this computer.
@@ -177,12 +211,23 @@ pub(crate) struct AppSettingsView {
 
 struct StoredSettings {
     view: AppSettingsView,
+    /// The settings in force: the saved values with the overrides applied, and with
+    /// execution and auto-start forced off while a runtime configuration error exists.
+    effective: AppSettings,
 }
+
+/// What a save changed in the running application, for the caller to apply while the
+/// save still holds the settings lock, so concurrent saves apply in the order they
+/// were stored.
+pub(crate) struct AppliedSettings {
+    pub effective: AppSettings,
+    /// The bridge endpoint to serve with from now on; `None` when the save left it as it was.
+    pub endpoint_change: Option<BridgeEndpoint>,
+}
+
 pub(crate) struct AppSettingsState {
     path: Option<PathBuf>,
     inner: Mutex<StoredSettings>,
-    startup_trading_enabled: bool,
-    startup_settings: AppSettings,
     overrides: HashMap<String, String>,
     runtime_error: Option<String>,
 }
@@ -404,20 +449,17 @@ impl AppSettingsState {
             let _ = persist(path, &stored);
         }
         let configured = error.is_none() && settings.validate().is_ok();
-        let startup_trading_enabled = configured && settings.trading_enabled;
-        settings.trading_enabled = startup_trading_enabled;
+        settings.trading_enabled &= configured;
         Self {
             path,
-            startup_trading_enabled,
-            startup_settings: settings.clone(),
             overrides,
             runtime_error,
             inner: Mutex::new(StoredSettings {
+                effective: settings.clone(),
                 view: AppSettingsView {
                     mt5_bridge_settings: settings,
                     configured,
                     first_launch: !persisted || error.is_some(),
-                    restart_required: false,
                     platform: if cfg!(windows) {
                         "windows"
                     } else if cfg!(target_os = "macos") {
@@ -433,34 +475,94 @@ impl AppSettingsState {
         }
     }
 
-    pub(crate) fn startup_trading_enabled(&self) -> bool {
-        self.startup_trading_enabled
+    /// Whether the settings in force allow order execution.
+    pub(crate) fn trading_enabled(&self) -> bool {
+        self.effective().trading_enabled
     }
+
+    fn effective(&self) -> AppSettings {
+        self.inner
+            .lock()
+            .expect("settings mutex poisoned")
+            .effective
+            .clone()
+    }
+
+    /// `stored` as the app runs with it: overrides applied, and execution and auto-start
+    /// forced off while a runtime configuration error exists (fail closed).
+    fn effective_from(&self, stored: &AppSettings) -> AppSettings {
+        let (mut effective, _) = stored.clone().with_overrides(&self.overrides);
+        if self.runtime_error.is_some() {
+            effective.trading_enabled = false;
+            effective.auto_start_mt5 = false;
+        }
+        effective
+    }
+
+    /// The value of the `MT5_*` setting `name` in force right now, or `None` for a name
+    /// that is not a setting. Every reader of an MT5 setting asks this instead of the
+    /// process environment, which is written once at startup and never again.
+    pub(crate) fn runtime_variable(&self, name: &str) -> Option<String> {
+        self.effective().variable(name)
+    }
+
+    /// [`Self::runtime_variable`] for a setting, the process environment for any other
+    /// name (`HOME`, `ProgramFiles`, ...): the lookup discovery needs for both.
+    pub(crate) fn variable_or_process_env(&self, name: &str) -> Option<String> {
+        self.runtime_variable(name).or_else(|| env::var(name).ok())
+    }
+
+    pub(crate) fn backend_config(&self) -> Mt5BackendConfig {
+        self.effective().backend_config()
+    }
+
+    pub(crate) fn bridge_endpoint(&self) -> BridgeEndpoint {
+        self.effective().bridge_endpoint()
+    }
+
     fn view(&self) -> Result<AppSettingsView, String> {
         self.inner
             .lock()
             .map(|inner| inner.view.clone())
             .map_err(|_| "Settings are unavailable".into())
     }
-    fn save(&self, settings: AppSettings) -> Result<AppSettingsView, String> {
+
+    /// Stores `settings` and makes them the ones in force.
+    ///
+    /// A save that changes the bridge endpoint ends the MT5 session, so it is refused
+    /// before anything is written while `queue` holds an order. `apply` receives the new
+    /// effective settings after they are stored and runs under the settings lock; it must
+    /// not read settings from this state.
+    fn save(
+        &self,
+        settings: AppSettings,
+        queue: &ExecutionQueueView,
+        apply: impl FnOnce(AppliedSettings),
+    ) -> Result<AppSettingsView, String> {
         let mut inner = self.inner.lock().map_err(|_| "Settings are unavailable")?;
         let path = self
             .path
             .as_ref()
             .ok_or("Settings directory is unavailable")?;
+        settings.validate()?;
+        let effective = self.effective_from(&settings);
+        let endpoint = effective.bridge_endpoint();
+        let endpoint_change = (endpoint != inner.effective.bridge_endpoint()).then_some(endpoint);
+        if endpoint_change.is_some() && queue.order_pending() {
+            return Err(BRIDGE_CHANGE_REFUSED.into());
+        }
         persist(path, &settings)?;
         inner.view.mt5_bridge_settings = settings;
         inner.view.configured = true;
         inner.view.first_launch = false;
         // The saved values are the user's own, so no field is a detected one any more.
         inner.view.detected_fields = Vec::new();
-        let (effective, _) = inner
-            .view
-            .mt5_bridge_settings
-            .clone()
-            .with_overrides(&self.overrides);
-        inner.view.restart_required = effective != self.startup_settings;
         inner.view.configuration_error = self.runtime_error.clone();
+        inner.effective = effective.clone();
+        apply(AppliedSettings {
+            effective,
+            endpoint_change,
+        });
         Ok(inner.view.clone())
     }
 
@@ -471,56 +573,53 @@ impl AppSettingsState {
     /// filled, the user's own values and `auto_start_mt5` stay exactly as they are,
     /// and a field an `MT5_*` override supplies is not touched.
     pub(crate) fn fill_from_installation(&self, installation: &Mt5Installation) {
-        // The guard ends the lock section here: a fill leaves the restart hint alone.
         self.store_installation_paths(|saved, overridden| {
             fill_detected_paths(saved, installation, overridden)
         });
     }
 
     /// Stores the installation paths of the installation the user picked in the setup
-    /// guide, so the next launch reaches that terminal and nothing has to be picked
-    /// again.
+    /// guide, so the running app and the next launch reach that terminal and nothing has
+    /// to be picked again.
     ///
     /// The pick is explicit, so it replaces the saved installation paths instead of
     /// filling the unset ones; a field an `MT5_*` override supplies keeps the override.
     /// Best effort like the fill above, and the auto-start flag stays the user's: the
-    /// saved paths never start MT5 by themselves. The view then reports a restart when
-    /// the paths differ from the ones this launch runs with, the same rule `save`
-    /// applies, because the bridge and the environment keep the startup values.
+    /// saved paths never start MT5 by themselves.
     pub(crate) fn store_chosen_installation(&self, installation: &Mt5Installation) {
-        let Some(mut inner) = self.store_installation_paths(|saved, overridden| {
+        self.store_installation_paths(|saved, overridden| {
             chosen_installation_paths(saved, installation, overridden)
-        }) else {
-            return;
-        };
-        inner.view.restart_required = inner.view.mt5_bridge_settings != self.startup_settings;
+        });
     }
 
     /// Stores the settings `paths` derives from the saved file and mirrors them in the
-    /// view, including the fields the installation supplied. Returns the guard of the
-    /// view when the file now holds them, so the caller can adjust the view inside the
-    /// same lock section.
+    /// view and in the settings in force, including the fields the installation
+    /// supplied.
     ///
     /// Best effort: a settings directory the app has none of, a missing or unreadable
-    /// settings file, no changed field, and a failed write all leave the view as it is
-    /// instead of failing the caller.
+    /// settings file, no changed field, and a failed write all leave the settings as
+    /// they are instead of failing the caller.
     fn store_installation_paths(
         &self,
         paths: impl FnOnce(&AppSettings, &[String]) -> (AppSettings, Vec<&'static str>),
-    ) -> Option<MutexGuard<'_, StoredSettings>> {
-        let mut inner = self.inner.lock().ok()?;
-        let path = self.path.as_deref()?;
+    ) {
+        let Ok(mut inner) = self.inner.lock() else {
+            return;
+        };
+        let Some(path) = self.path.as_deref() else {
+            return;
+        };
         let Ok(Some(saved)) = read_file(path) else {
-            return None;
+            return;
         };
         let (updated, fields) = paths(&saved, &inner.view.overridden_keys);
         if fields.is_empty() || persist(path, &updated).is_err() {
-            return None;
+            return;
         }
-        let (effective, _) = updated.with_overrides(&self.overrides);
-        inner.view.mt5_bridge_settings = effective;
+        inner.effective = self.effective_from(&updated);
+        let (shown, _) = updated.with_overrides(&self.overrides);
+        inner.view.mt5_bridge_settings = shown;
         inner.view.detected_fields = fields;
-        Some(inner)
     }
 }
 
@@ -530,12 +629,25 @@ pub(crate) fn get_app_settings(
 ) -> Result<AppSettingsView, String> {
     state.view()
 }
+/// Saves the settings and applies them to the running app: the execution permission
+/// (turning it off drops the queued commands), the MT5 paths, and a changed bridge
+/// endpoint. Refused before anything is written when the endpoint would change while an
+/// order is queued or in flight.
 #[tauri::command]
 pub(crate) fn save_app_settings(
     settings: AppSettings,
     state: tauri::State<'_, AppSettingsState>,
+    adapter: tauri::State<'_, ExecutionAdapterState>,
+    backend: tauri::State<'_, Mt5BackendState>,
+    endpoint: tauri::State<'_, BridgeEndpointControl>,
 ) -> Result<AppSettingsView, String> {
-    state.save(settings)
+    state.save(settings, &adapter.queue_status(), |applied| {
+        adapter.set_local_trading_enabled(applied.effective.trading_enabled);
+        backend.reconfigure(applied.effective.backend_config());
+        if let Some(new_endpoint) = applied.endpoint_change {
+            endpoint.replace(new_endpoint);
+        }
+    })
 }
 
 #[cfg(test)]

@@ -7,7 +7,6 @@ export interface AppSettingsData {
   mt5BridgeSettings: MT5BridgeSettings;
   configured: boolean;
   firstLaunch: boolean;
-  restartRequired: boolean;
   platform: 'windows' | 'macos' | 'linux';
   overriddenKeys: string[];
   /** Fields this load filled from an MT5 installation detected on this computer. */

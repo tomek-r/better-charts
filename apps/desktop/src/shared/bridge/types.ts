@@ -529,6 +529,18 @@ export interface Mt5InstallReport {
   files: Mt5FileReport[];
 }
 
+/** What the process inspection found; `unknown` is a failed inspection, never a stopped terminal. */
+export type TerminalProcess = 'running' | 'not_running' | 'unknown';
+
+/** `get_mt5_backend_status`: the MetaTrader 5 process, apart from the bridge connection. */
+export interface Mt5BackendStatus {
+  /** Legacy flag: `unknown` reads as false. Prefer `terminalProcess`. */
+  running: boolean;
+  terminalProcess: TerminalProcess;
+  configured: boolean;
+  autoStartEnabled: boolean;
+}
+
 /** `restart_mt5_with_ea` report: the terminal is starting again with the EA attached. */
 export interface Mt5RestartReport {
   /** True once MT5 was relaunched; the session itself arrives later as a bridge status. */

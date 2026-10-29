@@ -77,10 +77,7 @@ fn app_permission_rejects_all_four_submissions_without_journaling() {
         .unwrap_err(),
     ];
     for error in errors {
-        assert_eq!(
-            error,
-            "trading is disabled in app settings; restart after enabling it"
-        );
+        assert_eq!(error, "trading is disabled in app settings");
     }
     assert_eq!(adapter.queue_status().pending, 0);
     assert!(safety.recovery_snapshot().unwrap().1.is_empty());

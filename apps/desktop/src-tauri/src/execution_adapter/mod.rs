@@ -11,7 +11,10 @@
 
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -34,6 +37,9 @@ pub const DISPATCH_ENABLED: bool = true;
 pub const MAX_PENDING_COMMANDS: usize = 32;
 
 const DISPATCH_DISABLED_MESSAGE: &str = "dispatch is disabled until owner approval";
+
+/// Journal reason of the commands dropped when app settings turn execution off.
+const TRADING_DISABLED_REASON: &str = "trading disabled in app settings";
 
 /// Checked first by every Tauri submission command. Goes through a function
 /// call (not a const `if`) so the compiler keeps the gated paths reachable
@@ -69,9 +75,17 @@ pub struct ExecutionQueueView {
     pub stranded: usize,
 }
 
+impl ExecutionQueueView {
+    /// Whether an order is queued or in flight, which makes ending the bridge session
+    /// (a reinstall, a restart, a new bridge endpoint) unsafe to start.
+    pub fn order_pending(&self) -> bool {
+        self.pending > 0 || self.in_flight.is_some()
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ExecutionAdapterError {
-    #[error("trading is disabled in app settings; restart after enabling it")]
+    #[error("trading is disabled in app settings")]
     TradingDisabled,
     #[error("execution queue is full (32 pending commands)")]
     QueueFull,
@@ -147,8 +161,10 @@ pub struct ExecutionAdapterState {
     /// from [`DISPATCH_ENABLED`] via [`Self::new_with_trading_permission`]; tests use
     /// `new_with_gate` to exercise the claim mechanics behind it.
     gate: bool,
-    /// Startup permission; settings saves cannot change a running queue.
-    local_trading_enabled: bool,
+    /// App-settings permission to execute orders. A settings save changes it while the
+    /// app runs through [`Self::set_local_trading_enabled`]; the queue and the claim
+    /// path read it on every call.
+    local_trading_enabled: Arc<AtomicBool>,
     /// Per-process boot nonce embedded in every `command_id` (F-4).
     boot_nonce: u32,
 }
@@ -163,10 +179,33 @@ impl ExecutionAdapterState {
         Self::create(safety, DISPATCH_ENABLED, enabled, boot_nonce())
     }
 
+    fn local_trading_enabled(&self) -> bool {
+        self.local_trading_enabled.load(Ordering::SeqCst)
+    }
+
+    /// Applies the app-settings permission to the running queue. The flag is stored
+    /// first, so no submission or claim passes once this returns; turning the
+    /// permission off then drops every command that was queued but not yet claimed,
+    /// exactly like a session change. The in-flight command is left alone and settles
+    /// through its normal updates, and nothing dropped is ever retried.
+    pub fn set_local_trading_enabled(&self, enabled: bool) {
+        self.local_trading_enabled.store(enabled, Ordering::SeqCst);
+        if enabled {
+            return;
+        }
+        let queued = {
+            let Ok(mut inner) = self.inner.lock() else {
+                return;
+            };
+            drain_queue(&mut inner)
+        };
+        self.record_queue_dropped(queued, TRADING_DISABLED_REASON);
+    }
+
     /// Reject submissions before validation or durable intent registration.
     pub fn submission_gate(&self) -> Result<(), String> {
         dispatch_gate()?;
-        if self.local_trading_enabled {
+        if self.local_trading_enabled() {
             Ok(())
         } else {
             Err(ExecutionAdapterError::TradingDisabled.to_string())
@@ -177,8 +216,9 @@ impl ExecutionAdapterState {
         &self,
         mut status: ExecutionSafetyStatus,
     ) -> ExecutionSafetyStatus {
-        status.dispatch_enabled &= self.gate && self.local_trading_enabled;
-        if !self.local_trading_enabled {
+        let local_trading_enabled = self.local_trading_enabled();
+        status.dispatch_enabled &= self.gate && local_trading_enabled;
+        if !local_trading_enabled {
             status.message = format!(
                 "Execution journal {}; trading is disabled in app settings.",
                 status.journal_state
@@ -213,7 +253,7 @@ impl ExecutionAdapterState {
             safety,
             next_sequence: Arc::new(std::sync::atomic::AtomicU64::new(1)),
             gate,
-            local_trading_enabled,
+            local_trading_enabled: Arc::new(AtomicBool::new(local_trading_enabled)),
             boot_nonce,
         }
     }
@@ -236,7 +276,7 @@ impl ExecutionAdapterState {
         ExecutionQueueView {
             pending: inner.queue.len(),
             in_flight: inner.in_flight.clone(),
-            dispatch_enabled: self.gate && self.local_trading_enabled,
+            dispatch_enabled: self.gate && self.local_trading_enabled(),
             stranded: inner.stranded,
         }
     }
@@ -302,7 +342,7 @@ impl ExecutionAdapterState {
         intent: Option<ExecutionIntent>,
         at_ms: u64,
     ) -> Result<(), ExecutionAdapterError> {
-        if !self.local_trading_enabled {
+        if !self.local_trading_enabled() {
             return Err(ExecutionAdapterError::TradingDisabled);
         }
         if inner.queue.len() >= MAX_PENDING_COMMANDS {
@@ -333,10 +373,15 @@ impl ExecutionAdapterState {
     }
 
     fn claim_wire_message(&self, requested_session: Option<&str>) -> Option<PendingCommand> {
-        if !self.gate || !self.local_trading_enabled {
+        if !self.gate {
             return None;
         }
         let mut inner = self.inner.lock().expect("execution adapter mutex poisoned");
+        // Read under the adapter lock: a disable that already drained the queue
+        // cannot be followed by a claim that passed the permission check earlier.
+        if !self.local_trading_enabled() {
+            return None;
+        }
         if requested_session
             .is_some_and(|session_id| inner.session_id.as_deref() != Some(session_id))
         {
@@ -560,14 +605,7 @@ impl ExecutionAdapterState {
             let in_flight = inner.in_flight.take();
             let watermark = inner.in_flight_at_update;
             inner.in_flight_at_update = 0;
-            let queued: Vec<String> = inner
-                .queue
-                .drain(..)
-                .map(|command| command.command_id)
-                .collect();
-            if !queued.is_empty() {
-                inner.stranded = queued.len();
-            }
+            let queued = drain_queue(&mut inner);
             // Replace the account and session token in the same critical
             // section as draining the prior queue, so no old operation can
             // slip between teardown and the next session's installation.
@@ -594,6 +632,13 @@ impl ExecutionAdapterState {
                 at_update: watermark + 1,
             });
         }
+        self.record_queue_dropped(queued, reason);
+    }
+
+    /// Journals the commands a drain dropped without ever dispatching them; an empty
+    /// drain journals nothing. Best-effort like the rest of a teardown: the queue is
+    /// already empty, so a journal failure cannot leave a command behind.
+    fn record_queue_dropped(&self, queued: Vec<String>, reason: &str) {
         if !queued.is_empty() {
             let _ = self.safety.record_queue_dropped(queued, reason.to_owned());
         }
@@ -621,6 +666,20 @@ impl ExecutionAdapterState {
             Err(ExecutionAdapterError::AccountMismatch)
         }
     }
+}
+
+/// Empties the queue and returns the dropped command ids, refreshing the `stranded`
+/// count (overwritten, never accumulated) when anything was dropped.
+fn drain_queue(inner: &mut AdapterInner) -> Vec<String> {
+    let queued: Vec<String> = inner
+        .queue
+        .drain(..)
+        .map(|command| command.command_id)
+        .collect();
+    if !queued.is_empty() {
+        inner.stranded = queued.len();
+    }
+    queued
 }
 
 /// The command lifecycle is settled once the EA reports the server's final

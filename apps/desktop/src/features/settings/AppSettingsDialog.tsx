@@ -28,6 +28,14 @@ function DetectedHint({ detected, field }: { detected: DetectedSettingsField[]; 
   return <span className="settings-detected-hint">Detected on this computer</span>;
 }
 
+/** The backend rejects a save with a readable reason (e.g. an order is in flight); anything else is generic. */
+function saveFailureMessage(failure: unknown): string {
+  if (typeof failure === 'string' && failure.length > 0) {
+    return failure;
+  }
+  return 'Could not save settings. Check the values and try again.';
+}
+
 function SettingsContent({ loadRequest, children }: { loadRequest: Promise<void> | undefined; children: ReactNode }) {
   if (loadRequest) {
     use(loadRequest);
@@ -110,8 +118,8 @@ export function AppSettingsDialog({
     try {
       const next = await saveAppSettings(draft);
       onSaved(next);
-    } catch {
-      setError('Could not save settings. Check the values and try again.');
+    } catch (failure) {
+      setError(saveFailureMessage(failure));
     } finally {
       setSaving(false);
     }
@@ -134,7 +142,6 @@ export function AppSettingsDialog({
       }}
       onSubmit={(event) => void save(event)}
       headerActions={<ModalDialogCloseButton label="Close settings" disabled={busy} onClick={onClose} />}
-      footerNote="Changes apply after restarting Better Charts."
       actions={
         <>
           <ModalDialogButton variant="secondary" disabled={busy} onClick={onClose}>

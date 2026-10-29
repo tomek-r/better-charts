@@ -203,7 +203,7 @@ fn install_one(
 /// to disappear. So nothing is written while either exists. `restart` reuses the
 /// same guard, because closing the terminal loses an order just as surely.
 pub(super) fn ensure_no_order_pending(queue: &ExecutionQueueView) -> Result<(), InstallError> {
-    if queue.pending > 0 || queue.in_flight.is_some() {
+    if queue.order_pending() {
         return Err(InstallError::OrderInFlight);
     }
     Ok(())

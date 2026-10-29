@@ -102,6 +102,7 @@ function MarketProbe() {
 }
 
 function ChartHeaderProbes() {
+  const tauriAvailable = useTauriAvailable();
   return (
     <div data-testid="probe-chart-header">
       <Probe id="chart-title">
@@ -113,9 +114,12 @@ function ChartHeaderProbes() {
       <Probe id="chart-timeframes">
         <ChartTimeframes />
       </Probe>
-      <Probe id="chart-canvas">
-        <ChartCanvas />
-      </Probe>
+      {/* The canvas reads the setup flow to know whether a reconnect loader may show. */}
+      <AppSettingsProvider tauriAvailable={tauriAvailable}>
+        <Probe id="chart-canvas">
+          <ChartCanvas />
+        </Probe>
+      </AppSettingsProvider>
     </div>
   );
 }
@@ -180,11 +184,7 @@ function SecondaryBridgeProbes() {
 
 function SettingsProbe() {
   const settings = useAppSettingsView();
-  return (
-    <output data-testid="probe-settings">
-      {settings.settings?.mt5BridgeSettings.address ?? 'loading'}|restart:{String(settings.restartNoticeVisible)}
-    </output>
-  );
+  return <output data-testid="probe-settings">{settings.settings?.mt5BridgeSettings.address ?? 'loading'}</output>;
 }
 
 function ChartResourcesProbe() {
@@ -466,7 +466,10 @@ function SettingsControls() {
   const settings = useAppSettingsView();
   const saveSettings = () => {
     if (settings.settings) {
-      settings.saved({ ...settings.settings, restartRequired: true });
+      settings.saved({
+        ...settings.settings,
+        mt5BridgeSettings: { ...settings.settings.mt5BridgeSettings, address: '127.0.0.1:9911' },
+      });
     }
   };
   return (

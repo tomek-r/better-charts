@@ -1,20 +1,28 @@
 import { useMemo } from 'react';
 import { BridgeRefusal } from '../../../shared/bridge/bridgeRefusal';
-import { useDelayedReveal } from '../../../shared/ui/animation/useDelayedReveal';
 import { ErrorNotification, type NoticeAction } from '../../../shared/ui/notification/ErrorNotifications';
 import { useAppSettingsActions, useSetupFlowOnScreen } from '../AppSettingsProvider';
-import { useBridgeConnectionSelector, useHasCandles } from '../../bridge/bridgeSelectors';
 import { useBridgeRefusal, useBridgeRefusalMessage } from '../../bridge/useBridgeRefusal';
-
-/** How long a drawn chart may sit without a connected bridge before its notice shows. */
-const DISCONNECTED_NOTICE_DELAY_MS = 3_000;
+import type { TerminalProcess } from '../../../shared/bridge/types';
+import { useBridgeReconnectWait } from './useBridgeReconnectWait';
+import { useTerminalProcess } from './useTerminalProcess';
 
 const TOKEN_MISMATCH_MESSAGE = 'MetaTrader 5 uses a different bridge token.';
 
-const NOT_SENDING_DATA_MESSAGE =
-  'MetaTrader 5 is not sending data. Check that it is running with the Better Charts EA attached and Algo Trading on.';
+const NOT_SENDING_DATA_MESSAGE = 'MetaTrader 5 is not sending data. Check the EA and Algo Trading.';
 
+/** Shown while the terminal check is unanswered, failed or inconclusive. */
 const NOT_CONNECTED_MESSAGE = 'MetaTrader 5 is not connected.';
+
+const NOT_CONNECTED_MESSAGES: Record<TerminalProcess, string> = {
+  running: 'MetaTrader 5 is running, but the EA is not connected.',
+  not_running: 'MetaTrader 5 is not running.',
+  unknown: NOT_CONNECTED_MESSAGE,
+};
+
+function notConnectedMessage(terminalProcess: TerminalProcess | undefined): string {
+  return terminalProcess === undefined ? NOT_CONNECTED_MESSAGE : NOT_CONNECTED_MESSAGES[terminalProcess];
+}
 
 /**
  * One stable action per fix: the notice store compares a notice's button by its label, so a fresh
@@ -36,14 +44,10 @@ export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
   const connectGuideAction = useSetupGuideAction('Open setup guide');
   const installGuideAction = useSetupGuideAction('Install again');
   const refusal = useBridgeRefusal();
-  const bridgeState = useBridgeConnectionSelector(({ status }) => status.state);
   // The refusal's own words, as a primitive: a heartbeat that keeps the same refusal reaches nothing here.
   const refusalMessage = useBridgeRefusalMessage(BridgeRefusal.Other);
-  const hasCandles = useHasCandles();
-  const disconnectedNoticeShown = useDelayedReveal(
-    hasCandles && bridgeState !== 'connected' && refusal === undefined && !setupFlowOnScreen,
-    DISCONNECTED_NOTICE_DELAY_MS,
-  );
+  const { noticeShown: disconnectedNoticeShown } = useBridgeReconnectWait();
+  const terminalProcess = useTerminalProcess(disconnectedNoticeShown);
   return (
     <>
       <ErrorNotification
@@ -58,7 +62,7 @@ export function BridgeNotices({ waitingTooLong }: { waitingTooLong: boolean }) {
       />
       <ErrorNotification
         noticeKey="mt5-not-connected"
-        message={disconnectedNoticeShown ? NOT_CONNECTED_MESSAGE : undefined}
+        message={disconnectedNoticeShown ? notConnectedMessage(terminalProcess) : undefined}
         action={connectGuideAction}
       />
       {/* The chart already toasts this refusal for every device, keyed by its own message, so using that

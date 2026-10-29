@@ -11,7 +11,7 @@ pub(super) async fn start_sequential_bridge(
         .expect("bind loopback listener");
     let addr = listener.local_addr().expect("listener address");
     let events = RecordingEvents::new();
-    let token = Arc::new(TEST_TOKEN.to_owned());
+    let endpoint = test_endpoint(addr);
     let events_dyn: Arc<dyn BridgeEvents> = events.clone();
     let harness = BridgeHarness {
         addr,
@@ -29,7 +29,7 @@ pub(super) async fn start_sequential_bridge(
                 events_dyn.clone(),
                 state.clone(),
                 adapter.clone(),
-                token.clone(),
+                endpoint.clone(),
                 session_number,
             ));
         }

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import type { BridgeStatus } from '../src/shared/bridge/types';
+import type { BridgeStatus, Mt5BackendStatus, TerminalProcess } from '../src/shared/bridge/types';
 import { bridgeNotice } from './helpers/bridgeNotice';
 import { CONNECTED_STATUS, CONNECTING_BRIDGE, TOKEN_MISMATCH_STATUS, WAITING_FOR_BRIDGE } from './helpers/bridgeStates';
 import {
@@ -15,7 +15,14 @@ import {
   setupScreen,
   waitingScreen,
 } from './helpers/setupGuide';
-import { gotoWithStub, pausePageClockAhead, pushBridgeStatus } from './helpers/tauriStub';
+import {
+  gotoWithStub,
+  pausePageClockAhead,
+  pushBridgeStatus,
+  setStubResponse,
+  wasInvoked,
+  type TauriStubOptions,
+} from './helpers/tauriStub';
 
 /** The heading of the guide's first step, which every entry point opens. */
 const SETUP_GUIDE_FIRST_STEP = 'Find MetaTrader 5';
@@ -23,11 +30,36 @@ const SETUP_GUIDE_FIRST_STEP = 'Find MetaTrader 5';
 /** A protocol error the EA words itself, the one refusal no other notice explains. */
 const OTHER_REFUSAL_MESSAGE = 'Bridge bind failed';
 
-/** How long a drawn chart waits for its bridge before the not-connected notice shows, a little past its 3 s delay. */
-const NOT_CONNECTED_NOTICE_REVEAL_MS = 3_100;
+/** How long a drawn chart waits for its bridge before the not-connected notice shows, a little past its 12 s delay. */
+const NOT_CONNECTED_NOTICE_REVEAL_MS = 12_100;
+
+/** A blip just under the 3 s the reconnect loader waits before it shows. */
+const BLIP_BEFORE_RECONNECT_LOADER_MS = 2_900;
+
+/** How long a drawn chart waits for its bridge before the reconnect loader shows, a little past its 3 s delay. */
+const RECONNECT_LOADER_REVEAL_MS = 3_100;
+
+/** What is left of the notice delay once the loader has shown, so the clock lands on the notice's reveal. */
+const LOADER_TO_NOTICE_MS = NOT_CONNECTED_NOTICE_REVEAL_MS - RECONNECT_LOADER_REVEAL_MS;
+
+/** The EA's longest gap between connection attempts (10 s) plus a second of slack for the handshake. */
+const EA_LONGEST_RETRY_GAP_WITH_SLACK_MS = 11_000;
 
 /** How long a completed setup waits behind the blurred screen, a little past its 15 s limit. */
 const WAITING_SCREEN_LIMIT_MS = 15_100;
+
+/** The notice wording per terminal check; the stub answers `running` unless a test says otherwise. */
+const TERMINAL_NOT_RUNNING_MESSAGE = 'MetaTrader 5 is not running.';
+const EA_NOT_CONNECTED_MESSAGE = 'MetaTrader 5 is running, but the EA is not connected.';
+const UNKNOWN_TERMINAL_MESSAGE = 'MetaTrader 5 is not connected.';
+
+/** The backend status the stub answers when the terminal check finds `terminalProcess`. */
+function backendStatusWith(terminalProcess: TerminalProcess): Mt5BackendStatus {
+  return { running: terminalProcess === 'running', terminalProcess, configured: true, autoStartEnabled: false };
+}
+
+/** How often the shown notice asks again whether MetaTrader 5 runs. */
+const TERMINAL_RECHECK_MS = 5_000;
 
 /** One problem of a completed setup: the notice it shows and the fix button it offers. */
 interface BridgeProblemNotice {
@@ -39,7 +71,8 @@ interface BridgeProblemNotice {
 /** Every problem a completed setup reports bottom right, with the fix its notice offers. */
 const BRIDGE_PROBLEM_NOTICES: BridgeProblemNotice[] = [
   {
-    message: 'MetaTrader 5 is not connected.',
+    // The default stub reports a running terminal, so the connecting bridge is the EA's absence.
+    message: EA_NOT_CONNECTED_MESSAGE,
     action: 'Open setup guide',
     status: { state: 'connecting' },
   },
@@ -56,10 +89,10 @@ const BRIDGE_PROBLEM_NOTICES: BridgeProblemNotice[] = [
 ];
 
 /** Loads a completed setup whose chart is drawn, with no blurred screen and no top bar status over it. */
-async function openCompletedSetupWithCandles(page: Page): Promise<void> {
+async function openCompletedSetupWithCandles(page: Page, stubOptions: TauriStubOptions = {}): Promise<void> {
   await pausePageClockAhead(page);
   await markSetupCompleted(page);
-  await gotoWithStub(page, { responses: CONNECTING_BRIDGE });
+  await gotoWithStub(page, { ...stubOptions, responses: { ...CONNECTING_BRIDGE, ...stubOptions.responses } });
 
   await expect(setupScreen(page)).toHaveCount(0);
   await expect(waitingScreen(page)).toHaveCount(0);
@@ -67,6 +100,11 @@ async function openCompletedSetupWithCandles(page: Page): Promise<void> {
   await expect(page.locator('.bridge-header-status')).toHaveCount(0);
   // The chart is drawn, so the bridge's silence only becomes a notice once its delay has passed.
   await expect(page.getByRole('alert')).toHaveCount(0);
+}
+
+/** The loader that covers a drawn chart while its bridge reconnects. */
+function reconnectLoader(page: Page): Locator {
+  return page.locator('.loading-message strong', { hasText: 'Reconnecting to MetaTrader 5…' });
 }
 
 /** The notice reporting `message`, once the clock passed the delay it holds its problem for. */
@@ -318,7 +356,7 @@ test('Happy trading remembers the setup on the device, so a reload keeps the set
   await expect(page.locator('header.topbar')).toBeVisible();
   await expect(setupScreen(page)).toHaveCount(0);
   // The reloaded device waits out its start before the notice offers the guide back.
-  const notice = await expectBridgeNotice(page, 'MetaTrader 5 is not connected.');
+  const notice = await expectBridgeNotice(page, EA_NOT_CONNECTED_MESSAGE);
 
   await notice.getByRole('button', { name: 'Open setup guide' }).click();
   await revealLazyGuide(page);
@@ -335,13 +373,105 @@ test('a completed setup keeps the guide notices away while the guide and its fin
   await openConnectStepWithUpdatedInstall(page);
 
   await page.clock.runFor(NOT_CONNECTED_NOTICE_REVEAL_MS);
-  await expect(bridgeNotice(page, 'MetaTrader 5 is not connected.')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(reconnectLoader(page)).toHaveCount(0);
 
   await pushBridgeStatus(page, CONNECTED_STATUS);
   await expect(setupCompleteDialog(page)).toBeVisible();
 
   await page.clock.runFor(NOT_CONNECTED_NOTICE_REVEAL_MS);
   await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('the not-connected notice waits out the EA longest retry gap before it shows', async ({ page }) => {
+  await openCompletedSetupWithCandles(page);
+  await pushBridgeStatus(page, { state: 'connecting' });
+
+  await page.clock.runFor(EA_LONGEST_RETRY_GAP_WITH_SLACK_MS);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+
+  await expectBridgeNotice(page, EA_NOT_CONNECTED_MESSAGE);
+});
+
+const NOTICE_PER_TERMINAL_PROCESS: Array<{ terminalProcess: TerminalProcess; message: string }> = [
+  { terminalProcess: 'not_running', message: TERMINAL_NOT_RUNNING_MESSAGE },
+  { terminalProcess: 'running', message: EA_NOT_CONNECTED_MESSAGE },
+  { terminalProcess: 'unknown', message: UNKNOWN_TERMINAL_MESSAGE },
+];
+
+for (const { terminalProcess, message } of NOTICE_PER_TERMINAL_PROCESS) {
+  test(`the not-connected notice says "${message}" when the terminal check answers ${terminalProcess}`, async ({
+    page,
+  }) => {
+    await openCompletedSetupWithCandles(page, {
+      responses: { get_mt5_backend_status: backendStatusWith(terminalProcess) },
+    });
+    await pushBridgeStatus(page, { state: 'connecting' });
+
+    const notice = await expectBridgeNotice(page, message);
+    await expect(notice.getByRole('button', { name: 'Open setup guide' })).toBeVisible();
+  });
+}
+
+test('the not-connected notice keeps its plain wording when the terminal check fails', async ({ page }) => {
+  await openCompletedSetupWithCandles(page, { failures: { get_mt5_backend_status: 'inspection failed' } });
+  await pushBridgeStatus(page, { state: 'connecting' });
+
+  await expectBridgeNotice(page, UNKNOWN_TERMINAL_MESSAGE);
+});
+
+test('the terminal is not checked before the notice shows', async ({ page }) => {
+  await openCompletedSetupWithCandles(page);
+  await pushBridgeStatus(page, { state: 'connecting' });
+
+  await page.clock.runFor(EA_LONGEST_RETRY_GAP_WITH_SLACK_MS);
+  expect(await wasInvoked(page, 'get_mt5_backend_status')).toBeUndefined();
+
+  await expectBridgeNotice(page, EA_NOT_CONNECTED_MESSAGE);
+  expect(await wasInvoked(page, 'get_mt5_backend_status')).toBeDefined();
+});
+
+test('the shown notice follows the terminal as it starts, in place', async ({ page }) => {
+  await openCompletedSetupWithCandles(page, {
+    responses: { get_mt5_backend_status: backendStatusWith('not_running') },
+  });
+  await pushBridgeStatus(page, { state: 'connecting' });
+  await expectBridgeNotice(page, TERMINAL_NOT_RUNNING_MESSAGE);
+
+  await setStubResponse(page, 'get_mt5_backend_status', backendStatusWith('running'));
+  await page.clock.runFor(TERMINAL_RECHECK_MS);
+
+  await expect(bridgeNotice(page, EA_NOT_CONNECTED_MESSAGE)).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(1);
+});
+
+test('a drawn chart hides a blip, then shows the reconnect loader, then hands over to the notice', async ({ page }) => {
+  await openCompletedSetupWithCandles(page);
+  await pushBridgeStatus(page, { state: 'connecting' });
+
+  await page.clock.runFor(BLIP_BEFORE_RECONNECT_LOADER_MS);
+  await expect(reconnectLoader(page)).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+
+  await page.clock.runFor(RECONNECT_LOADER_REVEAL_MS - BLIP_BEFORE_RECONNECT_LOADER_MS);
+  await expect(reconnectLoader(page)).toBeVisible();
+  await expect(page.locator('.chart-overlay')).toHaveCount(1);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+
+  await page.clock.runFor(LOADER_TO_NOTICE_MS);
+  await expect(bridgeNotice(page, EA_NOT_CONNECTED_MESSAGE)).toBeVisible();
+  await expect(reconnectLoader(page)).toHaveCount(0);
+});
+
+test('connecting again removes the reconnect loader at once', async ({ page }) => {
+  await openCompletedSetupWithCandles(page);
+  await pushBridgeStatus(page, { state: 'connecting' });
+  await page.clock.runFor(RECONNECT_LOADER_REVEAL_MS);
+  await expect(reconnectLoader(page)).toBeVisible();
+
+  await pushBridgeStatus(page, CONNECTED_STATUS);
+  await expect(reconnectLoader(page)).toHaveCount(0);
+  await expect(page.locator('.chart-overlay')).toHaveCount(0);
 });
 
 for (const { message, action, status: problemStatus } of BRIDGE_PROBLEM_NOTICES) {
