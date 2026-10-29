@@ -93,7 +93,9 @@ export function ObjectTreeRow({ record, plugin, selected, reorder }: ObjectTreeR
         onKeyDown={onNameKeyDown}
       >
         <DrawingToolIcon name={plugin.id} size={ROW_ICON_SIZE_PX} className="object-tree-row-icon" />
-        <span className="object-tree-row-label">{plugin.label}</span>
+        <span className="object-tree-row-label" title={plugin.label}>
+          {plugin.label}
+        </span>
       </button>
       <div className="object-tree-row-actions">
         <CommandButton

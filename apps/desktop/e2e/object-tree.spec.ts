@@ -244,21 +244,37 @@ test('Tab reaches the row settings button and Enter opens the settings', async (
   await expect(settingsDialog(page)).toBeVisible();
 });
 
-test('the longest drawing name stays whole beside the row actions at the default drawer width', async ({ page }) => {
+test('a long drawing name is cut with an ellipsis, never under the row actions, and its full name is its tooltip', async ({
+  page,
+}) => {
   await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE)]);
   const row = drawingRow(page, 'first');
   await row.hover();
 
   const label = row.locator('.object-tree-row-label');
-  const fit = await label.evaluate((element) => ({
-    scrollWidth: element.scrollWidth,
-    clientWidth: element.clientWidth,
-    labelRight: element.getBoundingClientRect().right,
-    actionsLeft: element.closest('li')?.querySelector('.object-tree-row-actions')?.getBoundingClientRect().left ?? 0,
-  }));
+  const fit = await label.evaluate((element) => {
+    const rowBox = element.closest('li')?.getBoundingClientRect();
+    const labelBox = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      textOverflow: style.textOverflow,
+      whiteSpace: style.whiteSpace,
+      title: element.getAttribute('title'),
+      text: element.textContent,
+      labelLeft: labelBox.left,
+      labelRight: labelBox.right,
+      rowLeft: rowBox?.left ?? 0,
+      rowRight: rowBox?.right ?? 0,
+      actionsLeft: element.closest('li')?.querySelector('.object-tree-row-actions')?.getBoundingClientRect().left ?? 0,
+    };
+  });
 
-  expect(fit.scrollWidth).toBeLessThanOrEqual(fit.clientWidth);
+  expect(fit.textOverflow).toBe('ellipsis');
+  expect(fit.whiteSpace).toBe('nowrap');
+  expect(fit.labelLeft).toBeGreaterThanOrEqual(fit.rowLeft);
+  expect(fit.labelRight).toBeLessThanOrEqual(fit.rowRight);
   expect(fit.labelRight).toBeLessThanOrEqual(fit.actionsLeft);
+  expect(fit.title).toBe(fit.text);
 });
 
 test('locking from the toolbar updates the tree row', async ({ page }) => {
