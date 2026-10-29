@@ -113,6 +113,7 @@ test.describe('chip menu', () => {
     const close = await chipAt(page, 'posCloses');
     await page.mouse.click(close.x, close.y, { button: 'right' });
     await expect(page.getByRole('menu', { name: 'Close part of position' })).toBeVisible();
+    await expect(page.getByRole('menu', { name: 'Chart', exact: true })).toHaveCount(0);
     expect(await wasInvoked(page, 'close_position')).toBeUndefined();
   });
 

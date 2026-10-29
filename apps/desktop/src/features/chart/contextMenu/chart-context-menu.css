@@ -1,0 +1,25 @@
+/* The shared menu normally hangs from its trigger; here the anchored panel positions it. */
+.chart-anchored-panel .chart-context-menu {
+  position: static;
+  min-width: 200px;
+}
+
+.chart-context-menu .ticket-menu-item {
+  font-size: 13px;
+}
+
+.chart-context-menu-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+.chart-context-menu-label {
+  flex: 1 1 auto;
+}
+
+.chart-context-menu-shortcut {
+  margin-left: 16px;
+  color: var(--color-muted);
+  font-family: inherit;
+}

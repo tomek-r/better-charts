@@ -7,6 +7,8 @@ import { useErrorNotification } from '../../shared/ui/notification/ErrorNotifica
 import { LoadingMessage } from '../../shared/ui/loading/LoadingMessage';
 import { HistoryWaitNotice } from './historyWait/HistoryWaitNotice';
 import { useBridgeReconnectWait } from '../settings/setup/useBridgeReconnectWait';
+import { useChartContextMenu } from './contextMenu/useChartContextMenu';
+import { useResetChartViewShortcut } from './contextMenu/useResetChartViewShortcut';
 
 /** A protocol error nothing else explains is the only thing worth a toast: the setup screen below covers a token
  * mismatch, an outdated component has its own notice, and a completed setup adds its fix to this same toast. */
@@ -48,11 +50,14 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
   const loading = loadingCopy(loadingMarketData, reconnecting);
   useErrorNotification(chartError);
   useErrorNotification(protocolErrorToNotify(status));
+  useResetChartViewShortcut();
+  const { onContextMenu, menu } = useChartContextMenu();
 
   return (
-    <div className="chart-frame">
+    <div className="chart-frame" onContextMenu={onContextMenu}>
       <div ref={chartHost} className="chart-host" aria-label="Market chart" tabIndex={0} />
       {children}
+      {menu}
       {loading && <div className="chart-overlay" />}
       {/* Centered on the window, not on the chart frame, so it reads the same with the trade panel open or closed. */}
       <div className="viewport-center-layer">
