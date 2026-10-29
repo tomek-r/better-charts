@@ -18,8 +18,8 @@ export const VOLUME_TOTAL = 'Total';
 export const VOLUME_DELTA = 'Delta';
 export const PLACEMENT_LEFT = 'Left';
 export const PLACEMENT_RIGHT = 'Right';
-export const VALUES_ON_PROFILE = 'On Profile';
-export const VALUES_OPPOSITE_SIDE = 'Opposite Side';
+export const VALUES_LEFT_OF_LINE = 'Left';
+export const VALUES_RIGHT_OF_LINE = 'Right';
 
 /**
  * The Inputs tab. Rows layout, row size and value area feed the request and
@@ -72,7 +72,8 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
   { kind: 'bool', id: 'extendRight', title: 'Extend Right', defaultValue: true },
 ];
 
-const HISTOGRAM_BOX_DEFAULT_COLOR = withOpacityPercent(palette.raised, 0);
+// Fully transparent, so drawings saved before the boxes existed look unchanged.
+const TRANSPARENT_BOX_DEFAULT_COLOR = withOpacityPercent(palette.raised, 0);
 
 /** The settings that only change how the computed profile is painted: changing one repaints. */
 export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
@@ -84,11 +85,18 @@ export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
     kind: 'choice',
     id: 'valuesPosition',
     title: 'Values Position',
-    defaultValue: VALUES_ON_PROFILE,
+    defaultValue: VALUES_RIGHT_OF_LINE,
     options: [
-      { value: VALUES_ON_PROFILE, title: VALUES_ON_PROFILE },
-      { value: VALUES_OPPOSITE_SIDE, title: VALUES_OPPOSITE_SIDE },
+      { value: VALUES_LEFT_OF_LINE, title: VALUES_LEFT_OF_LINE },
+      { value: VALUES_RIGHT_OF_LINE, title: VALUES_RIGHT_OF_LINE },
     ],
+    parentId: 'values',
+  },
+  {
+    kind: 'color',
+    id: 'valuesBackground',
+    title: 'Values Background',
+    defaults: { color: TRANSPARENT_BOX_DEFAULT_COLOR },
     parentId: 'values',
   },
   {
@@ -130,5 +138,5 @@ export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
   },
   // Listed last but painted first, under the bars and level lines. Transparent until the user picks an opacity,
   // so drawings saved before the box existed look unchanged.
-  { kind: 'color', id: 'histogramBox', title: 'Histogram Box', defaults: { color: HISTOGRAM_BOX_DEFAULT_COLOR } },
+  { kind: 'color', id: 'histogramBox', title: 'Histogram Box', defaults: { color: TRANSPARENT_BOX_DEFAULT_COLOR } },
 ];

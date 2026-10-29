@@ -6,6 +6,7 @@ import type { FixedRangeProfileState } from '../src/features/tools/fixedRangePro
 import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
 import { readFixedRangeProfileSettings } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileSettings';
 import type { TickProfileBin } from '../src/shared/bridge/types';
+import { parseHexColor } from '../src/shared/theme/hexColor';
 import { palette } from '../src/shared/theme/palette';
 
 /**
@@ -25,9 +26,9 @@ const DOWN_COLOR = '#f7525f';
 // The width setting is a share of the range, handle to handle: 45 px here, so the default 20% is 9 px.
 const RANGE_WIDTH = END_X - START_X;
 const FULL_LENGTH = RANGE_WIDTH * 0.2;
-// Up/Down mirrors around an axis half that extent inside the range, from its start (Left) or its end (Right).
-const LEFT_AXIS_X = START_X + FULL_LENGTH / 2;
-const RIGHT_AXIS_X = END_X - FULL_LENGTH / 2;
+// Up/Down mirrors around the anchor line itself: the range start (Left) or the range end (Right).
+const LEFT_AXIS_X = START_X;
+const RIGHT_AXIS_X = END_X;
 
 const bin = (low: number, high: number, down: number, up: number): TickProfileBin => ({
   low: String(low),
@@ -72,7 +73,7 @@ test('no stored settings paint exactly what the defaults paint, and what the too
   expect(paint({}).ops).toEqual(defaults.ops);
   expect(defaults.rows).toHaveLength(6);
   // The mirrored bars share the extent: each side's longest is at most half of it, so the up weight 50 (the
-  // common maximum) takes half the extent and the down weight 30 takes 30/50 of that, around the axis.
+  // common maximum) takes half the extent and the down weight 30 takes 30/50 of that, around the anchor line.
   expect(defaults.hit.anchorX).toBe(START_X);
   expect(defaults.hit.profileLeft).toBeCloseTo(LEFT_AXIS_X - (FULL_LENGTH / 2) * (30 / 50), 9);
   expect(defaults.hit.profileRight).toBeCloseTo(LEFT_AXIS_X + FULL_LENGTH / 2, 9);
@@ -194,7 +195,7 @@ test('placement right hangs the bars from the range end: mirrored for up/down, g
   const mirrored = paint({ placement: 'Right' });
   expect(mirrored.hit.anchorX).toBe(END_X);
   expect(mirrored.hit.profileLeft).toBeCloseTo(RIGHT_AXIS_X - (FULL_LENGTH / 2) * (30 / 50), 9);
-  expect(mirrored.hit.profileRight).toBeCloseTo(END_X, 9);
+  expect(mirrored.hit.profileRight).toBeCloseTo(RIGHT_AXIS_X + FULL_LENGTH / 2, 9);
 
   for (const volume of ['Total', 'Delta']) {
     const { hit, rows } = paint({ placement: 'Right', volume });
@@ -221,25 +222,34 @@ function paintedBounds(stored: ToolInputValues): { left: number; right: number }
   return { left: state.hit.profileLeft!, right: state.hit.profileRight! };
 }
 
-test('the width percent is the share of the range the histogram spans, and the bars stay inside the range', () => {
+test('the width percent is the share of the range the histogram spans: inward for Total and Delta, centred on the anchor line for Up/Down', () => {
   for (const volume of ['Up/Down', 'Total', 'Delta']) {
     for (const placement of ['Left', 'Right']) {
       for (const widthPercent of [1, 20, 100]) {
         // Every row of the balanced profile is the maximum of its mode (50 down or up, total 55, delta 45).
         const { left, right } = paintedBounds({ volume, placement, widthPercent });
-        expect(Math.abs(right - left - (RANGE_WIDTH * widthPercent) / 100)).toBeLessThanOrEqual(1);
-        expect(left).toBeGreaterThanOrEqual(START_X - 1e-9);
-        expect(right).toBeLessThanOrEqual(END_X + 1e-9);
+        const extent = (RANGE_WIDTH * widthPercent) / 100;
+        expect(Math.abs(right - left - extent)).toBeLessThanOrEqual(1);
+        if (volume === 'Up/Down') {
+          const anchorX = placement === 'Left' ? START_X : END_X;
+          expect(left).toBeCloseTo(anchorX - extent / 2, 9);
+          expect(right).toBeCloseTo(anchorX + extent / 2, 9);
+        } else {
+          expect(left).toBeGreaterThanOrEqual(START_X - 1e-9);
+          expect(right).toBeLessThanOrEqual(END_X + 1e-9);
+        }
       }
     }
   }
 });
 
 test('at 100 percent the widest row spans the whole range, with no pixel cap', () => {
-  for (const volume of ['Up/Down', 'Total', 'Delta']) {
+  for (const volume of ['Total', 'Delta']) {
     const { left, right } = paintedBounds({ volume, widthPercent: 100 });
     expect([left, right]).toEqual([START_X, END_X]);
   }
+  const mirrored = paintedBounds({ volume: 'Up/Down', widthPercent: 100 });
+  expect([mirrored.left, mirrored.right]).toEqual([START_X - RANGE_WIDTH / 2, START_X + RANGE_WIDTH / 2]);
 });
 
 test('a one-sided bar takes the whole extent from its anchor', () => {
@@ -247,11 +257,10 @@ test('a one-sided bar takes the whole extent from its anchor', () => {
   expect(paint({ volume: 'Delta', widthPercent: 100 }).hit.profileRight).toBeCloseTo(END_X, 9);
 });
 
-test('the bars are clipped to the range box as well as to the pane, and the level lines are not', () => {
+test('the bars, labels and level lines are clipped to the pane only', () => {
   const clips = paint().ops.filter((op) => op.kind === 'clip');
-  expect(clips).toHaveLength(2);
-  expect([clips[1].minX, clips[1].maxX]).toEqual([START_X, END_X]);
-  expect(clips[0].minX).toBe(chartRect.x);
+  expect(clips).toHaveLength(1);
+  expect([clips[0].minX, clips[0].maxX]).toEqual([chartRect.x, chartRect.x + chartRect.width]);
 });
 
 test('the up and down colours restyle the bars', () => {
@@ -330,37 +339,108 @@ test('with tall rows Values paints one label per row and the totals line, in the
   expect(texts[3].y).toBe(hit.summaryY);
 });
 
-test('placement right puts the labels 4 px inside the range end', () => {
+test('placement right puts the labels 4 px right of the range end', () => {
   const { texts } = paintValues({ ...VALUES_ON, placement: 'Right' });
-  expect(texts.every((text) => text.x === END_X - 4)).toBe(true);
+  expect(texts.every((text) => text.x === END_X + 4)).toBe(true);
 });
 
-test('Values Position defaults to On Profile and reads Opposite Side as the opposite edge', () => {
-  expect(readFixedRangeProfileSettings(undefined).appearance.valuesSide).toBe('profile');
-  expect(readFixedRangeProfileSettings({ valuesPosition: 'Opposite Side' }).appearance.valuesSide).toBe('opposite');
+test('Values Position defaults to Right and reads Left; the old stored options read as the default', () => {
+  expect(readFixedRangeProfileSettings(undefined).appearance.valuesSide).toBe('right');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'Left' }).appearance.valuesSide).toBe('left');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'Opposite Side' }).appearance.valuesSide).toBe('right');
+  expect(readFixedRangeProfileSettings({ valuesPosition: 'On Profile' }).appearance.valuesSide).toBe('right');
 });
 
-test('Opposite Side puts the labels and the totals line at the other edge of the range box', () => {
+test('Left puts the labels and the totals line 4 px left of the anchor line, right-aligned', () => {
   const cases = [
-    { placement: 'Left', x: END_X - 4, align: 'right' },
-    { placement: 'Right', x: START_X + 4, align: 'left' },
+    { placement: 'Left', x: START_X - 4 },
+    { placement: 'Right', x: END_X - 4 },
   ];
-  for (const { placement, x, align } of cases) {
-    const { texts, hit } = paintValues({ ...VALUES_ON, placement, valuesPosition: 'Opposite Side' });
+  for (const { placement, x } of cases) {
+    const { texts, hit } = paintValues({ ...VALUES_ON, placement, valuesPosition: 'Left' });
     expect(texts.every((text) => text.x === x)).toBe(true);
     expect(hit.valueLabelX).toBe(x);
-    expect(hit.valueLabelAlign).toBe(align);
+    expect(hit.valueLabelAlign).toBe('right');
     expect(texts[0].y).toBe((viewport.priceToY(150) + viewport.priceToY(140)) / 2);
     expect(texts.at(-1)?.y).toBe(hit.summaryY);
   }
 });
 
-test('On Profile anchors the labels at the edge the bars hang from', () => {
+test('Right anchors the labels 4 px right of the anchor line, left-aligned', () => {
   expect(paintValues(VALUES_ON).hit).toMatchObject({ valueLabelX: START_X + 4, valueLabelAlign: 'left' });
   expect(paintValues({ ...VALUES_ON, placement: 'Right' }).hit).toMatchObject({
-    valueLabelX: END_X - 4,
-    valueLabelAlign: 'right',
+    valueLabelX: END_X + 4,
+    valueLabelAlign: 'left',
   });
+});
+
+const BACKGROUND_COLOR = '#112233ff';
+const WITH_BACKGROUND = { ...VALUES_ON, 'valuesBackground.color': BACKGROUND_COLOR };
+
+/** The one rect painted in the values background colour, and the hit fields that report it. */
+function valuesBox(stored: ToolInputValues) {
+  const { ops, hit } = paintValues(stored);
+  const boxes = ops.filter((op) => op.kind === 'fillRect' && op.style === BACKGROUND_COLOR);
+  return { ops, hit, boxes };
+}
+
+// The recording context measures a text as 7 px per character. The widest text is the totals line `102×39`
+// (6 characters, 42 px); the rows are `40×6` (28), `12×30` (35) and `50×3` (28).
+const WIDEST_TEXT = 6 * 7;
+const LABEL_GAP = 4;
+const TOTALS_FONT_PX = 11;
+
+test('Values Background is transparent by default and paints no extra rect', () => {
+  const { appearance } = readFixedRangeProfileSettings(undefined);
+  expect(parseHexColor(appearance.valuesBackgroundColor)?.alpha).toBe(0);
+  const withoutColor = paintValues(VALUES_ON);
+  const withDefault = paint({ ...VALUES_ON, 'valuesBackground.color': appearance.valuesBackgroundColor });
+  expect(withoutColor.ops.filter((op) => op.kind === 'fillRect')).toHaveLength(6);
+  expect(withDefault.rows).toHaveLength(6);
+  expect(withoutColor.hit.valuesBoxLeft).toBeUndefined();
+});
+
+test('Values Background on the right paints one box from the anchor line past the widest text, before the texts', () => {
+  const { ops, hit, boxes } = valuesBox(WITH_BACKGROUND);
+  expect(boxes).toHaveLength(1);
+  // Right of the anchor: x from 73 to textX 77 + widest 42 + gap 4 = 123.
+  // Vertically from the top of the highest row to the totals line bottom: summaryY + 11.
+  const top = viewport.priceToY(170);
+  const bottom = viewport.priceToY(140) + LABEL_GAP + TOTALS_FONT_PX;
+  expect([boxes[0].minX, boxes[0].maxX]).toEqual([START_X, START_X + LABEL_GAP + WIDEST_TEXT + LABEL_GAP]);
+  expect([boxes[0].minY, boxes[0].maxY]).toEqual([top, bottom]);
+  expect(hit).toMatchObject({
+    valuesBoxLeft: START_X,
+    valuesBoxRight: 123,
+    valuesBoxTop: top,
+    valuesBoxBottom: bottom,
+  });
+  const boxIndex = ops.findIndex((op) => op === boxes[0]);
+  const barIndexes = ops.flatMap((op, index) => (op.kind === 'fillRect' && op !== boxes[0] ? [index] : []));
+  expect(boxIndex).toBeGreaterThan(Math.max(...barIndexes));
+  expect(boxIndex).toBeLessThan(ops.findIndex((op) => op.kind === 'fillText'));
+});
+
+test('Values Background on the left ends at the anchor line and starts past the widest text', () => {
+  const { hit, boxes } = valuesBox({ ...WITH_BACKGROUND, valuesPosition: 'Left' });
+  expect(boxes).toHaveLength(1);
+  // Left of the anchor: textX 73 - 4 = 69, minus widest 42 and gap 4 = 23, up to the anchor 73.
+  expect([boxes[0].minX, boxes[0].maxX]).toEqual([START_X - LABEL_GAP - WIDEST_TEXT - LABEL_GAP, START_X]);
+  expect([hit.valuesBoxLeft, hit.valuesBoxRight]).toEqual([23, START_X]);
+});
+
+test('hidden Values paints no background even with a colour', () => {
+  const { boxes, hit } = valuesBox({ 'valuesBackground.color': BACKGROUND_COLOR });
+  expect(boxes).toHaveLength(0);
+  expect(hit.valuesBoxLeft).toBeUndefined();
+});
+
+test('an invalid Values Background colour reads as the transparent default', () => {
+  const { appearance } = readFixedRangeProfileSettings({ 'valuesBackground.color': 'not a colour' });
+  expect(appearance.valuesBackgroundColor).toBe(
+    readFixedRangeProfileSettings(undefined).appearance.valuesBackgroundColor,
+  );
+  expect(parseHexColor(appearance.valuesBackgroundColor)?.alpha).toBe(0);
 });
 
 test('the label text follows the volume mode, with a typographic minus for a negative delta', () => {
@@ -406,7 +486,7 @@ test('a row of 1 px or less still gets a 1 px label', () => {
   expect(texts[0].font).toBe('400 1px system-ui, sans-serif');
 });
 
-test('the value labels are painted after the bars and before the level lines, inside the range box clip', () => {
+test('the value labels are painted after the bars and before the level lines, under the pane clip only', () => {
   const { ops } = paintValues(VALUES_ON);
   const indexesOf = (kind: PaintOp['kind']) => ops.flatMap((op, index) => (op.kind === kind ? [index] : []));
   const bars = indexesOf('fillRect');
@@ -414,7 +494,7 @@ test('the value labels are painted after the bars and before the level lines, in
   const lines = indexesOf('stroke');
   expect(bars.at(-1)).toBeLessThan(texts[0]);
   expect(texts.at(-1)).toBeLessThan(lines[0]);
-  expect(ops.filter((op) => op.kind === 'clip')).toHaveLength(2);
+  expect(ops.filter((op) => op.kind === 'clip')).toHaveLength(1);
 });
 
 test('the paint stays clipped to the pane under every setting', () => {

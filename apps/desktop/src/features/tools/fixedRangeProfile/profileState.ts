@@ -26,6 +26,11 @@ export interface FixedRangeProfileState {
     boxRight?: number;
     boxTop?: number;
     boxBottom?: number;
+    /** The painted box behind the value labels; absent while nothing is painted for it. */
+    valuesBoxLeft?: number;
+    valuesBoxRight?: number;
+    valuesBoxTop?: number;
+    valuesBoxBottom?: number;
     /** Row value labels painted; the totals line is reported by `summaryY` and absent when it is not painted. */
     valueLabels?: number;
     summaryY?: number;

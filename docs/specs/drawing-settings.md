@@ -44,25 +44,27 @@ full set.
      and no longer capped at 180 px, so the default look changes (the owner asked for this).
    - Rows layout, row count, ticks and value area map to the request through one pure function; a change re-requests
      the profile (a hidden drawing asks when shown again). Everything else only repaints.
-   - Rendering: the histogram's widest extent is this share of the range width (handle to handle); bars stay inside
-     the range (they are clipped to it as well as to the pane), with no pixel cap. Total stacks down then up, scaled
+   - Rendering: the histogram's widest extent is this share of the range width (handle to handle); bars are clipped
+     to the pane only, with no pixel cap. Total stacks down then up, scaled
      by the largest total; Delta is one bar of |up - down| in the leading side's colour; both reach the full extent.
      Left anchors at the range start and grows right, Right anchors at the range end and grows left. Up/Down
-     mirrors down left and up right of an axis placed half the extent inside the range (from the start for Left,
-     from the end for Right), each side at most half, so a row with the maximum on both sides spans the extent
-     exactly. A hidden level paints no line and reports no y; without Extend Right the lines stop at the range end.
-   - Values: drawn after the bars and before the level lines, 11px system-ui, clipped to the range box. Each
-     non-empty row shows its volumes 4px inside the anchor edge (left-aligned from the range start for Left,
-     right-aligned from the range end for Right), vertically centred: Up/Down `up×down` (TradingView's order),
+     mirrors down left and up right of the anchor line itself (the range start for Left, the range end for
+     Right), each side at most half the extent, so one side extends outside the range and a row with the maximum
+     on both sides spans the extent exactly. A hidden level paints no line and reports no y; without Extend Right the lines stop at the range end.
+   - Values: drawn after the bars and before the level lines, 11px system-ui, clipped to the pane only. Each
+     non-empty row shows its volumes 4px beside the anchor line (see Values Position), vertically centred: Up/Down `up×down` (TradingView's order),
      Total `up+down`, Delta `up-down` with a typographic minus. Numbers are compact: under 1000 at most 2 decimals,
      then 3 significant digits with K, M or B (`1.35K`). Every non-empty row is labelled, with a font of its own
      height minus 1px, capped at 11px and floored at 1px, centred on the row. A totals line, in the smallest row font, (same format over all rows) sits 4px under the lowest row whenever Values
      is on. `state.hit` reports `valueLabels` (row labels painted), `summaryY`, `valueLabelX` and
      `valueLabelAlign`. Toggling only repaints.
-   - Values Position (`On Profile` default, `Opposite Side`), a child of Values (indented, disabled while Values is
-     off). On Profile anchors the labels and the totals line at the edge the bars hang from; Opposite Side anchors
-     them 4px inside the other edge of the range box (right-aligned at the end for Left placement, left-aligned at
-     the start for Right placement). Changing it only repaints.
+   - Values Position (`Right` default, `Left`), a child of Values (indented, disabled while Values is off). The
+     labels and the totals line sit 4px left (right-aligned) or right (left-aligned) of the anchor line. Old stored
+     `On Profile` / `Opposite Side` values read as the default. Changing it only repaints.
+   - Values Background, a colour swatch without a checkbox and a child of Values (transparent by default, so saved
+     drawings are unchanged). A visible colour paints one filled box behind the labels column, from the anchor line to
+     4px past the widest text, from the highest labelled row to the bottom of the totals line; `state.hit` reports
+     it as `valuesBoxLeft/Right/Top/Bottom`. Changing it only repaints.
    - A drawing learns its resolved values through the optional `settingsChanged` member of `ChartDrawingShape`.
 
 Templates and Developing POC/VA come later.

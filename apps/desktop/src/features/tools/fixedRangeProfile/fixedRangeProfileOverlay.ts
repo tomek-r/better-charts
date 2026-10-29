@@ -2,7 +2,7 @@ import type { RenderViewport } from '../../chart/engine/surface/overlayRenderer'
 import type { ProfileResult } from '../../../shared/bridge/types';
 import { drawSeparatedText } from '../../../shared/canvas/separatedText';
 import { palette } from '../../../shared/theme/palette';
-import { parseHexColor } from '../../../shared/theme/hexColor';
+import { isFullyTransparent } from '../../../shared/theme/hexColor';
 import type { HandleEdges } from './drawing/handles';
 import { drawProfileBars, layoutProfileBars, type ProfileBarsLayout } from './profileBars';
 import type { FixedRangeProfileState } from './profileState';
@@ -87,7 +87,7 @@ function histogramBoxOf(
   left: number,
   right: number,
 ): HistogramBox | undefined {
-  if (layout.rows.length === 0 || parseHexColor(color)?.alpha === 0) {
+  if (layout.rows.length === 0 || isFullyTransparent(color)) {
     return undefined;
   }
   const top = Math.min(...layout.rows.map((row) => row.top));
@@ -131,9 +131,10 @@ function drawBarTimeframeLabel(
 }
 
 /**
- * The profile of the drawn range. The bars hang from the range start (placement left) or from the range end
- * (placement right) and never leave the range; `handles` gives the end x, which is otherwise the end of the
- * requested range.
+ * The profile of the drawn range. The bars hang from the anchor line, the range start (placement left) or the range
+ * end (placement right); Total and Delta grow inward, Up/Down mirrors around the line so one side leaves the range.
+ * Everything is clipped to the pane only. `handles` gives the end x, which is otherwise the end of the requested
+ * range.
  */
 export function drawFixedRangeProfile(
   ctx: CanvasRenderingContext2D,
@@ -172,18 +173,16 @@ export function drawFixedRangeProfile(
     drawHistogramBox(ctx, box, appearance.histogramBoxColor);
     Object.assign(hit, { boxLeft: box.left, boxRight: box.right, boxTop: box.top, boxBottom: box.bottom });
   }
-  // The bars also stay inside the range box, whatever the pane shows of it.
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(startX, viewport.chartRect.y, Math.max(0, endX - startX), viewport.chartRect.height);
-  ctx.clip();
   drawProfileBars(ctx, anchorX, layout, appearance);
-  const valueLabels = drawProfileValueLabels(ctx, { startX, endX }, layout, appearance);
+  const valueLabels = drawProfileValueLabels(ctx, anchorX, layout, appearance);
   hit.valueLabels = valueLabels.rowLabels;
   hit.summaryY = valueLabels.summaryY;
+  if (valueLabels.box !== undefined) {
+    const { left, right, top, bottom } = valueLabels.box;
+    Object.assign(hit, { valuesBoxLeft: left, valuesBoxRight: right, valuesBoxTop: top, valuesBoxBottom: bottom });
+  }
   hit.valueLabelX = valueLabels.textX;
   hit.valueLabelAlign = valueLabels.textAlign;
-  ctx.restore();
   const lineEndX = appearance.extendRight ? x + width : endX;
   if (Number.isFinite(lineEndX)) {
     drawLevelLines(ctx, viewport, profile, appearance, { startX, endX: lineEndX }, hit);

@@ -8,7 +8,7 @@ import {
   FIXED_RANGE_PROFILE_STYLES,
   PLACEMENT_RIGHT,
   ROWS_BY_TICKS,
-  VALUES_OPPOSITE_SIDE,
+  VALUES_LEFT_OF_LINE,
   VOLUME_DELTA,
   VOLUME_TOTAL,
   VOLUME_UP_DOWN,
@@ -42,8 +42,10 @@ export interface FixedRangeProfileAppearance {
   /** Per-row volume text and the totals line under the profile. */
   readonly valuesVisible: boolean;
   readonly valuesColor: string;
-  /** Beside the bars (the edge they hang from) or at the opposite edge of the range box. */
-  readonly valuesSide: 'profile' | 'opposite';
+  /** Which side of the anchor line the labels and the totals line sit on. */
+  readonly valuesSide: 'left' | 'right';
+  /** The fill behind the value labels column; an alpha of 00 paints no box. */
+  readonly valuesBackgroundColor: string;
   /** Share of the range width (handle to handle) the histogram's widest extent takes, in percent. */
   readonly widthPercent: number;
   readonly poc: FixedRangeProfileLevelStyle;
@@ -116,7 +118,8 @@ export function readFixedRangeProfileSettings(stored: unknown): FixedRangeProfil
       downColor: textOf(values, toolStyleKey('downVolume', 'color')),
       valuesVisible: values[toolStyleKey('values', 'visible')] === true,
       valuesColor: textOf(values, toolStyleKey('values', 'color')),
-      valuesSide: textOf(values, 'valuesPosition') === VALUES_OPPOSITE_SIDE ? 'opposite' : 'profile',
+      valuesSide: textOf(values, 'valuesPosition') === VALUES_LEFT_OF_LINE ? 'left' : 'right',
+      valuesBackgroundColor: textOf(values, toolStyleKey('valuesBackground', 'color')),
       widthPercent: numberOf(values, 'widthPercent'),
       poc: levelStyleOf(values, 'poc'),
       vah: levelStyleOf(values, 'vah'),

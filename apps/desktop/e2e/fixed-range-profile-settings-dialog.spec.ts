@@ -110,12 +110,12 @@ test('the Values row has a checkbox, unchecked by default, and a colour swatch',
   expect((await savedValues(page))[0]['values.visible']).toBe(true);
 });
 
-test('Values Position sits indented under Values, disabled while Values is off, defaulting to On Profile', async ({
+test('Values Position sits indented under Values, disabled while Values is off, defaulting to Right', async ({
   page,
 }) => {
   await page.getByRole('tab', { name: 'Style' }).click();
   const position = label(page, 'Values Position');
-  await expect(position).toHaveText('On Profile');
+  await expect(position).toHaveText('Right');
   await expect(position).toBeDisabled();
   const values = await page.getByRole('checkbox', { name: 'Values' }).boundingBox();
   const indented = await position.boundingBox();
@@ -124,9 +124,22 @@ test('Values Position sits indented under Values, disabled while Values is off, 
 
   await page.getByRole('checkbox', { name: 'Values' }).check();
   await expect(position).toBeEnabled();
-  await chooseOption(page, 'Values Position', 'Opposite Side');
+  await chooseOption(page, 'Values Position', 'Left');
   await page.getByRole('button', { name: 'OK', exact: true }).click();
-  expect((await savedValues(page))[0].valuesPosition).toBe('Opposite Side');
+  expect((await savedValues(page))[0].valuesPosition).toBe('Left');
+});
+
+test('Values Background is an indented swatch with no checkbox, disabled while Values is off', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Style' }).click();
+  const background = label(page, 'Values Background');
+  await expect(page.getByRole('checkbox', { name: 'Values Background' })).toHaveCount(0);
+  await expect(background).toBeDisabled();
+  const position = await label(page, 'Values Position').boundingBox();
+  expect((await background.boundingBox())!.y).toBeGreaterThan(position!.y);
+  await expect(background.locator('xpath=ancestor::*[@data-child][1]')).toHaveAttribute('data-child', 'true');
+
+  await page.getByRole('checkbox', { name: 'Values' }).check();
+  await expect(background).toBeEnabled();
 });
 
 test('every input sits on its own row, its label on the left and its control on the right', async ({ page }) => {
@@ -168,7 +181,8 @@ test('saving without a change hands back the defaults that reproduce the current
       'downVolume.color': palette.sell,
       'values.visible': false,
       'values.color': palette.text,
-      valuesPosition: 'On Profile',
+      valuesPosition: 'Right',
+      'valuesBackground.color': `${palette.raised}00`,
       'poc.visible': true,
       'poc.color': palette.profilePoc,
       'poc.width': 1,

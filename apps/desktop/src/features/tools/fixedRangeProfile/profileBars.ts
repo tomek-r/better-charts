@@ -45,12 +45,10 @@ export interface ProfileBarsLayout {
 /** Turns a weight into a bar length in px. */
 type WeightLength = (weight: number) => number;
 
-/** How a row's bars are measured: weight to length, the growth direction, and where a mirrored profile's axis sits. */
+/** How a row's bars are measured: weight to length and the growth direction. */
 interface BarGeometry {
   readonly lengthOf: WeightLength;
   readonly growth: Growth;
-  /** The offset from the anchor of the line down and up bars mirror around: half the extent inward from the anchor. */
-  readonly mirrorAxis: number;
 }
 
 interface VolumeLayout {
@@ -70,13 +68,13 @@ function outward(start: number, end: number, growth: Growth, side: BarSegment['s
 }
 
 const VOLUME_LAYOUTS: Readonly<Record<FixedRangeProfileVolumeMode, VolumeLayout>> = {
-  // Down to the left of the mirror axis, up to its right; the axis sits inside the range so nothing leaves it.
+  // The anchor line is the mirror axis: down to its left, up to its right, so one side leaves the range.
   upDown: {
     longestBarShare: 0.5,
     barWeight: ({ up, down }) => Math.max(up, down),
-    segments: ({ up, down }, { lengthOf, mirrorAxis }) => [
-      { from: mirrorAxis - lengthOf(down), to: mirrorAxis, side: 'down' },
-      { from: mirrorAxis, to: mirrorAxis + lengthOf(up), side: 'up' },
+    segments: ({ up, down }, { lengthOf }) => [
+      { from: -lengthOf(down), to: 0, side: 'down' },
+      { from: 0, to: lengthOf(up), side: 'up' },
     ],
   },
   // The down part first, the up part stacked after it.
@@ -113,7 +111,8 @@ function weightsOf(bin: TickProfileBin): RowWeights {
  * The rows of a profile at the viewport's price scale. One COMMON denominator covers every row so
  * dominance is comparable; the floor of 1 only matters when every weight is 0. The histogram's widest
  * extent is the width setting's share of `rangeWidth`, the px between the range's two handles, and the
- * bars hang from the anchor inward, so they stay inside the range.
+ * Total and Delta bars grow inward from the anchor; Up/Down bars mirror around the anchor line, so one side of
+ * them extends outside the range.
  */
 export function layoutProfileBars(
   profile: ProfileResult,
@@ -129,7 +128,6 @@ export function layoutProfileBars(
   const geometry: BarGeometry = {
     lengthOf: (weight) => longestBarLength * (weight / maxWeight),
     growth,
-    mirrorAxis: (growth * histogramExtent) / 2,
   };
 
   const pocPrice = Number(profile.poc);
