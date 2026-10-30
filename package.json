@@ -31,11 +31,6 @@
       "pnpm --filter better-charts exec eslint --fix"
     ]
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
   "license": "MIT",
   "workspaces": [
     "apps/*"
