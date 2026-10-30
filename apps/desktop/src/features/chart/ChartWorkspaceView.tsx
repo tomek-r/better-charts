@@ -11,20 +11,22 @@ import { ChartDrawingToolbar } from '../tools/drawingToolbar/ChartDrawingToolbar
 export function ChartWorkspaceView() {
   const chartDrawn = useChartDrawn();
   return (
-    <section className={chartDrawn ? 'chart-section' : 'chart-section chart-section-waiting'}>
-      <div className="chart-heading">
-        <ChartTitle />
-        <ChartQuotes />
-      </div>
-      <ChartTimeframes />
-      <ChartCanvas>
-        <ChartDrawingPersistence />
-        <ChartPartialClose />
-        <ChartDrawingToolbar />
-      </ChartCanvas>
+    <div className="chart-workspace">
+      <section className={chartDrawn ? 'chart-section' : 'chart-section chart-section-waiting'}>
+        <div className="chart-heading">
+          <ChartTitle />
+          <ChartQuotes />
+        </div>
+        <ChartTimeframes />
+        <ChartCanvas>
+          <ChartDrawingPersistence />
+          <ChartPartialClose />
+          <ChartDrawingToolbar />
+        </ChartCanvas>
+      </section>
       <div className="chart-footer">
         <ChartTimeZoneControl />
       </div>
-    </section>
+    </div>
   );
 }

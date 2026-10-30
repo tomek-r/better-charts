@@ -1,22 +1,32 @@
-/* Chart section frame and the states it shows before the first candles (ChartWorkspaceView). */
-.chart-section {
-  /* The section's side gutter; the footer uses it to run the full section width. */
+/* The chart card and the time zone card under it, 4px apart so the page background shows between
+   them (ChartWorkspaceView). */
+.chart-workspace {
+  /* The cards' side gutter; the footer uses it to keep the clock on the chart's right edge. */
   --chart-section-gutter: 22px;
   min-width: 0;
-  border-radius: var(--border-radius);
-  background: var(--color-overlay);
   align-self: stretch;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Chart section frame and the states it shows before the first candles. */
+.chart-section {
+  flex: 1 1 auto;
+  border-radius: var(--border-radius);
+  background: var(--color-overlay);
   padding: 8px var(--chart-section-gutter) 0;
   display: flex;
   flex-direction: column;
   min-height: 420px;
 }
 
-/* Without candles there is no chart to frame, so the section shows only the loader and the
-   backgrounds of both the section and the frame become transparent. */
+/* Without candles there is no chart to frame: the section shows only the loader, and the section,
+   the frame and the footer card get a transparent background. */
 .chart-section-waiting,
-.chart-section-waiting .chart-frame {
+.chart-section-waiting .chart-frame,
+.chart-section-waiting + .chart-footer {
   background: transparent;
 }
 
@@ -26,21 +36,20 @@
 .chart-section-waiting .chart-heading,
 .chart-section-waiting .timeframe-tabs,
 .chart-section-waiting .chart-host,
-.chart-section-waiting .chart-footer {
+.chart-section-waiting + .chart-footer {
   visibility: hidden;
 }
 
-/* The row under the chart: the time zone clock sits at its right edge. The bar belongs to the chart
-   card (card background), and a dark strip in the page colour runs the card's full width between the
-   chart and the bar; its side padding keeps the clock aligned with the chart's right edge. */
+/* The bar is its own card under the chart card, its top corners rounded towards the chart; its side
+   padding keeps the time zone clock aligned with the chart's right edge. */
 .chart-footer {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
-  border-top: 4px solid var(--color-root);
+  background: var(--color-overlay);
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
   min-height: 28px;
-  margin-inline: calc(-1 * var(--chart-section-gutter));
   padding: 4px var(--chart-section-gutter);
 }
 
@@ -50,8 +59,11 @@
 }
 
 @media (max-width: 520px) {
-  .chart-section {
+  .chart-workspace {
     --chart-section-gutter: 14px;
+  }
+
+  .chart-section {
     padding: 14px var(--chart-section-gutter) 0;
   }
 }

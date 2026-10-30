@@ -34,7 +34,7 @@ async function chartGapTo(page: Page, neighbour: Locator): Promise<number> {
 }
 
 const DRAWER_TO_STRIP_GAP_PX = 8;
-const CHART_TO_DRAWER_GAP_PX = 14;
+const CHART_TO_DRAWER_GAP_PX = 8;
 const GAP_TOLERANCE_PX = 0.5;
 
 /** Gap between `neighbour`'s right edge and the strip's left edge. */
