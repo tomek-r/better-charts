@@ -1,7 +1,9 @@
-//! The SQLite store behind the two commands: what it keeps per account and symbol, what it
-//! refuses, and what a row this build cannot trust reports.
+//! The SQLite store behind the commands: what it keeps per account and symbol, what it refuses,
+//! and what a row this build cannot trust reports.
 
 use super::{
+    chart_time_zone::ChartTimeZone,
+    error::ChartDrawingError,
     record::{ChartDrawingPoint, ChartDrawingRecord, MAX_POINTS_PER_DRAWING},
     sqlite_drawing_store::SqliteChartDrawingStore,
     store::{ChartDrawingStore, DrawingScope, MAX_DRAWINGS_PER_SCOPE},
@@ -31,6 +33,29 @@ fn store() -> SqliteChartDrawingStore {
 
 fn scope(account_key: &str, symbol: &str) -> DrawingScope {
     DrawingScope::new(account_key.to_owned(), symbol.to_owned()).expect("the scope is valid")
+}
+
+/// A chart time zone built the way the store validates one.
+fn time_zone(value: &str) -> ChartTimeZone {
+    ChartTimeZone::new(value.to_owned()).expect("the time zone is valid")
+}
+
+/// Saves one scope's time zone, failing the test when the store refuses it.
+fn save_time_zone(store: &SqliteChartDrawingStore, account_key: &str, symbol: &str, value: &str) {
+    store
+        .save_time_zone(&scope(account_key, symbol), &time_zone(value))
+        .expect("the time zone saves");
+}
+
+/// The time zone one chart was last shown in, as the store loads it.
+fn loaded_time_zone(
+    store: &SqliteChartDrawingStore,
+    account_key: &str,
+    symbol: &str,
+) -> Option<ChartTimeZone> {
+    store
+        .load_time_zone(&scope(account_key, symbol))
+        .expect("the time zone loads")
 }
 
 fn time_point(time_ms: i64) -> ChartDrawingPoint {
@@ -120,6 +145,20 @@ fn insert_point(store: &SqliteChartDrawingStore, id: &str) {
             Ok(())
         })
         .expect("the hand-written point is stored");
+}
+
+/// Writes one time zone row by hand, so the store reads a zone this build never wrote.
+fn insert_time_zone(store: &SqliteChartDrawingStore, time_zone: &str) {
+    store
+        .database()
+        .write(|connection| {
+            connection.execute(
+                "INSERT INTO chart_time_zones (account_key, symbol, time_zone) VALUES (?1, ?2, ?3)",
+                params![ACCOUNT_KEY, "EURUSD", time_zone],
+            )?;
+            Ok(())
+        })
+        .expect("the hand-written time zone is stored");
 }
 
 /// A folder of this test's own, removed with it; the database and its lock file live in it.
@@ -461,4 +500,126 @@ fn a_machine_without_an_app_data_folder_fails_every_call() {
 
     assert!(store.load(&eurusd).is_err());
     assert!(store.save(&eurusd, &[record("profile-1")]).is_err());
+    assert!(store.load_time_zone(&eurusd).is_err());
+    assert!(store
+        .save_time_zone(&eurusd, &time_zone("exchange"))
+        .is_err());
+}
+
+#[test]
+fn a_scope_without_a_saved_time_zone_loads_none() {
+    let store = store();
+
+    assert_eq!(loaded_time_zone(&store, ACCOUNT_KEY, "EURUSD"), None);
+}
+
+#[test]
+fn the_time_zone_of_one_scope_round_trips() {
+    let store = store();
+
+    save_time_zone(&store, ACCOUNT_KEY, "EURUSD", "America/New_York");
+
+    assert_eq!(
+        loaded_time_zone(&store, ACCOUNT_KEY, "EURUSD"),
+        Some(time_zone("America/New_York"))
+    );
+}
+
+#[test]
+fn saving_a_time_zone_again_replaces_the_previous_one() {
+    let store = store();
+    save_time_zone(&store, ACCOUNT_KEY, "EURUSD", "UTC");
+
+    save_time_zone(&store, ACCOUNT_KEY, "EURUSD", "exchange");
+
+    assert_eq!(
+        loaded_time_zone(&store, ACCOUNT_KEY, "EURUSD"),
+        Some(time_zone("exchange"))
+    );
+}
+
+#[test]
+fn two_scopes_keep_their_own_time_zone() {
+    let store = store();
+    save_time_zone(&store, ACCOUNT_KEY, "EURUSD", "America/New_York");
+    save_time_zone(&store, OTHER_ACCOUNT_KEY, "EURUSD", "UTC");
+    save_time_zone(&store, ACCOUNT_KEY, "NAS100", "Etc/GMT+5");
+
+    assert_eq!(
+        loaded_time_zone(&store, ACCOUNT_KEY, "EURUSD"),
+        Some(time_zone("America/New_York"))
+    );
+    assert_eq!(
+        loaded_time_zone(&store, OTHER_ACCOUNT_KEY, "EURUSD"),
+        Some(time_zone("UTC"))
+    );
+    assert_eq!(
+        loaded_time_zone(&store, ACCOUNT_KEY, "NAS100"),
+        Some(time_zone("Etc/GMT+5"))
+    );
+}
+
+#[test]
+fn a_time_zone_outside_the_allowed_shape_is_refused() {
+    // One letter more than a zone id may hold.
+    let overlong = "A".repeat(65);
+    let refused = [
+        "",
+        "  ",
+        "../etc",
+        "America/New York",
+        "1abc",
+        overlong.as_str(),
+    ];
+
+    for value in refused {
+        assert!(
+            ChartTimeZone::new(value.to_owned()).is_err(),
+            "{value:?} is refused"
+        );
+    }
+    for value in [
+        "exchange",
+        "UTC",
+        "America/New_York",
+        "America/Argentina/Buenos_Aires",
+        "Etc/GMT+5",
+    ] {
+        assert!(
+            ChartTimeZone::new(value.to_owned()).is_ok(),
+            "{value} is accepted"
+        );
+    }
+}
+
+#[test]
+fn a_stored_time_zone_this_build_cannot_read_fails_the_load() {
+    let store = store();
+    insert_time_zone(&store, "bad zone");
+
+    let refused = store
+        .load_time_zone(&scope(ACCOUNT_KEY, "EURUSD"))
+        .expect_err("a zone this build cannot read is an error");
+
+    assert!(
+        matches!(&refused, ChartDrawingError::TimeZoneUnreadable),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn the_drawings_of_a_database_before_the_time_zone_migration_survive_it() {
+    let directory = TestDirectory::new();
+    let path = directory.path().join(DATABASE_FILE_NAME);
+    {
+        let previous = SqliteChartDrawingStore::open_before_last_migration(&path)
+            .expect("the database opens with the earlier migrations");
+        insert_drawing(&previous, "profile-1", "{}");
+        insert_point(&previous, "profile-1");
+    }
+
+    let migrated = SqliteChartDrawingStore::open(&path).expect("the database migrates");
+
+    assert_eq!(ids(&migrated, ACCOUNT_KEY, "EURUSD"), ["profile-1"]);
+    assert_eq!(loaded_time_zone(&migrated, ACCOUNT_KEY, "EURUSD"), None);
 }

@@ -1,10 +1,12 @@
 //! The drawings the user saved on the chart, kept by the Rust side instead of the webview: one
-//! SQLite file under the app data folder, behind a [`ChartDrawingStore`]. The frontend talks to
-//! two commands.
+//! SQLite file under the app data folder, behind a [`ChartDrawingStore`]. The time zone each
+//! chart was last shown in lives in the same file, so it comes back when that chart opens again.
+//! The frontend talks to two commands for the drawings and two for the time zone.
 //!
 //! A premium build plugs its own store into the same trait; the commands, the state and the
 //! frontend contract stay as they are.
 
+mod chart_time_zone;
 mod error;
 mod limits;
 mod record;
@@ -14,6 +16,7 @@ mod store;
 mod tests;
 mod timeframe_visibility;
 
+use chart_time_zone::ChartTimeZone;
 use error::ChartDrawingError;
 use record::ChartDrawingRecord;
 use sqlite_drawing_store::SqliteChartDrawingStore;
@@ -24,7 +27,7 @@ use store::{ChartDrawingStore, DrawingScope, UnavailableChartDrawingStore};
 /// Name of the drawings database below the app data folder.
 const DATABASE_FILE_NAME: &str = "better-charts.sqlite3";
 
-/// The store the two commands work through.
+/// The store the commands work through.
 pub(crate) struct ChartDrawingsState(Arc<dyn ChartDrawingStore>);
 
 impl ChartDrawingsState {
@@ -71,6 +74,38 @@ pub(crate) async fn save_chart_drawings(
     let store = state.store();
     let scope = DrawingScope::new(account_key, symbol).map_err(|error| error.to_string())?;
     run_blocking(move || store.save(&scope, &records)).await
+}
+
+/// The time zone the chart of one account and symbol was last shown in, or none when that chart
+/// has none saved yet.
+#[tauri::command]
+pub(crate) async fn load_chart_time_zone(
+    state: tauri::State<'_, ChartDrawingsState>,
+    account_key: String,
+    symbol: String,
+) -> Result<Option<String>, String> {
+    let store = state.store();
+    let scope = DrawingScope::new(account_key, symbol).map_err(|error| error.to_string())?;
+    run_blocking(move || {
+        store
+            .load_time_zone(&scope)
+            .map(|time_zone| time_zone.map(ChartTimeZone::into_string))
+    })
+    .await
+}
+
+/// Replaces the time zone of one account and symbol, so that chart opens in it next time.
+#[tauri::command]
+pub(crate) async fn save_chart_time_zone(
+    state: tauri::State<'_, ChartDrawingsState>,
+    account_key: String,
+    symbol: String,
+    time_zone: String,
+) -> Result<(), String> {
+    let store = state.store();
+    let scope = DrawingScope::new(account_key, symbol).map_err(|error| error.to_string())?;
+    let time_zone = ChartTimeZone::new(time_zone).map_err(|error| error.to_string())?;
+    run_blocking(move || store.save_time_zone(&scope, &time_zone)).await
 }
 
 /// Runs one store call on a blocking thread, so the UI thread never waits on disk.

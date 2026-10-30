@@ -24,7 +24,10 @@ use bridge::commands::{
 use bridge::connection::run_server;
 use bridge::endpoint::BridgeEndpointControl;
 use bridge::state::BridgeState;
-use chart_drawings::{load_chart_drawings, save_chart_drawings, ChartDrawingsState};
+use chart_drawings::{
+    load_chart_drawings, load_chart_time_zone, save_chart_drawings, save_chart_time_zone,
+    ChartDrawingsState,
+};
 use download_resources::save_bundled_resource;
 use execution_adapter::ExecutionAdapterState;
 use execution_journal::{app_data_dir, ExecutionSafetyState};
@@ -162,6 +165,8 @@ pub fn run() {
             save_app_settings,
             load_chart_drawings,
             save_chart_drawings,
+            load_chart_time_zone,
+            save_chart_time_zone,
             get_execution_safety_status,
             get_execution_recovery_snapshot,
             get_execution_queue_status,
