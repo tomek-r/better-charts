@@ -1,6 +1,8 @@
-import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, TickMarkFormatter } from 'lightweight-charts';
 import type { BridgeState, Candle, QuoteSnapshot } from '../../../../shared/bridge/types';
 import { toRenderBar, type RenderBar } from '../bars/renderBar';
+import { createChartTimeFormat } from '../../timeZone/chartTimeFormat';
+import { EXCHANGE_TIME_ZONE } from '../../timeZone/chartTimeZones';
 import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayRenderer';
 import { createChartSurface } from './chartSurface';
@@ -85,6 +87,9 @@ export class ChartController {
   private readonly countdown: CountdownController;
   private symbol = '';
   private removed = false;
+  /** The zone the axis and the pointer labels are currently formatted in; broker time until told otherwise. */
+  private appliedTimeZone = EXCHANGE_TIME_ZONE;
+  private appliedBrokerOffsetMinutes: number | null = null;
   private readonly liveCandleHold: PointerCandleHold;
   private readonly view: ViewportController;
   private readonly tools: ChartToolSet;
@@ -278,6 +283,25 @@ export class ChartController {
       return;
     }
     this.updateLegend();
+  }
+  /**
+   * Shows every bar in `zone`'s wall clock. One format object feeds the time axis' tick labels and
+   * the pointer's time label, so the two can never disagree about which zone is on screen.
+   * `brokerUtcOffsetMinutes` is what turns a bar's broker wall time into a real instant; while it
+   * is unknown the chart can only show broker time.
+   */
+  setTimeZone(zone: string, brokerUtcOffsetMinutes: number | null): void {
+    if (zone === this.appliedTimeZone && brokerUtcOffsetMinutes === this.appliedBrokerOffsetMinutes) {
+      return;
+    }
+    this.appliedTimeZone = zone;
+    this.appliedBrokerOffsetMinutes = brokerUtcOffsetMinutes;
+    const format = createChartTimeFormat(zone, brokerUtcOffsetMinutes);
+    // A date or a business day has no instant to shift: those keep the library's own label.
+    const tickMarkFormatter: TickMarkFormatter = (time, tickMarkType) =>
+      typeof time === 'number' ? format.tickMarkLabel(time, tickMarkType) : null;
+    this.chart.applyOptions({ timeScale: { tickMarkFormatter } });
+    this.pointerReadout.setTimeFormat(format);
   }
   getData(): readonly RenderBar[] {
     return this.bars;

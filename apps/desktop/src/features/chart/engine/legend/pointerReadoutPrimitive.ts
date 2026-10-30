@@ -1,5 +1,7 @@
 import type { IPrimitivePaneRenderer, IPrimitivePaneView } from 'lightweight-charts';
 import { palette } from '../../../../shared/theme/palette';
+import { createChartTimeFormat, type ChartTimeFormat } from '../../timeZone/chartTimeFormat';
+import { EXCHANGE_TIME_ZONE } from '../../timeZone/chartTimeZones';
 import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import { priceTagHeight } from '../quotes/tagStack';
 import { measureTextWidth } from '../text/textMeasure';
@@ -38,6 +40,11 @@ import type { ChartDrawLayer, ChartDrawTarget } from '../tools/toolContract';
  * The time and price values are resolved at DRAW time from the pointer's pixel
  * position, so a scroll or zoom under a resting pointer updates the labels
  * with the data instead of leaving a stale readout behind.
+ *
+ * The time text comes from the chart's chosen time format (`setTimeFormat`),
+ * the same object the time axis labels its ticks with, so the two can never
+ * disagree about which zone a bar is shown in. It is broker time by default,
+ * as the axis is.
  */
 
 /** Colours come from the shared palette — a canvas renderer cannot read CSS variables. */
@@ -49,33 +56,6 @@ const LABEL_FONT_WEIGHT = 400;
 const LABEL_PADDING = 8;
 const MIN_LABEL_WIDTH = 54;
 const ACCENT_WIDTH = 2;
-
-const WEEKDAY_FORMAT = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short' });
-const DATE_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'UTC',
-  day: 'numeric',
-  month: 'short',
-  year: '2-digit',
-});
-const CLOCK_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'UTC',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
-/**
- * `Wed 30 Sep '26  08:03` — the date and the time of the bar under the pointer.
- * UTC, because that is the frame the library formats the time axis labels in;
- * formatting in the host's zone would print a time the axis next to it
- * contradicts. The two spaces before the clock are the reference's gap.
- */
-function formatPointerTime(seconds: number): string {
-  const at = new Date(seconds * 1000);
-  const part = (type: 'day' | 'month' | 'year') =>
-    DATE_FORMAT.formatToParts(at).find((entry) => entry.type === type)?.value ?? '';
-  return `${WEEKDAY_FORMAT.format(at)} ${part('day')} ${part('month')} '${part('year')}  ${CLOCK_FORMAT.format(at)}`;
-}
 
 interface LabelBox {
   x: number;
@@ -134,6 +114,8 @@ function timeLabelBox(text: string, x: number, paneWidth: number, axisHeight: nu
 export class PointerReadoutPrimitive extends ChartSeriesPrimitive {
   /** Pointer position in pane CSS px; null outside the pane. */
   private point: { x: number; y: number } | null = null;
+  /** The chart's zone, shared with the time axis; broker time until the controller hands another. */
+  private timeFormat: ChartTimeFormat = createChartTimeFormat(EXCHANGE_TIME_ZONE, null);
   private readonly pane: readonly IPrimitivePaneView[];
   private readonly timeAxis: readonly IPrimitivePaneView[];
   private readonly priceAxis: readonly IPrimitivePaneView[];
@@ -156,6 +138,12 @@ export class PointerReadoutPrimitive extends ChartSeriesPrimitive {
 
   private view(renderer: IPrimitivePaneRenderer): IPrimitivePaneView {
     return { zOrder: () => 'top', renderer: () => (this.point === null ? null : renderer) };
+  }
+
+  /** The chart's zone: the controller hands the very format object the time axis labels its ticks with. */
+  setTimeFormat(format: ChartTimeFormat): void {
+    this.timeFormat = format;
+    this.requestUpdate?.();
   }
 
   /** Follow the pointer (pane CSS px). Cheap to call per pointermove. */
@@ -297,7 +285,7 @@ export class PointerReadoutPrimitive extends ChartSeriesPrimitive {
     if (typeof time !== 'number') {
       return null;
     }
-    return { seconds: time, text: formatPointerTime(time) };
+    return { seconds: time, text: this.timeFormat.pointerLabel(time) };
   }
 
   private priceAt(y: number): { price: number; text: string } | null {

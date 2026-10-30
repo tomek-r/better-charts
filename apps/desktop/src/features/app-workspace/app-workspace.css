@@ -7,6 +7,8 @@
   padding: 8px calc(14px + var(--side-drawer-strip-width)) 0 66px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  /* One row the height of the window below the top bar; the chart card fills it. */
+  grid-template-rows: minmax(0, 1fr);
   gap: 20px;
   flex: 1;
   transition: padding-right 0.2s ease;
