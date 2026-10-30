@@ -1,3 +1,9 @@
 packages:
   - "apps/*"
 
+# Keep macOS and Linux native binaries side by side: node_modules is shared
+# between the macOS host and the Linux sandbox.
+supportedArchitectures:
+  os: [current, darwin]
+  cpu: [current, arm64]
+  libc: [current]
