@@ -1,4 +1,4 @@
-import type { BridgeState, QuoteSnapshot } from '../../../../shared/bridge/types';
+import type { BridgeState } from '../../../../shared/bridge/types';
 import type { BarCountdownPrimitive } from './barCountdownPrimitive';
 import type { BarCountdownState } from './barCountdownOptions';
 import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
@@ -16,19 +16,18 @@ export interface CountdownInputs {
 }
 
 /**
- * Owns the countdown's state: the mirrored chart inputs, the connection identity
- * and the last quote, plus the primitive that paints the axis tag and owns the
- * broker clock.
+ * Owns the countdown's state: the mirrored chart inputs, plus the primitive that
+ * paints the axis tag and reads the chart's broker time.
  *
  * Every input has exactly one owner, and this object is the one place that
  * collects them, because the tag silently goes stale if any caller forgets to
  * push an update after changing one.
  *
- * `setQuote` and `setPending` sync themselves, but `setConnection` only records.
- * Its caller writes the connection flag, then the chrome that labels it, and
- * syncs once afterwards, so the tag never repaints from a half-updated
- * connection state. Calling it without syncing leaves the state saying
- * disconnected while the chrome says connected, and the tag renders blank.
+ * `setPending` syncs itself, but `setConnection` only records. Its caller
+ * writes the connection flag, then the chrome that labels it, and syncs once
+ * afterwards, so the tag never repaints from a half-updated connection state.
+ * Calling it without syncing leaves the state saying disconnected while the
+ * chrome says connected, and the tag renders blank.
  *
  * The primitive stays with the controller for attach and detach, and is handed
  * in here only to be updated.
@@ -39,28 +38,20 @@ export class CountdownController {
     timeframe: DEFAULT_TIMEFRAME,
     connected: false,
     suspended: false,
-    connectionIdentity: '',
   };
-  private quote?: QuoteSnapshot;
 
   constructor(
     private readonly primitive: BarCountdownPrimitive,
     private readonly inputs: CountdownInputs,
   ) {}
 
-  setQuote(quote?: QuoteSnapshot): void {
-    this.quote = quote;
-    this.sync();
-  }
-
   setPending(pending: boolean): void {
     this.state.suspended = pending;
     this.sync();
   }
 
-  setConnection(state: BridgeState, identity: string): void {
+  setConnection(state: BridgeState): void {
     this.state.connected = state === 'connected';
-    this.state.connectionIdentity = identity;
   }
 
   /** Mirrors every input into the countdown state and repaints the axis tag. */
@@ -71,7 +62,6 @@ export class CountdownController {
     state.barTimeSeconds = this.inputs.barTimeSeconds();
     state.anchorPrice = this.inputs.bid();
     state.askPrice = this.inputs.ask();
-    state.quote = this.quote;
     this.primitive.update(state);
   }
 }

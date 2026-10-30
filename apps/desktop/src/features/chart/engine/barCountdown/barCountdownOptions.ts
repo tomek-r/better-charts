@@ -1,11 +1,5 @@
 import { palette } from '../../../../shared/theme/palette';
 
-/** A broker tick timestamp for one symbol. */
-export interface BrokerQuote {
-  symbol: string;
-  timeMs: number;
-}
-
 /** Label styling; values are CSS colours resolved at draw time. */
 export interface BarCountdownOptions {
   textColor: string;
@@ -37,8 +31,4 @@ export interface BarCountdownState {
   connected: boolean;
   /** History or timeframe load in flight: hide rather than show stale time. */
   suspended: boolean;
-  /** Changes when the bridge session changes, discarding the broker clock. */
-  connectionIdentity: string;
-  /** Newest tick; only a newer timestamp for the same symbol makes it live. */
-  quote?: BrokerQuote;
 }

@@ -1,7 +1,8 @@
 import type { IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, Time } from 'lightweight-charts';
 import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
-import { BrokerClock } from './brokerClock';
+import { BarCountdownClock } from './barCountdownClock';
+import type { BrokerTime } from '../brokerTime/brokerTime';
 import { priceTagHeight, tagStackTops } from '../quotes/tagStack';
 import { paintTag, tagLayout } from '../text/priceTag';
 import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './barCountdownOptions';
@@ -24,7 +25,7 @@ import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
  * the supported way to repaint content whose source is wall-clock time.
  */
 export class BarCountdownPrimitive extends ChartSeriesPrimitive {
-  private readonly clock = new BrokerClock();
+  private readonly clock: BarCountdownClock;
   private readonly axisViews: readonly IPrimitivePaneView[];
   private options: BarCountdownOptions;
   private readonly state: BarCountdownState = {
@@ -32,7 +33,6 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
     timeframe: DEFAULT_TIMEFRAME,
     connected: false,
     suspended: false,
-    connectionIdentity: '',
   };
   /** Text the last chart update put on the axis; drives the repaint decision. */
   private shownText = '';
@@ -41,8 +41,9 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
   private timer: number | undefined;
   private dueMs = 0;
 
-  constructor(options: Partial<BarCountdownOptions> = {}) {
+  constructor(brokerTime: BrokerTime, options: Partial<BarCountdownOptions> = {}) {
     super();
+    this.clock = new BarCountdownClock(brokerTime);
     this.options = { ...barCountdownDefaultOptions, ...options };
     // The view list is stable: the library caches views by array identity. The
     // renderer is null while the tag is hidden, so a hidden tag costs nothing.
@@ -53,7 +54,6 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
   /** Mirror the owner's state in and reschedule the wake-up for the next change. */
   update(state: Readonly<BarCountdownState>): void {
     const next = this.state;
-    const previousIdentity = next.connectionIdentity;
     next.symbol = state.symbol;
     next.timeframe = state.timeframe;
     next.barTimeSeconds = state.barTimeSeconds;
@@ -61,16 +61,6 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
     next.askPrice = state.askPrice;
     next.connected = state.connected;
     next.suspended = state.suspended;
-    next.connectionIdentity = state.connectionIdentity;
-    next.quote = state.quote;
-    // A session starts from cached last ticks, so its first quote must not be
-    // trusted as live: drop the clock and let a newer tick re-establish it.
-    if (!state.connected || state.connectionIdentity !== previousIdentity) {
-      this.clock.clear();
-    }
-    if (state.quote) {
-      this.clock.acceptQuote(state.quote);
-    }
     // Quotes arrive far more often than the label changes; compare before
     // asking the chart for a frame.
     if (this.painted() !== this.shownText) {
