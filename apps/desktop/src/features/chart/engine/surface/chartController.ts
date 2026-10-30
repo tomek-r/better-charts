@@ -7,6 +7,7 @@ import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayRenderer';
 import { createChartSurface } from './chartSurface';
 import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
+import { BrokerTime } from '../brokerTime/brokerTime';
 import { BarCountdownPrimitive } from '../barCountdown/barCountdownPrimitive';
 import { CountdownController } from '../barCountdown/countdownController';
 import { OhlcLegend } from '../legend/ohlcLegend';
@@ -65,7 +66,11 @@ export class ChartController {
   private readonly observer: ResizeObserver;
   private readonly legend: OhlcLegend;
   private readonly connection: ConnectionIndicator;
-  private readonly countdownPrimitive = new BarCountdownPrimitive({ backColor: TRADING_COLORS.sell });
+  // Broker time from the live ticks; the countdown and the time zone clock both read it.
+  private readonly brokerTime = new BrokerTime();
+  private readonly countdownPrimitive = new BarCountdownPrimitive(this.brokerTime, {
+    backColor: TRADING_COLORS.sell,
+  });
   private readonly scaleControls: PriceScaleController;
   // Every tool shares the pointer's time/price labels, and the tools' above-trading-overlays layer
   // is painted by it just before them. Attached for the chart's life, drawn only while
@@ -149,7 +154,8 @@ export class ChartController {
     this.primitive = new WorkspacePrimitive(this, state);
     this.candles.attachPrimitive(this.primitive);
     // The countdown tag is its own primitive: it paints on the axis canvas and
-    // owns the broker-clock timer that repaints it.
+    // owns the timer that repaints it. The broker time it counts on is the
+    // controller's, because the time zone clock reads it too.
     this.candles.attachPrimitive(this.countdownPrimitive);
     this.candles.attachPrimitive(this.priceTags);
     this.candles.attachPrimitive(this.pointerReadout);
@@ -303,6 +309,12 @@ export class ChartController {
     this.chart.applyOptions({ timeScale: { tickMarkFormatter } });
     this.pointerReadout.setTimeFormat(format);
   }
+  /** UTC now as the broker's ticks tell it; the desktop clock until a live tick and the broker's offset are known. */
+  clockNowMs(): number {
+    const brokerOffsetMinutes = this.appliedBrokerOffsetMinutes;
+    const brokerUtcNowMs = brokerOffsetMinutes === null ? null : this.brokerTime.utcNowMs(brokerOffsetMinutes);
+    return brokerUtcNowMs ?? Date.now();
+  }
   getData(): readonly RenderBar[] {
     return this.bars;
   }
@@ -319,7 +331,10 @@ export class ChartController {
     this.syncCountdown();
   }
   setQuoteClock(quote?: QuoteSnapshot): void {
-    this.countdown.setQuote(quote);
+    if (quote) {
+      this.brokerTime.acceptQuote(quote);
+    }
+    this.syncCountdown();
   }
   setCountdownPending(pending: boolean): void {
     this.countdown.setPending(pending);
@@ -407,7 +422,8 @@ export class ChartController {
   }
 
   setConnectionStatus(state: BridgeState, message?: string, identity = ''): void {
-    this.countdown.setConnection(state, identity);
+    this.brokerTime.setConnection(state, identity);
+    this.countdown.setConnection(state);
     this.connection.set(state, message);
     this.syncCountdown();
   }
@@ -477,10 +493,11 @@ export class ChartController {
   }
 
   /**
-   * The countdown primitive owns the broker clock, the broker-second alignment
-   * and the axis label; CountdownController mirrors the controller's single copy
-   * of each input into it, so every input has one owner. Call this whenever one of
-   * those inputs changes: quotes, bars, timeframe, Bid, symbol or connection.
+   * The countdown primitive owns the broker-second alignment and the axis label;
+   * ChartController owns the broker time, and CountdownController mirrors the
+   * controller's single copy of each input into the primitive, so every input has
+   * one owner. Call this whenever one of those inputs changes: quotes, bars,
+   * timeframe, Bid, symbol or connection.
    */
   private syncCountdown(): void {
     this.countdown.sync();

@@ -1,5 +1,5 @@
 import { timeframeBarOffset, timeframeBarTime } from '../../../../shared/bridge/timeframes';
-import type { BrokerQuote } from './barCountdownOptions';
+import type { BrokerTime } from '../brokerTime/brokerTime';
 
 /**
  * Land the wake-up just past a second boundary. Timers run at or after their
@@ -16,7 +16,7 @@ const BOUNDARY_GUARD_MS = 20;
  */
 const ROLLOVER_GRACE_MS = 5_000;
 
-interface BrokerClockReading {
+interface BarCountdownReading {
   /** Broker time now: last quote timestamp plus monotonic elapsed time. */
   nowMs: number;
   /** Time left in the bar being counted down; never zero. */
@@ -27,33 +27,9 @@ interface BrokerClockReading {
   ageMs: number;
 }
 
-/**
- * Broker time for one symbol, reconstructed from the last tick and monotonic
- * elapsed time. MT5 candle and tick timestamps share broker time, which can
- * differ from desktop UTC by hours, so the desktop clock is never used.
- */
-export class BrokerClock {
-  private quote?: { symbol: string; timeMs: number; receivedAt: number; live: boolean };
-
-  acceptQuote(quote?: BrokerQuote): void {
-    if (!quote || !Number.isFinite(quote.timeMs) || quote.timeMs <= 0) {
-      this.quote = undefined;
-      return;
-    }
-    // Repeated cached quotes must not restart the clock. Older ticks cannot
-    // extend a candle that has already expired.
-    if (this.quote?.symbol === quote.symbol && quote.timeMs <= this.quote.timeMs) {
-      return;
-    }
-    // The initial snapshot may contain a closed market's cached last tick.
-    // Only a newer tick for this symbol establishes a live broker clock.
-    const live = this.quote?.symbol === quote.symbol;
-    this.quote = { symbol: quote.symbol, timeMs: quote.timeMs, receivedAt: performance.now(), live };
-  }
-
-  clear(): void {
-    this.quote = undefined;
-  }
+/** The time left in the newest bar, counted on the chart's broker time. */
+export class BarCountdownClock {
+  constructor(private readonly brokerTime: BrokerTime) {}
 
   text(symbol: string, barTime: number | undefined, timeframe: string): string {
     const reading = this.read(symbol, barTime, timeframe);
@@ -88,13 +64,12 @@ export class BrokerClock {
     return Math.min(...delays) + BOUNDARY_GUARD_MS;
   }
 
-  private read(symbol: string, barTime: number | undefined, timeframe: string): BrokerClockReading | null {
-    const quote = this.quote;
-    if (!quote?.live || quote.symbol !== symbol || barTime === undefined) {
+  private read(symbol: string, barTime: number | undefined, timeframe: string): BarCountdownReading | null {
+    const reading = this.brokerTime.read();
+    if (!reading || reading.symbol !== symbol || barTime === undefined) {
       return null;
     }
-    const ageMs = Math.max(0, performance.now() - quote.receivedAt);
-    const nowMs = quote.timeMs + ageMs;
+    const { nowMs, ageMs } = reading;
     const startMs = barTime * 1000;
     if (nowMs < startMs) {
       return null;

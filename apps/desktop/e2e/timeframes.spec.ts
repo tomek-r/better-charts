@@ -12,7 +12,8 @@ import {
   loadTimeframeFavorites,
 } from '../src/features/chart/timeframes/timeframeFavorites';
 import { futurePoints } from '../src/features/chart/engine/timeScale/futureTimePoints';
-import { BrokerClock } from '../src/features/chart/engine/barCountdown/brokerClock';
+import { BrokerTime } from '../src/features/chart/engine/brokerTime/brokerTime';
+import { BarCountdownClock } from '../src/features/chart/engine/barCountdown/barCountdownClock';
 
 const periods = [
   ['M1', '1m'],
@@ -154,9 +155,11 @@ test('monthly padding follows calendar boundaries through leap February', () => 
 
 // Pinned because the subject is the month-end boundary of leap February 2024 (29 days, not 30).
 test('monthly countdown ends at the next month rather than after 30 days', () => {
-  const clock = new BrokerClock();
+  const brokerTime = new BrokerTime();
+  brokerTime.setConnection('connected', '');
+  const clock = new BarCountdownClock(brokerTime);
   const first = { symbol: 'XBRUSD', timeMs: Date.parse('2024-02-28T23:59:58Z') };
-  clock.acceptQuote(first);
-  clock.acceptQuote({ ...first, timeMs: first.timeMs + 1000 });
+  brokerTime.acceptQuote(first);
+  brokerTime.acceptQuote({ ...first, timeMs: first.timeMs + 1000 });
   expect(clock.text('XBRUSD', seconds('2024-02-01T00:00:00Z'), 'MN1')).toBe('24:00:01');
 });
