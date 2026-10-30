@@ -5,7 +5,10 @@ import { suppressNativeContextMenu } from './features/app-workspace/nativeContex
 import 'virtual:palette.css';
 import './styles.css';
 
-suppressNativeContextMenu(document);
+// Dev keeps the native menu for Inspect Element; production suppresses it because it freezes the chart on macOS.
+if (!import.meta.env.DEV) {
+  suppressNativeContextMenu(document);
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

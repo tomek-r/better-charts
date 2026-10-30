@@ -32,6 +32,18 @@ const CASES: ContextMenuCase[] = [
   },
 ];
 
+async function installNativeContextMenuSuppression(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    // The suite runs against the Vite dev server, which serves source modules, so production's suppression can be
+    // loaded here. The path stays a plain string const so TypeScript does not try to resolve it.
+    const modulePath = '/src/features/app-workspace/nativeContextMenu.ts';
+    const { suppressNativeContextMenu } = (await import(modulePath)) as {
+      suppressNativeContextMenu: (root: Document) => void;
+    };
+    suppressNativeContextMenu(document);
+  });
+}
+
 async function contextMenuWasSuppressed(page: Page, appendedMarkup: string, targetSelector: string): Promise<boolean> {
   return page.evaluate(
     ({ appendedMarkup: markup, targetSelector: selector }) => {
@@ -44,11 +56,21 @@ async function contextMenuWasSuppressed(page: Page, appendedMarkup: string, targ
   );
 }
 
-test.describe('native context menu', () => {
+test.describe('native context menu suppression in production builds', () => {
   for (const { name, appendedMarkup, targetSelector, menuSuppressed } of CASES) {
     test(`${menuSuppressed ? 'is suppressed' : 'is kept'} on ${name}`, async ({ page }) => {
       await gotoWithStub(page);
+      await installNativeContextMenuSuppression(page);
       expect(await contextMenuWasSuppressed(page, appendedMarkup, targetSelector)).toBe(menuSuppressed);
     });
   }
+});
+
+test.describe('native context menu in dev builds', () => {
+  test('is kept on page body', async ({ page }) => {
+    await gotoWithStub(page);
+    // Nothing installs the suppression in a dev build, so the WebView's own menu keeps working and Inspect Element
+    // still reaches the dev tools.
+    expect(await contextMenuWasSuppressed(page, '', 'body')).toBe(false);
+  });
 });
