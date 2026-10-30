@@ -123,10 +123,19 @@ export interface TauriStubOptions {
    * them, the way a corrupt file does.
    */
   unreadableChartDrawings?: string[];
+  /**
+   * Time zones the backend already holds, keyed by `chartDrawingScopeKey(accountKey, symbol)`
+   * as an earlier run of the app saved them. Written before the app loads; a reload in the
+   * same test keeps whatever the app saved afterwards.
+   */
+  chartTimeZones?: Record<string, string>;
 }
 
 /** Session key of the drawings the stub's backend holds, so a page reload keeps them. */
 const STUB_CHART_DRAWINGS_KEY = '__stubChartDrawings';
+
+/** Session key of the time zones the stub's backend holds, so a page reload keeps them. */
+const STUB_CHART_TIME_ZONES_KEY = '__stubChartTimeZones';
 
 export interface RecordedHistory {
   symbol: string;
@@ -274,14 +283,23 @@ export async function installTauriStub(
   page: Pick<Page, 'addInitScript'>,
   options: TauriStubOptions = {},
 ): Promise<void> {
-  const stubArgument = { opts: options, now: STUB_NOW, chartDrawingsKey: STUB_CHART_DRAWINGS_KEY };
-  await page.addInitScript(({ opts, now: NOW, chartDrawingsKey }: typeof stubArgument) => {
+  const stubArgument = {
+    opts: options,
+    now: STUB_NOW,
+    chartDrawingsKey: STUB_CHART_DRAWINGS_KEY,
+    chartTimeZonesKey: STUB_CHART_TIME_ZONES_KEY,
+  };
+  await page.addInitScript(({ opts, now: NOW, chartDrawingsKey, chartTimeZonesKey }: typeof stubArgument) => {
     const w = window as unknown as Record<string, unknown>;
 
     // A test seeds the drawings an earlier run saved. Filling only an empty store
     // keeps a reload in the same test on what the app has saved since.
     if (opts.chartDrawings && sessionStorage.getItem(chartDrawingsKey) === null) {
       sessionStorage.setItem(chartDrawingsKey, JSON.stringify(opts.chartDrawings));
+    }
+    // The time zones follow the same rule: seeded once, then whatever the app saves.
+    if (opts.chartTimeZones && sessionStorage.getItem(chartTimeZonesKey) === null) {
+      sessionStorage.setItem(chartTimeZonesKey, JSON.stringify(opts.chartTimeZones));
     }
 
     const safety = {
@@ -584,6 +602,19 @@ export async function installTauriStub(
       return `${String(args.accountKey)}\n${String(args.symbol)}`;
     }
 
+    /** The zones the stub's backend holds right now, keyed like a drawings list. */
+    function storedChartTimeZones(): Record<string, string> {
+      const stored = sessionStorage.getItem(chartTimeZonesKey);
+      try {
+        return stored === null ? {} : (JSON.parse(stored) as Record<string, string>);
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) {
+          throw error;
+        }
+        return {};
+      }
+    }
+
     /** Candle deliveries (snapshots and older pages), for harnesses that verify data volume. */
     const deliveries: Array<{ event: string; symbol: unknown; timeframe: unknown; candles: number }> = [];
 
@@ -882,6 +913,19 @@ export async function installTauriStub(
         // Tauri rejects with the bare string, not an Error.
         throw stringRejections[cmd];
       }
+      // The saved time zone of one chart (account and symbol), answered from the page's own
+      // store after the failure routes, so a test can make the load reject like the backend's
+      // own refusals.
+      if (cmd === 'load_chart_time_zone' || cmd === 'save_chart_time_zone') {
+        const key = chartDrawingKey(args);
+        const stored = storedChartTimeZones();
+        if (cmd === 'load_chart_time_zone') {
+          return stored[key] ?? null;
+        }
+        stored[key] = String(args.timeZone);
+        sessionStorage.setItem(chartTimeZonesKey, JSON.stringify(stored));
+        return null;
+      }
       if (!Object.prototype.hasOwnProperty.call(responses, cmd)) {
         throw new Error(`E2E Tauri stub has no scripted response for command "${cmd}".`);
       }
@@ -1046,6 +1090,12 @@ export async function storedDrawingIds(page: Page, accountKey: string, symbol: s
 export async function chartDrawingSaveCount(page: Page): Promise<number> {
   const all = await stubInvocations(page);
   return all.filter((entry) => entry.cmd === 'save_chart_drawings').length;
+}
+
+/** The time zones the stub's backend holds right now, keyed like `TauriStubOptions.chartTimeZones`. */
+export async function stubChartTimeZones(page: Page): Promise<Record<string, string>> {
+  const stored = await page.evaluate((key) => sessionStorage.getItem(key), STUB_CHART_TIME_ZONES_KEY);
+  return stored === null ? {} : (JSON.parse(stored) as Record<string, string>);
 }
 
 /** Changes what the stub answers for `cmd` from now on, as a backend whose state moved on. */

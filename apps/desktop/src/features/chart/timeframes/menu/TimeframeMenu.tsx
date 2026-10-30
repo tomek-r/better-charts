@@ -96,7 +96,7 @@ export function TimeframeMenu({
                 return (
                   <div key={wire} className={wire === active ? 'timeframe-menu-row active' : 'timeframe-menu-row'}>
                     <button
-                      className="timeframe-menu-select"
+                      className="popup-menu-row timeframe-menu-select"
                       disabled={disabled}
                       aria-current={wire === active ? 'true' : undefined}
                       onClick={() => onSelect(wire)}

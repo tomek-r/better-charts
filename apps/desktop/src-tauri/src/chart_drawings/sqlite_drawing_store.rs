@@ -1,8 +1,9 @@
 //! The drawings of every account and symbol in one SQLite file: a row per drawing and a row
-//! per anchor point, so every tool stores the same shape and reaches it through the same two
-//! commands.
+//! per anchor point, so every tool stores the same shape, plus the time zone each chart was
+//! last shown in.
 
 use super::{
+    chart_time_zone::ChartTimeZone,
     error::ChartDrawingError,
     record::{ChartDrawingPoint, ChartDrawingRecord},
     store::{ChartDrawingStore, DrawingScope, MAX_DRAWINGS_PER_SCOPE},
@@ -11,7 +12,7 @@ use super::{
 use serde_json::Value;
 use sqlite_store::rusqlite;
 use sqlite_store::{
-    rusqlite::{params, Connection, Statement, Transaction},
+    rusqlite::{params, Connection, OptionalExtension, Statement, Transaction},
     Migration, Outcome, SqliteDatabase, StoreError,
 };
 use std::{
@@ -28,6 +29,8 @@ const SCHEMA_VERSION: u32 = 1;
 const BELOW_BARS_VERSION: u32 = 2;
 /// The version that records on which timeframes a drawing paints.
 const TIMEFRAME_VISIBILITY_VERSION: u32 = 3;
+/// The version that records the time zone each chart was last shown in.
+const CHART_TIME_ZONE_VERSION: u32 = 4;
 
 /// The schema of the drawings database: one drawing, then its ordered points.
 const CREATE_SCHEMA: &str = "\
@@ -63,6 +66,15 @@ ALTER TABLE chart_drawings
   ADD COLUMN timeframe_visibility TEXT NOT NULL DEFAULT
   '{\"minutes\":{\"shown\":true,\"from\":1,\"to\":30},\"hours\":{\"shown\":true,\"from\":1,\"to\":12},\"days\":true,\"weeks\":true,\"months\":true}'";
 
+/// The time zone of one chart: at most one row per account and symbol.
+const CREATE_CHART_TIME_ZONE_TABLE: &str = "\
+CREATE TABLE chart_time_zones (
+  account_key TEXT NOT NULL,
+  symbol      TEXT NOT NULL,
+  time_zone   TEXT NOT NULL,
+  PRIMARY KEY (account_key, symbol)
+) STRICT, WITHOUT ROWID;";
+
 const SELECT_SCOPE_DRAWINGS: &str = "\
 SELECT drawing_id, tool_id, is_locked, is_visible, is_below_bars, inputs, timeframe_visibility
 FROM chart_drawings
@@ -89,6 +101,14 @@ const INSERT_POINT: &str = "\
 INSERT INTO chart_drawing_points (drawing_id, point_index, time_ms, price)
 VALUES (?1, ?2, ?3, ?4)";
 
+const SELECT_SCOPE_TIME_ZONE: &str =
+    "SELECT time_zone FROM chart_time_zones WHERE account_key = ?1 AND symbol = ?2";
+
+const UPSERT_SCOPE_TIME_ZONE: &str = "\
+INSERT INTO chart_time_zones (account_key, symbol, time_zone)
+VALUES (?1, ?2, ?3)
+ON CONFLICT (account_key, symbol) DO UPDATE SET time_zone = excluded.time_zone";
+
 /// The migrations of the drawings database, applied in order and never undone.
 const MIGRATIONS: &[Migration] = &[
     Migration {
@@ -103,6 +123,10 @@ const MIGRATIONS: &[Migration] = &[
         target_version: TIMEFRAME_VISIBILITY_VERSION,
         apply: add_timeframe_visibility_column,
     },
+    Migration {
+        target_version: CHART_TIME_ZONE_VERSION,
+        apply: create_chart_time_zone_table,
+    },
 ];
 
 fn create_schema(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
@@ -115,6 +139,10 @@ fn add_below_bars_column(transaction: &Transaction<'_>) -> rusqlite::Result<()> 
 
 fn add_timeframe_visibility_column(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     transaction.execute_batch(ADD_TIMEFRAME_VISIBILITY_COLUMN)
+}
+
+fn create_chart_time_zone_table(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(CREATE_CHART_TIME_ZONE_TABLE)
 }
 
 /// The drawings of this installation, kept in one SQLite file.
@@ -186,6 +214,32 @@ impl ChartDrawingStore for SqliteChartDrawingStore {
         self.database
             .write(|connection| replace_scope(connection, scope, records))
             .map_err(ChartDrawingError::while_writing)
+    }
+
+    fn load_time_zone(
+        &self,
+        scope: &DrawingScope,
+    ) -> Result<Option<ChartTimeZone>, ChartDrawingError> {
+        let stored_time_zone = self
+            .database
+            .read(|connection| read_time_zone(connection, scope))
+            .map_err(ChartDrawingError::time_zone_while_reading)?;
+        // A row this build cannot read is an error, never a chart that silently shows its default.
+        stored_time_zone
+            .map(|time_zone| {
+                ChartTimeZone::new(time_zone).map_err(|_| ChartDrawingError::TimeZoneUnreadable)
+            })
+            .transpose()
+    }
+
+    fn save_time_zone(
+        &self,
+        scope: &DrawingScope,
+        time_zone: &ChartTimeZone,
+    ) -> Result<(), ChartDrawingError> {
+        self.database
+            .write(|connection| write_time_zone(connection, scope, time_zone))
+            .map_err(ChartDrawingError::time_zone_while_writing)
     }
 }
 
@@ -301,4 +355,29 @@ fn timeframe_visibility_text(visibility: &TimeframeVisibility) -> Outcome<String
 /// A list index as the integer column that keeps the order.
 fn to_row_number(index: usize) -> Outcome<i64> {
     i64::try_from(index).map_err(|_| StoreError::WriteFailed.into())
+}
+
+/// The time zone saved for one scope, exactly as stored, or none when that chart has none yet.
+fn read_time_zone(connection: &Connection, scope: &DrawingScope) -> Outcome<Option<String>> {
+    let stored_time_zone: Option<String> = connection
+        .query_row(
+            SELECT_SCOPE_TIME_ZONE,
+            params![scope.account_key(), scope.symbol()],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(stored_time_zone)
+}
+
+/// Replaces the time zone of one scope, so a chart that already has one keeps a single row.
+fn write_time_zone(
+    connection: &Connection,
+    scope: &DrawingScope,
+    time_zone: &ChartTimeZone,
+) -> Outcome<()> {
+    connection.execute(
+        UPSERT_SCOPE_TIME_ZONE,
+        params![scope.account_key(), scope.symbol(), time_zone.as_str()],
+    )?;
+    Ok(())
 }

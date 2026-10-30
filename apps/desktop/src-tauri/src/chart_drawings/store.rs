@@ -1,10 +1,13 @@
-//! Where saved drawings live. The frontend only knows the [`ChartDrawingStore`] trait, so a
-//! build can keep the same two commands and store the drawings another way.
+//! Where saved drawings and chart time zones live. The frontend only knows the
+//! [`ChartDrawingStore`] trait, so a build can keep the same commands and store both another way.
 //!
 //! Every implementation validates on the way in and out: a database row this build cannot
 //! read is refused rather than replaced, so the drawings the user saved are never lost.
 
-use super::{error::ChartDrawingError, limits::is_present_within, record::ChartDrawingRecord};
+use super::{
+    chart_time_zone::ChartTimeZone, error::ChartDrawingError, limits::is_present_within,
+    record::ChartDrawingRecord,
+};
 use sqlite_store::StoreError;
 
 /// The most drawings one account and symbol keeps.
@@ -48,7 +51,8 @@ impl DrawingScope {
     }
 }
 
-/// The drawings of every account and symbol the app has saved.
+/// The drawings of every account and symbol the app has saved, and the time zone each chart was
+/// last shown in.
 pub(crate) trait ChartDrawingStore: Send + Sync {
     /// Every drawing saved for `scope`, in paint order. A scope with nothing saved holds none;
     /// rows that cannot be read or trusted are an error, never an empty list.
@@ -59,28 +63,36 @@ pub(crate) trait ChartDrawingStore: Send + Sync {
         scope: &DrawingScope,
         records: &[ChartDrawingRecord],
     ) -> Result<(), ChartDrawingError>;
+    /// The time zone `scope` was last shown in, or `None` when that chart has none saved yet. A
+    /// stored zone this build cannot read is an error, never `None`.
+    fn load_time_zone(
+        &self,
+        scope: &DrawingScope,
+    ) -> Result<Option<ChartTimeZone>, ChartDrawingError>;
+    /// Replaces the time zone of `scope`, so the chart opens in it next time.
+    fn save_time_zone(
+        &self,
+        scope: &DrawingScope,
+        time_zone: &ChartTimeZone,
+    ) -> Result<(), ChartDrawingError>;
 }
 
 /// The store of a machine whose drawings database could not be opened: every call fails with
 /// the reason opening found, so nothing is invented and nothing is lost.
 pub(super) struct UnavailableChartDrawingStore {
-    read_failure: ChartDrawingError,
-    write_failure: ChartDrawingError,
+    failure: StoreError,
 }
 
 impl UnavailableChartDrawingStore {
-    /// The store of a database that could not be opened, for the reason `error` names.
-    pub(super) fn for_failure(error: StoreError) -> Self {
-        Self {
-            read_failure: ChartDrawingError::while_reading(error.clone()),
-            write_failure: ChartDrawingError::while_writing(error),
-        }
+    /// The store of a database that could not be opened, for the reason `failure` names.
+    pub(super) fn for_failure(failure: StoreError) -> Self {
+        Self { failure }
     }
 }
 
 impl ChartDrawingStore for UnavailableChartDrawingStore {
     fn load(&self, _scope: &DrawingScope) -> Result<Vec<ChartDrawingRecord>, ChartDrawingError> {
-        Err(self.read_failure.clone())
+        Err(ChartDrawingError::while_reading(self.failure.clone()))
     }
 
     fn save(
@@ -88,6 +100,25 @@ impl ChartDrawingStore for UnavailableChartDrawingStore {
         _scope: &DrawingScope,
         _records: &[ChartDrawingRecord],
     ) -> Result<(), ChartDrawingError> {
-        Err(self.write_failure.clone())
+        Err(ChartDrawingError::while_writing(self.failure.clone()))
+    }
+
+    fn load_time_zone(
+        &self,
+        _scope: &DrawingScope,
+    ) -> Result<Option<ChartTimeZone>, ChartDrawingError> {
+        Err(ChartDrawingError::time_zone_while_reading(
+            self.failure.clone(),
+        ))
+    }
+
+    fn save_time_zone(
+        &self,
+        _scope: &DrawingScope,
+        _time_zone: &ChartTimeZone,
+    ) -> Result<(), ChartDrawingError> {
+        Err(ChartDrawingError::time_zone_while_writing(
+            self.failure.clone(),
+        ))
     }
 }

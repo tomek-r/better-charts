@@ -147,6 +147,10 @@ edit generated `target/`, `dist/`, `node_modules/`, `.vite/`, `test-results/`,
   `vercel-composition-patterns`, `vercel-react-best-practices`; chart
   rendering and drawing tools → `lightweight-charts-plugin-authoring`; before
   a commit → `code-review-and-quality` and `git-workflow-and-versioning`.
+  Agents without a Skill tool (DeepSeek MCP tasks, other external models)
+  get the same matching skills: their prompt names each one and tells them to
+  read `.agents/skills/<name>/SKILL.md` in full before any other step and to
+  follow it while they work.
 - Use only tools and commands that run without a permission prompt: read,
   search and list files with the Read/Grep/Glob tools and edit with
   Edit/Write. Bash is for one plain command per call (gates, `git

@@ -14,6 +14,7 @@
 @import './features/chart/chart-workspace.css';
 @import './features/chart/timeframes/chart-timeframes.css';
 @import './features/chart/timeframes/menu/timeframe-menu.css';
+@import './features/chart/timeZone/chart-time-zone.css';
 @import './features/tools/drawing-tool-rail.css';
 @import './features/tools/drawingToolbar/drawing-toolbar.css';
 @import './features/tools/drawingSettings/drawing-settings.css';
@@ -32,6 +33,7 @@
 @import './shared/ui/loading/loading-message.css';
 @import './shared/ui/dialog/modal-dialog.css';
 @import './shared/ui/popup/popup-surface.css';
+@import './shared/ui/popup/popup-menu-row.css';
 @import './shared/ui/focus/field-focus.css';
 @import './shared/ui/select/select.css';
 @import './shared/ui/colorPicker/color-picker.css';

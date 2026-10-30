@@ -1,0 +1,16 @@
+/* A selectable text row of a popup menu: the timeframe list and the time zone list. */
+.popup-menu-row {
+  border: 0;
+  border-radius: var(--border-radius);
+  padding: 8px;
+  color: var(--color-text);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.popup-menu-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
