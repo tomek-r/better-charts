@@ -1,4 +1,5 @@
 import { PriceScaleMode, type IChartApi, type IPriceScaleApi, type ISeriesApi } from 'lightweight-charts';
+import { ChartSettingsCornerButton } from './chartSettingsCornerButton';
 import { setPriceScaleRange } from './priceScaleRange';
 
 /** The scale the candles and the price axis are bound to. */
@@ -20,7 +21,8 @@ function setPressed(button: HTMLButtonElement, pressed: boolean): void {
 
 /**
  * Hover-revealed toggles on the right price scale: `A` fits the visible data
- * (auto scale) and `L` switches the scale to logarithmic prices.
+ * (auto scale) and `L` switches the scale to logarithmic prices. The settings
+ * gear sits below them, in the corner where the price axis meets the time axis.
  *
  * Both are ordinary HTML buttons in the axis column rather than a primitive:
  * the library paints the axis on its own canvas and gives plugins no hit
@@ -44,6 +46,7 @@ export class PriceScaleController {
   private readonly root: HTMLDivElement;
   private readonly autoButton: HTMLButtonElement;
   private readonly logButton: HTMLButtonElement;
+  private readonly settingsButton: ChartSettingsCornerButton;
   private revealed = false;
 
   constructor(
@@ -71,6 +74,7 @@ export class PriceScaleController {
     // row is re-read when one ends instead of trusting the state it last wrote.
     host.addEventListener('pointerup', this.onPointerUp);
     host.addEventListener('dblclick', this.onDoubleClick);
+    this.settingsButton = new ChartSettingsCornerButton(host, chart);
     this.sync();
   }
 
@@ -82,6 +86,11 @@ export class PriceScaleController {
     setPressed(this.logButton, logarithmic);
   }
 
+  /** Re-measures the gear on the axes' geometry. Call wherever the pane or the price labels changed. */
+  syncSettingsButton(): void {
+    this.settingsButton.sync();
+  }
+
   destroy(): void {
     this.host.removeEventListener('pointermove', this.onPointerMove);
     this.host.removeEventListener('pointerdown', this.onPointerMove);
@@ -90,6 +99,7 @@ export class PriceScaleController {
     this.host.removeEventListener('dblclick', this.onDoubleClick);
     this.autoButton.removeEventListener('click', this.toggleAutoScale);
     this.logButton.removeEventListener('click', this.toggleLogarithmic);
+    this.settingsButton.destroy();
     this.root.remove();
   }
 

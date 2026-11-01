@@ -18,6 +18,13 @@
   flex: 1 1 auto;
 }
 
+/* The line between the chart's view commands and its settings. */
+.chart-context-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--color-border);
+}
+
 .chart-context-menu-shortcut {
   margin-left: 16px;
   color: var(--color-muted);

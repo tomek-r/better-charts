@@ -1,0 +1,110 @@
+/* The chart's settings dialog (ChartSettingsDialog): a column of tabs beside the selected tab's panel. */
+
+.chart-settings {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 20px;
+  min-height: 300px;
+  font-size: 14px;
+}
+
+.chart-settings-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 10px;
+  border-right: 1px solid var(--color-border);
+}
+
+.chart-settings-tab {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--border-radius);
+  color: var(--color-muted-strong);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chart-settings-tab:hover,
+.chart-settings-tab[aria-selected='true'] {
+  color: var(--color-text-bright);
+}
+
+/* The open tab reads as the raised row it is. */
+.chart-settings-tab[aria-selected='true'] {
+  background: var(--color-raised);
+}
+
+.chart-settings-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+
+.chart-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* The caption above a group of rows: small, spaced capitals, the way the chart's own settings read. */
+.chart-settings-section-title {
+  margin: 0;
+  color: var(--color-muted-strong);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chart-settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* One setting per row: its label on the left, its control in the column beside it. */
+.chart-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-label);
+}
+
+.chart-settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.chart-settings-colors {
+  display: flex;
+  gap: 9px;
+}
+
+/* Room for three digits, spun up and down whole: the control the drawing settings style, sized for a percent. */
+.chart-settings-row .chart-settings-number {
+  width: 96px;
+}
+
+/* No room for a column: the tabs run across the top, above the panel. */
+@media (max-width: 640px) {
+  .chart-settings {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .chart-settings-tabs {
+    flex-direction: row;
+    padding: 0 0 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+}

@@ -9,6 +9,7 @@ import { HistoryWaitNotice } from './historyWait/HistoryWaitNotice';
 import { useBridgeReconnectWait } from '../settings/setup/useBridgeReconnectWait';
 import { useChartContextMenu } from './contextMenu/useChartContextMenu';
 import { useResetChartViewShortcut } from './contextMenu/useResetChartViewShortcut';
+import { ChartSettingsDialogHost } from './chartSettings/dialog/ChartSettingsDialogHost';
 
 /** A protocol error nothing else explains is the only thing worth a toast: the setup screen below covers a token
  * mismatch, an outdated component has its own notice, and a completed setup adds its fix to this same toast. */
@@ -39,18 +40,9 @@ function loadingCopy(loadingMarketData: boolean, reconnecting: boolean): Loading
   return reconnecting ? RECONNECTING : undefined;
 }
 
-/** `children` are DOM overlays hung over the canvas (positioned against the chart frame). */
-export function ChartCanvas({ children }: { children?: ReactNode }) {
+/** The frame the chart draws in. It renders inside the settings host because its menu offers the settings dialog. */
+function ChartFrame({ loading, children }: { loading?: LoadingCopy; children?: ReactNode }) {
   const { chartHost } = useChartResources();
-  const { status, tauriAvailable } = useBridgeConnection();
-  const { hasCandles, symbolLoading, chartError } = useBridgeChartState();
-  // A connected bridge is the only one with candles on the way; a missing one is the setup screen's case.
-  const loadingMarketData = symbolLoading || (tauriAvailable && status.state === 'connected' && !hasCandles);
-  const { loaderShown: reconnecting } = useBridgeReconnectWait();
-  const loading = loadingCopy(loadingMarketData, reconnecting);
-  useErrorNotification(chartError);
-  useErrorNotification(protocolErrorToNotify(status));
-  useResetChartViewShortcut();
   const { onContextMenu, menu } = useChartContextMenu();
 
   return (
@@ -65,5 +57,24 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
         <HistoryWaitNotice />
       </div>
     </div>
+  );
+}
+
+/** `children` are DOM overlays hung over the canvas (positioned against the chart frame). */
+export function ChartCanvas({ children }: { children?: ReactNode }) {
+  const { status, tauriAvailable } = useBridgeConnection();
+  const { hasCandles, symbolLoading, chartError } = useBridgeChartState();
+  // A connected bridge is the only one with candles on the way; a missing one is the setup screen's case.
+  const loadingMarketData = symbolLoading || (tauriAvailable && status.state === 'connected' && !hasCandles);
+  const { loaderShown: reconnecting } = useBridgeReconnectWait();
+  const loading = loadingCopy(loadingMarketData, reconnecting);
+  useErrorNotification(chartError);
+  useErrorNotification(protocolErrorToNotify(status));
+  useResetChartViewShortcut();
+
+  return (
+    <ChartSettingsDialogHost>
+      <ChartFrame loading={loading}>{children}</ChartFrame>
+    </ChartSettingsDialogHost>
   );
 }

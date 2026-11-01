@@ -1,6 +1,7 @@
 import { useCallback, useState, type MouseEvent, type ReactNode } from 'react';
 import { ChartAnchoredPanel } from '../../partial-close/ChartAnchoredPanel';
 import { useChartResources } from '../ChartWorkspaceProvider';
+import { useOpenChartSettings } from '../chartSettings/dialog/ChartSettingsDialogHost';
 import { ChartContextMenu } from './ChartContextMenu';
 
 interface FramePoint {
@@ -15,6 +16,7 @@ interface FramePoint {
  */
 export function useChartContextMenu(): { onContextMenu: (event: MouseEvent<HTMLElement>) => void; menu: ReactNode } {
   const { chartHost, chart } = useChartResources();
+  const openChartSettings = useOpenChartSettings();
   const [anchor, setAnchor] = useState<FramePoint>();
   const dismiss = useCallback(() => setAnchor(undefined), []);
 
@@ -31,9 +33,16 @@ export function useChartContextMenu(): { onContextMenu: (event: MouseEvent<HTMLE
     dismiss();
   };
 
+  // The menu closes before the dialog opens, so the dialog takes the focus back to the chart, not to a row
+  // of a menu that is no longer there.
+  const openSettings = () => {
+    dismiss();
+    openChartSettings();
+  };
+
   const menu = anchor && (
     <ChartAnchoredPanel x={anchor.x} y={anchor.y} onDismiss={dismiss}>
-      <ChartContextMenu onResetView={resetView} />
+      <ChartContextMenu onResetView={resetView} onOpenSettings={openSettings} />
     </ChartAnchoredPanel>
   );
   return { onContextMenu, menu };

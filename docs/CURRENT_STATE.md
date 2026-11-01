@@ -235,10 +235,36 @@ Not implemented: break even, multiple charts or Pine Script execution.
 
 Check corresponding E2E regressions before changing these decisions.
 
+## Chart settings
+
+Every chart has a chart id and belongs to a chart group (groups will become tabs of
+several charts). Today the app shows one chart, created once in `better-charts.sqlite3`
+and reused on every launch. A chart uses a template; today there is one, Default, whose
+values are the built-in ones (today's candle colours, the exchange time zone).
+
+What a chart shows is the template, then the chart's own overrides for the account and
+symbol it shows. Overrides store only the fields the user changed, so a later template
+change still reaches untouched fields; a new chart has no overrides.
+
+Settings are kept per bar type. Each bar type declares its own fields (checkbox, checkbox
+with up/down colours, colour pair, colour, line width, choice, percent), so a new bar type
+adds only its declaration. Today only Candles is drawn: Body, Borders and Wick (each
+on/off with up/down colours) and "Color bars based on previous close".
+
+The time zone is one of these settings: the footer clock and the dialog edit the same
+value. The old per-symbol saved time zones were not carried over.
+
+The Settings dialog opens from the chart's right-click menu ("Settings…", after a divider
+below "Reset chart view") and from the gear in the chart's bottom-right corner. It has a
+Symbol tab whose section follows the current bar type, plus Timezone. Every edit shows on
+the chart at once; OK saves the overrides; Cancel, × and Escape restore what the chart
+showed when the dialog opened.
+
 ## Chart drawings
 
-Drawings belong to one account and symbol and are kept by the Rust side in the local
-SQLite database `better-charts.sqlite3` (under the app data folder): one list per
+Drawings belong to one chart (its chart id) and the account and symbol it shows, and are
+kept by the Rust side in the local
+SQLite database `better-charts.sqlite3` (under the app data folder): one list per chart,
 account and symbol, loaded when that window opens and saved again on every committed
 change. A record holds only vector data — the shared fields (id, tool id, lock,
 visibility, settings) plus the ordered anchor points a tool placed, each a time, a

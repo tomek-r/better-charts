@@ -161,7 +161,8 @@ export class ChartController {
     this.legend = new OhlcLegend(host);
     this.connection = new ConnectionIndicator(this.legend.container());
     // The price scale is painted on the library's own canvas, so its toggles
-    // (A = auto scale, L = logarithmic) are DOM buttons in the axis column.
+    // (A = auto scale, L = logarithmic) are DOM buttons in the axis column, as
+    // is the gear in its corner; the gear asks for the settings with an event.
     this.scaleControls = new PriceScaleController(host, this.chart, this.candles);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
@@ -314,6 +315,7 @@ export class ChartController {
       return;
     }
     this.priceLines.sync();
+    this.scaleControls.syncSettingsButton();
     this.primitive.requestUpdate?.();
   }
   setBidAskPrices(ask?: number, bid?: number): void {

@@ -1,11 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
+import { expectUtcZoneSaved, lastSavedOverridesArgs, timeZoneButton, UTC_CLOCK } from './helpers/chartTimeZonePage';
 import {
   chartScopeKey,
   expectNoErrors,
   gotoWithStub,
   STUB_CHART_ID,
   stubChartSettingOverrides,
-  stubInvocations,
 } from './helpers/tauriStub';
 
 /**
@@ -24,7 +24,6 @@ const GBPUSD_CHART = chartScopeKey(ACCOUNT_KEY, 'GBPUSD');
 /** The broker offset the stub reports, in minutes. */
 const BROKER_OFFSET_MINUTES = 180;
 const BROKER_CLOCK = /^\d{2}:\d{2}:\d{2} UTC\+3$/;
-const UTC_CLOCK = /^\d{2}:\d{2}:\d{2} UTC$/;
 const TOKYO_CLOCK = /^\d{2}:\d{2}:\d{2} UTC\+9$/;
 const MINUTES_PER_HOUR = 60;
 const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
@@ -39,8 +38,6 @@ interface PointerTime {
   /** The readout's text for that bar, in the chart's zone. */
   readonly label: string;
 }
-
-const timeZoneButton = (page: Page) => page.getByRole('button', { name: 'Time zone', exact: true });
 
 const menuRows = (page: Page) => page.getByRole('menuitemradio');
 
@@ -69,12 +66,6 @@ async function pointerTime(page: Page): Promise<PointerTime> {
 /** Minutes of the day of a pointer label's trailing `HH:mm`. */
 function clockMinutes(label: string): number {
   return Number(label.slice(-5, -3)) * MINUTES_PER_HOUR + Number(label.slice(-2));
-}
-
-/** The last overrides the app stored for a chart's zone. */
-async function lastSavedOverridesArgs(page: Page): Promise<Record<string, unknown> | undefined> {
-  const saves = (await stubInvocations(page)).filter((entry) => entry.cmd === 'save_chart_setting_overrides');
-  return saves.at(-1)?.args;
 }
 
 /** Picks UTC from the menu and waits until the clock and the stored override both show it. */
@@ -131,13 +122,7 @@ test('picking UTC relabels the pointer three hours earlier and saves the zone as
     .toBe((clockMinutes(before.label) - BROKER_OFFSET_MINUTES + MINUTES_PER_DAY) % MINUTES_PER_DAY);
   expect((await pointerTime(page)).seconds).toBe(before.seconds);
 
-  await expect.poll(() => stubChartSettingOverrides(page)).toEqual({ [EURUSD_CHART]: { timeZone: 'UTC' } });
-  expect(await lastSavedOverridesArgs(page)).toEqual({
-    chartId: STUB_CHART_ID,
-    accountKey: ACCOUNT_KEY,
-    symbol: 'EURUSD',
-    overrides: { timeZone: 'UTC' },
-  });
+  await expectUtcZoneSaved(page);
   expectNoErrors(collected);
 });
 
