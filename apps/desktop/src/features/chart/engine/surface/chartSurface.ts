@@ -11,6 +11,7 @@ import {
 import { DEFAULT_BAR_SPACING, END_MARGIN } from '../timeScale/futureTimePoints';
 import { palette } from '../../../../shared/theme/palette';
 import { CHART_FONT_SIZE } from './chartFont';
+import { candleSeriesColors, DEFAULT_CANDLE_APPEARANCE } from '../bars/candleAppearance';
 
 export interface ChartSurface {
   chart: IChartApi;
@@ -94,11 +95,9 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
     handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
   });
   const candles = chart.addSeries(CandlestickSeries, {
-    upColor: palette.up,
-    downColor: palette.sell,
-    borderVisible: false,
-    wickUpColor: palette.up,
-    wickDownColor: palette.sell,
+    // The anchor is drawn with the same appearance the settings start from, so the first
+    // paint and every later setting agree on what a candle looks like.
+    ...candleSeriesColors(DEFAULT_CANDLE_APPEARANCE),
     priceLineVisible: false,
     lastValueVisible: false,
   });

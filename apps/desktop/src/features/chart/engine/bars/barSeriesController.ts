@@ -3,10 +3,13 @@ import type { Candle } from '../../../../shared/bridge/types';
 import { toRenderBar, type RenderBar } from './renderBar';
 import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../../shared/bridge/timeframes';
 import { palette } from '../../../../shared/theme/palette';
-
-function toCandleData(bar: RenderBar) {
-  return { ...bar, time: bar.time as UTCTimestamp };
-}
+import {
+  candlePointColors,
+  candleSeriesColors,
+  DEFAULT_CANDLE_APPEARANCE,
+  sameCandleAppearance,
+  type CandleAppearance,
+} from './candleAppearance';
 
 /**
  * Owns the renderable bar cache and the two series it feeds, so every mutation
@@ -20,6 +23,7 @@ export class BarSeriesController {
   private cache: RenderBar[] = [];
   private period = DEFAULT_TIMEFRAME;
   private priceDigits = 2;
+  private appearance = DEFAULT_CANDLE_APPEARANCE;
 
   constructor(
     private readonly candles: ISeriesApi<'Candlestick'>,
@@ -105,13 +109,15 @@ export class BarSeriesController {
    * overwrite the newest one.
    */
   apply(bar: RenderBar): boolean {
-    const appended = bar.time > (this.lastBar()?.time ?? -Infinity);
+    const last = this.lastBar();
+    const appended = bar.time > (last?.time ?? -Infinity);
+    const previous = appended ? last : this.cache[this.cache.length - 2];
     if (appended) {
       this.cache.push(bar);
     } else {
       this.cache[this.cache.length - 1] = bar;
     }
-    this.candles.update(toCandleData(bar));
+    this.candles.update(this.candleData(bar, previous));
     this.volume.update(this.volumeBar(bar));
     return appended;
   }
@@ -126,10 +132,36 @@ export class BarSeriesController {
     return true;
   }
 
+  /**
+   * Draws the candles with `appearance`. The series colours are always reapplied; the
+   * bars are rewritten only when per-point colours are involved, because they are
+   * what carries the previous-close colouring into the data.
+   */
+  setCandleAppearance(appearance: CandleAppearance): void {
+    if (sameCandleAppearance(appearance, this.appearance)) {
+      return;
+    }
+    const pointsCarryColors = appearance.colorByPreviousClose || this.appearance.colorByPreviousClose;
+    this.appearance = appearance;
+    this.candles.applyOptions(candleSeriesColors(appearance));
+    if (pointsCarryColors) {
+      this.writeCandles(this.cache);
+    }
+  }
+
   /** Rewrites both series from the whole bar list. */
   private writeAll(bars: readonly RenderBar[]): void {
-    this.candles.setData(bars.map(toCandleData));
+    this.writeCandles(bars);
     this.volume.setData(bars.map((bar) => this.volumeBar(bar)));
+  }
+
+  /** Rewrites the candle series; the bar before each one decides the colours it overrides. */
+  private writeCandles(bars: readonly RenderBar[]): void {
+    this.candles.setData(bars.map((bar, index) => this.candleData(bar, bars[index - 1])));
+  }
+
+  private candleData(bar: RenderBar, previous: RenderBar | undefined) {
+    return { ...bar, time: bar.time as UTCTimestamp, ...candlePointColors(this.appearance, bar, previous) };
   }
 
   private volumeBar(bar: RenderBar) {

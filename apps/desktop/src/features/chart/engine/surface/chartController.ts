@@ -1,13 +1,12 @@
-import type { IChartApi, ISeriesApi, TickMarkFormatter } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { BridgeState, Candle, QuoteSnapshot } from '../../../../shared/bridge/types';
 import { toRenderBar, type RenderBar } from '../bars/renderBar';
-import { createChartTimeFormat } from '../../timeZone/chartTimeFormat';
-import { EXCHANGE_TIME_ZONE } from '../../timeZone/chartTimeZones';
 import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayRenderer';
 import { createChartSurface } from './chartSurface';
 import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
 import { BrokerTime } from '../brokerTime/brokerTime';
+import { ChartTimeZoneDisplay } from '../brokerTime/chartTimeZoneDisplay';
 import { BarCountdownPrimitive } from '../barCountdown/barCountdownPrimitive';
 import { CountdownController } from '../barCountdown/countdownController';
 import { OhlcLegend } from '../legend/ohlcLegend';
@@ -16,6 +15,7 @@ import { PointerReadoutPrimitive } from '../legend/pointerReadoutPrimitive';
 import { PriceAxisTagsPrimitive } from '../quotes/priceAxisTagsPrimitive';
 import { PriceScaleController } from '../priceScale/priceScaleController';
 import { BarSeriesController } from '../bars/barSeriesController';
+import type { CandleAppearance } from '../bars/candleAppearance';
 import { PriceLineController } from '../quotes/priceLineController';
 import { isOutsidePane, ViewportController, type DiagnosticViewport } from '../viewport/viewportController';
 import type {
@@ -30,7 +30,7 @@ import type {
 import { ChartToolSet } from '../tools/toolSet';
 import { ChartDrawings } from '../drawings/chartDrawings';
 import { WorkspacePrimitive } from './workspacePrimitive';
-import { installDevTestApi, removeDevTestApi } from './devTestApi';
+import { installDevTestApi, readCandleSeriesState, removeDevTestApi } from './devTestApi';
 import { HistoryViewportMode } from '../bars/historyViewportMode';
 import { initialHistoryWindow } from '../bars/initialHistoryWindow';
 import { OlderHistoryPager } from '../bars/olderHistoryPager';
@@ -92,9 +92,7 @@ export class ChartController {
   private readonly countdown: CountdownController;
   private symbol = '';
   private removed = false;
-  /** The zone the axis and the pointer labels are currently formatted in; broker time until told otherwise. */
-  private appliedTimeZone = EXCHANGE_TIME_ZONE;
-  private appliedBrokerOffsetMinutes: number | null = null;
+  private readonly timeZoneDisplay: ChartTimeZoneDisplay;
   private readonly liveCandleHold: PointerCandleHold;
   private readonly view: ViewportController;
   private readonly tools: ChartToolSet;
@@ -113,6 +111,7 @@ export class ChartController {
     this.candles = candles;
     this.volume = volume;
     this.future = future;
+    this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
     this.data = new BarSeriesController(this.candles, this.volume);
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
     this.view = new ViewportController(this.chart, this.candles, this.future, this.data, () => this.removed);
@@ -177,6 +176,7 @@ export class ChartController {
       installDevTestApi({
         chart: this.chart,
         bars: () => this.bars,
+        candles: () => readCandleSeriesState(this.candles),
         visibleRange: () => this.visibleRange(),
         timeToX: (timeMs) => this.timeToX(timeMs),
         toolTestApi: (id) => this.tools.toolTestApi(id),
@@ -290,30 +290,21 @@ export class ChartController {
     }
     this.updateLegend();
   }
-  /**
-   * Shows every bar in `zone`'s wall clock. One format object feeds the time axis' tick labels and
-   * the pointer's time label, so the two can never disagree about which zone is on screen.
-   * `brokerUtcOffsetMinutes` is what turns a bar's broker wall time into a real instant; while it
-   * is unknown the chart can only show broker time.
-   */
+  /** Shows every bar in `zone`'s wall clock; broker time until the broker offset is known. */
   setTimeZone(zone: string, brokerUtcOffsetMinutes: number | null): void {
-    if (zone === this.appliedTimeZone && brokerUtcOffsetMinutes === this.appliedBrokerOffsetMinutes) {
+    this.timeZoneDisplay.apply(zone, brokerUtcOffsetMinutes);
+  }
+  /** Draws the candles with the chart's body, border and wick settings; the bars themselves stay where they are. */
+  setCandleAppearance(appearance: CandleAppearance): void {
+    if (this.removed) {
       return;
     }
-    this.appliedTimeZone = zone;
-    this.appliedBrokerOffsetMinutes = brokerUtcOffsetMinutes;
-    const format = createChartTimeFormat(zone, brokerUtcOffsetMinutes);
-    // A date or a business day has no instant to shift: those keep the library's own label.
-    const tickMarkFormatter: TickMarkFormatter = (time, tickMarkType) =>
-      typeof time === 'number' ? format.tickMarkLabel(time, tickMarkType) : null;
-    this.chart.applyOptions({ timeScale: { tickMarkFormatter } });
-    this.pointerReadout.setTimeFormat(format);
+    this.data.setCandleAppearance(appearance);
+    this.refreshOverlays();
   }
   /** UTC now as the broker's ticks tell it; the desktop clock until a live tick and the broker's offset are known. */
   clockNowMs(): number {
-    const brokerOffsetMinutes = this.appliedBrokerOffsetMinutes;
-    const brokerUtcNowMs = brokerOffsetMinutes === null ? null : this.brokerTime.utcNowMs(brokerOffsetMinutes);
-    return brokerUtcNowMs ?? Date.now();
+    return this.timeZoneDisplay.clockNowMs();
   }
   getData(): readonly RenderBar[] {
     return this.bars;

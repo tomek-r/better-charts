@@ -5,6 +5,7 @@ import { useNotifyError } from '../../../shared/ui/notification/ErrorNotificatio
 import { useBridgeConnectionSelector } from '../../bridge/bridgeSelectors';
 import { useChartResources } from '../ChartWorkspaceProvider';
 import { chartScopeKey, useChartScope } from '../useChartScope';
+import { candleAppearanceOf } from './candleAppearanceSetting';
 import {
   chartSettingsOverrides,
   DEFAULT_CHART_SETTINGS,
@@ -190,6 +191,14 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
   useEffect(() => {
     chart.current?.setTimeZone(settings.timeZone, brokerUtcOffsetMinutes);
   }, [brokerUtcOffsetMinutes, chart, settings.timeZone]);
+
+  // The engine draws the candles with the chart's body, border and wick settings. The candle values
+  // object is the dependency, so every preview and every keep reaches the chart, and a change to
+  // another bar style's settings leaves the candles alone.
+  const candleSettings = settings.barStyles.candles;
+  useEffect(() => {
+    chart.current?.setCandleAppearance(candleAppearanceOf(candleSettings));
+  }, [candleSettings, chart]);
 
   return choice;
 }
