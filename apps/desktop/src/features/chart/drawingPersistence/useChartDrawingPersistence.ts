@@ -8,9 +8,9 @@ import type { ChartDrawingStore } from './chartDrawingStore';
 import { LatestSaveQueue } from './latestSaveQueue';
 
 /**
- * Saves every drawing on the chart per account and symbol, and restores them when that symbol comes
- * back: after a symbol switch, a timeframe switch, a reconnect or an app restart the drawings return
- * with their ids, lock flags and settings.
+ * Saves every drawing on the chart per chart, account and symbol, and restores them when that symbol
+ * comes back: after a symbol switch, a timeframe switch, a reconnect or an app restart the drawings
+ * return with their ids, lock flags and settings.
  */
 export function useChartDrawingPersistence(store: ChartDrawingStore): void {
   const { chart } = useChartResources();
@@ -38,18 +38,17 @@ export function useChartDrawingPersistence(store: ChartDrawingStore): void {
     if (!scope || !drawings) {
       return;
     }
-    const { accountKey, symbol: scopeSymbol } = scope;
     let scopeChanged = false;
     store
-      .load(accountKey, scopeSymbol)
+      .load(scope)
       .then((records) => {
         // A load that lands after the scope moved on belongs to another window.
         if (scopeChanged) {
           return;
         }
         drawings.replaceRecords(records);
-        loadedScope.current = { accountKey, symbol: scopeSymbol };
-        saves.current = new LatestSaveQueue((changed) => store.save(accountKey, scopeSymbol, changed), notifyError);
+        loadedScope.current = scope;
+        saves.current = new LatestSaveQueue((changed) => store.save(scope, changed), notifyError);
       })
       .catch((error: unknown) => {
         if (!scopeChanged) {

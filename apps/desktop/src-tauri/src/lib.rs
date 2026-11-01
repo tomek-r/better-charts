@@ -2,7 +2,9 @@
 
 mod app_settings;
 mod bridge;
+mod chart_database;
 mod chart_drawings;
+mod chart_settings;
 mod download_resources;
 mod execution_adapter;
 mod execution_journal;
@@ -24,9 +26,10 @@ use bridge::commands::{
 use bridge::connection::run_server;
 use bridge::endpoint::BridgeEndpointControl;
 use bridge::state::BridgeState;
-use chart_drawings::{
-    load_chart_drawings, load_chart_time_zone, save_chart_drawings, save_chart_time_zone,
-    ChartDrawingsState,
+use chart_database::open_chart_database;
+use chart_drawings::{load_chart_drawings, save_chart_drawings, ChartDrawingsState};
+use chart_settings::{
+    load_chart_layout, load_chart_settings, save_chart_setting_overrides, ChartSettingsState,
 };
 use download_resources::save_bundled_resource;
 use execution_adapter::ExecutionAdapterState;
@@ -145,9 +148,12 @@ pub fn run() {
         .map(|error| format!("{error}; fix or remove the runtime .env file and restart"));
     let app_settings = AppSettingsState::load(runtime_error);
     let trading_enabled = app_settings.trading_enabled();
-    // Saved drawings live under the same app data folder as the journal; without one
-    // their store refuses every call instead of losing what the user drew.
-    let chart_drawings = ChartDrawingsState::open(app_data_dir());
+    // Saved drawings and chart settings share one database under the same app data folder as
+    // the journal; without one their stores refuse every call instead of losing what the user
+    // drew or picked.
+    let chart_database = open_chart_database(app_data_dir());
+    let chart_drawings = ChartDrawingsState::from_database(chart_database.clone());
+    let chart_settings = ChartSettingsState::from_database(chart_database);
     let bridge_state = BridgeState::default();
     let mt5_backend = Mt5BackendState::new(app_settings.backend_config());
     let bridge_endpoint = BridgeEndpointControl::new(app_settings.bridge_endpoint());
@@ -157,6 +163,7 @@ pub fn run() {
         .manage(app_settings)
         .manage(bridge_endpoint)
         .manage(chart_drawings)
+        .manage(chart_settings)
         .manage(ChosenInstallation::default())
         .manage(bridge_state.clone())
         .manage(mt5_backend.clone())
@@ -165,8 +172,9 @@ pub fn run() {
             save_app_settings,
             load_chart_drawings,
             save_chart_drawings,
-            load_chart_time_zone,
-            save_chart_time_zone,
+            load_chart_layout,
+            load_chart_settings,
+            save_chart_setting_overrides,
             get_execution_safety_status,
             get_execution_recovery_snapshot,
             get_execution_queue_status,

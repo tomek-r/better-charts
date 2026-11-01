@@ -7,7 +7,7 @@ import { savedProfile } from './helpers/savedProfile';
 import {
   brokerSymbolFixture,
   chartDrawingSaveCount,
-  chartDrawingScopeKey,
+  chartScopeKey,
   expectNoErrors,
   gotoWithStub,
   pushEvent,
@@ -18,9 +18,9 @@ import {
 
 /**
  * Drawings survive everything that empties the chart: a page reload, a symbol switch, a
- * timeframe switch and an account switch. The Rust backend keeps one list per account and
- * symbol, so each set comes back with its ids, lock flags and points, and only under the
- * account and symbol that drew it.
+ * timeframe switch and an account switch. The Rust backend keeps one list per chart, account
+ * and symbol, so each set comes back with its ids, lock flags and points, and only under the
+ * chart, account and symbol that drew it.
  */
 
 /** The account the stub's bridge status, account snapshot and portfolio all report. */
@@ -43,7 +43,7 @@ async function savedSymbols(page: Page): Promise<string[]> {
 /** Boots the app with one seeded drawing saved under the drawing account and symbol. */
 async function gotoWithSavedProfile(page: Page, record: ReturnType<typeof savedProfile>): Promise<void> {
   await gotoWithStub(page, {
-    chartDrawings: { [chartDrawingScopeKey(ACCOUNT_KEY, 'EURUSD')]: [record] },
+    chartDrawings: { [chartScopeKey(ACCOUNT_KEY, 'EURUSD')]: [record] },
   });
 }
 
@@ -164,13 +164,13 @@ test("another account sees none of the first account's drawings", async ({ page 
   await expect.poll(async () => (await drawings(page)).length).toBe(0);
   // The drawing stays saved under the account that drew it, and the other account has no list.
   expect(await storedDrawingIds(page, ACCOUNT_KEY, 'EURUSD')).toEqual([placed.id]);
-  expect(Object.keys(await stubChartDrawings(page))).toEqual([chartDrawingScopeKey(ACCOUNT_KEY, 'EURUSD')]);
+  expect(Object.keys(await stubChartDrawings(page))).toEqual([chartScopeKey(ACCOUNT_KEY, 'EURUSD')]);
   expectNoErrors(collected);
 });
 
 test('a saved file the backend cannot read is reported and never overwritten', async ({ page }) => {
   const collected = await gotoWithStub(page, {
-    unreadableChartDrawings: [chartDrawingScopeKey(ACCOUNT_KEY, 'EURUSD')],
+    unreadableChartDrawings: [chartScopeKey(ACCOUNT_KEY, 'EURUSD')],
   });
 
   await expect(

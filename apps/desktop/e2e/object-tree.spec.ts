@@ -8,7 +8,7 @@ import {
   TOOLBAR_SYMBOL,
 } from './helpers/drawingToolbarPage';
 import { savedProfile } from './helpers/savedProfile';
-import { chartDrawingScopeKey, gotoWithStub } from './helpers/tauriStub';
+import { chartScopeKey, gotoWithStub } from './helpers/tauriStub';
 
 /**
  * The object tree drawer: the drawings of the chart listed topmost first, the click that selects one,
@@ -72,7 +72,7 @@ async function openObjectTree(page: Page): Promise<void> {
 /** Boots the app with the given profiles saved, waits for them on the chart and opens the tree. */
 async function gotoWithSavedProfiles(page: Page, records: readonly SavedProfile[]): Promise<void> {
   await gotoWithStub(page, {
-    chartDrawings: { [chartDrawingScopeKey(TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL)]: [...records] },
+    chartDrawings: { [chartScopeKey(TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL)]: [...records] },
   });
   await expect.poll(async () => (await chartDrawings(page)).length).toBe(records.length);
   await openObjectTree(page);

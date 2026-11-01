@@ -1,16 +1,17 @@
 import { invoke } from '@tauri-apps/api/core';
 import { readChartDrawingRecord, type ChartDrawingRecord } from '../engine/drawings/drawingRecord';
+import type { ChartScope } from '../useChartScope';
 
 /**
- * Where the chart's drawings live: one list per account and symbol, kept by the Rust
+ * Where the chart's drawings live: one list per chart, account and symbol, kept by the Rust
  * backend in the app data folder. The interface is the whole contract, so a build with
  * another backend answers the same two calls.
  */
 export interface ChartDrawingStore {
-  /** Every drawing saved for one account and symbol; a list the backend could not read rejects. */
-  load(accountKey: string, symbol: string): Promise<ChartDrawingRecord[]>;
+  /** Every drawing saved for one chart, account and symbol; a list the backend could not read rejects. */
+  load(scope: ChartScope): Promise<ChartDrawingRecord[]>;
   /** Replaces that list; an empty list removes what was saved. */
-  save(accountKey: string, symbol: string, records: readonly ChartDrawingRecord[]): Promise<void>;
+  save(scope: ChartScope, records: readonly ChartDrawingRecord[]): Promise<void>;
 }
 
 /** The backend's two commands, named after the trait they answer. */
@@ -43,12 +44,12 @@ function readDrawingRecords(value: unknown): ChartDrawingRecord[] {
 /** The store of the desktop app: the two Rust commands, and nothing else. */
 export function createTauriChartDrawingStore(): ChartDrawingStore {
   return {
-    load: async (accountKey, symbol) => {
-      const saved = await invoke(LOAD_DRAWINGS_COMMAND, { accountKey, symbol });
+    load: async ({ chartId, accountKey, symbol }) => {
+      const saved = await invoke(LOAD_DRAWINGS_COMMAND, { chartId, accountKey, symbol });
       return readDrawingRecords(saved);
     },
-    save: async (accountKey, symbol, records) => {
-      await invoke(SAVE_DRAWINGS_COMMAND, { accountKey, symbol, records });
+    save: async ({ chartId, accountKey, symbol }, records) => {
+      await invoke(SAVE_DRAWINGS_COMMAND, { chartId, accountKey, symbol, records });
     },
   };
 }

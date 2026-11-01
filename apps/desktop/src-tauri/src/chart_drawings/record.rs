@@ -4,9 +4,8 @@
 //! points. A point names a time in epoch milliseconds, a price, or both; a price stays
 //! decimal text, so a number the user placed reaches the chart again with the same digits.
 
-use super::{
-    error::ChartDrawingError, limits::is_present_within, timeframe_visibility::TimeframeVisibility,
-};
+use super::{error::ChartDrawingError, timeframe_visibility::TimeframeVisibility};
+use crate::chart_database::limits::is_present_within;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;

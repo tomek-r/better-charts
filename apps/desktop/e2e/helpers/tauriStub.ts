@@ -113,9 +113,9 @@ export interface TauriStubOptions {
   /** Holds `restart_mt5_with_ea` open this long, to observe the buttons while MT5 reopens. */
   restartDelayMs?: number;
   /**
-   * Drawings the backend already holds, keyed by `chartDrawingScopeKey(accountKey, symbol)`
-   * as an earlier run of the app saved them. Written before the app loads; a reload in
-   * the same test keeps whatever the app saved afterwards.
+   * Drawings the backend already holds, keyed by `chartScopeKey(accountKey, symbol)` as an earlier
+   * run of the app saved them. Written before the app loads; a reload in the same test keeps
+   * whatever the app saved afterwards.
    */
   chartDrawings?: Record<string, unknown[]>;
   /**
@@ -124,18 +124,35 @@ export interface TauriStubOptions {
    */
   unreadableChartDrawings?: string[];
   /**
-   * Time zones the backend already holds, keyed by `chartDrawingScopeKey(accountKey, symbol)`
+   * The saved chart layout the app starts from; the FIRST entry is the chart it draws. Unset, one
+   * chart with `STUB_CHART_ID` on the default template, as a database without a chart answers.
+   */
+  chartLayout?: ChartLayoutEntry[];
+  /**
+   * Chart setting overrides the backend already holds, keyed by `chartScopeKey(accountKey, symbol)`
    * as an earlier run of the app saved them. Written before the app loads; a reload in the
    * same test keeps whatever the app saved afterwards.
    */
-  chartTimeZones?: Record<string, string>;
+  chartSettingOverrides?: Record<string, object>;
+  /** The settings of every chart's template; unset, the model's defaults, so the exchange time zone. */
+  chartTemplateSettings?: object;
 }
+
+/** One chart of the layout the backend answers with. */
+export interface ChartLayoutEntry {
+  chartId: string;
+  groupId: string;
+  templateId: string;
+}
+
+/** The chart the stub's layout names, which is the one the app draws. */
+export const STUB_CHART_ID = 'stub-chart';
 
 /** Session key of the drawings the stub's backend holds, so a page reload keeps them. */
 const STUB_CHART_DRAWINGS_KEY = '__stubChartDrawings';
 
-/** Session key of the time zones the stub's backend holds, so a page reload keeps them. */
-const STUB_CHART_TIME_ZONES_KEY = '__stubChartTimeZones';
+/** Session key of the chart setting overrides the stub's backend holds, so a page reload keeps them. */
+const STUB_CHART_SETTING_OVERRIDES_KEY = '__stubChartSettingOverrides';
 
 export interface RecordedHistory {
   symbol: string;
@@ -286,20 +303,20 @@ export async function installTauriStub(
   const stubArgument = {
     opts: options,
     now: STUB_NOW,
-    chartDrawingsKey: STUB_CHART_DRAWINGS_KEY,
-    chartTimeZonesKey: STUB_CHART_TIME_ZONES_KEY,
+    stubChartId: STUB_CHART_ID,
+    chartStorage: { drawings: STUB_CHART_DRAWINGS_KEY, settingOverrides: STUB_CHART_SETTING_OVERRIDES_KEY },
   };
-  await page.addInitScript(({ opts, now: NOW, chartDrawingsKey, chartTimeZonesKey }: typeof stubArgument) => {
+  await page.addInitScript(({ opts, now: NOW, stubChartId, chartStorage }: typeof stubArgument) => {
     const w = window as unknown as Record<string, unknown>;
 
     // A test seeds the drawings an earlier run saved. Filling only an empty store
     // keeps a reload in the same test on what the app has saved since.
-    if (opts.chartDrawings && sessionStorage.getItem(chartDrawingsKey) === null) {
-      sessionStorage.setItem(chartDrawingsKey, JSON.stringify(opts.chartDrawings));
+    if (opts.chartDrawings && sessionStorage.getItem(chartStorage.drawings) === null) {
+      sessionStorage.setItem(chartStorage.drawings, JSON.stringify(opts.chartDrawings));
     }
-    // The time zones follow the same rule: seeded once, then whatever the app saves.
-    if (opts.chartTimeZones && sessionStorage.getItem(chartTimeZonesKey) === null) {
-      sessionStorage.setItem(chartTimeZonesKey, JSON.stringify(opts.chartTimeZones));
+    // The chart setting overrides follow the same rule: seeded once, then whatever the app saves.
+    if (opts.chartSettingOverrides && sessionStorage.getItem(chartStorage.settingOverrides) === null) {
+      sessionStorage.setItem(chartStorage.settingOverrides, JSON.stringify(opts.chartSettingOverrides));
     }
 
     const safety = {
@@ -375,6 +392,9 @@ export async function installTauriStub(
         ],
       },
     ];
+
+    /** The layout of a backend with nothing saved: one chart, drawn on the default template. */
+    const defaultChartLayout = [{ chartId: stubChartId, groupId: 'stub-group', templateId: 'default' }];
 
     const responses: Record<string, unknown> = {
       get_app_settings: {
@@ -534,6 +554,8 @@ export async function installTauriStub(
       // Not reachable from the UI yet (draft card is chart-event-only), but
       // scripted so the command inventory stays complete.
       modify_order: null,
+      // The saved chart layout: its first entry is the one chart the app draws.
+      load_chart_layout: opts.chartLayout ?? defaultChartLayout,
       // Event-result commands: resolve the invoke AND push the matching event.
       project_risk_preview: null,
       request_risk_preview: 'reactive',
@@ -581,14 +603,14 @@ export async function installTauriStub(
     const invocations: Array<{ cmd: string; args: Record<string, unknown> }> = [];
     let nextCallbackId = 1;
 
-    /** The drawings the stub's backend holds right now, keyed `${accountKey}\n${symbol}`. */
-    function storedChartDrawings(): Record<string, unknown[]> {
-      const raw = sessionStorage.getItem(chartDrawingsKey);
+    /** One stored JSON map of the page's own backend state, empty when nothing was written yet. */
+    function storedBy(key: string): Record<string, unknown> {
+      const raw = sessionStorage.getItem(key);
       if (raw === null) {
         return {};
       }
       try {
-        return JSON.parse(raw) as Record<string, unknown[]>;
+        return JSON.parse(raw) as Record<string, unknown>;
       } catch (error) {
         if (!(error instanceof SyntaxError)) {
           throw error;
@@ -597,22 +619,19 @@ export async function installTauriStub(
       }
     }
 
-    /** The one list the drawing commands address: the account and the symbol, kept apart. */
-    function chartDrawingKey(args: Record<string, unknown>): string {
-      return `${String(args.accountKey)}\n${String(args.symbol)}`;
+    /** The drawings the stub's backend holds right now, keyed by chart, account and symbol. */
+    function storedChartDrawings(): Record<string, unknown[]> {
+      return storedBy(chartStorage.drawings) as Record<string, unknown[]>;
     }
 
-    /** The zones the stub's backend holds right now, keyed like a drawings list. */
-    function storedChartTimeZones(): Record<string, string> {
-      const stored = sessionStorage.getItem(chartTimeZonesKey);
-      try {
-        return stored === null ? {} : (JSON.parse(stored) as Record<string, string>);
-      } catch (error) {
-        if (!(error instanceof SyntaxError)) {
-          throw error;
-        }
-        return {};
-      }
+    /** The chart setting overrides the stub's backend holds right now, keyed the same way. */
+    function storedChartSettings(): Record<string, unknown> {
+      return storedBy(chartStorage.settingOverrides);
+    }
+
+    /** The chart, account and symbol the chart commands address, kept apart. */
+    function chartScopeKeyOf(args: Record<string, unknown>): string {
+      return `${String(args.chartId)}\n${String(args.accountKey)}\n${String(args.symbol)}`;
     }
 
     /** Candle deliveries (snapshots and older pages), for harnesses that verify data volume. */
@@ -885,11 +904,11 @@ export async function installTauriStub(
         choices.push(String(args.path));
         w.__mt5Choices = choices;
       }
-      // Saved chart drawings: one list per account and symbol, answered from the page's
+      // Saved chart drawings: one list per chart, account and symbol, answered from the page's
       // own store so a reload in the same test still sees what the app saved. A seeded
       // unreadable scope rejects exactly like a corrupt file behind the real backend.
       if (cmd === 'load_chart_drawings' || cmd === 'save_chart_drawings') {
-        const key = chartDrawingKey(args);
+        const key = chartScopeKeyOf(args);
         if (cmd === 'load_chart_drawings' && opts.unreadableChartDrawings?.includes(key)) {
           throw new Error('Saved drawings could not be read');
         }
@@ -903,7 +922,7 @@ export async function installTauriStub(
         } else {
           stored[key] = records;
         }
-        sessionStorage.setItem(chartDrawingsKey, JSON.stringify(stored));
+        sessionStorage.setItem(chartStorage.drawings, JSON.stringify(stored));
         return null;
       }
       if (Object.prototype.hasOwnProperty.call(failures, cmd)) {
@@ -913,17 +932,25 @@ export async function installTauriStub(
         // Tauri rejects with the bare string, not an Error.
         throw stringRejections[cmd];
       }
-      // The saved time zone of one chart (account and symbol), answered from the page's own
-      // store after the failure routes, so a test can make the load reject like the backend's
-      // own refusals.
-      if (cmd === 'load_chart_time_zone' || cmd === 'save_chart_time_zone') {
-        const key = chartDrawingKey(args);
-        const stored = storedChartTimeZones();
-        if (cmd === 'load_chart_time_zone') {
-          return stored[key] ?? null;
+      // The settings of one chart at one account and symbol, answered from the page's own store
+      // after the failure routes, so a test can make the load reject like the backend's own refusals.
+      if (cmd === 'load_chart_settings' || cmd === 'save_chart_setting_overrides') {
+        const key = chartScopeKeyOf(args);
+        const stored = storedChartSettings();
+        if (cmd === 'load_chart_settings') {
+          return {
+            templateId: 'default',
+            templateSettings: opts.chartTemplateSettings ?? {},
+            overrides: stored[key] ?? {},
+          };
         }
-        stored[key] = String(args.timeZone);
-        sessionStorage.setItem(chartTimeZonesKey, JSON.stringify(stored));
+        const overrides = (args.overrides as Record<string, unknown> | undefined) ?? {};
+        if (Object.keys(overrides).length === 0) {
+          delete stored[key];
+        } else {
+          stored[key] = overrides;
+        }
+        sessionStorage.setItem(chartStorage.settingOverrides, JSON.stringify(stored));
         return null;
       }
       if (!Object.prototype.hasOwnProperty.call(responses, cmd)) {
@@ -1066,9 +1093,12 @@ export async function wasInvoked(page: Page, cmd: string): Promise<RecordedInvok
   return all.find((entry) => entry.cmd === cmd);
 }
 
-/** The key one scope's drawings are stored under, as the stub's backend addresses them. */
-export function chartDrawingScopeKey(accountKey: string, symbol: string): string {
-  return `${accountKey}\n${symbol}`;
+/**
+ * The key one chart's state is stored under, as the stub's backend addresses it: the chart, the
+ * account and the symbol, kept apart by newlines.
+ */
+export function chartScopeKey(accountKey: string, symbol: string, chartId = STUB_CHART_ID): string {
+  return `${chartId}\n${accountKey}\n${symbol}`;
 }
 
 /** The drawing lists the stub's backend holds right now, keyed like `TauriStubOptions.chartDrawings`. */
@@ -1079,10 +1109,10 @@ export async function stubChartDrawings(page: Page): Promise<Record<string, unkn
   );
 }
 
-/** The ids of one scope's saved drawings, in the order the backend keeps them. */
+/** The ids of one chart's saved drawings, in the order the backend keeps them. */
 export async function storedDrawingIds(page: Page, accountKey: string, symbol: string): Promise<string[]> {
   const stored = await stubChartDrawings(page);
-  const records = (stored[chartDrawingScopeKey(accountKey, symbol)] ?? []) as Array<{ id?: unknown }>;
+  const records = (stored[chartScopeKey(accountKey, symbol)] ?? []) as Array<{ id?: unknown }>;
   return records.map((record) => String(record.id));
 }
 
@@ -1092,10 +1122,15 @@ export async function chartDrawingSaveCount(page: Page): Promise<number> {
   return all.filter((entry) => entry.cmd === 'save_chart_drawings').length;
 }
 
-/** The time zones the stub's backend holds right now, keyed like `TauriStubOptions.chartTimeZones`. */
-export async function stubChartTimeZones(page: Page): Promise<Record<string, string>> {
-  const stored = await page.evaluate((key) => sessionStorage.getItem(key), STUB_CHART_TIME_ZONES_KEY);
-  return stored === null ? {} : (JSON.parse(stored) as Record<string, string>);
+/**
+ * The chart setting overrides the stub's backend holds right now, keyed like
+ * `TauriStubOptions.chartSettingOverrides`.
+ */
+export async function stubChartSettingOverrides(page: Page): Promise<Record<string, object>> {
+  return page.evaluate(
+    (key) => JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, object>,
+    STUB_CHART_SETTING_OVERRIDES_KEY,
+  );
 }
 
 /** Changes what the stub answers for `cmd` from now on, as a backend whose state moved on. */
