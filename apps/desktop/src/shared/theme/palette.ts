@@ -60,6 +60,8 @@ export const palette = {
   // Take profit and info / brand: blue
   tp: '#3aaeff',
   info: '#77a7ff',
+  infoWash: '#77a7ff55',
+  infoClear: '#77a7ff00',
 
   // Sell / danger: red
   sell: '#f7525f',
