@@ -19,18 +19,16 @@ export function SymbolSettingsPanel({ settings, onChange }: ChartSettingsPanelPr
     onChange(withSettingValue(settings, barStyle, key, value));
   return (
     <>
-      <section className="chart-settings-section">
-        <h3 className="chart-settings-section-title">{section.title}</h3>
-        <div className="chart-settings-rows">
-          {section.fields.map((field) => (
-            <SettingFieldRow
-              key={field.key}
-              field={field}
-              value={values[field.key]}
-              onChange={(value) => setValue(field.key, value)}
-            />
-          ))}
-        </div>
+      <section>
+        <h3>{section.title}</h3>
+        {section.fields.map((field) => (
+          <SettingFieldRow
+            key={field.key}
+            field={field}
+            value={values[field.key]}
+            onChange={(value) => setValue(field.key, value)}
+          />
+        ))}
       </section>
       <TimeZoneSettingRow zone={settings.timeZone} onChange={(zone) => onChange(withTimeZone(settings, zone))} />
     </>

@@ -88,7 +88,7 @@ function ColorPairSettingRow({ field, value, onChange }: SettingRowProps<'colorP
   const pair = typeof value === 'object' ? value : field.defaultValue;
   return (
     <>
-      <span className="chart-settings-label">{field.label}</span>
+      <span>{field.label}</span>
       <ColorPairPickers label={field.label} pair={pair} onChange={onChange} />
     </>
   );
@@ -98,7 +98,7 @@ function ColorSettingRow({ field, value, onChange }: SettingRowProps<'color'>) {
   const color = typeof value === 'string' ? value : field.defaultValue;
   return (
     <>
-      <span className="chart-settings-label">{field.label}</span>
+      <span>{field.label}</span>
       <ColorPickerButton label={field.label} color={color} onColorChange={onChange} />
     </>
   );
@@ -108,7 +108,7 @@ function LineWidthSettingRow({ field, value, onChange }: SettingRowProps<'lineWi
   const width = typeof value === 'number' ? value : field.defaultValue;
   return (
     <>
-      <span className="chart-settings-label">{field.label}</span>
+      <span>{field.label}</span>
       <Select
         ariaLabel={field.label}
         options={LINE_WIDTH_OPTIONS}
@@ -123,7 +123,7 @@ function ChoiceSettingRow({ field, value, onChange }: SettingRowProps<'choice'>)
   const choice = typeof value === 'string' ? value : field.defaultValue;
   return (
     <>
-      <span className="chart-settings-label">{field.label}</span>
+      <span>{field.label}</span>
       <Select ariaLabel={field.label} options={field.options} value={choice} onChange={onChange} />
     </>
   );
@@ -133,7 +133,7 @@ function PercentSettingRow({ field, value, onChange }: SettingRowProps<'percent'
   const percent = typeof value === 'number' ? value : field.defaultValue;
   return (
     <>
-      <span className="chart-settings-label">{field.label}</span>
+      <span>{field.label}</span>
       <input
         className="drawing-settings-control chart-settings-number"
         type="number"
@@ -175,8 +175,13 @@ interface SettingFieldRowProps {
   readonly onChange: (value: ChartSettingValue) => void;
 }
 
+/** A checkbox has no control beside its label, so its row spans the panel and the label stays on one line. */
+function rowClassName(kind: ChartSettingField['kind']): string {
+  return kind === 'checkbox' ? 'chart-settings-row chart-settings-row-wide' : 'chart-settings-row';
+}
+
 /** One row of the settings dialog: the control the field's kind asks for, beside the label that names it. */
 export function SettingFieldRow({ field, value, onChange }: SettingFieldRowProps) {
   const render = SETTING_ROWS[field.kind] as RenderSettingRow;
-  return <div className="chart-settings-row">{render({ field, value, onChange })}</div>;
+  return <div className={rowClassName(field.kind)}>{render({ field, value, onChange })}</div>;
 }

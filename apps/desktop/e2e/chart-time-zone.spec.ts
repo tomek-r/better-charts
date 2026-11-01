@@ -23,6 +23,8 @@ const EURUSD_CHART = chartScopeKey(ACCOUNT_KEY, 'EURUSD');
 const GBPUSD_CHART = chartScopeKey(ACCOUNT_KEY, 'GBPUSD');
 /** The broker offset the stub reports, in minutes. */
 const BROKER_OFFSET_MINUTES = 180;
+/** The exchange row's label: the broker's offset, written the way the cities are. */
+const EXCHANGE_ROW_TEXT = '(UTC+3) Exchange';
 const BROKER_CLOCK = /^\d{2}:\d{2}:\d{2} UTC\+3$/;
 const TOKYO_CLOCK = /^\d{2}:\d{2}:\d{2} UTC\+9$/;
 const MINUTES_PER_HOUR = 60;
@@ -90,7 +92,7 @@ test('the clock under the chart reads the exchange time until another zone is pi
   await expect(timeZoneButton(page)).toHaveText(BROKER_CLOCK);
 
   await openTimeZoneMenu(page);
-  await expect(menuRows(page).nth(1)).toHaveText('Exchange');
+  await expect(menuRows(page).nth(1)).toHaveText(EXCHANGE_ROW_TEXT);
   await expect(menuRows(page).nth(1)).toHaveAttribute('aria-checked', 'true');
   expectNoErrors(collected);
 });
@@ -101,7 +103,7 @@ test('the menu lists UTC, the exchange, then the cities under their current offs
   await openTimeZoneMenu(page);
 
   await expect(menuRows(page).first()).toHaveText('UTC');
-  await expect(menuRows(page).nth(1)).toHaveText('Exchange');
+  await expect(menuRows(page).nth(1)).toHaveText(EXCHANGE_ROW_TEXT);
   // The label carries the offset in force today, so the day of the run decides it.
   await expect(menuRows(page).filter({ hasText: 'New York' })).toHaveText(/^\(UTC-[45]\) New York$/);
   await expect(menuRows(page).filter({ hasText: 'Honolulu' })).toHaveText(/^\(UTC-10\) Honolulu$/);

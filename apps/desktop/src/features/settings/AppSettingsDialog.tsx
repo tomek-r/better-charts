@@ -1,22 +1,33 @@
 import { ErrorNotification } from '../../shared/ui/notification/ErrorNotifications';
 import { afterExitAnimation } from '../../shared/ui/animation/afterExitAnimation';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../shared/ui/dialog/ModalDialog';
+import { SettingsNav, type SettingsNavTab } from '../../shared/ui/settingsNav/SettingsNav';
 import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { LazySetupGuideModal } from './setup/setup-guide-modal/LazySetupGuideModal';
 import type { AppSettingsData, DetectedSettingsField } from './appSettingsData';
 import { saveAppSettings } from './appSettingsCommands';
 import { bridgeSettingsIssue } from './bridgeSettingsValidation';
-import { SectionInfoIcon } from './SectionInfoIcon';
+import { SectionHelpIcon } from './SectionHelpIcon';
 import { SettingsTextField } from './SettingsTextField';
 import { FRAME_BYTES } from '../../shared/bridge/config';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';
 
-const SETTINGS_CATEGORIES = [
-  { name: 'MT5 setup', icon: '⇄' },
-  { name: 'Trading', icon: '⌁' },
-] as const;
+/** The glyph the nav shows beside the bridge connection: the two arrows of a two-way link. */
+function BridgeGlyph() {
+  return '⇄';
+}
 
-type Category = (typeof SETTINGS_CATEGORIES)[number]['name'];
+/** The glyph the nav shows beside trading: the line a position is drawn on. */
+function TradingGlyph() {
+  return '⌁';
+}
+
+const APP_SETTINGS_TABS = [
+  { id: 'mt5Setup', title: 'MT5 setup', Icon: BridgeGlyph },
+  { id: 'trading', title: 'Trading', Icon: TradingGlyph },
+] as const satisfies readonly SettingsNavTab[];
+
+type SettingsCategory = (typeof APP_SETTINGS_TABS)[number]['id'];
 
 const BYTES_PER_MIB = 1024 * 1024;
 
@@ -77,7 +88,7 @@ export function AppSettingsDialog({
   const draft = editedDraft ?? settings?.mt5BridgeSettings;
   // Detection hints describe the load, so an edit during the session leaves them as they are.
   const detectedFields = settings?.detectedFields ?? [];
-  const [category, setCategory] = useState<Category>('MT5 setup');
+  const [category, setCategory] = useState<SettingsCategory>('mt5Setup');
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
@@ -110,7 +121,7 @@ export function AppSettingsDialog({
     }
     const issue = bridgeSettingsIssue(draft, settings?.platform);
     if (issue) {
-      setCategory('MT5 setup');
+      setCategory('mt5Setup');
       setError(issue);
       return;
     }
@@ -164,19 +175,13 @@ export function AppSettingsDialog({
         )
       }
     >
-      <nav className="settings-nav" aria-label="Settings categories">
-        {SETTINGS_CATEGORIES.map(({ name, icon }) => (
-          <button
-            type="button"
-            key={name}
-            aria-current={category === name ? 'page' : undefined}
-            onClick={() => setCategory(name)}
-          >
-            <span aria-hidden="true">{icon}</span>
-            {name}
-          </button>
-        ))}
-      </nav>
+      <SettingsNav
+        label="Settings categories"
+        selection={{ kind: 'page' }}
+        tabs={APP_SETTINGS_TABS}
+        selectedId={category}
+        onSelect={setCategory}
+      />
       <div className="settings-content" key={category}>
         {loadError && <ErrorNotification message={loadError} />}
         <Suspense fallback={<p role="status">Loading settings…</p>}>
@@ -184,7 +189,7 @@ export function AppSettingsDialog({
             {settings?.firstLaunch && (
               <p className="settings-intro">Welcome to Better Charts. Set up your MT5 connection to get started.</p>
             )}
-            {draft && category === 'MT5 setup' && (
+            {draft && category === 'mt5Setup' && (
               <>
                 <h3 className="settings-section-title">
                   Bridge connection
@@ -200,7 +205,7 @@ export function AppSettingsDialog({
                       onOpenGuide();
                     }}
                   >
-                    <SectionInfoIcon />
+                    <SectionHelpIcon />
                   </button>
                 </h3>
                 <SettingsTextField
@@ -242,7 +247,7 @@ export function AppSettingsDialog({
                 </p>
               </>
             )}
-            {draft && category === 'Trading' && (
+            {draft && category === 'trading' && (
               <>
                 <h3>Trading permissions</h3>
                 <label className="settings-checkbox">
@@ -260,7 +265,7 @@ export function AppSettingsDialog({
                 <p className="settings-hint">Keep disabled for charting without order execution.</p>
               </>
             )}
-            {draft && category === 'MT5 setup' && (
+            {draft && category === 'mt5Setup' && (
               <>
                 <h3>Terminal startup</h3>
                 <label className="settings-checkbox">

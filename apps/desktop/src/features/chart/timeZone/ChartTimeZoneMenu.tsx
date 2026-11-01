@@ -50,9 +50,9 @@ interface ChartTimeZoneMenuProps {
 }
 
 /**
- * The time zone list: UTC, the exchange, then the cities under the offset each is running at the
- * moment the menu opened. A city needs the broker's offset to be read at all, so without it only
- * the exchange can be chosen.
+ * The time zone list: UTC, the exchange under the broker's offset, then the cities under the offset each
+ * is running at the moment the menu opened. A city needs the broker's offset to be read at all, so
+ * without it only the exchange can be chosen.
  */
 export function ChartTimeZoneMenu({
   anchorRef,
@@ -65,7 +65,7 @@ export function ChartTimeZoneMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   // One snapshot of the offsets, taken when the menu opens: a list that reshuffled while the
   // pointer travelled down it would be unreadable.
-  const [options] = useState(() => chartTimeZoneOptions(Date.now()));
+  const [options] = useState(() => chartTimeZoneOptions(Date.now(), brokerUtcOffsetMinutes));
   usePopupPlacement(anchorRef, menuRef, { alignment: 'end' });
   useOutsidePointerDismissal(pickerRef, onClose);
   const escapeToAnchor = useCallback(() => {

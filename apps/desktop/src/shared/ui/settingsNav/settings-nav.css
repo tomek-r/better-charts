@@ -1,0 +1,95 @@
+/* The body of a settings dialog: the left column of tabs and the panel content beside it. The frame,
+   the header and the footer come from shared/ui/dialog/modal-dialog.css. */
+
+.settings-body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.settings-nav {
+  padding: 10px 0;
+  border-right: 1px solid var(--color-border-dialog);
+}
+
+.settings-nav button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 22px;
+  border: 2px solid transparent;
+  border-radius: var(--border-radius);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* The open row reads as the accent's own: accent border, accent-tinted fill, accent text. */
+.settings-nav button[aria-current],
+.settings-nav button[aria-selected='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-fill);
+  color: var(--color-accent);
+}
+
+.settings-nav-icon {
+  width: 21px;
+  font-size: 21px;
+  text-align: center;
+}
+
+.settings-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 28px;
+  font-size: 14px;
+}
+
+/* The caption above a group of settings: small, spaced capitals. */
+.settings-content h3 {
+  margin: 12px 0 20px;
+  color: var(--color-muted-strong);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-content h3:not(:first-child) {
+  margin-top: 28px;
+}
+
+@media (max-width: 600px) {
+  .settings-body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .settings-nav {
+    flex-shrink: 0;
+    display: flex;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border-dialog);
+    padding: 6px;
+  }
+
+  .settings-nav button {
+    justify-content: center;
+    padding: 12px 6px;
+    font-size: 12px;
+    gap: 5px;
+  }
+
+  .settings-nav-icon {
+    display: none;
+  }
+
+  .settings-content {
+    flex: 1;
+    padding: 16px 18px;
+  }
+}
