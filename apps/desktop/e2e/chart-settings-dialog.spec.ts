@@ -9,6 +9,7 @@ import {
   stubChartSettingOverrides,
   stubInvocations,
 } from './helpers/tauriStub';
+import { palette } from '../src/shared/theme/palette';
 
 /**
  * The chart's settings dialog: the row in the chart's right-click menu and the gear in its corner both
@@ -58,7 +59,7 @@ async function waitForDialogSettled(dialog: Locator): Promise<void> {
 /** Opens the dialog from the menu row the feature adds, and waits for it to settle. */
 async function openSettingsFromMenu(page: Page): Promise<void> {
   const menu = await openChartMenu(page);
-  await menu.getByRole('menuitem', { name: 'Settings…' }).click();
+  await menu.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   const dialog = chartSettingsDialog(page);
   await expect(dialog).toBeVisible();
   await waitForDialogSettled(dialog);
@@ -69,6 +70,14 @@ async function openSettingsDialog(page: Page): Promise<Locator> {
   await openChart(page);
   await openSettingsFromMenu(page);
   return chartSettingsDialog(page);
+}
+
+/** Opens the dialog and switches to the Canvas tab, where the chart's own canvas is edited. */
+async function openCanvasTab(page: Page): Promise<Locator> {
+  const dialog = await openSettingsDialog(page);
+  await dialog.getByRole('tab', { name: 'Canvas' }).click();
+  await expect(dialog.getByRole('tab', { name: 'Canvas' })).toHaveAttribute('aria-selected', 'true');
+  return dialog;
 }
 
 /** Unchecks the candle body and waits for the chart to draw the bodies hidden. */
@@ -118,7 +127,7 @@ test('the chart menu lists the view command, a separator and the settings, which
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText('Reset chart view');
   await expect(menu.getByRole('separator')).toHaveCount(1);
-  await expect(rows.nth(1)).toHaveText('Settings…');
+  await expect(rows.nth(1)).toHaveText('Settings');
 
   await rows.nth(1).click();
   const dialog = chartSettingsDialog(page);
@@ -295,5 +304,83 @@ test('in a narrow window the dialog fits, with its tabs above the panel and no s
   const tabs = (await dialog.getByRole('tablist').boundingBox())!;
   const panel = (await dialog.getByRole('tabpanel').boundingBox())!;
   expect(tabs.y + tabs.height).toBeLessThanOrEqual(panel.y + 1);
+  expectNoErrors(collected);
+});
+
+test('the Canvas tab lists the chart canvas settings in its three groups', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openCanvasTab(page);
+
+  for (const heading of ['Chart basic styles', 'Scales', 'Margins']) {
+    await expect(dialog.getByRole('heading', { name: heading })).toBeVisible();
+  }
+  for (const name of ['Vertical grid lines', 'Horizontal grid lines']) {
+    await expect(dialog.getByRole('checkbox', { name, exact: true })).toBeVisible();
+  }
+  for (const name of ['Top', 'Bottom', 'Right']) {
+    await expect(dialog.getByRole('spinbutton', { name, exact: true })).toBeVisible();
+  }
+  for (const name of [
+    'Background fill',
+    'Background colour',
+    'Vertical grid lines colour',
+    'Horizontal grid lines colour',
+    'Crosshair',
+    'Text colour',
+    'Text font size',
+    'Lines',
+  ]) {
+    await expect(dialog.getByRole('button', { name, exact: true })).toBeVisible();
+  }
+  expectNoErrors(collected);
+});
+
+test('unchecking the vertical grid lines then OK stores exactly that canvas override', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openCanvasTab(page);
+
+  await dialog.getByRole('checkbox', { name: 'Vertical grid lines', exact: true }).uncheck();
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const overrides = { canvas: { verticalGrid: { visible: false, color: palette.borderSubtle, style: 'solid' } } };
+  await expect.poll(() => stubChartSettingOverrides(page)).toEqual({ [EURUSD_CHART]: overrides });
+  expectNoErrors(collected);
+});
+
+test('switching the background to a gradient shows the top and the bottom colour', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openCanvasTab(page);
+
+  await dialog.getByRole('button', { name: 'Background fill', exact: true }).click();
+  await page.getByRole('option', { name: 'Gradient', exact: true }).click();
+
+  await expect(dialog.getByRole('button', { name: 'Background top colour', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Background bottom colour', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Background colour', exact: true })).toHaveCount(0);
+  expectNoErrors(collected);
+});
+
+test('typing 3 in the right margin then OK stores just that canvas override', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openCanvasTab(page);
+
+  await dialog.getByRole('spinbutton', { name: 'Right', exact: true }).fill('3');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await expect.poll(() => stubChartSettingOverrides(page)).toEqual({ [EURUSD_CHART]: { canvas: { rightMargin: 3 } } });
+  expectNoErrors(collected);
+});
+
+test('Cancel on the Canvas tab saves nothing', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openCanvasTab(page);
+
+  await dialog.getByRole('checkbox', { name: 'Vertical grid lines', exact: true }).uncheck();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  expect(await saveCount(page)).toBe(0);
   expectNoErrors(collected);
 });

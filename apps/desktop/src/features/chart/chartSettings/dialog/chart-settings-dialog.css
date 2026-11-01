@@ -20,12 +20,23 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* A checkbox with its text, and the two swatches of a colour pair. */
+/* A checkbox with its text, the swatches of a colour pair, and the controls of a row that holds two of them. */
 .chart-settings-checkbox-row,
-.chart-settings-colors {
+.chart-settings-colors,
+.chart-settings-controls {
   display: flex;
   align-items: center;
   gap: 9px;
+}
+
+/* Controls that share the column beside their label: a select gives way rather than pushing a swatch out. */
+.chart-settings-controls > * {
+  min-width: 0;
+}
+
+/* The unit a whole number counts in, after the input that holds it. */
+.chart-settings-unit {
+  color: var(--color-muted);
 }
 
 /* Room for three digits, spun up and down whole: the drawing settings' control, sized for a percent. */

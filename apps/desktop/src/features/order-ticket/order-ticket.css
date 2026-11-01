@@ -721,22 +721,23 @@ span.ticket-mode {
   cursor: not-allowed;
 }
 
+/* The info mark: the icon draws its own ring, so only its size and colour live here. */
 .ticket-menu-info {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 50%;
   color: var(--color-muted);
-  font-size: 9px;
-  font-style: italic;
-  font-weight: 700;
   cursor: help;
+}
+
+.ticket-menu-info svg {
+  display: block;
+  width: 15px;
+  height: 15px;
 }
 
 .ticket-menu-info:hover {
   color: var(--color-text-label);
-  border-color: var(--color-muted);
 }

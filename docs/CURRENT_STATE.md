@@ -254,7 +254,7 @@ on/off with up/down colours) and "Color bars based on previous close".
 The time zone is one of these settings: the footer clock and the dialog edit the same
 value. The old per-symbol saved time zones were not carried over.
 
-The Settings dialog opens from the chart's right-click menu ("Settings…", after a divider
+The Settings dialog opens from the chart's right-click menu ("Settings", after a divider
 below "Reset chart view") and from the gear in the chart's bottom-right corner. It has a
 Symbol tab whose section follows the current bar type, plus Timezone. Every edit shows on
 the chart at once; OK saves the overrides; Cancel, × and Escape restore what the chart

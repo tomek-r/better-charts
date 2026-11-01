@@ -1,0 +1,7 @@
+/* The Canvas tab's glyph: sized like the icons of the settings column's other rows. */
+.canvas-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+}

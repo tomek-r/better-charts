@@ -7,13 +7,11 @@ import type {
   ColorPairSettingField,
   ColorSettingField,
   LineWidthSettingField,
+  SettingsSectionFields,
   ToggledColorPairSettingField,
 } from './settingFields';
 
-export interface BarStyleSettingsSection {
-  readonly title: string;
-  readonly fields: readonly ChartSettingField[];
-}
+export type BarStyleSettingsSection = SettingsSectionFields;
 
 const COLOR_BY_PREVIOUS_CLOSE_FIELD: CheckboxSettingField = {
   kind: 'checkbox',

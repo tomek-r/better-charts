@@ -95,4 +95,6 @@
 
 .section-info-trigger svg {
   display: block;
+  width: 18px;
+  height: 18px;
 }

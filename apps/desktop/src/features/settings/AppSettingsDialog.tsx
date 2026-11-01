@@ -2,12 +2,12 @@ import { ErrorNotification } from '../../shared/ui/notification/ErrorNotificatio
 import { afterExitAnimation } from '../../shared/ui/animation/afterExitAnimation';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../shared/ui/dialog/ModalDialog';
 import { SettingsNav, type SettingsNavTab } from '../../shared/ui/settingsNav/SettingsNav';
+import { InfoIcon } from '../../shared/ui/icons/InfoIcon';
 import { Suspense, use, useEffect, useRef, useState, type SubmitEvent, type ReactNode } from 'react';
 import { LazySetupGuideModal } from './setup/setup-guide-modal/LazySetupGuideModal';
 import type { AppSettingsData, DetectedSettingsField } from './appSettingsData';
 import { saveAppSettings } from './appSettingsCommands';
 import { bridgeSettingsIssue } from './bridgeSettingsValidation';
-import { SectionHelpIcon } from './SectionHelpIcon';
 import { SettingsTextField } from './SettingsTextField';
 import { FRAME_BYTES } from '../../shared/bridge/config';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';
@@ -205,7 +205,7 @@ export function AppSettingsDialog({
                       onOpenGuide();
                     }}
                   >
-                    <SectionHelpIcon />
+                    <InfoIcon />
                   </button>
                 </h3>
                 <SettingsTextField

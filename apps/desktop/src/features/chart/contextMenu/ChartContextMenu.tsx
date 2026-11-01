@@ -31,7 +31,7 @@ export function ChartContextMenu({
       <div role="separator" className="chart-context-menu-separator" />
       <button type="button" role="menuitem" className="ticket-menu-item" onClick={onOpenSettings}>
         <SettingsIcon className="chart-context-menu-icon" />
-        <span className="chart-context-menu-label">Settings…</span>
+        <span className="chart-context-menu-label">Settings</span>
       </button>
     </div>
   );
