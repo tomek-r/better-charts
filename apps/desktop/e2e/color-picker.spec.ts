@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { GREYSCALE_ROW, HUE_ROW } from '../src/shared/ui/colorPicker/colorPalette';
 import { MAX_CUSTOM_COLORS } from '../src/shared/ui/colorPicker/savedCustomColors';
 import { cancelCount, mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
@@ -8,7 +8,8 @@ import { HISTOGRAM_BOX, POC_LINE } from './helpers/toolStyleFixtures';
 /**
  * The colour and line picker of the Style tab: a swatch button opening a popover with preset colours, the
  * user's own colours, opacity and, for a line, thickness and line style. Changes land in the dialog's pending
- * values, and Cancel discards them.
+ * values, and Cancel discards them. The "+" of the custom row opens an in-app colour editor, which is what
+ * stores a custom colour: the native colour panel added every shade of a drag on macOS.
  */
 
 /** POC_LINE's own colour, an opaque red that is not one of the presets. */
@@ -19,6 +20,28 @@ const trigger = (page: Page) => page.getByLabel('POC colour', { exact: true });
 const popover = (page: Page) => page.getByRole('dialog', { name: 'POC colour options' });
 const swatch = (page: Page, hex: string) => popover(page).getByRole('button', { name: hex, exact: true });
 const ok = (page: Page) => page.getByRole('button', { name: 'OK', exact: true });
+const addCustomButton = (page: Page) => popover(page).getByRole('button', { name: 'Add custom colour', exact: true });
+const hexField = (page: Page) => popover(page).getByLabel('Hex colour', { exact: true });
+const addButton = (page: Page) => popover(page).getByRole('button', { name: 'Add', exact: true });
+const preview = (page: Page) => popover(page).locator('.color-editor-preview');
+const customSwatches = (page: Page) =>
+  popover(page).getByRole('group', { name: 'Custom colours' }).getByRole('button', { name: /^#/ });
+
+/** Opens the editor with "+", types `color` into its hex field and presses Add. */
+async function addCustomColor(page: Page, color: string): Promise<void> {
+  await addCustomButton(page).click();
+  await hexField(page).fill(color);
+  await addButton(page).click();
+}
+
+/** Where the control is on the page, which a drag or a click at a fraction of it needs. */
+async function boxOf(control: Locator) {
+  const box = await control.boundingBox();
+  if (box === null) {
+    throw new Error('the control is not on screen');
+  }
+  return box;
+}
 
 /** Closes the open popover (it would cover the footer), presses OK and reads the POC colour the form saved. */
 async function savedPocColor(page: Page): Promise<unknown> {
@@ -145,9 +168,107 @@ test('a plain colour offers neither thickness nor line style', async ({ page }) 
   await expect(colorPopover.getByRole('group', { name: 'Line style' })).toHaveCount(0);
 });
 
+test('"+" opens the in-app editor instead of the native colour panel', async ({ page }) => {
+  await trigger(page).click();
+  await addCustomButton(page).click();
+
+  await expect(addCustomButton(page)).toHaveAttribute('aria-expanded', 'true');
+  await expect(hexField(page)).toBeVisible();
+  await expect(popover(page).locator('input[type="color"]')).toHaveCount(0);
+});
+
+test('a typed hex colour is added once, selected, and closes the editor', async ({ page }) => {
+  await trigger(page).click();
+  await addCustomButton(page).click();
+  await hexField(page).fill('#4CAF50');
+  await addButton(page).click();
+
+  await expect(customSwatches(page)).toHaveCount(1);
+  await expect(customSwatches(page).first()).toHaveAttribute('aria-label', '#4caf50');
+  await expect(customSwatches(page).first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(hexField(page)).toHaveCount(0);
+  await expect(addCustomButton(page)).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('dragging the square previews a colour and adds nothing until Add', async ({ page }) => {
+  await trigger(page).click();
+  await addCustomButton(page).click();
+  const square = popover(page).getByRole('slider', { name: 'Saturation and brightness', exact: true });
+  const box = await boxOf(square);
+
+  await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.15);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 4 });
+  await page.mouse.up();
+
+  await expect(preview(page)).not.toHaveCSS('background-color', 'rgb(255, 0, 0)');
+  await expect(hexField(page)).toHaveValue(/^#[0-9a-f]{6}$/);
+  await expect(customSwatches(page)).toHaveCount(0);
+  const dragged = await hexField(page).inputValue();
+
+  await addButton(page).click();
+
+  await expect(customSwatches(page)).toHaveCount(1);
+  await expect(customSwatches(page).first()).toHaveAttribute('aria-label', dragged);
+});
+
+test('the hue bar moves the colour with the arrow keys', async ({ page }) => {
+  await trigger(page).click();
+  await addCustomButton(page).click();
+  await expect(hexField(page)).toHaveValue(POC_DEFAULT);
+  const hueBar = popover(page).getByRole('slider', { name: 'Hue', exact: true });
+
+  await hueBar.focus();
+  await page.keyboard.press('ArrowUp');
+
+  await expect(hueBar).toHaveAttribute('aria-valuenow', '1');
+  await expect(hexField(page)).toHaveValue('#ff0400');
+
+  await page.keyboard.press('Shift+ArrowUp');
+  await expect(hueBar).toHaveAttribute('aria-valuenow', '11');
+});
+
+test('a hex text that is no colour disables Add', async ({ page }) => {
+  await trigger(page).click();
+  await addCustomButton(page).click();
+
+  await hexField(page).fill('#12');
+  await expect(hexField(page)).toHaveAttribute('aria-invalid', 'true');
+  await expect(addButton(page)).toBeDisabled();
+
+  await hexField(page).fill('#4caf50');
+  await expect(hexField(page)).toHaveAttribute('aria-invalid', 'false');
+  await expect(addButton(page)).toBeEnabled();
+});
+
+test('Escape closes the editor but keeps the popover open', async ({ page }) => {
+  await trigger(page).click();
+  await addCustomButton(page).click();
+  await expect(hexField(page)).toBeFocused();
+
+  await page.keyboard.press('Escape');
+
+  await expect(hexField(page)).toHaveCount(0);
+  await expect(popover(page)).toBeVisible();
+  await expect(addCustomButton(page)).toHaveAttribute('aria-expanded', 'false');
+  await expect(addCustomButton(page)).toBeFocused();
+});
+
+test('ten colours added with the Enter key fill the row and no more', async ({ page }) => {
+  await trigger(page).click();
+  const added = Array.from({ length: MAX_CUSTOM_COLORS + 1 }, (_, index) => `#${(index + 16).toString(16)}0ff0`);
+  for (const color of added) {
+    await addCustomButton(page).click();
+    await hexField(page).fill(color);
+    await hexField(page).press('Enter');
+  }
+
+  await expect(customSwatches(page)).toHaveCount(MAX_CUSTOM_COLORS);
+});
+
 test('a custom colour is added, applied and still there after a reload', async ({ page }) => {
   await trigger(page).click();
-  await popover(page).getByLabel('Custom colour', { exact: true }).fill('#123456');
+  await addCustomColor(page, '#123456');
 
   await expect(swatch(page, '#123456')).toHaveAttribute('aria-pressed', 'true');
   expect(await savedPocColor(page)).toBe('#123456');
@@ -161,13 +282,10 @@ test('a custom colour is added, applied and still there after a reload', async (
 
 test('custom colours are kept newest first, without repeats, up to ten', async ({ page }) => {
   await trigger(page).click();
-  const input = popover(page).getByLabel('Custom colour', { exact: true });
   const added = Array.from({ length: MAX_CUSTOM_COLORS + 2 }, (_, index) => `#00${(index + 16).toString(16)}00`);
-  for (const color of added) {
-    await input.fill(color);
+  for (const color of [...added, added[5]]) {
+    await addCustomColor(page, color);
   }
-  // Adding an older colour again moves it to the front instead of listing it twice.
-  await input.fill(added[5]);
 
   const savedColors = popover(page).getByRole('group', { name: 'Custom colours' }).getByRole('button', { name: /^#/ });
   await expect(savedColors).toHaveCount(MAX_CUSTOM_COLORS);

@@ -9,8 +9,8 @@ import { addCustomColor, loadCustomColors, saveCustomColors } from './savedCusto
 import { LineOptionsSection, type LineOptions } from './LineOptionsSection';
 import { OpacityControl } from './OpacityControl';
 
-// The hidden native colour input is reached through the "+" button, so it stays out of the tab order.
-const FOCUSABLE_SELECTOR = 'button:not(:disabled), input:not(:disabled):not([tabindex="-1"])';
+// Everything Tab reaches inside the popover: its buttons and fields, and the colour editor's two sliders.
+const FOCUSABLE_SELECTOR = 'button:not(:disabled), input:not(:disabled):not([tabindex="-1"]), [role="slider"]';
 
 interface ColorPickerPopoverProps {
   /** Names the dialog: `${label} options`. */
