@@ -6,7 +6,7 @@ import { scalesFields } from './scalesSettings';
 import { readSettingValue, sameSettingValue, type ChartSettingField, type ChartSettingValue } from './settingFields';
 
 /** The values one group of fields holds, keyed by field key. */
-export type SettingValues = Readonly<Record<string, ChartSettingValue>>;
+type SettingValues = Readonly<Record<string, ChartSettingValue>>;
 
 /** The fields a bar type actually sets, keyed by field key. */
 export type BarStyleSettingValues = SettingValues;

@@ -63,11 +63,6 @@ export function ToggledLineSettingRow({ field, value, onChange }: SettingRowProp
   );
 }
 
-export function LineSettingRow({ field, value, onChange }: SettingRowProps<'line'>) {
-  const line = typeof value === 'object' && 'style' in value ? value : field.defaultValue;
-  return <LabelledLinePicker label={field.label} line={line} onChange={onChange} />;
-}
-
 export function SizedLineSettingRow({ field, value, onChange }: SettingRowProps<'sizedLine'>) {
   const line = typeof value === 'object' && 'width' in value ? value : field.defaultValue;
   const thickness: LineThickness = {

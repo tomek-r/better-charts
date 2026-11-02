@@ -7,7 +7,7 @@ export interface PointerPoint {
   readonly y: number;
 }
 
-export interface DragHandlers {
+interface DragHandlers {
   readonly onPointerDown: PointerEventHandler<HTMLElement>;
   readonly onPointerMove: PointerEventHandler<HTMLElement>;
   readonly onPointerUp: PointerEventHandler<HTMLElement>;

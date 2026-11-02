@@ -4,7 +4,7 @@ import type { BridgeState, MarketSessionStatus } from '../../../../shared/bridge
 export type MarketStatus = 'open' | 'closed' | 'unknown';
 
 /** What the decision reads: the transport state, the EA's latest report and the symbol on screen. */
-export interface MarketStatusInput {
+interface MarketStatusInput {
   bridgeState: BridgeState;
   /** The EA's report for its own active symbol; absent until a heartbeat carries one. */
   session: MarketSessionStatus | undefined;
@@ -12,7 +12,7 @@ export interface MarketStatusInput {
   shownSymbol: string | undefined;
 }
 
-export interface MarketStatusLabelInput {
+interface MarketStatusLabelInput {
   status: MarketStatus;
   bridgeState: BridgeState;
 }

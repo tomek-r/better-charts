@@ -41,7 +41,7 @@ import { OlderHistoryPager } from '../bars/olderHistoryPager';
 import { PointerCandleHold } from '../bars/pointerCandleHold';
 
 /** What the app gives the chart for its tools; a tool sees it only through its `ChartToolHost`. */
-export type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
+type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
   toolDefinitions: readonly ChartToolDefinition[];
   /** The tool active at start and made active again after a placement; one of `toolDefinitions`. */
   defaultToolId: string;
@@ -339,9 +339,6 @@ export class ChartController {
   }
   visibleRange(): { from: number; to: number } | null {
     return this.view.visibleRange();
-  }
-  isFollowing(): boolean {
-    return this.view.isFollowing();
   }
   diagnosticViewport(): DiagnosticViewport {
     return this.view.diagnosticViewport();

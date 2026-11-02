@@ -20,18 +20,18 @@ import type { ChartScalesState } from './chartScalesAppearance';
 import { clearViewportChangeLog, viewportChangeLog, type ViewportChangeRecord } from '../viewport/viewportDiagnostics';
 
 /** One candle's time with the colours it overrides the series with, as a plain copy. */
-export interface CandlePointState extends CandlePointColors {
+interface CandlePointState extends CandlePointColors {
   readonly time: number;
 }
 
 /** One candle series as the test hook shows it: its colour options and its points' colours. */
-export interface CandleSeriesState {
+interface CandleSeriesState {
   readonly colors: ReturnType<typeof candleSeriesColors>;
   readonly points: CandlePointState[];
 }
 
 /** The chart's background as the library reports it: one colour, or the two ends of a gradient. */
-export interface ChartBackgroundState {
+interface ChartBackgroundState {
   readonly type: ColorType;
   readonly color?: string;
   readonly topColor?: string;
@@ -39,7 +39,7 @@ export interface ChartBackgroundState {
 }
 
 /** One of the chart's grid lines, as the library holds it. */
-export interface ChartGridLineState {
+interface ChartGridLineState {
   readonly visible: boolean;
   readonly color: string;
   readonly style: LineStyle;
@@ -156,12 +156,12 @@ function candlePointState(point: CandlestickData<Time>): CandlePointState {
 }
 
 /** The candle series' colours and per-point colours, read back from the series itself. */
-export function readCandleSeriesState(candles: ISeriesApi<'Candlestick'>): CandleSeriesState {
+function readCandleSeriesState(candles: ISeriesApi<'Candlestick'>): CandleSeriesState {
   return { colors: candleColorsOf(candles), points: candles.data().filter(isCandlestickPoint).map(candlePointState) };
 }
 
 /** The live chart state the test hook reads; the controller supplies accessors, never chart-library objects. */
-export interface DevTestApiSources {
+interface DevTestApiSources {
   chart: IChartApi;
   bars(): readonly RenderBar[];
   candles(): CandleSeriesState;
@@ -176,7 +176,7 @@ export interface DevTestApiSources {
 }
 
 /** The live readings the surface already publishes; the hook reads them through these. */
-export interface DevTestReadings {
+interface DevTestReadings {
   readonly drawings: ChartDrawings;
   getData(): readonly RenderBar[];
   visibleRange(): { from: number; to: number } | null;
@@ -186,17 +186,17 @@ export interface DevTestReadings {
 }
 
 /** The tool test surfaces the hook hands back per tool id. */
-export interface DevTestToolSurfaces {
+interface DevTestToolSurfaces {
   toolTestApi(id: string): unknown;
 }
 
 /** The pointer's time/price labels, which every tool shows while a pointer is over the pane. */
-export interface DevTestPointerReadout {
+interface DevTestPointerReadout {
   readout(): PointerReadout | null;
 }
 
 /** The empty bars kept to the right of the last bar, which the Canvas tab sets. */
-export interface DevTestPaneMargins {
+interface DevTestPaneMargins {
   rightMarginBars(): number;
 }
 
@@ -279,7 +279,7 @@ function buildDevTestApi({
   };
 }
 
-export function installDevTestApi(sources: DevTestApiSources): void {
+function installDevTestApi(sources: DevTestApiSources): void {
   const api = buildDevTestApi(sources);
   const devWindow = window as unknown as DevWindow;
   devWindow.__chartTest = api;

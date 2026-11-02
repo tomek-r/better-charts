@@ -10,7 +10,7 @@ import { EXCHANGE_TIME_ZONE } from '../../timeZone/chartTimeZones';
 import type { BrokerTime } from './brokerTime';
 
 /** The pointer readout's seam: the display only ever hands it a new format. */
-export interface TimeFormatTarget {
+interface TimeFormatTarget {
   setTimeFormat(format: ChartTimeFormat): void;
 }
 

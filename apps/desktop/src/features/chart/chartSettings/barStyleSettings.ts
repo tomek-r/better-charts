@@ -11,7 +11,7 @@ import type {
   ToggledColorPairSettingField,
 } from './settingFields';
 
-export type BarStyleSettingsSection = SettingsSectionFields;
+type BarStyleSettingsSection = SettingsSectionFields;
 
 const COLOR_BY_PREVIOUS_CLOSE_FIELD: CheckboxSettingField = {
   kind: 'checkbox',

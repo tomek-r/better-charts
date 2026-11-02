@@ -8,7 +8,7 @@ import { ScalesSettingsPanel } from './ScalesSettingsPanel';
 import { SymbolSettingsPanel } from './SymbolSettingsPanel';
 
 /** One tab of the dialog's left column: its title, the icon beside it, and the panel it opens. */
-export interface ChartSettingsTab {
+interface ChartSettingsTab {
   readonly id: string;
   readonly title: string;
   readonly Icon: ComponentType;
