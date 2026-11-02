@@ -1,3 +1,4 @@
+import { BID_ASK_DRAWING_MODES, type BidAskDrawingMode } from '../engine/surface/chartScalesAppearance';
 import { parseHexColor } from '../../../shared/theme/hexColor';
 import type { LineDashStyle } from '../../../shared/ui/colorPicker/LinePreview';
 
@@ -39,6 +40,18 @@ export type BackgroundFillValue = {
   readonly bottomColor: string;
 };
 
+/** What a quote scale draws of its bid and ask: line and label, line, label, or nothing. */
+export const QUOTE_LINE_MODES = BID_ASK_DRAWING_MODES;
+
+export type QuoteLineMode = BidAskDrawingMode;
+
+/** The bid and ask lines of the price scale: what is drawn of them, and each one's colour. */
+export type QuoteLinesValue = {
+  readonly mode: QuoteLineMode;
+  readonly bid: string;
+  readonly ask: string;
+};
+
 /** Text drawn in a colour at a size in pixels, such as the numbers of a scale. */
 export type TextStyleValue = {
   readonly color: string;
@@ -73,6 +86,7 @@ export type ChartSettingValue =
   | LineValue
   | ToggledLineValue
   | BackgroundFillValue
+  | QuoteLinesValue
   | TextStyleValue;
 
 export interface ChoiceOption {
@@ -130,6 +144,11 @@ export interface BackgroundFillSettingField extends SettingFieldIdentity {
   readonly defaultValue: BackgroundFillValue;
 }
 
+export interface QuoteLinesSettingField extends SettingFieldIdentity {
+  readonly kind: 'quoteLines';
+  readonly defaultValue: QuoteLinesValue;
+}
+
 export interface TextStyleSettingField extends SettingFieldIdentity {
   readonly kind: 'textStyle';
   readonly defaultValue: TextStyleValue;
@@ -161,6 +180,7 @@ export type ChartSettingField =
   | ToggledLineSettingField
   | LineSettingField
   | BackgroundFillSettingField
+  | QuoteLinesSettingField
   | TextStyleSettingField
   | ChoiceSettingField
   | PercentSettingField
@@ -182,6 +202,7 @@ const TOGGLED_COLOR_PAIR_KEYS = ['visible', 'up', 'down'];
 const LINE_KEYS = ['color', 'style'];
 const TOGGLED_LINE_KEYS = ['visible', 'color', 'style'];
 const BACKGROUND_FILL_KEYS = ['mode', 'color', 'bottomColor'];
+const QUOTE_LINES_KEYS = ['mode', 'bid', 'ask'];
 const TEXT_STYLE_KEYS = ['color', 'fontSize'];
 
 function readBoolean(raw: unknown): boolean | undefined {
@@ -227,6 +248,10 @@ function readDashStyle(raw: unknown): LineDashStyle | undefined {
 
 function readFillMode(raw: unknown): BackgroundFillMode | undefined {
   return BACKGROUND_FILL_MODES.find((mode) => mode === raw);
+}
+
+function readQuoteLineMode(raw: unknown): QuoteLineMode | undefined {
+  return QUOTE_LINE_MODES.find((mode) => mode === raw);
 }
 
 function readFontSize(raw: unknown): number | undefined {
@@ -307,6 +332,19 @@ function readBackgroundFill(raw: unknown): BackgroundFillValue | undefined {
   return { mode, color, bottomColor };
 }
 
+function readQuoteLines(raw: unknown): QuoteLinesValue | undefined {
+  if (!hasExactKeys(raw, QUOTE_LINES_KEYS)) {
+    return undefined;
+  }
+  const mode = readQuoteLineMode(raw.mode);
+  const bid = readColor(raw.bid);
+  const ask = readColor(raw.ask);
+  if (mode === undefined || bid === undefined || ask === undefined) {
+    return undefined;
+  }
+  return { mode, bid, ask };
+}
+
 function readTextStyle(raw: unknown): TextStyleValue | undefined {
   if (!hasExactKeys(raw, TEXT_STYLE_KEYS)) {
     return undefined;
@@ -321,6 +359,17 @@ function readTextStyle(raw: unknown): TextStyleValue | undefined {
 
 type SettingValueReader = (raw: unknown) => ChartSettingValue | undefined;
 
+/** Whether a value is the fill a background row edits: the mode it names and the two colours it paints between. */
+export function isBackgroundFillValue(value: unknown): value is BackgroundFillValue {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  if (!('mode' in value) || !('color' in value) || !('bottomColor' in value)) {
+    return false;
+  }
+  return readFillMode(value.mode) !== undefined;
+}
+
 /** One reader per kind; `choice` is read separately because it needs the field's options. */
 const SETTING_VALUE_READERS: Readonly<Record<Exclude<SettingKind, 'choice'>, SettingValueReader>> = {
   checkbox: readBoolean,
@@ -331,6 +380,7 @@ const SETTING_VALUE_READERS: Readonly<Record<Exclude<SettingKind, 'choice'>, Set
   toggledLine: readToggledLine,
   line: readLine,
   backgroundFill: readBackgroundFill,
+  quoteLines: readQuoteLines,
   textStyle: readTextStyle,
   percent: readPercent,
   barCount: readBarCount,

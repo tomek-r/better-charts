@@ -5,6 +5,7 @@ import { CheckboxSettingRow } from './settingRows/checkboxRows';
 import { ColorPairSettingRow, ColorSettingRow, ToggledColorPairSettingRow } from './settingRows/colorRows';
 import { LineSettingRow, ToggledLineSettingRow } from './settingRows/lineRows';
 import { BarCountSettingRow, PercentSettingRow } from './settingRows/numberRows';
+import { QuoteLinesSettingRow } from './settingRows/quoteRows';
 import { ChoiceSettingRow, LineWidthSettingRow } from './settingRows/selectRows';
 import type { SettingRowProps } from './settingRows/settingRowProps';
 
@@ -23,6 +24,7 @@ const SETTING_ROWS: {
   toggledLine: ToggledLineSettingRow,
   line: LineSettingRow,
   backgroundFill: BackgroundFillSettingRow,
+  quoteLines: QuoteLinesSettingRow,
   textStyle: TextStyleSettingRow,
 };
 

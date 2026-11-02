@@ -8,24 +8,7 @@ import {
 } from '../engine/surface/chartAppearance';
 import type { CanvasSettingValues } from './chartSettings';
 import { BACKGROUND_FILL_MODES, LINE_DASH_STYLES } from './settingFields';
-
-/** A stored setting object to read fields off; anything else stored for the key is unreadable. */
-function isSettingRecord(raw: unknown): raw is Readonly<Record<string, unknown>> {
-  return typeof raw === 'object' && raw !== null;
-}
-
-/** The option `raw` names; a stored name this build does not know reads as the default one. */
-function readOption<Option extends string>(raw: unknown, options: readonly Option[], fallback: Option): Option {
-  return options.find((option) => option === raw) ?? fallback;
-}
-
-function readColor(raw: unknown, fallback: string): string {
-  return typeof raw === 'string' ? raw : fallback;
-}
-
-function readNumber(raw: unknown, fallback: number): number {
-  return typeof raw === 'number' && Number.isFinite(raw) ? raw : fallback;
-}
+import { isSettingRecord, readColor, readNumber, readOption } from './settingValueReaders';
 
 /** One line as stored, each field that does not read falling back to the default one. */
 function readLine(raw: unknown, fallback: ChartLineAppearance): ChartLineAppearance {

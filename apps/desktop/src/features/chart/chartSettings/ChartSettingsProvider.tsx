@@ -15,6 +15,7 @@ import {
   type ChartSettings,
 } from './chartSettings';
 import { createTauriChartSettingsStore, type ChartSettingsStore, type StoredChartSettings } from './chartSettingsStore';
+import { scalesAppearanceOf } from './scalesAppearanceSetting';
 
 /** What the settings of the chart on screen offer: what it shows, and the ways to change it. */
 export interface ChartSettingsChoice {
@@ -208,6 +209,14 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
   useEffect(() => {
     chart.current?.setChartAppearance(chartAppearanceOf(canvasSettings));
   }, [canvasSettings, chart]);
+
+  // The engine draws what the Scales and lines tab sets: the A/L row, the countdown tag, the Bid/Ask
+  // quote and the labels of the time axis, the pointer and the footer clock. The scales values object
+  // is the dependency, so every preview and every keep reaches the chart.
+  const scalesSettings = settings.scales;
+  useEffect(() => {
+    chart.current?.setScalesAppearance(scalesAppearanceOf(scalesSettings));
+  }, [chart, scalesSettings]);
 
   return choice;
 }

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { TickMarkType } from 'lightweight-charts';
-import { createChartTimeFormat } from '../src/features/chart/timeZone/chartTimeFormat';
+import { createChartTimeFormat, MONTH_ABBREVIATIONS } from '../src/features/chart/timeZone/chartTimeFormat';
 import { EXCHANGE_TIME_ZONE, UTC_TIME_ZONE } from '../src/features/chart/timeZone/chartTimeZones';
 
 /** The time axis, pointer and clock text of a chosen zone. Pure Node. */
@@ -39,8 +39,6 @@ const brokerMidnightMs = Date.UTC(utcNow.getUTCFullYear(), utcNow.getUTCMonth(),
 const brokerMidnightSeconds = brokerMidnightMs / MS_PER_SECOND;
 /** Broker midnight in UTC terms: the wall time the axis shows when the day boundary is not local. */
 const brokerMidnightWallTime = utcHourMinuteText(brokerMidnightMs - BROKER_OFFSET_MINUTES * MS_PER_MINUTE);
-
-const SHORT_MONTH_FORMAT = new Intl.DateTimeFormat('en-GB', { timeZone: UTC_TIME_ZONE, month: 'short' });
 
 test('the pointer label keeps the reference layout', () => {
   const label = createChartTimeFormat(UTC_TIME_ZONE, 0).pointerLabel(utcBarSeconds);
@@ -90,7 +88,7 @@ test('a broker midnight that is not a local midnight shows the time', () => {
 test('a broker midnight names the day, the month and the year', () => {
   const format = createChartTimeFormat(UTC_TIME_ZONE, 0);
   const dayOfMonth = String(utcNow.getUTCDate());
-  const shortMonth = SHORT_MONTH_FORMAT.format(brokerMidnightMs);
+  const shortMonth = MONTH_ABBREVIATIONS[utcNow.getUTCMonth()];
   const year = String(utcNow.getUTCFullYear());
   expect(format.tickMarkLabel(brokerMidnightSeconds, TickMarkType.DayOfMonth)).toBe(dayOfMonth);
   expect(format.tickMarkLabel(brokerMidnightSeconds, TickMarkType.Month)).toBe(shortMonth);

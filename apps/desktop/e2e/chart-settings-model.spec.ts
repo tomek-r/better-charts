@@ -14,9 +14,12 @@ import {
   readChartSettingsLayer,
   resolveChartSettings,
   withCanvasValue,
+  withScalesValue,
   withSettingValue,
   withTimeZone,
 } from '../src/features/chart/chartSettings/chartSettings';
+import { SCALES_SETTINGS, scalesFields } from '../src/features/chart/chartSettings/scalesSettings';
+import type { QuoteLinesValue } from '../src/features/chart/chartSettings/settingFields';
 import { EXCHANGE_TIME_ZONE } from '../src/features/chart/timeZone/chartTimeZones';
 import { palette } from '../src/shared/theme/palette';
 
@@ -203,5 +206,92 @@ test('a canvas edit round-trips through one sparse layer', () => {
   const overrides = chartSettingsOverrides(DEFAULT_CHART_SETTINGS, edited);
 
   expect(overrides).toEqual({ canvas: { rightMargin: 3 } });
+  expect(resolveChartSettings([overrides])).toEqual(edited);
+});
+
+/** How the chart's scales and lines behave today, which is what every scales field defaults to. */
+const SCALES_DEFAULTS: Readonly<Record<string, unknown>> = {
+  scaleModeButtons: 'mouseOver',
+  countdown: true,
+  bidAsk: { mode: 'lineAndLabel', bid: palette.sell, ask: palette.buy },
+  dayOfWeek: true,
+  dateFormat: 'dayMonthYear',
+  hourFormat: 'h24',
+};
+
+/** The bid and ask with nothing drawn of them, as the dialog's Hidden option writes them. */
+const HIDDEN_QUOTES: QuoteLinesValue = { mode: 'hidden', bid: palette.sell, ask: palette.buy };
+
+test('every scales field defaults to the way the chart behaves today', () => {
+  expect(DEFAULT_CHART_SETTINGS.scales).toEqual(SCALES_DEFAULTS);
+  for (const field of scalesFields()) {
+    expect(field.defaultValue).toEqual(SCALES_DEFAULTS[field.key]);
+  }
+});
+
+test('the scales settings are drawn in the three sections the dialog lists, in order', () => {
+  expect(SCALES_SETTINGS.map((section) => section.title)).toEqual([
+    'Price scale',
+    'Price labels & lines',
+    'Time scale',
+  ]);
+  expect(scalesFields().map((field) => field.key)).toEqual(Object.keys(SCALES_DEFAULTS));
+});
+
+test('a chart scales override wins per field over the template it starts from', () => {
+  const templateLayer = readChartSettingsLayer({
+    scales: { scaleModeButtons: 'always', countdown: false, dateFormat: 'iso', hourFormat: 'h12' },
+  });
+  const overrideLayer = readChartSettingsLayer({ scales: { countdown: true, hourFormat: 'h24', dayOfWeek: true } });
+
+  const resolved = resolveChartSettings([templateLayer, overrideLayer]);
+
+  expect(resolved.scales).toEqual({
+    scaleModeButtons: 'always',
+    countdown: true,
+    bidAsk: SCALES_DEFAULTS.bidAsk,
+    dayOfWeek: true,
+    dateFormat: 'iso',
+    hourFormat: 'h24',
+  });
+});
+
+test('a stored scales layer keeps the fields it can read and drops the rest', () => {
+  const layer = readChartSettingsLayer({
+    scales: {
+      scaleModeButtons: 'sometimes',
+      countdown: false,
+      bidAsk: { mode: 'blink', bid: palette.sell, ask: palette.buy },
+      dayOfWeek: true,
+      dateFormat: 'julian',
+      hourFormat: 'h36',
+      unknownField: 3,
+    },
+  });
+
+  expect(layer).toEqual({ scales: { countdown: false, dayOfWeek: true } });
+});
+
+test('a stored bid and ask whose colour is not a colour is dropped whole', () => {
+  const layer = readChartSettingsLayer({ scales: { bidAsk: { mode: 'line', bid: 'nope', ask: palette.buy } } });
+
+  expect(layer).toEqual({});
+});
+
+test('a scales edit round-trips through one sparse layer', () => {
+  const edited = withScalesValue(DEFAULT_CHART_SETTINGS, 'countdown', false);
+
+  const overrides = chartSettingsOverrides(DEFAULT_CHART_SETTINGS, edited);
+
+  expect(overrides).toEqual({ scales: { countdown: false } });
+  expect(resolveChartSettings([overrides])).toEqual(edited);
+});
+
+test('a bid and ask edit round-trips through one sparse layer', () => {
+  const edited = withScalesValue(DEFAULT_CHART_SETTINGS, 'bidAsk', HIDDEN_QUOTES);
+
+  const overrides = chartSettingsOverrides(DEFAULT_CHART_SETTINGS, edited);
+
+  expect(overrides).toEqual({ scales: { bidAsk: HIDDEN_QUOTES } });
   expect(resolveChartSettings([overrides])).toEqual(edited);
 });

@@ -3,9 +3,11 @@ import { Select, type SelectOption } from '../../../../../shared/ui/select/Selec
 import {
   BACKGROUND_FILL_MODES,
   TEXT_FONT_SIZES,
+  isBackgroundFillValue,
   type BackgroundFillMode,
   type BackgroundFillValue,
 } from '../../settingFields';
+import { SelectWithSwatches } from './selectWithSwatches';
 import type { SettingRowProps } from './settingRowProps';
 
 const FILL_MODE_LABELS: Readonly<Record<BackgroundFillMode, string>> = { solid: 'Solid', gradient: 'Gradient' };
@@ -59,20 +61,17 @@ function BackgroundSwatches({ label, fill, onChange }: BackgroundSwatchesProps) 
 }
 
 export function BackgroundFillSettingRow({ field, value, onChange }: SettingRowProps<'backgroundFill'>) {
-  const fill = typeof value === 'object' && 'mode' in value ? value : field.defaultValue;
+  const fill: BackgroundFillValue = isBackgroundFillValue(value) ? value : field.defaultValue;
   return (
-    <>
-      <span>{field.label}</span>
-      <div className="chart-settings-controls">
-        <Select
-          ariaLabel={`${field.label} fill`}
-          options={FILL_MODE_OPTIONS}
-          value={fill.mode}
-          onChange={(choice) => onChange({ ...fill, mode: fillModeOf(choice) })}
-        />
-        <BackgroundSwatches label={field.label} fill={fill} onChange={onChange} />
-      </div>
-    </>
+    <SelectWithSwatches
+      label={field.label}
+      selectLabel={`${field.label} fill`}
+      options={FILL_MODE_OPTIONS}
+      value={fill.mode}
+      onChange={(choice) => onChange({ ...fill, mode: fillModeOf(choice) })}
+    >
+      <BackgroundSwatches label={field.label} fill={fill} onChange={onChange} />
+    </SelectWithSwatches>
   );
 }
 

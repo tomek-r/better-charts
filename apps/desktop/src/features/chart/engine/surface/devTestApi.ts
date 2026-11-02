@@ -16,6 +16,7 @@ import type { RenderBar } from '../bars/renderBar';
 import { candleSeriesColors, type CandlePointColors } from '../bars/candleAppearance';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
 import type { ChartLineAppearance } from './chartAppearance';
+import type { ChartScalesState } from './chartScalesAppearance';
 import { clearViewportChangeLog, viewportChangeLog, type ViewportChangeRecord } from '../viewport/viewportDiagnostics';
 
 /** One candle's time with the colours it overrides the series with, as a plain copy. */
@@ -92,6 +93,8 @@ export interface DevTestApi {
   pointerReadout(): PointerReadout | null;
   /** What the Canvas tab sets: the chart's own paint, its margins and the crosshair. */
   appearance(): ChartAppearanceState;
+  /** What the Scales and lines tab sets: the A/L row, the countdown tag, the quote and the time labels. */
+  scales(): ChartScalesState;
   priceScale(): {
     autoScale: boolean;
     mode: PriceScaleMode;
@@ -169,6 +172,7 @@ export interface DevTestApiSources {
   pointerReadout(): PointerReadout | null;
   rightMarginBars(): number;
   crosshairStyle(): ChartLineAppearance;
+  scalesState(): ChartScalesState;
 }
 
 /** The live readings the surface already publishes; the hook reads them through these. */
@@ -178,6 +182,7 @@ export interface DevTestReadings {
   visibleRange(): { from: number; to: number } | null;
   timeToX(timeMs: number): number;
   crosshairStyle(): ChartLineAppearance;
+  scalesState(): ChartScalesState;
 }
 
 /** The tool test surfaces the hook hands back per tool id. */
@@ -243,6 +248,7 @@ function buildDevTestApi({
   pointerReadout,
   rightMarginBars,
   crosshairStyle,
+  scalesState,
 }: DevTestApiSources): DevTestApi {
   return {
     data: () => bars().map((bar) => ({ ...bar })),
@@ -257,6 +263,7 @@ function buildDevTestApi({
     selectedDrawing: () => drawings.selected(),
     pointerReadout,
     appearance: () => appearanceState({ chart, rightMarginBars, crosshairStyle }),
+    scales: scalesState,
     priceScale: () => {
       const scale = chart.priceScale('right');
       const options = scale.options();
@@ -303,6 +310,7 @@ export function installChartDevTestApi(
     pointerReadout: () => pointerReadout.readout(),
     rightMarginBars: () => pane.rightMarginBars(),
     crosshairStyle: () => readings.crosshairStyle(),
+    scalesState: () => readings.scalesState(),
   });
 }
 

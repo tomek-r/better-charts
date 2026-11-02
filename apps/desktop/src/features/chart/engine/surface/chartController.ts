@@ -5,8 +5,8 @@ import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayRenderer';
 import { createChartSurface } from './chartSurface';
 import type { ChartAppearance, ChartLineAppearance } from './chartAppearance';
+import type { ChartScalesAppearance, ChartScalesState } from './chartScalesAppearance';
 import { ChartAppearanceController } from './chartAppearanceController';
-import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
 import { BrokerTime } from '../brokerTime/brokerTime';
 import { ChartTimeZoneDisplay } from '../brokerTime/chartTimeZoneDisplay';
 import { BarCountdownPrimitive } from '../barCountdown/barCountdownPrimitive';
@@ -71,9 +71,7 @@ export class ChartController {
   private readonly connection: ConnectionIndicator;
   // Broker time from the live ticks; the countdown and the time zone clock both read it.
   private readonly brokerTime = new BrokerTime();
-  private readonly countdownPrimitive = new BarCountdownPrimitive(this.brokerTime, {
-    backColor: TRADING_COLORS.sell,
-  });
+  private readonly countdownPrimitive = new BarCountdownPrimitive(this.brokerTime);
   private readonly scaleControls: PriceScaleController;
   // Every tool shares the pointer's time/price labels, and the tools' above-trading-overlays layer
   // is painted by it just before them. Attached for the chart's life, drawn only while
@@ -85,10 +83,7 @@ export class ChartController {
   // The Bid/Ask lines are native price lines; their tags are price-axis labels
   // positioned by this primitive, because the library's own label alignment
   // restacks them around the last price on every tick (see the chart options).
-  private readonly priceTags = new PriceAxisTagsPrimitive({
-    askColor: TRADING_COLORS.buy,
-    bidColor: TRADING_COLORS.sell,
-  });
+  private readonly priceTags = new PriceAxisTagsPrimitive();
   // The bar cache, its interval and the price precision are owned by
   // BarSeriesController; the `bars` accessor below is the read-only seam onto it.
   private readonly data: BarSeriesController;
@@ -288,6 +283,25 @@ export class ChartController {
     if (this.appearance.apply(appearance)) {
       this.refreshOverlays();
     }
+  }
+  /**
+   * Applies the Scales and lines tab: how the A/L row reaches the screen, whether the countdown tag is
+   * drawn, what the Bid/Ask quote draws of itself, and how the axis, the pointer and the footer write time.
+   */
+  setScalesAppearance(appearance: ChartScalesAppearance): void {
+    this.scaleControls.setScaleModeButtons(appearance.scaleModeButtons);
+    this.countdown.setShown(appearance.countdown);
+    this.priceLines.setBidAskAppearance(appearance.bidAsk);
+    this.timeZoneDisplay.setLabels(appearance.timeLabels);
+  }
+  /** What the chart draws of the Scales and lines tab, read back from the collaborators that own each part. */
+  scalesState(): ChartScalesState {
+    return {
+      scaleModeButtons: this.scaleControls.scaleModeButtons(),
+      countdownVisible: this.countdown.shown(),
+      bidAsk: this.priceLines.bidAskState(),
+      timeLabels: this.timeZoneDisplay.labels(),
+    };
   }
   /** The colour and dash of the pointer's crosshair lines, which every tool draws the pointer with. */
   crosshairStyle(): ChartLineAppearance {

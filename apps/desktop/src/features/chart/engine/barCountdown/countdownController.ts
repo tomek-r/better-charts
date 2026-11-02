@@ -50,6 +50,18 @@ export class CountdownController {
     this.sync();
   }
 
+  /** Whether the tag is drawn: what the Countdown setting asks of the chart. */
+  setShown(shown: boolean): void {
+    if (shown !== this.primitive.shown()) {
+      this.primitive.applyOptions({ shown });
+    }
+  }
+
+  /** Whether the tag is drawn right now, which the dev test hook reads back. */
+  shown(): boolean {
+    return this.primitive.shown();
+  }
+
   setConnection(state: BridgeState): void {
     this.state.connected = state === 'connected';
   }

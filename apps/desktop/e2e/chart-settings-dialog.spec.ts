@@ -80,6 +80,14 @@ async function openCanvasTab(page: Page): Promise<Locator> {
   return dialog;
 }
 
+/** Opens the dialog and switches to the Scales and lines tab, where the price and time scales are edited. */
+async function openScalesTab(page: Page): Promise<Locator> {
+  const dialog = await openSettingsDialog(page);
+  await dialog.getByRole('tab', { name: 'Scales and lines' }).click();
+  await expect(dialog.getByRole('tab', { name: 'Scales and lines' })).toHaveAttribute('aria-selected', 'true');
+  return dialog;
+}
+
 /** Unchecks the candle body and waits for the chart to draw the bodies hidden. */
 async function hideCandleBodies(page: Page, dialog: Locator): Promise<void> {
   await dialog.getByRole('checkbox', { name: 'Body' }).uncheck();
@@ -116,6 +124,13 @@ async function lineHeightPixels(label: Locator): Promise<number> {
     line.remove();
     return height;
   });
+}
+
+/** Clicks OK, waits for the dialog to go, and waits for the stub to hold exactly this chart's overrides. */
+async function expectKeptOverrides(page: Page, dialog: Locator, overrides: Record<string, unknown>): Promise<void> {
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => stubChartSettingOverrides(page)).toEqual({ [EURUSD_CHART]: overrides });
 }
 
 test('the chart menu lists the view command, a separator and the settings, which open the dialog', async ({ page }) => {
@@ -188,10 +203,8 @@ test('OK stores coloring by the previous close without moving the visible bars, 
   await expect.poll(() => coloredPointCount(page)).toBe(STUB_BAR_COUNT);
   expect(await page.evaluate(() => window.__chartTest!.visibleRange())).toEqual(rangeBeforeToggle);
 
-  await dialog.getByRole('button', { name: 'OK' }).click();
-  await expect(dialog).toHaveCount(0);
   const overrides = { barStyles: { candles: { colorByPreviousClose: true } } };
-  await expect.poll(() => stubChartSettingOverrides(page)).toEqual({ [EURUSD_CHART]: overrides });
+  await expectKeptOverrides(page, dialog, overrides);
   expect(await lastSavedOverridesArgs(page)).toEqual({
     chartId: STUB_CHART_ID,
     accountKey: ACCOUNT_KEY,
@@ -344,11 +357,8 @@ test('unchecking the vertical grid lines then OK stores exactly that canvas over
   const dialog = await openCanvasTab(page);
 
   await dialog.getByRole('checkbox', { name: 'Vertical grid lines', exact: true }).uncheck();
-  await dialog.getByRole('button', { name: 'OK' }).click();
-  await expect(dialog).toHaveCount(0);
-
   const overrides = { canvas: { verticalGrid: { visible: false, color: palette.borderSubtle, style: 'solid' } } };
-  await expect.poll(() => stubChartSettingOverrides(page)).toEqual({ [EURUSD_CHART]: overrides });
+  await expectKeptOverrides(page, dialog, overrides);
   expectNoErrors(collected);
 });
 
@@ -370,10 +380,7 @@ test('typing 3 in the right margin then OK stores just that canvas override', as
   const dialog = await openCanvasTab(page);
 
   await dialog.getByRole('spinbutton', { name: 'Right', exact: true }).fill('3');
-  await dialog.getByRole('button', { name: 'OK' }).click();
-  await expect(dialog).toHaveCount(0);
-
-  await expect.poll(() => stubChartSettingOverrides(page)).toEqual({ [EURUSD_CHART]: { canvas: { rightMargin: 3 } } });
+  await expectKeptOverrides(page, dialog, { canvas: { rightMargin: 3 } });
   expectNoErrors(collected);
 });
 
@@ -384,6 +391,67 @@ test('Cancel on the Canvas tab saves nothing', async ({ page }) => {
   await dialog.getByRole('checkbox', { name: 'Vertical grid lines', exact: true }).uncheck();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
+
+  expect(await saveCount(page)).toBe(0);
+  expectNoErrors(collected);
+});
+
+test('the tabs read Symbol, Scales and lines, Canvas in that order', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openSettingsDialog(page);
+
+  await expect(dialog.getByRole('tab')).toHaveText(['Symbol', 'Scales and lines', 'Canvas']);
+  expectNoErrors(collected);
+});
+
+test('the Scales and lines tab lists the price scale, its labels and lines, and the time scale', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openScalesTab(page);
+
+  for (const heading of ['Price scale', 'Price labels & lines', 'Time scale']) {
+    await expect(dialog.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+  }
+  for (const name of ['Countdown to bar close', 'Day of week on labels']) {
+    await expect(dialog.getByRole('checkbox', { name, exact: true })).toBeVisible();
+  }
+  for (const name of ['Scale modes (A and L)', 'Bid and ask display', 'Bid colour', 'Ask colour', 'Date format']) {
+    await expect(dialog.getByRole('button', { name, exact: true })).toBeVisible();
+  }
+  await expect(dialog.getByRole('button', { name: 'Time hours format', exact: true })).toBeVisible();
+  expectNoErrors(collected);
+});
+
+test('unchecking the countdown then OK stores exactly that scales override', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openScalesTab(page);
+
+  await dialog.getByRole('checkbox', { name: 'Countdown to bar close', exact: true }).uncheck();
+  await expectKeptOverrides(page, dialog, { scales: { countdown: false } });
+  expectNoErrors(collected);
+});
+
+test('choosing Hidden for Bid and ask then OK stores the mode with both colours', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openScalesTab(page);
+
+  await dialog.getByRole('button', { name: 'Bid and ask display', exact: true }).click();
+  await page.getByRole('option', { name: 'Hidden', exact: true }).click();
+  const bidAsk = { mode: 'hidden', bid: palette.sell, ask: palette.buy };
+  await expectKeptOverrides(page, dialog, { scales: { bidAsk } });
+  expectNoErrors(collected);
+});
+
+test('Cancel on the Scales and lines tab puts the chart back without storing anything', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openScalesTab(page);
+
+  await dialog.getByRole('checkbox', { name: 'Countdown to bar close', exact: true }).uncheck();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // The dialog opens again on the countdown the chart kept, which the cancelled edit never reached.
+  const reopened = await openScalesTab(page);
+  await expect(reopened.getByRole('checkbox', { name: 'Countdown to bar close', exact: true })).toBeChecked();
 
   expect(await saveCount(page)).toBe(0);
   expectNoErrors(collected);
