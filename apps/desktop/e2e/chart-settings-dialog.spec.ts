@@ -165,6 +165,27 @@ test('the gear in the chart corner opens the same dialog', async ({ page }) => {
   expect(Math.abs(gearBox.x + gearBox.width - (host.x + host.width))).toBeLessThanOrEqual(1);
   expect(Math.abs(gearBox.y + gearBox.height - (host.y + host.height))).toBeLessThanOrEqual(1);
 
+  // The box is the corner cell the two axes make: it starts past the price axis' border line on the left
+  // and below the time axis' border line on top, so its chip lines up with the axes instead of covering them.
+  // The axes are re-measured with the width of the price labels, so they are read with the gear's box.
+  const corner = await page.evaluate(() => {
+    const gearElement = document.querySelector('.chart-settings-corner-button');
+    const hostElement = document.querySelector('.chart-host');
+    if (gearElement === null || hostElement === null) {
+      throw new Error('the gear or the chart host is missing');
+    }
+    const gearRect = gearElement.getBoundingClientRect();
+    const hostRect = hostElement.getBoundingClientRect();
+    const scale = window.__chartTest!.priceScale();
+    return {
+      gear: { left: gearRect.left, top: gearRect.top },
+      priceAxisLeft: hostRect.right - scale.axisWidth,
+      timeAxisTop: hostRect.bottom - scale.timeAxisHeight,
+    };
+  });
+  expect(corner.gear.left).toBeGreaterThanOrEqual(corner.priceAxisLeft + 1);
+  expect(corner.gear.top).toBeGreaterThanOrEqual(corner.timeAxisTop + 1);
+
   await gear.click();
   const dialog = chartSettingsDialog(page);
   await expect(dialog).toBeVisible();
@@ -349,6 +370,44 @@ test('the Canvas tab lists the chart canvas settings in its three groups', async
   await waitForDialogSettled(dialog);
   const gridLineSwatch = dialog.getByRole('button', { name: 'Vertical grid lines colour', exact: true });
   expect((await gridLineSwatch.boundingBox())!.width).toBeLessThan(100);
+  expectNoErrors(collected);
+});
+
+test('the Vertical grid lines colour picker offers line styles and no thickness', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openCanvasTab(page);
+
+  await dialog.getByRole('button', { name: 'Vertical grid lines colour', exact: true }).click();
+  const picker = page.getByRole('dialog', { name: 'Vertical grid lines colour options' });
+
+  // The chart draws grid lines one pixel wide, so this line's picker has no thickness to offer.
+  await expect(picker.getByRole('group', { name: 'Line style' })).toBeVisible();
+  await expect(picker.getByText('Thickness')).toHaveCount(0);
+  expectNoErrors(collected);
+});
+
+test('the Crosshair picker offers four thicknesses, and choosing one then OK stores the width', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  const dialog = await openCanvasTab(page);
+
+  await dialog.getByRole('button', { name: 'Crosshair', exact: true }).click();
+  const picker = page.getByRole('dialog', { name: 'Crosshair options' });
+  const thickness = picker.getByRole('group', { name: 'Thickness' });
+
+  for (const width of [1, 2, 3, 4]) {
+    await expect(thickness.getByRole('button', { name: `${width} px`, exact: true })).toBeVisible();
+  }
+  await expect(thickness.getByRole('button')).toHaveCount(4);
+  await expect(picker.getByRole('group', { name: 'Line style' })).toBeVisible();
+
+  await thickness.getByRole('button', { name: '2 px', exact: true }).click();
+  await expect(thickness.getByRole('button', { name: '2 px', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  // Escape closes the picker alone; the dialog below it stays to be kept.
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
+
+  const crosshair = { color: palette.textLabel, style: 'solid', width: 2 };
+  await expectKeptOverrides(page, dialog, { canvas: { crosshair } });
   expectNoErrors(collected);
 });
 

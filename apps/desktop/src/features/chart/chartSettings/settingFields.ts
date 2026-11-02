@@ -21,6 +21,12 @@ export type LineValue = {
   readonly style: LineDashStyle;
 };
 
+/** A line a setting draws at a thickness it sets too, such as the pointer's crosshair. */
+export type SizedLineValue = LineValue & {
+  /** The line's thickness in whole CSS pixels. */
+  readonly width: number;
+};
+
 /** A line a checkbox draws and hides, such as a grid line. */
 export type ToggledLineValue = {
   readonly visible: boolean;
@@ -61,6 +67,9 @@ export type TextStyleValue = {
 /** The dash patterns a line can be drawn with. */
 export const LINE_DASH_STYLES: readonly LineDashStyle[] = ['solid', 'dashed', 'dotted'];
 
+/** The thicknesses a line can be drawn at, in whole CSS pixels, which a thickness picker offers. */
+export const LINE_WIDTHS: readonly number[] = [1, 2, 3, 4];
+
 /** The sizes text can be drawn at, in pixels. */
 export const TEXT_FONT_SIZES: readonly number[] = [10, 11, 12, 13, 14, 16, 18, 20];
 
@@ -84,6 +93,7 @@ export type ChartSettingValue =
   | ColorPairValue
   | ToggledColorPairValue
   | LineValue
+  | SizedLineValue
   | ToggledLineValue
   | BackgroundFillValue
   | QuoteLinesValue
@@ -139,6 +149,11 @@ export interface LineSettingField extends SettingFieldIdentity {
   readonly defaultValue: LineValue;
 }
 
+export interface SizedLineSettingField extends SettingFieldIdentity {
+  readonly kind: 'sizedLine';
+  readonly defaultValue: SizedLineValue;
+}
+
 export interface BackgroundFillSettingField extends SettingFieldIdentity {
   readonly kind: 'backgroundFill';
   readonly defaultValue: BackgroundFillValue;
@@ -179,6 +194,7 @@ export type ChartSettingField =
   | LineWidthSettingField
   | ToggledLineSettingField
   | LineSettingField
+  | SizedLineSettingField
   | BackgroundFillSettingField
   | QuoteLinesSettingField
   | TextStyleSettingField
@@ -194,16 +210,17 @@ export interface SettingsSectionFields {
 
 type SettingKind = ChartSettingField['kind'];
 
-/** The whole pixel widths a line field can name. */
-const LINE_WIDTH_RANGE: NumberRange = { min: 1, max: 4 };
-
 const COLOR_PAIR_KEYS = ['up', 'down'];
 const TOGGLED_COLOR_PAIR_KEYS = ['visible', 'up', 'down'];
 const LINE_KEYS = ['color', 'style'];
+const SIZED_LINE_KEYS = ['color', 'style', 'width'];
 const TOGGLED_LINE_KEYS = ['visible', 'color', 'style'];
 const BACKGROUND_FILL_KEYS = ['mode', 'color', 'bottomColor'];
 const QUOTE_LINES_KEYS = ['mode', 'bid', 'ask'];
 const TEXT_STYLE_KEYS = ['color', 'fontSize'];
+
+/** The thickness a value stored before a line had a width reads as. */
+const DEFAULT_LINE_WIDTH = 1;
 
 function readBoolean(raw: unknown): boolean | undefined {
   return typeof raw === 'boolean' ? raw : undefined;
@@ -224,7 +241,7 @@ function readIntegerInRange(raw: unknown, range: NumberRange): number | undefine
 }
 
 function readLineWidth(raw: unknown): number | undefined {
-  return readIntegerInRange(raw, LINE_WIDTH_RANGE);
+  return LINE_WIDTHS.find((width) => width === raw);
 }
 
 function readPercent(raw: unknown): number | undefined {
@@ -307,6 +324,26 @@ function readLine(raw: unknown): LineValue | undefined {
   return hasExactKeys(raw, LINE_KEYS) ? readLineParts(raw) : undefined;
 }
 
+/** The colour and dash a record holds at `width`, undefined when any of the three does not read. */
+function sizedLineOf(record: Readonly<Record<string, unknown>>, width: number | undefined): SizedLineValue | undefined {
+  const line = readLineParts(record);
+  if (line === undefined || width === undefined) {
+    return undefined;
+  }
+  return { ...line, width };
+}
+
+/**
+ * A line with the thickness it is drawn at. A value stored before the width existed keeps its
+ * colour and dash, and reads one pixel wide.
+ */
+function readSizedLine(raw: unknown): SizedLineValue | undefined {
+  if (hasExactKeys(raw, LINE_KEYS)) {
+    return sizedLineOf(raw, DEFAULT_LINE_WIDTH);
+  }
+  return hasExactKeys(raw, SIZED_LINE_KEYS) ? sizedLineOf(raw, readLineWidth(raw.width)) : undefined;
+}
+
 function readToggledLine(raw: unknown): ToggledLineValue | undefined {
   if (!hasExactKeys(raw, TOGGLED_LINE_KEYS)) {
     return undefined;
@@ -379,6 +416,7 @@ const SETTING_VALUE_READERS: Readonly<Record<Exclude<SettingKind, 'choice'>, Set
   lineWidth: readLineWidth,
   toggledLine: readToggledLine,
   line: readLine,
+  sizedLine: readSizedLine,
   backgroundFill: readBackgroundFill,
   quoteLines: readQuoteLines,
   textStyle: readTextStyle,

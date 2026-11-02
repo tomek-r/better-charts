@@ -4,9 +4,9 @@ import type {
   BarCountSettingField,
   ChartSettingField,
   ColorSettingField,
-  LineSettingField,
   PercentSettingField,
   SettingsSectionFields,
+  SizedLineSettingField,
   TextStyleSettingField,
   ToggledLineSettingField,
 } from './settingFields';
@@ -34,11 +34,12 @@ const HORIZONTAL_GRID_FIELD: ToggledLineSettingField = {
   defaultValue: { visible: true, color: palette.borderSubtle, style: 'solid' },
 };
 
-const CROSSHAIR_FIELD: LineSettingField = {
-  kind: 'line',
+/** The app draws the crosshair itself, so it is the one canvas line whose thickness the settings set. */
+const CROSSHAIR_FIELD: SizedLineSettingField = {
+  kind: 'sizedLine',
   key: 'crosshair',
   label: 'Crosshair',
-  defaultValue: { color: palette.textLabel, style: 'solid' },
+  defaultValue: { color: palette.textLabel, style: 'solid', width: 1 },
 };
 
 const SCALE_TEXT_FIELD: TextStyleSettingField = {

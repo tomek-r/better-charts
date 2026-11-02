@@ -7,9 +7,12 @@ export interface CrosshairTestApi {
   linesVisible(): boolean;
 }
 
-/** A line through a CSS-px coordinate, in device pixels: the whole-pixel thickness and where it starts. */
-function snappedLine(pointCss: number, pixelRatio: number): { start: number; thickness: number } {
-  const thickness = Math.max(1, Math.floor(pixelRatio));
+/**
+ * A line through a CSS-px coordinate, in device pixels: the whole-pixel thickness the settings ask
+ * for and the pixel the line starts at, centred on the pointer.
+ */
+function snappedLine(pointCss: number, pixelRatio: number, width: number): { start: number; thickness: number } {
+  const thickness = Math.max(1, Math.round(width * pixelRatio));
   return { start: Math.round(pointCss * pixelRatio - thickness / 2), thickness };
 }
 
@@ -39,11 +42,10 @@ function paintRun(
 }
 
 /**
- * Draws full-width and full-height 1 CSS px lines through the pointer while active
- * and the pointer is over the pane, in the colour and dash the chart's settings give
- * the crosshair. They continue over both axes, so the engine's time and price labels
- * are visibly attached to them. The labels themselves belong to the engine and
- * follow every tool.
+ * Draws full-width and full-height lines through the pointer while active and the pointer is
+ * over the pane, in the colour, dash and thickness the chart's settings give the crosshair.
+ * They continue over both axes, so the engine's time and price labels are visibly attached to
+ * them. The labels themselves belong to the engine and follow every tool.
  */
 export class CrosshairTool implements ChartTool {
   /** Pointer position in pane CSS px; null while it is outside the pane or the tool is not active. */
@@ -78,18 +80,18 @@ export class CrosshairTool implements ChartTool {
     // is exactly lineWidth pixels wide at every pixel ratio.
     const { horizontalPixelRatio, verticalPixelRatio, width, height } = target.bitmap;
     const { surface } = target.layer;
-    const { color, style } = this.host.crosshairStyle();
+    const { color, style, width: lineWidth } = this.host.crosshairStyle();
     const pattern = dashPatternOf(style);
     target.bitmap.withContext((context) => {
       context.fillStyle = color;
       if (surface !== 'priceAxis') {
-        const { start, thickness } = snappedLine(point.x, horizontalPixelRatio);
+        const { start, thickness } = snappedLine(point.x, horizontalPixelRatio, lineWidth);
         paintRun(height, pattern, verticalPixelRatio, (offset, run) => {
           context.fillRect(start, offset, thickness, run);
         });
       }
       if (surface !== 'timeAxis') {
-        const { start, thickness } = snappedLine(point.y, verticalPixelRatio);
+        const { start, thickness } = snappedLine(point.y, verticalPixelRatio, lineWidth);
         paintRun(width, pattern, horizontalPixelRatio, (offset, run) => {
           context.fillRect(offset, start, run, thickness);
         });

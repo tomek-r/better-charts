@@ -4,10 +4,11 @@ import {
   type ChartBackgroundAppearance,
   type ChartLineAppearance,
   type ChartScaleTextAppearance,
+  type ChartSizedLineAppearance,
   type ChartToggledLineAppearance,
 } from '../engine/surface/chartAppearance';
 import type { CanvasSettingValues } from './chartSettings';
-import { BACKGROUND_FILL_MODES, LINE_DASH_STYLES } from './settingFields';
+import { BACKGROUND_FILL_MODES, LINE_DASH_STYLES, LINE_WIDTHS } from './settingFields';
 import { isSettingRecord, readColor, readNumber, readOption } from './settingValueReaders';
 
 /** One line as stored, each field that does not read falling back to the default one. */
@@ -19,6 +20,14 @@ function readLine(raw: unknown, fallback: ChartLineAppearance): ChartLineAppeara
     color: readColor(raw.color, fallback.color),
     style: readOption(raw.style, LINE_DASH_STYLES, fallback.style),
   };
+}
+
+/** One line with the thickness it is drawn at, its width falling back like the rest of the line. */
+function readSizedLine(raw: unknown, fallback: ChartSizedLineAppearance): ChartSizedLineAppearance {
+  if (!isSettingRecord(raw)) {
+    return fallback;
+  }
+  return { ...readLine(raw, fallback), width: readOption(raw.width, LINE_WIDTHS, fallback.width) };
 }
 
 /** One line a checkbox shows and hides, its visibility falling back like the line itself. */
@@ -58,7 +67,7 @@ export function chartAppearanceOf(canvas: CanvasSettingValues): ChartAppearance 
     background: readBackground(canvas.background),
     verticalGrid: readToggledLine(canvas.verticalGrid, defaults.verticalGrid),
     horizontalGrid: readToggledLine(canvas.horizontalGrid, defaults.horizontalGrid),
-    crosshair: readLine(canvas.crosshair, defaults.crosshair),
+    crosshair: readSizedLine(canvas.crosshair, defaults.crosshair),
     scaleText: readScaleText(canvas.scaleText),
     scaleLines: readColor(canvas.scaleLines, defaults.scaleLines),
     topMarginPercent: readNumber(canvas.topMargin, defaults.topMarginPercent),

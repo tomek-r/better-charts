@@ -9,3 +9,15 @@
   background: var(--color-panel);
   box-shadow: 0 12px 32px var(--color-scrim-strong);
 }
+
+/* A popup that neither side of its anchor can hold is capped in height by usePopupPlacement, which marks it
+   here: its content scrolls inside it, and its rows keep their height instead of being squashed by the
+   column layout of a picker. */
+.popup-surface[data-capped] {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.popup-surface[data-capped] > * {
+  flex-shrink: 0;
+}

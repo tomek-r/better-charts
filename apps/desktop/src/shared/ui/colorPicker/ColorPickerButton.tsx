@@ -7,6 +7,9 @@ import { LinePreview } from './LinePreview';
 /** Shown while the stored colour is unreadable, so the swatch and the picker still render. */
 const FALLBACK_COLOR = '#000000';
 
+/** The width of a line whose picker offers none: the chart draws those lines one pixel wide. */
+const FIXED_LINE_WIDTH = 1;
+
 interface ColorPickerButtonProps {
   /** Names the setting: the button's accessible name, e.g. "POC colour". */
   readonly label: string;
@@ -51,7 +54,7 @@ export function ColorPickerButton({ label, color, onColorChange, line, disabled 
       >
         <span className="color-face">
           {line ? (
-            <LinePreview color={shownColor} width={line.width} dash={line.dashStyle} />
+            <LinePreview color={shownColor} width={line.thickness?.width ?? FIXED_LINE_WIDTH} dash={line.dashStyle} />
           ) : (
             <span className="color-face-fill" style={{ backgroundColor: shownColor }} />
           )}

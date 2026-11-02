@@ -19,7 +19,7 @@ import {
   withTimeZone,
 } from '../src/features/chart/chartSettings/chartSettings';
 import { SCALES_SETTINGS, scalesFields } from '../src/features/chart/chartSettings/scalesSettings';
-import type { QuoteLinesValue } from '../src/features/chart/chartSettings/settingFields';
+import type { QuoteLinesValue, SizedLineValue } from '../src/features/chart/chartSettings/settingFields';
 import { EXCHANGE_TIME_ZONE } from '../src/features/chart/timeZone/chartTimeZones';
 import { palette } from '../src/shared/theme/palette';
 
@@ -140,7 +140,7 @@ const CANVAS_DEFAULTS: Readonly<Record<string, unknown>> = {
   background: { mode: 'solid', color: palette.overlay, bottomColor: palette.overlay },
   verticalGrid: { visible: true, color: palette.borderSubtle, style: 'solid' },
   horizontalGrid: { visible: true, color: palette.borderSubtle, style: 'solid' },
-  crosshair: { color: palette.textLabel, style: 'solid' },
+  crosshair: { color: palette.textLabel, style: 'solid', width: 1 },
   scaleText: { color: palette.mutedStrong, fontSize: 11 },
   scaleLines: palette.border,
   topMargin: 12,
@@ -161,6 +161,7 @@ test('the canvas settings are drawn in the three sections the dialog lists, in o
 });
 
 test('a chart canvas override wins per field over the template it starts from', () => {
+  // The crosshair is stored the way a build before the width existed stored it: two keys, no width.
   const templateLayer = readChartSettingsLayer({
     canvas: { topMargin: 20, crosshair: { color: palette.info, style: 'dashed' } },
   });
@@ -170,7 +171,7 @@ test('a chart canvas override wins per field over the template it starts from', 
 
   expect(resolved.canvas.topMargin).toBe(30);
   expect(resolved.canvas.rightMargin).toBe(12);
-  expect(resolved.canvas.crosshair).toEqual({ color: palette.info, style: 'dashed' });
+  expect(resolved.canvas.crosshair).toEqual({ color: palette.info, style: 'dashed', width: 1 });
   expect(resolved.canvas.bottomMargin).toBe(18);
   expect(resolved.canvas.background).toEqual(CANVAS_DEFAULTS.background);
 });
@@ -206,6 +207,40 @@ test('a canvas edit round-trips through one sparse layer', () => {
   const overrides = chartSettingsOverrides(DEFAULT_CHART_SETTINGS, edited);
 
   expect(overrides).toEqual({ canvas: { rightMargin: 3 } });
+  expect(resolveChartSettings([overrides])).toEqual(edited);
+});
+
+test('the crosshair is the one canvas line whose thickness the settings set', () => {
+  const kindByKey = new Map(canvasFields().map((field) => [field.key, field.kind]));
+
+  expect(kindByKey.get('crosshair')).toBe('sizedLine');
+  expect(kindByKey.get('verticalGrid')).toBe('toggledLine');
+  expect(kindByKey.get('horizontalGrid')).toBe('toggledLine');
+});
+
+test('a crosshair stored before it had a width keeps its colour and dash, one pixel wide', () => {
+  const layer = readChartSettingsLayer({ canvas: { crosshair: { color: palette.info, style: 'dashed' } } });
+
+  expect(layer).toEqual({ canvas: { crosshair: { color: palette.info, style: 'dashed', width: 1 } } });
+});
+
+test('a stored crosshair whose width is not one of the four is dropped', () => {
+  for (const width of [5, 1.5, 0]) {
+    const layer = readChartSettingsLayer({
+      canvas: { crosshair: { color: palette.textLabel, style: 'solid', width } },
+    });
+
+    expect(layer).toEqual({});
+  }
+});
+
+test('a crosshair thickness edit round-trips through one sparse layer', () => {
+  const crosshair: SizedLineValue = { color: palette.textLabel, style: 'solid', width: 2 };
+  const edited = withCanvasValue(DEFAULT_CHART_SETTINGS, 'crosshair', crosshair);
+
+  const overrides = chartSettingsOverrides(DEFAULT_CHART_SETTINGS, edited);
+
+  expect(overrides).toEqual({ canvas: { crosshair } });
   expect(resolveChartSettings([overrides])).toEqual(edited);
 });
 

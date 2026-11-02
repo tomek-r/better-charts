@@ -8,8 +8,12 @@ export function isSettingRecord(raw: unknown): raw is Readonly<Record<string, un
   return typeof raw === 'object' && raw !== null;
 }
 
-/** The option `raw` names; a stored name this build does not know reads as the default one. */
-export function readOption<Option extends string>(raw: unknown, options: readonly Option[], fallback: Option): Option {
+/** The option `raw` names, such as a dash style or a line width; an unknown one reads as the default. */
+export function readOption<Option extends string | number>(
+  raw: unknown,
+  options: readonly Option[],
+  fallback: Option,
+): Option {
   return options.find((option) => option === raw) ?? fallback;
 }
 

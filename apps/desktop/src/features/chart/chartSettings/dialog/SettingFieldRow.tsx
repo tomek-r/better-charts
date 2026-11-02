@@ -3,7 +3,7 @@ import type { ChartSettingField, ChartSettingValue } from '../settingFields';
 import { BackgroundFillSettingRow, TextStyleSettingRow } from './settingRows/appearanceRows';
 import { CheckboxSettingRow } from './settingRows/checkboxRows';
 import { ColorPairSettingRow, ColorSettingRow, ToggledColorPairSettingRow } from './settingRows/colorRows';
-import { LineSettingRow, ToggledLineSettingRow } from './settingRows/lineRows';
+import { LineSettingRow, SizedLineSettingRow, ToggledLineSettingRow } from './settingRows/lineRows';
 import { BarCountSettingRow, PercentSettingRow } from './settingRows/numberRows';
 import { QuoteLinesSettingRow } from './settingRows/quoteRows';
 import { ChoiceSettingRow, LineWidthSettingRow } from './settingRows/selectRows';
@@ -23,6 +23,7 @@ const SETTING_ROWS: {
   barCount: BarCountSettingRow,
   toggledLine: ToggledLineSettingRow,
   line: LineSettingRow,
+  sizedLine: SizedLineSettingRow,
   backgroundFill: BackgroundFillSettingRow,
   quoteLines: QuoteLinesSettingRow,
   textStyle: TextStyleSettingRow,

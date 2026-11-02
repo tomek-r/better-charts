@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { ColorType, LineStyle } from 'lightweight-charts';
 import type { ChartAppearanceState } from '../src/features/chart/engine/surface/devTestApi';
 import { palette } from '../src/shared/theme/palette';
+import { decodePng, parseHexColor, pixelAt } from './helpers/pngPixels';
 import { chartScopeKey, expectNoErrors, gotoWithStub } from './helpers/tauriStub';
 
 /**
@@ -21,6 +22,18 @@ const SEEDED_TOP_COLOR = '#101010';
 const SEEDED_BOTTOM_COLOR = '#303030';
 /** Empty bars after the last one, well away from the default five. */
 const SEEDED_RIGHT_MARGIN = 12;
+/** A crosshair three times as thick as the default one. */
+const SEEDED_CROSSHAIR_WIDTH = 3;
+/** A red no palette colour is, so only the seeded crosshair can paint it. */
+const SEEDED_CROSSHAIR_COLOR = '#ff0000';
+/** The seeded crosshair's colour as a screenshot decodes it. */
+const SEEDED_CROSSHAIR_RGB = parseHexColor(SEEDED_CROSSHAIR_COLOR).join();
+/** Where in the pane the pointer rests while a crosshair line is measured. */
+const POINTER = { x: 300, y: 150 };
+/** Half the pane slice a line's thickness is counted across. */
+const LINE_CLIP_HALF_WIDTH = 8;
+/** How far above the pointer the slice is taken, clear of the horizontal line. */
+const LINE_CLIP_ABOVE_POINTER = 30;
 
 /** What the chart is drawn with right now, read back through the DEV test hook. */
 async function appearance(page: Page): Promise<ChartAppearanceState> {
@@ -35,6 +48,25 @@ async function openChart(page: Page): Promise<void> {
 /** Empty slots between the last bar and the pane's right edge: the right margin as the user sees it. */
 async function rightGap(page: Page): Promise<number> {
   return page.evaluate(() => window.__chartTest!.visibleRange()!.to - (window.__chartTest!.data().length - 1));
+}
+
+/** Selects the crosshair tool the way the owner does: the pointer group's icon, then its row in the menu. */
+async function selectCrosshairTool(page: Page): Promise<void> {
+  await page.locator('.tool-rail button[aria-label="Pointer tools"]').click();
+  await page.locator('.tool-flyout').getByRole('menuitemradio', { name: 'Crosshair pointer' }).click();
+}
+
+/** Device pixels of the crosshair's own colour across one row of the pane: how thick it draws the line. */
+async function drawnCrosshairWidth(page: Page, pointer: { x: number; y: number }): Promise<number> {
+  const clip = {
+    x: pointer.x - LINE_CLIP_HALF_WIDTH,
+    y: pointer.y - LINE_CLIP_ABOVE_POINTER,
+    width: 2 * LINE_CLIP_HALF_WIDTH,
+    height: 1,
+  };
+  const row = decodePng(await page.screenshot({ clip }));
+  const colors = Array.from({ length: row.width }, (_, x) => pixelAt(row, x, 0));
+  return colors.filter((color) => color.join() === SEEDED_CROSSHAIR_RGB).length;
 }
 
 test('a default chart keeps the background, grids, scales and margins it has always had', async ({ page }) => {
@@ -53,7 +85,7 @@ test('a default chart keeps the background, grids, scales and margins it has alw
   expect(defaults.timeScaleBorder).toBe(palette.border);
   expect(defaults.scaleMargins).toEqual({ top: 0.12, bottom: 0.18 });
   expect(defaults.rightMarginBars).toBe(5);
-  expect(defaults.crosshair).toEqual({ color: palette.textLabel, style: 'solid' });
+  expect(defaults.crosshair).toEqual({ color: palette.textLabel, style: 'solid', width: 1 });
   expectNoErrors(collected);
 });
 
@@ -129,6 +161,31 @@ test('a chart whose crosshair was recoloured draws the pointer lines in that col
   });
   await openChart(page);
 
-  await expect.poll(async () => (await appearance(page)).crosshair).toEqual({ color: '#ff0000', style: 'dashed' });
+  const crosshair = { color: '#ff0000', style: 'dashed', width: 1 };
+  await expect.poll(async () => (await appearance(page)).crosshair).toEqual(crosshair);
+  expectNoErrors(collected);
+});
+
+test('a chart whose crosshair was made thicker draws the pointer lines that many pixels wide', async ({ page }) => {
+  const collected = await gotoWithStub(page, {
+    chartSettingOverrides: {
+      [EURUSD_CHART]: {
+        canvas: { crosshair: { color: SEEDED_CROSSHAIR_COLOR, style: 'solid', width: SEEDED_CROSSHAIR_WIDTH } },
+      },
+    },
+  });
+  await openChart(page);
+  await expect.poll(async () => (await appearance(page)).crosshair.width).toBe(SEEDED_CROSSHAIR_WIDTH);
+
+  const host = (await page.locator('.chart-host').boundingBox())!;
+  await selectCrosshairTool(page);
+  const pointer = { x: host.x + POINTER.x, y: host.y + POINTER.y };
+  await page.mouse.move(pointer.x, pointer.y);
+  await expect.poll(async () => page.evaluate(() => window.__chartTest?.tool('crosshair')?.linesVisible())).toBe(true);
+
+  // The tool draws whole device pixels, so a CSS px of thickness is one device pixel of the screenshot.
+  const pixelRatio = await page.evaluate(() => window.devicePixelRatio);
+  const drawnWidth = Math.max(1, Math.round(SEEDED_CROSSHAIR_WIDTH * pixelRatio));
+  await expect.poll(async () => drawnCrosshairWidth(page, pointer)).toBe(drawnWidth);
   expectNoErrors(collected);
 });

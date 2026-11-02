@@ -17,6 +17,9 @@ const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
 const BUTTON_LABEL = 'Chart settings';
 
+/** The border the library paints on the price axis' left edge and on the time axis' top edge. */
+const AXIS_BORDER_PX = 1;
+
 /** The gear glyph: the same outline `SettingsIcon` renders, as an element the DOM button can hold. */
 function gearGlyph(): SVGSVGElement {
   const glyph = document.createElementNS(SVG_NAMESPACE, 'svg');
@@ -30,17 +33,31 @@ function gearGlyph(): SVGSVGElement {
 }
 
 /**
+ * Writes one edge of the button's box, in CSS pixels from the host's corner. Nothing below zero is
+ * written: an axis the chart hides reports no width or height, and a collapsed box reads as absent
+ * instead of being drawn backwards over the chart.
+ */
+function setEdge(button: HTMLButtonElement, edge: 'left' | 'top' | 'width' | 'height', pixels: number): void {
+  const next = `${Math.max(0, pixels)}px`;
+  if (button.style[edge] !== next) {
+    button.style[edge] = next;
+  }
+}
+
+/**
  * The settings gear in the corner where the price axis meets the time axis.
  *
  * It is an ordinary HTML button for the same reason as the A/L toggles: the library paints both axes on
- * its own canvas, which no button can be clicked on or reached through. Its box is the axis column's
- * width by the time axis's height, so it sits in the corner the two axes make; CSS paints and centres it.
+ * its own canvas, which no button can be clicked on or reached through. Its box is the corner cell inside
+ * the two axis borders — the axis column's width between the price axis' border line and the chart frame,
+ * by the time axis' height between its own border line and the frame — so the rounded chip CSS paints
+ * inside it is centred in that cell and covers neither axis line nor the frame's rounded corner.
  */
 export class ChartSettingsCornerButton {
   private readonly button: HTMLButtonElement;
 
   constructor(
-    host: HTMLElement,
+    private readonly host: HTMLElement,
     private readonly chart: IChartApi,
   ) {
     this.button = document.createElement('button');
@@ -54,16 +71,22 @@ export class ChartSettingsCornerButton {
     this.sync();
   }
 
-  /** Re-measures both axes: they change with the pane's size, and with the width of the price labels. */
+  /**
+   * Re-measures the corner cell on both axes: they change with the pane's size, and the price axis also
+   * with the width of its labels. The cell is measured from the frame's right and bottom edges inwards,
+   * which is where the axes themselves end, and each side stops one border line short of an axis edge.
+   * Every edge is snapped inwards to whole pixels — the left and top edges round up, the width and height
+   * round down — so a fraction of a pixel in the axes' geometry can never cover a border line or reach
+   * past the frame.
+   */
   sync(): void {
-    const width = `${this.chart.priceScale(PRICE_SCALE_ID).width()}px`;
-    const height = `${this.chart.timeScale().height()}px`;
-    if (this.button.style.width !== width) {
-      this.button.style.width = width;
-    }
-    if (this.button.style.height !== height) {
-      this.button.style.height = height;
-    }
+    const { width: hostWidth, height: hostHeight } = this.host.getBoundingClientRect();
+    const axisWidth = this.chart.priceScale(PRICE_SCALE_ID).width();
+    const timeAxisHeight = this.chart.timeScale().height();
+    setEdge(this.button, 'left', Math.ceil(hostWidth - axisWidth + AXIS_BORDER_PX));
+    setEdge(this.button, 'top', Math.ceil(hostHeight - timeAxisHeight + AXIS_BORDER_PX));
+    setEdge(this.button, 'width', Math.floor(axisWidth) - AXIS_BORDER_PX);
+    setEdge(this.button, 'height', Math.floor(timeAxisHeight) - AXIS_BORDER_PX);
   }
 
   destroy(): void {

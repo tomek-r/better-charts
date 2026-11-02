@@ -27,7 +27,7 @@ test('the default appearance is the chart as it has always looked', () => {
   expect(defaults.background).toEqual({ mode: 'solid', color: palette.overlay, bottomColor: palette.overlay });
   expect(defaults.verticalGrid).toEqual({ visible: true, color: palette.borderSubtle, style: 'solid' });
   expect(defaults.horizontalGrid).toEqual({ visible: true, color: palette.borderSubtle, style: 'solid' });
-  expect(defaults.crosshair).toEqual({ color: palette.textLabel, style: 'solid' });
+  expect(defaults.crosshair).toEqual({ color: palette.textLabel, style: 'solid', width: 1 });
   expect(defaults.scaleText).toEqual({ color: palette.mutedStrong, fontSize: 11 });
   expect(defaults.scaleLines).toBe(palette.border);
   expect([defaults.topMarginPercent, defaults.bottomMarginPercent]).toEqual([12, 18]);
@@ -95,4 +95,12 @@ test('a canvas value that does not read falls back to its default, field by fiel
   expect(appearance.scaleText).toEqual(DEFAULT_CHART_APPEARANCE.scaleText);
   expect(appearance.rightMarginBars).toBe(DEFAULT_CHART_APPEARANCE.rightMarginBars);
   expect(appearance.horizontalGrid).toEqual(DEFAULT_CHART_APPEARANCE.horizontalGrid);
+});
+
+test('the crosshair keeps the thickness the Canvas tab sets, one pixel when it names none', () => {
+  const seeded: CanvasSettingValues = { crosshair: { color: '#ff0000', style: 'dashed', width: 3 } };
+
+  expect(chartAppearanceOf(seeded).crosshair).toEqual({ color: '#ff0000', style: 'dashed', width: 3 });
+  expect(chartAppearanceOf({ crosshair: { color: '#ff0000', style: 'dashed' } }).crosshair.width).toBe(1);
+  expect(chartAppearanceOf({ crosshair: { color: '#ff0000', style: 'dashed', width: 5 } }).crosshair.width).toBe(1);
 });

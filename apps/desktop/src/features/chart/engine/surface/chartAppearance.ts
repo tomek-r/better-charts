@@ -9,6 +9,12 @@ export interface ChartLineAppearance {
   readonly style: LineDashKind;
 }
 
+/** A line the chart paints at a thickness the settings set, such as the pointer's crosshair. */
+export interface ChartSizedLineAppearance extends ChartLineAppearance {
+  /** The line's thickness in CSS px. */
+  readonly width: number;
+}
+
 /** A line a settings checkbox shows and hides, such as a grid line. */
 export interface ChartToggledLineAppearance extends ChartLineAppearance {
   readonly visible: boolean;
@@ -38,7 +44,7 @@ export interface ChartAppearance {
   readonly background: ChartBackgroundAppearance;
   readonly verticalGrid: ChartToggledLineAppearance;
   readonly horizontalGrid: ChartToggledLineAppearance;
-  readonly crosshair: ChartLineAppearance;
+  readonly crosshair: ChartSizedLineAppearance;
   readonly scaleText: ChartScaleTextAppearance;
   /** The colour of the lines around both scales, price and time. */
   readonly scaleLines: string;
@@ -55,7 +61,7 @@ export const DEFAULT_CHART_APPEARANCE: ChartAppearance = {
   background: { mode: 'solid', color: palette.overlay, bottomColor: palette.overlay },
   verticalGrid: { visible: true, color: palette.borderSubtle, style: 'solid' },
   horizontalGrid: { visible: true, color: palette.borderSubtle, style: 'solid' },
-  crosshair: { color: palette.textLabel, style: 'solid' },
+  crosshair: { color: palette.textLabel, style: 'solid', width: 1 },
   scaleText: { color: palette.mutedStrong, fontSize: CHART_FONT_SIZE },
   scaleLines: palette.border,
   topMarginPercent: 12,
@@ -126,6 +132,10 @@ function sameToggledLine(first: ChartToggledLineAppearance, second: ChartToggled
   return first.visible === second.visible && sameLine(first, second);
 }
 
+function sameSizedLine(first: ChartSizedLineAppearance, second: ChartSizedLineAppearance): boolean {
+  return first.width === second.width && sameLine(first, second);
+}
+
 /** Whether two appearances paint the same chart, so one that did not change costs no re-layout. */
 export function sameChartAppearance(first: ChartAppearance, second: ChartAppearance): boolean {
   return (
@@ -134,7 +144,7 @@ export function sameChartAppearance(first: ChartAppearance, second: ChartAppeara
     first.background.bottomColor === second.background.bottomColor &&
     sameToggledLine(first.verticalGrid, second.verticalGrid) &&
     sameToggledLine(first.horizontalGrid, second.horizontalGrid) &&
-    sameLine(first.crosshair, second.crosshair) &&
+    sameSizedLine(first.crosshair, second.crosshair) &&
     first.scaleText.color === second.scaleText.color &&
     first.scaleText.fontSize === second.scaleText.fontSize &&
     first.scaleLines === second.scaleLines &&

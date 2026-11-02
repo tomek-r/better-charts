@@ -4,7 +4,7 @@ import type { RenderBar } from '../bars/renderBar';
 import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayRenderer';
 import { createChartSurface } from './chartSurface';
-import type { ChartAppearance, ChartLineAppearance } from './chartAppearance';
+import type { ChartAppearance, ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesAppearance, ChartScalesState } from './chartScalesAppearance';
 import { ChartAppearanceController } from './chartAppearanceController';
 import { BrokerTime } from '../brokerTime/brokerTime';
@@ -303,8 +303,8 @@ export class ChartController {
       timeLabels: this.timeZoneDisplay.labels(),
     };
   }
-  /** The colour and dash of the pointer's crosshair lines, which every tool draws the pointer with. */
-  crosshairStyle(): ChartLineAppearance {
+  /** The colour, dash and thickness of the pointer's crosshair lines, which every tool draws the pointer with. */
+  crosshairStyle(): ChartSizedLineAppearance {
     return this.appearance.crosshairStyle();
   }
   /** UTC now as the broker's ticks tell it; the desktop clock until a live tick and the broker's offset are known. */

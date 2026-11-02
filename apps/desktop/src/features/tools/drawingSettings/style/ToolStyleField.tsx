@@ -29,12 +29,14 @@ function lineOptionsOf(
 ): LineOptions {
   const width = values[toolStyleKey(id, 'width')];
   return {
-    widths: TOOL_STYLE_LINE_WIDTHS,
     dashStyles: TOOL_STYLE_LINE_STYLES,
-    width: typeof width === 'number' ? width : TOOL_STYLE_LINE_WIDTHS[0],
     dashStyle: TOOL_STYLE_LINE_STYLES.find((style) => style === values[toolStyleKey(id, 'style')]) ?? 'solid',
-    onWidthChange: (next) => onChange(toolStyleKey(id, 'width'), next),
     onDashStyleChange: (next) => onChange(toolStyleKey(id, 'style'), next),
+    thickness: {
+      widths: TOOL_STYLE_LINE_WIDTHS,
+      width: typeof width === 'number' ? width : TOOL_STYLE_LINE_WIDTHS[0],
+      onWidthChange: (next) => onChange(toolStyleKey(id, 'width'), next),
+    },
   };
 }
 

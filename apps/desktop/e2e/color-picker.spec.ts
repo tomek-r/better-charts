@@ -3,6 +3,7 @@ import { GREYSCALE_ROW, HUE_ROW } from '../src/shared/ui/colorPicker/colorPalett
 import { MAX_CUSTOM_COLORS } from '../src/shared/ui/colorPicker/savedCustomColors';
 import { cancelCount, mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
 import { defaultToolStyleValues } from '../src/features/chart/engine/drawings/toolStyles';
+import { gotoWithStub } from './helpers/tauriStub';
 import { HISTOGRAM_BOX, POC_LINE } from './helpers/toolStyleFixtures';
 
 /**
@@ -48,6 +49,42 @@ async function savedPocColor(page: Page): Promise<unknown> {
   await page.keyboard.press('Escape');
   await ok(page).click();
   return (await savedValues(page))[0]['poc.color'];
+}
+
+/** A line of the chart's own canvas: the chart draws it one pixel wide, so its picker offers no thickness. */
+const CANVAS_LINE_LABEL = 'Vertical grid lines colour';
+
+/** The chart's own canvas settings: the picker its Crosshair row opens is the tallest of them. */
+const CROSSHAIR_LABEL = 'Crosshair';
+
+/** The window the desktop app is built for, which Chromium opens at when a test does not size it. */
+const DEFAULT_WINDOW = { width: 1280, height: 720 };
+
+/** Leaves the drawing settings form for the app and opens the chart's Settings dialog on its Canvas tab. */
+async function openCanvasTab(page: Page): Promise<void> {
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'Chart settings', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Settings' }).getByRole('tab', { name: 'Canvas' }).click();
+}
+
+/** Opens that Canvas line's picker: the Canvas tab and the line's swatch. Returns the popover. */
+async function openCanvasLinePicker(page: Page): Promise<Locator> {
+  await openCanvasTab(page);
+  await page.getByRole('button', { name: CANVAS_LINE_LABEL, exact: true }).click();
+  return page.getByRole('dialog', { name: `${CANVAS_LINE_LABEL} options` });
+}
+
+/** How far each side of the popover's box reaches past the window, so an all-zero answer is a box fully inside. */
+async function overflowFromWindow(popover: Locator): Promise<Record<'left' | 'top' | 'right' | 'bottom', number>> {
+  return popover.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      left: Math.max(0, -box.left),
+      top: Math.max(0, -box.top),
+      right: Math.max(0, box.right - window.innerWidth),
+      bottom: Math.max(0, box.bottom - window.innerHeight),
+    };
+  });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -157,6 +194,33 @@ test('a line offers four thicknesses and three line styles', async ({ page }) =>
 
   await expect(popover(page).getByRole('group', { name: 'Thickness' }).getByRole('button')).toHaveCount(4);
   await expect(popover(page).getByRole('group', { name: 'Line style' }).getByRole('button')).toHaveCount(3);
+});
+
+test('a line picker without thickness offers the three line styles and no Thickness section', async ({ page }) => {
+  const canvasLine = await openCanvasLinePicker(page);
+
+  await expect(canvasLine.getByRole('group', { name: 'Line style' }).getByRole('button')).toHaveCount(3);
+  await expect(canvasLine.getByRole('group', { name: 'Thickness' })).toHaveCount(0);
+  // With no thickness to set, the swatch previews the line at the width the chart draws it.
+  const lineSwatch = page.getByRole('button', { name: CANVAS_LINE_LABEL, exact: true });
+  await expect(lineSwatch.locator('line')).toHaveAttribute('stroke-width', '1');
+});
+
+test('the Crosshair picker stays inside the window, its custom colour editor included', async ({ page }) => {
+  await page.setViewportSize(DEFAULT_WINDOW);
+  await openCanvasTab(page);
+  await page.getByRole('button', { name: CROSSHAIR_LABEL, exact: true }).click();
+  const picker = page.getByRole('dialog', { name: `${CROSSHAIR_LABEL} options` });
+
+  // Opened from the Canvas tab's Crosshair row, the picker hangs below a trigger that sits low in the
+  // window, so a picker that grew past the window's edge would put its own bottom rows out of reach.
+  await expect.poll(() => overflowFromWindow(picker)).toEqual({ left: 0, top: 0, right: 0, bottom: 0 });
+
+  await picker.getByRole('button', { name: 'Add custom colour', exact: true }).click();
+  await expect(picker.getByLabel('Hex colour', { exact: true })).toBeVisible();
+
+  // The editor makes the picker taller than the room under its trigger; it is re-placed as it grows.
+  await expect.poll(() => overflowFromWindow(picker)).toEqual({ left: 0, top: 0, right: 0, bottom: 0 });
 });
 
 test('a plain colour offers neither thickness nor line style', async ({ page }) => {

@@ -8,7 +8,7 @@ import {
   priceScaleMargins,
   sameChartAppearance,
   type ChartAppearance,
-  type ChartLineAppearance,
+  type ChartSizedLineAppearance,
 } from './chartAppearance';
 
 /**
@@ -44,8 +44,8 @@ export class ChartAppearanceController {
     return true;
   }
 
-  /** The colour and dash of the pointer's crosshair lines, which every tool draws the pointer with. */
-  crosshairStyle(): ChartLineAppearance {
+  /** The colour, dash and thickness of the pointer's crosshair lines, which every tool draws the pointer with. */
+  crosshairStyle(): ChartSizedLineAppearance {
     return this.appearance.crosshair;
   }
 

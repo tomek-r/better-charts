@@ -15,7 +15,7 @@ import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/draw
 import type { RenderBar } from '../bars/renderBar';
 import { candleSeriesColors, type CandlePointColors } from '../bars/candleAppearance';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
-import type { ChartLineAppearance } from './chartAppearance';
+import type { ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesState } from './chartScalesAppearance';
 import { clearViewportChangeLog, viewportChangeLog, type ViewportChangeRecord } from '../viewport/viewportDiagnostics';
 
@@ -60,7 +60,7 @@ export interface ChartAppearanceState {
   readonly timeScaleBorder: string;
   readonly scaleMargins: { readonly top: number; readonly bottom: number };
   readonly rightMarginBars: number;
-  readonly crosshair: ChartLineAppearance;
+  readonly crosshair: ChartSizedLineAppearance;
 }
 
 /**
@@ -171,7 +171,7 @@ export interface DevTestApiSources {
   drawings: ChartDrawings;
   pointerReadout(): PointerReadout | null;
   rightMarginBars(): number;
-  crosshairStyle(): ChartLineAppearance;
+  crosshairStyle(): ChartSizedLineAppearance;
   scalesState(): ChartScalesState;
 }
 
@@ -181,7 +181,7 @@ export interface DevTestReadings {
   getData(): readonly RenderBar[];
   visibleRange(): { from: number; to: number } | null;
   timeToX(timeMs: number): number;
-  crosshairStyle(): ChartLineAppearance;
+  crosshairStyle(): ChartSizedLineAppearance;
   scalesState(): ChartScalesState;
 }
 
@@ -233,7 +233,7 @@ function appearanceState({ chart, rightMarginBars, crosshairStyle }: AppearanceS
     timeScaleBorder: options.timeScale.borderColor,
     scaleMargins: { top: margins.top, bottom: margins.bottom },
     rightMarginBars: rightMarginBars(),
-    crosshair: { color: crosshair.color, style: crosshair.style },
+    crosshair: { color: crosshair.color, style: crosshair.style, width: crosshair.width },
   };
 }
 
