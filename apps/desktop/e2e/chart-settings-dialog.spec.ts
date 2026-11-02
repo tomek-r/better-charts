@@ -332,6 +332,10 @@ test('the Canvas tab lists the chart canvas settings in its three groups', async
   ]) {
     await expect(dialog.getByRole('button', { name, exact: true })).toBeVisible();
   }
+  // A line's swatch is as wide as its face instead of filling the control column of its row.
+  await waitForDialogSettled(dialog);
+  const gridLineSwatch = dialog.getByRole('button', { name: 'Vertical grid lines colour', exact: true });
+  expect((await gridLineSwatch.boundingBox())!.width).toBeLessThan(100);
   expectNoErrors(collected);
 });
 
