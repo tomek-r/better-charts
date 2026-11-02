@@ -91,6 +91,16 @@ export class PriceScaleController {
     this.settingsButton.sync();
   }
 
+  /**
+   * Fills the row's box with the chart's own background colour. That fill is what masks the axis
+   * labels behind the toggles (see price-scale-controls.css), so it takes the background the chart
+   * is drawn on, a gradient's top colour included, and it must be opaque to hide the labels.
+   * `null` drops the inline colour, leaving the row painted by its opaque CSS default.
+   */
+  setMaskColor(color: string | null): void {
+    this.root.style.backgroundColor = color ?? '';
+  }
+
   destroy(): void {
     this.host.removeEventListener('pointermove', this.onPointerMove);
     this.host.removeEventListener('pointerdown', this.onPointerMove);

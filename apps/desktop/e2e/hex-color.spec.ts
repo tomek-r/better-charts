@@ -5,6 +5,7 @@ import {
   colorOpacityPercent,
   formatHexColor,
   mixHexColors,
+  opaqueHexColor,
   opacityPercentToAlpha,
   parseHexColor,
   solidHexColor,
@@ -59,6 +60,12 @@ test('the solid part and the opacity of a stored colour are read apart', () => {
   expect(solidHexColor('#3366ff')).toBe('#3366ff');
   expect(colorOpacityPercent('#3366ff80')).toBe(50);
   expect(colorOpacityPercent('#3366ff')).toBe(100);
+});
+
+test('a colour is made opaque by dropping its alpha, and unreadable text has no opaque form', () => {
+  expect(opaqueHexColor('#121823e8')).toBe('#121823');
+  expect(opaqueHexColor('#77a7ff')).toBe('#77a7ff');
+  expect(opaqueHexColor('nope')).toBeUndefined();
 });
 
 test('a new colour can keep the alpha of the colour it replaces', () => {

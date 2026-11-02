@@ -9,9 +9,6 @@ import { timeframeBarTime } from '../../../../shared/bridge/timeframes';
 /** Future time points allow every real candle to leave the pane when panning. */
 export const MARGIN_BARS = 100;
 
-/** Empty bars kept to the right of the last real bar, matching the follow anchor. */
-export const END_MARGIN = 5;
-
 /** Default zoom, in pixels per bar: the chart's initial spacing and what `resetToEnd` restores. */
 export const DEFAULT_BAR_SPACING = 10;
 

@@ -1,6 +1,5 @@
 import {
   CandlestickSeries,
-  ColorType,
   CrosshairMode,
   HistogramSeries,
   LineSeries,
@@ -8,10 +7,9 @@ import {
   type IChartApi,
   type ISeriesApi,
 } from 'lightweight-charts';
-import { DEFAULT_BAR_SPACING, END_MARGIN } from '../timeScale/futureTimePoints';
-import { palette } from '../../../../shared/theme/palette';
-import { CHART_FONT_SIZE } from './chartFont';
+import { DEFAULT_BAR_SPACING } from '../timeScale/futureTimePoints';
 import { candleSeriesColors, DEFAULT_CANDLE_APPEARANCE } from '../bars/candleAppearance';
+import { chartLayoutOptions, DEFAULT_CHART_APPEARANCE, priceScaleMargins } from './chartAppearance';
 
 export interface ChartSurface {
   chart: IChartApi;
@@ -38,35 +36,35 @@ function chartLocale(): string {
 /**
  * Builds the chart and the three series it owns. This is the only module that
  * creates the chart and its series, so the visual configuration lives here rather
- * than being spread through the controller: the palette, the hidden crosshair, the
- * time scale's end margin, and the separate price scales that keep the volume and
- * the helper points out of the price fit.
+ * than being spread through the controller: the hidden crosshair, the time scale's
+ * end margin, and the separate price scales that keep the volume and the helper
+ * points out of the price fit.
+ *
+ * The chart's own paint — background, grids, scale text and borders, margins —
+ * comes from `DEFAULT_CHART_APPEARANCE` through the mappers, which is the same
+ * appearance the settings apply, so the first paint and every later setting agree.
  *
  * The controller keeps the handles and owns their lifecycle: attachment,
  * detachment and disposal.
  */
 export function createChartSurface(host: HTMLElement): ChartSurface {
+  const { layout, grid, rightPriceScale, timeScale } = chartLayoutOptions(DEFAULT_CHART_APPEARANCE);
   const chart = createChart(host, {
     autoSize: false,
-    layout: {
-      // This colour is also .price-scale-controls' fill in features/chart/engine/priceScale/price-scale-controls.css,
-      // which masks the axis labels behind the price-scale toggles.
-      background: { type: ColorType.Solid, color: palette.overlay },
-      textColor: palette.mutedStrong,
-      fontSize: CHART_FONT_SIZE,
-      attributionLogo: true,
-    },
+    // This background is also the fill the A/L price-scale toggles mask the axis labels with; see
+    // features/chart/engine/priceScale/price-scale-controls.css.
+    layout: { ...layout, attributionLogo: true },
     localization: { locale: chartLocale() },
-    grid: { vertLines: { color: palette.borderSubtle }, horzLines: { color: palette.borderSubtle } },
+    grid,
     crosshair: {
       mode: CrosshairMode.Hidden,
       vertLine: { visible: false, labelVisible: false },
       horzLine: { visible: false, labelVisible: false },
     },
     rightPriceScale: {
-      borderColor: palette.border,
+      ...rightPriceScale,
       minimumWidth: 70,
-      scaleMargins: { top: 0.12, bottom: 0.18 },
+      scaleMargins: priceScaleMargins(DEFAULT_CHART_APPEARANCE),
       // Auto scale stays off: the range is fitted once per loaded series (see
       // fitPriceScale) and then holds, so a tick cannot rescale
       // the pane under the pointer. `A`, a double-click on the axis and dragging
@@ -82,11 +80,11 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
       alignLabels: false,
     },
     timeScale: {
-      borderColor: palette.border,
+      ...timeScale,
       timeVisible: true,
       secondsVisible: false,
       barSpacing: DEFAULT_BAR_SPACING,
-      rightOffset: END_MARGIN,
+      rightOffset: DEFAULT_CHART_APPEARANCE.rightMarginBars,
       lockVisibleTimeRangeOnResize: false,
       shiftVisibleRangeOnNewBar: false,
       allowShiftVisibleRangeOnWhitespaceReplacement: false,

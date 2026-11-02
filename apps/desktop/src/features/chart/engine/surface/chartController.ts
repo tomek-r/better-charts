@@ -1,9 +1,11 @@
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { BridgeState, Candle, QuoteSnapshot } from '../../../../shared/bridge/types';
-import { toRenderBar, type RenderBar } from '../bars/renderBar';
+import type { RenderBar } from '../bars/renderBar';
 import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayRenderer';
 import { createChartSurface } from './chartSurface';
+import type { ChartAppearance, ChartLineAppearance } from './chartAppearance';
+import { ChartAppearanceController } from './chartAppearanceController';
 import { TRADING_COLORS } from '../trading/tradingOverlayDrawing';
 import { BrokerTime } from '../brokerTime/brokerTime';
 import { ChartTimeZoneDisplay } from '../brokerTime/chartTimeZoneDisplay';
@@ -30,7 +32,8 @@ import type {
 import { ChartToolSet } from '../tools/toolSet';
 import { ChartDrawings } from '../drawings/chartDrawings';
 import { WorkspacePrimitive } from './workspacePrimitive';
-import { installDevTestApi, readCandleSeriesState, removeDevTestApi } from './devTestApi';
+import { installChartDevTestApi, removeDevTestApi } from './devTestApi';
+import { LiveBarController } from './liveBarController';
 import { HistoryViewportMode } from '../bars/historyViewportMode';
 import { initialHistoryWindow } from '../bars/initialHistoryWindow';
 import { OlderHistoryPager } from '../bars/olderHistoryPager';
@@ -92,8 +95,10 @@ export class ChartController {
   private readonly countdown: CountdownController;
   private symbol = '';
   private removed = false;
+  private readonly appearance: ChartAppearanceController;
   private readonly timeZoneDisplay: ChartTimeZoneDisplay;
   private readonly liveCandleHold: PointerCandleHold;
+  private readonly liveBar: LiveBarController;
   private readonly view: ViewportController;
   private readonly tools: ChartToolSet;
   private readonly olderHistory: OlderHistoryPager;
@@ -130,6 +135,7 @@ export class ChartController {
       barSeries: this.data,
       geometry: this.view,
       requestRepaint: () => this.refreshOverlays(),
+      crosshairStyle: () => this.crosshairStyle(),
       returnToDefaultTool: () => {
         this.tools.returnToDefaultTool();
         this.onToolRelease?.();
@@ -164,9 +170,15 @@ export class ChartController {
     // (A = auto scale, L = logarithmic) are DOM buttons in the axis column, as
     // is the gear in its corner; the gear asks for the settings with an event.
     this.scaleControls = new PriceScaleController(host, this.chart, this.candles);
+    this.appearance = new ChartAppearanceController(this.chart, this.view, this.scaleControls);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
     this.liveCandleHold = new PointerCandleHold(host, (candle) => this.updateCandle(candle));
+    this.liveBar = new LiveBarController(this.chart, this.data, this.view, this.liveCandleHold, {
+      isDisposed: () => this.removed,
+      resetView: () => this.resetView(),
+      barsChanged: () => this.afterBarsChanged(),
+    });
     this.resize();
     this.view.onViewportChanged = () => this.olderHistory.requestIfGapRevealed();
     this.view.start();
@@ -174,16 +186,7 @@ export class ChartController {
     // primitives and controllers built above.
     this.tools.activateDefaultTool();
     if (import.meta.env.DEV) {
-      installDevTestApi({
-        chart: this.chart,
-        bars: () => this.bars,
-        candles: () => readCandleSeriesState(this.candles),
-        visibleRange: () => this.visibleRange(),
-        timeToX: (timeMs) => this.timeToX(timeMs),
-        toolTestApi: (id) => this.tools.toolTestApi(id),
-        drawings: this.drawings,
-        pointerReadout: () => this.pointerReadout.readout(),
-      });
+      installChartDevTestApi(this.chart, this.candles, this.tools, this.pointerReadout, this.view, this);
     }
   }
 
@@ -206,41 +209,12 @@ export class ChartController {
    * pane never keeps a range from a series of a different shape. Timeframe
    * changes can retain the bars-from-end position; other replacements reset.
    */
-  replaceHistory(
-    candles: readonly Candle[],
-    { timeframe, viewportMode = HistoryViewportMode.Reset }: ReplaceHistoryOptions = {},
-  ): boolean {
-    return this.view.traced('replaceHistory', () => this.swapHistory(candles, timeframe, viewportMode));
+  replaceHistory(candles: readonly Candle[], options: ReplaceHistoryOptions = {}): boolean {
+    return this.view.traced('replaceHistory', () => this.swapHistory(candles, options));
   }
 
   updateCandle(candle: Candle): void {
-    if (this.removed) {
-      return;
-    }
-    if (this.liveCandleHold.hold(candle)) {
-      return;
-    }
-    const bar = toRenderBar(candle);
-    if (!bar) {
-      return;
-    }
-    const last = this.data.lastBar();
-    if (last && bar.time < last.time) {
-      return;
-    }
-    const range = this.visibleRange();
-    const follows = this.isFollowing();
-    const spacing = this.chart.timeScale().options().barSpacing;
-    if (this.data.apply(bar)) {
-      this.view.extendFuture();
-      if (range) {
-        this.view.restoreViewport(range.to + (follows ? 1 : 0), spacing);
-      }
-    }
-    if (!last) {
-      this.resetView();
-    }
-    this.afterBarsChanged();
+    this.liveBar.apply(candle);
   }
 
   resetView(): void {
@@ -264,7 +238,7 @@ export class ChartController {
   /** Bars the first history request should ask for, given the pane as measured now. */
   initialHistoryBars(): number {
     const scale = this.chart.timeScale();
-    return initialHistoryWindow(scale.width(), scale.options().barSpacing);
+    return initialHistoryWindow(scale.width(), scale.options().barSpacing, this.view.rightMarginBars());
   }
 
   /**
@@ -302,6 +276,22 @@ export class ChartController {
     }
     this.data.setCandleAppearance(appearance);
     this.refreshOverlays();
+  }
+  /**
+   * Paints the chart itself with the Canvas tab's settings: background, both grids, scale text and
+   * lines, price margins and the empty bars to the right of the last one.
+   */
+  setChartAppearance(appearance: ChartAppearance): void {
+    if (this.removed) {
+      return;
+    }
+    if (this.appearance.apply(appearance)) {
+      this.refreshOverlays();
+    }
+  }
+  /** The colour and dash of the pointer's crosshair lines, which every tool draws the pointer with. */
+  crosshairStyle(): ChartLineAppearance {
+    return this.appearance.crosshairStyle();
   }
   /** UTC now as the broker's ticks tell it; the desktop clock until a live tick and the broker's offset are known. */
   clockNowMs(): number {
@@ -442,7 +432,8 @@ export class ChartController {
     }
   }
 
-  private swapHistory(candles: readonly Candle[], timeframe: string | undefined, viewportMode: HistoryViewportMode) {
+  private swapHistory(candles: readonly Candle[], options: ReplaceHistoryOptions): boolean {
+    const { timeframe, viewportMode = HistoryViewportMode.Reset } = options;
     if (this.removed) {
       return false;
     }

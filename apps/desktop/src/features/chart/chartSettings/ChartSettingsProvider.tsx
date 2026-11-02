@@ -6,6 +6,7 @@ import { useBridgeConnectionSelector } from '../../bridge/bridgeSelectors';
 import { useChartResources } from '../ChartWorkspaceProvider';
 import { chartScopeKey, useChartScope } from '../useChartScope';
 import { candleAppearanceOf } from './candleAppearanceSetting';
+import { chartAppearanceOf } from './canvasAppearanceSetting';
 import {
   chartSettingsOverrides,
   DEFAULT_CHART_SETTINGS,
@@ -199,6 +200,14 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
   useEffect(() => {
     chart.current?.setCandleAppearance(candleAppearanceOf(candleSettings));
   }, [candleSettings, chart]);
+
+  // The engine paints the chart itself with the Canvas tab's settings. The canvas values object is
+  // the dependency, so every preview and every keep reaches the chart, and a change to another tab's
+  // settings leaves the chart's own paint alone.
+  const canvasSettings = settings.canvas;
+  useEffect(() => {
+    chart.current?.setChartAppearance(chartAppearanceOf(canvasSettings));
+  }, [canvasSettings, chart]);
 
   return choice;
 }

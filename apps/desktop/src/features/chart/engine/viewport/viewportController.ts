@@ -2,9 +2,9 @@ import type { IChartApi, ISeriesApi, Logical, UTCTimestamp } from 'lightweight-c
 import type { TimeModel } from '../bars/timeModel';
 import { fitPriceScale } from '../priceScale/fitPriceScale';
 import type { RenderViewport } from '../surface/overlayRenderer';
+import { DEFAULT_CHART_APPEARANCE } from '../surface/chartAppearance';
 import {
   DEFAULT_BAR_SPACING,
-  END_MARGIN,
   futurePoints,
   neededFutureBarCount,
   timeScaleBaseIndex,
@@ -60,6 +60,8 @@ export function isOutsidePane(x: number, y: number, width: number, height: numbe
 export class ViewportController {
   private futureCount = 0;
   private futureFrame = 0;
+  /** Empty bars kept to the right of the last bar, as the chart's settings set them. */
+  private marginBars = DEFAULT_CHART_APPEARANCE.rightMarginBars;
   /** Pane size in host CSS px, refreshed on layout and on every repaint. */
   private paneWidth = 0;
   private paneHeight = 0;
@@ -89,6 +91,28 @@ export class ViewportController {
     cancelAnimationFrame(this.futureFrame);
     cancelAnimationFrame(this.queuedWriteFrame);
     this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.onRangeChange);
+  }
+
+  /** Empty bars kept to the right of the last bar, which a reset restores and a replacement anchors against. */
+  rightMarginBars(): number {
+    return this.marginBars;
+  }
+
+  /**
+   * Sets how many empty bars stay to the right of the last bar. A pane following the newest bar
+   * re-anchors to the new margin; one the user scrolled away stays exactly where it was put, and
+   * the margin reaches it the next time the pane is anchored.
+   */
+  setRightMargin(bars: number): void {
+    if (bars === this.marginBars) {
+      return;
+    }
+    const following = this.isFollowing();
+    this.marginBars = bars;
+    if (!following) {
+      return;
+    }
+    this.restoreViewport(timeScaleBaseIndex(this.data.bars.length, bars), this.chart.timeScale().options().barSpacing);
   }
 
   /**
@@ -191,7 +215,7 @@ export class ViewportController {
     const width = this.chart.timeScale().width();
     return {
       offset: range ? range.from * spacing : 0,
-      endAnchor: timeScaleBaseIndex(this.data.bars.length, END_MARGIN) * spacing - width,
+      endAnchor: timeScaleBaseIndex(this.data.bars.length, this.marginBars) * spacing - width,
       followEnabled: this.isFollowing(),
     };
   }
@@ -235,7 +259,7 @@ export class ViewportController {
       cancelAnimationFrame(this.futureFrame);
       this.futureFrame = 0;
       this.ensureFuture(DEFAULT_BAR_SPACING);
-      const to = timeScaleBaseIndex(this.data.bars.length, END_MARGIN);
+      const to = timeScaleBaseIndex(this.data.bars.length, this.marginBars);
       this.restoreViewport(to, DEFAULT_BAR_SPACING);
       this.fitPrices(to, DEFAULT_BAR_SPACING);
     });
@@ -347,7 +371,7 @@ export class ViewportController {
     if (range === null || !this.data.bars.length) {
       return null;
     }
-    return { barsFromEnd: timeScaleBaseIndex(this.data.bars.length, END_MARGIN) - range.to };
+    return { barsFromEnd: timeScaleBaseIndex(this.data.bars.length, this.marginBars) - range.to };
   }
 
   /**
@@ -372,7 +396,7 @@ export class ViewportController {
     if (!bars.length) {
       return false;
     }
-    const end = timeScaleBaseIndex(bars.length, END_MARGIN);
+    const end = timeScaleBaseIndex(bars.length, this.marginBars);
     const to = Math.max(end - anchor.barsFromEnd, 0);
     this.restoreViewport(to, barSpacing);
     this.fitPrices(to, barSpacing);

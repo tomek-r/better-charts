@@ -1,9 +1,21 @@
-import type { CandlestickData, IChartApi, ISeriesApi, PriceScaleMode, Time, WhitespaceData } from 'lightweight-charts';
+import {
+  ColorType,
+  type Background,
+  type CandlestickData,
+  type GridLineOptions,
+  type IChartApi,
+  type ISeriesApi,
+  type LineStyle,
+  type PriceScaleMode,
+  type Time,
+  type WhitespaceData,
+} from 'lightweight-charts';
 import type { ChartDrawings } from '../drawings/chartDrawings';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import type { RenderBar } from '../bars/renderBar';
 import { candleSeriesColors, type CandlePointColors } from '../bars/candleAppearance';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
+import type { ChartLineAppearance } from './chartAppearance';
 import { clearViewportChangeLog, viewportChangeLog, type ViewportChangeRecord } from '../viewport/viewportDiagnostics';
 
 /** One candle's time with the colours it overrides the series with, as a plain copy. */
@@ -15,6 +27,39 @@ export interface CandlePointState extends CandlePointColors {
 export interface CandleSeriesState {
   readonly colors: ReturnType<typeof candleSeriesColors>;
   readonly points: CandlePointState[];
+}
+
+/** The chart's background as the library reports it: one colour, or the two ends of a gradient. */
+export interface ChartBackgroundState {
+  readonly type: ColorType;
+  readonly color?: string;
+  readonly topColor?: string;
+  readonly bottomColor?: string;
+}
+
+/** One of the chart's grid lines, as the library holds it. */
+export interface ChartGridLineState {
+  readonly visible: boolean;
+  readonly color: string;
+  readonly style: LineStyle;
+}
+
+/** What the Canvas tab sets, read back from the chart options and the controllers that own the rest. */
+export interface ChartAppearanceState {
+  readonly layout: {
+    readonly background: ChartBackgroundState;
+    readonly textColor: string;
+    readonly fontSize: number;
+  };
+  readonly grid: {
+    readonly vertLines: ChartGridLineState;
+    readonly horzLines: ChartGridLineState;
+  };
+  readonly rightPriceScaleBorder: string;
+  readonly timeScaleBorder: string;
+  readonly scaleMargins: { readonly top: number; readonly bottom: number };
+  readonly rightMarginBars: number;
+  readonly crosshair: ChartLineAppearance;
 }
 
 /**
@@ -45,6 +90,8 @@ export interface DevTestApi {
   selectedDrawing(): ChartDrawingSelection | null;
   /** The pointer's time/price labels, shown for every tool; null while no pointer is over the pane. */
   pointerReadout(): PointerReadout | null;
+  /** What the Canvas tab sets: the chart's own paint, its margins and the crosshair. */
+  appearance(): ChartAppearanceState;
   priceScale(): {
     autoScale: boolean;
     mode: PriceScaleMode;
@@ -120,6 +167,69 @@ export interface DevTestApiSources {
   toolTestApi(id: string): unknown;
   drawings: ChartDrawings;
   pointerReadout(): PointerReadout | null;
+  rightMarginBars(): number;
+  crosshairStyle(): ChartLineAppearance;
+}
+
+/** The live readings the surface already publishes; the hook reads them through these. */
+export interface DevTestReadings {
+  readonly drawings: ChartDrawings;
+  getData(): readonly RenderBar[];
+  visibleRange(): { from: number; to: number } | null;
+  timeToX(timeMs: number): number;
+  crosshairStyle(): ChartLineAppearance;
+}
+
+/** The tool test surfaces the hook hands back per tool id. */
+export interface DevTestToolSurfaces {
+  toolTestApi(id: string): unknown;
+}
+
+/** The pointer's time/price labels, which every tool shows while a pointer is over the pane. */
+export interface DevTestPointerReadout {
+  readout(): PointerReadout | null;
+}
+
+/** The empty bars kept to the right of the last bar, which the Canvas tab sets. */
+export interface DevTestPaneMargins {
+  rightMarginBars(): number;
+}
+
+/** The chart's background copied out of the library's own option, whichever kind it is. */
+function backgroundState(background: Background): ChartBackgroundState {
+  if (background.type === ColorType.VerticalGradient) {
+    return { type: background.type, topColor: background.topColor, bottomColor: background.bottomColor };
+  }
+  return { type: background.type, color: background.color };
+}
+
+function gridLineState({ visible, color, style }: GridLineOptions): ChartGridLineState {
+  return { visible, color, style };
+}
+
+type AppearanceSources = Pick<DevTestApiSources, 'chart' | 'rightMarginBars' | 'crosshairStyle'>;
+
+/** The chart's own paint and margins, read back from the options and the controllers that own them. */
+function appearanceState({ chart, rightMarginBars, crosshairStyle }: AppearanceSources): ChartAppearanceState {
+  const options = chart.options();
+  const margins = chart.priceScale('right').options().scaleMargins;
+  const crosshair = crosshairStyle();
+  return {
+    layout: {
+      background: backgroundState(options.layout.background),
+      textColor: options.layout.textColor,
+      fontSize: options.layout.fontSize,
+    },
+    grid: {
+      vertLines: gridLineState(options.grid.vertLines),
+      horzLines: gridLineState(options.grid.horzLines),
+    },
+    rightPriceScaleBorder: options.rightPriceScale.borderColor,
+    timeScaleBorder: options.timeScale.borderColor,
+    scaleMargins: { top: margins.top, bottom: margins.bottom },
+    rightMarginBars: rightMarginBars(),
+    crosshair: { color: crosshair.color, style: crosshair.style },
+  };
 }
 
 function buildDevTestApi({
@@ -131,6 +241,8 @@ function buildDevTestApi({
   toolTestApi,
   drawings,
   pointerReadout,
+  rightMarginBars,
+  crosshairStyle,
 }: DevTestApiSources): DevTestApi {
   return {
     data: () => bars().map((bar) => ({ ...bar })),
@@ -144,6 +256,7 @@ function buildDevTestApi({
     drawings: () => drawings.exportRecords(),
     selectedDrawing: () => drawings.selected(),
     pointerReadout,
+    appearance: () => appearanceState({ chart, rightMarginBars, crosshairStyle }),
     priceScale: () => {
       const scale = chart.priceScale('right');
       const options = scale.options();
@@ -165,6 +278,32 @@ export function installDevTestApi(sources: DevTestApiSources): void {
   devWindow.__chartTest = api;
   // Console helper for diagnosing a view that moved on its own: `__viewportLog()`.
   devWindow.__viewportLog = () => console.table(api.viewportChanges().map(describeChange));
+}
+
+/**
+ * Installs the dev hook from the surface's own handles, so the controller's constructor keeps one
+ * call instead of the source wiring. DEV-gated at that call site, like `installDevTestApi` itself.
+ */
+export function installChartDevTestApi(
+  chart: IChartApi,
+  candles: ISeriesApi<'Candlestick'>,
+  tools: DevTestToolSurfaces,
+  pointerReadout: DevTestPointerReadout,
+  pane: DevTestPaneMargins,
+  readings: DevTestReadings,
+): void {
+  installDevTestApi({
+    chart,
+    bars: () => readings.getData(),
+    candles: () => readCandleSeriesState(candles),
+    visibleRange: () => readings.visibleRange(),
+    timeToX: (timeMs) => readings.timeToX(timeMs),
+    toolTestApi: (id) => tools.toolTestApi(id),
+    drawings: readings.drawings,
+    pointerReadout: () => pointerReadout.readout(),
+    rightMarginBars: () => pane.rightMarginBars(),
+    crosshairStyle: () => readings.crosshairStyle(),
+  });
 }
 
 export function removeDevTestApi(): void {
