@@ -1,9 +1,10 @@
 import { useLayoutEffect, type RefObject } from 'react';
 
 /** Which edge of the anchor the popup lines up with before it is kept inside the window. */
-export type PopupAlignment = 'start' | 'end';
+type PopupAlignment = 'start' | 'end';
 
-export interface PopupPlacementOptions {
+/** How a popup is lined up with its anchor, and whether it is as wide as it. */
+interface PopupPlacementOptions {
   readonly alignment?: PopupAlignment;
   /** Makes the popup at least as wide as its anchor, as a drop-down list is. */
   readonly matchAnchorWidth?: boolean;

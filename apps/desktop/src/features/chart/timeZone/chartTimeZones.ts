@@ -1,7 +1,7 @@
 export const EXCHANGE_TIME_ZONE = 'exchange';
 export const UTC_TIME_ZONE = 'UTC';
 
-export interface ChartTimeZoneOption {
+interface ChartTimeZoneOption {
   readonly zone: string;
   readonly label: string;
 }

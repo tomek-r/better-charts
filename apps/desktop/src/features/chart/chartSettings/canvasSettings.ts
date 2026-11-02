@@ -11,7 +11,7 @@ import type {
   ToggledLineSettingField,
 } from './settingFields';
 
-export type CanvasSettingsSection = SettingsSectionFields;
+type CanvasSettingsSection = SettingsSectionFields;
 
 const BACKGROUND_FIELD: BackgroundFillSettingField = {
   kind: 'backgroundFill',

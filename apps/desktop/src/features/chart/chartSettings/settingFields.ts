@@ -9,7 +9,7 @@ export type ColorPairValue = {
 };
 
 /** A colour pair a checkbox turns on and off, such as a candle's body. */
-export type ToggledColorPairValue = {
+type ToggledColorPairValue = {
   readonly visible: boolean;
   readonly up: string;
   readonly down: string;
@@ -28,7 +28,7 @@ export type SizedLineValue = LineValue & {
 };
 
 /** A line a checkbox draws and hides, such as a grid line. */
-export type ToggledLineValue = {
+type ToggledLineValue = {
   readonly visible: boolean;
   readonly color: string;
   readonly style: LineDashStyle;
@@ -59,7 +59,7 @@ export type QuoteLinesValue = {
 };
 
 /** Text drawn in a colour at a size in pixels, such as the numbers of a scale. */
-export type TextStyleValue = {
+type TextStyleValue = {
   readonly color: string;
   readonly fontSize: number;
 };
@@ -99,7 +99,7 @@ export type ChartSettingValue =
   | QuoteLinesValue
   | TextStyleValue;
 
-export interface ChoiceOption {
+interface ChoiceOption {
   readonly value: string;
   readonly label: string;
 }
@@ -142,11 +142,6 @@ export interface LineWidthSettingField extends SettingFieldIdentity {
 export interface ToggledLineSettingField extends SettingFieldIdentity {
   readonly kind: 'toggledLine';
   readonly defaultValue: ToggledLineValue;
-}
-
-export interface LineSettingField extends SettingFieldIdentity {
-  readonly kind: 'line';
-  readonly defaultValue: LineValue;
 }
 
 export interface SizedLineSettingField extends SettingFieldIdentity {
@@ -193,7 +188,6 @@ export type ChartSettingField =
   | ColorSettingField
   | LineWidthSettingField
   | ToggledLineSettingField
-  | LineSettingField
   | SizedLineSettingField
   | BackgroundFillSettingField
   | QuoteLinesSettingField
@@ -320,10 +314,6 @@ function readLineParts(record: Readonly<Record<string, unknown>>): LineValue | u
   return { color, style };
 }
 
-function readLine(raw: unknown): LineValue | undefined {
-  return hasExactKeys(raw, LINE_KEYS) ? readLineParts(raw) : undefined;
-}
-
 /** The colour and dash a record holds at `width`, undefined when any of the three does not read. */
 function sizedLineOf(record: Readonly<Record<string, unknown>>, width: number | undefined): SizedLineValue | undefined {
   const line = readLineParts(record);
@@ -415,7 +405,6 @@ const SETTING_VALUE_READERS: Readonly<Record<Exclude<SettingKind, 'choice'>, Set
   color: readColor,
   lineWidth: readLineWidth,
   toggledLine: readToggledLine,
-  line: readLine,
   sizedLine: readSizedLine,
   backgroundFill: readBackgroundFill,
   quoteLines: readQuoteLines,

@@ -9,7 +9,7 @@ export interface SettingsNavTab<Id extends string = string> {
 }
 
 /** How a nav reports its current row: a settings page, or the tab whose panel is open beside it. */
-export type SettingsNavSelection = { readonly kind: 'page' } | { readonly kind: 'tabs'; readonly panelId: string };
+type SettingsNavSelection = { readonly kind: 'page' } | { readonly kind: 'tabs'; readonly panelId: string };
 
 /** The id a tab row is given, which the panel it controls names back in its `aria-labelledby`. */
 export function settingsNavTabId(panelId: string, tabId: string): string {

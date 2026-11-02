@@ -11,7 +11,7 @@ import { DEFAULT_BAR_SPACING } from '../timeScale/futureTimePoints';
 import { candleSeriesColors, DEFAULT_CANDLE_APPEARANCE } from '../bars/candleAppearance';
 import { chartLayoutOptions, DEFAULT_CHART_APPEARANCE, priceScaleMargins } from './chartAppearance';
 
-export interface ChartSurface {
+interface ChartSurface {
   chart: IChartApi;
   candles: ISeriesApi<'Candlestick'>;
   volume: ISeriesApi<'Histogram'>;

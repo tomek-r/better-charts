@@ -12,7 +12,7 @@ type LiveBarCache = Pick<BarSeriesController, 'apply' | 'lastBar'>;
 type LivePane = Pick<ViewportController, 'visibleRange' | 'isFollowing' | 'extendFuture' | 'restoreViewport'>;
 
 /** What the rest of the surface must do around a live candle; this class owns the ordering. */
-export interface LiveBarHooks {
+interface LiveBarHooks {
   /** True once the surface is destroyed, when no write may reach the chart any more. */
   isDisposed(): boolean;
   /** Puts the pane on the end anchor once the series' first bar has arrived. */

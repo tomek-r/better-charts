@@ -14,7 +14,7 @@ import type {
   SettingsSectionFields,
 } from './settingFields';
 
-export type ScalesSettingsSection = SettingsSectionFields;
+type ScalesSettingsSection = SettingsSectionFields;
 
 const SCALE_MODE_LABELS: Readonly<Record<ScaleButtonsMode, string>> = {
   mouseOver: 'Visible on mouse over',

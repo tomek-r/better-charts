@@ -273,16 +273,17 @@ test.describe('portfolio card overflow regression', () => {
   });
 });
 
-test('chart chrome nests the connection dot inside the OHLC legend, after its text', async ({ page }) => {
+test('chart chrome nests the market dot inside the OHLC legend, after its text', async ({ page }) => {
   // The dot belongs to a rendered chart, so load one: a connected stub serves the candles.
   const { consoleErrors } = await gotoWithStub(page);
   await expect(page.locator('.chart-legend')).toHaveAttribute('aria-label', 'Candle OHLC');
   // Exactly two spans, and the dot is the last of them, so the text comes first.
   await expect(page.locator('.chart-legend > span')).toHaveCount(2);
   const dot = page.locator('.chart-legend > span:last-child');
-  await expect(dot).toHaveClass(/chart-connection-dot/);
+  await expect(dot).toHaveClass(/chart-market-dot/);
   await expect(dot).toHaveAttribute('role', 'status');
-  await expect(dot).toHaveAttribute('aria-label', /^MT5 /);
+  // The stub reports EURUSD's session as open.
+  await expect(dot).toHaveAttribute('aria-label', 'Market open');
   // The dot only shows once the stub's candles have rendered a chart.
   await expect(dot).toBeVisible();
   // With candles the waiting state is gone: the chart chrome is back on screen.
@@ -336,28 +337,33 @@ test.describe('tool rail', () => {
   });
 });
 
-test('the connection dot recovers from a bind error through connecting to connected', async ({ page }) => {
+test('the market dot follows the bridge from a bind error through connecting to a reported session', async ({
+  page,
+}) => {
   await gotoWithStub(page);
-  const dot = page.locator('.chart-connection-dot');
-  await expect(dot).toHaveAttribute('aria-label', 'MT5 connected');
+  const dot = page.locator('.chart-market-dot');
+  await expect(dot).toHaveAttribute('aria-label', 'Market open');
   await pushEvent(page, 'bridge-status', {
     state: 'protocol_error',
     message: 'bridge bind failed: Address already in use; retrying in 1s',
   });
-  await expect(dot).toHaveClass(/chart-connection-protocol_error/);
-  await expect(dot).toHaveAttribute('title', /retrying in 1s/);
+  // A refused connection cannot report a session: the dot is unknown and names the error.
+  await expect(dot).toHaveClass(/chart-market-unknown/);
+  await expect(dot).toHaveAttribute('aria-label', 'Market status unknown: MT5 connection error');
+  await expect(dot).toHaveAttribute('title', 'Market status unknown: MT5 connection error');
   await pushEvent(page, 'bridge-status', {
     state: 'connecting',
     message: 'Waiting for MT5 bridge to connect.',
   });
-  await expect(dot).toHaveAttribute('aria-label', 'MT5 connecting');
+  await expect(dot).toHaveAttribute('aria-label', 'Market status unknown: MT5 connecting');
   await pushEvent(page, 'bridge-status', {
     state: 'connected',
     supportedTimeframes: ['M1'],
     message: 'Bridge connected.',
+    marketSession: { symbol: 'EURUSD', isOpen: true, tradeMode: 4, serverTimeMs: STUB_NOW },
   });
-  await expect(dot).toHaveAttribute('aria-label', 'MT5 connected');
-  await expect(dot).toHaveAttribute('title', 'Bridge connected.');
+  await expect(dot).toHaveClass(/chart-market-open/);
+  await expect(dot).toHaveAttribute('aria-label', 'Market open');
 });
 
 test('an outdated MT5 bridge shows the update instructions while waiting for data', async ({ page }) => {

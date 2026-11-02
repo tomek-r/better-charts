@@ -3,7 +3,7 @@ import type { RenderBar } from '../bars/renderBar';
 import { setPriceScaleRange } from './priceScaleRange';
 
 /** The viewport whose candles the price scale is fitted to: its right edge, zoom and plot width. */
-export interface PriceFitViewport {
+interface PriceFitViewport {
   /** Logical index of the pane's right edge. */
   to: number;
   barSpacing: number;

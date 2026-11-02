@@ -4,16 +4,12 @@ import {
   type CandlePartAppearance,
 } from '../engine/bars/candleAppearance';
 import type { BarStyleSettingValues } from './chartSettings';
+import { isSettingRecord } from './settingValueReaders';
 
 const COLOR_BY_PREVIOUS_CLOSE_KEY = 'colorByPreviousClose';
 const BODY_KEY = 'body';
 const BORDERS_KEY = 'borders';
 const WICK_KEY = 'wick';
-
-/** A stored setting object to read fields off; anything else stored for the key is unreadable. */
-function isSettingRecord(raw: unknown): raw is Readonly<Record<string, unknown>> {
-  return typeof raw === 'object' && raw !== null;
-}
 
 function readColorByPreviousClose(raw: unknown): boolean {
   return typeof raw === 'boolean' ? raw : DEFAULT_CANDLE_APPEARANCE.colorByPreviousClose;

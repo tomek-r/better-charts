@@ -3,6 +3,7 @@ import { ChartController } from '../engine/surface/chartController';
 import { CHART_TOOL_PLUGINS, DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
 import { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
 import { bridgeIdentityKey } from '../../../shared/bridge/bridgeIdentity';
+import { marketStatusLabel, marketStatusOf } from '../engine/legend/marketStatus';
 import { quoteDigits } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
 import { popupOwnsKeyboard, toolFlyoutOpen } from '../../../shared/ui/popup/popupKeyboardOwnership';
@@ -133,10 +134,20 @@ export function useChartWorkspaceChartEffects(
   useEffect(() => {
     chart.current?.setConnectionStatus(
       status.state,
-      status.message,
       bridgeIdentityKey({ terminal: status.terminal, account: status.account, server: status.server }),
     );
-  }, [chart, status.state, status.message, status.terminal, status.account, status.server]);
+  }, [chart, status.state, status.terminal, status.account, status.server]);
+  // The legend's dot describes the symbol on screen, so a report the EA made for another symbol
+  // reads as unknown until the next heartbeat names this one.
+  useEffect(() => {
+    const marketStatus = marketStatusOf({
+      bridgeState: status.state,
+      session: status.marketSession,
+      shownSymbol: snapshot.symbol,
+    });
+    const label = marketStatusLabel({ status: marketStatus, bridgeState: status.state });
+    chart.current?.setMarketStatus(marketStatus, label);
+  }, [chart, snapshot.symbol, status.marketSession, status.state]);
   useEffect(() => {
     setPendingModification(undefined);
     clearStagedWidget();

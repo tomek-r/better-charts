@@ -4,7 +4,7 @@
  */
 
 /** One colour as bytes: `alpha` 0 is transparent, 255 opaque. */
-export interface RgbaColor {
+interface RgbaColor {
   readonly red: number;
   readonly green: number;
   readonly blue: number;

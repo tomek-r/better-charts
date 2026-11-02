@@ -12,7 +12,8 @@ import { ChartTimeZoneDisplay } from '../brokerTime/chartTimeZoneDisplay';
 import { BarCountdownPrimitive } from '../barCountdown/barCountdownPrimitive';
 import { CountdownController } from '../barCountdown/countdownController';
 import { OhlcLegend } from '../legend/ohlcLegend';
-import { ConnectionIndicator } from '../legend/connectionIndicator';
+import { MarketStatusIndicator } from '../legend/marketStatusIndicator';
+import type { MarketStatus } from '../legend/marketStatus';
 import { PointerReadoutPrimitive } from '../legend/pointerReadoutPrimitive';
 import { PriceAxisTagsPrimitive } from '../quotes/priceAxisTagsPrimitive';
 import { PriceScaleController } from '../priceScale/priceScaleController';
@@ -40,7 +41,7 @@ import { OlderHistoryPager } from '../bars/olderHistoryPager';
 import { PointerCandleHold } from '../bars/pointerCandleHold';
 
 /** What the app gives the chart for its tools; a tool sees it only through its `ChartToolHost`. */
-export type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
+type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
   toolDefinitions: readonly ChartToolDefinition[];
   /** The tool active at start and made active again after a placement; one of `toolDefinitions`. */
   defaultToolId: string;
@@ -68,7 +69,7 @@ export class ChartController {
   private readonly primitive: WorkspacePrimitive;
   private readonly observer: ResizeObserver;
   private readonly legend: OhlcLegend;
-  private readonly connection: ConnectionIndicator;
+  private readonly marketStatus: MarketStatusIndicator;
   // Broker time from the live ticks; the countdown and the time zone clock both read it.
   private readonly brokerTime = new BrokerTime();
   private readonly countdownPrimitive = new BarCountdownPrimitive(this.brokerTime);
@@ -160,7 +161,7 @@ export class ChartController {
     this.candles.attachPrimitive(this.priceTags);
     this.candles.attachPrimitive(this.pointerReadout);
     this.legend = new OhlcLegend(host);
-    this.connection = new ConnectionIndicator(this.legend.container());
+    this.marketStatus = new MarketStatusIndicator(this.legend.container());
     // The price scale is painted on the library's own canvas, so its toggles
     // (A = auto scale, L = logarithmic) are DOM buttons in the axis column, as
     // is the gear in its corner; the gear asks for the settings with an event.
@@ -339,9 +340,6 @@ export class ChartController {
   visibleRange(): { from: number; to: number } | null {
     return this.view.visibleRange();
   }
-  isFollowing(): boolean {
-    return this.view.isFollowing();
-  }
   diagnosticViewport(): DiagnosticViewport {
     return this.view.diagnosticViewport();
   }
@@ -418,10 +416,14 @@ export class ChartController {
     this.drawings.drawingsReplaced();
   }
 
-  setConnectionStatus(state: BridgeState, message?: string, identity = ''): void {
+  /** Whether the shown symbol's market is open, as the legend's dot reports it. */
+  setMarketStatus(status: MarketStatus, label: string): void {
+    this.marketStatus.set(status, label);
+  }
+
+  setConnectionStatus(state: BridgeState, identity = ''): void {
     this.brokerTime.setConnection(state, identity);
     this.countdown.setConnection(state);
-    this.connection.set(state, message);
     this.syncCountdown();
   }
   destroy(): void {
@@ -433,7 +435,7 @@ export class ChartController {
     this.view.destroy();
     this.observer.disconnect();
     this.liveCandleHold.destroy();
-    this.connection.destroy();
+    this.marketStatus.destroy();
     this.legend.destroy();
     this.scaleControls.destroy();
     this.candles.detachPrimitive(this.pointerReadout);

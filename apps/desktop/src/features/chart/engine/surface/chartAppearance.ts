@@ -70,7 +70,7 @@ export const DEFAULT_CHART_APPEARANCE: ChartAppearance = {
 };
 
 /** The chart options an appearance sets, in the shape `createChart` and `applyOptions` take. */
-export interface ChartAppearanceOptions {
+interface ChartAppearanceOptions {
   readonly layout: {
     readonly background: Background;
     readonly textColor: string;

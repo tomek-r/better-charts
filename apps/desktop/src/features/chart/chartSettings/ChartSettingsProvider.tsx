@@ -18,11 +18,9 @@ import { createTauriChartSettingsStore, type ChartSettingsStore, type StoredChar
 import { scalesAppearanceOf } from './scalesAppearanceSetting';
 
 /** What the settings of the chart on screen offer: what it shows, and the ways to change it. */
-export interface ChartSettingsChoice {
+interface ChartSettingsChoice {
   /** The settings the chart shows now, the settings dialog's preview included. */
   readonly settings: ChartSettings;
-  /** The template the chart starts from, so the dialog can show what this chart overrides. */
-  readonly templateSettings: ChartSettings;
   /** Shows `next` without saving it, so the chart follows the dialog. */
   preview(next: ChartSettings): void;
   /** Shows `next` and stores it as this chart's overrides for the account and symbol on screen. */
@@ -185,8 +183,8 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
   const selectTimeZone = useCallback((zone: string) => keep(withTimeZone(kept, zone)), [keep, kept]);
 
   const choice = useMemo<ChartSettingsChoice>(
-    () => ({ settings, templateSettings, preview, keep, revert, selectTimeZone }),
-    [keep, preview, revert, selectTimeZone, settings, templateSettings],
+    () => ({ settings, preview, keep, revert, selectTimeZone }),
+    [keep, preview, revert, selectTimeZone, settings],
   );
 
   // The engine formats its axis and readout in the chart's zone; the bars themselves never move.

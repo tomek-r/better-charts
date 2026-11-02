@@ -2,7 +2,7 @@ import { parseHexColor, solidHexColor } from '../../theme/hexColor';
 
 /** The colours the user added with "+", newest first, kept across sessions. Opacity is not part of a saved colour. */
 
-export const CUSTOM_COLORS_KEY = 'better-charts.custom-colors.v1';
+const CUSTOM_COLORS_KEY = 'better-charts.custom-colors.v1';
 export const MAX_CUSTOM_COLORS = 10;
 
 /** The list with `color` first, any earlier copy of it removed and the oldest dropped past the cap. */

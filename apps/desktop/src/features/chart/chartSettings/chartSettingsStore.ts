@@ -3,7 +3,7 @@ import type { ChartScope } from '../useChartScope';
 import { readChartSettingsLayer, type ChartSettingsLayer } from './chartSettings';
 
 /** One chart of the saved layout: its own identity, the group it sits in, and its template. */
-export interface ChartLayoutEntry {
+interface ChartLayoutEntry {
   readonly chartId: string;
   readonly groupId: string;
   readonly templateId: string;
