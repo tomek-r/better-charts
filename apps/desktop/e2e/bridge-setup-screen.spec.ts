@@ -186,8 +186,8 @@ test('an unconnected bridge covers the workspace and offers the guide alone', as
   const screen = setupScreen(page);
   await expect(screen).toBeVisible();
   await expect(screen.locator('.loading-message strong')).toHaveText('Connect MetaTrader 5');
-  // No chart is rendered, so the connection dot has nothing to describe.
-  await expect(page.locator('.chart-connection-dot')).toBeHidden();
+  // No chart is rendered, so the market dot has nothing to describe.
+  await expect(page.locator('.chart-market-dot')).toBeHidden();
 
   await screen.getByRole('button', { name: 'Open setup guide' }).click();
   await expect(setupGuideDialog(page)).toBeVisible();
@@ -198,7 +198,7 @@ test('an unconnected bridge covers the workspace and offers the guide alone', as
 test('a connected bridge with candles leaves the workspace uncovered', async ({ page }) => {
   await gotoWithStub(page);
   await expect(setupScreen(page)).toHaveCount(0);
-  await expect(page.locator('.chart-connection-dot')).toBeVisible();
+  await expect(page.locator('.chart-market-dot')).toBeVisible();
 });
 
 test('a completed setup waits for MetaTrader 5 behind the blurred screen', async ({ page }) => {

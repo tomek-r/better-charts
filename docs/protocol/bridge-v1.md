@@ -147,8 +147,8 @@ timeout is 6 seconds. Heartbeats check transport liveness;
 market/account/portfolio publication runs independently. Reconnect delays are
 1, 2, 4, 8, then 10 seconds; a successful handshake resets backoff.
 If the desktop cannot bind the local bridge port, it also retries at
-1, 2, 4, 8, then 10-second intervals. The connection indicator stays red with
-the bind error while waiting, then changes to connecting once listening.
+1, 2, 4, 8, then 10-second intervals. The bridge reports the bind error while
+waiting, then connecting once listening.
 Only an accepted EA handshake makes it connected. Invalid address configuration
 remains an error and requires correction.
 
@@ -161,7 +161,9 @@ time at which `is_open` was evaluated). The EA derives `is_open` from
 `SymbolInfoSessionTrade` at `TimeTradeServer()` — checking the current weekday
 and the previous weekday so an overnight session that started before midnight
 still counts — and closes it when `SYMBOL_TRADE_MODE_DISABLED` is set. `null`
-or an absent field means unknown.
+or an absent field means unknown. The chart legend's dot shows this state for
+the symbol on screen: green when it is open, red when it is closed, grey while
+it is unknown.
 
 Rust stores the latest observation and gates **order submission only**: a
 submit is rejected unless the observation is present, names the order's symbol,
