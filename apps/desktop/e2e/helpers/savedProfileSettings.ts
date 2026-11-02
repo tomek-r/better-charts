@@ -2,14 +2,14 @@ import { expect, type Page } from '@playwright/test';
 import type { DrawingTimeframeVisibility } from '../../src/features/chart/engine/drawings/timeframeVisibility';
 import { chartDrawings, TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL } from './drawingToolbarPage';
 import { savedProfile } from './savedProfile';
-import { chartDrawingScopeKey, gotoWithStub } from './tauriStub';
+import { chartScopeKey, gotoWithStub } from './tauriStub';
 
 /** The id of the one profile these steps seed. */
 export const SEEDED_PROFILE_ID = 'seeded';
 
 /** Boots the app with one saved fixed range volume profile, optionally restricted to some timeframes. */
 export async function gotoWithSavedProfile(page: Page, timeframeVisibility?: DrawingTimeframeVisibility) {
-  const scopeKey = chartDrawingScopeKey(TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL);
+  const scopeKey = chartScopeKey(TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL);
   const seeded = savedProfile(SEEDED_PROFILE_ID, { locked: false, visible: true, timeframeVisibility });
   await gotoWithStub(page, { chartDrawings: { [scopeKey]: [seeded] } });
   await expect.poll(async () => (await chartDrawings(page)).length).toBe(1);

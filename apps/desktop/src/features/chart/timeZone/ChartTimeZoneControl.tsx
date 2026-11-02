@@ -1,22 +1,30 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { useBridgeConnectionSelector } from '../../bridge/bridgeSelectors';
+import { useChartSettings } from '../chartSettings/ChartSettingsProvider';
+import { chartTimeLabelsOf } from '../chartSettings/scalesAppearanceSetting';
 import { createChartTimeFormat } from './chartTimeFormat';
 import { ChartTimeZoneMenu } from './ChartTimeZoneMenu';
-import { createTauriChartTimeZoneStore, type ChartTimeZoneStore } from './chartTimeZoneStore';
 import { useChartClock } from './useChartClock';
-import { useChartTimeZone } from './useChartTimeZone';
 
 /** The label the button falls back to while the zone has no clock of its own. */
 const EXCHANGE_BUTTON_LABEL = 'Exchange';
 
 /**
  * The live clock of the chart's time zone, under the chart's right corner; clicking it opens the
- * zone list. The zone belongs to this chart (one account and one symbol) and is restored with it.
+ * zone list. The zone is one of the chart's settings: its template's, unless this chart overrides
+ * it for the account and symbol on screen. Its hours follow the Scales and lines tab's hour format,
+ * which the axis and the pointer labels write with too.
  */
 export function ChartTimeZoneControl() {
-  // One store for the lifetime of the chart, like the drawings', so the hook never reloads on a render.
-  const [store] = useState<ChartTimeZoneStore>(createTauriChartTimeZoneStore);
-  const { zone, brokerUtcOffsetMinutes, selectZone } = useChartTimeZone(store);
-  const format = useMemo(() => createChartTimeFormat(zone, brokerUtcOffsetMinutes), [brokerUtcOffsetMinutes, zone]);
+  const { settings, selectTimeZone } = useChartSettings();
+  const brokerUtcOffsetMinutes = useBridgeConnectionSelector(({ status }) => status.brokerUtcOffsetMinutes) ?? null;
+  const zone = settings.timeZone;
+  const scales = settings.scales;
+  const labels = useMemo(() => chartTimeLabelsOf(scales), [scales]);
+  const format = useMemo(
+    () => createChartTimeFormat(zone, brokerUtcOffsetMinutes, labels),
+    [brokerUtcOffsetMinutes, labels, zone],
+  );
   const clock = useChartClock(format);
   const [open, setOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -25,9 +33,9 @@ export function ChartTimeZoneControl() {
   const chooseZone = useCallback(
     (next: string) => {
       setOpen(false);
-      selectZone(next);
+      selectTimeZone(next);
     },
-    [selectZone],
+    [selectTimeZone],
   );
 
   return (

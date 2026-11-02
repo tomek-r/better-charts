@@ -1,61 +1,133 @@
-//! The SQLite store behind the commands: what it keeps per account and symbol, what it refuses,
-//! and what a row this build cannot trust reports.
+//! The drawings store behind the commands: what it keeps per chart, account and symbol, what it
+//! refuses, and what a row this build cannot trust reports.
 
 use super::{
-    chart_time_zone::ChartTimeZone,
-    error::ChartDrawingError,
     record::{ChartDrawingPoint, ChartDrawingRecord, MAX_POINTS_PER_DRAWING},
     sqlite_drawing_store::SqliteChartDrawingStore,
-    store::{ChartDrawingStore, DrawingScope, MAX_DRAWINGS_PER_SCOPE},
+    store::{ChartDrawingStore, MAX_DRAWINGS_PER_SCOPE},
     timeframe_visibility::{TimeframeCountRange, TimeframeVisibility},
     ChartDrawingsState,
 };
+use crate::chart_database::{self, open_chart_database, ChartScope};
 use serde_json::json;
-use sqlite_store::rusqlite::params;
+use sqlite_store::{rusqlite::params, SqliteDatabase};
 use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
 };
 
 /// The account the stub's bridge reports, spelled the way the frontend scopes it.
 const ACCOUNT_KEY: &str = "50123456@Broker-Demo";
 const OTHER_ACCOUNT_KEY: &str = "70001234@Broker-Live";
-const DATABASE_FILE_NAME: &str = "better-charts.sqlite3";
+/// The chart a test adds beside the seeded one, so one account and symbol can be drawn twice.
+const SECOND_CHART_ID: &str = "second-chart";
 /// Milliseconds of one five-minute bar, the slot width the test bar series uses.
 const BAR_MS: i64 = 300_000;
+/// Schema versions stay as they are in the migrations, so these stay valid: the one before the
+/// stacking flag, the one before the timeframe setting, and the last one before the charts.
+const BEFORE_BELOW_BARS_VERSION: u32 = 1;
+const BEFORE_TIMEFRAME_VISIBILITY_VERSION: u32 = 2;
+const BEFORE_CHART_SETTINGS_VERSION: u32 = 4;
 
-/// A store of its own in memory: the tests never touch the user's drawings database.
-fn store() -> SqliteChartDrawingStore {
-    SqliteChartDrawingStore::in_memory().expect("the in-memory database opens")
+/// The drawings of one chart database this test owns, with the chart the migration seeds.
+struct TestChart {
+    database: Arc<SqliteDatabase>,
+    chart_id: String,
 }
 
-fn scope(account_key: &str, symbol: &str) -> DrawingScope {
-    DrawingScope::new(account_key.to_owned(), symbol.to_owned()).expect("the scope is valid")
+impl TestChart {
+    /// A database of its own in memory: the tests never touch the user's drawings database.
+    fn new() -> Self {
+        let database = chart_database::in_memory().expect("the in-memory database opens");
+        let chart_id = seeded_chart_id(&database);
+        Self { database, chart_id }
+    }
+
+    fn store(&self) -> SqliteChartDrawingStore {
+        SqliteChartDrawingStore::from_database(Arc::clone(&self.database))
+    }
+
+    fn scope(&self, account_key: &str, symbol: &str) -> ChartScope {
+        scope_of(&self.chart_id, account_key, symbol)
+    }
+
+    /// Saves one scope's drawings on the seeded chart, failing the test when the store refuses
+    /// them.
+    fn save(&self, account_key: &str, symbol: &str, records: &[ChartDrawingRecord]) {
+        self.store()
+            .save(&self.scope(account_key, symbol), records)
+            .expect("the drawings save");
+    }
+
+    /// Everything one scope of the seeded chart holds, as the store loads it.
+    fn loaded(&self, account_key: &str, symbol: &str) -> Vec<ChartDrawingRecord> {
+        self.store()
+            .load(&self.scope(account_key, symbol))
+            .expect("the drawings load")
+    }
+
+    /// The ids one scope of the seeded chart holds, in paint order.
+    fn ids(&self, account_key: &str, symbol: &str) -> Vec<String> {
+        ids_in(&self.store(), &self.scope(account_key, symbol))
+    }
 }
 
-/// A chart time zone built the way the store validates one.
-fn time_zone(value: &str) -> ChartTimeZone {
-    ChartTimeZone::new(value.to_owned()).expect("the time zone is valid")
+/// The scope the three values name, as the command that receives them builds it.
+fn try_scope(chart_id: &str, account_key: &str, symbol: &str) -> Result<ChartScope, String> {
+    ChartScope::new(
+        chart_id.to_owned(),
+        account_key.to_owned(),
+        symbol.to_owned(),
+    )
 }
 
-/// Saves one scope's time zone, failing the test when the store refuses it.
-fn save_time_zone(store: &SqliteChartDrawingStore, account_key: &str, symbol: &str, value: &str) {
+/// The scope of the account and symbol on the chart `chart_id` names.
+fn scope_of(chart_id: &str, account_key: &str, symbol: &str) -> ChartScope {
+    try_scope(chart_id, account_key, symbol).expect("the scope is valid")
+}
+
+/// The ids one scope holds, in paint order.
+fn ids_in(store: &SqliteChartDrawingStore, scope: &ChartScope) -> Vec<String> {
     store
-        .save_time_zone(&scope(account_key, symbol), &time_zone(value))
-        .expect("the time zone saves");
+        .load(scope)
+        .expect("the drawings load")
+        .into_iter()
+        .map(|record| record.id)
+        .collect()
 }
 
-/// The time zone one chart was last shown in, as the store loads it.
-fn loaded_time_zone(
-    store: &SqliteChartDrawingStore,
-    account_key: &str,
-    symbol: &str,
-) -> Option<ChartTimeZone> {
-    store
-        .load_time_zone(&scope(account_key, symbol))
-        .expect("the time zone loads")
+/// The id of the chart the migration seeds, the one nearly every test draws on.
+fn seeded_chart_id(database: &SqliteDatabase) -> String {
+    database
+        .read(|connection| {
+            let chart_id: String = connection.query_row(
+                "SELECT chart_id FROM charts ORDER BY position LIMIT 1",
+                params![],
+                |row| row.get(0),
+            )?;
+            Ok(chart_id)
+        })
+        .expect("the seeded chart is stored")
+}
+
+/// Whether the database still holds the per-symbol time zone table that the charts replaced.
+fn chart_time_zone_table_exists(database: &SqliteDatabase) -> bool {
+    database
+        .read(|connection| {
+            let tables: i64 = connection.query_row(
+                "SELECT count(*) FROM sqlite_master \
+                 WHERE type = 'table' AND name = 'chart_time_zones'",
+                params![],
+                |row| row.get(0),
+            )?;
+            Ok(tables > 0)
+        })
+        .expect("the schema is readable")
 }
 
 fn time_point(time_ms: i64) -> ChartDrawingPoint {
@@ -85,72 +157,61 @@ fn record(id: &str) -> ChartDrawingRecord {
     }
 }
 
-/// Saves one scope's drawings, failing the test when the store refuses them.
-fn save(
-    store: &SqliteChartDrawingStore,
-    account_key: &str,
-    symbol: &str,
-    records: &[ChartDrawingRecord],
-) {
-    store
-        .save(&scope(account_key, symbol), records)
-        .expect("the drawings save");
+/// The default timeframe setting as the JSON text the column keeps.
+fn default_visibility_text() -> String {
+    serde_json::to_string(&TimeframeVisibility::default()).expect("the default setting serializes")
 }
 
-/// Everything one scope holds, as the store loads it.
-fn loaded(
-    store: &SqliteChartDrawingStore,
-    account_key: &str,
-    symbol: &str,
-) -> Vec<ChartDrawingRecord> {
-    store
-        .load(&scope(account_key, symbol))
-        .expect("the drawings load")
-}
-
-/// The ids one scope holds, in paint order.
-fn ids(store: &SqliteChartDrawingStore, account_key: &str, symbol: &str) -> Vec<String> {
-    loaded(store, account_key, symbol)
-        .into_iter()
-        .map(|record| record.id)
-        .collect()
-}
-
-/// Writes one drawing row by hand, so the store reads a row this build never wrote.
-fn insert_drawing(store: &SqliteChartDrawingStore, id: &str, inputs: &str) {
-    store
-        .database()
+/// Writes one drawing row of this build by hand, so the store reads a row it never wrote.
+fn insert_drawing(database: &SqliteDatabase, chart_id: &str, id: &str, inputs: &str) {
+    database
         .write(|connection| {
             connection.execute(
                 "INSERT INTO chart_drawings \
-                 (drawing_id, account_key, symbol, position, tool_id, is_locked, is_visible, inputs) \
+                 (drawing_id, chart_id, account_key, symbol, position, tool_id, is_locked, \
+                  is_visible, inputs, is_below_bars, timeframe_visibility) \
+                 VALUES (?1, ?2, ?3, 'EURUSD', 0, 'fixedRangeProfile', 0, 1, ?4, 0, ?5)",
+                params![id, chart_id, ACCOUNT_KEY, inputs, default_visibility_text()],
+            )?;
+            Ok(())
+        })
+        .expect("the hand-written drawing is stored");
+}
+
+/// Writes one drawing row in the shape the versions before the charts had, so a migration test
+/// leaves the columns those versions added to their defaults.
+fn insert_legacy_drawing(database: &SqliteDatabase, id: &str, inputs: &str) {
+    database
+        .write(|connection| {
+            connection.execute(
+                "INSERT INTO chart_drawings \
+                 (drawing_id, account_key, symbol, position, tool_id, is_locked, is_visible, \
+                  inputs) \
                  VALUES (?1, ?2, 'EURUSD', 0, 'fixedRangeProfile', 0, 1, ?3)",
                 params![id, ACCOUNT_KEY, inputs],
             )?;
             Ok(())
         })
-        .expect("the hand-written row is stored");
+        .expect("the hand-written legacy drawing is stored");
 }
 
 /// Writes one point of the drawing under `id`, so a drawing the test wrote itself loads.
-fn insert_point(store: &SqliteChartDrawingStore, id: &str) {
-    store
-        .database()
+fn insert_point(database: &SqliteDatabase, id: &str, point_index: i64, time_ms: i64) {
+    database
         .write(|connection| {
             connection.execute(
                 "INSERT INTO chart_drawing_points (drawing_id, point_index, time_ms, price) \
-                 VALUES (?1, 0, ?2, NULL)",
-                params![id, 1_700_000_000_000i64],
+                 VALUES (?1, ?2, ?3, NULL)",
+                params![id, point_index, time_ms],
             )?;
             Ok(())
         })
         .expect("the hand-written point is stored");
 }
 
-/// Writes one time zone row by hand, so the store reads a zone this build never wrote.
-fn insert_time_zone(store: &SqliteChartDrawingStore, time_zone: &str) {
-    store
-        .database()
+/// Writes one time zone row of the version before the charts, the row the upgrade drops.
+fn insert_time_zone(database: &SqliteDatabase, time_zone: &str) {
+    database
         .write(|connection| {
             connection.execute(
                 "INSERT INTO chart_time_zones (account_key, symbol, time_zone) VALUES (?1, ?2, ?3)",
@@ -159,6 +220,20 @@ fn insert_time_zone(store: &SqliteChartDrawingStore, time_zone: &str) {
             Ok(())
         })
         .expect("the hand-written time zone is stored");
+}
+
+/// Writes a second chart row by hand, so the tests can draw one account and symbol twice.
+fn insert_chart(database: &SqliteDatabase, chart_id: &str, position: i64) {
+    database
+        .write(|connection| {
+            connection.execute(
+                "INSERT INTO charts (chart_id, group_id, template_id, position) \
+                 SELECT ?1, group_id, 'default', ?2 FROM chart_groups ORDER BY position LIMIT 1",
+                params![chart_id, position],
+            )?;
+            Ok(())
+        })
+        .expect("the second chart is stored");
 }
 
 /// A folder of this test's own, removed with it; the database and its lock file live in it.
@@ -189,7 +264,7 @@ impl Drop for TestDirectory {
 
 #[test]
 fn the_drawings_of_one_scope_round_trip() {
-    let store = store();
+    let chart = TestChart::new();
     let saved = ChartDrawingRecord {
         locked: true,
         visible: false,
@@ -208,21 +283,21 @@ fn the_drawings_of_one_scope_round_trip() {
         ..record("profile-1")
     };
 
-    save(&store, ACCOUNT_KEY, "EURUSD", std::slice::from_ref(&saved));
+    chart.save(ACCOUNT_KEY, "EURUSD", std::slice::from_ref(&saved));
 
-    assert_eq!(loaded(&store, ACCOUNT_KEY, "EURUSD"), [saved]);
+    assert_eq!(chart.loaded(ACCOUNT_KEY, "EURUSD"), [saved]);
 }
 
 #[test]
 fn the_below_bars_flag_round_trips_both_values() {
-    let store = store();
+    let chart = TestChart::new();
     let mut below = record("below-bars");
     below.below_bars = true;
     let above = record("above-bars");
 
-    save(&store, ACCOUNT_KEY, "EURUSD", &[below, above]);
+    chart.save(ACCOUNT_KEY, "EURUSD", &[below, above]);
 
-    let restored = loaded(&store, ACCOUNT_KEY, "EURUSD");
+    let restored = chart.loaded(ACCOUNT_KEY, "EURUSD");
     assert!(restored[0].below_bars);
     assert!(!restored[1].below_bars);
 }
@@ -259,20 +334,19 @@ fn restricted_visibility() -> TimeframeVisibility {
 
 #[test]
 fn the_timeframe_visibility_round_trips() {
-    let store = store();
+    let chart = TestChart::new();
     let restricted = ChartDrawingRecord {
         timeframe_visibility: restricted_visibility(),
         ..record("restricted")
     };
 
-    save(
-        &store,
+    chart.save(
         ACCOUNT_KEY,
         "EURUSD",
         &[restricted.clone(), record("everywhere")],
     );
 
-    let restored = loaded(&store, ACCOUNT_KEY, "EURUSD");
+    let restored = chart.loaded(ACCOUNT_KEY, "EURUSD");
     assert_eq!(restored[0], restricted);
     assert_eq!(
         restored[1].timeframe_visibility,
@@ -293,7 +367,7 @@ fn a_stored_payload_without_the_timeframe_visibility_shows_everywhere() {
 
 #[test]
 fn a_reversed_timeframe_range_is_refused_and_writes_nothing() {
-    let store = store();
+    let chart = TestChart::new();
     let mut reversed = restricted_visibility();
     reversed.minutes.from = 20;
     reversed.minutes.to = 5;
@@ -302,171 +376,219 @@ fn a_reversed_timeframe_range_is_refused_and_writes_nothing() {
         ..record("reversed")
     };
 
-    let error = store
-        .save(&scope(ACCOUNT_KEY, "EURUSD"), &[refused])
+    let error = chart
+        .store()
+        .save(&chart.scope(ACCOUNT_KEY, "EURUSD"), &[refused])
         .expect_err("the range is refused");
 
     assert!(error.to_string().contains("minutes"), "{error}");
-    assert!(loaded(&store, ACCOUNT_KEY, "EURUSD").is_empty());
+    assert!(chart.loaded(ACCOUNT_KEY, "EURUSD").is_empty());
 }
 
 #[test]
 fn two_scopes_never_see_each_other() {
-    let store = store();
-    save(&store, ACCOUNT_KEY, "EURUSD", &[record("eurusd-1")]);
-    save(&store, ACCOUNT_KEY, "NAS100", &[record("nas100-1")]);
-    save(&store, OTHER_ACCOUNT_KEY, "EURUSD", &[record("other-1")]);
+    let chart = TestChart::new();
+    chart.save(ACCOUNT_KEY, "EURUSD", &[record("eurusd-1")]);
+    chart.save(ACCOUNT_KEY, "NAS100", &[record("nas100-1")]);
+    chart.save(OTHER_ACCOUNT_KEY, "EURUSD", &[record("other-1")]);
 
-    assert_eq!(ids(&store, ACCOUNT_KEY, "EURUSD"), ["eurusd-1"]);
-    assert_eq!(ids(&store, ACCOUNT_KEY, "NAS100"), ["nas100-1"]);
-    assert_eq!(ids(&store, OTHER_ACCOUNT_KEY, "EURUSD"), ["other-1"]);
-    assert!(loaded(&store, OTHER_ACCOUNT_KEY, "NAS100").is_empty());
+    assert_eq!(chart.ids(ACCOUNT_KEY, "EURUSD"), ["eurusd-1"]);
+    assert_eq!(chart.ids(ACCOUNT_KEY, "NAS100"), ["nas100-1"]);
+    assert_eq!(chart.ids(OTHER_ACCOUNT_KEY, "EURUSD"), ["other-1"]);
+    assert!(chart.loaded(OTHER_ACCOUNT_KEY, "NAS100").is_empty());
+}
+
+#[test]
+fn the_same_account_and_symbol_on_two_charts_keep_separate_drawings() {
+    let chart = TestChart::new();
+    let second = scope_of(SECOND_CHART_ID, ACCOUNT_KEY, "EURUSD");
+    insert_chart(&chart.database, SECOND_CHART_ID, 1);
+
+    chart.save(ACCOUNT_KEY, "EURUSD", &[record("seeded-chart-1")]);
+    chart
+        .store()
+        .save(&second, &[record("second-chart-1")])
+        .expect("the drawings save");
+
+    assert_eq!(chart.ids(ACCOUNT_KEY, "EURUSD"), ["seeded-chart-1"]);
+    assert_eq!(ids_in(&chart.store(), &second), ["second-chart-1"]);
 }
 
 #[test]
 fn an_empty_list_removes_the_drawings_of_the_scope() {
-    let store = store();
-    save(&store, ACCOUNT_KEY, "EURUSD", &[record("profile-1")]);
+    let chart = TestChart::new();
+    chart.save(ACCOUNT_KEY, "EURUSD", &[record("profile-1")]);
 
-    save(&store, ACCOUNT_KEY, "EURUSD", &[]);
+    chart.save(ACCOUNT_KEY, "EURUSD", &[]);
     // A scope that already holds nothing is the state the caller asked for.
-    save(&store, ACCOUNT_KEY, "EURUSD", &[]);
+    chart.save(ACCOUNT_KEY, "EURUSD", &[]);
 
-    assert!(loaded(&store, ACCOUNT_KEY, "EURUSD").is_empty());
+    assert!(chart.loaded(ACCOUNT_KEY, "EURUSD").is_empty());
 }
 
 #[test]
 fn the_drawings_keep_their_position_and_their_points_keep_their_order() {
-    let store = store();
+    let chart = TestChart::new();
     let first = record("profile-1");
     let mut second = record("profile-2");
     second.points = (0..5)
         .map(|index| time_point(1_700_000_000_000 + index * BAR_MS))
         .collect();
 
-    save(&store, ACCOUNT_KEY, "EURUSD", &[first, second.clone()]);
+    chart.save(ACCOUNT_KEY, "EURUSD", &[first, second.clone()]);
 
-    assert_eq!(
-        ids(&store, ACCOUNT_KEY, "EURUSD"),
-        ["profile-1", "profile-2"]
-    );
-    assert_eq!(
-        loaded(&store, ACCOUNT_KEY, "EURUSD")[1].points,
-        second.points
-    );
+    assert_eq!(chart.ids(ACCOUNT_KEY, "EURUSD"), ["profile-1", "profile-2"]);
+    assert_eq!(chart.loaded(ACCOUNT_KEY, "EURUSD")[1].points, second.points);
 }
 
 #[test]
-fn a_scope_needs_a_present_and_bounded_account_and_symbol() {
-    assert!(DrawingScope::new(String::new(), "EURUSD".to_owned()).is_err());
-    assert!(DrawingScope::new("a".repeat(257), "EURUSD".to_owned()).is_err());
-    assert!(DrawingScope::new(ACCOUNT_KEY.to_owned(), String::new()).is_err());
-    assert!(DrawingScope::new(ACCOUNT_KEY.to_owned(), "S".repeat(65)).is_err());
-    assert!(DrawingScope::new(ACCOUNT_KEY.to_owned(), "EURUSD".to_owned()).is_ok());
+fn a_scope_needs_a_present_and_bounded_chart_account_and_symbol() {
+    assert!(try_scope("", ACCOUNT_KEY, "EURUSD").is_err());
+    assert!(try_scope(&"c".repeat(65), ACCOUNT_KEY, "EURUSD").is_err());
+    assert!(try_scope("chart-1", "", "EURUSD").is_err());
+    assert!(try_scope("chart-1", &"a".repeat(257), "EURUSD").is_err());
+    assert!(try_scope("chart-1", ACCOUNT_KEY, "").is_err());
+    assert!(try_scope("chart-1", ACCOUNT_KEY, &"S".repeat(65)).is_err());
+    assert!(try_scope("chart-1", ACCOUNT_KEY, "EURUSD").is_ok());
 }
 
 #[test]
 fn a_list_above_the_limit_is_refused_and_writes_nothing() {
-    let store = store();
+    let chart = TestChart::new();
     let records: Vec<ChartDrawingRecord> = (0..=MAX_DRAWINGS_PER_SCOPE)
         .map(|index| record(&format!("profile-{index}")))
         .collect();
 
-    let refused = store.save(&scope(ACCOUNT_KEY, "EURUSD"), &records);
+    let refused = chart
+        .store()
+        .save(&chart.scope(ACCOUNT_KEY, "EURUSD"), &records);
 
     let message = refused.expect_err("the list is refused").to_string();
     assert!(message.contains("at most"), "{message}");
-    assert!(loaded(&store, ACCOUNT_KEY, "EURUSD").is_empty());
+    assert!(chart.loaded(ACCOUNT_KEY, "EURUSD").is_empty());
 }
 
 #[test]
 fn a_point_without_a_time_or_a_price_is_refused_and_writes_nothing() {
-    let store = store();
+    let chart = TestChart::new();
     let mut anchored = record("profile-1");
     anchored.points = vec![ChartDrawingPoint {
         time_ms: None,
         price: None,
     }];
 
-    assert!(store
-        .save(&scope(ACCOUNT_KEY, "EURUSD"), &[anchored])
+    assert!(chart
+        .store()
+        .save(&chart.scope(ACCOUNT_KEY, "EURUSD"), &[anchored])
         .is_err());
-    assert!(loaded(&store, ACCOUNT_KEY, "EURUSD").is_empty());
+    assert!(chart.loaded(ACCOUNT_KEY, "EURUSD").is_empty());
 }
 
 #[test]
 fn a_price_in_exponent_form_is_refused_and_writes_nothing() {
-    let store = store();
+    let chart = TestChart::new();
     let mut exponent = record("profile-1");
     exponent.points = vec![priced_point("1e5")];
 
-    let refused = store.save(&scope(ACCOUNT_KEY, "EURUSD"), &[exponent]);
+    let refused = chart
+        .store()
+        .save(&chart.scope(ACCOUNT_KEY, "EURUSD"), &[exponent]);
 
     let message = refused.expect_err("the price is refused").to_string();
     assert!(message.contains("decimal"), "{message}");
-    assert!(loaded(&store, ACCOUNT_KEY, "EURUSD").is_empty());
+    assert!(chart.loaded(ACCOUNT_KEY, "EURUSD").is_empty());
 }
 
 #[test]
 fn a_list_with_too_many_points_is_refused_and_writes_nothing() {
-    let store = store();
+    let chart = TestChart::new();
     let mut crowded = record("profile-1");
     crowded.points = (0..=MAX_POINTS_PER_DRAWING)
         .map(|_| time_point(1_700_000_000_000))
         .collect();
 
-    assert!(store
-        .save(&scope(ACCOUNT_KEY, "EURUSD"), &[crowded])
+    assert!(chart
+        .store()
+        .save(&chart.scope(ACCOUNT_KEY, "EURUSD"), &[crowded])
         .is_err());
-    assert!(loaded(&store, ACCOUNT_KEY, "EURUSD").is_empty());
+    assert!(chart.loaded(ACCOUNT_KEY, "EURUSD").is_empty());
 }
 
 #[test]
 fn an_inputs_column_that_is_not_json_fails_the_load() {
-    let store = store();
-    insert_drawing(&store, "corrupt", "not json");
+    let chart = TestChart::new();
+    insert_drawing(&chart.database, &chart.chart_id, "corrupt", "not json");
 
-    assert!(store.load(&scope(ACCOUNT_KEY, "EURUSD")).is_err());
+    assert!(chart
+        .store()
+        .load(&chart.scope(ACCOUNT_KEY, "EURUSD"))
+        .is_err());
 }
 
 #[test]
 fn a_drawing_without_points_fails_the_load() {
-    let store = store();
-    insert_drawing(&store, "pointless", "{}");
+    let chart = TestChart::new();
+    insert_drawing(&chart.database, &chart.chart_id, "pointless", "{}");
 
-    assert!(store.load(&scope(ACCOUNT_KEY, "EURUSD")).is_err());
+    assert!(chart
+        .store()
+        .load(&chart.scope(ACCOUNT_KEY, "EURUSD"))
+        .is_err());
 }
 
 #[test]
 fn the_drawings_of_a_database_file_survive_a_reopen() {
     let directory = TestDirectory::new();
-    let path = directory.path().join(DATABASE_FILE_NAME);
     {
-        let store = SqliteChartDrawingStore::open(&path).expect("the database opens");
-        save(&store, ACCOUNT_KEY, "EURUSD", &[record("profile-1")]);
+        let database =
+            open_chart_database(Some(directory.path().to_path_buf())).expect("the database opens");
+        let chart_id = seeded_chart_id(&database);
+        let store = SqliteChartDrawingStore::from_database(Arc::clone(&database));
+        store
+            .save(
+                &scope_of(&chart_id, ACCOUNT_KEY, "EURUSD"),
+                &[record("profile-1")],
+            )
+            .expect("the drawings save");
     }
 
-    let reopened = SqliteChartDrawingStore::open(&path).expect("the database opens again");
+    let reopened = open_chart_database(Some(directory.path().to_path_buf()))
+        .expect("the database opens again");
+    let store = SqliteChartDrawingStore::from_database(Arc::clone(&reopened));
 
-    assert_eq!(ids(&reopened, ACCOUNT_KEY, "EURUSD"), ["profile-1"]);
+    assert_eq!(
+        ids_in(
+            &store,
+            &scope_of(&seeded_chart_id(&reopened), ACCOUNT_KEY, "EURUSD")
+        ),
+        ["profile-1"]
+    );
 }
 
 #[test]
 fn a_drawing_written_before_the_below_bars_migration_opens_above_the_bars() {
     let directory = TestDirectory::new();
-    let path = directory.path().join(DATABASE_FILE_NAME);
+    let path = directory.path().join(chart_database::DATABASE_FILE_NAME);
     {
-        let previous = SqliteChartDrawingStore::open_before_last_migration(&path)
+        let database = chart_database::open_at_version(&path, BEFORE_BELOW_BARS_VERSION)
             .expect("the database opens with the earlier migrations");
         // The row leaves out the below-bars column that build did not have, so only the
         // migration's default can fill it.
-        insert_drawing(&previous, "profile-1", "{}");
-        insert_point(&previous, "profile-1");
+        insert_legacy_drawing(&database, "profile-1", "{}");
+        insert_point(&database, "profile-1", 0, 1_700_000_000_000);
     }
 
-    let migrated = SqliteChartDrawingStore::open(&path).expect("the database migrates");
+    let migrated =
+        open_chart_database(Some(directory.path().to_path_buf())).expect("the database migrates");
+    let store = SqliteChartDrawingStore::from_database(Arc::clone(&migrated));
 
-    let restored = loaded(&migrated, ACCOUNT_KEY, "EURUSD");
+    let restored = store
+        .load(&scope_of(
+            &seeded_chart_id(&migrated),
+            ACCOUNT_KEY,
+            "EURUSD",
+        ))
+        .expect("the drawings load");
     assert_eq!(restored.len(), 1);
     assert_eq!(restored[0].id, "profile-1");
     assert!(!restored[0].below_bars);
@@ -475,17 +597,25 @@ fn a_drawing_written_before_the_below_bars_migration_opens_above_the_bars() {
 #[test]
 fn a_drawing_written_before_the_timeframe_migration_shows_on_every_timeframe() {
     let directory = TestDirectory::new();
-    let path = directory.path().join(DATABASE_FILE_NAME);
+    let path = directory.path().join(chart_database::DATABASE_FILE_NAME);
     {
-        let previous = SqliteChartDrawingStore::open_before_last_migration(&path)
+        let database = chart_database::open_at_version(&path, BEFORE_TIMEFRAME_VISIBILITY_VERSION)
             .expect("the database opens with the earlier migrations");
-        insert_drawing(&previous, "profile-1", "{}");
-        insert_point(&previous, "profile-1");
+        insert_legacy_drawing(&database, "profile-1", "{}");
+        insert_point(&database, "profile-1", 0, 1_700_000_000_000);
     }
 
-    let migrated = SqliteChartDrawingStore::open(&path).expect("the database migrates");
+    let migrated =
+        open_chart_database(Some(directory.path().to_path_buf())).expect("the database migrates");
+    let store = SqliteChartDrawingStore::from_database(Arc::clone(&migrated));
 
-    let restored = loaded(&migrated, ACCOUNT_KEY, "EURUSD");
+    let restored = store
+        .load(&scope_of(
+            &seeded_chart_id(&migrated),
+            ACCOUNT_KEY,
+            "EURUSD",
+        ))
+        .expect("the drawings load");
     assert_eq!(restored.len(), 1);
     assert_eq!(
         restored[0].timeframe_visibility,
@@ -494,132 +624,44 @@ fn a_drawing_written_before_the_timeframe_migration_shows_on_every_timeframe() {
 }
 
 #[test]
+fn a_drawing_of_the_version_before_the_charts_moves_to_the_seeded_chart() {
+    let directory = TestDirectory::new();
+    let path = directory.path().join(chart_database::DATABASE_FILE_NAME);
+    {
+        let database = chart_database::open_at_version(&path, BEFORE_CHART_SETTINGS_VERSION)
+            .expect("the database opens with the earlier migrations");
+        insert_legacy_drawing(&database, "profile-1", "{}");
+        insert_point(&database, "profile-1", 0, 1_700_000_000_000);
+        insert_point(&database, "profile-1", 1, 1_700_000_900_000);
+        insert_time_zone(&database, "America/New_York");
+    }
+
+    let migrated =
+        open_chart_database(Some(directory.path().to_path_buf())).expect("the database migrates");
+    let store = SqliteChartDrawingStore::from_database(Arc::clone(&migrated));
+
+    let restored = store
+        .load(&scope_of(
+            &seeded_chart_id(&migrated),
+            ACCOUNT_KEY,
+            "EURUSD",
+        ))
+        .expect("the drawings load");
+
+    assert_eq!(restored.len(), 1);
+    assert_eq!(restored[0].id, "profile-1");
+    assert_eq!(
+        restored[0].points,
+        [time_point(1_700_000_000_000), time_point(1_700_000_900_000)]
+    );
+    assert!(!chart_time_zone_table_exists(&migrated));
+}
+
+#[test]
 fn a_machine_without_an_app_data_folder_fails_every_call() {
-    let store = ChartDrawingsState::open(None).store();
-    let eurusd = scope(ACCOUNT_KEY, "EURUSD");
+    let store = ChartDrawingsState::from_database(open_chart_database(None)).store();
+    let eurusd = scope_of("chart-1", ACCOUNT_KEY, "EURUSD");
 
     assert!(store.load(&eurusd).is_err());
     assert!(store.save(&eurusd, &[record("profile-1")]).is_err());
-    assert!(store.load_time_zone(&eurusd).is_err());
-    assert!(store
-        .save_time_zone(&eurusd, &time_zone("exchange"))
-        .is_err());
-}
-
-#[test]
-fn a_scope_without_a_saved_time_zone_loads_none() {
-    let store = store();
-
-    assert_eq!(loaded_time_zone(&store, ACCOUNT_KEY, "EURUSD"), None);
-}
-
-#[test]
-fn the_time_zone_of_one_scope_round_trips() {
-    let store = store();
-
-    save_time_zone(&store, ACCOUNT_KEY, "EURUSD", "America/New_York");
-
-    assert_eq!(
-        loaded_time_zone(&store, ACCOUNT_KEY, "EURUSD"),
-        Some(time_zone("America/New_York"))
-    );
-}
-
-#[test]
-fn saving_a_time_zone_again_replaces_the_previous_one() {
-    let store = store();
-    save_time_zone(&store, ACCOUNT_KEY, "EURUSD", "UTC");
-
-    save_time_zone(&store, ACCOUNT_KEY, "EURUSD", "exchange");
-
-    assert_eq!(
-        loaded_time_zone(&store, ACCOUNT_KEY, "EURUSD"),
-        Some(time_zone("exchange"))
-    );
-}
-
-#[test]
-fn two_scopes_keep_their_own_time_zone() {
-    let store = store();
-    save_time_zone(&store, ACCOUNT_KEY, "EURUSD", "America/New_York");
-    save_time_zone(&store, OTHER_ACCOUNT_KEY, "EURUSD", "UTC");
-    save_time_zone(&store, ACCOUNT_KEY, "NAS100", "Etc/GMT+5");
-
-    assert_eq!(
-        loaded_time_zone(&store, ACCOUNT_KEY, "EURUSD"),
-        Some(time_zone("America/New_York"))
-    );
-    assert_eq!(
-        loaded_time_zone(&store, OTHER_ACCOUNT_KEY, "EURUSD"),
-        Some(time_zone("UTC"))
-    );
-    assert_eq!(
-        loaded_time_zone(&store, ACCOUNT_KEY, "NAS100"),
-        Some(time_zone("Etc/GMT+5"))
-    );
-}
-
-#[test]
-fn a_time_zone_outside_the_allowed_shape_is_refused() {
-    // One letter more than a zone id may hold.
-    let overlong = "A".repeat(65);
-    let refused = [
-        "",
-        "  ",
-        "../etc",
-        "America/New York",
-        "1abc",
-        overlong.as_str(),
-    ];
-
-    for value in refused {
-        assert!(
-            ChartTimeZone::new(value.to_owned()).is_err(),
-            "{value:?} is refused"
-        );
-    }
-    for value in [
-        "exchange",
-        "UTC",
-        "America/New_York",
-        "America/Argentina/Buenos_Aires",
-        "Etc/GMT+5",
-    ] {
-        assert!(
-            ChartTimeZone::new(value.to_owned()).is_ok(),
-            "{value} is accepted"
-        );
-    }
-}
-
-#[test]
-fn a_stored_time_zone_this_build_cannot_read_fails_the_load() {
-    let store = store();
-    insert_time_zone(&store, "bad zone");
-
-    let refused = store
-        .load_time_zone(&scope(ACCOUNT_KEY, "EURUSD"))
-        .expect_err("a zone this build cannot read is an error");
-
-    assert!(
-        matches!(&refused, ChartDrawingError::TimeZoneUnreadable),
-        "{refused:?}"
-    );
-}
-
-#[test]
-fn the_drawings_of_a_database_before_the_time_zone_migration_survive_it() {
-    let directory = TestDirectory::new();
-    let path = directory.path().join(DATABASE_FILE_NAME);
-    {
-        let previous = SqliteChartDrawingStore::open_before_last_migration(&path)
-            .expect("the database opens with the earlier migrations");
-        insert_drawing(&previous, "profile-1", "{}");
-        insert_point(&previous, "profile-1");
-    }
-
-    let migrated = SqliteChartDrawingStore::open(&path).expect("the database migrates");
-
-    assert_eq!(ids(&migrated, ACCOUNT_KEY, "EURUSD"), ["profile-1"]);
-    assert_eq!(loaded_time_zone(&migrated, ACCOUNT_KEY, "EURUSD"), None);
 }

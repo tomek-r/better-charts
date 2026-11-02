@@ -7,6 +7,7 @@
   display: flex;
   justify-content: center;
   gap: 6px;
+  /* Opaque, because this fill hides the axis labels behind the row. */
   background: var(--color-panel);
   pointer-events: none;
   opacity: 0;
@@ -14,8 +15,19 @@
   padding-top: 5px;
 }
 
+/* The Scale modes setting hides the row outright: `hidden` takes it out of the axis, the tab order and
+   the pointer's reach, which the class above would otherwise put back. */
+.price-scale-controls[hidden] {
+  display: none;
+}
+
 .price-scale-controls-revealed,
 .price-scale-controls:focus-within {
+  opacity: 1;
+}
+
+/* Kept on screen by the Scale modes setting: no pointer needed, and its buttons always take a press. */
+.price-scale-controls-always {
   opacity: 1;
 }
 
@@ -33,7 +45,8 @@
   cursor: pointer;
 }
 
-.price-scale-controls-revealed button {
+.price-scale-controls-revealed button,
+.price-scale-controls-always button {
   pointer-events: auto;
 }
 

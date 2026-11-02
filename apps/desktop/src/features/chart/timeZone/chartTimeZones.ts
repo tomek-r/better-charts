@@ -176,16 +176,20 @@ function cityOption({ city, offsetMinutes }: CityOffset): ChartTimeZoneOption {
   return { zone: city.zone, label: `(${formatUtcOffset(offsetMinutes)}) ${city.name}` };
 }
 
+/** The exchange, under the broker's own offset the way a city is named, and plain until that offset is known. */
+function exchangeOption(brokerUtcOffsetMinutes: number | null): ChartTimeZoneOption {
+  if (brokerUtcOffsetMinutes === null) {
+    return { zone: EXCHANGE_TIME_ZONE, label: 'Exchange' };
+  }
+  return { zone: EXCHANGE_TIME_ZONE, label: `(${formatUtcOffset(brokerUtcOffsetMinutes)}) Exchange` };
+}
+
 /** The menu: UTC, then the exchange, then every city under the offset it is running at that instant. */
-export function chartTimeZoneOptions(atMs: number): ChartTimeZoneOption[] {
+export function chartTimeZoneOptions(atMs: number, brokerUtcOffsetMinutes: number | null): ChartTimeZoneOption[] {
   const cityOptions = CITIES.map((city) => cityOffset(city, atMs))
     .sort(byOffsetThenName)
     .map(cityOption);
-  return [
-    { zone: UTC_TIME_ZONE, label: UTC_TIME_ZONE },
-    { zone: EXCHANGE_TIME_ZONE, label: 'Exchange' },
-    ...cityOptions,
-  ];
+  return [{ zone: UTC_TIME_ZONE, label: UTC_TIME_ZONE }, exchangeOption(brokerUtcOffsetMinutes), ...cityOptions];
 }
 
 const knownZones: ReadonlySet<string> = new Set([

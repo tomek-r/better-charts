@@ -51,6 +51,12 @@ export function alphaToOpacityPercent(alpha: number): number {
   return Math.round((alpha * MAX_PERCENT) / OPAQUE_ALPHA);
 }
 
+/** The colour with its alpha dropped: `#rrggbb`, or undefined for text that is no colour. */
+export function opaqueHexColor(text: string): string | undefined {
+  const parsed = parseHexColor(text);
+  return parsed === undefined ? undefined : formatHexColor({ ...parsed, alpha: OPAQUE_ALPHA });
+}
+
 /** The colour without its alpha: `#rrggbb`. Text that is no colour comes back unchanged. */
 export function solidHexColor(text: string): string {
   const parsed = parseHexColor(text);

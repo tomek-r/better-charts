@@ -1,0 +1,72 @@
+/* The rows a chart settings tab draws and the space its groups keep apart. The dialog's frame, its tab
+   column and the panel's frame come from shared/ui/settingsNav/settings-nav.css; the controls keep the
+   styles the select and drawing settings give them. */
+
+/* A group after the first keeps the space above it that the panel's padding and the caption's own margin keep
+   above the first group, so every caption starts a group instead of hugging the row before it. */
+.settings-content > section + section > h3 {
+  margin-top: calc(24px + 12px);
+}
+
+/* One setting: its label in a column as wide as the tab column above it, its control in the column beside it.
+   A select fills that column, so it is wide enough for the longest zone a select can name, "(UTC+5:30) Kolkata",
+   and no value is cut off. The columns are packed left, so a colour row's swatches sit just after their label
+   however wide the panel is. */
+.chart-settings-row {
+  display: grid;
+  grid-template-columns: 220px 240px;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 8px;
+  color: var(--color-text-label);
+}
+
+/* A row whose field has no control beside its label: the label takes the whole row and stays on one line. */
+.chart-settings-row-wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* A colour or line trigger is as wide as the swatch it draws: it neither fills the column it sits in nor
+   shrinks beside the select that shares that column, so the select gives way instead. */
+.chart-settings-row .color-trigger {
+  flex: 0 0 auto;
+  justify-self: start;
+}
+
+/* A checkbox with its text, the swatches of a colour pair, and the controls of a row that holds two of them. */
+.chart-settings-checkbox-row,
+.chart-settings-colors,
+.chart-settings-controls {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* Controls that share the column beside their label: a select gives way rather than pushing a swatch out. */
+.chart-settings-controls > * {
+  min-width: 0;
+}
+
+/* The unit a whole number counts in, after the input that holds it. */
+.chart-settings-unit {
+  color: var(--color-muted);
+}
+
+/* Room for three digits, spun up and down whole: the drawing settings' control, sized for a percent. */
+.chart-settings-row .chart-settings-number {
+  width: 96px;
+}
+
+/* No room for a column beside the label: the control takes the row under it. */
+@media (max-width: 600px) {
+  .chart-settings-row {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    gap: 9px;
+  }
+
+  /* The panel's narrow padding is the space the first caption keeps from the top there. */
+  .settings-content > section + section > h3 {
+    margin-top: calc(16px + 12px);
+  }
+}

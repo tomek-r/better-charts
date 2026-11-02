@@ -1,0 +1,65 @@
+/* The settings gear in the corner of the price axis and the time axis (engine/priceScale/chartSettingsCornerButton). */
+
+/* The engine sets the box: the corner cell inside both axis border lines (see ChartSettingsCornerButton.sync). */
+.chart-settings-corner-button {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  color: var(--color-muted);
+  background: none;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+/* The rounded chip is the corner cell inset on every side, so it stays clear of the axis border lines and
+   the frame's rounded corner, while the whole cell stays the button's hit area. */
+.chart-settings-corner-button::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 6px;
+  background: none;
+  transition: background-color 0.12s ease;
+}
+
+/* The path is drawn in the 24-unit frame the outline icons share; the box shows it at 16px. It is positioned
+   so it paints over the chip, which is positioned too and would otherwise cover the gear. */
+.chart-settings-corner-button svg {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-settings-corner-button:hover {
+  color: var(--color-text);
+}
+
+.chart-settings-corner-button:hover::before {
+  background: var(--color-border-subtle);
+}
+
+/* The ring follows the chip rather than the cell, so it never draws over the axis lines. */
+.chart-settings-corner-button:focus-visible {
+  outline: none;
+}
+
+.chart-settings-corner-button:focus-visible::before {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-settings-corner-button,
+  .chart-settings-corner-button::before {
+    transition: none;
+  }
+}

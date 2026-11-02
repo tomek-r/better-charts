@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { InfoIcon } from '../../../shared/ui/icons/InfoIcon';
 import type { SizingModeMenuItem } from './unitsModeCopy';
 import type { UnitsMode } from './unitsMode';
 
@@ -54,7 +55,7 @@ export function SizingModeMenu({
             aria-label={item.infoAria}
             onClick={(event) => event.stopPropagation()}
           >
-            i
+            <InfoIcon />
           </span>
         </button>
       ))}

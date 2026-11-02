@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../../src/features/chart/engine/drawings/drawingRecord';
 import { commitProfile, position } from './fixedRangeProfilePage';
-import { chartDrawingScopeKey, stubChartDrawings } from './tauriStub';
+import { chartScopeKey, stubChartDrawings } from './tauriStub';
 
 /**
  * The drawing toolbar page steps the drawing-toolbar and drawing-settings specs share: the toolbar
@@ -32,7 +32,7 @@ export async function chartDrawings(page: Page): Promise<ChartDrawingRecord[]> {
 /** The records the stub's backend holds for the plot, in save order. */
 export async function savedDrawings(page: Page): Promise<Array<Record<string, unknown>>> {
   const stored = await stubChartDrawings(page);
-  const records = stored[chartDrawingScopeKey(TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL)] ?? [];
+  const records = stored[chartScopeKey(TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL)] ?? [];
   return records as Array<Record<string, unknown>>;
 }
 

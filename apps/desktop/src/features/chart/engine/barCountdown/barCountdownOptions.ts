@@ -4,11 +4,14 @@ import { palette } from '../../../../shared/theme/palette';
 export interface BarCountdownOptions {
   textColor: string;
   backColor: string;
+  /** Whether the tag is drawn at all: a chart whose Countdown setting is off draws none, and runs no timer. */
+  shown: boolean;
 }
 
 export const barCountdownDefaultOptions: BarCountdownOptions = {
   textColor: palette.text,
   backColor: palette.sell,
+  shown: true,
 };
 
 /**

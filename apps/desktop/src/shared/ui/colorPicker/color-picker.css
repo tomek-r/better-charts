@@ -98,6 +98,119 @@
   line-height: 1;
 }
 
+/* The in-app colour editor behind "+": a preview, a hex field and Add, then the square and the hue bar. */
+.color-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.color-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.color-editor-preview {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.color-editor-hex,
+.color-editor-add {
+  box-sizing: border-box;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+}
+
+.color-editor-hex {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.color-editor-hex[aria-invalid='true'] {
+  border-color: var(--color-danger-text);
+}
+
+.color-editor-add {
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.color-editor-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.color-editor-body {
+  display: grid;
+  grid-template-columns: 1fr 16px;
+  gap: 8px;
+  height: 150px;
+}
+
+.color-editor-square,
+.color-editor-hue {
+  position: relative;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.color-editor-square:focus-visible,
+.color-editor-hue:focus-visible,
+.color-editor-hex:focus-visible,
+.color-editor-add:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
+}
+
+/* Not palette colours: the hue under these overlays, and the hue wheel below, are the colour space itself. */
+.color-editor-square {
+  background-image: linear-gradient(to right, #ffffff, #ffffff00), linear-gradient(to top, #000000, #00000000);
+}
+
+.color-editor-hue {
+  background-image: linear-gradient(to bottom, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  cursor: ns-resize;
+}
+
+.color-editor-handle {
+  position: absolute;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-text-bright);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--color-scrim-strong);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.color-editor-hue-handle {
+  position: absolute;
+  right: 0;
+  left: 0;
+  box-sizing: border-box;
+  height: 8px;
+  border: 2px solid var(--color-text-bright);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--color-scrim-strong);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
 .color-divider {
   width: 100%;
   margin: 0;

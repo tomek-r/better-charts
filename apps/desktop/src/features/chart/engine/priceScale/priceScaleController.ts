@@ -1,4 +1,6 @@
 import { PriceScaleMode, type IChartApi, type IPriceScaleApi, type ISeriesApi } from 'lightweight-charts';
+import type { ScaleButtonsMode } from '../surface/chartScalesAppearance';
+import { ChartSettingsCornerButton } from './chartSettingsCornerButton';
 import { setPriceScaleRange } from './priceScaleRange';
 
 /** The scale the candles and the price axis are bound to. */
@@ -19,17 +21,19 @@ function setPressed(button: HTMLButtonElement, pressed: boolean): void {
 }
 
 /**
- * Hover-revealed toggles on the right price scale: `A` fits the visible data
- * (auto scale) and `L` switches the scale to logarithmic prices.
+ * Toggles on the right price scale: `A` fits the visible data (auto scale) and
+ * `L` switches the scale to logarithmic prices. The settings gear sits below
+ * them, in the corner where the price axis meets the time axis.
  *
  * Both are ordinary HTML buttons in the axis column rather than a primitive:
  * the library paints the axis on its own canvas and gives plugins no hit
  * testing, cursor or focus there, so a drawn button could not be clicked with
- * the mouse or reached with the keyboard. The row is revealed by a pointer hit
- * test built from public geometry only — the axis width
+ * the mouse or reached with the keyboard. By default the row is revealed by a
+ * pointer hit test built from public geometry only — the axis width
  * (`IPriceScaleApi.width()`) and the pane height — which is also the region
  * Lightweight Charts itself treats as the price scale, so the toggles appear
- * exactly where the axis is.
+ * exactly where the axis is. The Scale modes setting keeps it on screen, or
+ * takes it away.
  *
  * The toggles are price-scale options, so their pressed state is read back from
  * the scale instead of being cached: the library changes those options on its
@@ -44,7 +48,10 @@ export class PriceScaleController {
   private readonly root: HTMLDivElement;
   private readonly autoButton: HTMLButtonElement;
   private readonly logButton: HTMLButtonElement;
+  private readonly settingsButton: ChartSettingsCornerButton;
   private revealed = false;
+  /** How the row reaches the screen: revealed by the pointer, kept on screen, or never drawn. */
+  private modeButtons: ScaleButtonsMode = 'mouseOver';
 
   constructor(
     private readonly host: HTMLElement,
@@ -71,6 +78,7 @@ export class PriceScaleController {
     // row is re-read when one ends instead of trusting the state it last wrote.
     host.addEventListener('pointerup', this.onPointerUp);
     host.addEventListener('dblclick', this.onDoubleClick);
+    this.settingsButton = new ChartSettingsCornerButton(host, chart);
     this.sync();
   }
 
@@ -80,6 +88,48 @@ export class PriceScaleController {
     const logarithmic = options.mode === PriceScaleMode.Logarithmic;
     setPressed(this.autoButton, options.autoScale);
     setPressed(this.logButton, logarithmic);
+    if (this.modeButtons === 'always') {
+      this.setWidth(this.axis.width());
+    }
+  }
+
+  /**
+   * What the Scale modes setting asks of the row: `mouseOver` reveals it while the pointer is over the
+   * axis, `always` keeps it on screen, and `hidden` removes it — a `hidden` element takes no pointer
+   * press and no focus, so the toggles cannot be reached at all.
+   */
+  setScaleModeButtons(mode: ScaleButtonsMode): void {
+    if (mode === this.modeButtons) {
+      return;
+    }
+    this.modeButtons = mode;
+    this.root.hidden = mode === 'hidden';
+    this.root.classList.toggle('price-scale-controls-always', mode === 'always');
+    // A row kept on screen masks the axis labels from the start; a revealed one is measured by the hit test.
+    if (mode === 'always') {
+      this.setWidth(this.axis.width());
+    }
+    this.conceal();
+  }
+
+  /** The mode the row is drawn with, which the dev test hook reads back. */
+  scaleModeButtons(): ScaleButtonsMode {
+    return this.modeButtons;
+  }
+
+  /** Re-measures the gear on the axes' geometry. Call wherever the pane or the price labels changed. */
+  syncSettingsButton(): void {
+    this.settingsButton.sync();
+  }
+
+  /**
+   * Fills the row's box with the chart's own background colour. That fill is what masks the axis
+   * labels behind the toggles (see price-scale-controls.css), so it takes the background the chart
+   * is drawn on, a gradient's top colour included, and it must be opaque to hide the labels.
+   * `null` drops the inline colour, leaving the row painted by its opaque CSS default.
+   */
+  setMaskColor(color: string | null): void {
+    this.root.style.backgroundColor = color ?? '';
   }
 
   destroy(): void {
@@ -90,6 +140,7 @@ export class PriceScaleController {
     this.host.removeEventListener('dblclick', this.onDoubleClick);
     this.autoButton.removeEventListener('click', this.toggleAutoScale);
     this.logButton.removeEventListener('click', this.toggleLogarithmic);
+    this.settingsButton.destroy();
     this.root.remove();
   }
 
@@ -112,6 +163,9 @@ export class PriceScaleController {
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
+    if (!this.revealsOnHover()) {
+      return;
+    }
     const width = this.axisWidthUnderPointer(event);
     if (width === 0) {
       this.conceal();
@@ -122,6 +176,9 @@ export class PriceScaleController {
   };
 
   private readonly onPointerLeave = (): void => {
+    if (!this.revealsOnHover()) {
+      return;
+    }
     this.conceal();
   };
 
@@ -168,6 +225,11 @@ export class PriceScaleController {
 
   private paneHeight(): number {
     return this.chart.panes()[0]?.getHeight() ?? this.host.clientHeight;
+  }
+
+  /** Only the mouse-over row follows the pointer; the other two modes draw a row that never moves. */
+  private revealsOnHover(): boolean {
+    return this.modeButtons === 'mouseOver';
   }
 
   private reveal(): void {

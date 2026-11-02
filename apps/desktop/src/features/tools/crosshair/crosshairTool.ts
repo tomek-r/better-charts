@@ -1,8 +1,5 @@
+import { dashPatternOf } from '../../../shared/canvas/dashPatterns';
 import type { ChartDrawTarget, ChartTool, ChartToolHost } from '../../chart/engine/tools/toolContract';
-import { palette } from '../../../shared/theme/palette';
-
-/** Colours come from the shared palette — a canvas renderer cannot read CSS variables. */
-const LINE_COLOR = palette.textLabel;
 
 /** What the e2e suite reads through `window.__chartTest.tool('crosshair')` (dev builds only). */
 export interface CrosshairTestApi {
@@ -10,23 +7,51 @@ export interface CrosshairTestApi {
   linesVisible(): boolean;
 }
 
-/** A line through a CSS-px coordinate, in device pixels: the whole-pixel thickness and where it starts. */
-function snappedLine(pointCss: number, pixelRatio: number): { start: number; thickness: number } {
-  const thickness = Math.max(1, Math.floor(pixelRatio));
+/**
+ * A line through a CSS-px coordinate, in device pixels: the whole-pixel thickness the settings ask
+ * for and the pixel the line starts at, centred on the pointer.
+ */
+function snappedLine(pointCss: number, pixelRatio: number, width: number): { start: number; thickness: number } {
+  const thickness = Math.max(1, Math.round(width * pixelRatio));
   return { start: Math.round(pointCss * pixelRatio - thickness / 2), thickness };
 }
 
 /**
- * Draws full-width and full-height 1 CSS px lines through the pointer while active
- * and the pointer is over the pane. They continue over both axes, so the engine's
- * time and price labels are visibly attached to them. The labels themselves belong
- * to the engine and follow every tool.
+ * Fills the run a crosshair line covers along its own axis, in device pixels: one bar while the
+ * line is solid, otherwise the dashes of its style, each run rounded to a whole device pixel so
+ * the line stays crisp at every pixel ratio.
+ */
+function paintRun(
+  length: number,
+  pattern: readonly number[] | undefined,
+  pixelRatio: number,
+  paint: (offset: number, run: number) => void,
+): void {
+  if (pattern === undefined) {
+    paint(0, length);
+    return;
+  }
+  let offset = 0;
+  for (let index = 0; offset < length; index += 1) {
+    const run = Math.max(1, Math.round(pattern[index % pattern.length] * pixelRatio));
+    if (index % 2 === 0) {
+      paint(offset, Math.min(run, length - offset));
+    }
+    offset += run;
+  }
+}
+
+/**
+ * Draws full-width and full-height lines through the pointer while active and the pointer is
+ * over the pane, in the colour, dash and thickness the chart's settings give the crosshair.
+ * They continue over both axes, so the engine's time and price labels are visibly attached to
+ * them. The labels themselves belong to the engine and follow every tool.
  */
 export class CrosshairTool implements ChartTool {
   /** Pointer position in pane CSS px; null while it is outside the pane or the tool is not active. */
   private point: { x: number; y: number } | null = null;
 
-  constructor(private readonly host: Pick<ChartToolHost, 'requestRepaint'>) {}
+  constructor(private readonly host: Pick<ChartToolHost, 'requestRepaint' | 'crosshairStyle'>) {}
 
   activate(): void {
     this.host.requestRepaint();
@@ -55,15 +80,21 @@ export class CrosshairTool implements ChartTool {
     // is exactly lineWidth pixels wide at every pixel ratio.
     const { horizontalPixelRatio, verticalPixelRatio, width, height } = target.bitmap;
     const { surface } = target.layer;
+    const { color, style, width: lineWidth } = this.host.crosshairStyle();
+    const pattern = dashPatternOf(style);
     target.bitmap.withContext((context) => {
-      context.fillStyle = LINE_COLOR;
+      context.fillStyle = color;
       if (surface !== 'priceAxis') {
-        const vertical = snappedLine(point.x, horizontalPixelRatio);
-        context.fillRect(vertical.start, 0, vertical.thickness, height);
+        const { start, thickness } = snappedLine(point.x, horizontalPixelRatio, lineWidth);
+        paintRun(height, pattern, verticalPixelRatio, (offset, run) => {
+          context.fillRect(start, offset, thickness, run);
+        });
       }
       if (surface !== 'timeAxis') {
-        const horizontal = snappedLine(point.y, verticalPixelRatio);
-        context.fillRect(0, horizontal.start, width, horizontal.thickness);
+        const { start, thickness } = snappedLine(point.y, verticalPixelRatio, lineWidth);
+        paintRun(width, pattern, horizontalPixelRatio, (offset, run) => {
+          context.fillRect(offset, start, run, thickness);
+        });
       }
     });
   }

@@ -25,6 +25,7 @@ import {
 import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../../src/features/settings/setup/BridgeAwaitingScreen';
 import { BridgeScreen } from '../../src/features/settings/setup/BridgeScreen';
 import { ChartWorkspaceProvider, useChartResources } from '../../src/features/chart/ChartWorkspaceProvider';
+import { ChartSettingsProvider } from '../../src/features/chart/chartSettings/ChartSettingsProvider';
 import { ChartTitle } from '../../src/features/chart/header/ChartTitle';
 import { ChartQuotes } from '../../src/features/chart/header/ChartQuotes';
 import { ChartCanvas } from '../../src/features/chart/ChartCanvas';
@@ -522,65 +523,67 @@ function WorkspaceProbes() {
       </ChartWorkspaceProvider>
       <ChartWorkspaceProvider>
         <BridgeSessionProvider>
-          <SymbolSearchProvider>
-            <HeaderProbes />
-            <SymbolSearchView />
-          </SymbolSearchProvider>
-          <Probe id="bridge-runtime">
-            <BridgeRuntimeProbe />
-          </Probe>
-          <Probe id="bridge-lifecycle-runtime">
-            <BridgeLifecycleRuntimeProbe />
-          </Probe>
-          <Probe id="market">
-            <MarketProbe />
-          </Probe>
-          <BridgeHeartbeatProbe />
-          <ChartHeaderProbes />
-          <Probe id="account">
-            <AccountProbe />
-          </Probe>
-          <Probe id="portfolio">
-            <PortfolioProbe />
-          </Probe>
-          <Probe id="chart-resources">
-            <ChartResourcesProbe />
-          </Probe>
-          <ExecutionProvider>
-            <OrderTicketProvider>
-              <Probe id="ticket-header">
-                <EnvironmentBadgeProbe />
-              </Probe>
-              <Probe id="ticket-edit">
-                <TicketEditProbe />
-              </Probe>
-              <Probe id="ticket-quotes">
-                <OrderTicketQuotes />
-              </Probe>
-              <Probe id="ticket-extra-settings">
-                <OrderTicketExtraSettings />
-              </Probe>
-              <Probe id="ticket-sizing">
-                <OrderTicketSizing />
-              </Probe>
-              <Probe id="ticket-tick-value">
-                <OrderTicketTickValue />
-              </Probe>
-              <Probe id="ticket-exits">
-                <OrderTicketExits />
-              </Probe>
-              <Probe id="ticket-action">
-                <TicketActionProbe />
-                <OrderTicketReviewAction />
-              </Probe>
-              <TicketControls />
-            </OrderTicketProvider>
-          </ExecutionProvider>
-          <Probe id="panel">
-            <PanelProbe />
-          </Probe>
-          <PanelControls />
-          <BridgeControls />
+          <ChartSettingsProvider>
+            <SymbolSearchProvider>
+              <HeaderProbes />
+              <SymbolSearchView />
+            </SymbolSearchProvider>
+            <Probe id="bridge-runtime">
+              <BridgeRuntimeProbe />
+            </Probe>
+            <Probe id="bridge-lifecycle-runtime">
+              <BridgeLifecycleRuntimeProbe />
+            </Probe>
+            <Probe id="market">
+              <MarketProbe />
+            </Probe>
+            <BridgeHeartbeatProbe />
+            <ChartHeaderProbes />
+            <Probe id="account">
+              <AccountProbe />
+            </Probe>
+            <Probe id="portfolio">
+              <PortfolioProbe />
+            </Probe>
+            <Probe id="chart-resources">
+              <ChartResourcesProbe />
+            </Probe>
+            <ExecutionProvider>
+              <OrderTicketProvider>
+                <Probe id="ticket-header">
+                  <EnvironmentBadgeProbe />
+                </Probe>
+                <Probe id="ticket-edit">
+                  <TicketEditProbe />
+                </Probe>
+                <Probe id="ticket-quotes">
+                  <OrderTicketQuotes />
+                </Probe>
+                <Probe id="ticket-extra-settings">
+                  <OrderTicketExtraSettings />
+                </Probe>
+                <Probe id="ticket-sizing">
+                  <OrderTicketSizing />
+                </Probe>
+                <Probe id="ticket-tick-value">
+                  <OrderTicketTickValue />
+                </Probe>
+                <Probe id="ticket-exits">
+                  <OrderTicketExits />
+                </Probe>
+                <Probe id="ticket-action">
+                  <TicketActionProbe />
+                  <OrderTicketReviewAction />
+                </Probe>
+                <TicketControls />
+              </OrderTicketProvider>
+            </ExecutionProvider>
+            <Probe id="panel">
+              <PanelProbe />
+            </Probe>
+            <PanelControls />
+            <BridgeControls />
+          </ChartSettingsProvider>
         </BridgeSessionProvider>
       </ChartWorkspaceProvider>
     </>

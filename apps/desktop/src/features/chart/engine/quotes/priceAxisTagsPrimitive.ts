@@ -7,6 +7,7 @@ import type {
 } from 'lightweight-charts';
 import { palette } from '../../../../shared/theme/palette';
 import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
+import { DEFAULT_CHART_SCALES_APPEARANCE } from '../surface/chartScalesAppearance';
 import type { RenderTarget } from '../surface/drawTarget';
 import { paintTag, tagLayout, type TagLayout } from '../text/priceTag';
 import { priceTagHeight, tagStackTops } from './tagStack';
@@ -55,6 +56,12 @@ export interface PriceAxisTagsOptions {
   bidColor: string;
 }
 
+/** The tag colours a chart draws until the Bid and ask setting names others. */
+const DEFAULT_TAG_OPTIONS: PriceAxisTagsOptions = {
+  askColor: DEFAULT_CHART_SCALES_APPEARANCE.bidAsk.ask,
+  bidColor: DEFAULT_CHART_SCALES_APPEARANCE.bidAsk.bid,
+};
+
 export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
   private readonly axisViews: readonly IPrimitivePaneView[];
   /** Axis coordinate of each tag's centre captured by `updateAllViews`; NaN while hidden. */
@@ -77,7 +84,7 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
     width: 0,
   };
 
-  constructor(options: PriceAxisTagsOptions) {
+  constructor(options: PriceAxisTagsOptions = DEFAULT_TAG_OPTIONS) {
     super();
     this.options = { ...options };
     // The view list is stable: the library caches views by array identity. A
@@ -101,6 +108,12 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
       this.requestUpdate?.();
       this.holdAxisWidthAfterPaint();
     }
+  }
+
+  /** The colours the Bid and ask setting names for the two tags. */
+  applyOptions(options: Partial<PriceAxisTagsOptions>): void {
+    this.options = { ...this.options, ...options };
+    this.requestUpdate?.();
   }
 
   attached(params: SeriesAttachedParameter<Time>): void {

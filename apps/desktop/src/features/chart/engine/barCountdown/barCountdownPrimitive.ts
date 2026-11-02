@@ -72,6 +72,13 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
   applyOptions(options: Partial<BarCountdownOptions>): void {
     this.options = { ...this.options, ...options };
     this.requestUpdate?.();
+    // A hidden tag must not keep a timer awake, and one shown again resumes counting.
+    this.schedule();
+  }
+
+  /** Whether the tag is drawn at all, which the Countdown setting sets. */
+  shown(): boolean {
+    return this.options.shown;
   }
 
   attached(params: SeriesAttachedParameter<Time>): void {
@@ -144,9 +151,9 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
     return this.tagText() !== '' && Number.isFinite(y) && y >= 0 && y <= this.paneHeight;
   }
 
-  /** Text the axis shows right now: empty while the label is hidden. */
+  /** Text the axis shows right now: empty while the label is hidden or the setting draws none. */
   private painted(): string {
-    return this.visible() ? this.tagText() : '';
+    return this.options.shown && this.visible() ? this.tagText() : '';
   }
 
   /**
@@ -157,7 +164,7 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
    */
   private schedule(): void {
     const { connected, suspended, symbol, barTimeSeconds, timeframe } = this.state;
-    if (!this.requestUpdate || !connected || suspended || document.hidden) {
+    if (!this.requestUpdate || !this.options.shown || !connected || suspended || document.hidden) {
       this.stopTimer();
       return;
     }

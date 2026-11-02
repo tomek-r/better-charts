@@ -10,6 +10,9 @@ import {
 
 /** The zone menu and the UTC offsets it prints. Pure Node. */
 
+/** The broker's UTC offset these cases run with, in minutes: the exchange's row names it. */
+const BROKER_UTC_OFFSET_MINUTES = 120;
+
 const OFFSET_TEXTS: ReadonlyArray<[number, string]> = [
   [0, 'UTC'],
   [60, 'UTC+1'],
@@ -25,14 +28,19 @@ for (const [minutes, text] of OFFSET_TEXTS) {
   });
 }
 
-test('the menu lists UTC first and the exchange second', () => {
-  const options = chartTimeZoneOptions(Date.now());
+test('the menu lists UTC first and the exchange under the broker offset second', () => {
+  const options = chartTimeZoneOptions(Date.now(), BROKER_UTC_OFFSET_MINUTES);
   expect(options[0]).toEqual({ zone: UTC_TIME_ZONE, label: 'UTC' });
+  expect(options[1]).toEqual({ zone: EXCHANGE_TIME_ZONE, label: '(UTC+2) Exchange' });
+});
+
+test('the exchange is named plainly while the broker offset is unknown', () => {
+  const options = chartTimeZoneOptions(Date.now(), null);
   expect(options[1]).toEqual({ zone: EXCHANGE_TIME_ZONE, label: 'Exchange' });
 });
 
 test('every city is listed as its offset and its name', () => {
-  const cityOptions = chartTimeZoneOptions(Date.now()).slice(2);
+  const cityOptions = chartTimeZoneOptions(Date.now(), BROKER_UTC_OFFSET_MINUTES).slice(2);
   expect(cityOptions.length).toBeGreaterThan(80);
   for (const option of cityOptions) {
     expect(option.label).toMatch(/^\(UTC([+-]\d{1,2}(:\d{2})?)?\) .+$/);
@@ -41,7 +49,7 @@ test('every city is listed as its offset and its name', () => {
 
 test('a city label carries the offset in force now', () => {
   const atMs = Date.now();
-  for (const option of chartTimeZoneOptions(atMs).slice(2)) {
+  for (const option of chartTimeZoneOptions(atMs, BROKER_UTC_OFFSET_MINUTES).slice(2)) {
     expect(option.label.startsWith(`(${formatUtcOffset(utcOffsetMinutes(option.zone, atMs))}) `)).toBe(true);
   }
 });
@@ -49,7 +57,7 @@ test('a city label carries the offset in force now', () => {
 test('the cities run from the earliest offset to the latest', () => {
   const atMs = Date.now();
   let previousOffset = Number.NEGATIVE_INFINITY;
-  for (const option of chartTimeZoneOptions(atMs).slice(2)) {
+  for (const option of chartTimeZoneOptions(atMs, BROKER_UTC_OFFSET_MINUTES).slice(2)) {
     const offset = utcOffsetMinutes(option.zone, atMs);
     expect(offset).toBeGreaterThanOrEqual(previousOffset);
     previousOffset = offset;
@@ -57,7 +65,8 @@ test('the cities run from the earliest offset to the latest', () => {
 });
 
 test('New York is on the menu', () => {
-  expect(chartTimeZoneOptions(Date.now()).map((option) => option.zone)).toContain('America/New_York');
+  const zones = chartTimeZoneOptions(Date.now(), BROKER_UTC_OFFSET_MINUTES).map((option) => option.zone);
+  expect(zones).toContain('America/New_York');
 });
 
 test('UTC has no offset', () => {

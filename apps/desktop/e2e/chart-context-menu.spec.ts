@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openChartMenu } from './helpers/chartMenu';
 import { holdIdleCallbacks } from './helpers/tauriStub';
 import { loadViewportWindow, waitForPaint } from './helpers/viewportHarness';
 
@@ -53,14 +54,6 @@ async function expectViewRestored(page: Page, loaded: VisibleRange): Promise<voi
     .toBeLessThan(ALLOWED_RANGE_DRIFT_BARS);
 }
 
-async function openChartMenu(page: Page) {
-  const host = (await page.locator('.chart-host').boundingBox())!;
-  await page.mouse.click(host.x + host.width / 2, host.y + host.height / 2, { button: 'right' });
-  const menu = page.getByRole('menu', { name: 'Chart', exact: true });
-  await expect(menu).toBeVisible();
-  return menu;
-}
-
 test('right-click opens the chart menu and its item restores the loaded view', async ({ page }) => {
   await loadViewportWindow(page);
   const loaded = await panAndZoom(page);
@@ -89,7 +82,7 @@ for (const { platform, label, keys } of SHORTCUTS) {
     test(`the menu item shows ${label}`, async ({ page }) => {
       await loadViewportWindow(page, { stub: { platform } });
       const menu = await openChartMenu(page);
-      await expect(menu.getByRole('menuitem')).toContainText(label);
+      await expect(menu.getByRole('menuitem', { name: /Reset chart view/ })).toContainText(label);
     });
 
     test(`${keys} restores the loaded view without a menu`, async ({ page }) => {

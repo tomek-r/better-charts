@@ -2,6 +2,7 @@ import type { QuoteSnapshot } from '../../../../shared/bridge/types';
 import type { MarketDataPort } from '../../../bridge/marketDataPort';
 import type { TimeModel } from '../bars/timeModel';
 import type { RenderViewport } from '../surface/overlayRenderer';
+import type { ChartSizedLineAppearance } from '../surface/chartAppearance';
 import type { ToolInputDefinition } from '../drawings/toolInputs';
 import type { ToolStyleDefinition } from '../drawings/toolStyles';
 import type { ChartDrawingPointRule, ChartToolDrawings } from '../drawings/toolDrawings';
@@ -177,6 +178,8 @@ export interface ChartToolHost {
   barSeries: TimeModel;
   geometry: ChartToolGeometry;
   requestRepaint: () => void;
+  /** The colour, dash and thickness the chart's settings draw the pointer's crosshair lines in. */
+  crosshairStyle(): ChartSizedLineAppearance;
   /** The tool finished placing its drawing; the controller makes the default tool active again. */
   returnToDefaultTool: () => void;
   /** The chart's current selection, as the app has accepted it. */

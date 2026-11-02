@@ -1,53 +1,51 @@
-import { useEffect, useRef } from 'react';
+import { useRef, useState } from 'react';
 import { solidHexColor } from '../../theme/hexColor';
 import { ColorSwatchButton } from './ColorSwatchButton';
+import { CustomColorEditor } from './CustomColorEditor';
 
 interface CustomColorsProps {
   /** The saved colours, newest first. */
   readonly colors: readonly string[];
   readonly current: string;
   readonly onPick: (color: string) => void;
-  /** A colour the user just chose in the native colour input. */
+  /** A colour the user just chose in the editor. */
   readonly onAdd: (color: string) => void;
 }
 
-/** The user's saved colours and a "+" that opens the native colour input to add one. */
+/** The user's saved colours and a "+" that opens the in-app editor below them to add one. */
 export function CustomColors({ colors, current, onPick, onAdd }: CustomColorsProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const [editing, setEditing] = useState(false);
   const solidCurrent = solidHexColor(current).toLowerCase();
 
-  // The native `change` event, not React's `onChange` (which is `input`): a colour counts once the user commits it.
-  useEffect(() => {
-    const input = inputRef.current;
-    if (input === null) {
-      return undefined;
-    }
-    const commit = () => onAdd(input.value);
-    input.addEventListener('change', commit);
-    return () => input.removeEventListener('change', commit);
-  }, [onAdd]);
+  const closeEditor = () => {
+    setEditing(false);
+    addButtonRef.current?.focus();
+  };
+
+  const add = (color: string) => {
+    onAdd(color);
+    closeEditor();
+  };
 
   return (
-    <div className="color-custom" role="group" aria-label="Custom colours">
-      {colors.map((color) => (
-        <ColorSwatchButton key={color} color={color} selected={color === solidCurrent} onPick={onPick} />
-      ))}
-      <button
-        type="button"
-        className="color-swatch color-add"
-        aria-label="Add custom colour"
-        onClick={() => inputRef.current?.click()}
-      >
-        +
-      </button>
-      <input
-        ref={inputRef}
-        className="visually-hidden"
-        type="color"
-        aria-label="Custom colour"
-        tabIndex={-1}
-        defaultValue={solidCurrent}
-      />
-    </div>
+    <>
+      <div className="color-custom" role="group" aria-label="Custom colours">
+        {colors.map((color) => (
+          <ColorSwatchButton key={color} color={color} selected={color === solidCurrent} onPick={onPick} />
+        ))}
+        <button
+          ref={addButtonRef}
+          type="button"
+          className="color-swatch color-add"
+          aria-label="Add custom colour"
+          aria-expanded={editing}
+          onClick={() => setEditing((open) => !open)}
+        >
+          +
+        </button>
+      </div>
+      {editing ? <CustomColorEditor initialColor={solidCurrent} onAdd={add} onClose={closeEditor} /> : null}
+    </>
   );
 }
