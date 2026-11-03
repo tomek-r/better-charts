@@ -93,11 +93,12 @@ export interface DevTestApi {
   pointerReadout(): PointerReadout | null;
   /** What the Canvas tab sets: the chart's own paint, its margins and the crosshair. */
   appearance(): ChartAppearanceState;
-  /** What the Scales and lines tab sets: the A/L row, the countdown tag, the quote and the time labels. */
+  /** What the scales settings set: the A/L row, the scale's shape and symbol tag, the countdown and the labels. */
   scales(): ChartScalesState;
   priceScale(): {
     autoScale: boolean;
     mode: PriceScaleMode;
+    invertScale: boolean;
     axisWidth: number;
     paneHeight: number;
     timeAxisHeight: number;
@@ -270,6 +271,7 @@ function buildDevTestApi({
       return {
         autoScale: options.autoScale,
         mode: options.mode,
+        invertScale: options.invertScale,
         axisWidth: scale.width(),
         paneHeight: chart.panes()[0]?.getHeight() ?? 0,
         timeAxisHeight: chart.timeScale().height(),

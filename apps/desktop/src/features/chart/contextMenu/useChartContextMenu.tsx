@@ -29,7 +29,7 @@ export function useChartContextMenu(): { onContextMenu: (event: MouseEvent<HTMLE
   };
 
   const resetView = () => {
-    chart.current?.resetView();
+    chart.current?.resetChartView();
     dismiss();
   };
 

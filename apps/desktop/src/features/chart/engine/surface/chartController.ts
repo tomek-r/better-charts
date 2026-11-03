@@ -6,6 +6,7 @@ import type { RenderViewport } from './overlayRenderer';
 import { createChartSurface } from './chartSurface';
 import type { ChartAppearance, ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesAppearance, ChartScalesState } from './chartScalesAppearance';
+import { ChartScalesPresenter } from './chartScalesPresenter';
 import { ChartAppearanceController } from './chartAppearanceController';
 import { BrokerTime } from '../brokerTime/brokerTime';
 import { ChartTimeZoneDisplay } from '../brokerTime/chartTimeZoneDisplay';
@@ -16,7 +17,7 @@ import { MarketStatusIndicator } from '../legend/marketStatusIndicator';
 import type { MarketStatus } from '../legend/marketStatus';
 import { PointerReadoutPrimitive } from '../legend/pointerReadoutPrimitive';
 import { PriceAxisTagsPrimitive } from '../quotes/priceAxisTagsPrimitive';
-import { PriceScaleController } from '../priceScale/priceScaleController';
+import { PriceScaleController, type PriceScaleState } from '../priceScale/priceScaleController';
 import { BarSeriesController } from '../bars/barSeriesController';
 import type { CandleAppearance } from '../bars/candleAppearance';
 import { PriceLineController } from '../quotes/priceLineController';
@@ -63,8 +64,6 @@ interface ReplaceHistoryOptions {
 export class ChartController {
   private readonly chart: IChartApi;
   private readonly candles: ISeriesApi<'Candlestick'>;
-  private readonly volume: ISeriesApi<'Histogram'>;
-  private readonly future: ISeriesApi<'Line'>;
   private readonly priceLines: PriceLineController;
   private readonly primitive: WorkspacePrimitive;
   private readonly observer: ResizeObserver;
@@ -74,6 +73,7 @@ export class ChartController {
   private readonly brokerTime = new BrokerTime();
   private readonly countdownPrimitive = new BarCountdownPrimitive(this.brokerTime);
   private readonly scaleControls: PriceScaleController;
+  private readonly scales: ChartScalesPresenter;
   // Every tool shares the pointer's time/price labels, and the tools' above-trading-overlays layer
   // is painted by it just before them. Attached for the chart's life, drawn only while
   // a pointer is over the pane.
@@ -110,12 +110,10 @@ export class ChartController {
     const { chart, candles, volume, future } = createChartSurface(host);
     this.chart = chart;
     this.candles = candles;
-    this.volume = volume;
-    this.future = future;
     this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
-    this.data = new BarSeriesController(this.candles, this.volume);
+    this.data = new BarSeriesController(this.candles, volume);
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
-    this.view = new ViewportController(this.chart, this.candles, this.future, this.data, () => this.removed);
+    this.view = new ViewportController(this.chart, this.candles, future, this.data, () => this.removed);
     this.olderHistory = new OlderHistoryPager({
       isDestroyed: () => this.removed,
       isBeforeHistory: () => this.view.isBeforeHistory(),
@@ -163,9 +161,17 @@ export class ChartController {
     this.legend = new OhlcLegend(host);
     this.marketStatus = new MarketStatusIndicator(this.legend.container());
     // The price scale is painted on the library's own canvas, so its toggles
-    // (A = auto scale, L = logarithmic) are DOM buttons in the axis column, as
+    // (A = auto scale, L = the price scale mode) are DOM buttons in the axis column, as
     // is the gear in its corner; the gear asks for the settings with an event.
     this.scaleControls = new PriceScaleController(host, this.chart, this.candles);
+    this.scales = new ChartScalesPresenter({
+      priceScale: this.scaleControls,
+      countdown: this.countdown,
+      quotes: this.priceLines,
+      tags: this.priceTags,
+      timeLabels: this.timeZoneDisplay,
+      isDisposed: () => this.removed,
+    });
     this.appearance = new ChartAppearanceController(this.chart, this.view, this.scaleControls);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
@@ -220,10 +226,19 @@ export class ChartController {
     this.view.resetToEnd();
     this.view.clearRetainedPrices();
     // The reset fits the scale to the data it now shows (see `resetToEnd`) but
-    // leaves the auto scale option where the user put it: auto scale is off by
-    // default, so turning it back on here would light the `A` toggle after every
-    // selection change.
+    // leaves the auto scale option where the user put it: this also runs on every
+    // selection change, and a scale that started following each tick there would
+    // rescale the pane under the pointer. `resetChartView` is the reset the user asks for.
     this.scaleControls.sync();
+  }
+
+  /**
+   * The chart menu's Reset chart view: the pane back to the end anchor with the default zoom, and the
+   * price scale back to fitting the bars it shows by itself, which is the view a chart opens on.
+   */
+  resetChartView(): void {
+    this.setAutoScale(true);
+    this.resetView();
   }
 
   /** Asks for one older page now; the idle prefetch calls it, the scroll path gates it on a revealed gap. */
@@ -247,13 +262,11 @@ export class ChartController {
 
   setSymbol(symbol: string): void {
     if (symbol !== this.symbol) {
-      // Another instrument formats its prices differently: let the axis size
-      // itself for it instead of carrying the widest label of the previous one.
-      this.priceTags.releaseAxisWidth();
+      this.scales.changeSymbolTag(symbol);
     }
     this.symbol = symbol;
     this.updateLegend();
-    this.syncCountdown();
+    this.scales.syncCountdown();
   }
   setPricePrecision(digits: number): void {
     if (!this.data.setPrecision(digits)) {
@@ -286,23 +299,24 @@ export class ChartController {
     }
   }
   /**
-   * Applies the Scales and lines tab: how the A/L row reaches the screen, whether the countdown tag is
-   * drawn, what the Bid/Ask quote draws of itself, and how the axis, the pointer and the footer write time.
+   * Applies the chart's scales and lines: how the A/L row reaches the screen, the price scale's shape
+   * and its symbol tag, whether the countdown tag is drawn, what the Bid/Ask quote draws of itself, and
+   * how the axis, the pointer and the footer write time.
    */
   setScalesAppearance(appearance: ChartScalesAppearance): void {
-    this.scaleControls.setScaleModeButtons(appearance.scaleModeButtons);
-    this.countdown.setShown(appearance.countdown);
-    this.priceLines.setBidAskAppearance(appearance.bidAsk);
-    this.timeZoneDisplay.setLabels(appearance.timeLabels);
+    this.scales.applyAppearance(appearance);
   }
-  /** What the chart draws of the Scales and lines tab, read back from the collaborators that own each part. */
+  /** What the chart draws of its scales and lines, read back from the collaborators that own each part. */
   scalesState(): ChartScalesState {
-    return {
-      scaleModeButtons: this.scaleControls.scaleModeButtons(),
-      countdownVisible: this.countdown.shown(),
-      bidAsk: this.priceLines.bidAskState(),
-      timeLabels: this.timeZoneDisplay.labels(),
-    };
+    return this.scales.drawnState();
+  }
+  /** The price scale as it is drawn now: whether it fits the data itself, its spacing and its direction. */
+  priceScaleState(): PriceScaleState {
+    return this.scales.priceScaleState();
+  }
+  /** Fits the price scale to the data it shows, or stops it doing so. */
+  setAutoScale(on: boolean): void {
+    this.scales.setAutoScale(on);
   }
   /** The colour, dash and thickness of the pointer's crosshair lines, which every tool draws the pointer with. */
   crosshairStyle(): ChartSizedLineAppearance {
@@ -319,20 +333,19 @@ export class ChartController {
     if (this.removed) {
       return;
     }
-    this.priceLines.sync();
-    this.scaleControls.syncSettingsButton();
+    this.scales.resyncAxis();
     this.primitive.requestUpdate?.();
   }
   setBidAskPrices(ask?: number, bid?: number): void {
     this.priceLines.setBidAsk(ask, bid);
     this.refreshOverlays();
-    this.syncCountdown();
+    this.scales.syncCountdown();
   }
   setQuoteClock(quote?: QuoteSnapshot): void {
     if (quote) {
       this.brokerTime.acceptQuote(quote);
     }
-    this.syncCountdown();
+    this.scales.syncCountdown();
   }
   setCountdownPending(pending: boolean): void {
     this.countdown.setPending(pending);
@@ -424,7 +437,7 @@ export class ChartController {
   setConnectionStatus(state: BridgeState, identity = ''): void {
     this.brokerTime.setConnection(state, identity);
     this.countdown.setConnection(state);
-    this.syncCountdown();
+    this.scales.syncCountdown();
   }
   destroy(): void {
     if (this.removed) {
@@ -483,24 +496,13 @@ export class ChartController {
   private afterBarsChanged(): void {
     this.updateLegend();
     this.refreshOverlays();
-    this.syncCountdown();
+    this.scales.syncCountdown();
     this.tools.barsChanged();
   }
 
   /** Read-only seam onto the bar cache, which BarSeriesController owns and writes. */
   private get bars(): readonly RenderBar[] {
     return this.data.bars;
-  }
-
-  /**
-   * The countdown primitive owns the broker-second alignment and the axis label;
-   * ChartController owns the broker time, and CountdownController mirrors the
-   * controller's single copy of each input into the primitive, so every input has
-   * one owner. Call this whenever one of those inputs changes: quotes, bars,
-   * timeframe, Bid, symbol or connection.
-   */
-  private syncCountdown(): void {
-    this.countdown.sync();
   }
 
   private updateLegend(): void {

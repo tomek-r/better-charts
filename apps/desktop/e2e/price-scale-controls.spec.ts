@@ -351,8 +351,10 @@ test('loading oil-priced candles in log mode keeps the range in actual prices', 
   expect(extent).toEqual({ min: 95.9996, max: 96.0004 });
   await page.mouse.move(host.left + host.width - 20, host.top + host.height / 2);
   await page.getByRole('button', { name: /^Logarithmic/ }).click();
-  expect((await scaleState(page)).mode).toBe(0);
-  expect((await scaleState(page)).range?.from).toBeCloseTo(95.9996, 6);
-  expect((await scaleState(page)).range?.to).toBeCloseTo(96.0004, 6);
+  // The mode is one of the chart's saved settings, so it reaches the scale a render after the press.
+  await expect.poll(async () => (await scaleState(page)).mode).toBe(0);
+  const regular = (await scaleState(page)).range!;
+  expect(regular.from).toBeCloseTo(95.9996, 6);
+  expect(regular.to).toBeCloseTo(96.0004, 6);
   expectClean(collected);
 });

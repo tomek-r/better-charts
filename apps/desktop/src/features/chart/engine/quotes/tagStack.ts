@@ -1,6 +1,6 @@
 /**
- * Vertical placement of the price-axis tag stack: Ask, Bid and the countdown
- * directly under the Bid.
+ * Vertical placement of the price-axis tag stack: Ask, Bid, the countdown directly
+ * under the Bid, and the chart's symbol under the countdown.
  *
  * Both primitives paint their own box, so each used to round its own centre. A
  * fractional spacing next to a whole-pixel box height left a one pixel gap or
@@ -24,16 +24,18 @@ export interface TagStackTops {
   ask: number;
   bid: number;
   countdown: number;
+  /** The symbol name tag, one whole box under the countdown; NaN while there is no Bid to follow. */
+  symbol: number;
 }
 
 /**
- * Tops of the three tags from the axis coordinates of the Ask and Bid prices.
+ * Tops of the four tags from the axis coordinates of the Ask and Bid prices.
  * A tag stays on its own price unless it would overlap its neighbour; tags that
  * touch share one edge, so they are flush at any price and any pixel ratio.
  */
 export function tagStackTops(askY: number | null, bidY: number | null, height: number): TagStackTops {
   const half = height / 2;
-  const tops: TagStackTops = { ask: NaN, bid: NaN, countdown: NaN };
+  const tops: TagStackTops = { ask: NaN, bid: NaN, countdown: NaN, symbol: NaN };
   if (bidY === null) {
     if (askY !== null) {
       tops.ask = Math.round(askY - half);
@@ -51,5 +53,6 @@ export function tagStackTops(askY: number | null, bidY: number | null, height: n
     tops.bid = gap >= 0 && gap <= height ? tops.ask + height : Math.round(bidY + offset - half);
   }
   tops.countdown = tops.bid + height;
+  tops.symbol = tops.countdown + height;
   return tops;
 }
