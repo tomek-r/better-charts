@@ -160,6 +160,7 @@ pub fn run() {
     let bridge_endpoint_changes = bridge_endpoint.subscribe();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(app_settings)
         .manage(bridge_endpoint)
         .manage(chart_drawings)

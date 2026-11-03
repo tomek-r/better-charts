@@ -153,5 +153,5 @@ Pre-commit hooks enforce validation; do not bypass failing checks.
 ## License
 
 [MIT](LICENSE). Lightweight Charts is Apache-2.0 licensed; its license and NOTICE
-are included in desktop packages, with TradingView attribution on the chart.
+are included in desktop packages, with TradingView attribution in App settings, About.
 MetaTrader 5 and Wine are separate products with their own licenses.

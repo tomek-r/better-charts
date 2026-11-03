@@ -64,10 +64,13 @@
 
 /* ── Info icon on the "Bridge connection" heading ────────────────────── */
 
+/* One text line tall, like every other heading: the larger info button overflows it evenly above and
+   below instead of pushing the heading and the fields under it down. */
 .settings-content h3.settings-section-title {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 1lh;
 }
 
 .section-info-trigger {
@@ -98,6 +101,34 @@
 
 .section-info-trigger svg {
   display: block;
+  width: 18px;
+  height: 18px;
+}
+
+/* About tab links: the opener plugin takes them to the system browser. */
+
+.settings-link {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.settings-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* The trading glyph's ink fills little of its em box; a larger size matches the other nav icons
+   without making the row taller. */
+.settings-trading-glyph {
+  display: block;
+  font-size: 32px;
+  line-height: 21px;
+}
+
+/* The info icon carries no size of its own; 18px matches the chart settings nav icons. */
+.settings-dialog .settings-nav-icon svg {
   width: 18px;
   height: 18px;
 }
