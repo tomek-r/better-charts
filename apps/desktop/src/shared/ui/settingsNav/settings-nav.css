@@ -35,10 +35,17 @@
   color: var(--color-accent);
 }
 
+/* Every icon gets the same box, whether it is a text glyph or an SVG, so all rows are one height and
+   each label sits centred against its icon. */
 .settings-nav-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
   width: 21px;
+  height: 24px;
   font-size: 21px;
-  text-align: center;
+  line-height: 1;
 }
 
 .settings-content {
@@ -51,7 +58,7 @@
 
 /* The caption above a group of settings: small, spaced capitals. */
 .settings-content h3 {
-  margin: 12px 0 20px;
+  margin: 0 0 20px;
   color: var(--color-muted-strong);
   font-size: 11px;
   font-weight: 500;

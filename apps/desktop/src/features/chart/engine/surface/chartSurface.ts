@@ -53,7 +53,7 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
     autoSize: false,
     // This background is also the fill the A/L price-scale toggles mask the axis labels with; see
     // features/chart/engine/priceScale/price-scale-controls.css.
-    layout: { ...layout, attributionLogo: true },
+    layout: { ...layout, attributionLogo: false },
     localization: { locale: chartLocale() },
     grid,
     crosshair: {

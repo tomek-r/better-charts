@@ -9,6 +9,7 @@ import type { AppSettingsData, DetectedSettingsField } from './appSettingsData';
 import { saveAppSettings } from './appSettingsCommands';
 import { bridgeSettingsIssue } from './bridgeSettingsValidation';
 import { SettingsTextField } from './SettingsTextField';
+import { AboutSettingsPanel } from './about/AboutSettingsPanel';
 import { FRAME_BYTES } from '../../shared/bridge/config';
 import type { MT5BridgeSettings } from '../../shared/bridge/types';
 
@@ -17,14 +18,15 @@ function BridgeGlyph() {
   return '⇄';
 }
 
-/** The glyph the nav shows beside trading: the line a position is drawn on. */
+/** The glyph the nav shows beside trading: the line a position is drawn on. Its ink is small, so it is set larger. */
 function TradingGlyph() {
-  return '⌁';
+  return <span className="settings-trading-glyph">⌁</span>;
 }
 
 const APP_SETTINGS_TABS = [
   { id: 'mt5Setup', title: 'MT5 setup', Icon: BridgeGlyph },
   { id: 'trading', title: 'Trading', Icon: TradingGlyph },
+  { id: 'about', title: 'About', Icon: InfoIcon },
 ] as const satisfies readonly SettingsNavTab[];
 
 type SettingsCategory = (typeof APP_SETTINGS_TABS)[number]['id'];
@@ -265,6 +267,7 @@ export function AppSettingsDialog({
                 <p className="settings-hint">Keep disabled for charting without order execution.</p>
               </>
             )}
+            {category === 'about' && <AboutSettingsPanel />}
             {draft && category === 'mt5Setup' && (
               <>
                 <h3>Terminal startup</h3>
