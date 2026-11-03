@@ -4,6 +4,7 @@ import { MAX_CUSTOM_COLORS } from '../src/shared/ui/colorPicker/savedCustomColor
 import { cancelCount, mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
 import { defaultToolStyleValues } from '../src/features/chart/engine/drawings/toolStyles';
 import { gotoWithStub } from './helpers/tauriStub';
+import { openScalesAndLinesMenu } from './helpers/chartMenu';
 import { HISTOGRAM_BOX, POC_LINE } from './helpers/toolStyleFixtures';
 
 /**
@@ -63,7 +64,8 @@ const DEFAULT_WINDOW = { width: 1280, height: 720 };
 /** Leaves the drawing settings form for the app and opens the chart's Settings dialog on its Canvas tab. */
 async function openCanvasTab(page: Page): Promise<void> {
   await gotoWithStub(page);
-  await page.getByRole('button', { name: 'Chart settings', exact: true }).click();
+  const menu = await openScalesAndLinesMenu(page);
+  await menu.getByRole('menuitem', { name: 'More settings' }).click();
   await page.getByRole('dialog', { name: 'Settings' }).getByRole('tab', { name: 'Canvas' }).click();
 }
 

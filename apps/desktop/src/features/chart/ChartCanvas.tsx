@@ -9,6 +9,8 @@ import { HistoryWaitNotice } from './historyWait/HistoryWaitNotice';
 import { useBridgeReconnectWait } from '../settings/setup/useBridgeReconnectWait';
 import { useChartContextMenu } from './contextMenu/useChartContextMenu';
 import { useResetChartViewShortcut } from './contextMenu/useResetChartViewShortcut';
+import { useScalesAndLinesMenu } from './scalesAndLinesMenu/useScalesAndLinesMenu';
+import { useScalesAndLinesShortcuts } from './scalesAndLinesMenu/useScalesAndLinesShortcuts';
 import { ChartSettingsDialogHost } from './chartSettings/dialog/ChartSettingsDialogHost';
 
 /** A protocol error nothing else explains is the only thing worth a toast: the setup screen below covers a token
@@ -44,12 +46,14 @@ function loadingCopy(loadingMarketData: boolean, reconnecting: boolean): Loading
 function ChartFrame({ loading, children }: { loading?: LoadingCopy; children?: ReactNode }) {
   const { chartHost } = useChartResources();
   const { onContextMenu, menu } = useChartContextMenu();
+  const scalesAndLinesMenu = useScalesAndLinesMenu();
 
   return (
     <div className="chart-frame" onContextMenu={onContextMenu}>
       <div ref={chartHost} className="chart-host" aria-label="Market chart" tabIndex={0} />
       {children}
       {menu}
+      {scalesAndLinesMenu}
       {loading && <div className="chart-overlay" />}
       {/* Centered on the window, not on the chart frame, so it reads the same with the trade panel open or closed. */}
       <div className="viewport-center-layer">
@@ -71,6 +75,7 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
   useErrorNotification(chartError);
   useErrorNotification(protocolErrorToNotify(status));
   useResetChartViewShortcut();
+  useScalesAndLinesShortcuts();
 
   return (
     <ChartSettingsDialogHost>

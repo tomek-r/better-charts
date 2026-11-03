@@ -8,3 +8,11 @@ export async function openChartMenu(page: Page): Promise<Locator> {
   await expect(menu).toBeVisible();
   return menu;
 }
+
+/** Clicks the gear in the chart's bottom-right corner and returns the Scales and lines menu it opens. */
+export async function openScalesAndLinesMenu(page: Page): Promise<Locator> {
+  await page.getByRole('button', { name: 'Chart settings', exact: true }).click();
+  const menu = page.getByRole('menu', { name: 'Scales and lines', exact: true });
+  await expect(menu).toBeVisible();
+  return menu;
+}

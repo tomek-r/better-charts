@@ -13,9 +13,9 @@ import {
 import { palette } from '../src/shared/theme/palette';
 
 /**
- * The chart's settings dialog: the row in the chart's right-click menu and the gear in its corner both
- * open it. Every edit shows on the chart at once, OK keeps and stores it, and Cancel, the × and Escape
- * put back what the chart showed when the dialog opened.
+ * The chart's settings dialog: the row in the chart's right-click menu opens it, and so does the settings row
+ * of the Scales and lines menu the gear in the chart's corner opens. Every edit shows on the chart at once, OK
+ * keeps and stores it, and Cancel, the × and Escape put back what the chart showed when the dialog opened.
  */
 
 /** The account the stub's bridge status and account snapshot both report. */
@@ -144,7 +144,9 @@ test('the chart menu lists the view command, a separator and the settings, which
   expectNoErrors(collected);
 });
 
-test('the gear in the chart corner opens the same dialog', async ({ page }) => {
+test('the gear in the chart corner opens the Scales and lines menu, whose settings row opens the dialog', async ({
+  page,
+}) => {
   const collected = await gotoWithStub(page);
   await openChart(page);
 
@@ -179,9 +181,13 @@ test('the gear in the chart corner opens the same dialog', async ({ page }) => {
   expect(corner.gear.top).toBeGreaterThanOrEqual(corner.timeAxisTop + 1);
 
   await gear.click();
+  const menu = page.getByRole('menu', { name: 'Scales and lines', exact: true });
+  await expect(menu).toBeVisible();
+  // The gear opens the Scales and lines menu; the dialog is the menu's last row, on the tab of the scale it shows.
+  await menu.getByRole('menuitem', { name: 'More settings' }).click();
   const dialog = chartSettingsDialog(page);
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('tab', { name: 'Symbol' })).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.getByRole('tab', { name: 'Scales and lines' })).toHaveAttribute('aria-selected', 'true');
   expectNoErrors(collected);
 });
 

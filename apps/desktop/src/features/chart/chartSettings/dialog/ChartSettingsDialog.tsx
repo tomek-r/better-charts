@@ -15,11 +15,11 @@ import { CHART_SETTINGS_TABS } from './chartSettingsTabs';
  * It is portalled to the page body because the chart frame is a clipped stacking context: the modal has
  * to cover the whole window.
  */
-export function ChartSettingsDialog({ onClose }: { onClose: () => void }) {
+export function ChartSettingsDialog({ onClose, initialTabId }: { onClose: () => void; initialTabId?: string }) {
   const { settings, preview, keep, revert } = useChartSettings();
   // The dialog edits a draft of the settings it opened on, so Cancel has something exact to put back.
   const [draft, setDraft] = useState(settings);
-  const [selectedTabId, setSelectedTabId] = useState(CHART_SETTINGS_TABS[0].id);
+  const [selectedTabId, setSelectedTabId] = useState(initialTabId ?? CHART_SETTINGS_TABS[0].id);
   const panelId = useId();
   const selectedTab = CHART_SETTINGS_TABS.find((tab) => tab.id === selectedTabId) ?? CHART_SETTINGS_TABS[0];
 

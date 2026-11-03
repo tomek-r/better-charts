@@ -1,0 +1,46 @@
+/* The Scales and lines menu the gear in the chart's corner opens (features/chart/scalesAndLinesMenu). The rows
+   themselves are the right-click menu's: these are only the check column, the submenu arrow and the submenu
+   itself. */
+
+/* The column a row holding a value shows its tick in, which keeps every label starting on the same line. The
+   marks carry no colour of their own: they take the row's, the one its label reads in, so the reset arrow, the
+   ticks and the gear are as bright as their labels are, on hover and on focus too. */
+.scales-and-lines-menu-leading {
+  display: flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+}
+
+/* No row wraps, label or shortcut: the menu grows to its widest row instead, and the panel that hangs it keeps
+   the grown menu inside the chart frame. */
+.scales-and-lines-menu .ticket-menu-item,
+.scales-and-lines-menu-submenu .ticket-menu-item {
+  white-space: nowrap;
+}
+
+.scales-and-lines-menu-check {
+  width: 14px;
+  height: 14px;
+}
+
+/* The arrow of a row that opens a submenu, turned to point at the submenu beside the menu. */
+.scales-and-lines-menu-caret {
+  flex: 0 0 auto;
+  transform: rotate(-90deg);
+}
+
+/* A submenu of the menu: its own surface, hung beside its row by ScalesAndLinesSubmenu, which sets its place. */
+.ticket-menu.scales-and-lines-menu-submenu {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: auto;
+  left: 0;
+  min-width: 200px;
+}
+
+.scales-and-lines-menu-submenu .ticket-menu-item {
+  font-size: 13px;
+}

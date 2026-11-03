@@ -1,7 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assembleGlyphRows, observeFillText, type AxisPaint } from './helpers/canvasText';
 import { openChartMenu } from './helpers/chartMenu';
+import { chartScalesState } from './helpers/chartScalesState';
 import { openChartSettingsTab } from './helpers/chartSettingsDialog';
+import { libraryPriceScale } from './helpers/libraryPriceScale';
+import { openChart } from './helpers/openChart';
+import { savedOverrides } from './helpers/savedOverrides';
 import {
   chartScopeKey,
   eurusdQuote,
@@ -10,11 +14,10 @@ import {
   pushEvent,
   STUB_NOW,
   stubChartSettingOverrides,
-  stubInvocations,
 } from './helpers/tauriStub';
 
 /**
- * The price scale menu's saved values: which way the scale grows, how it spaces its prices, and the
+ * The Scales and lines menu's saved values: which way the scale grows, how it spaces its prices, and the
  * symbol name tag. All three are saved with the chart's scales settings and applied to the engine, but
  * the Scales and lines tab draws none of them — only the gear menu of the next slice offers them.
  */
@@ -23,8 +26,6 @@ import {
 const ACCOUNT_KEY = '50123456@Broker-Demo';
 /** One chart is one account and one symbol, which is how the backend keys its settings. */
 const EURUSD_CHART = chartScopeKey(ACCOUNT_KEY, 'EURUSD');
-/** The bars the stub's snapshot holds. */
-const STUB_BAR_COUNT = 10;
 /** `PriceScaleMode.Logarithmic` and `PriceScaleMode.Normal`, as the library's own options report them. */
 const LOGARITHMIC_MODE = 1;
 const REGULAR_MODE = 0;
@@ -32,36 +33,15 @@ const REGULAR_MODE = 0;
 const HIGH_BID = '1.08540';
 const HIGH_ASK = '1.08545';
 
-/** The price scale as the library holds it, read back through the DEV test hook. */
-function priceScale(page: Page) {
-  return page.evaluate(() => window.__chartTest!.priceScale());
-}
-
-/** What the chart draws of its scales settings right now. */
-function scales(page: Page) {
-  return page.evaluate(() => window.__chartTest!.scales());
-}
-
 /** The saved shape and symbol tag as the chart draws them: the library's options beside the engine's state. */
 async function scaleShape(page: Page) {
-  const [library, state] = await Promise.all([priceScale(page), scales(page)]);
+  const [library, state] = await Promise.all([libraryPriceScale(page), chartScalesState(page)]);
   return {
     mode: library.mode,
     invertScale: { library: library.invertScale, engine: state.invertScale },
     priceScaleMode: state.priceScaleMode,
     symbolNameLabel: state.symbolNameLabelVisible,
   };
-}
-
-/** The overrides every `save_chart_setting_overrides` call carried, oldest first. */
-async function savedOverrides(page: Page): Promise<unknown[]> {
-  const calls = (await stubInvocations(page)).filter((entry) => entry.cmd === 'save_chart_setting_overrides');
-  return calls.map((entry) => entry.args.overrides);
-}
-
-/** Waits for the stub's ten bars, so the chart has candles to scale. */
-async function openChart(page: Page): Promise<void> {
-  await expect.poll(() => page.evaluate(() => window.__chartTest?.data().length ?? 0)).toBe(STUB_BAR_COUNT);
 }
 
 /** Moves the pointer onto the right price axis, which reveals the A and L row. */
@@ -128,7 +108,7 @@ test('the L toggle saves the price scale mode it asks for instead of writing the
   const logButton = page.getByRole('button', { name: /^Logarithmic/ });
 
   await logButton.click();
-  await expect.poll(async () => (await priceScale(page)).mode).toBe(LOGARITHMIC_MODE);
+  await expect.poll(async () => (await libraryPriceScale(page)).mode).toBe(LOGARITHMIC_MODE);
   await expect(logButton).toHaveAttribute('aria-pressed', 'true');
   const logarithmic = { scales: { priceScaleMode: 'logarithmic' } };
   expect(await savedOverrides(page)).toEqual([logarithmic]);
@@ -136,7 +116,7 @@ test('the L toggle saves the price scale mode it asks for instead of writing the
 
   // Asking for the regular scale again leaves nothing to store, so the chart falls back to its template.
   await logButton.click();
-  await expect.poll(async () => (await priceScale(page)).mode).toBe(REGULAR_MODE);
+  await expect.poll(async () => (await libraryPriceScale(page)).mode).toBe(REGULAR_MODE);
   await expect(logButton).toHaveAttribute('aria-pressed', 'false');
   expect(await savedOverrides(page)).toEqual([logarithmic, {}]);
   expect(await stubChartSettingOverrides(page)).toEqual({});
@@ -180,15 +160,15 @@ test('Reset chart view fits the price scale to the data again after A turned tha
   const collected = await gotoWithStub(page);
   await openChart(page);
   await resetChartView(page);
-  await expect.poll(async () => (await priceScale(page)).autoScale).toBe(true);
+  await expect.poll(async () => (await libraryPriceScale(page)).autoScale).toBe(true);
 
   await hoverPriceAxis(page);
   const autoButton = page.getByRole('button', { name: /^Auto scale/ });
   await autoButton.click();
-  await expect.poll(async () => (await priceScale(page)).autoScale).toBe(false);
+  await expect.poll(async () => (await libraryPriceScale(page)).autoScale).toBe(false);
 
   await resetChartView(page);
-  await expect.poll(async () => (await priceScale(page)).autoScale).toBe(true);
+  await expect.poll(async () => (await libraryPriceScale(page)).autoScale).toBe(true);
   await expect(autoButton).toHaveAttribute('aria-pressed', 'true');
   expectNoErrors(collected);
 });

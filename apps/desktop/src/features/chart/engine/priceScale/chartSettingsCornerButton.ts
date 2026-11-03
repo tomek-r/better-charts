@@ -2,10 +2,10 @@ import type { IChartApi } from 'lightweight-charts';
 import { SETTINGS_ICON_PATH } from '../../../../shared/ui/icons/SettingsIcon';
 
 /**
- * The event the gear raises on the chart's host when it is pressed. The settings dialog's host listens
- * for it, so the engine asks for the dialog without ever holding a React callback.
+ * The event the gear raises on the chart's host when it is pressed. The Scales and lines menu listens for it,
+ * so the engine asks for the menu without ever holding a React callback.
  */
-export const CHART_SETTINGS_REQUESTED_EVENT = 'chart-settings-requested';
+export const SCALES_AND_LINES_MENU_REQUESTED_EVENT = 'chart-scales-and-lines-menu-requested';
 
 /** The scale the gear is measured against: the one the price axis and the candles are bound to. */
 const PRICE_SCALE_ID = 'right';
@@ -45,7 +45,8 @@ function setEdge(button: HTMLButtonElement, edge: 'left' | 'top' | 'width' | 'he
 }
 
 /**
- * The settings gear in the corner where the price axis meets the time axis.
+ * The settings gear in the corner where the price axis meets the time axis: it asks for the Scales and lines
+ * menu, which is also the way into the chart's settings.
  *
  * It is an ordinary HTML button for the same reason as the A/L toggles: the library paints both axes on
  * its own canvas, which no button can be clicked on or reached through. Its box is the corner cell inside
@@ -65,8 +66,9 @@ export class ChartSettingsCornerButton {
     this.button.className = 'chart-settings-corner-button';
     this.button.title = BUTTON_LABEL;
     this.button.setAttribute('aria-label', BUTTON_LABEL);
+    this.button.setAttribute('aria-haspopup', 'menu');
     this.button.append(gearGlyph());
-    this.button.addEventListener('click', this.requestSettings);
+    this.button.addEventListener('click', this.requestMenu);
     host.appendChild(this.button);
     this.sync();
   }
@@ -90,12 +92,12 @@ export class ChartSettingsCornerButton {
   }
 
   destroy(): void {
-    this.button.removeEventListener('click', this.requestSettings);
+    this.button.removeEventListener('click', this.requestMenu);
     this.button.remove();
   }
 
   /** The press travels up to the chart's host as an event, which is the only way out of the engine. */
-  private readonly requestSettings = (): void => {
-    this.button.dispatchEvent(new Event(CHART_SETTINGS_REQUESTED_EVENT, { bubbles: true }));
+  private readonly requestMenu = (): void => {
+    this.button.dispatchEvent(new Event(SCALES_AND_LINES_MENU_REQUESTED_EVENT, { bubbles: true }));
   };
 }

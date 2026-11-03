@@ -15,13 +15,12 @@
   transition: color 0.12s ease;
 }
 
-/* The rounded chip is the corner cell inset on every side, so it stays clear of the axis border lines and
-   the frame's rounded corner, while the whole cell stays the button's hit area. */
+/* The chip fills the corner cell edge to edge: its left side meets the price axis' border line and its top
+   the time axis' border line. The chart frame clips it to the frame's own rounded corner. */
 .chart-settings-corner-button::before {
   content: '';
   position: absolute;
-  inset: 3px;
-  border-radius: 6px;
+  inset: 0;
   background: none;
   transition: background-color 0.12s ease;
 }
@@ -47,14 +46,14 @@
   background: var(--color-border-subtle);
 }
 
-/* The ring follows the chip rather than the cell, so it never draws over the axis lines. */
+/* The ring is drawn inside the chip, so it never draws over the axis lines. */
 .chart-settings-corner-button:focus-visible {
   outline: none;
 }
 
 .chart-settings-corner-button:focus-visible::before {
   outline: 2px solid var(--color-accent);
-  outline-offset: 0;
+  outline-offset: -2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

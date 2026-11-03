@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { openChartMenu } from './chartMenu';
 
-/** The name of the chart's settings dialog, which the chart menu's row and the chart's gear both open. */
+/** The name of the chart's settings dialog, which the chart menu's row and the Scales and lines menu both open. */
 const SETTINGS_DIALOG_NAME = 'Settings';
 /** The chart menu's row that opens the dialog, matched exactly so the view command is not taken for it. */
 const SETTINGS_MENU_ITEM_NAME = 'Settings';

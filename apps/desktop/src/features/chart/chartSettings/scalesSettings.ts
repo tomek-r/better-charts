@@ -125,9 +125,9 @@ const SYMBOL_NAME_LABEL_FIELD: CheckboxSettingField = {
 
 /**
  * The price scale's shape and the symbol tag: saved with the scales settings, like the rows above, but
- * offered only by the gear menu on the chart, never by the dialog's Scales and lines tab.
+ * offered only by the gear's Scales and lines menu, never by the dialog's Scales and lines tab.
  */
-export const PRICE_SCALE_MENU_FIELDS: readonly ChartSettingField[] = [
+export const SCALES_AND_LINES_MENU_FIELDS: readonly ChartSettingField[] = [
   PRICE_SCALE_MODE_FIELD,
   INVERT_SCALE_FIELD,
   SYMBOL_NAME_LABEL_FIELD,
@@ -135,5 +135,5 @@ export const PRICE_SCALE_MENU_FIELDS: readonly ChartSettingField[] = [
 
 /** Every scales field storage reads and writes: the sections the dialog draws, then the gear menu's fields. */
 export function scalesFields(): readonly ChartSettingField[] {
-  return [...SCALES_SETTINGS.flatMap((section) => section.fields), ...PRICE_SCALE_MENU_FIELDS];
+  return [...SCALES_SETTINGS.flatMap((section) => section.fields), ...SCALES_AND_LINES_MENU_FIELDS];
 }

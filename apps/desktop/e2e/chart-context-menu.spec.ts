@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openChartMenu } from './helpers/chartMenu';
 import { holdIdleCallbacks } from './helpers/tauriStub';
+import { focusScratchTextField } from './helpers/textFieldFocus';
 import { loadViewportWindow, waitForPaint } from './helpers/viewportHarness';
 
 interface VisibleRange {
@@ -98,12 +99,7 @@ test('the shortcut leaves the view alone while a text field has focus', async ({
   await loadViewportWindow(page);
   await panAndZoom(page);
   const moved = await visibleRange(page);
-  await page.evaluate(() => {
-    const field = document.createElement('input');
-    field.setAttribute('aria-label', 'Scratch field');
-    document.body.append(field);
-    field.focus();
-  });
+  await focusScratchTextField(page);
 
   await page.keyboard.press('Control+R');
   await waitForPaint(page);
