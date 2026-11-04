@@ -1,0 +1,52 @@
+/* The Indicators button beside the bar type button and the dialog it opens (features/indicators). The button's
+   box, border and colours are the header's shared button: these rules are only what the indicator parts add. */
+
+.indicators-trigger {
+  /* A button does not take the page's font, and its label is a word like the timeframes beside it. */
+  font: inherit;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.indicators-trigger-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+/* The search field, then one row per indicator, scrolling instead of growing past the window. */
+.indicators-dialog-search {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 8px;
+}
+
+.indicators-dialog-list {
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.indicators-dialog-row {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.indicators-dialog-row:hover,
+.indicators-dialog-row:focus-visible {
+  background: var(--color-border-subtle);
+}
+
+.indicators-dialog-empty {
+  margin: 0;
+  color: var(--color-muted-strong);
+}

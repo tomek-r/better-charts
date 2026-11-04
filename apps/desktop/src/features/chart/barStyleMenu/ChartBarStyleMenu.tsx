@@ -115,7 +115,7 @@ export function ChartBarStyleMenu() {
       <button
         ref={triggerRef}
         type="button"
-        className="bar-style-trigger"
+        className="chart-header-button bar-style-trigger"
         aria-label="Bar type"
         aria-haspopup="menu"
         aria-expanded={open}

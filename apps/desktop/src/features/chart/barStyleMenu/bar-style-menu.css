@@ -1,33 +1,12 @@
-/* The bar type button beside the timeframes and the list it opens (features/chart/barStyleMenu). The menu itself
-   is the shared popup surface and its rows are the shared menu rows: these rules are only the button, what the
-   rows add to them, and the marks they carry. */
+/* The bar type button beside the timeframes and the list it opens (features/chart/barStyleMenu). The button's
+   look is the chart header's shared button; the menu itself is the shared popup surface and its rows are the
+   shared menu rows: these rules are only what the bar type button adds, what the rows add to them, and the
+   marks they carry. */
 
+/* The header's shared button keeps the look; the bar type button only tightens it around an icon and a caret. */
 .bar-style-trigger {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
   gap: 2px;
-  box-sizing: border-box;
-  height: 30px;
   padding: 0 4px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-  color: var(--color-muted-strong);
-  background: transparent;
-  cursor: pointer;
-}
-
-.bar-style-trigger:hover,
-.bar-style-trigger[aria-expanded='true'] {
-  color: var(--color-text);
-  border-color: var(--color-text-secondary);
-  background: var(--color-border-subtle);
-}
-
-/* The button has a border of its own, which takes the accent: a ring around it would double it. */
-.bar-style-trigger:focus-visible {
-  outline: none;
-  border-color: var(--color-accent);
 }
 
 .bar-style-trigger-caret {
