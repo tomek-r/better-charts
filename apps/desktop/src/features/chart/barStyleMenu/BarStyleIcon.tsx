@@ -109,14 +109,12 @@ function ColumnsGlyph() {
   );
 }
 
-/** High-low: boxes for the periods, each with the small labels the style writes beside it. */
+/** High-low: an open box from each bar's low to its high, side by side. */
 function HighLowGlyph() {
   return (
     <>
-      <rect x="4.5" y="7.5" width="9" height="5" />
-      <path d="M17.5 9h3.5M17.5 11h2.5" />
-      <rect x="4.5" y="16.5" width="9" height="5" />
-      <path d="M17.5 18h3.5M17.5 20h2.5" />
+      <rect x="7.5" y="5.5" width="5" height="17" />
+      <rect x="15.5" y="9.5" width="5" height="11" />
     </>
   );
 }
