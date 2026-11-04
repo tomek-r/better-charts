@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { waitTwoAnimationFrames } from './helpers/animationFrames';
+import { decodePng, parseHexColor, pixelAt, type DecodedPng } from './helpers/pngPixels';
 import { chartScopeKey, expectNoErrors, gotoWithStub, windowCandles } from './helpers/tauriStub';
 
 /**
@@ -20,9 +22,9 @@ const HIDDEN_COLOR = 'transparent';
 /** A fill colour no default draws, so an area chart drawn with it cannot be mistaken for a default one. */
 const SEEDED_FILL_TOP = '#123456';
 
-/** Waits for the stub's ten bars, so both series have points whose values can be read. */
-async function openChart(page: Page): Promise<void> {
-  await expect.poll(() => page.evaluate(() => window.__chartTest?.data().length ?? 0)).toBe(STUB_BAR_COUNT);
+/** Waits for the stub's bars, so both series have points whose values can be read. */
+async function openChart(page: Page, barCount = STUB_BAR_COUNT): Promise<void> {
+  await expect.poll(() => page.evaluate(() => window.__chartTest?.data().length ?? 0)).toBe(barCount);
 }
 
 /** The bar style series as the hook shows it. */
@@ -87,6 +89,99 @@ async function basePriceGap(page: Page, levelPercent: number): Promise<number> {
     }
     return Math.abs(price - (range.from + ((range.to - range.from) * percent) / 100));
   }, levelPercent);
+}
+
+/** The bars one volume candle window holds, enough that a screenshot crosses several bodies of each volume. */
+const VOLUME_CANDLE_BAR_COUNT = 30;
+/** The tick volume of every other bar, so neighbouring bodies differ as far as the width rule allows. */
+const BUSY_TICK_VOLUME = 1000;
+const QUIET_TICK_VOLUME = 10;
+/** The price band every seeded bar covers, so one row of pixels crosses every body on screen. */
+const SHARED_OPEN = '1.0840';
+const SHARED_CLOSE = '1.0860';
+const SHARED_HIGH = '1.0865';
+const SHARED_LOW = '1.0835';
+/** How much wider the busy body has to be than the quiet one at the setting's default 80 %. */
+const WIDEST_OVER_NARROWEST = 3;
+/** How far two bodies of the same width may measure apart, which rounding and clipping can nudge. */
+const SAME_BODY_WIDTH_TOLERANCE = 1;
+/** The rising body colour as a screenshot decodes it, and how far a blended channel may stray from it. */
+const RISING_BODY_RGB = parseHexColor(UP_COLOR);
+const CHANNEL_TOLERANCE = 10;
+/** How many pixel rows of the body band paint the same bodies, which a one-row quote line never does. */
+const MIN_BAND_ROWS = 3;
+
+/** The stub's window of bars, every one of them rising over the same band, their volumes alternating. */
+function sameBodyBandCandles(count: number) {
+  return windowCandles(count).map((candle, index) => ({
+    ...candle,
+    open: SHARED_OPEN,
+    high: SHARED_HIGH,
+    low: SHARED_LOW,
+    close: SHARED_CLOSE,
+    tickVolume: index % 2 === 0 ? BUSY_TICK_VOLUME : QUIET_TICK_VOLUME,
+    realVolume: index % 2 === 0 ? BUSY_TICK_VOLUME : QUIET_TICK_VOLUME,
+  }));
+}
+
+/** Whether a screenshot pixel is the rising body colour, within the tolerance a blend may stray. */
+function isRisingBody([red, green, blue]: readonly [number, number, number]): boolean {
+  return (
+    Math.abs(red - RISING_BODY_RGB[0]) <= CHANNEL_TOLERANCE &&
+    Math.abs(green - RISING_BODY_RGB[1]) <= CHANNEL_TOLERANCE &&
+    Math.abs(blue - RISING_BODY_RGB[2]) <= CHANNEL_TOLERANCE
+  );
+}
+
+/** The widths of the rising bodies one row of the pane paints, its outermost runs left out. */
+function risingBodyWidthsOfRow(image: DecodedPng, row: number): number[] {
+  const widths: number[] = [];
+  let runStart = -1;
+  for (let column = 0; column <= image.width; column += 1) {
+    const inBody = column < image.width && isRisingBody(pixelAt(image, column, row));
+    if (inBody && runStart < 0) {
+      runStart = column;
+    }
+    if (!inBody && runStart >= 0) {
+      widths.push(column - runStart);
+      runStart = -1;
+    }
+  }
+  // A body at either end of the row can be cut by the pane's edge or by the price scale drawn over it.
+  return widths.slice(1, -1);
+}
+
+/**
+ * The widths of the bodies painted along a row of the band they all share. A row only counts when at least
+ * MIN_BAND_ROWS rows paint the same number of body pixels, which leaves out the one-pixel dotted quote
+ * lines: their dashes add up-coloured pixels between the bodies on their own row only.
+ */
+function drawnBodyWidths(image: DecodedPng): number[] {
+  const rows = Array.from({ length: image.height }, (_, row) => risingBodyWidthsOfRow(image, row));
+  const pixelsPerRow = rows.map((widths) => widths.reduce((painted, width) => painted + width, 0));
+  let widthsOfBandRow: number[] = [];
+  let bandRowBodyPixels = 0;
+  for (const [row, bodyPixels] of pixelsPerRow.entries()) {
+    const rowsWithSamePixels = pixelsPerRow.filter((pixels) => pixels === bodyPixels).length;
+    if (bodyPixels > bandRowBodyPixels && rowsWithSamePixels >= MIN_BAND_ROWS) {
+      bandRowBodyPixels = bodyPixels;
+      widthsOfBandRow = rows[row] ?? [];
+    }
+  }
+  return widthsOfBandRow;
+}
+
+/** The body widths one screenshot of the chart host measures right now. */
+async function paneBodyWidths(page: Page): Promise<number[]> {
+  await waitTwoAnimationFrames(page);
+  const image = decodePng(await page.locator('.chart-host').screenshot());
+  return drawnBodyWidths(image);
+}
+
+/** Waits for the pane to paint its bodies, then reports the widths one screenshot of it measures. */
+async function paintedBodyWidths(page: Page): Promise<number[]> {
+  await expect.poll(async () => (await paneBodyWidths(page)).length).toBeGreaterThan(0);
+  return paneBodyWidths(page);
 }
 
 test('a default chart draws its candles on the anchor series and nothing else', async ({ page }) => {
@@ -265,4 +360,32 @@ test('the baseline turns its fill at the saved share of the visible price range'
   await expect.poll(() => page.evaluate(() => window.__chartTest!.priceScale().range)).not.toEqual(rangeBefore);
   await expect.poll(() => basePriceGap(page, BASELINE_LEVEL_PERCENT)).toBeLessThan(BASE_PRICE_TOLERANCE);
   expectNoErrors(collected);
+});
+
+/** Opens a chart of alternating-volume bars on the volume candles style and measures the bodies it paints. */
+async function volumeCandleBodyWidths(page: Page, savedSettings: object): Promise<number[]> {
+  const collected = await gotoWithStub(page, {
+    historyByTimeframe: { M5: sameBodyBandCandles(VOLUME_CANDLE_BAR_COUNT) },
+    chartSettingOverrides: { [EURUSD_CHART]: { barStyle: 'volumeCandles', ...savedSettings } },
+  });
+  await openChart(page, VOLUME_CANDLE_BAR_COUNT);
+  await waitForSeriesType(page, 'Custom');
+
+  const widths = await paintedBodyWidths(page);
+
+  expect(widths.length, 'no rising body of the up colour was found in the pane').toBeGreaterThan(1);
+  expectNoErrors(collected);
+  return widths;
+}
+
+test('the volume candles draw a quiet bar narrower than the busiest one on screen', async ({ page }) => {
+  const widths = await volumeCandleBodyWidths(page, {});
+
+  expect(Math.max(...widths)).toBeGreaterThanOrEqual(WIDEST_OVER_NARROWEST * Math.min(...widths));
+});
+
+test('a width sensitivity of zero draws every volume candle body at the full width', async ({ page }) => {
+  const widths = await volumeCandleBodyWidths(page, { barStyles: { volumeCandles: { widthSensitivity: 0 } } });
+
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(SAME_BODY_WIDTH_TOLERANCE);
 });

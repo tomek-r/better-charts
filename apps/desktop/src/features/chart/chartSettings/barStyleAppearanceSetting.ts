@@ -13,9 +13,10 @@ import {
   type HighLowAppearance,
   type LineStyleAppearance,
   type ToggledColor,
+  type VolumeCandlesAppearance,
 } from '../engine/barStyle/barStyleAppearance';
 import { isPriceSource, type PriceSource } from '../engine/barStyle/priceSource';
-import { BAR_STYLE_SETTINGS } from './barStyleSettings';
+import { BAR_STYLE_SETTINGS, WIDTH_SENSITIVITY_FIELD } from './barStyleSettings';
 import { candleAppearanceOf } from './candleAppearanceSetting';
 import type { BarStyleSettingValues } from './chartSettings';
 import { readSettingValue } from './settingFields';
@@ -38,6 +39,7 @@ const BOTTOM_FILL_KEY = 'bottomFill';
 const BODY_KEY = 'body';
 const BORDERS_KEY = 'borders';
 const LABELS_KEY = 'labels';
+const WIDTH_SENSITIVITY_KEY = 'widthSensitivity';
 
 /**
  * What a style draws when its own settings hold nothing its fields can explain — the values the
@@ -77,6 +79,14 @@ const HIGH_LOW_DEFAULTS: Omit<HighLowAppearance, 'style'> = {
   borders: HIGH_LOW_COLOR,
   labels: HIGH_LOW_COLOR,
 };
+
+/** The whole percent a stored share is written in, which the appearance keeps as a fraction of one. */
+const WHOLE_PERCENT = 100;
+/**
+ * How far the quietest visible body narrows when its own setting holds nothing readable: the default of its
+ * field, so the chart and its settings dialog cannot disagree on it.
+ */
+const DEFAULT_WIDTH_SENSITIVITY = WIDTH_SENSITIVITY_FIELD.defaultValue / WHOLE_PERCENT;
 
 /** The settings field a style declares under `key`; a style declares only the keys its own section holds. */
 function fieldOf(style: BarStyle, key: string) {
@@ -128,6 +138,12 @@ function readLineWidth(style: BarStyle, values: BarStyleSettingValues): BarStyle
 function readBaseLevel(values: BarStyleSettingValues): number | undefined {
   const value = fieldValue('baseline', BASE_LEVEL_KEY, values);
   return typeof value === 'number' ? value : undefined;
+}
+
+/** The stored percent as the fraction of the body width the appearance takes off the quietest visible bar. */
+function readWidthSensitivity(values: BarStyleSettingValues): number | undefined {
+  const value = fieldValue('volumeCandles', WIDTH_SENSITIVITY_KEY, values);
+  return typeof value === 'number' ? value / WHOLE_PERCENT : undefined;
 }
 
 function barsAppearance(style: BarStyle, values: BarStyleSettingValues): BarsAppearance {
@@ -194,6 +210,14 @@ function highLowAppearance(values: BarStyleSettingValues): HighLowAppearance {
   };
 }
 
+function volumeCandlesAppearance(values: BarStyleSettingValues): VolumeCandlesAppearance {
+  return {
+    style: 'volumeCandles',
+    candles: candleAppearanceOf(values),
+    widthSensitivity: readWidthSensitivity(values) ?? DEFAULT_WIDTH_SENSITIVITY,
+  };
+}
+
 /**
  * The chart's bar style as the engine draws it. Every value is read through the settings field of its
  * own key, so a store holding nothing readable leaves the chart on the defaults the dialog shows.
@@ -223,7 +247,7 @@ export function barStyleAppearanceOf(style: BarStyle, values: BarStyleSettingVal
     case 'hollowCandles':
       return { style, candles: candleAppearanceOf(values) };
     case 'volumeCandles':
-      return { style, candles: candleAppearanceOf(values) };
+      return volumeCandlesAppearance(values);
     case 'heikinAshi':
       return { style, candles: candleAppearanceOf(values) };
     case 'baseline':

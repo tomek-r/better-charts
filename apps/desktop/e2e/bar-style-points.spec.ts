@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { DEFAULT_CANDLE_APPEARANCE } from '../src/features/chart/engine/bars/candleAppearance';
 import type { RenderBar } from '../src/features/chart/engine/bars/renderBar';
+import type { VolumeCandlesAppearance } from '../src/features/chart/engine/barStyle/barStyleAppearance';
 import {
   barStylePoint,
   barStylePoints,
@@ -20,6 +21,8 @@ const UP_COLOR = '#26a69a';
 const DOWN_COLOR = '#f7525f';
 const BAR_TIME_SECONDS = 1_700_000_000;
 const TRANSPARENT = 'transparent';
+/** The width sensitivity a volume candle chart draws until its own is saved: 100 %, as a fraction of the width. */
+const DEFAULT_WIDTH_SENSITIVITY = 1;
 
 /** One bar of the chart's own shape; its open and close decide the colour, its range the price sources. */
 function barAt(open: number, close: number, high = Math.max(open, close), low = Math.min(open, close)): RenderBar {
@@ -202,12 +205,28 @@ const DEFAULT_HIGH_LOW_APPEARANCE = {
   labels: { visible: true, color: palette.info },
 } as const;
 
+/** The appearance a volume candle chart draws for a saved width sensitivity, its candles at their defaults. */
+function defaultCandlesWith(widthSensitivity: number): VolumeCandlesAppearance {
+  return { style: 'volumeCandles', candles: DEFAULT_CANDLE_APPEARANCE, widthSensitivity };
+}
+
 test('the default volume candle and high-low settings map onto the appearance the engine draws', () => {
-  expect(barStyleAppearanceOf('volumeCandles', {})).toEqual({
-    style: 'volumeCandles',
-    candles: DEFAULT_CANDLE_APPEARANCE,
-  });
+  expect(barStyleAppearanceOf('volumeCandles', {})).toEqual(defaultCandlesWith(DEFAULT_WIDTH_SENSITIVITY));
   expect(barStyleAppearanceOf('highLow', {})).toEqual(DEFAULT_HIGH_LOW_APPEARANCE);
+});
+
+test('a saved width sensitivity reads as the share of the body width a quiet bar keeps it from', () => {
+  // Half of the width, written the whole percent the settings dialog offers.
+  expect(barStyleAppearanceOf('volumeCandles', { widthSensitivity: 50 })).toEqual(defaultCandlesWith(0.5));
+});
+
+test('a width sensitivity stored out of range or in the wrong shape falls back to the default of its field', () => {
+  expect(barStyleAppearanceOf('volumeCandles', { widthSensitivity: 140 })).toEqual(
+    defaultCandlesWith(DEFAULT_WIDTH_SENSITIVITY),
+  );
+  expect(barStyleAppearanceOf('volumeCandles', { widthSensitivity: 'half' })).toEqual(
+    defaultCandlesWith(DEFAULT_WIDTH_SENSITIVITY),
+  );
 });
 
 test('a high-low colour stored in the wrong shape falls back to the default of its own field', () => {

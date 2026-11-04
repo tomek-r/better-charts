@@ -1,20 +1,35 @@
-/**
- * The share of the body width even the thinnest bar keeps, so a bar of no volume against a busy window
- * is still a bar rather than a sliver.
- */
-const MIN_VOLUME_SHARE = 0.2;
-
 /** The narrowest a body is ever drawn, in device pixels. */
 const NARROWEST_BODY_WIDTH = 1;
 
+/** The volumes the visible bars of a window trade between, which the bodies are scaled across. */
+export interface VisibleVolumeRange {
+  readonly min: number;
+  readonly max: number;
+}
+
 /**
- * How wide one bar's body is drawn: `fullWidth` less the share its volume makes up of the largest volume
- * in the visible window, which widest bars get in full. A window with no volume draws every body in full.
+ * How far one bar's volume sits from the quietest visible bar towards the busiest, as a share of the way the
+ * two span. A window whose bars all traded alike spans nothing, so every bar there counts as the busiest one.
  */
-export function volumeCandleWidth(volume: number, maxVolume: number, fullWidth: number): number {
-  if (maxVolume <= 0) {
-    return Math.max(NARROWEST_BODY_WIDTH, Math.round(fullWidth));
+function relativeVolumeOf(volume: number, visibleVolumes: VisibleVolumeRange): number {
+  const spread = visibleVolumes.max - visibleVolumes.min;
+  if (spread <= 0) {
+    return 1;
   }
-  const share = MIN_VOLUME_SHARE + (1 - MIN_VOLUME_SHARE) * (volume / maxVolume);
+  return (volume - visibleVolumes.min) / spread;
+}
+
+/**
+ * How wide one bar's body is drawn: `fullWidth` less the share `widthSensitivity` takes off a bar as quiet as
+ * the quietest visible one. The busiest visible bar fills the whole width and the quietest narrows to the
+ * narrowest body, whatever volumes the two trade; a window with nothing to compare draws every body in full.
+ */
+export function volumeCandleWidth(
+  volume: number,
+  visibleVolumes: VisibleVolumeRange,
+  fullWidth: number,
+  widthSensitivity: number,
+): number {
+  const share = 1 - widthSensitivity * (1 - relativeVolumeOf(volume, visibleVolumes));
   return Math.max(NARROWEST_BODY_WIDTH, Math.round(fullWidth * share));
 }

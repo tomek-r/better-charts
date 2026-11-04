@@ -7,6 +7,7 @@ import type {
   ColorPairSettingField,
   ColorSettingField,
   LineWidthSettingField,
+  PercentSettingField,
   SettingsSectionFields,
   ToggledColorPairSettingField,
   ToggledColorSettingField,
@@ -47,6 +48,18 @@ const WICK_FIELD: ToggledColorPairSettingField = {
   key: 'wick',
   label: 'Wick',
   defaultValue: { visible: true, up: palette.up, down: palette.sell },
+};
+
+/**
+ * How far the quietest visible body narrows against the busiest one, as the whole percent the dialog shows: the
+ * full sensitivity, which leaves the quietest bar the narrowest body.
+ */
+export const WIDTH_SENSITIVITY_FIELD: PercentSettingField = {
+  kind: 'percent',
+  key: 'widthSensitivity',
+  label: 'Width sensitivity',
+  defaultValue: 100,
+  unit: '%',
 };
 
 const HIGH_LOW_BODY_FIELD: ToggledColorSettingField = {
@@ -107,6 +120,9 @@ const CANDLE_FIELDS: readonly ChartSettingField[] = [
   WICK_FIELD,
 ];
 
+/** The candles' own fields, and how far the quietest body on screen narrows against the busiest one. */
+const VOLUME_CANDLES_FIELDS: readonly ChartSettingField[] = [...CANDLE_FIELDS, WIDTH_SENSITIVITY_FIELD];
+
 const BARS_FIELDS: readonly ChartSettingField[] = [
   COLOR_BY_PREVIOUS_CLOSE_FIELD,
   COLORS_FIELD,
@@ -151,7 +167,7 @@ export const BAR_STYLE_SETTINGS: Readonly<Record<BarStyle, BarStyleSettingsSecti
   bars: settingsSection('bars', BARS_FIELDS),
   candles: settingsSection('candles', CANDLE_FIELDS),
   hollowCandles: settingsSection('hollowCandles', CANDLE_FIELDS),
-  volumeCandles: settingsSection('volumeCandles', CANDLE_FIELDS),
+  volumeCandles: settingsSection('volumeCandles', VOLUME_CANDLES_FIELDS),
   line: settingsSection('line', LINE_FIELDS),
   lineWithMarkers: settingsSection('lineWithMarkers', LINE_FIELDS),
   stepLine: settingsSection('stepLine', LINE_FIELDS),

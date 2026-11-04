@@ -92,6 +92,8 @@ export interface HeikinAshiAppearance {
 export interface VolumeCandlesAppearance {
   readonly style: 'volumeCandles';
   readonly candles: CandleAppearance;
+  /** How far a quiet bar's body narrows against the busiest visible bar, from 0 to 1 of the body width. */
+  readonly widthSensitivity: number;
 }
 
 /** The range as a box from the low to the high, labelled at both prices, which a custom series draws. */
@@ -175,6 +177,10 @@ function sameToggledColor(first: ToggledColor, second: ToggledColor): boolean {
   return first.visible === second.visible && first.color === second.color;
 }
 
+function sameVolumeCandlesAppearance(first: VolumeCandlesAppearance, second: VolumeCandlesAppearance): boolean {
+  return sameCandleAppearance(first.candles, second.candles) && first.widthSensitivity === second.widthSensitivity;
+}
+
 function sameHighLowAppearance(first: HighLowAppearance, second: HighLowAppearance): boolean {
   return (
     sameToggledColor(first.body, second.body) &&
@@ -200,9 +206,10 @@ export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarSty
   switch (first.style) {
     case 'candles':
     case 'hollowCandles':
-    case 'volumeCandles':
     case 'heikinAshi':
       return second.style === first.style && sameCandleAppearance(first.candles, second.candles);
+    case 'volumeCandles':
+      return second.style === 'volumeCandles' && sameVolumeCandlesAppearance(first, second);
     case 'bars':
       return second.style === 'bars' && sameBarsAppearance(first, second);
     case 'line':

@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test';
 import type { UTCTimestamp } from 'lightweight-charts';
 import { volumeCandleColors } from '../src/features/chart/engine/barStyle/volumeCandles/volumeCandleColors';
-import { volumeCandleWidth } from '../src/features/chart/engine/barStyle/volumeCandles/volumeCandleWidth';
+import {
+  volumeCandleWidth,
+  type VisibleVolumeRange,
+} from '../src/features/chart/engine/barStyle/volumeCandles/volumeCandleWidth';
 import {
   VOLUME_CANDLES_DEFAULT_OPTIONS,
   type VolumeCandlesOptions,
@@ -9,14 +12,22 @@ import {
 import type { VolumeCandlePoint } from '../src/features/chart/engine/barStyle/volumeCandles/volumeCandlePoint';
 
 /**
- * How a volume candle is drawn: the width of its body, a share of the widest body on screen that grows with
- * the bar's volume, and the colours of its body, its border and its wick.
+ * How a volume candle is drawn: the width of its body, a share of the widest body on screen that grows from the
+ * quietest visible bar towards the busiest one, and the colours of its body, its border and its wick.
  */
 
-/** The widest body these tests scale, ten device pixels, so every share is a round number of pixels. */
-const FULL_WIDTH = 10;
-/** What the busiest bar of a window can hold. */
-const BUSIEST_VOLUME = 500;
+/** The widest body these tests scale, twenty device pixels, so every share is a round number of pixels. */
+const FULL_WIDTH = 20;
+/** The volumes the visible bars of a window trade between in these width tests. */
+const VISIBLE_VOLUMES: VisibleVolumeRange = { min: 800, max: 1000 };
+/** The sensitivity the setting offers by default, which narrows the quietest visible bar to the narrowest body. */
+const DEFAULT_WIDTH_SENSITIVITY = 1;
+/** A sensitivity below the default, which leaves the quietest visible bar a fifth of the width. */
+const MILD_WIDTH_SENSITIVITY = 0.8;
+/** A sensitivity that leaves every body at the full width. */
+const NO_WIDTH_SENSITIVITY = 0;
+/** The volume the colour tests' bars trade, which no colour rule reads. */
+const CANDLE_VOLUME = 500;
 
 /** The colours a candle may name of its own: the body, the border and the wick. */
 type OwnColors = Pick<VolumeCandlePoint, 'color' | 'borderColor' | 'wickColor'>;
@@ -40,28 +51,49 @@ function volumeCandle(open: number, close: number, ownColors: Partial<OwnColors>
     high: Math.max(open, close) + 1,
     low: Math.min(open, close) - 1,
     close,
-    volume: BUSIEST_VOLUME,
+    volume: CANDLE_VOLUME,
     ...ownColors,
   };
 }
 
-test('the busiest visible bar fills the whole body width', () => {
-  expect(volumeCandleWidth(BUSIEST_VOLUME, BUSIEST_VOLUME, FULL_WIDTH)).toBe(FULL_WIDTH);
+test('the busiest visible bar fills the whole body width at the default sensitivity', () => {
+  expect(volumeCandleWidth(1000, VISIBLE_VOLUMES, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(FULL_WIDTH);
 });
 
-test('a bar of half the busiest volume draws six tenths of the body width', () => {
-  // 0.2 + 0.8 * 0.5 = 0.6 of the width, which is the share the thinnest and the widest bar span.
-  expect(volumeCandleWidth(BUSIEST_VOLUME / 2, BUSIEST_VOLUME, FULL_WIDTH)).toBe(6);
+test('the quietest visible bar narrows to the narrowest body at the default sensitivity', () => {
+  expect(volumeCandleWidth(800, VISIBLE_VOLUMES, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(1);
 });
 
-test('a bar of no volume keeps a fifth of the body width, and never less than a pixel', () => {
-  expect(volumeCandleWidth(0, BUSIEST_VOLUME, FULL_WIDTH)).toBe(2);
-  // A fifth of two device pixels rounds to nothing, so the narrowest body a bar can have is one pixel.
-  expect(volumeCandleWidth(0, BUSIEST_VOLUME, 2)).toBe(1);
+test('a bar halfway up the visible range draws half the body width at the default sensitivity', () => {
+  // (900 - 800) / (1000 - 800) = 0.5, so 1 - 1 * (1 - 0.5) = 0.5 of the twenty device pixels.
+  expect(volumeCandleWidth(900, VISIBLE_VOLUMES, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(10);
+});
+
+test('the quietest visible bar keeps a fifth of the body width at a sensitivity of four fifths', () => {
+  // 1 - 0.8 * (1 - 0) = 0.2 of the twenty device pixels.
+  expect(volumeCandleWidth(800, VISIBLE_VOLUMES, FULL_WIDTH, MILD_WIDTH_SENSITIVITY)).toBe(4);
+});
+
+test('a bar halfway up the visible range draws three fifths of the body width at a sensitivity of four fifths', () => {
+  // 1 - 0.8 * (1 - 0.5) = 0.6 of the twenty device pixels.
+  expect(volumeCandleWidth(900, VISIBLE_VOLUMES, FULL_WIDTH, MILD_WIDTH_SENSITIVITY)).toBe(12);
+});
+
+test('a sensitivity of zero draws every body at the full width', () => {
+  expect(volumeCandleWidth(800, VISIBLE_VOLUMES, FULL_WIDTH, NO_WIDTH_SENSITIVITY)).toBe(FULL_WIDTH);
+  expect(volumeCandleWidth(1000, VISIBLE_VOLUMES, FULL_WIDTH, NO_WIDTH_SENSITIVITY)).toBe(FULL_WIDTH);
+});
+
+test('a window whose visible bars all traded the same volume draws every body at the full width', () => {
+  // Nothing to compare the volumes against, so the sensitivity has no body to narrow.
+  const equalVolumes: VisibleVolumeRange = { min: 500, max: 500 };
+  expect(volumeCandleWidth(500, equalVolumes, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(FULL_WIDTH);
 });
 
 test('a window whose visible bars hold no volume draws every body at the full width', () => {
-  expect(volumeCandleWidth(0, 0, FULL_WIDTH)).toBe(FULL_WIDTH);
+  const noVolumes: VisibleVolumeRange = { min: 0, max: 0 };
+  expect(volumeCandleWidth(0, noVolumes, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(FULL_WIDTH);
+  expect(volumeCandleWidth(0, noVolumes, FULL_WIDTH, NO_WIDTH_SENSITIVITY)).toBe(FULL_WIDTH);
 });
 
 test('a rising candle without colours of its own takes the rising body, border and wick', () => {

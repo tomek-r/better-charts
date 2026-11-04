@@ -135,6 +135,7 @@ function volumeCandlesOptionsOf(appearance: VolumeCandlesAppearance, digits: num
     ...VOLUME_CANDLES_DEFAULT_OPTIONS,
     ...barStyleCommonOptions(digits),
     ...candleSeriesColors(appearance.candles),
+    widthSensitivity: appearance.widthSensitivity,
   };
 }
 
