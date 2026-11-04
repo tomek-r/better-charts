@@ -13,13 +13,18 @@ export type ChartIndicatorPane = 'overlay' | 'own';
  * returns is display-only, never an order input.
  */
 export interface ChartIndicator {
-  /** Every bar, after a history, a settings or a symbol/timeframe change. */
+  /**
+   * Every bar, after a history, a settings or a symbol/timeframe change: rebuilds the indicator's state
+   * up to the newest bar, which is the one still forming, and returns the whole frame.
+   */
   load(bars: readonly RenderBar[], settings: SettingValues): IndicatorFrame;
   /**
-   * The newest bar changed or a new one opened. The frame carries only the closed bar, if any,
-   * then the forming one.
+   * One live bar: the forming bar again (same time: a tick) or a newer one (the forming bar closed).
+   * Returns only the bars that changed: the closed bar, if any, then the forming one; a bar older than
+   * the forming one changes nothing. The state stays as of the last closed bar, so a tick never leaks
+   * into it; a settings change arrives as `load`.
    */
-  update(bars: readonly RenderBar[], settings: SettingValues): IndicatorFrame;
+  update(bar: RenderBar, settings: SettingValues): IndicatorFrame;
   dispose?(): void;
   /** Development builds only: a read-only view of the indicator's state for the e2e suite. */
   testApi?(): unknown;
