@@ -1,6 +1,7 @@
 import {
   BID_ASK_DRAWING_MODES,
   DEFAULT_CHART_SCALES_APPEARANCE,
+  PRICE_SCALE_MODES,
   SCALE_BUTTON_MODES,
   type ChartBidAskAppearance,
   type ChartScalesAppearance,
@@ -35,7 +36,7 @@ export function chartTimeLabelsOf(scales: ScalesSettingValues): ChartTimeLabels 
   };
 }
 
-/** The chart the Scales and lines tab's settings draw, each field that does not read falling back to its default. */
+/** The chart the scales settings draw, each field that does not read falling back to its default. */
 export function scalesAppearanceOf(scales: ScalesSettingValues): ChartScalesAppearance {
   const defaults = DEFAULT_CHART_SCALES_APPEARANCE;
   return {
@@ -43,5 +44,8 @@ export function scalesAppearanceOf(scales: ScalesSettingValues): ChartScalesAppe
     countdown: readBoolean(scales.countdown, defaults.countdown),
     bidAsk: readBidAsk(scales.bidAsk),
     timeLabels: chartTimeLabelsOf(scales),
+    invertScale: readBoolean(scales.invertScale, defaults.invertScale),
+    priceScaleMode: readOption(scales.priceScaleMode, PRICE_SCALE_MODES, defaults.priceScaleMode),
+    symbolNameLabel: readBoolean(scales.symbolNameLabel, defaults.symbolNameLabel),
   };
 }

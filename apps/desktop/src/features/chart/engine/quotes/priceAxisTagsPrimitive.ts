@@ -13,7 +13,8 @@ import { paintTag, tagLayout, type TagLayout } from '../text/priceTag';
 import { priceTagHeight, tagStackTops } from './tagStack';
 
 /**
- * Bid/Ask price-axis labels.
+ * The price-axis tags the quote draws: the Bid and Ask prices, and the chart's symbol name under
+ * them.
  *
  * The lines are native Lightweight Charts price lines; only their labels are
  * positioned here. A price line cannot own them: the library's label alignment
@@ -26,13 +27,19 @@ import { priceTagHeight, tagStackTops } from './tagStack';
  *
  * So the tags are price-axis labels drawn here in the library's label style,
  * spaced by the two prices so both stay readable, and only ever moving with the
- * scale.
+ * scale. The symbol name rides in the same stack, so it can never cover a quote
+ * tag whichever price the market trades at.
  */
 
 export interface PriceAxisTagsState {
   ask?: number;
   bid?: number;
 }
+
+/** The tags this primitive paints, in the stack order `tagStackTops` places them. */
+const TAG_SIDES = ['ask', 'bid', 'symbol'] as const;
+
+type TagSide = (typeof TAG_SIDES)[number];
 
 /**
  * The tags are painted here, not by the library, because the library sizes a
@@ -43,45 +50,53 @@ export interface PriceAxisTagsState {
  */
 interface TagTexts {
   key: string;
-  ask: string;
-  bid: string;
   font: string;
-  layouts: { ask: TagLayout; bid: TagLayout };
-  /** Box width shared by the pair. */
-  width: number;
+  layouts: Readonly<Record<TagSide, TagLayout>>;
+  /** Box width the Ask and Bid pair shares: the same digits count, and a price that gains one widens both. */
+  priceWidth: number;
+  /** Width of the widest box drawn, which the price axis has to be at least as wide as. */
+  widestWidth: number;
 }
 
 export interface PriceAxisTagsOptions {
   askColor: string;
   bidColor: string;
+  /** Whether the chart's symbol is drawn as a tag under the countdown, which the Symbol name label sets. */
+  symbolNameLabel: boolean;
 }
 
-/** The tag colours a chart draws until the Bid and ask setting names others. */
+/** The tags a chart draws until the Bid and ask setting names other colours. */
 const DEFAULT_TAG_OPTIONS: PriceAxisTagsOptions = {
   askColor: DEFAULT_CHART_SCALES_APPEARANCE.bidAsk.ask,
   bidColor: DEFAULT_CHART_SCALES_APPEARANCE.bidAsk.bid,
+  symbolNameLabel: DEFAULT_CHART_SCALES_APPEARANCE.symbolNameLabel,
 };
 
 export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
   private readonly axisViews: readonly IPrimitivePaneView[];
   /** Axis coordinate of each tag's centre captured by `updateAllViews`; NaN while hidden. */
-  private readonly shownY = { ask: NaN, bid: NaN };
+  private readonly shownY: Record<TagSide, number> = { ask: NaN, bid: NaN, symbol: NaN };
   private options: PriceAxisTagsOptions;
   private readonly state: PriceAxisTagsState = {};
+  /** The chart's symbol, drawn as a tag only while the Symbol name label setting draws it. */
+  private symbol = '';
   /** Pending post-paint width read, so a burst of quotes schedules one. */
   private widthFrame = 0;
   /** The axis width the chart was configured with, restored on a symbol change. */
   private configuredMinimumWidth = 0;
   /** Widest axis width needed so far; never lowered while this series is shown. */
   private heldAxisWidth = 0;
-  /** Formatted tag texts and layouts, kept until prices or font move. */
+  /** Formatted tag texts and layouts, kept until prices, symbol or font move. */
   private texts: TagTexts = {
     key: '',
-    ask: '',
-    bid: '',
     font: '',
-    layouts: { ask: { width: 0, glyphs: [] }, bid: { width: 0, glyphs: [] } },
-    width: 0,
+    layouts: {
+      ask: { width: 0, glyphs: [] },
+      bid: { width: 0, glyphs: [] },
+      symbol: { width: 0, glyphs: [] },
+    },
+    priceWidth: 0,
+    widestWidth: 0,
   };
 
   constructor(options: PriceAxisTagsOptions = DEFAULT_TAG_OPTIONS) {
@@ -89,7 +104,7 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
     this.options = { ...options };
     // The view list is stable: the library caches views by array identity. A
     // hidden tag has no renderer, so it costs nothing.
-    this.axisViews = (['ask', 'bid'] as const).map((side) => {
+    this.axisViews = TAG_SIDES.map((side) => {
       const renderer: IPrimitivePaneRenderer = { draw: (target) => this.draw(target, side) };
       return {
         zOrder: () => 'top' as const,
@@ -104,16 +119,28 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
     this.state.ask = state.ask;
     this.state.bid = state.bid;
     if (changed) {
-      this.reserveAxisWidthForTags();
-      this.requestUpdate?.();
-      this.holdAxisWidthAfterPaint();
+      this.tagsChanged();
     }
   }
 
-  /** The colours the Bid and ask setting names for the two tags. */
+  /** The chart's symbol; the symbol tag follows it, so a new instrument re-lays it out at once. */
+  setSymbol(symbol: string): void {
+    if (symbol === this.symbol) {
+      return;
+    }
+    this.symbol = symbol;
+    this.tagsChanged();
+  }
+
+  /** The colours the Bid and ask setting names, and whether the symbol name tag is drawn. */
   applyOptions(options: Partial<PriceAxisTagsOptions>): void {
     this.options = { ...this.options, ...options };
-    this.requestUpdate?.();
+    this.tagsChanged();
+  }
+
+  /** Whether the symbol name tag is drawn, which the dev test hook reads back. */
+  symbolNameLabel(): boolean {
+    return this.options.symbolNameLabel;
   }
 
   attached(params: SeriesAttachedParameter<Time>): void {
@@ -124,8 +151,7 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
 
   detached(): void {
     super.detached();
-    this.shownY.ask = NaN;
-    this.shownY.bid = NaN;
+    this.hideTags();
     cancelAnimationFrame(this.widthFrame);
     this.widthFrame = 0;
     this.configuredMinimumWidth = 0;
@@ -141,8 +167,34 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
   /** Runs on every chart update, before the axis is painted; the draw reads this snapshot. */
   updateAllViews(): void {
     this.refreshPaneHeight();
-    this.shownY.ask = this.visible(this.state.ask, 'ask') ? this.coordinate(this.state.ask, 'ask') : NaN;
-    this.shownY.bid = this.visible(this.state.bid, 'bid') ? this.coordinate(this.state.bid, 'bid') : NaN;
+    const height = priceTagHeight(this.labelFontSize());
+    const tops = tagStackTops(this.coordinateOf(this.state.ask), this.coordinateOf(this.state.bid), height);
+    for (const side of TAG_SIDES) {
+      this.shownY[side] = this.shownCentre(side, tops[side], height);
+    }
+  }
+
+  /**
+   * A change the layout depends on: widen the axis before the paint that first draws the boxes, and
+   * repaint. The post-paint read then holds whatever the settled width turned out to be.
+   */
+  private tagsChanged(): void {
+    this.reserveAxisWidthForTags();
+    this.requestUpdate?.();
+    this.holdAxisWidthAfterPaint();
+  }
+
+  /** Centre of a tag's box when it is drawn, NaN when it has no text or its box leaves the pane. */
+  private shownCentre(side: TagSide, top: number, height: number): number {
+    const centre = top + height / 2;
+    const onPane = Number.isFinite(centre) && centre >= 0 && centre <= this.paneHeight;
+    return onPane && this.text(side) !== '' ? centre : NaN;
+  }
+
+  private hideTags(): void {
+    for (const side of TAG_SIDES) {
+      this.shownY[side] = NaN;
+    }
   }
 
   /**
@@ -180,8 +232,8 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
     }
     // The tags are painted here, so the library's own width no longer includes
     // them: the axis must also be at least as wide as the boxes drawn.
-    const shown = !Number.isNaN(this.shownY.ask) || !Number.isNaN(this.shownY.bid);
-    const width = Math.max(scale.width(), shown ? this.texts.width : 0);
+    const shown = TAG_SIDES.some((side) => !Number.isNaN(this.shownY[side]));
+    const width = Math.max(scale.width(), shown ? this.texts.widestWidth : 0);
     this.raiseAxisWidth(scale, width);
   }
 
@@ -204,8 +256,8 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
     if (scale === undefined) {
       return;
     }
-    const { width } = this.tagTexts();
-    this.raiseAxisWidth(scale, width);
+    const { widestWidth } = this.tagTexts();
+    this.raiseAxisWidth(scale, widestWidth);
   }
 
   /**
@@ -227,54 +279,51 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
     return this.series.priceToCoordinate(price);
   }
 
-  private coordinate(price: number | undefined, side: 'ask' | 'bid'): number {
-    if (this.coordinateOf(price) === null) {
-      return NaN;
+  /** The text a tag writes: a formatted price, or the symbol while the Symbol name label draws it. */
+  private text(side: TagSide): string {
+    if (side === 'symbol') {
+      return this.options.symbolNameLabel ? this.symbol : '';
     }
-    // Ask above its price, Bid below its price: the pair grows outwards, so one
-    // tag never covers the other however tight the spread gets, and with a wide
-    // spread they sit on their prices like native labels. The box tops are whole
-    // pixels shared with the countdown (see `tagStackTops`).
-    const height = priceTagHeight(this.labelFontSize());
-    const tops = tagStackTops(this.coordinateOf(this.state.ask), this.coordinateOf(this.state.bid), height);
-    return tops[side] + height / 2;
+    return this.priceText(side === 'ask' ? this.state.ask : this.state.bid);
   }
 
-  private text(price: number | undefined, side: 'ask' | 'bid'): string {
-    if (price === undefined || this.series === null) {
-      return '';
-    }
-    return this.tagTexts()[side];
+  private priceText(price: number | undefined): string {
+    const formatter = this.series?.priceFormatter();
+    return formatter === undefined || price === undefined ? '' : formatter.format(price);
   }
 
   /**
-   * Both tag texts and their fixed-cell layouts, kept until a price or the font
-   * changes. The pair shares one box width: with the same number of characters
-   * it is already equal, and a price that gains a digit widens both.
+   * Every tag's text and fixed-cell layout, kept until a price, the symbol or the
+   * font changes. The Ask and Bid pair shares one box width: with the same number
+   * of characters it is already equal, and a price that gains a digit widens both.
    */
   private tagTexts(): TagTexts {
-    const formatter = this.series?.priceFormatter();
-    const ask = formatter === undefined || this.state.ask === undefined ? '' : formatter.format(this.state.ask);
-    const bid = formatter === undefined || this.state.bid === undefined ? '' : formatter.format(this.state.bid);
-    const fontSize = this.labelFontSize();
+    const ask = this.text('ask');
+    const bid = this.text('bid');
+    const symbol = this.text('symbol');
     const font = this.labelFont();
-    const key = `${ask}|${bid}|${font}`;
+    const key = `${ask}|${bid}|${symbol}|${font}`;
     if (this.texts.key === key) {
       return this.texts;
     }
-    const layouts = { ask: tagLayout(ask, font, fontSize), bid: tagLayout(bid, font, fontSize) };
-    const width = Math.max(layouts.ask.width, layouts.bid.width);
-    this.texts = { key, ask, bid, font, layouts, width };
+    const fontSize = this.labelFontSize();
+    const layouts = {
+      ask: tagLayout(ask, font, fontSize),
+      bid: tagLayout(bid, font, fontSize),
+      symbol: tagLayout(symbol, font, fontSize),
+    };
+    const priceWidth = Math.max(layouts.ask.width, layouts.bid.width);
+    this.texts = { key, font, layouts, priceWidth, widestWidth: Math.max(priceWidth, layouts.symbol.width) };
     return this.texts;
   }
 
-  private visible(price: number | undefined, side: 'ask' | 'bid'): boolean {
-    const y = this.coordinate(price, side);
-    return this.text(price, side) !== '' && Number.isFinite(y) && y >= 0 && y <= this.paneHeight;
+  /** The box each tag is painted in: the Ask and Bid pair share one width, the symbol its own. */
+  private boxWidth(texts: TagTexts, side: TagSide): number {
+    return side === 'symbol' ? texts.layouts.symbol.width : texts.priceWidth;
   }
 
   /** Box and fixed-cell digits, in the axis canvas' own coordinates. */
-  private draw(target: RenderTarget, side: 'ask' | 'bid'): void {
+  private draw(target: RenderTarget, side: TagSide): void {
     const centre = this.shownY[side];
     if (Number.isNaN(centre)) {
       return;
@@ -284,7 +333,7 @@ export class PriceAxisTagsPrimitive extends ChartSeriesPrimitive {
     target.useMediaCoordinateSpace(({ context }) => {
       paintTag(context, {
         layout: texts.layouts[side],
-        width: texts.width,
+        width: this.boxWidth(texts, side),
         font: texts.font,
         backColor: side === 'ask' ? this.options.askColor : this.options.bidColor,
         textColor: palette.text,

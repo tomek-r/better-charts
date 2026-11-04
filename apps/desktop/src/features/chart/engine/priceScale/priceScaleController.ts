@@ -1,10 +1,40 @@
 import { PriceScaleMode, type IChartApi, type IPriceScaleApi, type ISeriesApi } from 'lightweight-charts';
-import type { ScaleButtonsMode } from '../surface/chartScalesAppearance';
+import { priceScaleModeOf, type ChartPriceScaleMode, type ScaleButtonsMode } from '../surface/chartScalesAppearance';
 import { ChartSettingsCornerButton } from './chartSettingsCornerButton';
 import { setPriceScaleRange } from './priceScaleRange';
 
 /** The scale the candles and the price axis are bound to. */
 const PRICE_SCALE_ID = 'right';
+
+/**
+ * The event the `L` toggle raises on the chart's host: the price scale mode it asks the chart to keep.
+ * The mode is one of the chart's saved scales settings, so the toggle asks for it instead of writing it.
+ */
+export const PRICE_SCALE_MODE_REQUESTED_EVENT = 'chart-price-scale-mode-requested';
+
+/** The event the scale raises on the chart's host whenever auto scale actually moves. */
+export const PRICE_SCALE_AUTO_CHANGED_EVENT = 'chart-price-scale-auto-changed';
+
+/** What the `L` toggle asks for: the mode the chart should draw the price scale in. */
+export interface PriceScaleModeRequestDetail {
+  readonly mode: ChartPriceScaleMode;
+}
+
+/** What the scale reports when auto scale moves: whether the scale now fits the visible data itself. */
+export interface PriceScaleAutoDetail {
+  readonly autoScale: boolean;
+}
+
+/** The saved shape of the price scale: which way its prices grow, and how they are spaced. */
+export interface PriceScaleShape {
+  readonly invertScale: boolean;
+  readonly logarithmic: boolean;
+}
+
+/** The price scale as the chart draws it right now, which the gear menu and the app read back. */
+export interface PriceScaleState extends PriceScaleShape {
+  readonly autoScale: boolean;
+}
 
 function control(glyph: string, label: string): HTMLButtonElement {
   const button = document.createElement('button');
@@ -22,7 +52,7 @@ function setPressed(button: HTMLButtonElement, pressed: boolean): void {
 
 /**
  * Toggles on the right price scale: `A` fits the visible data (auto scale) and
- * `L` switches the scale to logarithmic prices. The settings gear sits below
+ * `L` switches the scale between regular and logarithmic prices. The settings gear sits below
  * them, in the corner where the price axis meets the time axis.
  *
  * Both are ordinary HTML buttons in the axis column rather than a primitive:
@@ -40,6 +70,11 @@ function setPressed(button: HTMLButtonElement, pressed: boolean): void {
  * own too, by turning auto scale off when the axis is dragged and on again when
  * it is double-clicked.
  *
+ * `A` is a plain view toggle, but the mode is a saved setting: `L` only asks for
+ * the other mode, and the settings apply it through `setScaleShape` like any
+ * other saved value. The events travel up to the chart's host, which is the only
+ * way out of the engine.
+ *
  * Position and paint are CSS (`.price-scale-controls` in features/chart/engine/priceScale/price-scale-controls.css). Only
  * the row's width is set here, because the axis width is runtime geometry.
  */
@@ -52,6 +87,8 @@ export class PriceScaleController {
   private revealed = false;
   /** How the row reaches the screen: revealed by the pointer, kept on screen, or never drawn. */
   private modeButtons: ScaleButtonsMode = 'mouseOver';
+  /** The auto scale the app was last told about; only a real change is announced. */
+  private autoScale = false;
 
   constructor(
     private readonly host: HTMLElement,
@@ -66,7 +103,7 @@ export class PriceScaleController {
     this.autoButton = control('A', 'Auto scale — fit the visible data to the pane');
     this.logButton = control('L', 'Logarithmic price scale');
     this.autoButton.addEventListener('click', this.toggleAutoScale);
-    this.logButton.addEventListener('click', this.toggleLogarithmic);
+    this.logButton.addEventListener('click', this.requestOtherMode);
     this.root.append(this.autoButton, this.logButton);
     host.appendChild(this.root);
     host.addEventListener('pointermove', this.onPointerMove);
@@ -85,12 +122,47 @@ export class PriceScaleController {
   /** Re-reads the scale. Call after changing it anywhere else (e.g. resetView). */
   sync(): void {
     const options = this.axis.options();
-    const logarithmic = options.mode === PriceScaleMode.Logarithmic;
     setPressed(this.autoButton, options.autoScale);
-    setPressed(this.logButton, logarithmic);
+    setPressed(this.logButton, options.mode === PriceScaleMode.Logarithmic);
+    this.noticeAutoScale(options.autoScale);
     if (this.modeButtons === 'always') {
       this.setWidth(this.axis.width());
     }
+  }
+
+  /** Fits the visible data to the pane, or stops doing so, whichever way the caller asks. */
+  setAutoScale(on: boolean): void {
+    if (this.axis.options().autoScale === on) {
+      return;
+    }
+    this.axis.applyOptions({ autoScale: on });
+    this.sync();
+  }
+
+  /**
+   * The saved shape of the scale, each part written only when it differs from the scale's own. The
+   * prices' spacing is the one write that has to carry the range over with it.
+   */
+  setScaleShape(shape: Readonly<PriceScaleShape>): void {
+    const options = this.axis.options();
+    if (options.invertScale !== shape.invertScale) {
+      this.axis.applyOptions({ invertScale: shape.invertScale });
+    }
+    const mode = shape.logarithmic ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal;
+    if (options.mode !== mode) {
+      this.applyMode(mode);
+    }
+    this.sync();
+  }
+
+  /** The scale as it is drawn now, which the gear menu offers to change and the app reads back. */
+  scaleShape(): PriceScaleState {
+    const options = this.axis.options();
+    return {
+      autoScale: options.autoScale,
+      logarithmic: options.mode === PriceScaleMode.Logarithmic,
+      invertScale: options.invertScale,
+    };
   }
 
   /**
@@ -139,28 +211,46 @@ export class PriceScaleController {
     this.host.removeEventListener('pointerup', this.onPointerUp);
     this.host.removeEventListener('dblclick', this.onDoubleClick);
     this.autoButton.removeEventListener('click', this.toggleAutoScale);
-    this.logButton.removeEventListener('click', this.toggleLogarithmic);
+    this.logButton.removeEventListener('click', this.requestOtherMode);
     this.settingsButton.destroy();
     this.root.remove();
   }
 
   private readonly toggleAutoScale = (): void => {
-    this.axis.applyOptions({ autoScale: !this.axis.options().autoScale });
-    this.sync();
+    this.setAutoScale(!this.axis.options().autoScale);
   };
 
-  private readonly toggleLogarithmic = (): void => {
-    const mode = this.axis.options().mode;
+  /** The mode is a saved setting, so the toggle asks the app for the other one and writes nothing itself. */
+  private readonly requestOtherMode = (): void => {
+    const mode = priceScaleModeOf(!this.scaleShape().logarithmic);
+    const detail: PriceScaleModeRequestDetail = { mode };
+    this.logButton.dispatchEvent(new CustomEvent(PRICE_SCALE_MODE_REQUESTED_EVENT, { bubbles: true, detail }));
+  };
+
+  /**
+   * Writes the mode, holding the actual-price range across the library's own manual switch: a manual
+   * range is written in the coordinates of the mode it was set in, so it would land elsewhere.
+   */
+  private applyMode(mode: PriceScaleMode): void {
     const range = this.axis.options().autoScale ? null : this.axis.getVisibleRange();
-    this.axis.applyOptions({
-      mode: mode === PriceScaleMode.Logarithmic ? PriceScaleMode.Normal : PriceScaleMode.Logarithmic,
-    });
-    // Preserve the actual-price range across LWC's manual mode switch.
+    this.axis.applyOptions({ mode });
     if (range !== null) {
       setPriceScaleRange(this.candles, range);
     }
-    this.sync();
-  };
+  }
+
+  /**
+   * Announces auto scale moving, which the library also does on its own: dragging the axis turns it
+   * off and double-clicking it turns it on. Only a real change is announced, so a re-read repeats none.
+   */
+  private noticeAutoScale(autoScale: boolean): void {
+    if (autoScale === this.autoScale) {
+      return;
+    }
+    this.autoScale = autoScale;
+    const detail: PriceScaleAutoDetail = { autoScale };
+    this.host.dispatchEvent(new CustomEvent(PRICE_SCALE_AUTO_CHANGED_EVENT, { bubbles: true, detail }));
+  }
 
   private readonly onPointerMove = (event: PointerEvent): void => {
     if (!this.revealsOnHover()) {

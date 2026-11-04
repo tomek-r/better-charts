@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openChartMenu } from './helpers/chartMenu';
+import { chartSettingsDialog, openChartSettingsDialog, openChartSettingsTab } from './helpers/chartSettingsDialog';
 import { expectUtcZoneSaved, lastSavedOverridesArgs, timeZoneButton, UTC_CLOCK } from './helpers/chartTimeZonePage';
 import {
   chartScopeKey,
@@ -12,9 +13,9 @@ import {
 import { palette } from '../src/shared/theme/palette';
 
 /**
- * The chart's settings dialog: the row in the chart's right-click menu and the gear in its corner both
- * open it. Every edit shows on the chart at once, OK keeps and stores it, and Cancel, the × and Escape
- * put back what the chart showed when the dialog opened.
+ * The chart's settings dialog: the row in the chart's right-click menu opens it, and so does the settings row
+ * of the Scales and lines menu the gear in the chart's corner opens. Every edit shows on the chart at once, OK
+ * keeps and stores it, and Cancel, the × and Escape put back what the chart showed when the dialog opened.
  */
 
 /** The account the stub's bridge status and account snapshot both report. */
@@ -27,8 +28,6 @@ const STUB_BAR_COUNT = 10;
 const UP_COLOR = '#26a69a';
 const HIDDEN_BODY_UP_COLOR = 'transparent';
 const NARROW_VIEWPORT = { width: 480, height: 720 };
-
-const chartSettingsDialog = (page: Page) => page.getByRole('dialog', { name: 'Settings' });
 
 async function saveCount(page: Page): Promise<number> {
   return (await stubInvocations(page)).filter((entry) => entry.cmd === 'save_chart_setting_overrides').length;
@@ -58,10 +57,7 @@ async function waitForDialogSettled(dialog: Locator): Promise<void> {
 
 /** Opens the dialog from the menu row the feature adds, and waits for it to settle. */
 async function openSettingsFromMenu(page: Page): Promise<void> {
-  const menu = await openChartMenu(page);
-  await menu.getByRole('menuitem', { name: 'Settings', exact: true }).click();
-  const dialog = chartSettingsDialog(page);
-  await expect(dialog).toBeVisible();
+  const dialog = await openChartSettingsDialog(page);
   await waitForDialogSettled(dialog);
 }
 
@@ -72,20 +68,16 @@ async function openSettingsDialog(page: Page): Promise<Locator> {
   return chartSettingsDialog(page);
 }
 
-/** Opens the dialog and switches to the Canvas tab, where the chart's own canvas is edited. */
+/** Waits for the bars, then opens the dialog on the Canvas tab, where the chart's own canvas is edited. */
 async function openCanvasTab(page: Page): Promise<Locator> {
-  const dialog = await openSettingsDialog(page);
-  await dialog.getByRole('tab', { name: 'Canvas' }).click();
-  await expect(dialog.getByRole('tab', { name: 'Canvas' })).toHaveAttribute('aria-selected', 'true');
-  return dialog;
+  await openChart(page);
+  return openChartSettingsTab(page, 'Canvas');
 }
 
-/** Opens the dialog and switches to the Scales and lines tab, where the price and time scales are edited. */
+/** Waits for the bars, then opens the dialog on the Scales and lines tab, where the scales are edited. */
 async function openScalesTab(page: Page): Promise<Locator> {
-  const dialog = await openSettingsDialog(page);
-  await dialog.getByRole('tab', { name: 'Scales and lines' }).click();
-  await expect(dialog.getByRole('tab', { name: 'Scales and lines' })).toHaveAttribute('aria-selected', 'true');
-  return dialog;
+  await openChart(page);
+  return openChartSettingsTab(page, 'Scales and lines');
 }
 
 /** Unchecks the candle body and waits for the chart to draw the bodies hidden. */
@@ -152,7 +144,9 @@ test('the chart menu lists the view command, a separator and the settings, which
   expectNoErrors(collected);
 });
 
-test('the gear in the chart corner opens the same dialog', async ({ page }) => {
+test('the gear in the chart corner opens the Scales and lines menu, whose settings row opens the dialog', async ({
+  page,
+}) => {
   const collected = await gotoWithStub(page);
   await openChart(page);
 
@@ -187,9 +181,13 @@ test('the gear in the chart corner opens the same dialog', async ({ page }) => {
   expect(corner.gear.top).toBeGreaterThanOrEqual(corner.timeAxisTop + 1);
 
   await gear.click();
+  const menu = page.getByRole('menu', { name: 'Scales and lines', exact: true });
+  await expect(menu).toBeVisible();
+  // The gear opens the Scales and lines menu; the dialog is the menu's last row, on the tab of the scale it shows.
+  await menu.getByRole('menuitem', { name: 'More settings' }).click();
   const dialog = chartSettingsDialog(page);
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('tab', { name: 'Symbol' })).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.getByRole('tab', { name: 'Scales and lines' })).toHaveAttribute('aria-selected', 'true');
   expectNoErrors(collected);
 });
 

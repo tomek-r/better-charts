@@ -16,6 +16,7 @@ import {
 } from './chartSettings';
 import { createTauriChartSettingsStore, type ChartSettingsStore, type StoredChartSettings } from './chartSettingsStore';
 import { scalesAppearanceOf } from './scalesAppearanceSetting';
+import { usePriceScaleModeRequests } from './usePriceScaleModeRequests';
 
 /** What the settings of the chart on screen offer: what it shows, and the ways to change it. */
 interface ChartSettingsChoice {
@@ -182,6 +183,10 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
 
   const selectTimeZone = useCallback((zone: string) => keep(withTimeZone(kept, zone)), [keep, kept]);
 
+  // The L toggle on the chart asks for the other price scale mode; the mode is one of the scales
+  // settings, so the request is kept like an edit of the Scales and lines tab's own rows.
+  usePriceScaleModeRequests(settings, keep);
+
   const choice = useMemo<ChartSettingsChoice>(
     () => ({ settings, preview, keep, revert, selectTimeZone }),
     [keep, preview, revert, selectTimeZone, settings],
@@ -208,9 +213,10 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
     chart.current?.setChartAppearance(chartAppearanceOf(canvasSettings));
   }, [canvasSettings, chart]);
 
-  // The engine draws what the Scales and lines tab sets: the A/L row, the countdown tag, the Bid/Ask
-  // quote and the labels of the time axis, the pointer and the footer clock. The scales values object
-  // is the dependency, so every preview and every keep reaches the chart.
+  // The engine draws what the scales settings set: the A/L row, the price scale's direction and spacing,
+  // the symbol name tag, the countdown tag, the Bid/Ask quote and the labels of the time axis, the pointer
+  // and the footer clock. The scales values object is the dependency, so every preview and every keep
+  // reaches the chart.
   const scalesSettings = settings.scales;
   useEffect(() => {
     chart.current?.setScalesAppearance(scalesAppearanceOf(scalesSettings));

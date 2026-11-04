@@ -24,7 +24,7 @@ export function useResetChartViewShortcut(): void {
         return;
       }
       event.preventDefault();
-      chart.current?.resetView();
+      chart.current?.resetChartView();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

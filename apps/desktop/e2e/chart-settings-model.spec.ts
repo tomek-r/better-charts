@@ -252,6 +252,9 @@ const SCALES_DEFAULTS: Readonly<Record<string, unknown>> = {
   dayOfWeek: true,
   dateFormat: 'dayMonthYear',
   hourFormat: 'h24',
+  priceScaleMode: 'regular',
+  invertScale: false,
+  symbolNameLabel: false,
 };
 
 /** The bid and ask with nothing drawn of them, as the dialog's Hidden option writes them. */
@@ -288,6 +291,9 @@ test('a chart scales override wins per field over the template it starts from', 
     dayOfWeek: true,
     dateFormat: 'iso',
     hourFormat: 'h24',
+    priceScaleMode: 'regular',
+    invertScale: false,
+    symbolNameLabel: false,
   });
 });
 
@@ -300,6 +306,9 @@ test('a stored scales layer keeps the fields it can read and drops the rest', ()
       dayOfWeek: true,
       dateFormat: 'julian',
       hourFormat: 'h36',
+      priceScaleMode: 'sometimes',
+      invertScale: 'yes',
+      symbolNameLabel: 1,
       unknownField: 3,
     },
   });

@@ -6,8 +6,9 @@ import type { ChartSettingValue } from '../src/features/chart/chartSettings/sett
 import { palette } from '../src/shared/theme/palette';
 
 /**
- * The Scales and lines settings read back as the chart draws them: the A/L row, the countdown tag,
- * the Bid/Ask quote and the time labels, each field falling back to its default on its own. Pure Node.
+ * The scales settings read back as the chart draws them: the A/L row, the price scale's direction and
+ * spacing, the symbol name tag, the countdown tag, the Bid/Ask quote and the time labels, each field
+ * falling back to its default on its own. Pure Node.
  */
 
 /** What a chart draws when nothing has been stored: the scales and lines it has always had. */
@@ -16,6 +17,9 @@ const DEFAULTS = {
   countdown: true,
   bidAsk: { mode: 'lineAndLabel', bid: palette.sell, ask: palette.buy },
   timeLabels: { dayOfWeek: true, dateFormat: 'dayMonthYear', hourFormat: 'h24' },
+  invertScale: false,
+  priceScaleMode: 'regular',
+  symbolNameLabel: false,
 };
 
 /** Every scales field's declared default, keyed as the stored settings are. */
@@ -43,12 +47,18 @@ test('every scales setting reads back the value it names', () => {
     dayOfWeek: false,
     dateFormat: 'monthDayNumeric',
     hourFormat: 'h12',
+    invertScale: true,
+    priceScaleMode: 'logarithmic',
+    symbolNameLabel: true,
   };
   expect(scalesAppearanceOf(stored)).toEqual({
     scaleModeButtons: 'always',
     countdown: false,
     bidAsk: { mode: 'label', bid: '#112233', ask: '#445566' },
     timeLabels: { dayOfWeek: false, dateFormat: 'monthDayNumeric', hourFormat: 'h12' },
+    invertScale: true,
+    priceScaleMode: 'logarithmic',
+    symbolNameLabel: true,
   });
 });
 

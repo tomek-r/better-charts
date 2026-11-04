@@ -1,5 +1,10 @@
 import { palette } from '../../../shared/theme/palette';
-import { SCALE_BUTTON_MODES, type ScaleButtonsMode } from '../engine/surface/chartScalesAppearance';
+import {
+  PRICE_SCALE_MODES,
+  SCALE_BUTTON_MODES,
+  type ChartPriceScaleMode,
+  type ScaleButtonsMode,
+} from '../engine/surface/chartScalesAppearance';
 import {
   CHART_DATE_FORMATS,
   CHART_HOUR_FORMATS,
@@ -91,7 +96,44 @@ export const SCALES_SETTINGS: readonly ScalesSettingsSection[] = [
   { title: 'Time scale', fields: TIME_SCALE_FIELDS },
 ];
 
-/** Every scales field, the section boundaries dropped, in the order the dialog draws them. */
+const PRICE_SCALE_MODE_LABELS: Readonly<Record<ChartPriceScaleMode, string>> = {
+  regular: 'Regular',
+  logarithmic: 'Logarithmic',
+};
+
+const PRICE_SCALE_MODE_FIELD: ChoiceSettingField = {
+  kind: 'choice',
+  key: 'priceScaleMode',
+  label: 'Scale type',
+  defaultValue: 'regular',
+  options: PRICE_SCALE_MODES.map((mode) => ({ value: mode, label: PRICE_SCALE_MODE_LABELS[mode] })),
+};
+
+const INVERT_SCALE_FIELD: CheckboxSettingField = {
+  kind: 'checkbox',
+  key: 'invertScale',
+  label: 'Invert scale',
+  defaultValue: false,
+};
+
+const SYMBOL_NAME_LABEL_FIELD: CheckboxSettingField = {
+  kind: 'checkbox',
+  key: 'symbolNameLabel',
+  label: 'Symbol name label',
+  defaultValue: false,
+};
+
+/**
+ * The price scale's shape and the symbol tag: saved with the scales settings, like the rows above, but
+ * offered only by the gear's Scales and lines menu, never by the dialog's Scales and lines tab.
+ */
+export const SCALES_AND_LINES_MENU_FIELDS: readonly ChartSettingField[] = [
+  PRICE_SCALE_MODE_FIELD,
+  INVERT_SCALE_FIELD,
+  SYMBOL_NAME_LABEL_FIELD,
+];
+
+/** Every scales field storage reads and writes: the sections the dialog draws, then the gear menu's fields. */
 export function scalesFields(): readonly ChartSettingField[] {
-  return SCALES_SETTINGS.flatMap((section) => section.fields);
+  return [...SCALES_SETTINGS.flatMap((section) => section.fields), ...SCALES_AND_LINES_MENU_FIELDS];
 }

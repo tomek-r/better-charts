@@ -95,6 +95,9 @@ test('a default chart keeps the scale modes, the countdown, the quote and the la
       countdownVisible: true,
       bidAsk: { linesVisible: true, labelsVisible: true, bid: palette.sell, ask: palette.buy },
       timeLabels: { dayOfWeek: true, dateFormat: 'dayMonthYear', hourFormat: 'h24' },
+      invertScale: false,
+      priceScaleMode: 'regular',
+      symbolNameLabelVisible: false,
     });
   expectNoErrors(collected);
 });
