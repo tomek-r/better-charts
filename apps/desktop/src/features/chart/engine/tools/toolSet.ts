@@ -56,6 +56,16 @@ function resolveTool(tool: ChartTool): ResolvedChartTool {
   };
 }
 
+/** The pointer and selection commands the chart's input routing sends to the active tool. */
+export interface ChartToolInput {
+  isPlacementToolActive(): boolean;
+  selectTool(id: string): void;
+  pointerDown(x: number, y: number): boolean;
+  pointerMove(x: number, y: number): boolean;
+  pointerUp(outcome: ChartPointerUpOutcome): boolean;
+  cancelGestures(): void;
+}
+
 /**
  * The instantiated tools and which one is active. It routes pointer events and lifecycle calls to
  * every tool, paints the drawings in the stacking order and knows no concrete tool: the default id
@@ -66,7 +76,7 @@ function resolveTool(tool: ChartTool): ResolvedChartTool {
  * `activate` may ask the host to repaint, and the host reaches objects the owner is
  * still creating while the constructor runs.
  */
-export class ChartToolSet implements ChartDrawingCommands {
+export class ChartToolSet implements ChartDrawingCommands, ChartToolInput {
   private activeEntry: ToolEntry;
   /** Where the pointer rests in the pane; replayed to a tool that becomes active later. Null outside it. */
   private hoverPoint: { x: number; y: number } | null = null;

@@ -25,13 +25,12 @@ import { isOutsidePane, ViewportController, type DiagnosticViewport } from '../v
 import type {
   ChartDrawingPaintTarget,
   ChartDrawTarget,
-  ChartPointerUpOutcome,
   ChartToolDefinition,
   ChartToolHost,
   ChartToolHostBase,
   ChartToolResetReason,
 } from '../tools/toolContract';
-import { ChartToolSet } from '../tools/toolSet';
+import { ChartToolSet, type ChartToolInput } from '../tools/toolSet';
 import { ChartDrawings } from '../drawings/chartDrawings';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installChartDevTestApi, removeDevTestApi } from './devTestApi';
@@ -97,6 +96,8 @@ export class ChartController {
   private readonly liveBar: LiveBarController;
   private readonly view: ViewportController;
   private readonly tools: ChartToolSet;
+  /** Pointer and selection commands for the active tool; the same tool set, narrowed to what input routing needs. */
+  readonly toolInput: ChartToolInput;
   private readonly olderHistory: OlderHistoryPager;
   /** Selection, user commands and saved records of the chart's drawings. */
   readonly drawings: ChartDrawings;
@@ -142,6 +143,7 @@ export class ChartController {
       selectionChanged: (selection) => this.drawings.selectionChanged(selection),
       drawingsChanged: () => this.drawings.drawingsChanged(),
     });
+    this.toolInput = this.tools;
     this.drawings = new ChartDrawings(this.tools, () => this.refreshOverlays());
     this.countdown = new CountdownController(this.countdownPrimitive, {
       symbol: () => this.symbol,
@@ -379,10 +381,6 @@ export class ChartController {
   timeToX(timeMs: number): number {
     return this.view.timeToX(timeMs);
   }
-  /** Whether a tool that places drawings (not a pointer tool) is active. */
-  isPlacementToolActive(): boolean {
-    return this.tools.isPlacementToolActive();
-  }
   /**
    * Every pointer shows axis labels (host CSS px), and the active tool hears the move.
    * Outside the pane both hide rather than clamp, because a clamped readout would
@@ -400,21 +398,6 @@ export class ChartController {
   hidePointerReadout(): void {
     this.pointerReadout.hide();
     this.tools.pointerLeave();
-  }
-  selectChartTool(toolId: string): void {
-    this.tools.selectTool(toolId);
-  }
-  toolPointerDown(x: number, y: number): boolean {
-    return this.tools.pointerDown(x, y);
-  }
-  toolPointerMove(x: number, y: number): boolean {
-    return this.tools.pointerMove(x, y);
-  }
-  toolPointerUp(outcome: ChartPointerUpOutcome): boolean {
-    return this.tools.pointerUp(outcome);
-  }
-  cancelToolGestures(): void {
-    this.tools.cancelGestures();
   }
   drawTools(target: ChartDrawTarget): void {
     this.tools.draw(target);
