@@ -5,8 +5,8 @@ import {
   DEFAULT_TIMEFRAME_VISIBILITY,
   type DrawingTimeframeVisibility,
 } from '../../chart/engine/drawings/timeframeVisibility';
-import type { ToolInputValues } from '../../chart/engine/drawings/toolInputs';
-import { resolveToolSettingValues, type ToolSettingsSchema } from '../../chart/engine/drawings/toolSettings';
+import type { SettingValues } from '../../chart/engine/settings/settingInputs';
+import { resolveSettingValues, type SettingsSchema } from '../../chart/engine/settings/settingsSchema';
 import { useChartResources } from '../../chart/ChartWorkspaceProvider';
 import { useRequiredContext } from '../../../shared/context/useRequiredContext';
 import { useDrawingSelection } from '../drawingToolbar/useDrawingSelection';
@@ -17,7 +17,7 @@ import { DrawingSettingsDialog, type DrawingSettingsDialogProps } from './Drawin
 interface OpenDrawingSettings {
   readonly toolId: string;
   readonly drawingId: string;
-  readonly values: ToolInputValues;
+  readonly values: SettingValues;
   readonly points: readonly ChartDrawingPoint[];
   readonly timeframeVisibility: DrawingTimeframeVisibility;
 }
@@ -34,11 +34,11 @@ function storedDrawingState(
   drawings: ChartDrawings | undefined,
   toolId: string,
   drawingId: string,
-  settings: ToolSettingsSchema,
+  settings: SettingsSchema,
 ): Pick<OpenDrawingSettings, 'values' | 'points' | 'timeframeVisibility'> {
   const record = drawings?.exportRecords().find((entry) => entry.toolId === toolId && entry.id === drawingId);
   return {
-    values: resolveToolSettingValues(settings, record?.inputs),
+    values: resolveSettingValues(settings, record?.inputs),
     points: record?.points ?? [],
     timeframeVisibility: record?.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY,
   };

@@ -1,22 +1,22 @@
 import {
-  isToolInputActive,
-  isToolInputInvalid,
-  type ToolInputDefinition,
-  type ToolInputValue,
-  type ToolInputValues,
-} from '../../../chart/engine/drawings/toolInputs';
-import { ToolInputField } from './ToolInputField';
+  isSettingInputActive,
+  isSettingInputInvalid,
+  type SettingInputDefinition,
+  type SettingValue,
+  type SettingValues,
+} from '../../../chart/engine/settings/settingInputs';
+import { SettingInputField } from './SettingInputField';
 
 /** The inputs sharing one group, or the ungrouped ones; `legend` is undefined for those. */
 interface DefinitionGroup {
   readonly legend: string | undefined;
-  readonly inputs: readonly ToolInputDefinition[];
+  readonly inputs: readonly SettingInputDefinition[];
 }
 
 /** Ungrouped inputs first, then each named group in the order its first input declares it. */
-function definitionGroups(definitions: readonly ToolInputDefinition[]): DefinitionGroup[] {
+function definitionGroups(definitions: readonly SettingInputDefinition[]): DefinitionGroup[] {
   const ungrouped = definitions.filter((definition) => definition.group === undefined);
-  const grouped = new Map<string, ToolInputDefinition[]>();
+  const grouped = new Map<string, SettingInputDefinition[]>();
   for (const definition of definitions) {
     if (definition.group === undefined) {
       continue;
@@ -28,9 +28,9 @@ function definitionGroups(definitions: readonly ToolInputDefinition[]): Definiti
 }
 
 /** Rows of one group: inputs sharing an `inline` key join the row of the first of them, as in Pine. */
-function inputRows(inputs: readonly ToolInputDefinition[]): ToolInputDefinition[][] {
-  const rows: ToolInputDefinition[][] = [];
-  const inlineRows = new Map<string, ToolInputDefinition[]>();
+function inputRows(inputs: readonly SettingInputDefinition[]): SettingInputDefinition[][] {
+  const rows: SettingInputDefinition[][] = [];
+  const inlineRows = new Map<string, SettingInputDefinition[]>();
   for (const input of inputs) {
     const sharedRow = input.inline === undefined ? undefined : inlineRows.get(input.inline);
     if (sharedRow !== undefined) {
@@ -47,12 +47,12 @@ function inputRows(inputs: readonly ToolInputDefinition[]): ToolInputDefinition[
 }
 
 interface FieldEditing {
-  readonly values: ToolInputValues;
-  readonly onChange: (id: string, value: ToolInputValue) => void;
+  readonly values: SettingValues;
+  readonly onChange: (id: string, value: SettingValue) => void;
 }
 
 interface InputsTabProps extends FieldEditing {
-  readonly definitions: readonly ToolInputDefinition[];
+  readonly definitions: readonly SettingInputDefinition[];
 }
 
 interface DrawingSettingsGroupProps extends FieldEditing {
@@ -61,14 +61,14 @@ interface DrawingSettingsGroupProps extends FieldEditing {
 
 /** One group of fields: a fieldset with its legend, or a plain block while nothing names the group. */
 function DrawingSettingsGroup({ group, values, onChange }: DrawingSettingsGroupProps) {
-  const renderField = (definition: ToolInputDefinition) => (
-    <ToolInputField
+  const renderField = (definition: SettingInputDefinition) => (
+    <SettingInputField
       key={definition.id}
       definition={definition}
       value={values[definition.id]}
       onChange={(value) => onChange(definition.id, value)}
-      disabled={!isToolInputActive(definition, values)}
-      invalid={isToolInputInvalid(definition, values)}
+      disabled={!isSettingInputActive(definition, values)}
+      invalid={isSettingInputInvalid(definition, values)}
     />
   );
   const rows = inputRows(group.inputs).map((row) =>

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { ToolInputDefinition } from '../src/features/chart/engine/drawings/toolInputs';
+import type { SettingInputDefinition } from '../src/features/chart/engine/settings/settingInputs';
 import { mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
 import { PLACEMENT } from './helpers/toolStyleFixtures';
 
@@ -15,7 +15,7 @@ const MODE_INPUT = {
   title: 'Mode',
   defaultValue: 'volume',
   options: ['volume', 'trades', 'delta'],
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const modeButton = (page: Page) => page.getByLabel('Mode', { exact: true });
 const listbox = (page: Page) => page.getByRole('listbox');

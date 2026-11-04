@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { ChartDrawingCollection } from '../src/features/chart/engine/drawings/chartDrawingCollection';
 import type { ChartDrawingPoint, ChartToolDrawingRecord } from '../src/features/chart/engine/drawings/drawingRecord';
 import type { ChartDrawingPointRule } from '../src/features/chart/engine/drawings/toolDrawings';
-import type { ToolInputDefinition } from '../src/features/chart/engine/drawings/toolInputs';
+import type { SettingInputDefinition } from '../src/features/chart/engine/settings/settingInputs';
 import { FakeDrawingShape } from './helpers/fakeDrawingShape';
 
 /**
@@ -22,7 +22,7 @@ const PERIOD_INPUT = {
   defaultValue: 20,
   minValue: 1,
   maxValue: 200,
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 /** Two time-only anchors: the rule of a tool whose drawings span one window. */
 const TWO_TIME_POINTS: ChartDrawingPointRule = { min: 2, max: 2, anchor: 'time' };
@@ -42,7 +42,7 @@ function selectedId(collection: Collection): string | null {
 
 function buildCollection(
   points: ChartDrawingPointRule = TWO_TIME_POINTS,
-  inputs: readonly ToolInputDefinition[] = [PERIOD_INPUT],
+  inputs: readonly SettingInputDefinition[] = [PERIOD_INPUT],
 ): Harness {
   let repaintCount = 0;
   const collection = new ChartDrawingCollection<FakeDrawingShape>(

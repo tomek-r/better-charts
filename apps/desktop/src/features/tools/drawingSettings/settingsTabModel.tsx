@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import type { ChartDrawingPointRule } from '../../chart/engine/drawings/toolDrawings';
-import type { ToolInputValue, ToolInputValues } from '../../chart/engine/drawings/toolInputs';
-import type { ToolSettingsSchema } from '../../chart/engine/drawings/toolSettings';
+import type { SettingValue, SettingValues } from '../../chart/engine/settings/settingInputs';
+import type { SettingsSchema } from '../../chart/engine/settings/settingsSchema';
 import { CoordinatesTab, type CoordinateEditing } from './coordinates/CoordinatesTab';
 import { InputsTab } from './inputs/InputsTab';
 import { StyleTab } from './style/StyleTab';
@@ -13,15 +13,15 @@ export const COORDINATES_TAB_ID = 'coordinates';
 const VISIBILITY_TAB_ID = 'visibility';
 
 /** What a tool declares for its dialog: its settings and the anchors each drawing holds. */
-export interface DrawingSettingsSchema extends ToolSettingsSchema {
+export interface DrawingSettingsSchema extends SettingsSchema {
   readonly points?: ChartDrawingPointRule;
 }
 
 /** What every tab's content is given: the tool's declaration, the merged draft values, the anchors, and the ways to edit them. */
 export interface SettingsPanelProps {
   readonly settings: DrawingSettingsSchema;
-  readonly values: ToolInputValues;
-  readonly onChange: (key: string, value: ToolInputValue) => void;
+  readonly values: SettingValues;
+  readonly onChange: (key: string, value: SettingValue) => void;
   readonly coordinates: CoordinateEditing;
   readonly timeframeVisibility: TimeframeVisibilityEditing;
 }

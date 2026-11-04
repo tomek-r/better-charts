@@ -1,16 +1,16 @@
 import { useId, type ReactNode } from 'react';
-import type { ToolInputDefinition, ToolInputValue } from '../../../chart/engine/drawings/toolInputs';
-import { TOOL_INPUT_FIELDS, type ToolInputFieldProps } from './toolInputFields';
+import type { SettingInputDefinition, SettingValue } from '../../../chart/engine/settings/settingInputs';
+import { SETTING_INPUT_FIELDS, type SettingInputFieldProps } from './settingInputFields';
 
 /** The table indexed by one kind is the union of its entries; this names the one call, as the validators do. */
-type RenderToolInputField = (props: ToolInputFieldProps<ToolInputDefinition['kind']>) => ReactNode;
+type RenderSettingInputField = (props: SettingInputFieldProps<SettingInputDefinition['kind']>) => ReactNode;
 
-interface ToolInputFieldValues {
-  readonly definition: ToolInputDefinition;
-  readonly value: ToolInputValue;
-  readonly onChange: (value: ToolInputValue) => void;
+interface SettingInputFieldValues {
+  readonly definition: SettingInputDefinition;
+  readonly value: SettingValue;
+  readonly onChange: (value: SettingValue) => void;
   readonly disabled: boolean;
-  /** Whether the draft stops the form from saving; see `isToolInputInvalid`. */
+  /** Whether the draft stops the form from saving; see `isSettingInputInvalid`. */
   readonly invalid: boolean;
 }
 
@@ -18,11 +18,11 @@ interface ToolInputFieldValues {
  * One setting of a drawing: its title as a label, the control its kind asks for, and its tooltip as the
  * control's description. A draft value that blocks saving marks the control invalid.
  */
-export function ToolInputField({ definition, value, onChange, disabled, invalid }: ToolInputFieldValues) {
+export function SettingInputField({ definition, value, onChange, disabled, invalid }: SettingInputFieldValues) {
   const controlId = useId();
   const tooltipId = `${controlId}-tooltip`;
   const hasTooltip = definition.tooltip !== undefined;
-  const render = TOOL_INPUT_FIELDS[definition.kind] as RenderToolInputField;
+  const render = SETTING_INPUT_FIELDS[definition.kind] as RenderSettingInputField;
   return (
     <div className="drawing-settings-field">
       <label className="drawing-settings-label" htmlFor={controlId}>

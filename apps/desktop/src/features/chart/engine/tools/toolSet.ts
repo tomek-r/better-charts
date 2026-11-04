@@ -3,7 +3,7 @@ import type { ChartDrawingPoint, ChartDrawingRecord, ChartDrawingSelection } fro
 import { DrawingRegistry } from '../drawings/drawingRegistry';
 import { drawingsAroundBars, type DrawingRef, type DrawingStackEntry } from '../drawings/drawingStack';
 import type { DrawingTimeframeVisibility } from '../drawings/timeframeVisibility';
-import type { ToolInputValues } from '../drawings/toolInputs';
+import type { SettingValues } from '../settings/settingInputs';
 import type {
   ChartDrawingPaintTarget,
   ChartDrawTarget,
@@ -230,7 +230,7 @@ export class ChartToolSet implements ChartDrawingCommands, ChartToolInput {
     this.registry.setDrawingTimeframeVisibility(toolId, drawingId, visibility);
   }
 
-  setDrawingInputs(toolId: string, drawingId: string, inputs: ToolInputValues): void {
+  setDrawingInputs(toolId: string, drawingId: string, inputs: SettingValues): void {
     this.registry.setDrawingInputs(toolId, drawingId, inputs);
   }
 

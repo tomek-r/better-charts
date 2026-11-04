@@ -1,17 +1,17 @@
 import type { ReactNode } from 'react';
 import {
-  TOOL_INPUT_SOURCES,
-  type ToolInputDefinition,
-  type ToolInputValue,
-} from '../../../chart/engine/drawings/toolInputs';
+  SETTING_INPUT_SOURCES,
+  type SettingInputDefinition,
+  type SettingValue,
+} from '../../../chart/engine/settings/settingInputs';
 import { timeframeOptions } from '../../../../shared/bridge/timeframes';
 import { Select, type SelectOption } from '../../../../shared/ui/select/Select';
 
 /** What one field is given: its definition, the draft value, and the ids its label needs. */
-export interface ToolInputFieldProps<Kind extends ToolInputDefinition['kind']> {
-  readonly definition: Extract<ToolInputDefinition, { kind: Kind }>;
-  readonly value: ToolInputValue;
-  readonly onChange: (value: ToolInputValue) => void;
+export interface SettingInputFieldProps<Kind extends SettingInputDefinition['kind']> {
+  readonly definition: Extract<SettingInputDefinition, { kind: Kind }>;
+  readonly value: SettingValue;
+  readonly onChange: (value: SettingValue) => void;
   /** The control's id, which the field's own label points at. */
   readonly controlId: string;
   /** The id of the tooltip text, when the definition carries one. */
@@ -26,8 +26,8 @@ export interface ToolInputFieldProps<Kind extends ToolInputDefinition['kind']> {
  * The props of a control that serves several kinds: a union of the per-kind props, which a single kind's
  * own props fit, unlike one props type instantiated with the union of those kinds.
  */
-type FieldPropsFor<Kinds extends ToolInputDefinition['kind']> = Kinds extends ToolInputDefinition['kind']
-  ? ToolInputFieldProps<Kinds>
+type FieldPropsFor<Kinds extends SettingInputDefinition['kind']> = Kinds extends SettingInputDefinition['kind']
+  ? SettingInputFieldProps<Kinds>
   : never;
 
 /** The kinds a drop-down shows: a string with options, plus the three kinds that always list them. */
@@ -43,7 +43,7 @@ const DATETIME_LOCAL_LENGTH = 16;
 const TEXT_AREA_ROWS = 3;
 
 /** The text a number input shows: empty while the draft holds no number. */
-export function numberText(value: ToolInputValue): string {
+export function numberText(value: SettingValue): string {
   return typeof value === 'number' ? String(value) : '';
 }
 
@@ -58,12 +58,12 @@ export function titledOptions(options: readonly { readonly value: string; readon
 }
 
 /** The text a text-like control shows: empty while the draft holds no string. */
-export function stringText(value: ToolInputValue): string {
+export function stringText(value: SettingValue): string {
   return typeof value === 'string' ? value : '';
 }
 
 /** The `datetime-local` text of an instant, in UTC: the input shows wall-clock text, the draft keeps ms. */
-function timeText(value: ToolInputValue): string {
+function timeText(value: SettingValue): string {
   return typeof value === 'number' && Number.isFinite(value)
     ? new Date(value).toISOString().slice(0, DATETIME_LOCAL_LENGTH)
     : '';
@@ -76,7 +76,7 @@ function epochMilliseconds(text: string): number | '' {
 }
 
 /** The picker's `#RRGGBB` and the alpha suffix beside it, from a draft the definition already accepts. */
-export function colorParts({ value, invalid }: { value: ToolInputValue; invalid: boolean }): {
+export function colorParts({ value, invalid }: { value: SettingValue; invalid: boolean }): {
   base: string;
   alpha: string;
 } {
@@ -88,12 +88,12 @@ export function colorParts({ value, invalid }: { value: ToolInputValue; invalid:
 }
 
 /** The choices one drop-down lists, named per kind: Pine's own names for sources and timeframes. */
-function choiceOptions(definition: Extract<ToolInputDefinition, { kind: ChoiceKind }>): readonly SelectOption[] {
+function choiceOptions(definition: Extract<SettingInputDefinition, { kind: ChoiceKind }>): readonly SelectOption[] {
   if (definition.kind === 'enum') {
     return titledOptions(definition.options);
   }
   if (definition.kind === 'source') {
-    return TOOL_INPUT_SOURCES.map((source) => ({ value: source, label: source }));
+    return SETTING_INPUT_SOURCES.map((source) => ({ value: source, label: source }));
   }
   if (definition.kind === 'timeframe') {
     return timeframeOptions.map((option) => ({ value: option.wire, label: option.label }));
@@ -102,7 +102,7 @@ function choiceOptions(definition: Extract<ToolInputDefinition, { kind: ChoiceKi
 }
 
 /** The attributes every control carries: its label link, its tooltip and its validity. */
-function controlAttributes(props: FieldPropsFor<ToolInputDefinition['kind']>) {
+function controlAttributes(props: FieldPropsFor<SettingInputDefinition['kind']>) {
   return {
     id: props.controlId,
     title: props.definition.tooltip,
@@ -129,7 +129,7 @@ function NumberControl(props: FieldPropsFor<'int' | 'float' | 'price'>) {
   );
 }
 
-function BoolControl(props: ToolInputFieldProps<'bool'>) {
+function BoolControl(props: SettingInputFieldProps<'bool'>) {
   return (
     <input
       {...controlAttributes(props)}
@@ -155,7 +155,7 @@ function TextControl(props: FieldPropsFor<'string' | 'symbol' | 'session'>) {
   );
 }
 
-function TextAreaControl(props: ToolInputFieldProps<'textArea'>) {
+function TextAreaControl(props: SettingInputFieldProps<'textArea'>) {
   return (
     <textarea
       {...controlAttributes(props)}
@@ -183,11 +183,11 @@ function SelectControl(props: FieldPropsFor<ChoiceKind>) {
 }
 
 /** A `string` input lists its options as a drop-down and is a plain text field without any. */
-function StringControl(props: ToolInputFieldProps<'string'>) {
+function StringControl(props: SettingInputFieldProps<'string'>) {
   return props.definition.options === undefined ? <TextControl {...props} /> : <SelectControl {...props} />;
 }
 
-function ColorControl(props: ToolInputFieldProps<'color'>) {
+function ColorControl(props: SettingInputFieldProps<'color'>) {
   const { base, alpha } = colorParts(props);
   return (
     <div className="drawing-settings-color">
@@ -203,7 +203,7 @@ function ColorControl(props: ToolInputFieldProps<'color'>) {
   );
 }
 
-function TimeControl(props: ToolInputFieldProps<'time'>) {
+function TimeControl(props: SettingInputFieldProps<'time'>) {
   return (
     <input
       {...controlAttributes(props)}
@@ -216,8 +216,8 @@ function TimeControl(props: ToolInputFieldProps<'time'>) {
 }
 
 /** One field per kind: a new kind is one entry here, and TypeScript refuses a table that misses one. */
-export const TOOL_INPUT_FIELDS: {
-  readonly [Kind in ToolInputDefinition['kind']]: (props: ToolInputFieldProps<Kind>) => ReactNode;
+export const SETTING_INPUT_FIELDS: {
+  readonly [Kind in SettingInputDefinition['kind']]: (props: SettingInputFieldProps<Kind>) => ReactNode;
 } = {
   int: NumberControl,
   float: NumberControl,

@@ -3,8 +3,8 @@ import type { MarketDataPort } from '../../../bridge/marketDataPort';
 import type { TimeModel } from '../bars/timeModel';
 import type { RenderViewport } from '../surface/overlayRenderer';
 import type { ChartSizedLineAppearance } from '../surface/chartAppearance';
-import type { ToolInputDefinition } from '../drawings/toolInputs';
-import type { ToolStyleDefinition } from '../drawings/toolStyles';
+import type { SettingInputDefinition } from '../settings/settingInputs';
+import type { SettingStyleDefinition } from '../settings/settingStyles';
 import type { ChartDrawingPointRule, ChartToolDrawings } from '../drawings/toolDrawings';
 
 /** The viewport geometry a tool hit-tests against, in pane CSS pixels. */
@@ -225,9 +225,9 @@ export interface ChartToolDefinition {
    * The settings every drawing of this tool carries, in Pine Script v6 `input.*` kinds;
    * omitted means the tool's drawings have no settings.
    */
-  readonly inputs?: readonly ToolInputDefinition[];
+  readonly inputs?: readonly SettingInputDefinition[];
   /** The per-plot style settings of every drawing, stored beside the inputs; omitted means none. */
-  readonly styles?: readonly ToolStyleDefinition[];
+  readonly styles?: readonly SettingStyleDefinition[];
   /**
    * The anchors every drawing of this tool carries: how many, and whether each holds a time, a
    * price or both. A tool with drawings declares it together with `inputs`; a tool without

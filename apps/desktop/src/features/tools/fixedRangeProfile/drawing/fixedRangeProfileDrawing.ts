@@ -1,5 +1,5 @@
 import type { ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
-import type { ToolInputValues } from '../../../chart/engine/drawings/toolInputs';
+import type { SettingValues } from '../../../chart/engine/settings/settingInputs';
 import type { ChartDrawingShape } from '../../../chart/engine/drawings/toolDrawings';
 import type { ChartToolHost } from '../../../chart/engine/tools/toolContract';
 import type { RenderViewport } from '../../../chart/engine/surface/overlayRenderer';
@@ -285,7 +285,7 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
    * request replaces the awaited one and, for this drawing, the load in flight. The rest repaint with the
    * collection's own repaint.
    */
-  settingsChanged(inputs: ToolInputValues): void {
+  settingsChanged(inputs: SettingValues): void {
     const previous = this.settings.requestParams;
     this.settings = readFixedRangeProfileSettings(inputs);
     if (this.shown && !sameProfileRequestParams(previous, this.settings.requestParams)) {

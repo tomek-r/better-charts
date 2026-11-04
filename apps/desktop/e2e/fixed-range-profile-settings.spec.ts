@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 import { createFakeMarketDataPort } from './helpers/fakeMarketDataPort';
 import { DEFAULT_PROFILE_REQUEST_PARAMS } from '../src/features/tools/fixedRangeProfile/requests/fixedRangeProfileRequester';
 import { ChartDrawingCollection } from '../src/features/chart/engine/drawings/chartDrawingCollection';
-import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
-import { resolveToolSettingValues } from '../src/features/chart/engine/drawings/toolSettings';
+import type { SettingValues } from '../src/features/chart/engine/settings/settingInputs';
+import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
 import type { ChartToolHost } from '../src/features/chart/engine/tools/toolContract';
 import { FixedRangeProfileDrawing } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfileDrawing';
 import { FIXED_RANGE_PROFILE_POINTS } from '../src/features/tools/fixedRangeProfile/drawing/fixedRangeProfilePoints';
@@ -22,13 +22,13 @@ import {
 const SYMBOL = 'DEMO.TEST';
 const FROM_MS = Date.now() - 600_000;
 const END_MS = FROM_MS + 300_000;
-const DEFAULT_VALUES = resolveToolSettingValues(
+const DEFAULT_VALUES = resolveSettingValues(
   { inputs: FIXED_RANGE_PROFILE_INPUTS, styles: FIXED_RANGE_PROFILE_STYLES },
   undefined,
 );
 
 /** A collection holding one visible drawing, with the market port that records its requests. */
-function holdOneDrawing(storedInputs: ToolInputValues = {}) {
+function holdOneDrawing(storedInputs: SettingValues = {}) {
   const market = createFakeMarketDataPort();
   const queue = new TickProfileRequestQueue(market.port);
   // Only the host members the request path reads.
@@ -107,7 +107,7 @@ test('changing the row count, the layout or the value area asks for the profile 
   ]);
 });
 
-const RENDER_ONLY_CHANGES: ReadonlyArray<{ name: string; change: ToolInputValues }> = [
+const RENDER_ONLY_CHANGES: ReadonlyArray<{ name: string; change: SettingValues }> = [
   { name: 'a colour', change: { 'upVolume.color': '#112233' } },
   { name: 'the histogram box colour', change: { 'histogramBox.color': '#11223344' } },
   { name: 'the values labels being shown', change: { 'values.visible': true } },

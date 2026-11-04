@@ -9,7 +9,7 @@ import { DrawingSelectionState } from './drawingSelection';
 import { DrawingStack, drawingRefs, type DrawingRef, type DrawingStackEntry } from './drawingStack';
 import type { DrawingTimeframeVisibility } from './timeframeVisibility';
 import { TimeframeVisibilityStore } from './timeframeVisibilityStore';
-import type { ToolInputValues } from './toolInputs';
+import type { SettingValues } from '../settings/settingInputs';
 import type { ChartToolDrawings } from './toolDrawings';
 
 /** One registered tool as the registry sees it: its id and, when it places drawings, their operations. */
@@ -129,7 +129,7 @@ export class DrawingRegistry implements ChartDrawingCommands {
   }
 
   /** Applies new settings to one drawing; the owner saves when the tool accepted them. */
-  setDrawingInputs(toolId: string, drawingId: string, inputs: ToolInputValues): void {
+  setDrawingInputs(toolId: string, drawingId: string, inputs: SettingValues): void {
     if (this.drawingsOf(toolId)?.setInputs(drawingId, inputs) === true) {
       this.listeners.drawingsChanged();
     }

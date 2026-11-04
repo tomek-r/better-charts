@@ -11,7 +11,7 @@ import {
   type DrawingTimeframeVisibility,
 } from '../src/features/chart/engine/drawings/timeframeVisibility';
 import type { ChartDrawingPointRule } from '../src/features/chart/engine/drawings/toolDrawings';
-import type { ToolInputDefinition } from '../src/features/chart/engine/drawings/toolInputs';
+import type { SettingInputDefinition } from '../src/features/chart/engine/settings/settingInputs';
 import type {
   ChartDrawingPaintTarget,
   ChartDrawTarget,
@@ -34,7 +34,9 @@ import { FakeDrawingShape } from './helpers/fakeDrawingShape';
 const ORIGIN_POINT: ChartDrawingPoint = { timeMs: 0, price: null };
 
 /** The settings every fake tool's drawings carry; the set never resolves them, the collection does. */
-const FAKE_INPUTS: readonly ToolInputDefinition[] = [{ kind: 'int', id: 'period', title: 'Period', defaultValue: 20 }];
+const FAKE_INPUTS: readonly SettingInputDefinition[] = [
+  { kind: 'int', id: 'period', title: 'Period', defaultValue: 20 },
+];
 const FAKE_POINTS: ChartDrawingPointRule = { min: 1, max: 4, anchor: 'time' };
 const FAKE_DRAWING_RULES = { inputs: FAKE_INPUTS, points: FAKE_POINTS };
 

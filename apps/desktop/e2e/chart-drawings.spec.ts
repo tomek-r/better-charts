@@ -10,7 +10,7 @@ import {
   DEFAULT_TIMEFRAME_VISIBILITY,
   type DrawingTimeframeVisibility,
 } from '../src/features/chart/engine/drawings/timeframeVisibility';
-import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
+import type { SettingValues } from '../src/features/chart/engine/settings/settingInputs';
 
 /**
  * What the chart's drawings delegate to the command port and what they report back to the app,
@@ -237,7 +237,7 @@ test('hiding a drawing reaches the commands with the same arguments and repaints
 
 test('new settings reach the commands with the same arguments and repaint once', () => {
   const { drawings, calls, timeline } = buildHarness();
-  const inputs: ToolInputValues = { period: 30 };
+  const inputs: SettingValues = { period: 30 };
   drawings.setInputs('trend-line', 'line-1', inputs);
   expect(calls).toEqual([{ name: 'setDrawingInputs', args: ['trend-line', 'line-1', inputs] }]);
   expect(timeline).toEqual(['repaint']);

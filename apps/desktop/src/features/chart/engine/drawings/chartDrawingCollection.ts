@@ -1,6 +1,6 @@
 import { newChartDrawingId, type ChartDrawingPoint, type ChartToolDrawingRecord } from './drawingRecord';
-import type { ToolInputValues } from './toolInputs';
-import { assertUniqueToolSettingKeys, resolveToolSettingValues } from './toolSettings';
+import type { SettingValues } from '../settings/settingInputs';
+import { assertUniqueSettingKeys, resolveSettingValues } from '../settings/settingsSchema';
 import type {
   ChartDrawingAnchor,
   ChartDrawingFactory,
@@ -30,7 +30,7 @@ export interface ChartDrawingEntry<Drawing extends ChartDrawingShape> {
   readonly drawing: Drawing;
   readonly locked: boolean;
   readonly visible: boolean;
-  readonly inputs: ToolInputValues;
+  readonly inputs: SettingValues;
   readonly selected: boolean;
 }
 
@@ -40,7 +40,7 @@ export interface ChartDrawingStart {
   readonly id?: string;
   readonly locked?: boolean;
   readonly visible?: boolean;
-  readonly inputs?: ToolInputValues;
+  readonly inputs?: SettingValues;
 }
 
 /** One drawing as the collection keeps it: the lock, the visibility and the settings change in place. */
@@ -49,7 +49,7 @@ interface KeptDrawing<Drawing extends ChartDrawingShape> {
   readonly drawing: Drawing;
   locked: boolean;
   visible: boolean;
-  inputs: ToolInputValues;
+  inputs: SettingValues;
 }
 
 /**
@@ -70,7 +70,7 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     private readonly factory: ChartDrawingFactory<Drawing>,
     private readonly requestRepaint: () => void,
   ) {
-    assertUniqueToolSettingKeys(rules);
+    assertUniqueSettingKeys(rules);
   }
 
   /**
@@ -180,12 +180,12 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
   }
 
   /** Replaces one drawing's settings with the values the tool's definitions accept. */
-  setInputs(drawingId: string, inputs: ToolInputValues): boolean {
+  setInputs(drawingId: string, inputs: SettingValues): boolean {
     const entry = this.find(drawingId);
     if (entry === undefined) {
       return false;
     }
-    entry.inputs = resolveToolSettingValues(this.rules, inputs);
+    entry.inputs = resolveSettingValues(this.rules, inputs);
     entry.drawing.settingsChanged?.(entry.inputs);
     this.requestRepaint();
     return true;
@@ -252,7 +252,7 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
       drawing,
       locked: state.locked ?? false,
       visible: state.visible ?? true,
-      inputs: resolveToolSettingValues(this.rules, state.inputs),
+      inputs: resolveSettingValues(this.rules, state.inputs),
     };
     this.kept.push(kept);
     drawing.settingsChanged?.(kept.inputs);

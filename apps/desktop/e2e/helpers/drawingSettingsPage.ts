@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
-import type { ToolInputValues } from '../../src/features/chart/engine/drawings/toolInputs';
-import type { ToolSettingsSchema } from '../../src/features/chart/engine/drawings/toolSettings';
+import type { SettingValues } from '../../src/features/chart/engine/settings/settingInputs';
+import type { SettingsSchema } from '../../src/features/chart/engine/settings/settingsSchema';
 import { gotoWithStub } from './tauriStub';
 
 /** Page-side steps shared by the drawing settings specs; the form itself is mounted by the harness module. */
@@ -11,8 +11,8 @@ import { gotoWithStub } from './tauriStub';
  */
 export async function mountSettingsForm(
   page: Page,
-  settings?: ToolSettingsSchema,
-  overrides: ToolInputValues = {},
+  settings?: SettingsSchema,
+  overrides: SettingValues = {},
 ): Promise<void> {
   await gotoWithStub(page);
   await page.evaluate(
@@ -39,8 +39,8 @@ export async function cancelCount(page: Page): Promise<number> {
 }
 
 /** Every draft the form saved, oldest first. */
-export async function savedValues(page: Page): Promise<ToolInputValues[]> {
+export async function savedValues(page: Page): Promise<SettingValues[]> {
   return page.evaluate(
-    () => (window as unknown as { __drawingSettings: { saves: ToolInputValues[] } }).__drawingSettings.saves,
+    () => (window as unknown as { __drawingSettings: { saves: SettingValues[] } }).__drawingSettings.saves,
   );
 }

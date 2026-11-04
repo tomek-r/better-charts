@@ -1,11 +1,11 @@
-import type { ToolInputValue, ToolInputValues } from '../../../chart/engine/drawings/toolInputs';
-import { toolStyleKey, type ToolStyleDefinition } from '../../../chart/engine/drawings/toolStyles';
-import { ToolStyleField } from './ToolStyleField';
+import type { SettingValue, SettingValues } from '../../../chart/engine/settings/settingInputs';
+import { settingStyleKey, type SettingStyleDefinition } from '../../../chart/engine/settings/settingStyles';
+import { SettingStyleField } from './SettingStyleField';
 
 interface StyleTabProps {
-  readonly definitions: readonly ToolStyleDefinition[];
-  readonly values: ToolInputValues;
-  readonly onChange: (key: string, value: ToolInputValue) => void;
+  readonly definitions: readonly SettingStyleDefinition[];
+  readonly values: SettingValues;
+  readonly onChange: (key: string, value: SettingValue) => void;
 }
 
 /**
@@ -13,15 +13,15 @@ interface StyleTabProps {
  * switches nothing off, and so does a parent id no definition declares.
  */
 function isParentVisible(
-  definitions: readonly ToolStyleDefinition[],
-  { parentId }: ToolStyleDefinition,
-  values: ToolInputValues,
+  definitions: readonly SettingStyleDefinition[],
+  { parentId }: SettingStyleDefinition,
+  values: SettingValues,
 ): boolean {
   const parent = definitions.find((definition) => definition.id === parentId);
   if (parent === undefined) {
     return true;
   }
-  const parentVisible = values[toolStyleKey(parent.id, 'visible')];
+  const parentVisible = values[settingStyleKey(parent.id, 'visible')];
   return parentVisible === undefined || parentVisible === true;
 }
 
@@ -30,7 +30,7 @@ export function StyleTab({ definitions, values, onChange }: StyleTabProps) {
   return (
     <div className="drawing-settings-style-list">
       {definitions.map((definition) => (
-        <ToolStyleField
+        <SettingStyleField
           key={definition.id}
           definition={definition}
           values={values}

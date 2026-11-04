@@ -1,5 +1,5 @@
-import type { ToolInputDefinition } from '../../src/features/chart/engine/drawings/toolInputs';
-import type { ToolStyleDefinition } from '../../src/features/chart/engine/drawings/toolStyles';
+import type { SettingInputDefinition } from '../../src/features/chart/engine/settings/settingInputs';
+import type { SettingStyleDefinition } from '../../src/features/chart/engine/settings/settingStyles';
 
 /** Style definitions shared by the style schema and settings dialog specs: one of every kind, with children. */
 
@@ -8,7 +8,7 @@ export const PROFILE_TOGGLE = {
   id: 'profile',
   title: 'Volume profile',
   defaults: { visible: true },
-} satisfies ToolStyleDefinition;
+} satisfies SettingStyleDefinition;
 
 export const HISTOGRAM_BOX = {
   kind: 'color',
@@ -16,7 +16,7 @@ export const HISTOGRAM_BOX = {
   title: 'Histogram Box',
   parentId: 'profile',
   defaults: { color: '#2962ff33' },
-} satisfies ToolStyleDefinition;
+} satisfies SettingStyleDefinition;
 
 export const POC_LINE = {
   kind: 'line',
@@ -24,7 +24,7 @@ export const POC_LINE = {
   title: 'POC',
   parentId: 'profile',
   defaults: { visible: true, color: '#ff0000', width: 2, style: 'solid' },
-} satisfies ToolStyleDefinition;
+} satisfies SettingStyleDefinition;
 
 export const VALUE_AREA_UP = {
   kind: 'color',
@@ -32,7 +32,7 @@ export const VALUE_AREA_UP = {
   title: 'Value Area Up',
   parentId: 'profile',
   defaults: { visible: true, color: '#00ff00' },
-} satisfies ToolStyleDefinition;
+} satisfies SettingStyleDefinition;
 
 export const WIDTH_PERCENT = {
   kind: 'number',
@@ -42,7 +42,7 @@ export const WIDTH_PERCENT = {
   minValue: 10,
   maxValue: 100,
   step: 5,
-} satisfies ToolStyleDefinition;
+} satisfies SettingStyleDefinition;
 
 export const PLACEMENT = {
   kind: 'choice',
@@ -53,9 +53,9 @@ export const PLACEMENT = {
     { value: 'left', title: 'Left' },
     { value: 'right', title: 'Right' },
   ],
-} satisfies ToolStyleDefinition;
+} satisfies SettingStyleDefinition;
 
-export const ALL_STYLES: readonly ToolStyleDefinition[] = [
+export const ALL_STYLES: readonly SettingStyleDefinition[] = [
   PROFILE_TOGGLE,
   HISTOGRAM_BOX,
   POC_LINE,
@@ -70,4 +70,4 @@ export const COLLIDING_INPUT = {
   id: 'poc.color',
   title: 'Clash',
   defaultValue: '#123456',
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;

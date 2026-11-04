@@ -1,6 +1,6 @@
 import type { ChartDrawingPoint, ChartToolDrawingRecord } from './drawingRecord';
-import type { ToolInputDefinition, ToolInputValues } from './toolInputs';
-import type { ToolStyleDefinition } from './toolStyles';
+import type { SettingInputDefinition, SettingValues } from '../settings/settingInputs';
+import type { SettingStyleDefinition } from '../settings/settingStyles';
 
 /**
  * A drawing of one tool, seen by the engine's shared drawing core: the anchors it stores and the
@@ -23,7 +23,7 @@ export interface ChartDrawingShape {
    * before its first visibility, so a drawing that owns backend work starts it with the right inputs;
    * a drawing whose settings only change how it paints omits the member.
    */
-  settingsChanged?(inputs: ToolInputValues): void;
+  settingsChanged?(inputs: SettingValues): void;
   /** The drawing goes away: release everything it still holds. */
   dispose(): void;
 }
@@ -49,9 +49,9 @@ export interface ChartDrawingPointRule {
 
 /** What a tool declares about its drawings: the settings each one carries and the anchors it holds. */
 export interface ChartDrawingRules {
-  readonly inputs: readonly ToolInputDefinition[];
+  readonly inputs: readonly SettingInputDefinition[];
   /** The Style tab's settings, stored beside the inputs; omitted means the drawings have none. */
-  readonly styles?: readonly ToolStyleDefinition[];
+  readonly styles?: readonly SettingStyleDefinition[];
   readonly points: ChartDrawingPointRule;
 }
 
@@ -82,7 +82,7 @@ export interface ChartToolDrawings {
   /** Whether the drawing is painted; false when the tool has no drawing with that id. */
   isVisible(drawingId: string): boolean;
   /** Replaces one drawing's settings; false when the tool has no drawing with that id. */
-  setInputs(drawingId: string, inputs: ToolInputValues): boolean;
+  setInputs(drawingId: string, inputs: SettingValues): boolean;
   /**
    * Moves one drawing to new anchors, keeping its id, flags, settings, selection and paint position;
    * false when the tool has no such drawing or does not accept the anchors.

@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { GREYSCALE_ROW, HUE_ROW } from '../src/shared/ui/colorPicker/colorPalette';
 import { MAX_CUSTOM_COLORS } from '../src/shared/ui/colorPicker/savedCustomColors';
 import { cancelCount, mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
-import { defaultToolStyleValues } from '../src/features/chart/engine/drawings/toolStyles';
+import { defaultSettingStyleValues } from '../src/features/chart/engine/settings/settingStyles';
 import { gotoWithStub } from './helpers/tauriStub';
 import { openScalesAndLinesMenu } from './helpers/chartMenu';
 import { HISTOGRAM_BOX, POC_LINE } from './helpers/toolStyleFixtures';
@@ -187,7 +187,7 @@ test('thickness and line style update the pending values and the swatch preview'
   await expect(popover(page)).toHaveCount(0);
   await ok(page).click();
   expect(await savedValues(page)).toEqual([
-    { ...defaultToolStyleValues([POC_LINE, HISTOGRAM_BOX]), 'poc.width': 4, 'poc.style': 'dashed' },
+    { ...defaultSettingStyleValues([POC_LINE, HISTOGRAM_BOX]), 'poc.width': 4, 'poc.style': 'dashed' },
   ]);
 });
 

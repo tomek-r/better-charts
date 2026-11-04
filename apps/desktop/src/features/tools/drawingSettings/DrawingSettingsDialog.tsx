@@ -1,15 +1,15 @@
 import { useState, type SubmitEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { ChartDrawingPoint } from '../../chart/engine/drawings/drawingRecord';
-import type { ToolInputValue, ToolInputValues } from '../../chart/engine/drawings/toolInputs';
+import type { SettingValue, SettingValues } from '../../chart/engine/settings/settingInputs';
 import {
   DEFAULT_TIMEFRAME_VISIBILITY,
   type DrawingTimeframeVisibility,
 } from '../../chart/engine/drawings/timeframeVisibility';
 import {
-  areToolSettingValuesValid,
+  areSettingValuesValid,
   withStoredValuesForInvalidInactiveInputs,
-} from '../../chart/engine/drawings/toolSettings';
+} from '../../chart/engine/settings/settingsSchema';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../../shared/ui/dialog/ModalDialog';
 import { SettingsTabs } from './SettingsTabs';
 import { buildSettingsTabs, COORDINATES_TAB_ID, type DrawingSettingsSchema } from './settingsTabModel';
@@ -23,7 +23,7 @@ export interface DrawingSettingsFormProps {
   /** What the tool declares; each part that has content earns a tab. */
   readonly settings: DrawingSettingsSchema;
   /** The settings the form starts from, inputs and flattened styles together, read once when the dialog opened. */
-  readonly initialValues: ToolInputValues;
+  readonly initialValues: SettingValues;
   /** The anchors the drawing holds, read once when the dialog opened; they fill the Coordinates tab. */
   readonly initialPoints?: readonly ChartDrawingPoint[];
   /** The timeframes the drawing paints on, read once when the dialog opened; it fills the Visibility tab. */
@@ -34,7 +34,7 @@ export interface DrawingSettingsFormProps {
    * open with the user's edits and says so.
    */
   readonly onSave: (
-    values: ToolInputValues,
+    values: SettingValues,
     points?: readonly ChartDrawingPoint[],
     timeframeVisibility?: DrawingTimeframeVisibility,
   ) => boolean;
@@ -58,11 +58,11 @@ export function DrawingSettingsForm({
   const [selectedTabId, setSelectedTabId] = useState<string | undefined>(undefined);
   const coordinates = useCoordinateDraft(initialPoints, settings.points);
   const timeframeVisibility = useTimeframeVisibilityDraft(initialTimeframeVisibility);
-  const change = (key: string, value: ToolInputValue) => {
+  const change = (key: string, value: SettingValue) => {
     setValues((current) => ({ ...current, [key]: value }));
   };
   const tabs = buildSettingsTabs(settings);
-  const valid = areToolSettingValuesValid(settings, values) && coordinates.valid;
+  const valid = areSettingValuesValid(settings, values) && coordinates.valid;
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
     const savedValues = withStoredValuesForInvalidInactiveInputs(settings, values, initialValues);
@@ -103,7 +103,7 @@ export interface DrawingSettingsDialogProps {
   /** The tool's name, which titles the dialog: `${label} settings`. */
   readonly label: string;
   readonly settings: DrawingSettingsSchema;
-  readonly initialValues: ToolInputValues;
+  readonly initialValues: SettingValues;
   readonly initialPoints: readonly ChartDrawingPoint[];
   readonly initialTimeframeVisibility: DrawingTimeframeVisibility;
   readonly onSave: DrawingSettingsFormProps['onSave'];

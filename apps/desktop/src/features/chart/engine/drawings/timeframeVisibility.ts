@@ -1,5 +1,5 @@
 import { timeframeOptions, timeframeSection } from '../../../../shared/bridge/timeframes';
-import { isPlainRecord } from './toolInputs';
+import { isPlainRecord } from '../settings/settingInputs';
 
 /** Minutes or hours of one timeframe family: shown between `from` and `to` counts, both included. */
 export interface TimeframeCountRange {

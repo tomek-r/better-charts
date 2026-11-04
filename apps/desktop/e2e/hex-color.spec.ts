@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { isColorText } from '../src/features/chart/engine/drawings/toolInputs';
+import { isColorText } from '../src/features/chart/engine/settings/settingInputs';
 import {
   alphaToOpacityPercent,
   colorOpacityPercent,

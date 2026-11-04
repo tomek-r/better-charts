@@ -1,8 +1,8 @@
 import { DASHED_LINE_PATTERN } from '../../../shared/canvas/dashPatterns';
 import type { ProfileRequestParams, ProfileRowsLayout } from '../../bridge/marketDataPort';
-import type { ToolInputValues } from '../../chart/engine/drawings/toolInputs';
-import { resolveToolSettingValues } from '../../chart/engine/drawings/toolSettings';
-import { toolStyleKey } from '../../chart/engine/drawings/toolStyles';
+import type { SettingValues } from '../../chart/engine/settings/settingInputs';
+import { resolveSettingValues } from '../../chart/engine/settings/settingsSchema';
+import { settingStyleKey } from '../../chart/engine/settings/settingStyles';
 import {
   FIXED_RANGE_PROFILE_INPUTS,
   FIXED_RANGE_PROFILE_STYLES,
@@ -86,26 +86,26 @@ const SETTINGS_SCHEMA = { inputs: FIXED_RANGE_PROFILE_INPUTS, styles: FIXED_RANG
 
 // The values are resolved against the schema first, so each key holds its kind's type; the fallbacks
 // only narrow the union.
-function textOf(values: ToolInputValues, key: string): string {
+function textOf(values: SettingValues, key: string): string {
   const value = values[key];
   return typeof value === 'string' ? value : '';
 }
 
-function numberOf(values: ToolInputValues, key: string): number {
+function numberOf(values: SettingValues, key: string): number {
   const value = values[key];
   return typeof value === 'number' ? value : Number.NaN;
 }
 
-function levelStyleOf(values: ToolInputValues, id: string): FixedRangeProfileLevelStyle {
+function levelStyleOf(values: SettingValues, id: string): FixedRangeProfileLevelStyle {
   return {
-    visible: values[toolStyleKey(id, 'visible')] === true,
-    color: textOf(values, toolStyleKey(id, 'color')),
-    width: numberOf(values, toolStyleKey(id, 'width')),
-    dash: LINE_DASH_BY_STYLE[textOf(values, toolStyleKey(id, 'style'))] ?? [],
+    visible: values[settingStyleKey(id, 'visible')] === true,
+    color: textOf(values, settingStyleKey(id, 'color')),
+    width: numberOf(values, settingStyleKey(id, 'width')),
+    dash: LINE_DASH_BY_STYLE[textOf(values, settingStyleKey(id, 'style'))] ?? [],
   };
 }
 
-function rowsLayoutOf(values: ToolInputValues): ProfileRowsLayout {
+function rowsLayoutOf(values: SettingValues): ProfileRowsLayout {
   if (textOf(values, 'rowsLayout') === ROWS_BY_TICKS) {
     return { kind: 'ticksPerRow', ticks: numberOf(values, 'ticksPerRow') };
   }
@@ -117,19 +117,19 @@ function rowsLayoutOf(values: ToolInputValues): ProfileRowsLayout {
  * so a drawing saved before any setting existed resolves to the original look and request.
  */
 export function readFixedRangeProfileSettings(stored: unknown): FixedRangeProfileSettings {
-  const values = resolveToolSettingValues(SETTINGS_SCHEMA, stored);
+  const values = resolveSettingValues(SETTINGS_SCHEMA, stored);
   return {
     appearance: {
       volumeMode: VOLUME_MODE_BY_OPTION[textOf(values, 'volume')] ?? 'upDown',
       placement: textOf(values, 'placement') === PLACEMENT_RIGHT ? 'right' : 'left',
       extendRight: values.extendRight === true,
-      histogramBoxColor: textOf(values, toolStyleKey('histogramBox', 'color')),
-      upColor: textOf(values, toolStyleKey('upVolume', 'color')),
-      downColor: textOf(values, toolStyleKey('downVolume', 'color')),
-      valuesVisible: values[toolStyleKey('values', 'visible')] === true,
-      valuesColor: textOf(values, toolStyleKey('values', 'color')),
+      histogramBoxColor: textOf(values, settingStyleKey('histogramBox', 'color')),
+      upColor: textOf(values, settingStyleKey('upVolume', 'color')),
+      downColor: textOf(values, settingStyleKey('downVolume', 'color')),
+      valuesVisible: values[settingStyleKey('values', 'visible')] === true,
+      valuesColor: textOf(values, settingStyleKey('values', 'color')),
       valuesSide: VALUES_SIDE_BY_OPTION[textOf(values, 'valuesPosition')] ?? 'center',
-      valuesBackgroundColor: textOf(values, toolStyleKey('valuesBackground', 'color')),
+      valuesBackgroundColor: textOf(values, settingStyleKey('valuesBackground', 'color')),
       widthPercent: numberOf(values, 'widthPercent'),
       poc: levelStyleOf(values, 'poc'),
       vah: levelStyleOf(values, 'vah'),
