@@ -11,7 +11,7 @@ export function DrawingToolsView() {
       activeChartToolId={activeChartToolId}
       onPick={(tool) => {
         selectChartTool(tool);
-        chart.current?.selectChartTool(tool);
+        chart.current?.toolInput.selectTool(tool);
       }}
     />
   );

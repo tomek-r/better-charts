@@ -87,7 +87,7 @@ export function useChartWorkspaceInitEffects(
       ) {
         return;
       }
-      chartRef.current?.selectChartTool(DEFAULT_CHART_TOOL_ID);
+      chartRef.current?.toolInput.selectTool(DEFAULT_CHART_TOOL_ID);
       selectChartTool(DEFAULT_CHART_TOOL_ID);
     };
     window.addEventListener('keydown', cancelTool);

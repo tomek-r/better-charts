@@ -90,7 +90,7 @@ export function createChartPointerRouter(host: HTMLElement, deps: ChartPointerRo
   const onPointerDown = (event: PointerEvent) => {
     const { x, y } = localPoint(event);
     host.focus({ preventScroll: true });
-    if (chart.current?.isPlacementToolActive() && chart.current.toolPointerDown(x, y)) {
+    if (chart.current?.toolInput.isPlacementToolActive() && chart.current.toolInput.pointerDown(x, y)) {
       toolGesture = true;
       claimEvent(event);
       host.setPointerCapture(event.pointerId);
@@ -108,7 +108,7 @@ export function createChartPointerRouter(host: HTMLElement, deps: ChartPointerRo
       return;
     }
     if (!overlay) {
-      if (chart.current?.toolPointerDown(x, y)) {
+      if (chart.current?.toolInput.pointerDown(x, y)) {
         toolGesture = true;
         claimEvent(event);
         host.setPointerCapture(event.pointerId);
@@ -138,7 +138,7 @@ export function createChartPointerRouter(host: HTMLElement, deps: ChartPointerRo
     // Pointer labels follow every tool without consuming events or taking
     // ownership from the gesture paths below.
     chart.current?.movePointerReadout(x, y);
-    if (chart.current?.toolPointerMove(x, y)) {
+    if (chart.current?.toolInput.pointerMove(x, y)) {
       event.stopPropagation();
       return;
     }
@@ -168,12 +168,12 @@ export function createChartPointerRouter(host: HTMLElement, deps: ChartPointerRo
     chart.current?.hidePointerReadout();
   };
   const onPointerUp = (event: PointerEvent) => {
-    chart.current?.toolPointerUp('released');
+    chart.current?.toolInput.pointerUp('released');
     toolGesture = false;
     finishAllGestures(event, true);
   };
   const onPointerCancel = (event: PointerEvent) => {
-    chart.current?.toolPointerUp('cancelled');
+    chart.current?.toolInput.pointerUp('cancelled');
     toolGesture = false;
     finishAllGestures(event, false);
   };
@@ -239,7 +239,7 @@ export function createChartPointerRouter(host: HTMLElement, deps: ChartPointerRo
     staged.reset();
     trading.finishLineDrag({}, false);
     trading.finishChip({}, false);
-    chart.current?.toolPointerUp('cancelled');
+    chart.current?.toolInput.pointerUp('cancelled');
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.target !== host) {
@@ -250,8 +250,8 @@ export function createChartPointerRouter(host: HTMLElement, deps: ChartPointerRo
       staged.reset();
       trading.finishLineDrag({}, false);
       trading.finishChip({}, false);
-      chart.current?.cancelToolGestures();
-      chart.current?.selectChartTool(defaultToolId);
+      chart.current?.toolInput.cancelGestures();
+      chart.current?.toolInput.selectTool(defaultToolId);
       onDefaultToolSelected();
       event.preventDefault();
     } else if (event.key === 'Delete' || event.key === 'Backspace') {
