@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import type { ToolInputDefinition } from '../src/features/chart/engine/drawings/toolInputs';
-import { defaultToolStyleValues } from '../src/features/chart/engine/drawings/toolStyles';
+import type { SettingInputDefinition } from '../src/features/chart/engine/settings/settingInputs';
+import { defaultSettingStyleValues } from '../src/features/chart/engine/settings/settingStyles';
 import { HUE_ROW } from '../src/shared/ui/colorPicker/colorPalette';
 import { mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
 import { ALL_STYLES, POC_LINE } from './helpers/toolStyleFixtures';
@@ -13,14 +13,14 @@ import { ALL_STYLES, POC_LINE } from './helpers/toolStyleFixtures';
 /** A preset of the colour picker's hue row, so the swatch exists to click. */
 const BLUE = HUE_ROW[6];
 
-const BARS_INPUT = { kind: 'int', id: 'bars', title: 'Bars', defaultValue: 20 } satisfies ToolInputDefinition;
+const BARS_INPUT = { kind: 'int', id: 'bars', title: 'Bars', defaultValue: 20 } satisfies SettingInputDefinition;
 const MODE_INPUT = {
   kind: 'string',
   id: 'mode',
   title: 'Mode',
   defaultValue: 'volume',
   options: ['volume', 'trades'],
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 test('a tool with inputs only gets the Inputs tab alone', async ({ page }) => {
   await mountSettingsForm(page, { inputs: [BARS_INPUT] });
@@ -141,7 +141,7 @@ test('editing a line colour and a toggle then OK saves the flattened values', as
   await page.getByRole('button', { name: 'OK', exact: true }).click();
 
   expect(await savedValues(page)).toEqual([
-    { ...defaultToolStyleValues(ALL_STYLES), 'poc.color': BLUE, 'profile.visible': false },
+    { ...defaultSettingStyleValues(ALL_STYLES), 'poc.color': BLUE, 'profile.visible': false },
   ]);
 });
 
@@ -155,7 +155,7 @@ test('the line picker saves the chosen width and dash pattern', async ({ page })
   await page.getByRole('button', { name: 'OK', exact: true }).click();
 
   expect(await savedValues(page)).toEqual([
-    { ...defaultToolStyleValues([POC_LINE]), 'poc.width': 3, 'poc.style': 'dotted' },
+    { ...defaultSettingStyleValues([POC_LINE]), 'poc.width': 3, 'poc.style': 'dotted' },
   ]);
 });
 

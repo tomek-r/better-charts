@@ -1,7 +1,7 @@
 import { withOpacityPercent } from '../../../shared/theme/hexColor';
 import { palette } from '../../../shared/theme/palette';
-import type { ToolInputDefinition } from '../../chart/engine/drawings/toolInputs';
-import type { ToolStyleDefinition } from '../../chart/engine/drawings/toolStyles';
+import type { SettingInputDefinition } from '../../chart/engine/settings/settingInputs';
+import type { SettingStyleDefinition } from '../../chart/engine/settings/settingStyles';
 import {
   DEFAULT_ROW_COUNT,
   DEFAULT_TICKS_PER_ROW,
@@ -31,7 +31,7 @@ export const VALUES_RIGHT_OF_LINE = 'Right';
  * The Inputs tab. Rows layout, row size and value area feed the request and
  * ask for the profile again; volume and Extend Right only repaint.
  */
-export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
+export const FIXED_RANGE_PROFILE_INPUTS: readonly SettingInputDefinition[] = [
   {
     kind: 'string',
     id: 'rowsLayout',
@@ -82,7 +82,7 @@ export const FIXED_RANGE_PROFILE_INPUTS: readonly ToolInputDefinition[] = [
 const TRANSPARENT_BOX_DEFAULT_COLOR = withOpacityPercent(palette.raised, 0);
 
 /** The settings that only change how the computed profile is painted: changing one repaints. */
-export const FIXED_RANGE_PROFILE_STYLES: readonly ToolStyleDefinition[] = [
+export const FIXED_RANGE_PROFILE_STYLES: readonly SettingStyleDefinition[] = [
   { kind: 'color', id: 'upVolume', title: 'Up Volume', defaults: { color: palette.buy } },
   { kind: 'color', id: 'downVolume', title: 'Down Volume', defaults: { color: palette.sell } },
   // Off by default so drawings saved before the labels existed look unchanged.

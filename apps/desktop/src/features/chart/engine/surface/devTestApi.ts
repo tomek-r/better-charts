@@ -18,6 +18,8 @@ import type { BarStyleSeriesState } from '../barStyle/barStyleSeries';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
 import type { ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesState } from './chartScalesAppearance';
+import type { IndicatorFrame } from '../indicators/indicatorFrame';
+import type { IndicatorLayer, IndicatorLayerState } from '../indicators/indicatorLayer';
 import { clearViewportChangeLog, viewportChangeLog, type ViewportChangeRecord } from '../viewport/viewportDiagnostics';
 
 /** One candle's time with the colours it overrides the series with, as a plain copy. */
@@ -101,6 +103,13 @@ export interface DevTestApi {
   appearance(): ChartAppearanceState;
   /** What the scales settings set: the A/L row, the scale's shape and symbol tag, the countdown and the labels. */
   scales(): ChartScalesState;
+  /** Every indicator the display layer draws, in the order it was shown, as plain copies of its lines. */
+  indicators(): IndicatorLayerState[];
+  /** Draws a whole frame for indicator `id`, replacing what it drew. */
+  showIndicatorFrame(id: string, frame: IndicatorFrame): void;
+  /** Applies a live frame (the closed and the forming bar) to indicator `id`. */
+  updateIndicatorFrame(id: string, frame: IndicatorFrame): void;
+  removeIndicator(id: string): void;
   priceScale(): {
     autoScale: boolean;
     mode: PriceScaleMode;
@@ -177,6 +186,7 @@ interface DevTestApiSources {
   timeToX(timeMs: number): number;
   toolTestApi(id: string): unknown;
   drawings: ChartDrawings;
+  indicators: IndicatorLayer;
   pointerReadout(): PointerReadout | null;
   rightMarginBars(): number;
   crosshairStyle(): ChartSizedLineAppearance;
@@ -186,6 +196,7 @@ interface DevTestApiSources {
 /** The live readings the surface already publishes; the hook reads them through these. */
 interface DevTestReadings {
   readonly drawings: ChartDrawings;
+  readonly indicators: IndicatorLayer;
   getData(): readonly RenderBar[];
   visibleRange(): { from: number; to: number } | null;
   timeToX(timeMs: number): number;
@@ -259,6 +270,7 @@ function buildDevTestApi({
   timeToX,
   toolTestApi,
   drawings,
+  indicators,
   pointerReadout,
   rightMarginBars,
   crosshairStyle,
@@ -279,6 +291,10 @@ function buildDevTestApi({
     pointerReadout,
     appearance: () => appearanceState({ chart, rightMarginBars, crosshairStyle }),
     scales: scalesState,
+    indicators: () => indicators.state(),
+    showIndicatorFrame: (id, frame) => indicators.show(id, frame),
+    updateIndicatorFrame: (id, frame) => indicators.update(id, frame),
+    removeIndicator: (id) => indicators.remove(id),
     priceScale: () => {
       const scale = chart.priceScale('right');
       const options = scale.options();
@@ -325,6 +341,7 @@ export function installChartDevTestApi(
     timeToX: (timeMs) => readings.timeToX(timeMs),
     toolTestApi: (id) => tools.toolTestApi(id),
     drawings: readings.drawings,
+    indicators: readings.indicators,
     pointerReadout: () => pointerReadout.readout(),
     rightMarginBars: () => pane.rightMarginBars(),
     crosshairStyle: () => readings.crosshairStyle(),

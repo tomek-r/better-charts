@@ -1,6 +1,6 @@
 import { newChartDrawingId, type ChartDrawingPoint, type ChartToolDrawingRecord } from './drawingRecord';
-import type { ToolInputValues } from './toolInputs';
-import { assertUniqueToolSettingKeys, resolveToolSettingValues } from './toolSettings';
+import type { SettingValues } from '../settings/settingInputs';
+import { assertUniqueSettingKeys, resolveSettingValues } from '../settings/settingsSchema';
 import type {
   ChartDrawingAnchor,
   ChartDrawingFactory,
@@ -30,7 +30,7 @@ export interface ChartDrawingEntry<Drawing extends ChartDrawingShape> {
   readonly drawing: Drawing;
   readonly locked: boolean;
   readonly visible: boolean;
-  readonly inputs: ToolInputValues;
+  readonly settings: SettingValues;
   readonly selected: boolean;
 }
 
@@ -40,7 +40,7 @@ export interface ChartDrawingStart {
   readonly id?: string;
   readonly locked?: boolean;
   readonly visible?: boolean;
-  readonly inputs?: ToolInputValues;
+  readonly settings?: SettingValues;
 }
 
 /** One drawing as the collection keeps it: the lock, the visibility and the settings change in place. */
@@ -49,7 +49,7 @@ interface KeptDrawing<Drawing extends ChartDrawingShape> {
   readonly drawing: Drawing;
   locked: boolean;
   visible: boolean;
-  inputs: ToolInputValues;
+  settings: SettingValues;
 }
 
 /**
@@ -70,7 +70,7 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     private readonly factory: ChartDrawingFactory<Drawing>,
     private readonly requestRepaint: () => void,
   ) {
-    assertUniqueToolSettingKeys(rules);
+    assertUniqueSettingKeys(rules);
   }
 
   /**
@@ -86,12 +86,12 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
 
   /** Every drawing, bottom to top, with the state a paint pass or a gesture needs. */
   entries(): readonly ChartDrawingEntry<Drawing>[] {
-    return this.kept.map(({ id, drawing, locked, visible, inputs }) => ({
+    return this.kept.map(({ id, drawing, locked, visible, settings }) => ({
       id,
       drawing,
       locked,
       visible,
-      inputs,
+      settings,
       selected: id === this.selectedId,
     }));
   }
@@ -180,13 +180,13 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
   }
 
   /** Replaces one drawing's settings with the values the tool's definitions accept. */
-  setInputs(drawingId: string, inputs: ToolInputValues): boolean {
+  setSettings(drawingId: string, settings: SettingValues): boolean {
     const entry = this.find(drawingId);
     if (entry === undefined) {
       return false;
     }
-    entry.inputs = resolveToolSettingValues(this.rules, inputs);
-    entry.drawing.settingsChanged?.(entry.inputs);
+    entry.settings = resolveSettingValues(this.rules, settings);
+    entry.drawing.settingsChanged?.(entry.settings);
     this.requestRepaint();
     return true;
   }
@@ -205,21 +205,21 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     if (drawing === undefined) {
       return false;
     }
-    const { id, locked, visible, inputs, drawing: previous } = this.kept[index];
-    this.kept[index] = { id, drawing, locked, visible, inputs };
+    const { id, locked, visible, settings, drawing: previous } = this.kept[index];
+    this.kept[index] = { id, drawing, locked, visible, settings };
     previous.dispose();
-    drawing.settingsChanged?.(inputs);
+    drawing.settingsChanged?.(settings);
     drawing.visibilityChanged(visible);
     this.requestRepaint();
     return true;
   }
 
   exportRecords(): ChartToolDrawingRecord[] {
-    return this.kept.map(({ id, drawing, locked, visible, inputs }) => ({
+    return this.kept.map(({ id, drawing, locked, visible, settings }) => ({
       id,
       locked,
       visible,
-      inputs,
+      settings,
       points: drawing.points(),
     }));
   }
@@ -252,10 +252,10 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
       drawing,
       locked: state.locked ?? false,
       visible: state.visible ?? true,
-      inputs: resolveToolSettingValues(this.rules, state.inputs),
+      settings: resolveSettingValues(this.rules, state.settings),
     };
     this.kept.push(kept);
-    drawing.settingsChanged?.(kept.inputs);
+    drawing.settingsChanged?.(kept.settings);
     drawing.visibilityChanged(kept.visible);
     return kept.id;
   }

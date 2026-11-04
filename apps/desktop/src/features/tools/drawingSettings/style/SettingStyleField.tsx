@@ -1,22 +1,22 @@
 import { useId, type ReactNode } from 'react';
-import type { ToolInputValue, ToolInputValues } from '../../../chart/engine/drawings/toolInputs';
+import type { SettingValue, SettingValues } from '../../../chart/engine/settings/settingInputs';
 import {
-  TOOL_STYLE_LINE_STYLES,
-  TOOL_STYLE_LINE_WIDTHS,
-  toolStyleKey,
-  type ToolStyleDefinition,
-} from '../../../chart/engine/drawings/toolStyles';
+  SETTING_STYLE_LINE_STYLES,
+  SETTING_STYLE_LINE_WIDTHS,
+  settingStyleKey,
+  type SettingStyleDefinition,
+} from '../../../chart/engine/settings/settingStyles';
 import { ColorPickerButton } from '../../../../shared/ui/colorPicker/ColorPickerButton';
 import type { LineOptions } from '../../../../shared/ui/colorPicker/LineOptionsSection';
 import { Select } from '../../../../shared/ui/select/Select';
-import { numberFromInput, numberText, stringText, titledOptions } from '../inputs/toolInputFields';
+import { numberFromInput, numberText, stringText, titledOptions } from '../inputs/settingInputFields';
 import { VisibleCheckbox } from './styleControls';
 
 /** What one style field is given: its definition, every draft value, and whether its row is locked. */
-export interface ToolStyleFieldProps<Kind extends ToolStyleDefinition['kind']> {
-  readonly definition: Extract<ToolStyleDefinition, { kind: Kind }>;
-  readonly values: ToolInputValues;
-  readonly onChange: (key: string, value: ToolInputValue) => void;
+export interface SettingStyleFieldProps<Kind extends SettingStyleDefinition['kind']> {
+  readonly definition: Extract<SettingStyleDefinition, { kind: Kind }>;
+  readonly values: SettingValues;
+  readonly onChange: (key: string, value: SettingValue) => void;
   /** Whether the parent's checkbox, or this row's own, switches the row's controls off. */
   readonly disabled: boolean;
 }
@@ -24,23 +24,26 @@ export interface ToolStyleFieldProps<Kind extends ToolStyleDefinition['kind']> {
 /** The thickness and dash pattern a line's picker edits; an invalid draft reads as a plain thin solid line. */
 function lineOptionsOf(
   id: string,
-  values: ToolInputValues,
-  onChange: (key: string, value: ToolInputValue) => void,
+  values: SettingValues,
+  onChange: (key: string, value: SettingValue) => void,
 ): LineOptions {
-  const width = values[toolStyleKey(id, 'width')];
+  const width = values[settingStyleKey(id, 'width')];
   return {
-    dashStyles: TOOL_STYLE_LINE_STYLES,
-    dashStyle: TOOL_STYLE_LINE_STYLES.find((style) => style === values[toolStyleKey(id, 'style')]) ?? 'solid',
-    onDashStyleChange: (next) => onChange(toolStyleKey(id, 'style'), next),
+    dashStyles: SETTING_STYLE_LINE_STYLES,
+    dashStyle: SETTING_STYLE_LINE_STYLES.find((style) => style === values[settingStyleKey(id, 'style')]) ?? 'solid',
+    onDashStyleChange: (next) => onChange(settingStyleKey(id, 'style'), next),
     thickness: {
-      widths: TOOL_STYLE_LINE_WIDTHS,
-      width: typeof width === 'number' ? width : TOOL_STYLE_LINE_WIDTHS[0],
-      onWidthChange: (next) => onChange(toolStyleKey(id, 'width'), next),
+      widths: SETTING_STYLE_LINE_WIDTHS,
+      width: typeof width === 'number' ? width : SETTING_STYLE_LINE_WIDTHS[0],
+      onWidthChange: (next) => onChange(settingStyleKey(id, 'width'), next),
     },
   };
 }
 
-type StyleFieldEditing = Pick<ToolStyleFieldProps<ToolStyleDefinition['kind']>, 'values' | 'onChange' | 'disabled'>;
+type StyleFieldEditing = Pick<
+  SettingStyleFieldProps<SettingStyleDefinition['kind']>,
+  'values' | 'onChange' | 'disabled'
+>;
 
 interface ColorRowProps extends StyleFieldEditing {
   readonly id: string;
@@ -51,20 +54,20 @@ interface ColorRowProps extends StyleFieldEditing {
 
 /** A style's visible checkbox and its colour picker, which the checkbox switches off. */
 function VisibleColorRow({ id, title, values, onChange, disabled, line }: ColorRowProps) {
-  const visible = values[toolStyleKey(id, 'visible')] === true;
+  const visible = values[settingStyleKey(id, 'visible')] === true;
   return (
     <>
       <VisibleCheckbox
         title={title}
         checked={visible}
         disabled={disabled}
-        onChange={(checked) => onChange(toolStyleKey(id, 'visible'), checked)}
+        onChange={(checked) => onChange(settingStyleKey(id, 'visible'), checked)}
       />
       <ColorPickerButton
         label={`${title} colour`}
-        color={stringText(values[toolStyleKey(id, 'color')])}
+        color={stringText(values[settingStyleKey(id, 'color')])}
         disabled={disabled || !visible}
-        onColorChange={(color) => onChange(toolStyleKey(id, 'color'), color)}
+        onColorChange={(color) => onChange(settingStyleKey(id, 'color'), color)}
         line={line}
       />
     </>
@@ -78,15 +81,15 @@ function TitledColorRow({ id, title, values, onChange, disabled }: ColorRowProps
       <span className="drawing-settings-style-title">{title}</span>
       <ColorPickerButton
         label={title}
-        color={stringText(values[toolStyleKey(id, 'color')])}
+        color={stringText(values[settingStyleKey(id, 'color')])}
         disabled={disabled}
-        onColorChange={(color) => onChange(toolStyleKey(id, 'color'), color)}
+        onColorChange={(color) => onChange(settingStyleKey(id, 'color'), color)}
       />
     </>
   );
 }
 
-function LineStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'line'>) {
+function LineStyleField({ definition, values, onChange, disabled }: SettingStyleFieldProps<'line'>) {
   const { id, title } = definition;
   return (
     <VisibleColorRow
@@ -101,14 +104,14 @@ function LineStyleField({ definition, values, onChange, disabled }: ToolStyleFie
 }
 
 /** A colour row: with a checkbox when the style can be hidden, a plain title otherwise. */
-function ColorStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'color'>) {
+function ColorStyleField({ definition, values, onChange, disabled }: SettingStyleFieldProps<'color'>) {
   const { id, title } = definition;
   const Row = definition.defaults.visible === undefined ? TitledColorRow : VisibleColorRow;
   return <Row id={id} title={title} values={values} onChange={onChange} disabled={disabled} />;
 }
 
-function ToggleStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'toggle'>) {
-  const visibleKey = toolStyleKey(definition.id, 'visible');
+function ToggleStyleField({ definition, values, onChange, disabled }: SettingStyleFieldProps<'toggle'>) {
+  const visibleKey = settingStyleKey(definition.id, 'visible');
   return (
     <VisibleCheckbox
       title={definition.title}
@@ -119,7 +122,7 @@ function ToggleStyleField({ definition, values, onChange, disabled }: ToolStyleF
   );
 }
 
-function NumberStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'number'>) {
+function NumberStyleField({ definition, values, onChange, disabled }: SettingStyleFieldProps<'number'>) {
   const controlId = useId();
   const value = values[definition.id];
   const invalid = typeof value !== 'number' || !Number.isFinite(value);
@@ -144,7 +147,7 @@ function NumberStyleField({ definition, values, onChange, disabled }: ToolStyleF
   );
 }
 
-function ChoiceStyleField({ definition, values, onChange, disabled }: ToolStyleFieldProps<'choice'>) {
+function ChoiceStyleField({ definition, values, onChange, disabled }: SettingStyleFieldProps<'choice'>) {
   const controlId = useId();
   return (
     <>
@@ -163,8 +166,8 @@ function ChoiceStyleField({ definition, values, onChange, disabled }: ToolStyleF
 }
 
 /** One field per style kind: a new kind is one entry here, and TypeScript refuses a table that misses one. */
-const TOOL_STYLE_FIELDS: {
-  readonly [Kind in ToolStyleDefinition['kind']]: (props: ToolStyleFieldProps<Kind>) => ReactNode;
+const SETTING_STYLE_FIELDS: {
+  readonly [Kind in SettingStyleDefinition['kind']]: (props: SettingStyleFieldProps<Kind>) => ReactNode;
 } = {
   line: LineStyleField,
   color: ColorStyleField,
@@ -174,11 +177,11 @@ const TOOL_STYLE_FIELDS: {
 };
 
 /** The table indexed by one kind is the union of its entries; this names the one call. */
-type RenderToolStyleField = (props: ToolStyleFieldProps<ToolStyleDefinition['kind']>) => ReactNode;
+type RenderSettingStyleField = (props: SettingStyleFieldProps<SettingStyleDefinition['kind']>) => ReactNode;
 
 /** One row of the Style tab; a child row is marked so the stylesheet indents it under its parent. */
-export function ToolStyleField(props: ToolStyleFieldProps<ToolStyleDefinition['kind']>) {
-  const render = TOOL_STYLE_FIELDS[props.definition.kind] as RenderToolStyleField;
+export function SettingStyleField(props: SettingStyleFieldProps<SettingStyleDefinition['kind']>) {
+  const render = SETTING_STYLE_FIELDS[props.definition.kind] as RenderSettingStyleField;
   return (
     <div className="drawing-settings-style-row" data-child={props.definition.parentId !== undefined}>
       {render(props)}

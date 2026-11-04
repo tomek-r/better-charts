@@ -1,20 +1,17 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { ToolInputDefinition, ToolInputValues } from '../../src/features/chart/engine/drawings/toolInputs';
-import {
-  resolveToolSettingValues,
-  type ToolSettingsSchema,
-} from '../../src/features/chart/engine/drawings/toolSettings';
+import type { SettingInputDefinition, SettingValues } from '../../src/features/chart/engine/settings/settingInputs';
+import { resolveSettingValues, type SettingsSchema } from '../../src/features/chart/engine/settings/settingsSchema';
 import { DrawingSettingsForm } from '../../src/features/tools/drawingSettings/DrawingSettingsDialog';
 import { timeframeOptions } from '../../src/shared/bridge/timeframes';
 
 /**
- * Mounts the drawing settings form on its own, with one definition of every Pine-style input kind, and
+ * Mounts the drawing settings form on its own, with one definition of every input kind, and
  * records what its footer hands back. Specs load it by URL as `/e2e/helpers/drawingSettingsHarness.tsx`.
  */
 
 /** One definition of every kind; ids, titles and defaults stay apart from the other input suites. */
-export const EVERY_KIND: readonly ToolInputDefinition[] = [
+export const EVERY_KIND: readonly SettingInputDefinition[] = [
   { kind: 'int', id: 'bars', title: 'Bars', defaultValue: 20, minValue: 1, maxValue: 100, step: 1, group: 'Range' },
   {
     kind: 'float',
@@ -58,7 +55,7 @@ export const EVERY_KIND: readonly ToolInputDefinition[] = [
 
 /** What the mounted form recorded: every saved draft and every cancel press. */
 interface DrawingSettingsRecorder {
-  saves: ToolInputValues[];
+  saves: SettingValues[];
   cancels: number;
 }
 
@@ -71,8 +68,8 @@ const PANEL_PADDING = '24px 28px';
  * `overrides` replaces the starting draft, e.g. to open a colour with an alpha suffix.
  */
 export function mountSettingsFormHarness(
-  declared: ToolSettingsSchema | null | undefined,
-  overrides: ToolInputValues = {},
+  declared: SettingsSchema | null | undefined,
+  overrides: SettingValues = {},
 ): void {
   const settings = declared ?? { inputs: EVERY_KIND };
   const recorderWindow = window as unknown as { __drawingSettings: DrawingSettingsRecorder };
@@ -88,7 +85,7 @@ export function mountSettingsFormHarness(
     createRoot(container).render(
       createElement(DrawingSettingsForm, {
         settings,
-        initialValues: { ...resolveToolSettingValues(settings, undefined), ...overrides },
+        initialValues: { ...resolveSettingValues(settings, undefined), ...overrides },
         onSave: (values) => {
           recorderWindow.__drawingSettings.saves.push(values);
           return true;

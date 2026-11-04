@@ -20,7 +20,7 @@ use std::{
 };
 
 const SELECT_SCOPE_DRAWINGS: &str = "\
-SELECT drawing_id, tool_id, is_locked, is_visible, is_below_bars, inputs, timeframe_visibility
+SELECT drawing_id, tool_id, is_locked, is_visible, is_below_bars, settings, timeframe_visibility
 FROM chart_drawings
 WHERE chart_id = ?1 AND account_key = ?2 AND symbol = ?3
 ORDER BY position";
@@ -38,7 +38,7 @@ DELETE FROM chart_drawings WHERE chart_id = ?1 AND account_key = ?2 AND symbol =
 const INSERT_DRAWING: &str = "\
 INSERT INTO chart_drawings
   (drawing_id, chart_id, account_key, symbol, position, tool_id, is_locked, is_visible,
-   is_below_bars, inputs, timeframe_visibility)
+   is_below_bars, settings, timeframe_visibility)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
 
 const INSERT_POINT: &str = "\
@@ -100,7 +100,7 @@ fn read_scope(connection: &Connection, scope: &ChartScope) -> Outcome<Vec<ChartD
     let mut rows = statement.query(scope_params(scope))?;
     let mut records = Vec::new();
     while let Some(row) = rows.next()? {
-        let inputs: String = row.get(5)?;
+        let settings: String = row.get(5)?;
         let timeframe_visibility: String = row.get(6)?;
         let id: String = row.get(0)?;
         let points = take_points(&mut stored_points, &id)?;
@@ -112,7 +112,7 @@ fn read_scope(connection: &Connection, scope: &ChartScope) -> Outcome<Vec<ChartD
             below_bars: row.get(4)?,
             timeframe_visibility: serde_json::from_str(&timeframe_visibility)
                 .map_err(|_| StoreError::Corrupt)?,
-            inputs: serde_json::from_str(&inputs).map_err(|_| StoreError::Corrupt)?,
+            settings: serde_json::from_str(&settings).map_err(|_| StoreError::Corrupt)?,
             points,
         });
     }
@@ -175,7 +175,7 @@ fn replace_scope(
             record.locked,
             record.visible,
             record.below_bars,
-            inputs_text(&record.inputs)?,
+            settings_text(&record.settings)?,
             timeframe_visibility_text(&record.timeframe_visibility)?,
         ])?;
         insert_points(&mut insert_point, record)?;
@@ -195,9 +195,9 @@ fn insert_points(insert_point: &mut Statement<'_>, record: &ChartDrawingRecord) 
     Ok(())
 }
 
-/// The inputs map of one drawing as the JSON text the frontend sent.
-fn inputs_text(inputs: &BTreeMap<String, Value>) -> Outcome<String> {
-    serde_json::to_string(inputs).map_err(|_| StoreError::WriteFailed.into())
+/// The settings of one drawing as the JSON text the frontend sent.
+fn settings_text(settings: &BTreeMap<String, Value>) -> Outcome<String> {
+    serde_json::to_string(settings).map_err(|_| StoreError::WriteFailed.into())
 }
 
 /// The timeframe setting of one drawing as the JSON text the column keeps.

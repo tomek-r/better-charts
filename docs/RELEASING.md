@@ -5,8 +5,7 @@
 - Review tracked files and Git history for credentials, account data, captures,
   logs, journals and local installation paths. `.gitignore` cannot remove
   previously committed data; rotate any exposed credentials.
-- Keep the project license and bundled third-party notices. Planned Pine
-  support has not changed the current MIT license.
+- Keep the project license and bundled third-party notices.
 - Run the [validation commands](../README.md#development).
 
 ## Desktop packages

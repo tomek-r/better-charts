@@ -31,7 +31,7 @@ const MINIMAL_RECORD = {
   toolId: 'fixedRangeProfile',
   locked: false,
   visible: true,
-  inputs: {},
+  settings: {},
   points: [{ timeMs: 1_000, price: null }],
 };
 

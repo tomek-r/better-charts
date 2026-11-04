@@ -6,15 +6,15 @@ import {
 } from '../src/features/chart/engine/drawings/drawingRecord';
 import { DEFAULT_TIMEFRAME_VISIBILITY } from '../src/features/chart/engine/drawings/timeframeVisibility';
 import {
-  defaultToolInputValues,
-  isValidToolInputValue,
-  resolveToolInputValues,
-  type ToolInputDefinition,
-} from '../src/features/chart/engine/drawings/toolInputs';
+  defaultSettingInputValues,
+  isValidSettingInputValue,
+  resolveSettingInputValues,
+  type SettingInputDefinition,
+} from '../src/features/chart/engine/settings/settingInputs';
 import { timeframeOptions } from '../src/shared/bridge/timeframes';
 
 /**
- * The settings schema one drawing carries: one definition per Pine Script v6 input kind,
+ * The settings schema one drawing carries: one definition per input kind,
  * one validator table behind them, and the stored record around them. Pure Node, no browser.
  */
 
@@ -26,7 +26,7 @@ const INT_INPUT = {
   minValue: 1,
   maxValue: 200,
   step: 1,
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const FLOAT_INPUT = {
   kind: 'float',
@@ -36,9 +36,9 @@ const FLOAT_INPUT = {
   minValue: 0,
   maxValue: 4,
   step: 0.5,
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
-const BOOL_INPUT = { kind: 'bool', id: 'filled', title: 'Filled', defaultValue: true } satisfies ToolInputDefinition;
+const BOOL_INPUT = { kind: 'bool', id: 'filled', title: 'Filled', defaultValue: true } satisfies SettingInputDefinition;
 
 const STRING_INPUT = {
   kind: 'string',
@@ -46,63 +46,63 @@ const STRING_INPUT = {
   title: 'Profile',
   defaultValue: 'volume',
   options: ['volume', 'trades'],
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const TEXT_AREA_INPUT = {
   kind: 'textArea',
   id: 'note',
   title: 'Note',
   defaultValue: 'opening range',
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const COLOR_INPUT = {
   kind: 'color',
   id: 'tint',
   title: 'Tint',
   defaultValue: '#3366ff',
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const SOURCE_INPUT = {
   kind: 'source',
   id: 'basis',
   title: 'Basis',
   defaultValue: 'hlc3',
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const TIMEFRAME_INPUT = {
   kind: 'timeframe',
   id: 'window',
   title: 'Window',
   defaultValue: timeframeOptions[0].wire,
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const SYMBOL_INPUT = {
   kind: 'symbol',
   id: 'symbol',
   title: 'Symbol',
   defaultValue: 'EURUSD',
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const SESSION_INPUT = {
   kind: 'session',
   id: 'session',
   title: 'Session',
   defaultValue: '0930-1600:23456',
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const PRICE_INPUT = {
   kind: 'price',
   id: 'level',
   title: 'Level',
   defaultValue: 1.2345,
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const TIME_INPUT = {
   kind: 'time',
   id: 'since',
   title: 'Since',
   defaultValue: Date.now(),
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
 const ENUM_INPUT = {
   kind: 'enum',
@@ -113,9 +113,9 @@ const ENUM_INPUT = {
     { value: 'stepped', title: 'Stepped' },
     { value: 'smooth', title: 'Smooth' },
   ],
-} satisfies ToolInputDefinition;
+} satisfies SettingInputDefinition;
 
-const ALL_INPUTS: readonly ToolInputDefinition[] = [
+const ALL_INPUTS: readonly SettingInputDefinition[] = [
   INT_INPUT,
   FLOAT_INPUT,
   BOOL_INPUT,
@@ -133,12 +133,12 @@ const ALL_INPUTS: readonly ToolInputDefinition[] = [
 
 test('every kind accepts its own default value', () => {
   for (const definition of ALL_INPUTS) {
-    expect(isValidToolInputValue(definition, definition.defaultValue)).toBe(true);
+    expect(isValidSettingInputValue(definition, definition.defaultValue)).toBe(true);
   }
 });
 
 test('the defaults of every definition are keyed by input id', () => {
-  expect(defaultToolInputValues(ALL_INPUTS)).toEqual({
+  expect(defaultSettingInputValues(ALL_INPUTS)).toEqual({
     period: 20,
     ratio: 1.5,
     filled: true,
@@ -156,32 +156,32 @@ test('the defaults of every definition are keyed by input id', () => {
 });
 
 test('no stored settings at all yields every default', () => {
-  const resolved = resolveToolInputValues(ALL_INPUTS, undefined);
-  expect(resolved).toEqual(defaultToolInputValues(ALL_INPUTS));
+  const resolved = resolveSettingInputValues(ALL_INPUTS, undefined);
+  expect(resolved).toEqual(defaultSettingInputValues(ALL_INPUTS));
   expect(resolved.period).toBe(20);
   expect(resolved.method).toBe('stepped');
 });
 
 test('stored settings that are not a record yield every default', () => {
   const expected = { period: 20, method: 'stepped' };
-  expect(resolveToolInputValues([INT_INPUT, ENUM_INPUT], ['period'])).toEqual(expected);
-  expect(resolveToolInputValues([INT_INPUT, ENUM_INPUT], 'period=20')).toEqual(expected);
+  expect(resolveSettingInputValues([INT_INPUT, ENUM_INPUT], ['period'])).toEqual(expected);
+  expect(resolveSettingInputValues([INT_INPUT, ENUM_INPUT], 'period=20')).toEqual(expected);
 });
 
 test('a valid stored value wins over the default', () => {
-  expect(resolveToolInputValues([INT_INPUT, COLOR_INPUT], { period: 55, tint: '#ff000080' })).toEqual({
+  expect(resolveSettingInputValues([INT_INPUT, COLOR_INPUT], { period: 55, tint: '#ff000080' })).toEqual({
     period: 55,
     tint: '#ff000080',
   });
 });
 
 test('stored keys without a definition are dropped', () => {
-  expect(resolveToolInputValues([INT_INPUT], { period: 30, vanished: 5 })).toEqual({ period: 30 });
+  expect(resolveSettingInputValues([INT_INPUT], { period: 30, vanished: 5 })).toEqual({ period: 30 });
 });
 
 interface InvalidInput {
   readonly name: string;
-  readonly definition: ToolInputDefinition;
+  readonly definition: SettingInputDefinition;
   readonly value: unknown;
 }
 
@@ -205,8 +205,8 @@ const INVALID_INPUTS: readonly InvalidInput[] = [
 
 for (const { name, definition, value } of INVALID_INPUTS) {
   test(`${definition.kind} rejects ${name} and falls back to the default`, () => {
-    expect(isValidToolInputValue(definition, value)).toBe(false);
-    expect(resolveToolInputValues([definition], { [definition.id]: value })).toEqual({
+    expect(isValidSettingInputValue(definition, value)).toBe(false);
+    expect(resolveSettingInputValues([definition], { [definition.id]: value })).toEqual({
       [definition.id]: definition.defaultValue,
     });
   });
@@ -219,7 +219,7 @@ const STORED_DRAWING = {
   visible: true,
   belowBars: false,
   timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
-  inputs: { period: 20, filled: true, basis: 'hlc3' },
+  settings: { period: 20, filled: true, basis: 'hlc3' },
   points: [
     { timeMs: 1_700_000_000_000, price: null },
     { timeMs: null, price: '1.08505' },
@@ -267,7 +267,7 @@ const REJECTED_DRAWINGS: ReadonlyArray<{ name: string; value: unknown }> = [
   { name: 'a drawing with an empty tool id', value: { ...STORED_DRAWING, toolId: '' } },
   { name: 'a drawing whose lock flag is not a boolean', value: { ...STORED_DRAWING, locked: 'no' } },
   { name: 'a drawing whose below-bars flag is not a boolean', value: { ...STORED_DRAWING, belowBars: 'below' } },
-  { name: 'a drawing with an object as an input value', value: { ...STORED_DRAWING, inputs: { period: {} } } },
+  { name: 'a drawing with an object as an input value', value: { ...STORED_DRAWING, settings: { period: {} } } },
   { name: 'a drawing that is not a record at all', value: 'drawing-1' },
 ];
 

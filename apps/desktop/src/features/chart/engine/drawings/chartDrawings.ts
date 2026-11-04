@@ -1,7 +1,7 @@
 import type { ChartDrawingPoint, ChartDrawingRecord, ChartDrawingSelection } from './drawingRecord';
 import type { DrawingTimeframeVisibility } from './timeframeVisibility';
 import type { DrawingStackEntry } from './drawingStack';
-import type { ToolInputValues } from './toolInputs';
+import type { SettingValues } from '../settings/settingInputs';
 
 /** The drawing commands the class needs; the tool set implements them, so drawings never import the tool set. */
 export interface ChartDrawingCommands {
@@ -10,7 +10,7 @@ export interface ChartDrawingCommands {
   deleteDrawing(toolId: string, drawingId: string): boolean;
   setDrawingLocked(toolId: string, drawingId: string, locked: boolean): void;
   setDrawingVisible(toolId: string, drawingId: string, visible: boolean): void;
-  setDrawingInputs(toolId: string, drawingId: string, inputs: ToolInputValues): void;
+  setDrawingSettings(toolId: string, drawingId: string, settings: SettingValues): void;
   setDrawingTimeframeVisibility(toolId: string, drawingId: string, visibility: DrawingTimeframeVisibility): void;
   setDrawingPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean;
   exportDrawings(): ChartDrawingRecord[];
@@ -167,8 +167,8 @@ export class ChartDrawings {
     this.repaint();
   }
 
-  setInputs(toolId: string, drawingId: string, inputs: ToolInputValues): void {
-    this.commands.setDrawingInputs(toolId, drawingId, inputs);
+  setSettings(toolId: string, drawingId: string, settings: SettingValues): void {
+    this.commands.setDrawingSettings(toolId, drawingId, settings);
     this.repaint();
   }
 

@@ -99,7 +99,7 @@ test('a drawing saved as locked comes back locked, with its points and settings'
 
   await expect.poll(async () => (await drawings(page)).length).toBe(1);
   const [restored] = await drawings(page);
-  expect(restored).toMatchObject({ id: 'locked-profile', toolId: 'fixedRangeProfile', locked: true, inputs: {} });
+  expect(restored).toMatchObject({ id: 'locked-profile', toolId: 'fixedRangeProfile', locked: true, settings: {} });
   expect(restored.points).toEqual(locked.points);
 });
 

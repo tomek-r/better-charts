@@ -36,8 +36,8 @@ required and are not bundled.
 
 This is an early release tested with a demo account. Real-money trading has
 not been validated. Some chart gestures submit modifications directly when
-trading is enabled. Start with a demo account. Partial close, Break Even,
-multiple charts and Pine Script are not yet available.
+trading is enabled. Start with a demo account. Partial close, Break Even
+and multiple charts are not yet available.
 
 ## Build
 

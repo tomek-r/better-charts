@@ -29,10 +29,12 @@ const SECOND_CHART_ID: &str = "second-chart";
 /// Milliseconds of one five-minute bar, the slot width the test bar series uses.
 const BAR_MS: i64 = 300_000;
 /// Schema versions stay as they are in the migrations, so these stay valid: the one before the
-/// stacking flag, the one before the timeframe setting, and the last one before the charts.
+/// stacking flag, the one before the timeframe setting, the last one before the charts, and the
+/// one that still named a drawing's stored values its inputs.
 const BEFORE_BELOW_BARS_VERSION: u32 = 1;
 const BEFORE_TIMEFRAME_VISIBILITY_VERSION: u32 = 2;
 const BEFORE_CHART_SETTINGS_VERSION: u32 = 4;
+const BEFORE_DRAWING_SETTINGS_VERSION: u32 = 5;
 
 /// The drawings of one chart database this test owns, with the chart the migration seeds.
 struct TestChart {
@@ -152,7 +154,7 @@ fn record(id: &str) -> ChartDrawingRecord {
         visible: true,
         below_bars: false,
         timeframe_visibility: TimeframeVisibility::default(),
-        inputs: BTreeMap::from([("rows".to_owned(), json!(128))]),
+        settings: BTreeMap::from([("rows".to_owned(), json!(128))]),
         points: vec![time_point(1_700_000_000_000), time_point(1_700_000_900_000)],
     }
 }
@@ -163,7 +165,35 @@ fn default_visibility_text() -> String {
 }
 
 /// Writes one drawing row of this build by hand, so the store reads a row it never wrote.
-fn insert_drawing(database: &SqliteDatabase, chart_id: &str, id: &str, inputs: &str) {
+fn insert_drawing(database: &SqliteDatabase, chart_id: &str, id: &str, settings: &str) {
+    database
+        .write(|connection| {
+            connection.execute(
+                "INSERT INTO chart_drawings \
+                 (drawing_id, chart_id, account_key, symbol, position, tool_id, is_locked, \
+                  is_visible, settings, is_below_bars, timeframe_visibility) \
+                 VALUES (?1, ?2, ?3, 'EURUSD', 0, 'fixedRangeProfile', 0, 1, ?4, 0, ?5)",
+                params![
+                    id,
+                    chart_id,
+                    ACCOUNT_KEY,
+                    settings,
+                    default_visibility_text()
+                ],
+            )?;
+            Ok(())
+        })
+        .expect("the hand-written drawing is stored");
+}
+
+/// Writes one drawing row in the shape version 5 wrote, where the column of a drawing's stored
+/// values still carried the name of its inputs, so only the migration renames it.
+fn insert_drawing_before_settings_column(
+    database: &SqliteDatabase,
+    chart_id: &str,
+    id: &str,
+    inputs: &str,
+) {
     database
         .write(|connection| {
             connection.execute(
@@ -268,7 +298,7 @@ fn the_drawings_of_one_scope_round_trip() {
     let saved = ChartDrawingRecord {
         locked: true,
         visible: false,
-        inputs: BTreeMap::from([
+        settings: BTreeMap::from([
             ("rows".to_owned(), json!(128)),
             ("label".to_owned(), json!("trend")),
         ]),
@@ -306,7 +336,7 @@ fn the_below_bars_flag_round_trips_both_values() {
 fn a_stored_payload_without_the_below_bars_flag_stands_above_the_bars() {
     let stored: ChartDrawingRecord = serde_json::from_str(
         r#"{"id":"profile-1","toolId":"fixedRangeProfile","locked":false,"visible":true,
-            "inputs":{},"points":[{"timeMs":1700000000000,"price":null}]}"#,
+            "settings":{},"points":[{"timeMs":1700000000000,"price":null}]}"#,
     )
     .expect("the record parses without the flag");
 
@@ -358,7 +388,7 @@ fn the_timeframe_visibility_round_trips() {
 fn a_stored_payload_without_the_timeframe_visibility_shows_everywhere() {
     let stored: ChartDrawingRecord = serde_json::from_str(
         r#"{"id":"profile-1","toolId":"fixedRangeProfile","locked":false,"visible":true,
-            "inputs":{},"points":[{"timeMs":1700000000000,"price":null}]}"#,
+            "settings":{},"points":[{"timeMs":1700000000000,"price":null}]}"#,
     )
     .expect("the record parses without the setting");
 
@@ -515,7 +545,7 @@ fn a_list_with_too_many_points_is_refused_and_writes_nothing() {
 }
 
 #[test]
-fn an_inputs_column_that_is_not_json_fails_the_load() {
+fn a_settings_column_that_is_not_json_fails_the_load() {
     let chart = TestChart::new();
     insert_drawing(&chart.database, &chart.chart_id, "corrupt", "not json");
 
@@ -655,6 +685,38 @@ fn a_drawing_of_the_version_before_the_charts_moves_to_the_seeded_chart() {
         [time_point(1_700_000_000_000), time_point(1_700_000_900_000)]
     );
     assert!(!chart_time_zone_table_exists(&migrated));
+}
+
+#[test]
+fn a_drawing_saved_before_the_settings_column_keeps_its_settings() {
+    let directory = TestDirectory::new();
+    let path = directory.path().join(chart_database::DATABASE_FILE_NAME);
+    {
+        let database = chart_database::open_at_version(&path, BEFORE_DRAWING_SETTINGS_VERSION)
+            .expect("the database opens with the earlier migrations");
+        let chart_id = seeded_chart_id(&database);
+        insert_drawing_before_settings_column(&database, &chart_id, "profile-1", r#"{"rows":128}"#);
+        insert_point(&database, "profile-1", 0, 1_700_000_000_000);
+        insert_point(&database, "profile-1", 1, 1_700_000_900_000);
+    }
+
+    let migrated =
+        open_chart_database(Some(directory.path().to_path_buf())).expect("the database migrates");
+    let store = SqliteChartDrawingStore::from_database(Arc::clone(&migrated));
+
+    let restored = store
+        .load(&scope_of(
+            &seeded_chart_id(&migrated),
+            ACCOUNT_KEY,
+            "EURUSD",
+        ))
+        .expect("the drawings load");
+
+    assert_eq!(restored.len(), 1);
+    assert_eq!(
+        restored[0].settings,
+        BTreeMap::from([("rows".to_owned(), json!(128))])
+    );
 }
 
 #[test]

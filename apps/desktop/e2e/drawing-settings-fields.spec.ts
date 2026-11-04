@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
+import type { SettingValues } from '../src/features/chart/engine/settings/settingInputs';
 import { timeframeLabel } from '../src/shared/bridge/timeframes';
 import { chooseOption, mountSettingsForm, savedValues } from './helpers/drawingSettingsPage';
 import { STUB_M5_INTERVAL_MS, STUB_NOW } from './helpers/tauriStub';
@@ -32,7 +32,7 @@ const SINCE_MS = STUB_NOW - 2 * STUB_M5_INTERVAL_MS;
 const SINCE_TEXT = new Date(SINCE_MS).toISOString().slice(0, 16);
 
 /** Mounts the form holding one input of every kind. */
-function mountForm(page: Page, overrides: ToolInputValues = {}): Promise<void> {
+function mountForm(page: Page, overrides: SettingValues = {}): Promise<void> {
   return mountSettingsForm(page, undefined, overrides);
 }
 

@@ -3,7 +3,7 @@ import { profileResultFor } from './helpers/fakeMarketDataPort';
 import { createRecordingCtx, createTestViewport, renderArgsFor, type PaintOp } from './helpers/overlayHarness';
 import { drawFixedRangeProfile } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileOverlay';
 import type { FixedRangeProfileState } from '../src/features/tools/fixedRangeProfile/profileState';
-import type { ToolInputValues } from '../src/features/chart/engine/drawings/toolInputs';
+import type { SettingValues } from '../src/features/chart/engine/settings/settingInputs';
 import { readFixedRangeProfileSettings } from '../src/features/tools/fixedRangeProfile/fixedRangeProfileSettings';
 import type { TickProfileBin } from '../src/shared/bridge/types';
 import { parseHexColor } from '../src/shared/theme/hexColor';
@@ -51,7 +51,7 @@ interface Painted {
 }
 
 /** Paints the profile under the given stored settings; no settings paints with the defaults. */
-function paint(stored?: ToolInputValues): Painted {
+function paint(stored?: SettingValues): Painted {
   const state: FixedRangeProfileState = { range: RANGE, profile: { ...PROFILE, ...LEVELS }, hit: {} };
   const ops: PaintOp[] = [];
   const ctx = createRecordingCtx((op) => ops.push(op), { recordClip: true });
@@ -210,7 +210,7 @@ test('placement right hangs the bars from the range end: mirrored for up/down, g
 const BALANCED_PROFILE = { ...PROFILE, bins: [bin(140, 150, 50, 5), bin(150, 160, 5, 50)] };
 
 /** The leftmost and rightmost edge the histogram paints. */
-function paintedBounds(stored: ToolInputValues): { left: number; right: number } {
+function paintedBounds(stored: SettingValues): { left: number; right: number } {
   const state: FixedRangeProfileState = { range: RANGE, profile: { ...BALANCED_PROFILE, ...LEVELS }, hit: {} };
   const { appearance } = readFixedRangeProfileSettings(stored);
   drawFixedRangeProfile(
@@ -319,7 +319,7 @@ const RIGHT_COLUMN_OFFSET = LABEL_GAP + WIDEST_TEXT / 2;
  * Paints the given bins under the stored settings. `texts` are the row labels; the Bid×Ask headers
  * are returned apart, top header first.
  */
-function paintValues(stored: ToolInputValues, bins: TickProfileBin[] = BINS) {
+function paintValues(stored: SettingValues, bins: TickProfileBin[] = BINS) {
   const state: FixedRangeProfileState = { range: RANGE, profile: { ...PROFILE, ...LEVELS, bins }, hit: {} };
   const ops: PaintOp[] = [];
   const { appearance } = readFixedRangeProfileSettings(stored);
@@ -465,7 +465,7 @@ const BACKGROUND_COLOR = '#112233ff';
 const WITH_BACKGROUND = { ...VALUES_ON, 'valuesBackground.color': BACKGROUND_COLOR };
 
 /** The one rect painted in the values background colour, and the hit fields that report it. */
-function valuesBox(stored: ToolInputValues) {
+function valuesBox(stored: SettingValues) {
   const { ops, hit } = paintValues(stored);
   const boxes = ops.filter((op) => op.kind === 'fillRect' && op.style === BACKGROUND_COLOR);
   return { ops, hit, boxes };
