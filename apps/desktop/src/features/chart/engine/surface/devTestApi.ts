@@ -20,6 +20,7 @@ import type { ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesState } from './chartScalesAppearance';
 import type { IndicatorFrame } from '../indicators/indicatorFrame';
 import type { IndicatorLayer, IndicatorLayerState } from '../indicators/indicatorLayer';
+import type { AttachedIndicatorState, IndicatorRuntime } from '../indicators/indicatorRuntime';
 import { clearViewportChangeLog, viewportChangeLog, type ViewportChangeRecord } from '../viewport/viewportDiagnostics';
 
 /** One candle's time with the colours it overrides the series with, as a plain copy. */
@@ -110,6 +111,16 @@ export interface DevTestApi {
   /** Applies a live frame (the closed and the forming bar) to indicator `id`. */
   updateIndicatorFrame(id: string, frame: IndicatorFrame): void;
   removeIndicator(id: string): void;
+  /** Attaches the registered indicator `definitionId` as `instanceId`; false when no such indicator exists. */
+  attachIndicator(
+    instanceId: string,
+    definitionId: string,
+    settings?: Readonly<Record<string, number | boolean | string>>,
+  ): boolean;
+  detachIndicator(instanceId: string): void;
+  setIndicatorSettings(instanceId: string, settings: Readonly<Record<string, number | boolean | string>>): void;
+  /** Every attached indicator, in attach order, with its resolved settings, as plain copies. */
+  attachedIndicators(): AttachedIndicatorState[];
   priceScale(): {
     autoScale: boolean;
     mode: PriceScaleMode;
@@ -186,7 +197,8 @@ interface DevTestApiSources {
   timeToX(timeMs: number): number;
   toolTestApi(id: string): unknown;
   drawings: ChartDrawings;
-  indicators: IndicatorLayer;
+  indicatorLayer: IndicatorLayer;
+  indicatorRuntime: IndicatorRuntime;
   pointerReadout(): PointerReadout | null;
   rightMarginBars(): number;
   crosshairStyle(): ChartSizedLineAppearance;
@@ -196,7 +208,8 @@ interface DevTestApiSources {
 /** The live readings the surface already publishes; the hook reads them through these. */
 interface DevTestReadings {
   readonly drawings: ChartDrawings;
-  readonly indicators: IndicatorLayer;
+  readonly indicatorLayer: IndicatorLayer;
+  readonly indicators: IndicatorRuntime;
   getData(): readonly RenderBar[];
   visibleRange(): { from: number; to: number } | null;
   timeToX(timeMs: number): number;
@@ -270,7 +283,8 @@ function buildDevTestApi({
   timeToX,
   toolTestApi,
   drawings,
-  indicators,
+  indicatorLayer,
+  indicatorRuntime,
   pointerReadout,
   rightMarginBars,
   crosshairStyle,
@@ -291,10 +305,15 @@ function buildDevTestApi({
     pointerReadout,
     appearance: () => appearanceState({ chart, rightMarginBars, crosshairStyle }),
     scales: scalesState,
-    indicators: () => indicators.state(),
-    showIndicatorFrame: (id, frame) => indicators.show(id, frame),
-    updateIndicatorFrame: (id, frame) => indicators.update(id, frame),
-    removeIndicator: (id) => indicators.remove(id),
+    indicators: () => indicatorLayer.state(),
+    showIndicatorFrame: (id, frame) => indicatorLayer.show(id, frame),
+    updateIndicatorFrame: (id, frame) => indicatorLayer.update(id, frame),
+    removeIndicator: (id) => indicatorLayer.remove(id),
+    attachIndicator: (instanceId, definitionId, settings) =>
+      indicatorRuntime.attach(instanceId, definitionId, settings),
+    detachIndicator: (instanceId) => indicatorRuntime.detach(instanceId),
+    setIndicatorSettings: (instanceId, settings) => indicatorRuntime.setSettings(instanceId, settings),
+    attachedIndicators: () => indicatorRuntime.attachedState(),
     priceScale: () => {
       const scale = chart.priceScale('right');
       const options = scale.options();
@@ -341,7 +360,8 @@ export function installChartDevTestApi(
     timeToX: (timeMs) => readings.timeToX(timeMs),
     toolTestApi: (id) => tools.toolTestApi(id),
     drawings: readings.drawings,
-    indicators: readings.indicators,
+    indicatorLayer: readings.indicatorLayer,
+    indicatorRuntime: readings.indicators,
     pointerReadout: () => pointerReadout.readout(),
     rightMarginBars: () => pane.rightMarginBars(),
     crosshairStyle: () => readings.crosshairStyle(),

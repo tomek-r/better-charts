@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { ChartController } from '../engine/surface/chartController';
 import { CHART_TOOL_PLUGINS, DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
+import { CHART_INDICATOR_PLUGINS } from '../../indicators/registry';
 import { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
 import { bridgeIdentityKey } from '../../../shared/bridge/bridgeIdentity';
 import { marketStatusLabel, marketStatusOf } from '../engine/legend/marketStatus';
@@ -45,6 +46,7 @@ export function useChartWorkspaceInitEffects(
           marketDataPort: marketData.port,
           notifyError,
           toolDefinitions: CHART_TOOL_PLUGINS,
+          indicatorDefinitions: CHART_INDICATOR_PLUGINS,
           defaultToolId: DEFAULT_CHART_TOOL_ID,
         },
       );
