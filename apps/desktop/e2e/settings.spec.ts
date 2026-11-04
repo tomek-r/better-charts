@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
+import { pageNoise, recordPageNoise } from './helpers/pageNoise';
 import { setupGuideDialog, setupScreen } from './helpers/setupGuide';
 import { gotoWithStub, stubInvocations, type StubInternals, type TauriStubOptions } from './helpers/tauriStub';
 import type { AppSettingsData } from '../src/features/settings/appSettingsData';
@@ -25,6 +26,7 @@ const firstLaunch: AppSettingsData = {
 
 for (const outcome of ['resolve', 'reject'] as const) {
   test(`initial settings loading keeps the modal usable when the request ${outcome}s`, async ({ page }) => {
+    await recordPageNoise(page);
     await page.addInitScript(() => {
       type Internals = { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
       const w = window as unknown as {
@@ -98,6 +100,7 @@ for (const outcome of ['resolve', 'reject'] as const) {
     }
     await dialog.getByRole('button', { name: 'Close settings' }).click();
     await expect(dialog).toBeHidden();
+    expect(await pageNoise(page)).toEqual([]);
   });
 }
 

@@ -6,6 +6,12 @@ import { defaultSettingStyleValues } from '../src/features/chart/engine/settings
 import { gotoWithStub } from './helpers/tauriStub';
 import { openScalesAndLinesMenu } from './helpers/chartMenu';
 import { HISTOGRAM_BOX, POC_LINE } from './helpers/toolStyleFixtures';
+import { pageNoise, recordPageNoise } from './helpers/pageNoise';
+
+test.beforeEach(async ({ page }) => recordPageNoise(page));
+test.afterEach(async ({ page }) => {
+  expect(await pageNoise(page)).toEqual([]);
+});
 
 /**
  * The colour and line picker of the Style tab: a swatch button opening a popover with preset colours, the

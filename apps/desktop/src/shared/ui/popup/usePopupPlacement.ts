@@ -76,10 +76,18 @@ export function usePopupPlacement(
     place();
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
-    const sizeChanges = new ResizeObserver(place);
+    // Re-placing inside the observer's own callback can resize the popup again in the same frame, which the
+    // browser reports as a ResizeObserver loop; the next frame is soon enough.
+    let frame = 0;
+    const placeNextFrame = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(place);
+    };
+    const sizeChanges = new ResizeObserver(placeNextFrame);
     sizeChanges.observe(popup);
     return () => {
       sizeChanges.disconnect();
+      cancelAnimationFrame(frame);
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };

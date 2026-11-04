@@ -1,4 +1,5 @@
-import { act, createElement } from 'react';
+import { createElement } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import type { SettingInputDefinition, SettingValues } from '../../src/features/chart/engine/settings/settingInputs';
 import { resolveSettingValues, type SettingsSchema } from '../../src/features/chart/engine/settings/settingsSchema';
@@ -81,7 +82,8 @@ export function mountSettingsFormHarness(
   const container = document.createElement('div');
   container.style.padding = PANEL_PADDING;
   document.body.append(container);
-  act(() => {
+  // Renders synchronously so the spec can query the DOM at once; act() is for test runners, not a real browser.
+  flushSync(() => {
     createRoot(container).render(
       createElement(DrawingSettingsForm, {
         settings,
