@@ -60,13 +60,34 @@ export interface ColumnsAppearance {
   readonly colors: BarDirectionColors;
 }
 
+/** The price source as a line, filled up and down around a level read off the price scale's visible range. */
+export interface BaselineAppearance {
+  readonly style: 'baseline';
+  readonly priceSource: PriceSource;
+  /** How far up that range the fill turns around, as a whole percent from its bottom. */
+  readonly baseLevel: number;
+  readonly topLine: string;
+  readonly topFill: string;
+  readonly bottomLine: string;
+  readonly bottomFill: string;
+  readonly lineWidth: BarStyleLineWidth;
+}
+
+/** Heikin Ashi candles, which a series of their own draws from the chart's body, border and wick settings. */
+export interface HeikinAshiAppearance {
+  readonly style: 'heikinAshi';
+  readonly candles: CandleAppearance;
+}
+
 /** How the chart draws its bars, which is the one thing the bar style setting decides. */
 export type BarStyleAppearance =
   | CandleStyleAppearance
   | HollowCandlesAppearance
+  | HeikinAshiAppearance
   | BarsAppearance
   | LineStyleAppearance
   | AreaAppearance
+  | BaselineAppearance
   | ColumnsAppearance;
 
 /**
@@ -114,13 +135,25 @@ function sameColumnsAppearance(first: ColumnsAppearance, second: ColumnsAppearan
   return first.colorByPreviousClose === second.colorByPreviousClose && sameColors(first.colors, second.colors);
 }
 
+function sameBaselineAppearance(first: BaselineAppearance, second: BaselineAppearance): boolean {
+  return (
+    first.priceSource === second.priceSource &&
+    first.baseLevel === second.baseLevel &&
+    first.topLine === second.topLine &&
+    first.topFill === second.topFill &&
+    first.bottomLine === second.bottomLine &&
+    first.bottomFill === second.bottomFill &&
+    first.lineWidth === second.lineWidth
+  );
+}
+
 /** Whether two appearances draw the same bars, so a setting that did not change costs no repaint. */
 export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarStyleAppearance): boolean {
   switch (first.style) {
     case 'candles':
-      return second.style === 'candles' && sameCandleAppearance(first.candles, second.candles);
     case 'hollowCandles':
-      return second.style === 'hollowCandles' && sameCandleAppearance(first.candles, second.candles);
+    case 'heikinAshi':
+      return second.style === first.style && sameCandleAppearance(first.candles, second.candles);
     case 'bars':
       return second.style === 'bars' && sameBarsAppearance(first, second);
     case 'line':
@@ -131,6 +164,8 @@ export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarSty
       return second.style === 'stepLine' && sameLineStyleAppearance(first, second);
     case 'area':
       return second.style === 'area' && sameAreaAppearance(first, second);
+    case 'baseline':
+      return second.style === 'baseline' && sameBaselineAppearance(first, second);
     case 'columns':
       return second.style === 'columns' && sameColumnsAppearance(first, second);
   }

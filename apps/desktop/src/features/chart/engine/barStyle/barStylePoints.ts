@@ -1,11 +1,12 @@
 import type { BarData, CandlestickData, HistogramData, LineData, Time, UTCTimestamp } from 'lightweight-charts';
-import { paintedColor } from '../bars/candleAppearance';
+import { candlePointColors, paintedColor } from '../bars/candleAppearance';
 import type { RenderBar } from '../bars/renderBar';
 import type {
   BarDirectionColors,
   BarsAppearance,
   ColumnsAppearance,
   DrawnBarStyleAppearance,
+  HeikinAshiAppearance,
   HollowCandlesAppearance,
 } from './barStyleAppearance';
 import { priceAt, type PriceSource } from './priceSource';
@@ -44,7 +45,7 @@ function barColor(
   return directionColor(appearance.colors, rising);
 }
 
-/** The point the line and area styles plot: one value per bar, at the appearance's price source. */
+/** The point the line, area and baseline styles plot: one value per bar, at the appearance's price source. */
 function valuePoint(bar: RenderBar, source: PriceSource): LineData<Time> {
   return { time: bar.time as UTCTimestamp, value: priceAt(bar, source) };
 }
@@ -71,6 +72,25 @@ function hollowCandlePoint(
     // A hidden border leaves the body colour to outline the hole, so a hollow candle stays visible.
     borderColor: borders.visible ? directionColor(borders, rising) : directionColor(body, rising),
     wickColor: wick.visible ? directionColor(wick, rising) : TRANSPARENT,
+  };
+}
+
+/**
+ * One Heikin Ashi candle. `bar` is the Heikin Ashi bar, which heikinAshiBars and nextHeikinAshiBar chain
+ * before the points are written; the candle colours read it like any other bar.
+ */
+function heikinAshiCandlePoint(
+  appearance: HeikinAshiAppearance,
+  bar: RenderBar,
+  previous: RenderBar | undefined,
+): CandlestickData<Time> {
+  return {
+    time: bar.time as UTCTimestamp,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    ...candlePointColors(appearance.candles, bar, previous),
   };
 }
 
@@ -103,6 +123,8 @@ export function barStylePoint(
   switch (appearance.style) {
     case 'hollowCandles':
       return hollowCandlePoint(appearance, bar, previous);
+    case 'heikinAshi':
+      return heikinAshiCandlePoint(appearance, bar, previous);
     case 'bars':
       return barsPoint(appearance, bar, previous);
     case 'columns':
@@ -111,6 +133,7 @@ export function barStylePoint(
     case 'lineWithMarkers':
     case 'stepLine':
     case 'area':
+    case 'baseline':
       return valuePoint(bar, appearance.priceSource);
   }
 }

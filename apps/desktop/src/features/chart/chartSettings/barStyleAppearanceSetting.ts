@@ -7,6 +7,7 @@ import {
   type BarStyleAppearance,
   type BarStyleLineWidth,
   type BarsAppearance,
+  type BaselineAppearance,
   type ColumnsAppearance,
   type DrawnBarStyleAppearance,
   type LineStyleAppearance,
@@ -23,10 +24,15 @@ const COLORS_KEY = 'colors';
 const THIN_BARS_KEY = 'thinBars';
 const HLC_BARS_KEY = 'hlcBars';
 const PRICE_SOURCE_KEY = 'priceSource';
+const BASE_LEVEL_KEY = 'baseLevel';
 const LINE_COLOR_KEY = 'lineColor';
 const LINE_WIDTH_KEY = 'lineWidth';
 const FILL_TOP_KEY = 'fillTop';
 const FILL_BOTTOM_KEY = 'fillBottom';
+const TOP_LINE_KEY = 'topLine';
+const TOP_FILL_KEY = 'topFill';
+const BOTTOM_LINE_KEY = 'bottomLine';
+const BOTTOM_FILL_KEY = 'bottomFill';
 
 /**
  * What a style draws when its own settings hold nothing its fields can explain — the values the
@@ -48,6 +54,17 @@ const AREA_DEFAULTS: Omit<AreaAppearance, 'style'> = {
   fillBottom: palette.infoClear,
 };
 const COLUMNS_DEFAULTS: Omit<ColumnsAppearance, 'style'> = { colorByPreviousClose: false, colors: DEFAULT_COLORS };
+/** The level a baseline turns around when its own setting holds nothing readable: the middle of the range. */
+const DEFAULT_BASE_LEVEL = 50;
+const BASELINE_DEFAULTS: Omit<BaselineAppearance, 'style'> = {
+  priceSource: 'close',
+  baseLevel: DEFAULT_BASE_LEVEL,
+  topLine: palette.up,
+  topFill: palette.upWash,
+  bottomLine: palette.sell,
+  bottomFill: palette.sellWashStrong,
+  lineWidth: 2,
+};
 
 /** The settings field a style declares under `key`; a style declares only the keys its own section holds. */
 function fieldOf(style: BarStyle, key: string) {
@@ -86,6 +103,11 @@ function readPriceSource(style: BarStyle, values: BarStyleSettingValues): PriceS
 function readLineWidth(style: BarStyle, values: BarStyleSettingValues): BarStyleLineWidth | undefined {
   const value = fieldValue(style, LINE_WIDTH_KEY, values);
   return isBarStyleLineWidth(value) ? value : undefined;
+}
+
+function readBaseLevel(values: BarStyleSettingValues): number | undefined {
+  const value = fieldValue('baseline', BASE_LEVEL_KEY, values);
+  return typeof value === 'number' ? value : undefined;
 }
 
 function barsAppearance(style: BarStyle, values: BarStyleSettingValues): BarsAppearance {
@@ -130,6 +152,19 @@ function columnsAppearance(style: BarStyle, values: BarStyleSettingValues): Colu
   };
 }
 
+function baselineAppearance(values: BarStyleSettingValues): BaselineAppearance {
+  return {
+    style: 'baseline',
+    priceSource: readPriceSource('baseline', values) ?? BASELINE_DEFAULTS.priceSource,
+    baseLevel: readBaseLevel(values) ?? BASELINE_DEFAULTS.baseLevel,
+    topLine: readColor('baseline', TOP_LINE_KEY, values) ?? BASELINE_DEFAULTS.topLine,
+    topFill: readColor('baseline', TOP_FILL_KEY, values) ?? BASELINE_DEFAULTS.topFill,
+    bottomLine: readColor('baseline', BOTTOM_LINE_KEY, values) ?? BASELINE_DEFAULTS.bottomLine,
+    bottomFill: readColor('baseline', BOTTOM_FILL_KEY, values) ?? BASELINE_DEFAULTS.bottomFill,
+    lineWidth: readLineWidth('baseline', values) ?? BASELINE_DEFAULTS.lineWidth,
+  };
+}
+
 /**
  * The chart's bar style as the engine draws it. Every value is read through the settings field of its
  * own key, so a store holding nothing readable leaves the chart on the defaults the dialog shows.
@@ -158,9 +193,9 @@ export function barStyleAppearanceOf(style: BarStyle, values: BarStyleSettingVal
       return { style, candles: candleAppearanceOf(values) };
     case 'hollowCandles':
       return { style, candles: candleAppearanceOf(values) };
-    case 'baseline':
     case 'heikinAshi':
-      // Neither is drawn yet: until its own slice lands, both draw the candles the anchor already paints.
-      return { style: 'candles', candles: candleAppearanceOf(values) };
+      return { style, candles: candleAppearanceOf(values) };
+    case 'baseline':
+      return baselineAppearance(values);
   }
 }

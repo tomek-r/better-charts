@@ -70,6 +70,12 @@ test('the default settings of every style map onto the appearance the engine dra
     style: 'hollowCandles',
     candles: DEFAULT_CANDLE_APPEARANCE,
   });
+  expect(barStyleAppearanceOf('heikinAshi', defaults.heikinAshi)).toEqual({
+    style: 'heikinAshi',
+    candles: DEFAULT_CANDLE_APPEARANCE,
+  });
+  // The baseline turns around the middle of the price scale until its own level is saved otherwise.
+  expect(barStyleAppearanceOf('baseline', defaults.baseline)).toMatchObject({ style: 'baseline', baseLevel: 50 });
   expect(barStyleAppearanceOf('bars', defaults.bars)).toEqual({
     style: 'bars',
     colorByPreviousClose: false,
