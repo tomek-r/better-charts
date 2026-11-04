@@ -31,11 +31,11 @@ function CandlesGlyph() {
   );
 }
 
-/** Hollow candles: the candles' wicks and bodies, with the bodies left open. */
+/** Hollow candles: open bodies, with the wicks above and below them and none through them. */
 function HollowCandlesGlyph() {
   return (
     <>
-      <path d="M9.5 4.5v18M19.5 6.5v16" />
+      <path d="M9.5 4.5v5M9.5 17.5v5M19.5 6.5v6M19.5 19.5v3" />
       <rect x="6.5" y="9.5" width="6" height="8" />
       <rect x="16.5" y="12.5" width="6" height="7" />
     </>
