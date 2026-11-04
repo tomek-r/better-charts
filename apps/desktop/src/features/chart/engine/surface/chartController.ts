@@ -34,6 +34,7 @@ import { ChartToolSet, type ChartToolInput } from '../tools/toolSet';
 import { ChartDrawings } from '../drawings/chartDrawings';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installChartDevTestApi, removeDevTestApi } from './devTestApi';
+import { IndicatorLayer } from '../indicators/indicatorLayer';
 import { LiveBarController } from './liveBarController';
 import { HistoryViewportMode } from '../bars/historyViewportMode';
 import { initialHistoryWindow } from '../bars/initialHistoryWindow';
@@ -101,6 +102,8 @@ export class ChartController {
   private readonly olderHistory: OlderHistoryPager;
   /** Selection, user commands and saved records of the chart's drawings. */
   readonly drawings: ChartDrawings;
+  /** The indicators drawn on the price pane, each from the frames its producer hands over. */
+  readonly indicators: IndicatorLayer;
   onToolRelease?: () => void;
 
   constructor(
@@ -113,6 +116,7 @@ export class ChartController {
     this.candles = candles;
     this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
     this.data = new BarSeriesController(this.candles, volume, this.chart);
+    this.indicators = new IndicatorLayer(this.chart);
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
     this.view = new ViewportController(this.chart, this.candles, future, this.data, () => this.removed);
     this.olderHistory = new OlderHistoryPager({
@@ -438,6 +442,7 @@ export class ChartController {
     this.candles.detachPrimitive(this.countdownPrimitive);
     this.candles.detachPrimitive(this.priceTags);
     this.candles.detachPrimitive(this.primitive);
+    this.indicators.destroy();
     this.data.destroy();
     this.chart.remove();
     if (import.meta.env.DEV) {
