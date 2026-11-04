@@ -28,7 +28,7 @@ const DEFAULT_VALUES = resolveSettingValues(
 );
 
 /** A collection holding one visible drawing, with the market port that records its requests. */
-function holdOneDrawing(storedInputs: SettingValues = {}) {
+function holdOneDrawing(storedSettings: SettingValues = {}) {
   const market = createFakeMarketDataPort();
   const queue = new TickProfileRequestQueue(market.port);
   // Only the host members the request path reads.
@@ -44,7 +44,7 @@ function holdOneDrawing(storedInputs: SettingValues = {}) {
     () => undefined,
   );
   const drawing = FixedRangeProfileDrawing.restored(host, queue, { fromMs: FROM_MS, endMs: END_MS }, FROM_MS);
-  const id = collection.add(drawing, { inputs: storedInputs });
+  const id = collection.add(drawing, { settings: storedSettings });
   const rowsAndValueArea = () =>
     market.requests.map(({ rowsLayout, valueAreaPercent }) => ({ rowsLayout, valueAreaPercent }));
   return { collection, market, id, rowsAndValueArea };
@@ -90,9 +90,9 @@ test('a drawing stored with its own rows asks for them in its first request', ()
 
 test('changing the row count, the layout or the value area asks for the profile again', () => {
   const { collection, id, rowsAndValueArea } = holdOneDrawing();
-  collection.setInputs(id, { ...DEFAULT_VALUES, rowsLayout: 'Number Of Rows', rowCount: 64 });
-  collection.setInputs(id, { ...DEFAULT_VALUES, rowCount: 64, rowsLayout: 'Ticks Per Row', ticksPerRow: 5 });
-  collection.setInputs(id, {
+  collection.setSettings(id, { ...DEFAULT_VALUES, rowsLayout: 'Number Of Rows', rowCount: 64 });
+  collection.setSettings(id, { ...DEFAULT_VALUES, rowCount: 64, rowsLayout: 'Ticks Per Row', ticksPerRow: 5 });
+  collection.setSettings(id, {
     ...DEFAULT_VALUES,
     rowCount: 64,
     rowsLayout: 'Ticks Per Row',
@@ -124,7 +124,7 @@ const RENDER_ONLY_CHANGES: ReadonlyArray<{ name: string; change: SettingValues }
 for (const { name, change } of RENDER_ONLY_CHANGES) {
   test(`changing ${name} repaints without a new request`, () => {
     const { collection, market, id } = holdOneDrawing();
-    collection.setInputs(id, { ...DEFAULT_VALUES, ...change });
+    collection.setSettings(id, { ...DEFAULT_VALUES, ...change });
     expect(market.requests).toHaveLength(1);
   });
 }
@@ -137,14 +137,14 @@ test('the width percent accepts 1 to 100 and falls back to 20 outside them', () 
 
 test('an inactive field changes nothing the backend would compute', () => {
   const { collection, market, id } = holdOneDrawing();
-  collection.setInputs(id, { ...DEFAULT_VALUES, rowCount: 40 });
+  collection.setSettings(id, { ...DEFAULT_VALUES, rowCount: 40 });
   expect(market.requests).toHaveLength(1);
 });
 
 test('a hidden drawing asks for nothing until it is shown again, then with the new rows', () => {
   const { collection, id, rowsAndValueArea } = holdOneDrawing();
   collection.setVisible(id, false);
-  collection.setInputs(id, { ...DEFAULT_VALUES, rowsLayout: 'Number Of Rows', rowCount: 32 });
+  collection.setSettings(id, { ...DEFAULT_VALUES, rowsLayout: 'Number Of Rows', rowCount: 32 });
   expect(rowsAndValueArea()).toHaveLength(1);
   collection.setVisible(id, true);
   expect(rowsAndValueArea().at(-1)).toEqual({ rowsLayout: { kind: 'rows', count: 32 }, valueAreaPercent: 70 });

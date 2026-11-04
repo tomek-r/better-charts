@@ -105,7 +105,7 @@ function storedRecord(drawing: { readonly id: string; readonly belowBars: boolea
     locked: false,
     visible: true,
     timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
-    inputs: {},
+    settings: {},
     points: [ORIGIN_POINT],
   };
 }
@@ -511,11 +511,11 @@ test('showing the selected hidden drawing updates the selection to visible', () 
 test('new settings on a drawing are reported only when the tool accepts them', () => {
   const harness = buildToolSet();
   const drawingId = seedDrawing(harness, 'a', 5);
-  harness.tools.setDrawingInputs('a', drawingId, { period: 30 });
+  harness.tools.setDrawingSettings('a', drawingId, { period: 30 });
   expect(harness.reports.drawingsChanged).toBe(1);
-  harness.tools.setDrawingInputs('a', 'missing', { period: 50 });
+  harness.tools.setDrawingSettings('a', 'missing', { period: 50 });
   expect(harness.reports.drawingsChanged).toBe(1);
-  expect(harness.drawings.get('a')?.exportRecords()[0]?.inputs).toEqual({ period: 30 });
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.settings).toEqual({ period: 30 });
 });
 
 test('new anchors on the selected drawing are reported once and keep it selected', () => {
@@ -564,7 +564,7 @@ test('importing hands each tool only its own records, drops unknown tools and re
       toolId: 'b',
       locked: true,
       visible: false,
-      inputs: { period: 20 },
+      settings: { period: 20 },
     },
     { ...storedRecord({ id: 'c-1', belowBars: false }), toolId: 'c' },
   ];
@@ -592,7 +592,7 @@ test('an imported record keeps its id, flags and settings', () => {
     ...storedRecord({ id: 'a-1', belowBars: false }),
     locked: true,
     visible: false,
-    inputs: { period: 55 },
+    settings: { period: 55 },
   };
 
   harness.tools.replaceDrawings([record]);
@@ -720,7 +720,7 @@ test('the timeframe visibility survives an import and is forgotten with its draw
   const harness = buildToolSet({ toolIds: ['a'] });
   const record = {
     ...storedRecord({ id: 'a-1', belowBars: false }),
-    inputs: { period: 20 },
+    settings: { period: 20 },
     timeframeVisibility: SHOWN_ON_SHORT_MINUTES_ONLY,
   };
 
@@ -847,7 +847,7 @@ test('a tool that places no drawings answers as if it had none', () => {
   expect(tools.deleteDrawing('pointer', 'missing')).toBe(false);
   expect(tools.pointerDown(1, 1)).toBe(false);
   tools.setDrawingVisible('pointer', 'missing', false);
-  tools.setDrawingInputs('pointer', 'missing', { period: 1 });
+  tools.setDrawingSettings('pointer', 'missing', { period: 1 });
   tools.replaceDrawings([{ ...storedRecord({ id: 'a-1', belowBars: false }), toolId: 'pointer' }]);
   expect(tools.exportDrawings()).toEqual([]);
 });

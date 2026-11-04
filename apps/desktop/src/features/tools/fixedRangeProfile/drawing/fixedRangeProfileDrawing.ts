@@ -285,9 +285,9 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
    * request replaces the awaited one and, for this drawing, the load in flight. The rest repaint with the
    * collection's own repaint.
    */
-  settingsChanged(inputs: SettingValues): void {
+  settingsChanged(settings: SettingValues): void {
     const previous = this.settings.requestParams;
-    this.settings = readFixedRangeProfileSettings(inputs);
+    this.settings = readFixedRangeProfileSettings(settings);
     if (this.shown && !sameProfileRequestParams(previous, this.settings.requestParams)) {
       this.requestProfile();
     }

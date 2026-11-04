@@ -25,7 +25,7 @@ export function savedProfile(id: string, { locked, visible, belowBars, timeframe
     visible,
     belowBars,
     timeframeVisibility,
-    inputs: {},
+    settings: {},
     points: [
       { timeMs: STUB_NOW - 8 * STUB_M5_INTERVAL_MS, price: null },
       { timeMs: STUB_NOW - 3 * STUB_M5_INTERVAL_MS, price: null },

@@ -219,7 +219,7 @@ const STORED_DRAWING = {
   visible: true,
   belowBars: false,
   timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
-  inputs: { period: 20, filled: true, basis: 'hlc3' },
+  settings: { period: 20, filled: true, basis: 'hlc3' },
   points: [
     { timeMs: 1_700_000_000_000, price: null },
     { timeMs: null, price: '1.08505' },
@@ -267,7 +267,7 @@ const REJECTED_DRAWINGS: ReadonlyArray<{ name: string; value: unknown }> = [
   { name: 'a drawing with an empty tool id', value: { ...STORED_DRAWING, toolId: '' } },
   { name: 'a drawing whose lock flag is not a boolean', value: { ...STORED_DRAWING, locked: 'no' } },
   { name: 'a drawing whose below-bars flag is not a boolean', value: { ...STORED_DRAWING, belowBars: 'below' } },
-  { name: 'a drawing with an object as an input value', value: { ...STORED_DRAWING, inputs: { period: {} } } },
+  { name: 'a drawing with an object as an input value', value: { ...STORED_DRAWING, settings: { period: {} } } },
   { name: 'a drawing that is not a record at all', value: 'drawing-1' },
 ];
 

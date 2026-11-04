@@ -57,7 +57,7 @@ function drawingList(...ids: string[]): ChartDrawingRecord[] {
     visible: true,
     belowBars: false,
     timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
-    inputs: {},
+    settings: {},
     points: [{ timeMs: 0, price: null }],
   }));
 }

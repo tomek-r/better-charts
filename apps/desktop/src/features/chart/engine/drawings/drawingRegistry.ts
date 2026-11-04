@@ -129,8 +129,8 @@ export class DrawingRegistry implements ChartDrawingCommands {
   }
 
   /** Applies new settings to one drawing; the owner saves when the tool accepted them. */
-  setDrawingInputs(toolId: string, drawingId: string, inputs: SettingValues): void {
-    if (this.drawingsOf(toolId)?.setInputs(drawingId, inputs) === true) {
+  setDrawingSettings(toolId: string, drawingId: string, settings: SettingValues): void {
+    if (this.drawingsOf(toolId)?.setSettings(drawingId, settings) === true) {
       this.listeners.drawingsChanged();
     }
   }

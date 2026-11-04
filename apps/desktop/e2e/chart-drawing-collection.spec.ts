@@ -57,16 +57,16 @@ function buildCollection(
 
 /** A record as the app stores it, so an import test changes only the part it is about. */
 function recordOf(points: ChartDrawingPoint[], patch: Partial<ChartToolDrawingRecord> = {}): ChartToolDrawingRecord {
-  return { id: 'stored-1', locked: false, visible: true, inputs: {}, points, ...patch };
+  return { id: 'stored-1', locked: false, visible: true, settings: {}, points, ...patch };
 }
 
 test('an added drawing exports its id, flags, settings and points, and hears that it is shown', () => {
   const { collection } = buildCollection();
   const drawing = new FakeDrawingShape(10, [TIME_POINT, BOTH_POINT]);
-  const id = collection.add(drawing, { locked: true, visible: true, inputs: { period: 30 } });
+  const id = collection.add(drawing, { locked: true, visible: true, settings: { period: 30 } });
 
   expect(collection.exportRecords()).toEqual([
-    { id, locked: true, visible: true, inputs: { period: 30 }, points: [TIME_POINT, BOTH_POINT] },
+    { id, locked: true, visible: true, settings: { period: 30 }, points: [TIME_POINT, BOTH_POINT] },
   ]);
   expect(collection.isLocked(id)).toBe(true);
   expect(collection.isVisible(id)).toBe(true);
@@ -77,7 +77,7 @@ test('a drawing added without state starts unlocked, visible, with the tool defa
   const { collection } = buildCollection();
   const id = collection.add(new FakeDrawingShape(10, [TIME_POINT, TIME_POINT]));
   expect(collection.exportRecords()).toEqual([
-    { id, locked: false, visible: true, inputs: { period: 20 }, points: [TIME_POINT, TIME_POINT] },
+    { id, locked: false, visible: true, settings: { period: 20 }, points: [TIME_POINT, TIME_POINT] },
   ]);
 });
 
@@ -130,13 +130,13 @@ for (const { name, rule, kept, dropped } of RULE_CASES) {
 test('an import resolves the settings against the definitions, dropping unknown keys and bad values', () => {
   const { collection } = buildCollection();
   collection.importRecords([
-    recordOf([TIME_POINT, TIME_POINT], { id: 'stored', inputs: { period: 55, vanished: 5 } }),
-    recordOf([TIME_POINT, TIME_POINT], { id: 'invalid', inputs: { period: 'old' } }),
+    recordOf([TIME_POINT, TIME_POINT], { id: 'stored', settings: { period: 55, vanished: 5 } }),
+    recordOf([TIME_POINT, TIME_POINT], { id: 'invalid', settings: { period: 'old' } }),
   ]);
 
-  expect(collection.exportRecords().map(({ id, inputs }) => ({ id, inputs }))).toEqual([
-    { id: 'stored', inputs: { period: 55 } },
-    { id: 'invalid', inputs: { period: 20 } },
+  expect(collection.exportRecords().map(({ id, settings }) => ({ id, settings }))).toEqual([
+    { id: 'stored', settings: { period: 55 } },
+    { id: 'invalid', settings: { period: 20 } },
   ]);
 });
 
@@ -272,11 +272,11 @@ test('a missing id changes no drawing, and selecting it clears the selection', (
   const id = collection.add(new FakeDrawingShape(10));
   collection.select(id);
 
-  expect(collection.setInputs('missing', { period: 40 })).toBe(false);
+  expect(collection.setSettings('missing', { period: 40 })).toBe(false);
   expect(collection.setLocked('missing', true)).toBe(false);
   collection.select('missing');
 
-  expect(collection.exportRecords()[0].inputs).toEqual({ period: 20 });
+  expect(collection.exportRecords()[0].settings).toEqual({ period: 20 });
   expect(collection.isLocked(id)).toBe(false);
   expect(selectedId(collection)).toBeNull();
 });
@@ -292,7 +292,7 @@ function collectionWithFlaggedDrawing(): { collection: Collection; id: string; o
   const { collection } = buildCollection();
   const below = collection.add(new FakeDrawingShape(10, [TIME_POINT, TIME_POINT]));
   const old = new FakeDrawingShape(11, [TIME_POINT, TIME_POINT]);
-  const id = collection.add(old, { locked: true, visible: false, inputs: { period: 30 } });
+  const id = collection.add(old, { locked: true, visible: false, settings: { period: 30 } });
   const above = collection.add(new FakeDrawingShape(12, [TIME_POINT, TIME_POINT]));
   return { collection, id, old, ids: [below, id, above] };
 }
@@ -308,7 +308,7 @@ test('moving a drawing to new anchors keeps its id, flags, settings and place in
     id,
     locked: true,
     visible: false,
-    inputs: { period: 30 },
+    settings: { period: 30 },
     points: MOVED_POINTS,
   });
   expect(selectedId(collection)).toBe(id);

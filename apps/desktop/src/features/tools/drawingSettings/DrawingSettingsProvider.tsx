@@ -38,7 +38,7 @@ function storedDrawingState(
 ): Pick<OpenDrawingSettings, 'values' | 'points' | 'timeframeVisibility'> {
   const record = drawings?.exportRecords().find((entry) => entry.toolId === toolId && entry.id === drawingId);
   return {
-    values: resolveSettingValues(settings, record?.inputs),
+    values: resolveSettingValues(settings, record?.settings),
     points: record?.points ?? [],
     timeframeVisibility: record?.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY,
   };
@@ -134,7 +134,7 @@ export function DrawingSettingsProvider({ children }: DrawingSettingsProviderPro
       if (points !== undefined && !drawings.setPoints(target.toolId, target.drawingId, points)) {
         return false;
       }
-      drawings.setInputs(target.toolId, target.drawingId, values);
+      drawings.setSettings(target.toolId, target.drawingId, values);
       if (timeframeVisibility !== undefined) {
         drawings.setTimeframeVisibility(target.toolId, target.drawingId, timeframeVisibility);
       }

@@ -230,8 +230,8 @@ export class ChartToolSet implements ChartDrawingCommands, ChartToolInput {
     this.registry.setDrawingTimeframeVisibility(toolId, drawingId, visibility);
   }
 
-  setDrawingInputs(toolId: string, drawingId: string, inputs: SettingValues): void {
-    this.registry.setDrawingInputs(toolId, drawingId, inputs);
+  setDrawingSettings(toolId: string, drawingId: string, settings: SettingValues): void {
+    this.registry.setDrawingSettings(toolId, drawingId, settings);
   }
 
   setDrawingPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean {

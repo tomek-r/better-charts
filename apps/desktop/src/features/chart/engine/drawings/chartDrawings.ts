@@ -10,7 +10,7 @@ export interface ChartDrawingCommands {
   deleteDrawing(toolId: string, drawingId: string): boolean;
   setDrawingLocked(toolId: string, drawingId: string, locked: boolean): void;
   setDrawingVisible(toolId: string, drawingId: string, visible: boolean): void;
-  setDrawingInputs(toolId: string, drawingId: string, inputs: SettingValues): void;
+  setDrawingSettings(toolId: string, drawingId: string, settings: SettingValues): void;
   setDrawingTimeframeVisibility(toolId: string, drawingId: string, visibility: DrawingTimeframeVisibility): void;
   setDrawingPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean;
   exportDrawings(): ChartDrawingRecord[];
@@ -167,8 +167,8 @@ export class ChartDrawings {
     this.repaint();
   }
 
-  setInputs(toolId: string, drawingId: string, inputs: SettingValues): void {
-    this.commands.setDrawingInputs(toolId, drawingId, inputs);
+  setSettings(toolId: string, drawingId: string, settings: SettingValues): void {
+    this.commands.setDrawingSettings(toolId, drawingId, settings);
     this.repaint();
   }
 

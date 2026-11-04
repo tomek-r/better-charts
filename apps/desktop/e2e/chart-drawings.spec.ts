@@ -87,8 +87,8 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
     setDrawingVisible: (toolId, drawingId, visible) => {
       calls.push({ name: 'setDrawingVisible', args: [toolId, drawingId, visible] });
     },
-    setDrawingInputs: (toolId, drawingId, inputs) => {
-      calls.push({ name: 'setDrawingInputs', args: [toolId, drawingId, inputs] });
+    setDrawingSettings: (toolId, drawingId, settings) => {
+      calls.push({ name: 'setDrawingSettings', args: [toolId, drawingId, settings] });
     },
     setDrawingTimeframeVisibility: (toolId, drawingId, visibility) => {
       calls.push({ name: 'setDrawingTimeframeVisibility', args: [toolId, drawingId, visibility] });
@@ -124,7 +124,7 @@ function recordOf(id: string): ChartDrawingRecord {
     visible: true,
     belowBars: false,
     timeframeVisibility: DEFAULT_TIMEFRAME_VISIBILITY,
-    inputs: {},
+    settings: {},
     points: [ANCHOR],
   };
 }
@@ -237,9 +237,9 @@ test('hiding a drawing reaches the commands with the same arguments and repaints
 
 test('new settings reach the commands with the same arguments and repaint once', () => {
   const { drawings, calls, timeline } = buildHarness();
-  const inputs: SettingValues = { period: 30 };
-  drawings.setInputs('trend-line', 'line-1', inputs);
-  expect(calls).toEqual([{ name: 'setDrawingInputs', args: ['trend-line', 'line-1', inputs] }]);
+  const settings: SettingValues = { period: 30 };
+  drawings.setSettings('trend-line', 'line-1', settings);
+  expect(calls).toEqual([{ name: 'setDrawingSettings', args: ['trend-line', 'line-1', settings] }]);
   expect(timeline).toEqual(['repaint']);
 });
 

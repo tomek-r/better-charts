@@ -23,6 +23,9 @@ const TIMEFRAME_VISIBILITY_VERSION: u32 = 3;
 const CHART_TIME_ZONE_VERSION: u32 = 4;
 /// The version that gives every chart an identity, a template and settings of its own.
 const CHART_SETTINGS_VERSION: u32 = 5;
+/// The version that names a drawing's stored values for what they are: its settings, inputs and
+/// styles together.
+const DRAWING_SETTINGS_VERSION: u32 = 6;
 
 /// The schema of the first version: one drawing, then its ordered points.
 const CREATE_SCHEMA: &str = "\
@@ -145,6 +148,11 @@ ALTER TABLE chart_drawing_points_next RENAME TO chart_drawing_points;";
 /// rather than carried over.
 const DROP_CHART_TIME_ZONE_TABLE: &str = "DROP TABLE chart_time_zones";
 
+/// The values of a drawing under the name the frontend sends them by now. A rename keeps every
+/// saved value in its row: nothing is copied, converted or dropped.
+const RENAME_DRAWING_INPUTS_TO_SETTINGS: &str =
+    "ALTER TABLE chart_drawings RENAME COLUMN inputs TO settings";
+
 /// The migrations of the app database, applied in order and never undone.
 pub(super) const MIGRATIONS: &[Migration] = &[
     Migration {
@@ -166,6 +174,10 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     Migration {
         target_version: CHART_SETTINGS_VERSION,
         apply: create_chart_settings_schema,
+    },
+    Migration {
+        target_version: DRAWING_SETTINGS_VERSION,
+        apply: rename_drawing_inputs_to_settings,
     },
 ];
 
@@ -191,4 +203,8 @@ fn create_chart_settings_schema(transaction: &Transaction<'_>) -> rusqlite::Resu
     transaction.execute_batch(CREATE_CHART_SETTINGS_TABLES)?;
     transaction.execute_batch(REBUILD_DRAWINGS_WITH_CHART)?;
     transaction.execute_batch(DROP_CHART_TIME_ZONE_TABLE)
+}
+
+fn rename_drawing_inputs_to_settings(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(RENAME_DRAWING_INPUTS_TO_SETTINGS)
 }

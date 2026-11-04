@@ -13,11 +13,11 @@ use std::collections::BTreeMap;
 /// Longest accepted id or tool id of one drawing.
 const MAX_ID_BYTES: usize = 64;
 /// Most settings one drawing may carry.
-const MAX_INPUTS: usize = 64;
+const MAX_SETTINGS: usize = 64;
 /// Longest accepted name of one setting.
-const MAX_INPUT_KEY_BYTES: usize = 64;
+const MAX_SETTING_KEY_BYTES: usize = 64;
 /// Longest accepted text value of one setting.
-const MAX_INPUT_STRING_BYTES: usize = 4096;
+const MAX_SETTING_STRING_BYTES: usize = 4096;
 /// Most anchor points one drawing may carry.
 pub(crate) const MAX_POINTS_PER_DRAWING: usize = 2000;
 /// Longest accepted price text: a full decimal, never an exponent.
@@ -68,7 +68,8 @@ pub(crate) struct ChartDrawingRecord {
     /// On which timeframes the drawing paints. Absent in older payloads, which show it everywhere.
     #[serde(default)]
     pub(crate) timeframe_visibility: TimeframeVisibility,
-    pub(crate) inputs: BTreeMap<String, Value>,
+    /// The values of the drawing's inputs and styles, keyed by each setting's id.
+    pub(crate) settings: BTreeMap<String, Value>,
     /// The anchors of the drawing, in paint order.
     pub(crate) points: Vec<ChartDrawingPoint>,
 }
@@ -88,26 +89,26 @@ impl ChartDrawingRecord {
             )));
         }
         self.timeframe_visibility.validate()?;
-        self.validate_inputs()?;
+        self.validate_settings()?;
         self.validate_points()
     }
 
-    fn validate_inputs(&self) -> Result<(), ChartDrawingError> {
-        if self.inputs.len() > MAX_INPUTS {
+    fn validate_settings(&self) -> Result<(), ChartDrawingError> {
+        if self.settings.len() > MAX_SETTINGS {
             return Err(ChartDrawingError::Invalid(format!(
-                "A drawing holds at most {MAX_INPUTS} settings"
+                "A drawing holds at most {MAX_SETTINGS} settings"
             )));
         }
-        for (name, value) in &self.inputs {
-            if !is_present_within(name, MAX_INPUT_KEY_BYTES) {
+        for (name, value) in &self.settings {
+            if !is_present_within(name, MAX_SETTING_KEY_BYTES) {
                 return Err(ChartDrawingError::Invalid(format!(
-                    "A drawing setting needs a name of 1 to {MAX_INPUT_KEY_BYTES} bytes"
+                    "A drawing setting needs a name of 1 to {MAX_SETTING_KEY_BYTES} bytes"
                 )));
             }
-            if !is_storable_input_value(value) {
+            if !is_storable_setting_value(value) {
                 return Err(ChartDrawingError::Invalid(format!(
                     "A drawing setting holds a number, a boolean or a string of at most \
-                     {MAX_INPUT_STRING_BYTES} bytes"
+                     {MAX_SETTING_STRING_BYTES} bytes"
                 )));
             }
         }
@@ -127,10 +128,10 @@ impl ChartDrawingRecord {
     }
 }
 
-fn is_storable_input_value(value: &Value) -> bool {
+fn is_storable_setting_value(value: &Value) -> bool {
     match value {
         Value::Number(_) | Value::Bool(_) => true,
-        Value::String(text) => text.len() <= MAX_INPUT_STRING_BYTES,
+        Value::String(text) => text.len() <= MAX_SETTING_STRING_BYTES,
         Value::Null | Value::Array(_) | Value::Object(_) => false,
     }
 }
@@ -175,7 +176,7 @@ mod tests {
             visible: true,
             below_bars: false,
             timeframe_visibility: TimeframeVisibility::default(),
-            inputs: BTreeMap::from([("rows".into(), json!(128))]),
+            settings: BTreeMap::from([("rows".into(), json!(128))]),
             points: vec![point(Some(1), None), point(Some(2), None)],
         }
     }
@@ -194,14 +195,14 @@ mod tests {
     fn a_stored_record_uses_the_frontend_field_names() {
         let stored: ChartDrawingRecord = serde_json::from_str(
             r#"{"id":"profile-1","toolId":"fixedRangeProfile","locked":false,"visible":true,
-                "inputs":{},"points":[{"timeMs":1700000000000,"price":null},{"timeMs":null,"price":"1.0850"}]}"#,
+                "settings":{},"points":[{"timeMs":1700000000000,"price":null},{"timeMs":null,"price":"1.0850"}]}"#,
         )
         .expect("the record parses");
 
         assert_eq!(stored.points[0].time_ms, Some(1_700_000_000_000));
         assert_eq!(stored.points[1].price.as_deref(), Some("1.0850"));
 
-        let unknown_field = r#"{"id":"p","toolId":"t","locked":false,"visible":true,"inputs":{},
+        let unknown_field = r#"{"id":"p","toolId":"t","locked":false,"visible":true,"settings":{},
             "points":[{"timeMs":1,"price":null}],"geometry":null}"#;
         assert!(serde_json::from_str::<ChartDrawingRecord>(unknown_field).is_err());
     }
@@ -228,14 +229,14 @@ mod tests {
     #[test]
     fn the_number_of_settings_is_bounded() {
         let mut crowded = record();
-        crowded.inputs = (0..=MAX_INPUTS)
+        crowded.settings = (0..=MAX_SETTINGS)
             .map(|index| (format!("setting-{index}"), json!(index)))
             .collect();
 
         assert!(refusal(crowded).contains("settings"));
 
         let mut full = record();
-        full.inputs = (0..MAX_INPUTS)
+        full.settings = (0..MAX_SETTINGS)
             .map(|index| (format!("setting-{index}"), json!(index)))
             .collect();
         assert!(full.validate().is_ok());
@@ -244,11 +245,11 @@ mod tests {
     #[test]
     fn setting_names_are_required_and_bounded() {
         let mut unnamed = record();
-        unnamed.inputs = BTreeMap::from([(String::new(), json!(1))]);
+        unnamed.settings = BTreeMap::from([(String::new(), json!(1))]);
         assert!(refusal(unnamed).contains("name"));
 
         let mut long_name = record();
-        long_name.inputs = BTreeMap::from([("k".repeat(MAX_INPUT_KEY_BYTES + 1), json!(1))]);
+        long_name.settings = BTreeMap::from([("k".repeat(MAX_SETTING_KEY_BYTES + 1), json!(1))]);
         assert!(refusal(long_name).contains("name"));
     }
 
@@ -256,20 +257,22 @@ mod tests {
     fn a_setting_value_is_a_number_a_boolean_or_a_bounded_string() {
         for refused in [json!(null), json!([1]), json!({ "nested": 1 })] {
             let mut record = record();
-            record.inputs = BTreeMap::from([("setting".into(), refused)]);
+            record.settings = BTreeMap::from([("setting".into(), refused)]);
             assert!(refusal(record).contains("number, a boolean or a string"));
         }
 
         let mut long_text = record();
-        long_text.inputs =
-            BTreeMap::from([("note".into(), json!("x".repeat(MAX_INPUT_STRING_BYTES + 1)))]);
+        long_text.settings = BTreeMap::from([(
+            "note".into(),
+            json!("x".repeat(MAX_SETTING_STRING_BYTES + 1)),
+        )]);
         assert!(refusal(long_text).contains("number, a boolean or a string"));
 
         let mut storable = record();
-        storable.inputs = BTreeMap::from([
+        storable.settings = BTreeMap::from([
             ("rows".into(), json!(12)),
             ("visible".into(), json!(true)),
-            ("label".into(), json!("x".repeat(MAX_INPUT_STRING_BYTES))),
+            ("label".into(), json!("x".repeat(MAX_SETTING_STRING_BYTES))),
         ]);
         assert!(storable.validate().is_ok());
     }

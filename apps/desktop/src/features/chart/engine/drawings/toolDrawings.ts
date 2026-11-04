@@ -23,7 +23,7 @@ export interface ChartDrawingShape {
    * before its first visibility, so a drawing that owns backend work starts it with the right inputs;
    * a drawing whose settings only change how it paints omits the member.
    */
-  settingsChanged?(inputs: SettingValues): void;
+  settingsChanged?(settings: SettingValues): void;
   /** The drawing goes away: release everything it still holds. */
   dispose(): void;
 }
@@ -82,7 +82,7 @@ export interface ChartToolDrawings {
   /** Whether the drawing is painted; false when the tool has no drawing with that id. */
   isVisible(drawingId: string): boolean;
   /** Replaces one drawing's settings; false when the tool has no drawing with that id. */
-  setInputs(drawingId: string, inputs: SettingValues): boolean;
+  setSettings(drawingId: string, settings: SettingValues): boolean;
   /**
    * Moves one drawing to new anchors, keeping its id, flags, settings, selection and paint position;
    * false when the tool has no such drawing or does not accept the anchors.

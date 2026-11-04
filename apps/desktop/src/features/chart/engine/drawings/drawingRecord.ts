@@ -22,7 +22,7 @@ export interface ChartToolDrawingRecord {
   readonly locked: boolean;
   /** Whether the drawing is painted; hiding is stored, and its behaviour arrives separately. */
   readonly visible: boolean;
-  readonly inputs: SettingValues;
+  readonly settings: SettingValues;
   /** The anchors, in paint order. */
   readonly points: readonly ChartDrawingPoint[];
 }
@@ -80,11 +80,11 @@ export function readChartDrawingRecord(value: unknown): ChartDrawingRecord | und
   if (!isPlainRecord(value)) {
     return undefined;
   }
-  const { id, toolId, locked, visible, belowBars, timeframeVisibility, inputs, points } = value;
+  const { id, toolId, locked, visible, belowBars, timeframeVisibility, settings, points } = value;
   if (!isPresentString(id) || !isPresentString(toolId)) {
     return undefined;
   }
-  if (typeof locked !== 'boolean' || typeof visible !== 'boolean' || !isSettingValues(inputs)) {
+  if (typeof locked !== 'boolean' || typeof visible !== 'boolean' || !isSettingValues(settings)) {
     return undefined;
   }
   const below = readBelowBars(belowBars);
@@ -99,7 +99,7 @@ export function readChartDrawingRecord(value: unknown): ChartDrawingRecord | und
     visible,
     belowBars: below,
     timeframeVisibility: readTimeframeVisibility(timeframeVisibility),
-    inputs,
+    settings,
     points: anchors,
   };
 }
