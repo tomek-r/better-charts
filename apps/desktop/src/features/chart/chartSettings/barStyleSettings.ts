@@ -9,6 +9,7 @@ import type {
   LineWidthSettingField,
   SettingsSectionFields,
   ToggledColorPairSettingField,
+  ToggledColorSettingField,
 } from './settingFields';
 
 type BarStyleSettingsSection = SettingsSectionFields;
@@ -46,6 +47,27 @@ const WICK_FIELD: ToggledColorPairSettingField = {
   key: 'wick',
   label: 'Wick',
   defaultValue: { visible: true, up: palette.up, down: palette.sell },
+};
+
+const HIGH_LOW_BODY_FIELD: ToggledColorSettingField = {
+  kind: 'toggledColor',
+  key: 'body',
+  label: 'Body',
+  defaultValue: { visible: true, color: palette.info },
+};
+
+const HIGH_LOW_BORDERS_FIELD: ToggledColorSettingField = {
+  kind: 'toggledColor',
+  key: 'borders',
+  label: 'Borders',
+  defaultValue: { visible: true, color: palette.info },
+};
+
+const HIGH_LOW_LABELS_FIELD: ToggledColorSettingField = {
+  kind: 'toggledColor',
+  key: 'labels',
+  label: 'Labels',
+  defaultValue: { visible: true, color: palette.info },
 };
 
 const PRICE_SOURCE_FIELD: ChoiceSettingField = {
@@ -114,6 +136,12 @@ const BASELINE_FIELDS: readonly ChartSettingField[] = [
 
 const COLUMNS_FIELDS: readonly ChartSettingField[] = [COLOR_BY_PREVIOUS_CLOSE_FIELD, COLORS_FIELD];
 
+const HIGH_LOW_FIELDS: readonly ChartSettingField[] = [
+  HIGH_LOW_BODY_FIELD,
+  HIGH_LOW_BORDERS_FIELD,
+  HIGH_LOW_LABELS_FIELD,
+];
+
 function settingsSection(style: BarStyle, fields: readonly ChartSettingField[]): BarStyleSettingsSection {
   return { title: barStyleLabel(style), fields };
 }
@@ -123,11 +151,13 @@ export const BAR_STYLE_SETTINGS: Readonly<Record<BarStyle, BarStyleSettingsSecti
   bars: settingsSection('bars', BARS_FIELDS),
   candles: settingsSection('candles', CANDLE_FIELDS),
   hollowCandles: settingsSection('hollowCandles', CANDLE_FIELDS),
+  volumeCandles: settingsSection('volumeCandles', CANDLE_FIELDS),
   line: settingsSection('line', LINE_FIELDS),
   lineWithMarkers: settingsSection('lineWithMarkers', LINE_FIELDS),
   stepLine: settingsSection('stepLine', LINE_FIELDS),
   area: settingsSection('area', AREA_FIELDS),
   baseline: settingsSection('baseline', BASELINE_FIELDS),
   columns: settingsSection('columns', COLUMNS_FIELDS),
+  highLow: settingsSection('highLow', HIGH_LOW_FIELDS),
   heikinAshi: settingsSection('heikinAshi', CANDLE_FIELDS),
 };

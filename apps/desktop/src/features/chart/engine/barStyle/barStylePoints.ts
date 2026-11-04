@@ -8,11 +8,18 @@ import type {
   DrawnBarStyleAppearance,
   HeikinAshiAppearance,
   HollowCandlesAppearance,
+  VolumeCandlesAppearance,
 } from './barStyleAppearance';
+import type { HighLowPoint } from './highLow/highLowPoint';
 import { priceAt, type PriceSource } from './priceSource';
+import type { VolumeCandlePoint } from './volumeCandles/volumeCandlePoint';
 
-/** The point a bar style series holds: the library's own shape for the series type that draws the style. */
-export type BarStylePoint = BarData<Time> | CandlestickData<Time> | HistogramData<Time> | LineData<Time>;
+/**
+ * The point a bar style series holds: the library's own shape for the series type that draws the style, or
+ * the shape a custom series of the chart's own draws.
+ */
+export type BarStylePoint =
+  BarData<Time> | CandlestickData<Time> | HistogramData<Time> | LineData<Time> | VolumeCandlePoint | HighLowPoint;
 
 /** A hollow candle paints its body as a hole, so a part that is off writes no colour at all. */
 const TRANSPARENT = 'transparent';
@@ -105,6 +112,28 @@ function barsPoint(appearance: BarsAppearance, bar: RenderBar, previous: RenderB
   };
 }
 
+/** One volume candle: the bar's prices, the volume its body width follows and the colours of a candle. */
+function volumeCandlePoint(
+  appearance: VolumeCandlesAppearance,
+  bar: RenderBar,
+  previous: RenderBar | undefined,
+): VolumeCandlePoint {
+  return {
+    time: bar.time as UTCTimestamp,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
+    ...candlePointColors(appearance.candles, bar, previous),
+  };
+}
+
+/** One high-low bar: the range a custom series draws as a box, which is all its points hold. */
+function highLowPoint(bar: RenderBar): HighLowPoint {
+  return { time: bar.time as UTCTimestamp, high: bar.high, low: bar.low };
+}
+
 /** A column stands for the bar's close, coloured by the direction its style was saved with. */
 function columnsPoint(
   appearance: ColumnsAppearance,
@@ -125,6 +154,10 @@ export function barStylePoint(
       return hollowCandlePoint(appearance, bar, previous);
     case 'heikinAshi':
       return heikinAshiCandlePoint(appearance, bar, previous);
+    case 'volumeCandles':
+      return volumeCandlePoint(appearance, bar, previous);
+    case 'highLow':
+      return highLowPoint(bar);
     case 'bars':
       return barsPoint(appearance, bar, previous);
     case 'columns':

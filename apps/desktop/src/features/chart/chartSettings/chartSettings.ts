@@ -58,19 +58,14 @@ const TOP_MARGIN_KEY = 'topMargin';
 const BOTTOM_MARGIN_KEY = 'bottomMargin';
 const MARGIN_PERCENT_LIMIT = 90;
 
+/** One value per bar style, keyed by the style that names it; `BAR_STYLES` supplies the styles, so none is missed. */
 function everyBarStyle(valuesFor: (style: BarStyle) => BarStyleSettingValues): BarStylesByStyle {
-  return {
-    bars: valuesFor('bars'),
-    candles: valuesFor('candles'),
-    hollowCandles: valuesFor('hollowCandles'),
-    line: valuesFor('line'),
-    lineWithMarkers: valuesFor('lineWithMarkers'),
-    stepLine: valuesFor('stepLine'),
-    area: valuesFor('area'),
-    baseline: valuesFor('baseline'),
-    columns: valuesFor('columns'),
-    heikinAshi: valuesFor('heikinAshi'),
-  };
+  const barStyles: Partial<Record<BarStyle, BarStyleSettingValues>> = {};
+  for (const style of BAR_STYLES) {
+    barStyles[style] = valuesFor(style);
+  }
+  // `BAR_STYLES` names every style, so the record now holds a value for each of them.
+  return barStyles as BarStylesByStyle;
 }
 
 /** Every field's default, which is what a group of settings starts from. */

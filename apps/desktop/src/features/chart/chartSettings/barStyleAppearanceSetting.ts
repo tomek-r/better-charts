@@ -10,7 +10,9 @@ import {
   type BaselineAppearance,
   type ColumnsAppearance,
   type DrawnBarStyleAppearance,
+  type HighLowAppearance,
   type LineStyleAppearance,
+  type ToggledColor,
 } from '../engine/barStyle/barStyleAppearance';
 import { isPriceSource, type PriceSource } from '../engine/barStyle/priceSource';
 import { BAR_STYLE_SETTINGS } from './barStyleSettings';
@@ -33,6 +35,9 @@ const TOP_LINE_KEY = 'topLine';
 const TOP_FILL_KEY = 'topFill';
 const BOTTOM_LINE_KEY = 'bottomLine';
 const BOTTOM_FILL_KEY = 'bottomFill';
+const BODY_KEY = 'body';
+const BORDERS_KEY = 'borders';
+const LABELS_KEY = 'labels';
 
 /**
  * What a style draws when its own settings hold nothing its fields can explain — the values the
@@ -65,6 +70,13 @@ const BASELINE_DEFAULTS: Omit<BaselineAppearance, 'style'> = {
   bottomFill: palette.sellWashStrong,
   lineWidth: 2,
 };
+/** The colour each part of a high-low bar is drawn in until its own setting is saved otherwise. */
+const HIGH_LOW_COLOR: ToggledColor = { visible: true, color: palette.info };
+const HIGH_LOW_DEFAULTS: Omit<HighLowAppearance, 'style'> = {
+  body: HIGH_LOW_COLOR,
+  borders: HIGH_LOW_COLOR,
+  labels: HIGH_LOW_COLOR,
+};
 
 /** The settings field a style declares under `key`; a style declares only the keys its own section holds. */
 function fieldOf(style: BarStyle, key: string) {
@@ -93,6 +105,14 @@ function readColorPair(style: BarStyle, key: string, values: BarStyleSettingValu
     return undefined;
   }
   return { up: value.up, down: value.down };
+}
+
+function readToggledColor(style: BarStyle, key: string, values: BarStyleSettingValues): ToggledColor | undefined {
+  const value = fieldValue(style, key, values);
+  if (!isSettingRecord(value) || typeof value.visible !== 'boolean' || typeof value.color !== 'string') {
+    return undefined;
+  }
+  return { visible: value.visible, color: value.color };
 }
 
 function readPriceSource(style: BarStyle, values: BarStyleSettingValues): PriceSource | undefined {
@@ -165,6 +185,15 @@ function baselineAppearance(values: BarStyleSettingValues): BaselineAppearance {
   };
 }
 
+function highLowAppearance(values: BarStyleSettingValues): HighLowAppearance {
+  return {
+    style: 'highLow',
+    body: readToggledColor('highLow', BODY_KEY, values) ?? HIGH_LOW_DEFAULTS.body,
+    borders: readToggledColor('highLow', BORDERS_KEY, values) ?? HIGH_LOW_DEFAULTS.borders,
+    labels: readToggledColor('highLow', LABELS_KEY, values) ?? HIGH_LOW_DEFAULTS.labels,
+  };
+}
+
 /**
  * The chart's bar style as the engine draws it. Every value is read through the settings field of its
  * own key, so a store holding nothing readable leaves the chart on the defaults the dialog shows.
@@ -193,9 +222,13 @@ export function barStyleAppearanceOf(style: BarStyle, values: BarStyleSettingVal
       return { style, candles: candleAppearanceOf(values) };
     case 'hollowCandles':
       return { style, candles: candleAppearanceOf(values) };
+    case 'volumeCandles':
+      return { style, candles: candleAppearanceOf(values) };
     case 'heikinAshi':
       return { style, candles: candleAppearanceOf(values) };
     case 'baseline':
       return baselineAppearance(values);
+    case 'highLow':
+      return highLowAppearance(values);
   }
 }

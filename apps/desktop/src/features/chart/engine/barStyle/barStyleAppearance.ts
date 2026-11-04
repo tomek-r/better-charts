@@ -14,6 +14,12 @@ export interface BarDirectionColors {
   readonly down: string;
 }
 
+/** A colour a switch draws one part of a bar in, and whether that part is drawn at all. */
+export interface ToggledColor {
+  readonly visible: boolean;
+  readonly color: string;
+}
+
 /** Plain candles, which the anchor series draws itself from the chart's body, border and wick settings. */
 export interface CandleStyleAppearance {
   readonly style: 'candles';
@@ -79,22 +85,52 @@ export interface HeikinAshiAppearance {
   readonly candles: CandleAppearance;
 }
 
+/**
+ * Candles whose body width grows with the bar's volume, which a custom series draws from the chart's
+ * body, border and wick settings.
+ */
+export interface VolumeCandlesAppearance {
+  readonly style: 'volumeCandles';
+  readonly candles: CandleAppearance;
+}
+
+/** The range as a box from the low to the high, labelled at both prices, which a custom series draws. */
+export interface HighLowAppearance {
+  readonly style: 'highLow';
+  readonly body: ToggledColor;
+  readonly borders: ToggledColor;
+  readonly labels: ToggledColor;
+}
+
 /** How the chart draws its bars, which is the one thing the bar style setting decides. */
 export type BarStyleAppearance =
   | CandleStyleAppearance
   | HollowCandlesAppearance
+  | VolumeCandlesAppearance
   | HeikinAshiAppearance
   | BarsAppearance
   | LineStyleAppearance
   | AreaAppearance
   | BaselineAppearance
-  | ColumnsAppearance;
+  | ColumnsAppearance
+  | HighLowAppearance;
 
 /**
  * The appearances the bar style series draws itself; plain candles are the anchor series' own, so they
  * leave a second series no point to write.
  */
 export type DrawnBarStyleAppearance = Exclude<BarStyleAppearance, { style: 'candles' }>;
+
+/** The appearances a custom series draws, each with a pane view of its own that no other style can swap into. */
+export type CustomBarStyleAppearance = Extract<DrawnBarStyleAppearance, { style: 'highLow' | 'volumeCandles' }>;
+
+/** The appearances a library series type of its own draws. */
+export type LibraryBarStyleAppearance = Exclude<DrawnBarStyleAppearance, CustomBarStyleAppearance>;
+
+/** Whether a custom series draws the style, which is the one thing a library series type cannot paint. */
+export function isCustomBarStyle(style: DrawnBarStyleAppearance['style']): style is CustomBarStyleAppearance['style'] {
+  return style === 'highLow' || style === 'volumeCandles';
+}
 
 /** What the chart draws before any bar style setting arrives: the candles it has always drawn. */
 export const DEFAULT_BAR_STYLE_APPEARANCE: BarStyleAppearance = {
@@ -135,6 +171,18 @@ function sameColumnsAppearance(first: ColumnsAppearance, second: ColumnsAppearan
   return first.colorByPreviousClose === second.colorByPreviousClose && sameColors(first.colors, second.colors);
 }
 
+function sameToggledColor(first: ToggledColor, second: ToggledColor): boolean {
+  return first.visible === second.visible && first.color === second.color;
+}
+
+function sameHighLowAppearance(first: HighLowAppearance, second: HighLowAppearance): boolean {
+  return (
+    sameToggledColor(first.body, second.body) &&
+    sameToggledColor(first.borders, second.borders) &&
+    sameToggledColor(first.labels, second.labels)
+  );
+}
+
 function sameBaselineAppearance(first: BaselineAppearance, second: BaselineAppearance): boolean {
   return (
     first.priceSource === second.priceSource &&
@@ -152,6 +200,7 @@ export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarSty
   switch (first.style) {
     case 'candles':
     case 'hollowCandles':
+    case 'volumeCandles':
     case 'heikinAshi':
       return second.style === first.style && sameCandleAppearance(first.candles, second.candles);
     case 'bars':
@@ -168,5 +217,7 @@ export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarSty
       return second.style === 'baseline' && sameBaselineAppearance(first, second);
     case 'columns':
       return second.style === 'columns' && sameColumnsAppearance(first, second);
+    case 'highLow':
+      return second.style === 'highLow' && sameHighLowAppearance(first, second);
   }
 }

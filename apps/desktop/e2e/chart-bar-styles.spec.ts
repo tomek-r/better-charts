@@ -195,6 +195,46 @@ test('the heikin ashi style draws the candle series on the heikin ashi prices', 
   expectNoErrors(collected);
 });
 
+test('a chart saved on the volume candles style draws each bar as a custom series candle', async ({ page }) => {
+  const collected = await gotoWithStub(page, {
+    chartSettingOverrides: { [EURUSD_CHART]: { barStyle: 'volumeCandles' } },
+  });
+  await openChart(page);
+  await waitForSeriesType(page, 'Custom');
+
+  const drawn = await page.evaluate(() => ({
+    volumes: window.__chartTest!.data().map((bar) => ('volume' in bar ? bar.volume : undefined)),
+    state: window.__chartTest!.barStyle(),
+    colors: window.__chartTest!.candles().colors,
+  }));
+
+  expect(drawn.state.style).toBe('volumeCandles');
+  expect(drawn.state.points).toHaveLength(STUB_BAR_COUNT);
+  expect(drawn.state.points.map((point) => point.volume)).toEqual(drawn.volumes);
+  expect(drawn.colors.upColor).toBe(HIDDEN_COLOR);
+  expect(drawn.colors.downColor).toBe(HIDDEN_COLOR);
+  expectNoErrors(collected);
+});
+
+test('a chart saved on the high-low style draws a custom series holding each bar range', async ({ page }) => {
+  const collected = await gotoWithStub(page, {
+    chartSettingOverrides: { [EURUSD_CHART]: { barStyle: 'highLow' } },
+  });
+  await openChart(page);
+  await waitForSeriesType(page, 'Custom');
+
+  const drawn = await page.evaluate(() => ({
+    bars: window.__chartTest!.data(),
+    state: window.__chartTest!.barStyle(),
+  }));
+
+  expect(drawn.state.style).toBe('highLow');
+  expect(drawn.state.points).toHaveLength(STUB_BAR_COUNT);
+  expect(drawn.state.points.map((point) => point.high)).toEqual(drawn.bars.map((bar) => bar.high));
+  expect(drawn.state.points.map((point) => point.low)).toEqual(drawn.bars.map((bar) => bar.low));
+  expectNoErrors(collected);
+});
+
 test('the baseline turns its fill at the saved share of the visible price range', async ({ page }) => {
   const collected = await gotoWithStub(page, {
     // Each bar sits higher than the one before, so a narrower window of bars spans another price range.

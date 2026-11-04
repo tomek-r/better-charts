@@ -193,3 +193,70 @@ test('line points carry the price source the style was saved with', () => {
   expect(values[0]).toBeCloseTo(1.15, 10);
   expect(values[1]).toBeCloseTo(1.2, 10);
 });
+
+/** The appearance the high-low defaults draw, which settings of the wrong shape fall back to. */
+const DEFAULT_HIGH_LOW_APPEARANCE = {
+  style: 'highLow',
+  body: { visible: true, color: palette.info },
+  borders: { visible: true, color: palette.info },
+  labels: { visible: true, color: palette.info },
+} as const;
+
+test('the default volume candle and high-low settings map onto the appearance the engine draws', () => {
+  expect(barStyleAppearanceOf('volumeCandles', {})).toEqual({
+    style: 'volumeCandles',
+    candles: DEFAULT_CANDLE_APPEARANCE,
+  });
+  expect(barStyleAppearanceOf('highLow', {})).toEqual(DEFAULT_HIGH_LOW_APPEARANCE);
+});
+
+test('a high-low colour stored in the wrong shape falls back to the default of its own field', () => {
+  const highLow = barStyleAppearanceOf('highLow', {
+    body: { visible: true, color: 'not-a-colour' },
+    borders: { up: palette.up, down: palette.sell },
+    labels: 42,
+  });
+
+  expect(highLow).toEqual(DEFAULT_HIGH_LOW_APPEARANCE);
+});
+
+test('a high-low point carries the bar range and nothing else', () => {
+  const highLow = barStyleAppearanceOf('highLow', {});
+
+  expect(barStylePoint(highLow, barAt(1.1, 1.15, 1.2, 1.05), undefined)).toEqual({
+    time: BAR_TIME_SECONDS,
+    high: 1.2,
+    low: 1.05,
+  });
+});
+
+test('a volume candle point carries the bar prices, its volume and the candle colours', () => {
+  const volumeCandles = barStyleAppearanceOf('volumeCandles', {});
+  const heikinAshi = barStyleAppearanceOf('heikinAshi', {});
+  const previous = barAt(1.0, 1.05);
+  const bar = barAt(1.1, 1.15, 1.2, 1.05);
+
+  const volumeCandle = barStylePoint(volumeCandles, bar, previous);
+
+  expect(volumeCandle).toMatchObject({
+    time: BAR_TIME_SECONDS,
+    open: 1.1,
+    high: 1.2,
+    low: 1.05,
+    close: 1.15,
+    volume: 100,
+  });
+  // The colour rules are the candles' own, so one bar takes the same colours in both candle styles.
+  expect(pointColors(volumeCandle)).toEqual(pointColors(barStylePoint(heikinAshi, bar, previous)));
+});
+
+test('a volume candle takes the colours the chart saved its candles with', () => {
+  const savedCandles = { colorByPreviousClose: true, body: { visible: true, up: '#0a0b0c', down: '#0d0e0f' } };
+  const volumeCandles = barStyleAppearanceOf('volumeCandles', savedCandles);
+  const defaultVolumeCandles = barStyleAppearanceOf('volumeCandles', { colorByPreviousClose: true });
+  const bar = barAt(1.1, 1.15);
+
+  expect(pointColors(barStylePoint(volumeCandles, bar, undefined))).not.toEqual(
+    pointColors(barStylePoint(defaultVolumeCandles, bar, undefined)),
+  );
+});

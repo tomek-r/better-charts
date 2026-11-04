@@ -2,12 +2,14 @@ export const BAR_STYLES = [
   'bars',
   'candles',
   'hollowCandles',
+  'volumeCandles',
   'line',
   'lineWithMarkers',
   'stepLine',
   'area',
   'baseline',
   'columns',
+  'highLow',
   'heikinAshi',
 ] as const;
 
@@ -19,12 +21,14 @@ const BAR_STYLE_LABELS: Readonly<Record<BarStyle, string>> = {
   bars: 'Bars',
   candles: 'Candles',
   hollowCandles: 'Hollow candles',
+  volumeCandles: 'Volume candles',
   line: 'Line',
   lineWithMarkers: 'Line with markers',
   stepLine: 'Step line',
   area: 'Area',
   baseline: 'Baseline',
   columns: 'Columns',
+  highLow: 'High-low',
   heikinAshi: 'Heikin Ashi',
 };
 
@@ -38,10 +42,10 @@ function barStyleOption(style: BarStyle): BarStyleOption {
 }
 
 export const BAR_STYLE_GROUPS: readonly (readonly BarStyleOption[])[] = [
-  [barStyleOption('bars'), barStyleOption('candles'), barStyleOption('hollowCandles')],
+  [barStyleOption('bars'), barStyleOption('candles'), barStyleOption('hollowCandles'), barStyleOption('volumeCandles')],
   [barStyleOption('line'), barStyleOption('lineWithMarkers'), barStyleOption('stepLine')],
   [barStyleOption('area'), barStyleOption('baseline')],
-  [barStyleOption('columns')],
+  [barStyleOption('columns'), barStyleOption('highLow')],
   [barStyleOption('heikinAshi')],
 ];
 
