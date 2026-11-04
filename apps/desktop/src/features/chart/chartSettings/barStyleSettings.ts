@@ -52,13 +52,13 @@ const WICK_FIELD: ToggledColorPairSettingField = {
 
 /**
  * How far the quietest visible body narrows against the busiest one, as the whole percent the dialog shows: the
- * full sensitivity, which leaves the quietest bar the narrowest body.
+ * default 80 % leaves the quietest visible bar a fifth of the full body width.
  */
 export const WIDTH_SENSITIVITY_FIELD: PercentSettingField = {
   kind: 'percent',
   key: 'widthSensitivity',
   label: 'Width sensitivity',
-  defaultValue: 100,
+  defaultValue: 80,
   unit: '%',
 };
 

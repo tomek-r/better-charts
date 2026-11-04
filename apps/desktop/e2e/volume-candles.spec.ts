@@ -20,10 +20,10 @@ import type { VolumeCandlePoint } from '../src/features/chart/engine/barStyle/vo
 const FULL_WIDTH = 20;
 /** The volumes the visible bars of a window trade between in these width tests. */
 const VISIBLE_VOLUMES: VisibleVolumeRange = { min: 800, max: 1000 };
-/** The sensitivity the setting offers by default, which narrows the quietest visible bar to the narrowest body. */
-const DEFAULT_WIDTH_SENSITIVITY = 1;
-/** A sensitivity below the default, which leaves the quietest visible bar a fifth of the width. */
-const MILD_WIDTH_SENSITIVITY = 0.8;
+/** The sensitivity the setting offers by default, which leaves the quietest visible bar a fifth of the body width. */
+const DEFAULT_WIDTH_SENSITIVITY = 0.8;
+/** The full sensitivity, which narrows the quietest visible bar to the narrowest body. */
+const FULL_WIDTH_SENSITIVITY = 1;
 /** A sensitivity that leaves every body at the full width. */
 const NO_WIDTH_SENSITIVITY = 0;
 /** The volume the colour tests' bars trade, which no colour rule reads. */
@@ -60,23 +60,23 @@ test('the busiest visible bar fills the whole body width at the default sensitiv
   expect(volumeCandleWidth(1000, VISIBLE_VOLUMES, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(FULL_WIDTH);
 });
 
-test('the quietest visible bar narrows to the narrowest body at the default sensitivity', () => {
-  expect(volumeCandleWidth(800, VISIBLE_VOLUMES, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(1);
-});
-
-test('a bar halfway up the visible range draws half the body width at the default sensitivity', () => {
-  // (900 - 800) / (1000 - 800) = 0.5, so 1 - 1 * (1 - 0.5) = 0.5 of the twenty device pixels.
-  expect(volumeCandleWidth(900, VISIBLE_VOLUMES, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(10);
-});
-
-test('the quietest visible bar keeps a fifth of the body width at a sensitivity of four fifths', () => {
+test('the quietest visible bar keeps a fifth of the body width at the default sensitivity', () => {
   // 1 - 0.8 * (1 - 0) = 0.2 of the twenty device pixels.
-  expect(volumeCandleWidth(800, VISIBLE_VOLUMES, FULL_WIDTH, MILD_WIDTH_SENSITIVITY)).toBe(4);
+  expect(volumeCandleWidth(800, VISIBLE_VOLUMES, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(4);
 });
 
-test('a bar halfway up the visible range draws three fifths of the body width at a sensitivity of four fifths', () => {
+test('a bar halfway up the visible range draws three fifths of the body width at the default sensitivity', () => {
   // 1 - 0.8 * (1 - 0.5) = 0.6 of the twenty device pixels.
-  expect(volumeCandleWidth(900, VISIBLE_VOLUMES, FULL_WIDTH, MILD_WIDTH_SENSITIVITY)).toBe(12);
+  expect(volumeCandleWidth(900, VISIBLE_VOLUMES, FULL_WIDTH, DEFAULT_WIDTH_SENSITIVITY)).toBe(12);
+});
+
+test('the quietest visible bar narrows to the narrowest body at full sensitivity', () => {
+  expect(volumeCandleWidth(800, VISIBLE_VOLUMES, FULL_WIDTH, FULL_WIDTH_SENSITIVITY)).toBe(1);
+});
+
+test('a bar halfway up the visible range draws half the body width at full sensitivity', () => {
+  // (900 - 800) / (1000 - 800) = 0.5, so 1 - 1 * (1 - 0.5) = 0.5 of the twenty device pixels.
+  expect(volumeCandleWidth(900, VISIBLE_VOLUMES, FULL_WIDTH, FULL_WIDTH_SENSITIVITY)).toBe(10);
 });
 
 test('a sensitivity of zero draws every body at the full width', () => {

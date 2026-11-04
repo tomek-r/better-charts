@@ -21,8 +21,8 @@ const UP_COLOR = '#26a69a';
 const DOWN_COLOR = '#f7525f';
 const BAR_TIME_SECONDS = 1_700_000_000;
 const TRANSPARENT = 'transparent';
-/** The width sensitivity a volume candle chart draws until its own is saved: 100 %, as a fraction of the width. */
-const DEFAULT_WIDTH_SENSITIVITY = 1;
+/** The width sensitivity a volume candle chart draws until its own is saved: 80 %, as a fraction of the width. */
+const DEFAULT_WIDTH_SENSITIVITY = 0.8;
 
 /** One bar of the chart's own shape; its open and close decide the colour, its range the price sources. */
 function barAt(open: number, close: number, high = Math.max(open, close), low = Math.min(open, close)): RenderBar {

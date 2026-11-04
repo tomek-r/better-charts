@@ -14,8 +14,8 @@ export type VolumeCandlesOptions = CustomSeriesOptions &
     readonly widthSensitivity: number;
   };
 
-/** The width sensitivity a series starts on: 100 %, the full sensitivity the chart's settings offer by default. */
-const DEFAULT_WIDTH_SENSITIVITY = 1;
+/** The width sensitivity a series starts on: 80 %, the settings default, which leaves the quietest bar a fifth. */
+const DEFAULT_WIDTH_SENSITIVITY = 0.8;
 
 /** The options a volume candle series starts on: the library's defaults, painted as default candles are. */
 export const VOLUME_CANDLES_DEFAULT_OPTIONS: VolumeCandlesOptions = {
