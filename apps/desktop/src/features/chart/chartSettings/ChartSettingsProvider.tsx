@@ -5,7 +5,7 @@ import { useNotifyError } from '../../../shared/ui/notification/ErrorNotificatio
 import { useBridgeConnectionSelector } from '../../bridge/bridgeSelectors';
 import { useChartResources } from '../ChartWorkspaceProvider';
 import { chartScopeKey, useChartScope } from '../useChartScope';
-import { candleAppearanceOf } from './candleAppearanceSetting';
+import { barStyleAppearanceOf } from './barStyleAppearanceSetting';
 import { chartAppearanceOf } from './canvasAppearanceSetting';
 import {
   chartSettingsOverrides,
@@ -197,13 +197,14 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
     chart.current?.setTimeZone(settings.timeZone, brokerUtcOffsetMinutes);
   }, [brokerUtcOffsetMinutes, chart, settings.timeZone]);
 
-  // The engine draws the candles with the chart's body, border and wick settings. The candle values
-  // object is the dependency, so every preview and every keep reaches the chart, and a change to
-  // another bar style's settings leaves the candles alone.
-  const candleSettings = settings.barStyles.candles;
+  // The engine draws the chart's bar style: the candles, or the bar style series that draws every
+  // other style. The chosen style's values object is the dependency, so every preview and every keep
+  // reaches the chart, and a change to another bar style's settings leaves it alone.
+  const barStyle = settings.barStyle;
+  const barStyleValues = settings.barStyles[barStyle];
   useEffect(() => {
-    chart.current?.setCandleAppearance(candleAppearanceOf(candleSettings));
-  }, [candleSettings, chart]);
+    chart.current?.setBarStyle(barStyleAppearanceOf(barStyle, barStyleValues));
+  }, [barStyle, barStyleValues, chart]);
 
   // The engine paints the chart itself with the Canvas tab's settings. The canvas values object is
   // the dependency, so every preview and every keep reaches the chart, and a change to another tab's

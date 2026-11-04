@@ -14,6 +14,7 @@ import type { ChartDrawings } from '../drawings/chartDrawings';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import type { RenderBar } from '../bars/renderBar';
 import { candleSeriesColors, type CandlePointColors } from '../bars/candleAppearance';
+import type { BarStyleSeriesState } from '../barStyle/barStyleSeries';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
 import type { ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesState } from './chartScalesAppearance';
@@ -78,6 +79,11 @@ export interface DevTestApi {
   data(): readonly RenderBar[];
   /** The anchor candle series' colours and per-point colours, as plain copies. */
   candles(): CandleSeriesState;
+  /**
+   * The bar style series: the style it draws, the library series type drawing it (null while the
+   * anchor paints the candles), the options it was given and its points, all as plain copies.
+   */
+  barStyle(): BarStyleSeriesState;
   visibleRange(): { from: number; to: number } | null;
   scrollToRange(range: { from: number; to: number }): void;
   /** Every recent write to the time scale with the view before and after it, oldest first. */
@@ -166,6 +172,7 @@ interface DevTestApiSources {
   chart: IChartApi;
   bars(): readonly RenderBar[];
   candles(): CandleSeriesState;
+  barStyle(): BarStyleSeriesState;
   visibleRange(): { from: number; to: number } | null;
   timeToX(timeMs: number): number;
   toolTestApi(id: string): unknown;
@@ -199,6 +206,11 @@ interface DevTestPointerReadout {
 /** The empty bars kept to the right of the last bar, which the Canvas tab sets. */
 interface DevTestPaneMargins {
   rightMarginBars(): number;
+}
+
+/** The series that draws every bar style but candles, which the Bar styles settings set. */
+interface DevTestBarStyle {
+  barStyleState(): BarStyleSeriesState;
 }
 
 /** The chart's background copied out of the library's own option, whichever kind it is. */
@@ -242,6 +254,7 @@ function buildDevTestApi({
   chart,
   bars,
   candles,
+  barStyle,
   visibleRange,
   timeToX,
   toolTestApi,
@@ -254,6 +267,7 @@ function buildDevTestApi({
   return {
     data: () => bars().map((bar) => ({ ...bar })),
     candles,
+    barStyle,
     visibleRange,
     scrollToRange: (range) => chart.timeScale().setVisibleLogicalRange(range),
     viewportChanges: viewportChangeLog,
@@ -300,11 +314,13 @@ export function installChartDevTestApi(
   pointerReadout: DevTestPointerReadout,
   pane: DevTestPaneMargins,
   readings: DevTestReadings,
+  barStyle: DevTestBarStyle,
 ): void {
   installDevTestApi({
     chart,
     bars: () => readings.getData(),
     candles: () => readCandleSeriesState(candles),
+    barStyle: () => barStyle.barStyleState(),
     visibleRange: () => readings.visibleRange(),
     timeToX: (timeMs) => readings.timeToX(timeMs),
     toolTestApi: (id) => tools.toolTestApi(id),
