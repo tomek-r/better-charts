@@ -1,4 +1,5 @@
-import { act, createElement, Fragment, useState, type ComponentProps, type ReactElement } from 'react';
+import { createElement, Fragment, useState, type ComponentProps, type ReactElement } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../src/shared/ui/dialog/ModalDialog';
 
@@ -29,7 +30,8 @@ function mountOpenerWithModal(modal: (close: () => void) => ReactElement): void 
   }
   const container = document.createElement('div');
   document.body.append(container);
-  act(() => {
+  // Renders synchronously so the spec can query the DOM at once; act() is for test runners, not a real browser.
+  flushSync(() => {
     createRoot(container).render(createElement(Harness));
   });
 }

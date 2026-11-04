@@ -1,4 +1,5 @@
-import { act, createElement, Fragment, useRef, useState } from 'react';
+import { createElement, Fragment, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { createFieldStore, useStoreField, useFieldSetterSelector } from '../../src/shared/store/fieldStore';
 import { useOrderTicketSizingActions } from '../../src/features/order-ticket/sizing/useOrderTicketSizingActions';
@@ -89,7 +90,8 @@ export function mountFieldStoreHarness(): void {
   container.id = 'field-store-harness';
   document.body.append(container);
   const root = createRoot(container);
-  act(() => {
+  // Renders synchronously so the spec can query the DOM at once; act() is for test runners, not a real browser.
+  flushSync(() => {
     root.render(
       createElement(
         Fragment,

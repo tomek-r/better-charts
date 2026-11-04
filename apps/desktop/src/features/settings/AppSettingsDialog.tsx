@@ -49,10 +49,11 @@ function saveFailureMessage(failure: unknown): string {
   return 'Could not save settings. Check the values and try again.';
 }
 
-function SettingsContent({ loadRequest, children }: { loadRequest: Promise<void> | undefined; children: ReactNode }) {
-  if (loadRequest) {
-    use(loadRequest);
-  }
+/** Already settled: once the settings or the load error are in, `use()` returns at once instead of suspending. */
+const SETTLED_LOAD: Promise<void> = Promise.resolve();
+
+function SettingsContent({ loadRequest, children }: { loadRequest: Promise<void>; children: ReactNode }) {
+  use(loadRequest);
   return children;
 }
 
@@ -187,7 +188,7 @@ export function AppSettingsDialog({
       <div className="settings-content" key={category}>
         {loadError && <ErrorNotification message={loadError} />}
         <Suspense fallback={<p role="status">Loading settings…</p>}>
-          <SettingsContent loadRequest={!draft && !loadError ? loadRequest : undefined}>
+          <SettingsContent loadRequest={!draft && !loadError ? loadRequest : SETTLED_LOAD}>
             {settings?.firstLaunch && (
               <p className="settings-intro">Welcome to Better Charts. Set up your MT5 connection to get started.</p>
             )}
