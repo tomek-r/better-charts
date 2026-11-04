@@ -27,7 +27,7 @@ function definitionGroups(definitions: readonly SettingInputDefinition[]): Defin
   return ungrouped.length === 0 ? named : [{ legend: undefined, inputs: ungrouped }, ...named];
 }
 
-/** Rows of one group: inputs sharing an `inline` key join the row of the first of them, as in Pine. */
+/** Rows of one group: inputs sharing an `inline` key join the row of the first of them. */
 function inputRows(inputs: readonly SettingInputDefinition[]): SettingInputDefinition[][] {
   const rows: SettingInputDefinition[][] = [];
   const inlineRows = new Map<string, SettingInputDefinition[]>();

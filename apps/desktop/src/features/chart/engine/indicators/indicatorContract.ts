@@ -32,7 +32,7 @@ export interface ChartIndicator {
 export interface ChartIndicatorDefinition {
   readonly id: string;
   readonly pane: ChartIndicatorPane;
-  /** The settings the indicator offers, in Pine Script v6 `input.*` kinds; omitted means none. */
+  /** The settings the indicator offers, in the setting input kinds; omitted means none. */
   readonly inputs?: readonly SettingInputDefinition[];
   /** The per-plot style settings, stored beside the inputs; omitted means none. */
   readonly styles?: readonly SettingStyleDefinition[];

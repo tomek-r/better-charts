@@ -7,8 +7,8 @@ import {
   type SettingValues,
 } from './settingInputs';
 
-// The Style tab of one drawing, modelled on what Pine Script's `plot()`, `hline()` and `fill()` expose in
-// TradingView's Style tab. Styles are declared apart from inputs, but a style is stored as scalar values in
+// The Style tab of one drawing: how its lines, levels and fills are drawn. Styles are declared apart from
+// inputs, but a style is stored as scalar values in
 // the same map as the inputs: the store accepts only numbers, booleans and strings, so each style
 // flattens to the keys `settingStyleKey` names.
 
@@ -54,7 +54,7 @@ export interface SettingStyleToggle extends SettingStyleCommon<'toggle'> {
   readonly defaults: { readonly visible: boolean };
 }
 
-/** A number, bounded and stepped like a Pine `input.int`. */
+/** A number, bounded and stepped like an `int` input. */
 export interface SettingStyleNumber extends SettingStyleCommon<'number'> {
   readonly defaultValue: number;
   readonly minValue?: number;

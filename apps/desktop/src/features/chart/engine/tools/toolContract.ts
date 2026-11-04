@@ -222,7 +222,7 @@ export interface ChartToolDefinition {
    */
   readonly placesDrawings: boolean;
   /**
-   * The settings every drawing of this tool carries, in Pine Script v6 `input.*` kinds;
+   * The settings every drawing of this tool carries, in the setting input kinds;
    * omitted means the tool's drawings have no settings.
    */
   readonly inputs?: readonly SettingInputDefinition[];

@@ -14,7 +14,7 @@ import {
 import { timeframeOptions } from '../src/shared/bridge/timeframes';
 
 /**
- * The settings schema one drawing carries: one definition per Pine Script v6 input kind,
+ * The settings schema one drawing carries: one definition per input kind,
  * one validator table behind them, and the stored record around them. Pure Node, no browser.
  */
 

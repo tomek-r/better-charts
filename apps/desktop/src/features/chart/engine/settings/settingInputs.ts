@@ -1,17 +1,16 @@
 import { timeframeOptions } from '../../../../shared/bridge/timeframes';
 
-// The settings schema of one drawing, modelled on Pine Script v6's `input.*` functions: a
+// The settings schema of one drawing: a
 // definition states what to ask the user for, which value to start from and how a stored
-// value is checked. The engine stores and forwards values; the tool owns its schema. The input
-// kinds follow Pine Script v6 `input.*`, and both drawing tools and indicators declare their
-// settings in them.
+// value is checked. The engine stores and forwards values; the tool owns its schema. Both
+// drawing tools and indicators declare their settings in these kinds.
 
-/** The chart series a `source` input may name, in Pine Script's `input.source` order. */
+/** The chart series a `source` input may name, in the order its drop-down lists them. */
 export const SETTING_INPUT_SOURCES = ['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4'] as const;
 
 export type SettingInputSource = (typeof SETTING_INPUT_SOURCES)[number];
 
-/** Pine Script v6 `active`, declarative: the input is editable while another input holds one value. */
+/** Declarative activation: the input is editable while another input holds one value. */
 export interface SettingInputActiveWhen {
   readonly inputId: string;
   readonly equals: SettingValue;
@@ -25,9 +24,9 @@ interface SettingInputCommon<Kind extends string, Value> {
   readonly defaultValue: Value;
   readonly group?: string;
   readonly tooltip?: string;
-  /** Pine Script v6 `inline`: inputs sharing one key sit in one row, in declaration order. */
+  /** Inputs sharing one key sit in one row, in declaration order. */
   readonly inline?: string;
-  /** Pine Script v6 `active`: disabled, with its value kept, while the other input differs. */
+  /** Disabled, with its value kept, while the other input differs. */
   readonly activeWhen?: SettingInputActiveWhen;
 }
 
@@ -38,42 +37,42 @@ interface SettingInputNumberBounds {
   readonly step?: number;
 }
 
-/** Pine Script `input.int`: a whole number. */
+/** `int`: a whole number. */
 export type SettingInputInt = SettingInputCommon<'int', number> & SettingInputNumberBounds;
 
-/** Pine Script `input.float`: a decimal number. */
+/** `float`: a decimal number. */
 export type SettingInputFloat = SettingInputCommon<'float', number> & SettingInputNumberBounds;
 
-/** Pine Script `input.bool`: a checkbox. */
+/** `bool`: a checkbox. */
 export type SettingInputBool = SettingInputCommon<'bool', boolean>;
 
-/** Pine Script `input.string`: a text field, or a drop-down when `options` is given. */
+/** `string`: a text field, or a drop-down when `options` is given. */
 export interface SettingInputString extends SettingInputCommon<'string', string> {
   readonly options?: readonly string[];
 }
 
-/** Pine Script `input.text_area`: a multi-line text field. */
+/** `textArea`: a multi-line text field. */
 export type SettingInputTextArea = SettingInputCommon<'textArea', string>;
 
-/** Pine Script `input.color`: an `#RRGGBB` or `#RRGGBBAA` colour. */
+/** `color`: an `#RRGGBB` or `#RRGGBBAA` colour. */
 export type SettingInputColor = SettingInputCommon<'color', string>;
 
-/** Pine Script `input.source`: one of the chart's price series. */
+/** `source`: one of the chart's price series. */
 export type SettingInputSourceChoice = SettingInputCommon<'source', SettingInputSource>;
 
-/** Pine Script `input.timeframe`: a wire code from `config/timeframes.json`. */
+/** `timeframe`: a wire code from `config/timeframes.json`. */
 export type SettingInputTimeframe = SettingInputCommon<'timeframe', string>;
 
-/** Pine Script `input.symbol`: a symbol name. */
+/** `symbol`: a symbol name. */
 export type SettingInputSymbol = SettingInputCommon<'symbol', string>;
 
-/** Pine Script `input.session`: a `HHMM-HHMM` window with optional `:1234567` weekdays. */
+/** `session`: a `HHMM-HHMM` window with optional `:1234567` weekdays. */
 export type SettingInputSession = SettingInputCommon<'session', string>;
 
-/** Pine Script `input.price`: a chart price, display-only and never an order input. */
+/** `price`: a chart price, display-only and never an order input. */
 export type SettingInputPrice = SettingInputCommon<'price', number>;
 
-/** Pine Script `input.time`: an instant in epoch milliseconds. */
+/** `time`: an instant in epoch milliseconds. */
 export type SettingInputTime = SettingInputCommon<'time', number>;
 
 /** One choice of an `enum` input. */
@@ -82,7 +81,7 @@ export interface SettingInputEnumOption {
   readonly title: string;
 }
 
-/** Pine Script `input.enum`: one of the given choices. */
+/** `enum`: one of the given choices. */
 export interface SettingInputEnum extends SettingInputCommon<'enum', string> {
   readonly options: readonly SettingInputEnumOption[];
 }

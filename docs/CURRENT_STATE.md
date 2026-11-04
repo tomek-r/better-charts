@@ -136,7 +136,7 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   symbol's min volume and volume step. Offered only when the EA negotiates the
   `partial_close` capability (EA 1.004).
 
-Not implemented: break even, multiple charts or Pine Script execution.
+Not implemented: break even or multiple charts.
 
 ## Interface decisions
 
@@ -288,7 +288,7 @@ it reports, and each tool's declarations), so every tool that places drawings ge
 without its own code; the Arrow and Crosshair pointers place no drawings and therefore
 never show it.
 
-Settings are the tool's typed Pine Script v6-style inputs (`int`, `float`, `bool`,
+Settings are the tool's typed inputs (`int`, `float`, `bool`,
 `string`, `textArea`, `color`, `source`, `timeframe`, `symbol`, `session`, `price`,
 `time`, `enum`), rendered generically from the definitions a tool declares, one control
 per kind, grouped in fieldsets as the definitions ask, and OK stays disabled while a
@@ -375,10 +375,3 @@ verified by hand on macOS with the official MT5 application; the in-app restart
 flow still needs a manual check there. Windows and Linux discovery, compile
 commands and launches are covered by unit tests only; the restart closes MT5 with
 `taskkill`/`pkill`, which may close it less gracefully than quitting it.
-
-Pine integration has not started. [Piner](https://github.com/heyphat/piner) 0.13.0
-is preferred for v6 indicators (2026-10-04): targeted Node semantics/browser-bundle
-checks passed; upstream suite/Tauri runtime and TradingView parity remain unchecked.
-Use a Web Worker and existing chart adapter; keep scripts separate from execution.
-Repository remains MIT; adoption needs an AGPL-compatible plan, or evaluate
-[PineTS commercial licensing](https://github.com/LuxAlgo/PineTS/blob/main/LICENSE-COMMERCIAL.md).

@@ -79,10 +79,10 @@ Templates and Developing POC/VA come later.
 
 ## Settings schema
 
-- Inputs stay Pine Script v6 `input.*`. `ToolInputCommon` gains `inline` (inputs with the same key share one row,
+- Inputs keep their kinds. `SettingInputCommon` gains `inline` (inputs with the same key share one row,
   in declaration order) and `activeWhen` (`{ inputId, equals }`: the field is disabled while the other input's
   current dialog value differs; a disabled field keeps its value).
-- Styles follow Pine's per-plot Style tab and are declared separately in `toolStyles.ts`. Every style has `id`,
+- Styles describe a per-plot Style tab and are declared separately in `settingStyles.ts`. Every style has `id`,
   `title` and an optional `parentId` (indented under the parent, disabled while the parent's checkbox is off).
   Kinds: `line` (checkbox, colour, width 1-4, solid/dashed/dotted), `color` (optional checkbox), `toggle`,
   `number`, `choice`.
@@ -99,12 +99,12 @@ Templates and Developing POC/VA come later.
   no settings yet." message. Arrow keys, Home and End move between tabs.
 - Tabs are modelled as `{ id, title, render }` entries built from the declaration, so a later module adds a tab
   by adding an entry.
-- Ok saves the merged values through `setInputs`; it stays disabled while any value is invalid.
+- Ok saves the merged values through `setSettings`; it stays disabled while any value is invalid.
 - Top-anchored: the panel hangs from a fixed offset below the window's top edge (`backdropClassName`
   `drawing-settings-backdrop`, not the shared centring), so tabs of different height never move it. Only this dialog
   does this; the other modals keep centring.
 - One setting per row in a two-column grid, label left and control right, in both the Inputs and Style tabs. Number
-  fields are wide enough for four digits and their spin buttons. `inline` stays in the schema (Pine v6), but no
+  fields are wide enough for four digits and their spin buttons. `inline` stays in the schema, but no
   tool uses it by default.
 - Text is one step larger than before (15px body, 16px footer buttons), set once by the dialog's stylesheet.
 - Drop-downs (Inputs options and Style choices) are `shared/ui/select/Select`, an ARIA listbox: a button with

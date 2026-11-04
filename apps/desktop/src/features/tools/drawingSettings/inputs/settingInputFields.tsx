@@ -87,7 +87,7 @@ export function colorParts({ value, invalid }: { value: SettingValue; invalid: b
   return { base: colour.slice(0, COLOR_BASE_LENGTH), alpha: colour.slice(COLOR_BASE_LENGTH) };
 }
 
-/** The choices one drop-down lists, named per kind: Pine's own names for sources and timeframes. */
+/** The choices one drop-down lists, named per kind: the usual chart names for sources and timeframes. */
 function choiceOptions(definition: Extract<SettingInputDefinition, { kind: ChoiceKind }>): readonly SelectOption[] {
   if (definition.kind === 'enum') {
     return titledOptions(definition.options);

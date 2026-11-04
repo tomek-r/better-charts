@@ -6,7 +6,7 @@ import { DrawingSettingsForm } from '../../src/features/tools/drawingSettings/Dr
 import { timeframeOptions } from '../../src/shared/bridge/timeframes';
 
 /**
- * Mounts the drawing settings form on its own, with one definition of every Pine-style input kind, and
+ * Mounts the drawing settings form on its own, with one definition of every input kind, and
  * records what its footer hands back. Specs load it by URL as `/e2e/helpers/drawingSettingsHarness.tsx`.
  */
 
