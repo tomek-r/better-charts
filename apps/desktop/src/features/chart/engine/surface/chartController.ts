@@ -35,6 +35,8 @@ import { ChartDrawings } from '../drawings/chartDrawings';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installChartDevTestApi, removeDevTestApi } from './devTestApi';
 import { IndicatorLayer } from '../indicators/indicatorLayer';
+import { IndicatorRuntime } from '../indicators/indicatorRuntime';
+import type { ChartIndicatorDefinition } from '../indicators/indicatorContract';
 import { LiveBarController } from './liveBarController';
 import { HistoryViewportMode } from '../bars/historyViewportMode';
 import { initialHistoryWindow } from '../bars/initialHistoryWindow';
@@ -44,6 +46,8 @@ import { PointerCandleHold } from '../bars/pointerCandleHold';
 /** What the app gives the chart for its tools; a tool sees it only through its `ChartToolHost`. */
 type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
   toolDefinitions: readonly ChartToolDefinition[];
+  /** Every indicator a user can attach; the engine never imports the registry they come from. */
+  indicatorDefinitions: readonly ChartIndicatorDefinition[];
   /** The tool active at start and made active again after a placement; one of `toolDefinitions`. */
   defaultToolId: string;
 };
@@ -103,7 +107,9 @@ export class ChartController {
   /** Selection, user commands and saved records of the chart's drawings. */
   readonly drawings: ChartDrawings;
   /** The indicators drawn on the price pane, each from the frames its producer hands over. */
-  readonly indicators: IndicatorLayer;
+  readonly indicatorLayer: IndicatorLayer;
+  /** The indicators attached to the chart: each loads on a new history and follows the live bar. */
+  readonly indicators: IndicatorRuntime;
   onToolRelease?: () => void;
 
   constructor(
@@ -116,7 +122,7 @@ export class ChartController {
     this.candles = candles;
     this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
     this.data = new BarSeriesController(this.candles, volume, this.chart);
-    this.indicators = new IndicatorLayer(this.chart);
+    this.indicatorLayer = new IndicatorLayer(this.chart);
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
     this.view = new ViewportController(this.chart, this.candles, future, this.data, () => this.removed);
     this.olderHistory = new OlderHistoryPager({
@@ -124,11 +130,12 @@ export class ChartController {
       isBeforeHistory: () => this.view.isBeforeHistory(),
       oldestBarTimeSeconds: () => this.bars[0]?.time,
       visibleRange: () => this.visibleRange(),
-      prependBars: (candles) => this.data.prepend(candles),
+      prependBars: (candles) => this.indicators.olderBarsAdded(this.data.prepend(candles)),
       anchorAfterPrepend: (previous, added) => this.view.anchorAfterPrepend(previous, added),
       refreshOverlays: () => this.refreshOverlays(),
     });
-    const { toolDefinitions, defaultToolId, ...hostOptions } = options;
+    const { toolDefinitions, defaultToolId, indicatorDefinitions, ...hostOptions } = options;
+    this.indicators = new IndicatorRuntime(this.indicatorLayer, indicatorDefinitions, () => this.bars);
     const toolHost: ChartToolHostBase = {
       ...hostOptions,
       barSeries: this.data,
@@ -185,7 +192,10 @@ export class ChartController {
     this.liveBar = new LiveBarController(this.chart, this.data, this.view, this.liveCandleHold, {
       isDisposed: () => this.removed,
       resetView: () => this.resetView(),
-      barsChanged: () => this.afterBarsChanged(),
+      barsChanged: () => {
+        this.afterBarsChanged();
+        this.indicators.liveBarChanged();
+      },
     });
     this.resize();
     this.view.onViewportChanged = () => this.olderHistory.requestIfGapRevealed();
@@ -443,6 +453,7 @@ export class ChartController {
     this.candles.detachPrimitive(this.priceTags);
     this.candles.detachPrimitive(this.primitive);
     this.indicators.destroy();
+    this.indicatorLayer.destroy();
     this.data.destroy();
     this.chart.remove();
     if (import.meta.env.DEV) {
@@ -471,6 +482,7 @@ export class ChartController {
     // pane empty when a paged series handed its index to a shorter one.
     const preserved = previousAnchor !== null && this.view.restoreVisibleAnchor(previousAnchor, previousSpacing);
     this.afterBarsChanged();
+    this.indicators.historyChanged();
     // The carried-over position can sit deeper than this window reaches, which
     // leaves space before the oldest bar. Filling it is a page request, not a
     // nudge of the viewport: the range subscription may not notify for a restored

@@ -34,6 +34,8 @@ export function mountChartWithDefaultTool(
       marketDataPort: NO_MARKET_DATA,
       notifyError: () => undefined,
       toolDefinitions,
+      // This harness exercises the tools only; no indicator is attached.
+      indicatorDefinitions: [],
       defaultToolId,
     },
   );
