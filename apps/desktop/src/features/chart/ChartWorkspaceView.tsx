@@ -1,6 +1,7 @@
 import { ChartTitle } from './header/ChartTitle';
 import { ChartQuotes } from './header/ChartQuotes';
 import { ChartTimeframes } from './timeframes/ChartTimeframes';
+import { ChartBarStyleMenu } from './barStyleMenu/ChartBarStyleMenu';
 import { ChartCanvas } from './ChartCanvas';
 import { ChartTimeZoneControl } from './timeZone/ChartTimeZoneControl';
 import { ChartPartialClose } from '../partial-close/ChartPartialClose';
@@ -17,7 +18,10 @@ export function ChartWorkspaceView() {
           <ChartTitle />
           <ChartQuotes />
         </div>
-        <ChartTimeframes />
+        <div className="chart-header-tools">
+          <ChartTimeframes />
+          <ChartBarStyleMenu />
+        </div>
         <ChartCanvas>
           <ChartDrawingPersistence />
           <ChartPartialClose />

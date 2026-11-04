@@ -1,0 +1,103 @@
+/* The bar type button beside the timeframes and the list it opens (features/chart/barStyleMenu). The menu itself
+   is the shared popup surface and its rows are the shared menu rows: these rules are only the button, what the
+   rows add to them, and the marks they carry. */
+
+.bar-style-trigger {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  color: var(--color-muted-strong);
+  background: transparent;
+  cursor: pointer;
+}
+
+.bar-style-trigger:hover,
+.bar-style-trigger[aria-expanded='true'] {
+  color: var(--color-text);
+  border-color: var(--color-text-secondary);
+  background: var(--color-border-subtle);
+}
+
+/* The button has a border of its own, which takes the accent: a ring around it would double it. */
+.bar-style-trigger:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.bar-style-trigger-caret {
+  flex: 0 0 auto;
+  transition: transform 120ms ease-out;
+}
+
+.bar-style-trigger[aria-expanded='true'] .bar-style-trigger-caret {
+  transform: rotate(180deg);
+}
+
+.bar-style-icon {
+  flex: 0 0 auto;
+}
+
+/* The list: one row per bar type, the drawn one ticked. */
+.bar-style-menu {
+  display: flex;
+  flex-direction: column;
+  width: 208px;
+  padding: 6px;
+}
+
+/* Tighter than the shared rows, so the twelve bar types fit a chart's height without a scrollbar. */
+.bar-style-menu .bar-style-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+}
+
+/* A row shows the shape of its type at the size of a line of text, not at the button's icon size. */
+.bar-style-menu .bar-style-menu-row .bar-style-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.bar-style-menu-row:hover:not(:disabled),
+.bar-style-menu-row:focus-visible {
+  background: var(--color-border-subtle);
+}
+
+.bar-style-menu-row:focus-visible {
+  outline: 1px solid var(--color-accent);
+}
+
+.bar-style-menu-row[aria-checked='true'] {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.bar-style-menu-label {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.bar-style-menu-check {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.bar-style-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--color-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-style-trigger-caret {
+    transition: none;
+  }
+}

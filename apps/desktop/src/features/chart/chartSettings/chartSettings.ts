@@ -306,6 +306,10 @@ export function withScalesValue(settings: ChartSettings, key: string, value: Cha
   return { ...settings, scales: { ...settings.scales, [key]: value } };
 }
 
+export function withBarStyle(settings: ChartSettings, barStyle: BarStyle): ChartSettings {
+  return { ...settings, barStyle };
+}
+
 export function withTimeZone(settings: ChartSettings, timeZone: string): ChartSettings {
   return { ...settings, timeZone };
 }
