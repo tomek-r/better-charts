@@ -47,6 +47,26 @@ export function ToggledColorPairSettingRow({ field, value, onChange }: SettingRo
   );
 }
 
+export function ToggledColorSettingRow({ field, value, onChange }: SettingRowProps<'toggledColor'>) {
+  const toggled = typeof value === 'object' && 'visible' in value && 'color' in value ? value : field.defaultValue;
+  return (
+    <>
+      <LabelledCheckbox
+        className="chart-settings-checkbox-row"
+        checked={toggled.visible}
+        onChange={(visible) => onChange({ ...toggled, visible })}
+      >
+        {field.label}
+      </LabelledCheckbox>
+      <ColorPickerButton
+        label={`${field.label} colour`}
+        color={toggled.color}
+        onColorChange={(color) => onChange({ ...toggled, color })}
+      />
+    </>
+  );
+}
+
 export function ColorPairSettingRow({ field, value, onChange }: SettingRowProps<'colorPair'>) {
   const pair = typeof value === 'object' && 'up' in value ? value : field.defaultValue;
   return (

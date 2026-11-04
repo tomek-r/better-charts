@@ -1,4 +1,5 @@
 import { test, expect, chromium, devices, type Page } from '@playwright/test';
+import { waitTwoAnimationFrames } from './helpers/animationFrames';
 import { gotoWithStub } from './helpers/tauriStub';
 import { decodePng, parseHexColor, pixelAt, type DecodedPng } from './helpers/pngPixels';
 import { palette } from '../src/shared/theme/palette';
@@ -24,12 +25,6 @@ interface Clip {
   y: number;
   width: number;
   height: number;
-}
-
-async function waitTwoAnimationFrames(page: Page): Promise<void> {
-  await page.evaluate(
-    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
-  );
 }
 
 async function screenshotClip(page: Page, clip: Clip): Promise<DecodedPng> {

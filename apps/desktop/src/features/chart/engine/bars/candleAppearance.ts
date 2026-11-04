@@ -40,13 +40,31 @@ export const DEFAULT_CANDLE_APPEARANCE: CandleAppearance = {
   wick: { visible: true, up: PART_COLOR_UP, down: PART_COLOR_DOWN },
 };
 
+/** Every part of the anchor's candles switched off; the colours stay behind the flag. */
+const HIDDEN_CANDLE_PART: CandlePartAppearance = {
+  visible: false,
+  up: PART_COLOR_UP,
+  down: PART_COLOR_DOWN,
+};
+
+/**
+ * The candles the anchor series draws while another series paints the bars: every part hidden, so the
+ * anchor keeps the price format, the price fit and every primitive attached to it without painting.
+ */
+export const HIDDEN_CANDLE_APPEARANCE: CandleAppearance = {
+  colorByPreviousClose: false,
+  body: HIDDEN_CANDLE_PART,
+  borders: HIDDEN_CANDLE_PART,
+  wick: HIDDEN_CANDLE_PART,
+};
+
 /** The colour a part is drawn in: the up one for a bar that rose, the down one for a bar that fell. */
 function partColor(part: CandlePartAppearance, rising: boolean): string {
   return rising ? part.up : part.down;
 }
 
 /** A hidden part paints nothing, so it takes the transparent colour instead of its own. */
-function paintedColor(part: CandlePartAppearance, rising: boolean): string {
+export function paintedColor(part: CandlePartAppearance, rising: boolean): string {
   return part.visible ? partColor(part, rising) : HIDDEN_PART_COLOR;
 }
 

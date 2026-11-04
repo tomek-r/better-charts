@@ -248,8 +248,15 @@ change still reaches untouched fields; a new chart has no overrides.
 
 Settings are kept per bar type. Each bar type declares its own fields (checkbox, checkbox
 with up/down colours, colour pair, colour, line width, choice, percent), so a new bar type
-adds only its declaration. Today only Candles is drawn: Body, Borders and Wick (each
-on/off with up/down colours) and "Color bars based on previous close".
+adds only its declaration. The type a chart draws is chosen from the button beside the
+timeframes in the chart header and saved with the chart's settings, so it comes back for
+the account and symbol it was chosen on. All twelve types are offered: Bars, Candles,
+Hollow candles, Volume candles, Line, Line with markers, Step line, Area, Baseline,
+Columns, High-low and Heikin Ashi. The candle series stays the anchor the price tags, the
+countdown, the pointer readout and the drawings use, while a second series draws every
+other type; Heikin Ashi is computed from the MT5 bars, and Baseline's base level is a
+share of the visible price range. The legend and the price tags keep showing the real MT5
+prices.
 
 The time zone is one of these settings: the footer clock and the dialog edit the same
 value. The old per-symbol saved time zones were not carried over.

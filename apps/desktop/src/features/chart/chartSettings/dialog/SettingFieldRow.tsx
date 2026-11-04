@@ -2,7 +2,12 @@ import type { ReactNode } from 'react';
 import type { ChartSettingField, ChartSettingValue } from '../settingFields';
 import { BackgroundFillSettingRow, TextStyleSettingRow } from './settingRows/appearanceRows';
 import { CheckboxSettingRow } from './settingRows/checkboxRows';
-import { ColorPairSettingRow, ColorSettingRow, ToggledColorPairSettingRow } from './settingRows/colorRows';
+import {
+  ColorPairSettingRow,
+  ColorSettingRow,
+  ToggledColorPairSettingRow,
+  ToggledColorSettingRow,
+} from './settingRows/colorRows';
 import { SizedLineSettingRow, ToggledLineSettingRow } from './settingRows/lineRows';
 import { BarCountSettingRow, PercentSettingRow } from './settingRows/numberRows';
 import { QuoteLinesSettingRow } from './settingRows/quoteRows';
@@ -15,6 +20,7 @@ const SETTING_ROWS: {
 } = {
   checkbox: CheckboxSettingRow,
   toggledColorPair: ToggledColorPairSettingRow,
+  toggledColor: ToggledColorSettingRow,
   colorPair: ColorPairSettingRow,
   color: ColorSettingRow,
   lineWidth: LineWidthSettingRow,

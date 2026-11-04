@@ -15,6 +15,12 @@ type ToggledColorPairValue = {
   readonly down: string;
 };
 
+/** A colour a checkbox turns on and off, such as the labels of a high-low bar. */
+export type ToggledColorValue = {
+  readonly visible: boolean;
+  readonly color: string;
+};
+
 /** A line a setting draws: its colour and the pattern it is dashed in. */
 export type LineValue = {
   readonly color: string;
@@ -92,6 +98,7 @@ export type ChartSettingValue =
   | string
   | ColorPairValue
   | ToggledColorPairValue
+  | ToggledColorValue
   | LineValue
   | SizedLineValue
   | ToggledLineValue
@@ -122,6 +129,11 @@ export interface CheckboxSettingField extends SettingFieldIdentity {
 export interface ToggledColorPairSettingField extends SettingFieldIdentity {
   readonly kind: 'toggledColorPair';
   readonly defaultValue: ToggledColorPairValue;
+}
+
+export interface ToggledColorSettingField extends SettingFieldIdentity {
+  readonly kind: 'toggledColor';
+  readonly defaultValue: ToggledColorValue;
 }
 
 export interface ColorPairSettingField extends SettingFieldIdentity {
@@ -184,6 +196,7 @@ export interface BarCountSettingField extends SettingFieldIdentity, NumberFieldU
 export type ChartSettingField =
   | CheckboxSettingField
   | ToggledColorPairSettingField
+  | ToggledColorSettingField
   | ColorPairSettingField
   | ColorSettingField
   | LineWidthSettingField
@@ -206,6 +219,7 @@ type SettingKind = ChartSettingField['kind'];
 
 const COLOR_PAIR_KEYS = ['up', 'down'];
 const TOGGLED_COLOR_PAIR_KEYS = ['visible', 'up', 'down'];
+const TOGGLED_COLOR_KEYS = ['visible', 'color'];
 const LINE_KEYS = ['color', 'style'];
 const SIZED_LINE_KEYS = ['color', 'style', 'width'];
 const TOGGLED_LINE_KEYS = ['visible', 'color', 'style'];
@@ -305,6 +319,18 @@ function readToggledColorPair(raw: unknown): ToggledColorPairValue | undefined {
   return { visible, ...colors };
 }
 
+function readToggledColor(raw: unknown): ToggledColorValue | undefined {
+  if (!hasExactKeys(raw, TOGGLED_COLOR_KEYS)) {
+    return undefined;
+  }
+  const visible = readBoolean(raw.visible);
+  const color = readColor(raw.color);
+  if (visible === undefined || color === undefined) {
+    return undefined;
+  }
+  return { visible, color };
+}
+
 function readLineParts(record: Readonly<Record<string, unknown>>): LineValue | undefined {
   const color = readColor(record.color);
   const style = readDashStyle(record.style);
@@ -401,6 +427,7 @@ export function isBackgroundFillValue(value: unknown): value is BackgroundFillVa
 const SETTING_VALUE_READERS: Readonly<Record<Exclude<SettingKind, 'choice'>, SettingValueReader>> = {
   checkbox: readBoolean,
   toggledColorPair: readToggledColorPair,
+  toggledColor: readToggledColor,
   colorPair: readColorPair,
   color: readColor,
   lineWidth: readLineWidth,

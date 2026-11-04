@@ -31,6 +31,8 @@ import { LOADER_MAX_WIDTH, LOADER_ROW_COUNT, LOADER_ROW_HEIGHT } from '../src/sh
 import { palette } from '../src/shared/theme/palette';
 
 const INTERVAL = STUB_M5_INTERVAL_MS;
+/** Comfortably above the number of modules the dev server serves for the app. */
+const RESOURCE_TIMING_BUFFER_SIZE = 5000;
 /** The loader paints one red and one teal bar per row in every frame. */
 const BARS_PER_LOADER = LOADER_ROW_COUNT * 2;
 
@@ -846,6 +848,8 @@ for (const boundary of ['fromX', 'toX'] as const) {
 }
 
 test('live candle bursts paint once per distinct bar and keep the final OHLC and volume', async ({ page }) => {
+  // The default 250-entry resource timing buffer drops modules Vite serves one by one, hiding chartController.ts.
+  await page.addInitScript((size) => performance.setResourceTimingBufferSize(size), RESOURCE_TIMING_BUFFER_SIZE);
   await gotoWithStub(page);
   await ready(page);
   const result = await page.evaluate(async (now) => {

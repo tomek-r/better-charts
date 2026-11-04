@@ -1,4 +1,4 @@
-import type { ISeriesApi, UTCTimestamp } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { Candle } from '../../../../shared/bridge/types';
 import { toRenderBar, type RenderBar } from './renderBar';
 import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../../shared/bridge/timeframes';
@@ -7,12 +7,15 @@ import {
   candlePointColors,
   candleSeriesColors,
   DEFAULT_CANDLE_APPEARANCE,
+  HIDDEN_CANDLE_APPEARANCE,
   sameCandleAppearance,
   type CandleAppearance,
 } from './candleAppearance';
+import { BarStyleSeries, type BarStyleSeriesState } from '../barStyle/barStyleSeries';
+import type { BarStyleAppearance } from '../barStyle/barStyleAppearance';
 
 /**
- * Owns the renderable bar cache and the two series it feeds, so every mutation
+ * Owns the renderable bar cache and the series it feeds, so every mutation
  * funnels through one place; `bars` is read-only for everyone else.
  *
  * `replace` applies the timeframe only once the history has been accepted. A
@@ -23,12 +26,19 @@ export class BarSeriesController {
   private cache: RenderBar[] = [];
   private period = DEFAULT_TIMEFRAME;
   private priceDigits = 2;
+  /** The anchor series' candles, which stay hidden while another series paints the bars. */
   private appearance = DEFAULT_CANDLE_APPEARANCE;
+  /** Draws every bar style but candles; the anchor keeps the primitives, the price format and the fit. */
+  private readonly barStyle: BarStyleSeries;
 
   constructor(
     private readonly candles: ISeriesApi<'Candlestick'>,
     private readonly volume: ISeriesApi<'Histogram'>,
-  ) {}
+    chart: IChartApi,
+  ) {
+    // Built after the surface's series (see createChartSurface), so its series paints above them.
+    this.barStyle = new BarStyleSeries(chart);
+  }
 
   get bars(): readonly RenderBar[] {
     return this.cache;
@@ -118,6 +128,7 @@ export class BarSeriesController {
       this.cache[this.cache.length - 1] = bar;
     }
     this.candles.update(this.candleData(bar, previous));
+    this.barStyle.updateBar(bar, previous);
     this.volume.update(this.volumeBar(bar));
     return appended;
   }
@@ -129,15 +140,39 @@ export class BarSeriesController {
     }
     this.priceDigits = digits;
     this.candles.applyOptions({ priceFormat: { type: 'price', precision: digits, minMove: 10 ** -digits } });
+    this.barStyle.setPrecision(digits);
     return true;
   }
 
   /**
-   * Draws the candles with `appearance`. The series colours are always reapplied; the
-   * bars are rewritten only when per-point colours are involved, because they are
-   * what carries the previous-close colouring into the data.
+   * Draws the chart's bar style. A style with a series of its own paints the bars there, and the anchor
+   * hides every candle part: it is kept for the primitives, the price format and the price fit alone.
    */
-  setCandleAppearance(appearance: CandleAppearance): void {
+  setBarStyle(appearance: BarStyleAppearance): void {
+    this.barStyle.apply(appearance, this.cache);
+    if (appearance.style === 'candles') {
+      this.applyCandleAppearance(appearance.candles);
+      return;
+    }
+    this.applyCandleAppearance(HIDDEN_CANDLE_APPEARANCE);
+  }
+
+  /** The bar style series as the test hook shows it: a plain copy, never a chart-library object. */
+  barStyleState(): BarStyleSeriesState {
+    return this.barStyle.state();
+  }
+
+  /** Removes the bar style series; the surface removes the chart itself. */
+  destroy(): void {
+    this.barStyle.destroy();
+  }
+
+  /**
+   * Draws the anchor series' candles with `appearance`. The series colours are always reapplied; the
+   * bars are rewritten only when per-point colours are involved, because they are what carries the
+   * previous-close colouring into the data.
+   */
+  private applyCandleAppearance(appearance: CandleAppearance): void {
     if (sameCandleAppearance(appearance, this.appearance)) {
       return;
     }
@@ -149,9 +184,10 @@ export class BarSeriesController {
     }
   }
 
-  /** Rewrites both series from the whole bar list. */
+  /** Rewrites every series from the whole bar list. */
   private writeAll(bars: readonly RenderBar[]): void {
     this.writeCandles(bars);
+    this.barStyle.replaceBars(bars);
     this.volume.setData(bars.map((bar) => this.volumeBar(bar)));
   }
 

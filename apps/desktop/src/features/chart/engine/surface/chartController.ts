@@ -19,7 +19,7 @@ import { PointerReadoutPrimitive } from '../legend/pointerReadoutPrimitive';
 import { PriceAxisTagsPrimitive } from '../quotes/priceAxisTagsPrimitive';
 import { PriceScaleController, type PriceScaleState } from '../priceScale/priceScaleController';
 import { BarSeriesController } from '../bars/barSeriesController';
-import type { CandleAppearance } from '../bars/candleAppearance';
+import type { BarStyleAppearance } from '../barStyle/barStyleAppearance';
 import { PriceLineController } from '../quotes/priceLineController';
 import { isOutsidePane, ViewportController, type DiagnosticViewport } from '../viewport/viewportController';
 import type {
@@ -111,7 +111,7 @@ export class ChartController {
     this.chart = chart;
     this.candles = candles;
     this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
-    this.data = new BarSeriesController(this.candles, volume);
+    this.data = new BarSeriesController(this.candles, volume, this.chart);
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
     this.view = new ViewportController(this.chart, this.candles, future, this.data, () => this.removed);
     this.olderHistory = new OlderHistoryPager({
@@ -188,7 +188,7 @@ export class ChartController {
     // primitives and controllers built above.
     this.tools.activateDefaultTool();
     if (import.meta.env.DEV) {
-      installChartDevTestApi(this.chart, this.candles, this.tools, this.pointerReadout, this.view, this);
+      installChartDevTestApi(this.chart, this.candles, this.tools, this.pointerReadout, this.view, this, this.data);
     }
   }
 
@@ -278,12 +278,12 @@ export class ChartController {
   setTimeZone(zone: string, brokerUtcOffsetMinutes: number | null): void {
     this.timeZoneDisplay.apply(zone, brokerUtcOffsetMinutes);
   }
-  /** Draws the candles with the chart's body, border and wick settings; the bars themselves stay where they are. */
-  setCandleAppearance(appearance: CandleAppearance): void {
+  /** Draws the chart's bar style: the candles on the anchor, or a series of its own for every other style. */
+  setBarStyle(appearance: BarStyleAppearance): void {
     if (this.removed) {
       return;
     }
-    this.data.setCandleAppearance(appearance);
+    this.data.setBarStyle(appearance);
     this.refreshOverlays();
   }
   /**
@@ -455,6 +455,7 @@ export class ChartController {
     this.candles.detachPrimitive(this.countdownPrimitive);
     this.candles.detachPrimitive(this.priceTags);
     this.candles.detachPrimitive(this.primitive);
+    this.data.destroy();
     this.chart.remove();
     if (import.meta.env.DEV) {
       removeDevTestApi();
