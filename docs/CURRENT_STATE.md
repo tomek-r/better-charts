@@ -339,9 +339,10 @@ values and each plot's value at the crosshair bar, or at the last bar while the 
 chart (e.g. "SMA 9 close 1.08520"); oscillators write two decimals. An indicator with a pane of
 its own shows the same row at the top-left of that pane instead. A hovered row offers Hide/Show,
 Settings and Remove buttons, and a double click on its title opens the settings. A hidden
-indicator's row is dimmed behind an eye-off icon, and a chevron collapses the price-pane rows to
-their count ("˅ 2"). Each indicator pane draws its own top border, which stops at the price axis;
-the library's pane separator, which would cross the axis, is transparent.
+indicator's row is dimmed, and a chevron collapses the price-pane rows to their count ("˅ 2").
+Each indicator pane draws its own top border, which stops at the price axis; the library's pane
+separator and its hover band, which would cross the axis, are transparent, and a band of the
+pane's width shows while the line between the panes is hovered or dragged.
 
 The Indicators dialog sits at a fixed offset from the top of the window, like the settings
 dialogs.

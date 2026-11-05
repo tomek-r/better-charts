@@ -33,7 +33,6 @@ export interface IndicatorLegendSource {
 /** One row's elements; they outlive a refresh, so hover and focus survive a crosshair move. */
 interface RowView {
   readonly element: HTMLDivElement;
-  readonly hiddenIcon: SVGSVGElement;
   readonly title: HTMLSpanElement;
   readonly visibilityIcon: SVGSVGElement;
   readonly visibility: HTMLButtonElement;
@@ -64,13 +63,12 @@ const ACTION_ICON_CLASS = 'chart-indicator-legend-action-icon';
 const TOGGLE_CLASS = 'chart-indicator-legend-toggle';
 const COUNT_CLASS = 'chart-indicator-legend-count';
 const CHEVRON_CLASS = 'chart-indicator-legend-chevron';
-const HIDDEN_ICON_CLASS = 'chart-indicator-legend-hidden-icon';
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const CHEVRON_VIEW_BOX = '0 0 10 10';
 const CHEVRON_PATHS = ['M2 3.5l3 3 3-3'];
 const ICON_VIEW_BOX = '0 0 12 12';
 const EYE_PATHS = ['M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z', 'M6 4.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3z'];
-const HIDDEN_ICON_PATHS = [...EYE_PATHS, 'M2 10L10 2'];
+const EYE_OFF_PATHS = [...EYE_PATHS, 'M2 10L10 2'];
 const GEAR_PATHS = [
   'M6 4a2 2 0 1 1 0 4a2 2 0 1 1 0-4z',
   'M6 1v1.5M6 9.5V11M1 6h1.5M9.5 6H11M2.5 2.5l1 1M8.5 8.5l1 1M2.5 9.5l1-1M8.5 3.5l1-1',
@@ -231,7 +229,6 @@ export class IndicatorLegend {
   private createRow(instanceId: string): RowView {
     const element = createElementWithClass('div', ROW_CLASS);
     element.dataset.instanceId = instanceId;
-    const hiddenIcon = createIcon(HIDDEN_ICON_CLASS, ICON_VIEW_BOX, HIDDEN_ICON_PATHS);
     const title = createElementWithClass('span', TITLE_CLASS);
     title.addEventListener('dblclick', () => this.commands.openSettings(instanceId));
     const visibilityIcon = createIcon(ACTION_ICON_CLASS, ICON_VIEW_BOX, EYE_PATHS);
@@ -254,8 +251,8 @@ export class IndicatorLegend {
     const actions = createElementWithClass('span', ACTIONS_CLASS);
     actions.append(visibility, settings, remove);
     const values = createElementWithClass('span', VALUES_CLASS);
-    element.append(hiddenIcon, title, actions, values);
-    return { element, hiddenIcon, title, visibilityIcon, visibility, values, hidden: false };
+    element.append(title, actions, values);
+    return { element, title, visibilityIcon, visibility, values, hidden: false };
   }
 
   private applyRow(view: RowView, row: IndicatorLegendRow): void {
@@ -266,14 +263,13 @@ export class IndicatorLegend {
     } else {
       delete view.element.dataset.hidden;
     }
-    view.hiddenIcon.toggleAttribute('hidden', !row.hidden);
     this.applyVisibilityButton(view);
     this.applyValues(view, row);
   }
 
   private applyVisibilityButton(view: RowView): void {
     const label = view.hidden ? INDICATOR_VISIBILITY_LABELS.on : INDICATOR_VISIBILITY_LABELS.off;
-    const paths = view.hidden ? HIDDEN_ICON_PATHS : EYE_PATHS;
+    const paths = view.hidden ? EYE_OFF_PATHS : EYE_PATHS;
     view.visibilityIcon.replaceChildren(...paths.map(createIconPath));
     view.visibility.setAttribute('aria-label', label);
     view.visibility.title = label;

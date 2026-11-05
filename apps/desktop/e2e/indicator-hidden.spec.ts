@@ -14,6 +14,7 @@ import { gotoWithStub } from './helpers/tauriStub';
 const INDICATOR_LEGEND_LABEL = 'Indicator legend';
 const ROW_SELECTOR = '.chart-indicator-legend-row';
 const HIDDEN_ROW_SELECTOR = '.chart-indicator-legend-row[data-hidden=true]';
+/** The eye-off icon a hidden row used to show in front of its name; this selector now asserts its absence. */
 const HIDDEN_ICON_SELECTOR = '.chart-indicator-legend-hidden-icon';
 const SHORT_SMA_LENGTH = 3;
 
@@ -80,13 +81,15 @@ async function openChartWithSma(page: Page): Promise<string> {
 test.describe('hidden indicators', () => {
   failOnPageNoise();
 
-  test('a saved hidden indicator is attached but draws no line and dims its legend row', async ({ page }) => {
+  test('a saved hidden indicator is attached but draws no line and dims its legend row without an icon in front of its name', async ({
+    page,
+  }) => {
     await openWithSavedIndicators(page, [{ instanceId: 'hidden-1', definitionId: 'sma', settings: {}, hidden: true }]);
 
     await expect.poll(async () => (await attachedIndicators(page))[0]?.hidden).toBe(true);
     await expect.poll(() => layerHidden(page)).toBe(true);
     await expect(firstLegendRow(page)).toHaveAttribute('data-hidden', 'true');
-    await expect(firstLegendRow(page).locator(HIDDEN_ICON_SELECTOR)).toHaveCount(1);
+    await expect(firstLegendRow(page).locator(HIDDEN_ICON_SELECTOR)).toHaveCount(0);
   });
 
   test('hiding and showing an attached indicator toggles its line and its row', async ({ page }) => {

@@ -35,6 +35,8 @@ const PRICE_SCALE_MIN_WIDTH = 70;
 /** The library's resize handle on the pane separator; its full-window drag backdrop is the fixed one. */
 const RESIZE_HANDLE_SELECTOR = '.chart-host td[colspan="3"] > div[style*="position: absolute"]';
 const TRANSPARENT_COLOR = 'rgba(0, 0, 0, 0)';
+/** The app's own hover band on that separator, drawn over the pane's width instead. */
+const SEPARATOR_BAND_SELECTOR = '.chart-pane-separator-band';
 
 /** The legend an indicator holding a pane of its own shows its row in. */
 function paneLegend(page: Page): Locator {
@@ -215,7 +217,7 @@ test.describe('own-pane indicator legend', () => {
     await expect(page.getByRole('dialog', { name: RSI_SETTINGS_DIALOG })).toBeVisible();
   });
 
-  test('hovering the line between the panes paints no band', async ({ page }) => {
+  test('hovering the line between the panes paints a band over the pane only', async ({ page }) => {
     const handle = page.locator(RESIZE_HANDLE_SELECTOR);
     const box = await handle.boundingBox();
     if (box === null) {
@@ -225,6 +227,20 @@ test.describe('own-pane indicator legend', () => {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 
     await expect(handle).toHaveCSS('background-color', TRANSPARENT_COLOR);
+
+    const band = page.locator(SEPARATOR_BAND_SELECTOR);
+    await expect(band).toHaveCSS('opacity', '1');
+    const bandBox = await band.boundingBox();
+    const overlayBox = await paneLegend(page).boundingBox();
+    const hostBox = await page.locator(CHART_HOST_SELECTOR).boundingBox();
+    if (bandBox === null || overlayBox === null || hostBox === null) {
+      throw new Error('The separator band, the pane legend or the chart host is not laid out.');
+    }
+    expect(bandBox.width).toBeCloseTo(overlayBox.width, 0);
+    expect(bandBox.x + bandBox.width).toBeLessThanOrEqual(hostBox.x + hostBox.width - PRICE_SCALE_MIN_WIDTH);
+
+    await page.mouse.move(0, 0);
+    await expect(band).toHaveCSS('opacity', '0');
   });
 });
 

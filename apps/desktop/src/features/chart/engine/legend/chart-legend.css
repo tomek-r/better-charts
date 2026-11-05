@@ -83,14 +83,6 @@
   opacity: 0.5;
 }
 
-.chart-indicator-legend-hidden-icon {
-  width: 12px;
-  height: 12px;
-  margin-right: 4px;
-  vertical-align: middle;
-  stroke-width: 1.2;
-}
-
 .chart-indicator-legend-toggle {
   pointer-events: auto;
   display: inline-flex;
@@ -162,10 +154,6 @@
   stroke-width: 1.2;
 }
 
-.chart-indicator-legend-hidden-icon[hidden] {
-  display: none;
-}
-
 /* The overlay is the pane's top border, because the library separator crosses the price axis too,
    and it holds the legend row of the indicator that owns the pane. */
 .chart-indicator-pane-overlay {
@@ -185,4 +173,22 @@
   position: absolute;
   top: 4px;
   left: 12px;
+}
+
+/* The pane separator's hover band, drawn over the pane's width only: the library's own band (made
+   transparent) spans the price axis too. It shows while the library's resize handle beside it is
+   hovered, and while a drag shows the library's full-window backdrop. */
+.chart-pane-separator-band {
+  position: absolute;
+  top: -4px;
+  z-index: 49;
+  height: 9px;
+  pointer-events: none;
+  background: var(--color-border-subtle);
+  opacity: 0;
+}
+
+.chart-host td[colspan='3'] > div[style*='position: absolute']:hover ~ .chart-pane-separator-band,
+.chart-host td[colspan='3']:has(> div[style*='display: block']) > .chart-pane-separator-band {
+  opacity: 1;
 }
