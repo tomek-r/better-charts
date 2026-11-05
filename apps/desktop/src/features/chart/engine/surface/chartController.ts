@@ -25,8 +25,6 @@ import { isOutsidePane, ViewportController, type DiagnosticViewport } from '../v
 import type {
   ChartDrawingPaintTarget,
   ChartDrawTarget,
-  ChartToolDefinition,
-  ChartToolHost,
   ChartToolHostBase,
   ChartToolResetReason,
 } from '../tools/toolContract';
@@ -34,23 +32,15 @@ import { ChartToolSet, type ChartToolInput } from '../tools/toolSet';
 import { ChartDrawings } from '../drawings/chartDrawings';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installChartDevTestApi, removeDevTestApi } from './devTestApi';
-import { IndicatorLayer } from '../indicators/indicatorLayer';
-import { IndicatorRuntime } from '../indicators/indicatorRuntime';
-import type { ChartIndicatorDefinition } from '../indicators/indicatorContract';
+import type { ChartControllerOptions } from './chartControllerOptions';
+import type { IndicatorLayer } from '../indicators/indicatorLayer';
+import type { IndicatorRuntime } from '../indicators/indicatorRuntime';
+import { ChartIndicators } from '../indicators/chartIndicators';
 import { LiveBarController } from './liveBarController';
 import { HistoryViewportMode } from '../bars/historyViewportMode';
 import { initialHistoryWindow } from '../bars/initialHistoryWindow';
 import { OlderHistoryPager } from '../bars/olderHistoryPager';
 import { PointerCandleHold } from '../bars/pointerCandleHold';
-
-/** What the app gives the chart for its tools; a tool sees it only through its `ChartToolHost`. */
-type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
-  toolDefinitions: readonly ChartToolDefinition[];
-  /** Every indicator a user can attach; the engine never imports the registry they come from. */
-  indicatorDefinitions: readonly ChartIndicatorDefinition[];
-  /** The tool active at start and made active again after a placement; one of `toolDefinitions`. */
-  defaultToolId: string;
-};
 
 /** How a whole history replaces the series: for which timeframe, and where the pane goes afterwards. */
 interface ReplaceHistoryOptions {
@@ -110,6 +100,8 @@ export class ChartController {
   readonly indicatorLayer: IndicatorLayer;
   /** The indicators attached to the chart: each loads on a new history and follows the live bar. */
   readonly indicators: IndicatorRuntime;
+  /** The layer, the runtime and the legend above, owned and torn down as one unit. */
+  private readonly chartIndicators: ChartIndicators;
   onToolRelease?: () => void;
 
   constructor(
@@ -122,7 +114,15 @@ export class ChartController {
     this.candles = candles;
     this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
     this.data = new BarSeriesController(this.candles, volume, this.chart);
-    this.indicatorLayer = new IndicatorLayer(this.chart);
+    const { toolDefinitions, defaultToolId, indicatorDefinitions, indicatorLegendTitle, ...hostOptions } = options;
+    this.chartIndicators = new ChartIndicators(this.chart, host, {
+      definitions: indicatorDefinitions,
+      legendTitle: indicatorLegendTitle,
+      bars: () => this.bars,
+      digits: () => this.data.pricePrecision,
+    });
+    this.indicatorLayer = this.chartIndicators.layer;
+    this.indicators = this.chartIndicators.runtime;
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
     this.view = new ViewportController(this.chart, this.candles, future, this.data, () => this.removed);
     this.olderHistory = new OlderHistoryPager({
@@ -134,8 +134,6 @@ export class ChartController {
       anchorAfterPrepend: (previous, added) => this.view.anchorAfterPrepend(previous, added),
       refreshOverlays: () => this.refreshOverlays(),
     });
-    const { toolDefinitions, defaultToolId, indicatorDefinitions, ...hostOptions } = options;
-    this.indicators = new IndicatorRuntime(this.indicatorLayer, indicatorDefinitions, () => this.bars);
     const toolHost: ChartToolHostBase = {
       ...hostOptions,
       barSeries: this.data,
@@ -452,8 +450,7 @@ export class ChartController {
     this.candles.detachPrimitive(this.countdownPrimitive);
     this.candles.detachPrimitive(this.priceTags);
     this.candles.detachPrimitive(this.primitive);
-    this.indicators.destroy();
-    this.indicatorLayer.destroy();
+    this.chartIndicators.destroy();
     this.data.destroy();
     this.chart.remove();
     if (import.meta.env.DEV) {

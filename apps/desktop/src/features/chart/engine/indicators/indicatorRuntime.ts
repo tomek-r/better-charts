@@ -27,6 +27,8 @@ export class IndicatorRuntime {
     private readonly layer: IndicatorLayer,
     private readonly definitions: readonly ChartIndicatorDefinition[],
     private readonly bars: () => readonly RenderBar[],
+    /** Called after the attached indicators or the values they draw changed, so the legend follows. */
+    private readonly changed: () => void,
   ) {}
 
   /** Attaches `definitionId` as `instanceId`, replacing one already attached; false when unknown. */
@@ -44,6 +46,7 @@ export class IndicatorRuntime {
     };
     this.attached.set(instanceId, entry);
     this.reload(instanceId, entry);
+    this.changed();
     return true;
   }
 
@@ -56,6 +59,7 @@ export class IndicatorRuntime {
     entry.indicator.dispose?.();
     this.layer.remove(instanceId);
     this.attached.delete(instanceId);
+    this.changed();
   }
 
   /** Resolves `stored` again and reloads `instanceId`; an unknown id does nothing. */
@@ -66,6 +70,7 @@ export class IndicatorRuntime {
     }
     entry.settings = resolveSettingValues(entry.definition, stored);
     this.reload(instanceId, entry);
+    this.changed();
   }
 
   /** Loads every attached indicator again after a new history, symbol, timeframe or older page. */
@@ -73,6 +78,7 @@ export class IndicatorRuntime {
     for (const [instanceId, entry] of this.attached) {
       this.reload(instanceId, entry);
     }
+    this.changed();
   }
 
   /** Hands the live bar to every attached indicator, each of which keeps its own state. */
@@ -80,6 +86,7 @@ export class IndicatorRuntime {
     for (const [instanceId, entry] of this.attached) {
       this.layer.update(instanceId, entry.indicator.update(bar, entry.settings));
     }
+    this.changed();
   }
 
   /** The newest bar changed or a new one opened: hands that bar to every attached indicator. */

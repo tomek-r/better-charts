@@ -1,6 +1,7 @@
 import {
   LineSeries,
   LineType,
+  MismatchDirection,
   type IChartApi,
   type ISeriesApi,
   type LineData,
@@ -71,6 +72,28 @@ function secondsOf(time: Time): number {
 
 function isLinePoint(point: LineData<Time> | WhitespaceData<Time>): point is LineData<Time> {
   return 'value' in point;
+}
+
+/** One plot's value at one bar and the colour it is drawn in. */
+export interface IndicatorLegendValue {
+  readonly value: number | null;
+  readonly color: string;
+}
+
+/**
+ * The legend's value for one plot at the bar with `logicalIndex`: the plot's own colour where its
+ * point carries one, and no value where the plot has no point (a whitespace bar or a bar before it).
+ */
+function legendValueOf(series: ISeriesApi<'Line'>, logicalIndex: number): IndicatorLegendValue {
+  const color = series.options().color;
+  if (logicalIndex < 0) {
+    return { value: null, color };
+  }
+  const point = series.dataByIndex(logicalIndex, MismatchDirection.None);
+  if (point === null || !isLinePoint(point)) {
+    return { value: null, color };
+  }
+  return { value: point.value, color: point.color ?? color };
 }
 
 function pointStateOf(point: LineData<Time>): IndicatorPointState {
@@ -152,6 +175,15 @@ export class IndicatorLayer {
       id,
       plots: shown.series.map((series, plotIndex) => plotStateOf(series, shown.titles[plotIndex])),
     }));
+  }
+
+  /** Each plot's value at the bar with `logicalIndex`, for the legend; an unknown id has none. */
+  valuesAt(id: string, logicalIndex: number): IndicatorLegendValue[] {
+    const shown = this.shown.get(id);
+    if (shown === undefined) {
+      return [];
+    }
+    return shown.series.map((series) => legendValueOf(series, logicalIndex));
   }
 
   private addPlot(plot: IndicatorPlot): ISeriesApi<'Line'> {

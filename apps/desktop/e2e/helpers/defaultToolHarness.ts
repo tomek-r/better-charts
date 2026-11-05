@@ -36,6 +36,7 @@ export function mountChartWithDefaultTool(
       toolDefinitions,
       // This harness exercises the tools only; no indicator is attached.
       indicatorDefinitions: [],
+      indicatorLegendTitle: (definitionId) => definitionId,
       defaultToolId,
     },
   );

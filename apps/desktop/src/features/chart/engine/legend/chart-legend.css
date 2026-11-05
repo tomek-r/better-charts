@@ -33,3 +33,68 @@
 .chart-market-unknown {
   background: var(--color-muted);
 }
+
+/* The indicator rows sit under the OHLC line; only the toggle takes the pointer. */
+.chart-indicator-legend {
+  position: absolute;
+  top: 28px;
+  left: 12px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  color: var(--color-text-label);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.chart-indicator-legend-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chart-indicator-legend-rows[hidden],
+.chart-indicator-legend[hidden] {
+  display: none;
+}
+
+.chart-indicator-legend-row {
+  white-space: nowrap;
+}
+
+.chart-indicator-legend-toggle {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px;
+  margin-left: -4px;
+  border: 0;
+  border-radius: var(--border-radius);
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chart-indicator-legend-toggle:hover {
+  background: var(--color-border-subtle);
+}
+
+.chart-indicator-legend-chevron {
+  width: 10px;
+  height: 10px;
+  stroke-width: 1.5;
+  transition: none;
+}
+
+.chart-indicator-legend[data-collapsed='false'] .chart-indicator-legend-chevron {
+  transform: rotate(180deg);
+}
+
+.chart-indicator-legend-count[hidden] {
+  display: none;
+}
