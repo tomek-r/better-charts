@@ -62,11 +62,14 @@
 }
 
 .chart-indicator-legend-row {
+  --indicator-legend-row-height: 22px;
   pointer-events: auto;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 4px;
+  /* One height with or without the hover buttons: the 20 px buttons plus the 1 px border on each side. */
+  height: var(--indicator-legend-row-height);
+  padding: 0 4px;
   margin-left: -5px;
   border: 1px solid transparent;
   border-radius: var(--border-radius);

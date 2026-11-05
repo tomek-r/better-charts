@@ -174,6 +174,23 @@ test.describe('indicator legend', () => {
     await expect.poll(async () => (await attachedIndicators(page)).length).toBe(0);
     await expect(legend).toBeHidden();
   });
+
+  test('hovering a row keeps its height, so the rows under it stay put', async ({ page }) => {
+    await attachSma(page);
+    // The dialog closes under the pointer; off the chart, the row shows no buttons.
+    await page.mouse.move(0, 0);
+
+    const before = await rows.first().boundingBox();
+    await rows.first().hover();
+    await expect(rows.first().getByRole('button', { name: REMOVE_BUTTON_LABEL, exact: true })).toBeVisible();
+    const after = await rows.first().boundingBox();
+
+    if (before === null || after === null) {
+      throw new Error('The indicator legend row is not laid out.');
+    }
+    expect(after.height).toBeCloseTo(before.height, 0);
+    expect(after.y).toBeCloseTo(before.y, 0);
+  });
 });
 
 test.describe('own-pane indicator legend', () => {
