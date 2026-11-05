@@ -3,6 +3,7 @@ import type { ChartDrawingRecord, ChartDrawingSelection } from '../chart/engine/
 import { findChartToolPlugin } from '../tools/registry';
 import { useDrawingSelection } from '../tools/drawingToolbar/useDrawingSelection';
 import { ObjectTreeBarsRow } from './ObjectTreeBarsRow';
+import { ObjectTreeIndicators } from './ObjectTreeIndicators';
 import { ObjectTreeRow } from './ObjectTreeRow';
 import { useLayerList } from './useLayerList';
 import { useLayerReorder } from './useLayerReorder';
@@ -14,8 +15,8 @@ function isRecordSelected(selection: ChartDrawingSelection | null, record: Chart
 
 /**
  * The object tree drawer's body: the heading, then every layer of the chart, topmost first: the
- * drawings and the price bars among them. A tool the app no longer knows has no row, because its
- * label and icon come from the registry.
+ * drawings and the price bars among them. Under the drawings sit the indicator rows of the price pane.
+ * A tool the app no longer knows has no row, because its label and icon come from the registry.
  */
 export function ObjectTreePanel() {
   const layers = useLayerList();
@@ -49,6 +50,7 @@ export function ObjectTreePanel() {
       <ul ref={listRef} className="object-tree-list" aria-label="Drawings" tabIndex={-1}>
         {layers.map(layerRow)}
       </ul>
+      <ObjectTreeIndicators />
     </>
   );
 }

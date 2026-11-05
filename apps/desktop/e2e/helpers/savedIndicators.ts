@@ -1,6 +1,18 @@
 import type { Page } from '@playwright/test';
 import { openChart } from './openChart';
+import { savedOverrides } from './savedOverrides';
 import { chartScopeKey, gotoWithStub } from './tauriStub';
+
+/** Returns the raw `indicators` value of the most recently saved overrides object. */
+export function latestSavedIndicators(page: Page): Promise<unknown> {
+  return savedOverrides(page).then((saved) => {
+    const latest = saved.at(-1);
+    if (typeof latest !== 'object' || latest === null || Array.isArray(latest)) {
+      return undefined;
+    }
+    return 'indicators' in latest ? latest['indicators'] : undefined;
+  });
+}
 
 export const EURUSD_CHART = chartScopeKey('50123456@Broker-Demo', 'EURUSD');
 

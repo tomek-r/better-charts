@@ -3,20 +3,8 @@ import { readSavedIndicators } from '../src/features/chart/chartSettings/savedIn
 import { attachSma, attachedDefinitions, attachedIndicators } from './helpers/indicatorsDialog';
 import { openChart } from './helpers/openChart';
 import { failOnPageNoise } from './helpers/pageNoise';
-import { openWithSavedIndicators } from './helpers/savedIndicators';
-import { savedOverrides } from './helpers/savedOverrides';
+import { latestSavedIndicators, openWithSavedIndicators } from './helpers/savedIndicators';
 import { gotoWithStub } from './helpers/tauriStub';
-
-/** Returns the raw `indicators` value of the most recently saved overrides object. */
-function latestSavedIndicators(page: Page): Promise<unknown> {
-  return savedOverrides(page).then((saved) => {
-    const latest = saved.at(-1);
-    if (typeof latest !== 'object' || latest === null || Array.isArray(latest)) {
-      return undefined;
-    }
-    return 'indicators' in latest ? latest['indicators'] : undefined;
-  });
-}
 
 /** Number of indicator lines the chart has actually drawn. */
 function drawnLineCount(page: Page): Promise<number> {
