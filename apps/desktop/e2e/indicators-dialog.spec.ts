@@ -17,12 +17,33 @@ const NO_MATCHES = 'No indicators found.';
 const SMA_TITLE = 'Moving Average Simple';
 const SMA_SETTING_COUNT = 9;
 
+const ROW_FONT_SIZE = '14px';
+
 test.describe('indicators dialog', () => {
   failOnPageNoise();
 
   test.beforeEach(async ({ page }) => {
     await gotoWithStub(page);
     await openChart(page);
+  });
+
+  test('the dialog sits near the top of the window, not in its centre', async ({ page }) => {
+    await openIndicators(page);
+
+    const box = await indicatorsDialog(page).boundingBox();
+    const viewport = page.viewportSize();
+    if (box === null || viewport === null) {
+      throw new Error('the dialog or the viewport has no bounding box');
+    }
+
+    // A centred dialog has its middle on the window's middle; one anchored to the top sits above it.
+    expect(box.y + box.height / 2).toBeLessThan(viewport.height / 2);
+  });
+
+  test('indicator names are written at 14px', async ({ page }) => {
+    await openIndicators(page);
+
+    await expect(listRows(page).first()).toHaveCSS('font-size', ROW_FONT_SIZE);
   });
 
   test('the Indicators button opens a dialog with the search field focused and every indicator listed', async ({

@@ -37,6 +37,7 @@ export function IndicatorsDialog({
     <ModalDialog
       title={DIALOG_TITLE}
       className={DIALOG_CLASS_NAME}
+      backdropClassName="drawing-settings-backdrop"
       headerActions={<ModalDialogCloseButton label={CLOSE_LABEL} onClick={onDismiss} />}
       initialFocusRef={searchRef}
       onDismiss={onDismiss}
