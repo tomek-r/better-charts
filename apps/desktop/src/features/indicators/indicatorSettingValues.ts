@@ -1,4 +1,4 @@
-import type { IndicatorLineStyle, IndicatorPlot } from '../chart/engine/indicators/indicatorFrame';
+import type { IndicatorLevel, IndicatorLineStyle, IndicatorPlot } from '../chart/engine/indicators/indicatorFrame';
 import {
   SETTING_INPUT_SOURCES,
   type SettingInputSource,
@@ -50,18 +50,38 @@ function lineStyleSetting(settings: SettingValues, styleId: string): IndicatorLi
   return isLineStyle(lineStyle) ? lineStyle : DEFAULT_LINE_STYLE;
 }
 
+/** The keys a `line` style stores, as both the plot and the level a style can draw read them. */
+interface LineLook {
+  color: string;
+  lineWidth: number;
+  lineStyle: IndicatorLineStyle;
+  visible: boolean;
+}
+
+/** A `line` style's stored keys, in the style's values or, when one is missing, the given defaults. */
+function lineLook(settings: SettingValues, styleId: string, defaults: { color: string; width: number }): LineLook {
+  return {
+    color: stringSetting(settings, settingStyleKey(styleId, 'color'), defaults.color),
+    lineWidth: numberSetting(settings, settingStyleKey(styleId, 'width'), defaults.width),
+    lineStyle: lineStyleSetting(settings, styleId),
+    visible: booleanSetting(settings, settingStyleKey(styleId, 'visible'), DEFAULT_PLOT_VISIBLE),
+  };
+}
+
 /** The plot a `line` style draws, in the style's values or, when one is missing, the given default. */
 export function linePlotSetting(
   settings: SettingValues,
   styleId: string,
   plot: { title: string; color: string; width: number },
 ): IndicatorPlot {
-  return {
-    title: plot.title,
-    style: 'line',
-    color: stringSetting(settings, settingStyleKey(styleId, 'color'), plot.color),
-    lineWidth: numberSetting(settings, settingStyleKey(styleId, 'width'), plot.width),
-    lineStyle: lineStyleSetting(settings, styleId),
-    visible: booleanSetting(settings, settingStyleKey(styleId, 'visible'), DEFAULT_PLOT_VISIBLE),
-  };
+  return { title: plot.title, style: 'line', ...lineLook(settings, styleId, plot) };
+}
+
+/** The level a `line` style draws at `price`, in the style's values or, when one is missing, its default. */
+export function levelSetting(
+  settings: SettingValues,
+  styleId: string,
+  level: { title: string; price: number; color: string; width: number },
+): IndicatorLevel {
+  return { title: level.title, price: level.price, ...lineLook(settings, styleId, level) };
 }

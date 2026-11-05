@@ -19,6 +19,9 @@ const SAVED_SMA_21: SavedIndicator = { instanceId: 'sma-2', definitionId: 'sma',
 /** A saved indicator whose definition the registry does not know, so the tree cannot name it. */
 const SAVED_UNREGISTERED: SavedIndicator = { instanceId: 'ghost-1', definitionId: 'not-registered', settings: {} };
 
+/** A saved indicator that draws in a pane of its own, so the price-pane tree has no row for it. */
+const SAVED_RSI: SavedIndicator = { instanceId: 'rsi-1', definitionId: 'rsi', settings: { length: 14 } };
+
 test('hiding marks only its own entry, and showing takes the key away again', () => {
   const hidden = withIndicatorHidden([SAVED_SMA_9, SAVED_SMA_21], SAVED_SMA_9.instanceId, true);
 
@@ -48,4 +51,10 @@ test('the tree lists a registered price-pane indicator and drops an unknown defi
   expect(listed).toHaveLength(1);
   expect(listed[0]?.saved.definitionId).toBe('sma');
   expect(listed[0]?.plugin.pane).toBe('overlay');
+});
+
+test('the tree drops a saved own-pane indicator and keeps the price-pane one', () => {
+  const listed = objectTreeIndicators([SAVED_RSI, SAVED_SMA_9]);
+
+  expect(listed.map((entry) => entry.saved.definitionId)).toEqual(['sma']);
 });

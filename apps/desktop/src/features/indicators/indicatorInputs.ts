@@ -34,7 +34,12 @@ export function sourceInput(defaultValue: SettingInputSource): SettingInputSourc
   return { kind: 'source', id: SOURCE_INPUT, title: 'Source', defaultValue };
 }
 
-/** A drawn `line` style with the shared width and dash pattern, coloured `color`. */
-export function lineStyle(id: string, title: string, color: string): SettingStyleLine {
-  return { kind: 'line', id, title, defaults: { visible: true, color, width: LINE_WIDTH, style: LINE_DASH } };
+/** A drawn `line` style with the shared width, coloured `color` and dashed `dash` unless overridden. */
+export function lineStyle(
+  id: string,
+  title: string,
+  color: string,
+  dash: SettingStyleLineStyle = LINE_DASH,
+): SettingStyleLine {
+  return { kind: 'line', id, title, defaults: { visible: true, color, width: LINE_WIDTH, style: dash } };
 }
