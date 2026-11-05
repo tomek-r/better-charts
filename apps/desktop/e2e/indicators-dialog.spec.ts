@@ -1,65 +1,28 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
 import { matchingIndicators } from '../src/features/indicators/indicatorSearch';
+import {
+  attachedDefinitions,
+  attachedIndicators,
+  indicatorsButton,
+  indicatorsDialog,
+  indicatorsList,
+  listRows,
+  openIndicators,
+} from './helpers/indicatorsDialog';
+import { failOnPageNoise } from './helpers/pageNoise';
 import { openChart } from './helpers/openChart';
-import { pageNoise, recordPageNoise } from './helpers/pageNoise';
 import { gotoWithStub } from './helpers/tauriStub';
 
-const DIALOG_NAME = 'Indicators';
-const BUTTON_NAME = 'Indicators';
-const SEARCH_NAME = 'Search indicators';
-const LIST_NAME = 'Indicators';
 const NO_MATCHES = 'No indicators found.';
 const SMA_TITLE = 'Moving Average Simple';
 const SMA_SETTING_COUNT = 9;
 
-type AttachedIndicator = {
-  instanceId: string;
-  definitionId: string;
-  settings: unknown;
-};
-
-function indicatorsButton(page: Page) {
-  return page.getByRole('button', { name: BUTTON_NAME, exact: true });
-}
-
-function indicatorsDialog(page: Page) {
-  return page.getByRole('dialog', { name: DIALOG_NAME });
-}
-
-function searchField(page: Page) {
-  return page.getByRole('searchbox', { name: SEARCH_NAME });
-}
-
-function listRows(page: Page) {
-  return indicatorsDialog(page).getByRole('list', { name: LIST_NAME }).getByRole('button');
-}
-
-async function openIndicators(page: Page) {
-  await indicatorsButton(page).click();
-  await expect(indicatorsDialog(page)).toBeVisible();
-  return searchField(page);
-}
-
-async function attachedIndicators(page: Page): Promise<AttachedIndicator[]> {
-  const attached = await page.evaluate(() => window.__chartTest!.attachedIndicators());
-  return Array.from(attached);
-}
-
-async function attachedDefinitions(page: Page): Promise<string[]> {
-  const attached = await attachedIndicators(page);
-  return attached.map((indicator) => indicator.definitionId);
-}
-
 test.describe('indicators dialog', () => {
+  failOnPageNoise();
+
   test.beforeEach(async ({ page }) => {
-    await recordPageNoise(page);
     await gotoWithStub(page);
     await openChart(page);
-  });
-
-  test.afterEach(async ({ page }) => {
-    expect(await pageNoise(page)).toEqual([]);
   });
 
   test('the Indicators button opens a dialog with the search field focused and every indicator listed', async ({
@@ -69,7 +32,7 @@ test.describe('indicators dialog', () => {
 
     await expect(indicatorsButton(page)).toHaveAttribute('aria-expanded', 'true');
     await expect(search).toBeFocused();
-    await expect(indicatorsDialog(page).getByRole('list', { name: LIST_NAME }).getByText(SMA_TITLE)).toBeVisible();
+    await expect(indicatorsList(page).getByText(SMA_TITLE)).toBeVisible();
   });
 
   test('typing filters the list by name or short name', async ({ page }) => {
@@ -94,8 +57,8 @@ test.describe('indicators dialog', () => {
     await listRows(page).first().click();
 
     await expect(indicatorsDialog(page)).toBeHidden();
+    await expect.poll(async () => (await attachedIndicators(page)).length).toBe(1);
     const attached = await attachedIndicators(page);
-    expect(attached).toHaveLength(1);
     expect(attached[0]?.definitionId).toBe('sma');
     expect(attached[0]?.settings).toHaveLength(SMA_SETTING_COUNT);
   });
@@ -107,7 +70,7 @@ test.describe('indicators dialog', () => {
     await search.press('Enter');
 
     await expect(indicatorsDialog(page)).toBeHidden();
-    expect(await attachedDefinitions(page)).toEqual(['sma']);
+    await expect.poll(() => attachedDefinitions(page)).toEqual(['sma']);
   });
 
   test('Escape and the close button close the dialog without attaching anything', async ({ page }) => {

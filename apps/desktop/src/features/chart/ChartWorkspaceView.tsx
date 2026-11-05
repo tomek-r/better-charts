@@ -10,6 +10,8 @@ import { useChartDrawn } from './useChartDrawn';
 import { ChartDrawingPersistence } from './drawingPersistence/ChartDrawingPersistence';
 import { ChartDrawingToolbar } from '../tools/drawingToolbar/ChartDrawingToolbar';
 
+import { ChartIndicatorSync } from '../indicators/ChartIndicatorSync';
+
 export function ChartWorkspaceView() {
   const chartDrawn = useChartDrawn();
   return (
@@ -26,6 +28,7 @@ export function ChartWorkspaceView() {
         </div>
         <ChartCanvas>
           <ChartDrawingPersistence />
+          <ChartIndicatorSync />
           <ChartPartialClose />
           <ChartDrawingToolbar />
         </ChartCanvas>

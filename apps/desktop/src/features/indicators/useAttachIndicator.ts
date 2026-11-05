@@ -1,14 +1,16 @@
-import { useChartResources } from '../chart/ChartWorkspaceProvider';
+import { useChartSettings } from '../chart/chartSettings/ChartSettingsProvider';
+import { withIndicators } from '../chart/chartSettings/chartSettings';
 import type { RegisteredChartIndicatorPlugin } from './registry';
 
 /**
- * Attaches an indicator to the chart with its default settings; an attachment lives in memory only until
- * saving arrives with the chart's stored indicators.
+ * Adds an indicator to the chart with its default settings, by saving it with the chart's settings; the
+ * chart's indicator runtime follows them, so the indicator shows as soon as the chart keeps it.
  */
 export function useAttachIndicator(): (plugin: RegisteredChartIndicatorPlugin) => void {
-  const { chart } = useChartResources();
+  const { settings, keep } = useChartSettings();
 
   return (plugin) => {
-    chart.current?.indicators.attach(crypto.randomUUID(), plugin.id, undefined);
+    const indicator = { instanceId: crypto.randomUUID(), definitionId: plugin.id, settings: {} };
+    keep(withIndicators(settings, [...settings.indicators, indicator]));
   };
 }

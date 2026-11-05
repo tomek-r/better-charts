@@ -2,6 +2,7 @@ import { BAR_STYLES, DEFAULT_BAR_STYLE, isBarStyle, type BarStyle } from '../eng
 import { EXCHANGE_TIME_ZONE, isKnownChartTimeZone } from '../timeZone/chartTimeZones';
 import { BAR_STYLE_SETTINGS } from './barStyleSettings';
 import { canvasFields } from './canvasSettings';
+import { readSavedIndicators, sameSavedIndicators, type SavedIndicator } from './savedIndicators';
 import { scalesFields } from './scalesSettings';
 import { readSettingValue, sameSettingValue, type ChartSettingField, type ChartSettingValue } from './settingFields';
 
@@ -27,6 +28,7 @@ export interface ChartSettings {
   readonly barStyles: Readonly<Record<BarStyle, BarStyleSettingValues>>;
   readonly canvas: CanvasSettingValues;
   readonly scales: ScalesSettingValues;
+  readonly indicators: readonly SavedIndicator[];
 }
 
 /** Sparse settings: only what a stored template or a chart's overrides set. */
@@ -36,6 +38,7 @@ export interface ChartSettingsLayer {
   readonly barStyles?: Readonly<Partial<Record<BarStyle, BarStyleSettingValues>>>;
   readonly canvas?: CanvasSettingValues;
   readonly scales?: ScalesSettingValues;
+  readonly indicators?: readonly SavedIndicator[];
 }
 
 type BarStylesByStyle = Readonly<Record<BarStyle, BarStyleSettingValues>>;
@@ -200,6 +203,9 @@ function chartSettingsLayer(parts: ChartSettingsLayer, groups: SparseGroupValues
   if (parts.barStyles !== undefined) {
     layer.barStyles = parts.barStyles;
   }
+  if (parts.indicators !== undefined) {
+    layer.indicators = parts.indicators;
+  }
   return layer;
 }
 
@@ -214,6 +220,7 @@ function withLayer(settings: ChartSettings, layer: ChartSettingsLayer): ChartSet
     timeZone: layer.timeZone ?? settings.timeZone,
     barStyles: everyBarStyle((style) => mergedValues(settings.barStyles[style], layer.barStyles?.[style])),
     ...mergedGroups(settings, layer),
+    indicators: layer.indicators ?? settings.indicators,
   };
 }
 
@@ -251,6 +258,7 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   timeZone: EXCHANGE_TIME_ZONE,
   barStyles: everyBarStyle((style) => defaultValues(BAR_STYLE_SETTINGS[style].fields)),
   ...GROUP_DEFAULTS,
+  indicators: [],
 };
 
 /** The stored layer, keeping the fields that fit and dropping everything this build cannot show. */
@@ -263,6 +271,7 @@ export function readChartSettingsLayer(raw: unknown): ChartSettingsLayer {
       barStyle: readBarStyleName(raw.barStyle),
       timeZone: readTimeZoneName(raw.timeZone),
       barStyles: readSparseBarStyles(raw.barStyles),
+      indicators: readSavedIndicators(raw.indicators),
     },
     readGroups(raw),
   );
@@ -280,6 +289,7 @@ export function chartSettingsOverrides(base: ChartSettings, edited: ChartSetting
       barStyle: base.barStyle === edited.barStyle ? undefined : edited.barStyle,
       timeZone: base.timeZone === edited.timeZone ? undefined : edited.timeZone,
       barStyles: changedBarStyles(base.barStyles, edited.barStyles),
+      indicators: sameSavedIndicators(base.indicators, edited.indicators) ? undefined : edited.indicators,
     },
     changedGroups(base, edited),
   );
@@ -312,4 +322,8 @@ export function withBarStyle(settings: ChartSettings, barStyle: BarStyle): Chart
 
 export function withTimeZone(settings: ChartSettings, timeZone: string): ChartSettings {
   return { ...settings, timeZone };
+}
+
+export function withIndicators(settings: ChartSettings, indicators: readonly SavedIndicator[]): ChartSettings {
+  return { ...settings, indicators };
 }
