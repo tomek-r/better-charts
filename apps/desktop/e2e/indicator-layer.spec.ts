@@ -1,11 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { IndicatorFrame, IndicatorPlot } from '../src/features/chart/engine/indicators/indicatorFrame';
+import type {
+  IndicatorFill,
+  IndicatorFrame,
+  IndicatorLevel,
+  IndicatorPlot,
+} from '../src/features/chart/engine/indicators/indicatorFrame';
 import { openChart } from './helpers/openChart';
 import { gotoWithStub } from './helpers/tauriStub';
 
 /**
  * The display layer for indicator frames: one line per plot on the price pane, a missing value breaking
- * the line, and a live frame replacing the forming bar instead of redrawing the history.
+ * the line, a live frame replacing the forming bar instead of redrawing the history, and the frame's
+ * levels, fills and per-plot styles reaching the chart unchanged.
  */
 
 /** The bars the stub's snapshot holds. */
@@ -19,6 +25,32 @@ const SLOW_PLOT: IndicatorPlot = { title: 'slow', style: 'stepline', color: '#ff
 const POINT_COLOR = '#ff0000';
 /** The bar a test colours; its neighbours must keep their own colour. */
 const COLOURED_BAR = 3;
+/** The two levels of a band: one drawn dashed, one switched off by its producer. */
+const UPPER_LEVEL: IndicatorLevel = {
+  title: 'Upper',
+  price: 70,
+  color: '#787b86',
+  lineWidth: 1,
+  lineStyle: 'dashed',
+};
+const LOWER_LEVEL: IndicatorLevel = { title: 'Lower', price: 30, color: '#787b86', lineWidth: 1, visible: false };
+/** The faint colour of the band between the two plots. */
+const BAND_COLOR = '#2196f30d';
+/** The band painted between the demo's two plots. */
+const PLOT_BAND: IndicatorFill = {
+  from: { kind: 'plot', index: 0 },
+  to: { kind: 'plot', index: 1 },
+  color: BAND_COLOR,
+};
+
+/** `frame` with the levels and fills a producer describes for the whole frame rather than for one bar. */
+function withLevelsAndFills(
+  frame: IndicatorFrame,
+  levels: readonly IndicatorLevel[],
+  fills: readonly IndicatorFill[],
+): IndicatorFrame {
+  return { ...frame, levels, fills };
+}
 
 /** A frame of `plots` over `times`, where `valueAt` says what plot `plotIndex` plots on bar `barIndex`. */
 function frameOf(
@@ -94,12 +126,22 @@ test('a frame draws one line per plot with its values', async ({ page }) => {
   const indicators = await drawnIndicators(page);
   expect(indicators.map((indicator) => indicator.id)).toEqual([DEMO_ID]);
   expect(indicators[0].plots).toEqual([
-    { title: 'fast', color: '#2962ff', lineWidth: 2, lineType: 'simple', points: pointsOf(times, (bar) => bar + 1) },
+    {
+      title: 'fast',
+      color: '#2962ff',
+      lineWidth: 2,
+      lineType: 'simple',
+      lineStyle: 'solid',
+      visible: true,
+      points: pointsOf(times, (bar) => bar + 1),
+    },
     {
       title: 'slow',
       color: '#ff6d00',
       lineWidth: 1,
       lineType: 'step',
+      lineStyle: 'solid',
+      visible: true,
       points: pointsOf(times, (bar) => (bar + 1) * 2),
     },
   ]);
@@ -216,5 +258,63 @@ test('removing an indicator removes only its lines', async ({ page }) => {
 
   const indicators = await drawnIndicators(page);
   expect(indicators.map((indicator) => indicator.id)).toEqual(['b']);
+  expect(await page.evaluate(() => window.__chartTest!.data().length)).toBe(STUB_BAR_COUNT);
+});
+
+test('a dashed plot and a switched-off plot keep their style', async ({ page }) => {
+  const times = await openChartTimes(page);
+  const dashed: IndicatorPlot = { ...FAST_PLOT, lineStyle: 'dashed' };
+  const switchedOff: IndicatorPlot = { ...SLOW_PLOT, visible: false };
+
+  await showFrame(
+    page,
+    DEMO_ID,
+    frameOf([dashed, switchedOff], times, () => 1),
+  );
+
+  const [demo] = await drawnIndicators(page);
+  expect(demo.plots.map((plot) => plot.lineStyle)).toEqual(['dashed', 'solid']);
+  expect(demo.plots.map((plot) => plot.visible)).toEqual([true, false]);
+});
+
+test('levels are drawn as price lines and keep their own visibility', async ({ page }) => {
+  const times = await openChartTimes(page);
+  const levels = [UPPER_LEVEL, LOWER_LEVEL];
+
+  await showFrame(
+    page,
+    DEMO_ID,
+    withLevelsAndFills(
+      frameOf([FAST_PLOT], times, () => 1),
+      levels,
+      [],
+    ),
+  );
+
+  const [demo] = await drawnIndicators(page);
+  expect(demo.levels).toEqual([
+    { title: 'Upper', price: 70, color: '#787b86', visible: true },
+    { title: 'Lower', price: 30, color: '#787b86', visible: false },
+  ]);
+});
+
+test('a fill between two plots is recorded with its edges', async ({ page }) => {
+  const times = await openChartTimes(page);
+  const twoPlots = frameOf([FAST_PLOT, SLOW_PLOT], times, (plotIndex, barIndex) => barIndex + 1 + plotIndex * 2);
+
+  await showFrame(page, DEMO_ID, withLevelsAndFills(twoPlots, [], [PLOT_BAND]));
+
+  const [demo] = await drawnIndicators(page);
+  expect(demo.fills).toEqual([PLOT_BAND]);
+});
+
+test('removing an indicator takes its levels and fills with it', async ({ page }) => {
+  const times = await openChartTimes(page);
+  const twoPlots = frameOf([FAST_PLOT, SLOW_PLOT], times, (plotIndex, barIndex) => barIndex + 1 + plotIndex * 2);
+  await showFrame(page, DEMO_ID, withLevelsAndFills(twoPlots, [UPPER_LEVEL], [PLOT_BAND]));
+
+  await page.evaluate((id) => window.__chartTest!.removeIndicator(id), DEMO_ID);
+
+  expect(await drawnIndicators(page)).toEqual([]);
   expect(await page.evaluate(() => window.__chartTest!.data().length)).toBe(STUB_BAR_COUNT);
 });
