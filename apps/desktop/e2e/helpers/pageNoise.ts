@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 /** The buffer an init script keeps on the page: what the browser complained about while the spec ran. */
 type NoiseWindow = Window & { __pageNoise?: string[] };
@@ -25,4 +25,14 @@ export async function recordPageNoise(page: Page): Promise<void> {
 /** Everything {@link recordPageNoise} collected, in the order the browser printed it. */
 export async function pageNoise(page: Page): Promise<string[]> {
   return page.evaluate(() => (window as unknown as NoiseWindow).__pageNoise ?? []);
+}
+
+/**
+ * Registers both hooks: call it at the top of a spec or `describe` whose tests must leave the browser console clean.
+ */
+export function failOnPageNoise(): void {
+  test.beforeEach(({ page }) => recordPageNoise(page));
+  test.afterEach(async ({ page }) => {
+    expect(await pageNoise(page)).toEqual([]);
+  });
 }
