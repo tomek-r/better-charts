@@ -14,11 +14,25 @@
   height: 18px;
 }
 
-/* The search field, then one row per indicator, scrolling instead of growing past the window. */
+/* The search field, then one row per indicator, scrolling instead of growing past the window.
+   `appearance: none` drops WebKit's native search-field chrome so the field takes the dialog's field look;
+   its 10px padding plus 1px border equals the rows' 11px, so the placeholder and the titles share one edge. */
 .indicators-dialog-search {
+  appearance: none;
   box-sizing: border-box;
+  display: block;
   width: 100%;
   margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+}
+
+.indicators-dialog-search::placeholder {
+  color: var(--color-muted-strong);
 }
 
 .indicators-dialog-list {
@@ -32,8 +46,9 @@
 .indicators-dialog-row {
   display: block;
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 11px;
   border: 0;
+  border-radius: var(--border-radius);
   color: inherit;
   background: transparent;
   font: inherit;
