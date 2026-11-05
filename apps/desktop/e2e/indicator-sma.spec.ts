@@ -7,28 +7,15 @@ import { settingStyleKey } from '../src/features/chart/engine/settings/settingSt
 import { findChartIndicatorPlugin } from '../src/features/indicators/registry';
 import { PLOT_STYLE, SmaIndicator } from '../src/features/indicators/sma/smaIndicator';
 import { smaPlugin } from '../src/features/indicators/sma/smaPlugin';
+import { MILLISECONDS_PER_SECOND, barAt, barsFromCloses } from './helpers/indicatorBars';
 
-const FIRST_BAR_TIME = 1_700_000_000;
-const BAR_SPACING_SECONDS = 300;
-const MILLISECONDS_PER_SECOND = 1000;
 const SMA_LENGTH = 3;
 const SOURCE_LENGTH = 2;
 const LEADING_NULLS = [null, null];
 
-function barAt(index: number, close: number, high = close, low = close): RenderBar {
-  return {
-    time: FIRST_BAR_TIME + index * BAR_SPACING_SECONDS,
-    open: close,
-    high,
-    low,
-    close,
-    volume: 0,
-  };
-}
+const SIX_BARS = barsFromCloses([1, 2, 3, 4, 5, 6]);
 
-const SIX_BARS = [1, 2, 3, 4, 5, 6].map((close, index) => barAt(index, close));
-
-type SettingOverrides = Readonly<Record<string, number | string>>;
+type SettingOverrides = Readonly<Record<string, number | string | boolean>>;
 
 function loadedSmaValues(bars: readonly RenderBar[], overrides: SettingOverrides): (number | null)[] {
   const settings = resolveSettingValues(smaPlugin, overrides);
@@ -133,7 +120,9 @@ test('the plot is drawn in the style settings', () => {
   const indicator = new SmaIndicator();
 
   const defaults = indicator.load(bars, resolveSettingValues(smaPlugin, {}));
-  expect(defaults.plots).toEqual([{ title: 'SMA', style: 'line', color: '#2962FF', lineWidth: 1 }]);
+  expect(defaults.plots).toEqual([
+    { title: 'SMA', style: 'line', color: '#2962FF', lineWidth: 1, lineStyle: 'solid', visible: true },
+  ]);
 
   const styled = indicator.load(
     bars,
@@ -142,7 +131,20 @@ test('the plot is drawn in the style settings', () => {
       [settingStyleKey(PLOT_STYLE, 'width')]: 3,
     }),
   );
-  expect(styled.plots).toEqual([{ title: 'SMA', style: 'line', color: '#ff0000', lineWidth: 3 }]);
+  expect(styled.plots).toEqual([
+    { title: 'SMA', style: 'line', color: '#ff0000', lineWidth: 3, lineStyle: 'solid', visible: true },
+  ]);
+});
+
+test('switching the plot off and dashing it reaches the frame', () => {
+  const settings = resolveSettingValues(smaPlugin, {
+    [settingStyleKey(PLOT_STYLE, 'visible')]: false,
+    [settingStyleKey(PLOT_STYLE, 'style')]: 'dotted',
+  });
+
+  const [plot] = new SmaIndicator().load([barAt(0, 10)], settings).plots;
+
+  expect(plot).toMatchObject({ visible: false, lineStyle: 'dotted' });
 });
 
 test('the registry finds the SMA by id and nothing for an unknown one', () => {

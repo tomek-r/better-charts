@@ -1,0 +1,40 @@
+import type {
+  SettingInputInt,
+  SettingInputSource,
+  SettingInputSourceChoice,
+} from '../chart/engine/settings/settingInputs';
+import type { SettingStyleLine, SettingStyleLineStyle } from '../chart/engine/settings/settingStyles';
+
+/** The stored id of the input naming how many source values a window spans. */
+export const LENGTH_INPUT = 'length';
+/** The stored id of the input naming which price series a window reads. */
+export const SOURCE_INPUT = 'source';
+
+const LENGTH_MIN = 1;
+const LENGTH_MAX = 5000;
+const LENGTH_STEP = 1;
+const LINE_WIDTH = 1;
+const LINE_DASH: SettingStyleLineStyle = 'solid';
+
+/** The `int` input a window indicator asks for its length, starting at `defaultValue`. */
+export function lengthInput(defaultValue: number): SettingInputInt {
+  return {
+    kind: 'int',
+    id: LENGTH_INPUT,
+    title: 'Length',
+    defaultValue,
+    minValue: LENGTH_MIN,
+    maxValue: LENGTH_MAX,
+    step: LENGTH_STEP,
+  };
+}
+
+/** The `source` input a window indicator asks for its price series, starting at `defaultValue`. */
+export function sourceInput(defaultValue: SettingInputSource): SettingInputSourceChoice {
+  return { kind: 'source', id: SOURCE_INPUT, title: 'Source', defaultValue };
+}
+
+/** A drawn `line` style with the shared width and dash pattern, coloured `color`. */
+export function lineStyle(id: string, title: string, color: string): SettingStyleLine {
+  return { kind: 'line', id, title, defaults: { visible: true, color, width: LINE_WIDTH, style: LINE_DASH } };
+}
