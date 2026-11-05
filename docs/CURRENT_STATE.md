@@ -3,7 +3,7 @@
 Current behavior and owner decisions. See [architecture](architecture/README.md)
 and the [bridge contract](protocol/bridge-v1.md) for implementation details.
 
-React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object. The lifecycle coordinator passes non-quote props to ordered children; only quote-dependent children subscribe to live quotes. Chart tools, the Arrow and Crosshair pointers included, are plugins: one folder per tool under `features/tools/` implementing the `ChartToolPlugin`/`ChartTool` contract (`features/chart/engine/tools/toolContract.ts`), registered by one line in `features/tools/registry.ts`; the chart lifecycle passes that list to `ChartController` (`toolPlugins`), so the engine imports no concrete tool; the rail and icon iterate the registry, plugins sharing a `railGroup` (the pointers) render as one flyout button, and `DEFAULT_CHART_TOOL_ID` (arrow) is active when nothing else is. The engine owns only the pointer's time/price axis labels (`pointerReadoutPrimitive.ts`, shown for every tool); the Crosshair lines are drawn by `CrosshairTool` through the generic `pointerHover`/`pointerLeave` hooks and the layered `draw(ctx, viewport, layer)` hook (`aboveTradingOverlays*` layers); every plugin is built from its `toolClass`. Tools see the bridge only through the read-only `MarketDataPort` (`features/bridge/marketDataPort.ts`), never `invoke` or execution commands.
+React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object. The lifecycle coordinator passes non-quote props to ordered children; only quote-dependent children subscribe to live quotes. Chart tools, the Arrow and Crosshair pointers included, are plugins: one folder per tool under `features/tools/` implementing the `ChartToolPlugin`/`ChartTool` contract (`features/chart/engine/tools/toolContract.ts`), registered by one line in `features/tools/registry.ts`; the chart lifecycle passes that list to `ChartController` (`toolPlugins`), so the engine imports no concrete tool; the rail and icon iterate the registry, plugins sharing a `railGroup` (the pointers) render as one flyout button, and `DEFAULT_CHART_TOOL_ID` (arrow) is active when nothing else is. The engine owns only the pointer's time/price axis labels (`pointerReadoutPrimitive.ts`, shown for every tool); the Crosshair lines are drawn by `CrosshairTool` through the generic `pointerHover`/`pointerLeave` hooks and the layered `draw(ctx, viewport, layer)` hook (`aboveTradingOverlays*` layers); every plugin is built from its `toolClass`. Tools see the bridge only through the read-only `MarketDataPort` (`features/bridge/marketDataPort.ts`), never `invoke` or execution commands. Chart indicators are plugins the same way: one folder per indicator under `features/indicators/` implementing `ChartIndicatorPlugin` (`features/indicators/chartIndicatorPlugin.ts`, built on the engine's `ChartIndicatorDefinition`/`ChartIndicator` in `features/chart/engine/indicators/indicatorContract.ts`), registered in `features/indicators/registry.ts` and handed to `ChartController` as `indicatorDefinitions`. An indicator turns bars into an `IndicatorFrame` (plots, levels, fills, per-bar values and colours, an optional precision) and never touches the chart; the engine's display layer (`features/chart/engine/indicators/`) draws any frame and never computes, so another producer can attach later. Bar-by-bar indicators extend `BarByBarIndicator`, which owns the load/update and forming-bar contract.
 
 ## Available
 
@@ -311,6 +311,40 @@ side of the bars are saved. A locked or hidden drawing keeps its toggle in sight
 hidden row's name is dimmed while the row stays listed and clickable. The dialog is the
 same one the floating toolbar opens, held by one provider above the chart and the tree.
 The tree keeps no data window and no toolbar of its own (owner decision).
+
+## Chart indicators
+
+The Indicators button beside the bar-type control opens a dialog titled "Indicators" with a
+search field (a case-insensitive part of the name or short name) and the list of indicator
+names; choosing one, or Enter for the first match, attaches it with its defaults and closes
+the dialog. TradingView's tabs and categories are left out (owner decision). The list holds
+Moving Average Simple (SMA 9 close), Bollinger Bands (BB 20 close 2: basis, upper and lower,
+with the band between them filled), Relative Strength Index (RSI 14 close, with dashed 70 and
+30 bands, a dotted 50 band and the background between 70 and 30) and MACD (MACD 12 26 close 9:
+a histogram coloured by sign and by whether it grew, the MACD and signal lines and a zero line).
+SMA and Bollinger Bands draw on the price pane; RSI and MACD each get a pane of their own under
+it, about a fifth of the height, which closes when the indicator is removed. Every value is
+computed in the frontend from the bars the chart draws, as Pine's `ta.sma`, `ta.stdev`,
+`ta.rsi` and `ta.ema` compute them; a live tick redraws only the forming bar and never moves
+an indicator's state. Indicator values are display-only and never reach order, account or
+journal data.
+
+Attached indicators are saved per chart, account and symbol in the chart's settings overrides
+(id, indicator id, the settings the user changed, and `hidden: true` while hidden), so they
+come back when that chart opens. An entry that does not read is dropped, and one this build
+does not know stays saved and draws nothing.
+
+Under the OHLC line the legend lists one row per indicator: its short title, its input values
+and each plot's value at the crosshair bar, or at the last bar while the pointer is off the
+chart (e.g. "SMA 9 close 1.08520"); oscillators write two decimals. A hidden indicator's row is
+dimmed behind an eye-off icon, and a chevron collapses the rows to their count ("˅ 2").
+
+The Object tree lists, under the drawings, every indicator drawn on the price pane by its legend
+name; indicators with a pane of their own get no row (owner decision). A row's buttons open the
+indicator's settings, hide or show it and remove it, and a double click or Delete on its name
+does the same as in a drawing row. The settings dialog is the drawing settings form with the
+indicator's Inputs and Style tabs; OK stays disabled while a value is invalid and recomputes the
+indicator. A plot or band switched off in the Style tab hides only that line.
 
 ## Execution and configuration
 
