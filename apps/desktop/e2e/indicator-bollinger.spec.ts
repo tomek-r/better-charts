@@ -16,7 +16,12 @@ import {
 import { bollingerPlugin } from '../src/features/indicators/bollinger/bollingerPlugin';
 import { indicatorLegendTitle } from '../src/features/indicators/indicatorLegendTitle';
 import { findChartIndicatorPlugin } from '../src/features/indicators/registry';
-import { MILLISECONDS_PER_SECOND, barAt, barsFromCloses } from './helpers/indicatorBars';
+import {
+  MILLISECONDS_PER_SECOND,
+  barAt,
+  barsFromCloses,
+  expectNewerBarClosesTheFormingOne,
+} from './helpers/indicatorBars';
 
 const BOLLINGER_LENGTH = 3;
 const BOLLINGER_MULT = 2;
@@ -132,17 +137,10 @@ test('a tick replaces the forming bar only', () => {
 });
 
 test('a newer bar returns the closed bar and then the forming one', () => {
-  const settings = bollingerSettings();
-  const indicator = new BollingerIndicator();
-  const closedBar = barAt(4, 5);
-  const nextBar = barAt(5, 6);
-  indicator.load([...BOLLINGER_BARS.slice(0, 4), closedBar], settings);
-
-  const frame = indicator.update(nextBar, settings);
-
-  expect(frame.bars.map((bar) => bar.confirmed)).toEqual([true, false]);
-  expect(frame.bars.map((bar) => bar.timeMs)).toEqual(
-    [closedBar, nextBar].map((bar) => bar.time * MILLISECONDS_PER_SECOND),
+  expectNewerBarClosesTheFormingOne(
+    new BollingerIndicator(),
+    [...BOLLINGER_BARS.slice(0, 4), barAt(4, 5)],
+    bollingerSettings(),
   );
 });
 

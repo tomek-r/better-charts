@@ -19,7 +19,12 @@ import {
   UPPER_BAND_STYLE,
 } from '../src/features/indicators/rsi/rsiIndicator';
 import { rsiPlugin } from '../src/features/indicators/rsi/rsiPlugin';
-import { MILLISECONDS_PER_SECOND, barAt, barsFromCloses } from './helpers/indicatorBars';
+import {
+  MILLISECONDS_PER_SECOND,
+  barAt,
+  barsFromCloses,
+  expectNewerBarClosesTheFormingOne,
+} from './helpers/indicatorBars';
 
 type SettingOverrides = Readonly<Record<string, number | string | boolean>>;
 
@@ -209,17 +214,11 @@ test('a tick redraws only the forming bar and leaves the state alone', () => {
 });
 
 test('a newer bar returns the closed bar and then the forming one', () => {
-  const settings = rsiSettings(LIVE_LENGTH);
-  const indicator = new RsiIndicator();
-  const closedBar = barAt(3, 4);
-  const nextBar = barAt(4, 5);
-  indicator.load([...barsFromCloses(LIVE_CLOSES.slice(0, 3)), closedBar], settings);
-
-  const frame = indicator.update(nextBar, settings);
-  const expectedTimes = [closedBar, nextBar].map((bar) => bar.time * MILLISECONDS_PER_SECOND);
-
-  expect(frame.bars.map((bar) => bar.confirmed)).toEqual([true, false]);
-  expect(frame.bars.map((bar) => bar.timeMs)).toEqual(expectedTimes);
+  expectNewerBarClosesTheFormingOne(
+    new RsiIndicator(),
+    [...barsFromCloses(LIVE_CLOSES.slice(0, 3)), barAt(3, 4)],
+    rsiSettings(LIVE_LENGTH),
+  );
 });
 
 test('live updates end where a fresh load of the same bars ends', () => {

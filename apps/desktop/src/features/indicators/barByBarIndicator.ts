@@ -47,21 +47,27 @@ export abstract class BarByBarIndicator implements ChartIndicator {
   /** The values a bar plots, read from the state as of the last closed bar without moving it on. */
   protected abstract valuesAt(bar: RenderBar): readonly (number | null)[];
 
+  /** The per-plot colours of a bar, read from the same state as `valuesAt`, if it colours anything. */
+  protected colorsAt(_bar: RenderBar): readonly (string | null)[] | undefined {
+    return undefined;
+  }
+
   /** Moves the state on to a bar that closed, so the state stays as of the newest closed bar. */
   protected abstract commit(bar: RenderBar): void;
 
   /** The parts of the frame the bars do not touch, which the settings alone decide. */
   protected abstract frameStyle(settings: SettingValues): Omit<IndicatorFrame, 'bars'>;
 
-  /** Frames a bar that is final: its values are read before the bar moves the state on. */
+  /** Frames a bar that is final: its values and colours are read before the bar moves the state on. */
   private confirmedBar(bar: RenderBar): IndicatorBar {
     const values = this.valuesAt(bar);
+    const colors = this.colorsAt(bar);
     this.commit(bar);
-    return indicatorFrameBar(bar, values, true);
+    return indicatorFrameBar(bar, values, true, colors);
   }
 
   /** Frames the bar the chart is still drawing, which leaves the state alone. */
   private formingBar(bar: RenderBar): IndicatorBar {
-    return indicatorFrameBar(bar, this.valuesAt(bar), false);
+    return indicatorFrameBar(bar, this.valuesAt(bar), false, this.colorsAt(bar));
   }
 }
