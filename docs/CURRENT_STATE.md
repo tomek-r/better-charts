@@ -334,10 +334,17 @@ Attached indicators are saved per chart, account and symbol in the chart's setti
 come back when that chart opens. An entry that does not read is dropped, and one this build
 does not know stays saved and draws nothing.
 
-Under the OHLC line the legend lists one row per indicator: its short title, its input values
-and each plot's value at the crosshair bar, or at the last bar while the pointer is off the
-chart (e.g. "SMA 9 close 1.08520"); oscillators write two decimals. A hidden indicator's row is
-dimmed behind an eye-off icon, and a chevron collapses the rows to their count ("˅ 2").
+Under the OHLC line the legend lists one row per price-pane indicator: its short title, its input
+values and each plot's value at the crosshair bar, or at the last bar while the pointer is off the
+chart (e.g. "SMA 9 close 1.08520"); oscillators write two decimals. An indicator with a pane of
+its own shows the same row at the top-left of that pane instead. A hovered row offers Hide/Show,
+Settings and Remove buttons, and a double click on its title opens the settings. A hidden
+indicator's row is dimmed behind an eye-off icon, and a chevron collapses the price-pane rows to
+their count ("˅ 2"). Each indicator pane draws its own top border, which stops at the price axis;
+the library's pane separator, which would cross the axis, is transparent.
+
+The Indicators dialog sits at a fixed offset from the top of the window, like the settings
+dialogs.
 
 The Object tree lists, under the drawings, every indicator drawn on the price pane by its legend
 name; indicators with a pane of their own get no row (owner decision). A row's buttons open the

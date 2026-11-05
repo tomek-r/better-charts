@@ -5,7 +5,7 @@ import {
   INDICATOR_SETTINGS_LABEL,
   INDICATOR_VISIBILITY_LABELS,
   REMOVE_INDICATOR_LABEL,
-} from '../indicators/indicatorCommandLabels';
+} from '../chart/engine/legend/indicatorLegendLabels';
 import { IndicatorLineIcon } from '../indicators/IndicatorLineIcon';
 import { indicatorLegendTitle } from '../indicators/indicatorLegendTitle';
 import { useOpenIndicatorSettings } from '../indicators/IndicatorSettingsProvider';

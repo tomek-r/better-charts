@@ -62,7 +62,21 @@
 }
 
 .chart-indicator-legend-row {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px;
+  margin-left: -5px;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius);
   white-space: nowrap;
+}
+
+.chart-indicator-legend-row:hover,
+.chart-indicator-legend-row:focus-within {
+  border-color: var(--color-border);
+  background: var(--color-root);
 }
 
 .chart-indicator-legend-row[data-hidden='true'] {
@@ -109,4 +123,66 @@
 
 .chart-indicator-legend-count[hidden] {
   display: none;
+}
+
+/* A row offers its buttons on hover or while one of them has the focus. */
+.chart-indicator-legend-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.chart-indicator-legend-row:hover .chart-indicator-legend-actions,
+.chart-indicator-legend-row:focus-within .chart-indicator-legend-actions {
+  display: inline-flex;
+}
+
+.chart-indicator-legend-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--border-radius);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.chart-indicator-legend-action:hover,
+.chart-indicator-legend-action:focus-visible {
+  background: var(--color-border-subtle);
+}
+
+.chart-indicator-legend-action-icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.2;
+}
+
+.chart-indicator-legend-hidden-icon[hidden] {
+  display: none;
+}
+
+/* The overlay is the pane's top border, because the library separator crosses the price axis too,
+   and it holds the legend row of the indicator that owns the pane. */
+.chart-indicator-pane-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  border-top: 1px solid;
+  pointer-events: none;
+  color: var(--color-text-label);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-indicator-pane-overlay .chart-indicator-legend-row {
+  position: absolute;
+  top: 4px;
+  left: 12px;
 }

@@ -36,6 +36,7 @@ import type { ChartControllerOptions } from './chartControllerOptions';
 import type { IndicatorLayer } from '../indicators/indicatorLayer';
 import type { IndicatorRuntime } from '../indicators/indicatorRuntime';
 import { ChartIndicators } from '../indicators/chartIndicators';
+import type { IndicatorLegendCommands } from '../legend/indicatorLegend';
 import { LiveBarController } from './liveBarController';
 import { HistoryViewportMode } from '../bars/historyViewportMode';
 import { initialHistoryWindow } from '../bars/initialHistoryWindow';
@@ -103,6 +104,11 @@ export class ChartController {
   /** The layer, the runtime and the legend above, owned and torn down as one unit. */
   private readonly chartIndicators: ChartIndicators;
   onToolRelease?: () => void;
+
+  /** The app's commands for the legend's row buttons; null while none is mounted. */
+  setIndicatorCommands(commands: IndicatorLegendCommands | null): void {
+    this.chartIndicators.setCommands(commands);
+  }
 
   constructor(
     private readonly host: HTMLDivElement,

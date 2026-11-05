@@ -1,7 +1,6 @@
 import {
   MismatchDirection,
   type IChartApi,
-  type IPaneApi,
   type IPriceLine,
   type LineData,
   type Time,
@@ -12,7 +11,7 @@ import type { ChartIndicatorPane } from './indicatorContract';
 import { IndicatorFillPrimitive } from './indicatorFillPrimitive';
 import type { IndicatorBar, IndicatorFill, IndicatorFillEdge, IndicatorFrame, IndicatorLevel } from './indicatorFrame';
 import { createLevelLines, removeLevelLines, setLevelLinesHidden } from './indicatorLevels';
-import { PRICE_PANE_INDEX, addOwnPane, paneIndexOf, removeOwnPane } from './indicatorPanes';
+import { PRICE_PANE_INDEX, addOwnPane, paneIndexOf, removeOwnPane, type OwnPane } from './indicatorPanes';
 import {
   addPlotSeries,
   isHistogramPlotSeries,
@@ -72,7 +71,7 @@ interface Shown {
   levelLines: IPriceLine[];
   fills: readonly IndicatorFill[];
   fillPrimitive: IndicatorFillPrimitive | null;
-  ownPane: IPaneApi<Time> | null;
+  ownPane: OwnPane | null;
   precision: number | null;
 }
 
@@ -217,6 +216,11 @@ export class IndicatorLayer {
     return this.shown.get(id)?.precision ?? null;
   }
 
+  /** The element an own-pane indicator's legend row sits in; null for an overlay or an unknown id. */
+  paneLegendHost(id: string): HTMLElement | null {
+    return this.shown.get(id)?.ownPane?.overlay.element ?? null;
+  }
+
   /** Each plot's value at the bar with `logicalIndex`, for the legend; an unknown id has none. */
   valuesAt(id: string, logicalIndex: number): IndicatorLegendValue[] {
     const shown = this.shown.get(id);
@@ -227,7 +231,7 @@ export class IndicatorLayer {
   }
 
   /** Draws `frame` for `id`, in its own pane or on the price pane when `ownPane` is null. */
-  private draw(id: string, frame: IndicatorFrame, ownPane: IPaneApi<Time> | null): void {
+  private draw(id: string, frame: IndicatorFrame, ownPane: OwnPane | null): void {
     // The pane's index is read here rather than when it was added: indices shift when another pane goes.
     const paneIndex = paneIndexOf(ownPane);
     const precision = frame.precision ?? null;
@@ -272,7 +276,7 @@ export class IndicatorLayer {
    * The pane `id` draws in next: the pane of its own it already holds or a new one, and none for an
    * overlay, which gives a held pane back to the chart.
    */
-  private paneToDrawIn(heldPane: IPaneApi<Time> | null, pane: ChartIndicatorPane): IPaneApi<Time> | null {
+  private paneToDrawIn(heldPane: OwnPane | null, pane: ChartIndicatorPane): OwnPane | null {
     if (pane === 'own') {
       return heldPane ?? addOwnPane(this.chart);
     }

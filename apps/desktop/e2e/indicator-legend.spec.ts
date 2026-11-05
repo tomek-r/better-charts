@@ -1,10 +1,12 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
 import { indicatorLegendTitle } from '../src/features/indicators/indicatorLegendTitle';
+import { rsiPlugin } from '../src/features/indicators/rsi/rsiPlugin';
 import { smaPlugin } from '../src/features/indicators/sma/smaPlugin';
-import { attachSma } from './helpers/indicatorsDialog';
+import { attachedIndicators, attachSma } from './helpers/indicatorsDialog';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { openChart } from './helpers/openChart';
+import { openWithSavedIndicators } from './helpers/savedIndicators';
 import { gotoWithStub } from './helpers/tauriStub';
 
 const INDICATOR_LEGEND_LABEL = 'Indicator legend';
@@ -18,6 +20,26 @@ const NO_VALUE_TEXT = '∅';
 const SMA_ROW_COUNT = '1';
 const SECONDS_TO_MS = 1000;
 const CLOSE_PRICE_PATTERN = /C \d+\.(\d+)/;
+const HIDE_BUTTON_LABEL = 'Hide indicator';
+const SHOW_BUTTON_LABEL = 'Show indicator';
+const SETTINGS_BUTTON_LABEL = 'Indicator settings';
+const REMOVE_BUTTON_LABEL = 'Remove indicator';
+const TITLE_SELECTOR = '.chart-indicator-legend-title';
+const HIDDEN_ATTRIBUTE = 'data-hidden';
+const PANE_LEGEND_LABEL = 'Indicator pane legend';
+const SMA_SETTINGS_DIALOG = 'Moving Average Simple settings';
+const RSI_SETTINGS_DIALOG = 'Relative Strength Index settings';
+const RSI_DEFINITION_ID = 'rsi';
+const RSI_INSTANCE_ID = 'rsi-1';
+const PRICE_SCALE_MIN_WIDTH = 70;
+/** The library's resize handle on the pane separator; its full-window drag backdrop is the fixed one. */
+const RESIZE_HANDLE_SELECTOR = '.chart-host td[colspan="3"] > div[style*="position: absolute"]';
+const TRANSPARENT_COLOR = 'rgba(0, 0, 0, 0)';
+
+/** The legend an indicator holding a pane of its own shows its row in. */
+function paneLegend(page: Page): Locator {
+  return page.getByLabel(PANE_LEGEND_LABEL, { exact: true });
+}
 
 /** The price decimals the chart prints, read from the OHLC legend's own close price. */
 async function priceDecimals(page: Page): Promise<number> {
@@ -111,6 +133,98 @@ test.describe('indicator legend', () => {
 
     await expand.click();
     await expect(rows.first()).toBeVisible();
+  });
+
+  test('a hovered row offers Hide and Show, which save the hidden flag and dim the row', async ({ page }) => {
+    await attachSma(page);
+
+    await rows.first().hover();
+    await rows.first().getByRole('button', { name: HIDE_BUTTON_LABEL, exact: true }).click();
+    await expect.poll(async () => (await attachedIndicators(page))[0]?.hidden).toBe(true);
+    await expect(rows.first()).toHaveAttribute(HIDDEN_ATTRIBUTE, 'true');
+
+    await rows.first().hover();
+    await rows.first().getByRole('button', { name: SHOW_BUTTON_LABEL, exact: true }).click();
+    await expect.poll(async () => (await attachedIndicators(page))[0]?.hidden).toBe(false);
+  });
+
+  test('the settings button and a double click on the title open the settings dialog', async ({ page }) => {
+    await attachSma(page);
+    const dialog = page.getByRole('dialog', { name: SMA_SETTINGS_DIALOG });
+
+    await rows.first().hover();
+    await rows.first().getByRole('button', { name: SETTINGS_BUTTON_LABEL, exact: true }).click();
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    await rows.first().locator(TITLE_SELECTOR).dblclick();
+    await expect(dialog).toBeVisible();
+  });
+
+  test('Remove detaches the indicator and empties the legend', async ({ page }) => {
+    await attachSma(page);
+
+    await rows.first().hover();
+    await rows.first().getByRole('button', { name: REMOVE_BUTTON_LABEL, exact: true }).click();
+
+    await expect.poll(async () => (await attachedIndicators(page)).length).toBe(0);
+    await expect(legend).toBeHidden();
+  });
+});
+
+test.describe('own-pane indicator legend', () => {
+  failOnPageNoise();
+
+  test.beforeEach(async ({ page }) => {
+    await openWithSavedIndicators(page, [
+      { instanceId: RSI_INSTANCE_ID, definitionId: RSI_DEFINITION_ID, settings: {} },
+    ]);
+  });
+
+  test('an RSI row sits in its own pane, not under the OHLC line', async ({ page }) => {
+    await expect(page.getByLabel(INDICATOR_LEGEND_LABEL, { exact: true })).toBeHidden();
+
+    const rows = paneLegend(page).locator(ROW_SELECTOR);
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText(
+      indicatorLegendTitle(RSI_DEFINITION_ID, resolveSettingValues(rsiPlugin, {})),
+    );
+  });
+
+  test("the pane's top border stops at the price axis", async ({ page }) => {
+    const overlay = paneLegend(page);
+    await expect(overlay).toHaveCSS('border-top-width', '1px');
+    await expect(overlay).toHaveCSS('border-top-style', 'solid');
+
+    const overlayBox = await overlay.boundingBox();
+    const hostBox = await page.locator(CHART_HOST_SELECTOR).boundingBox();
+    if (overlayBox === null || hostBox === null) {
+      throw new Error('The pane legend or the chart host is not laid out.');
+    }
+    expect(overlayBox.x + overlayBox.width).toBeLessThanOrEqual(hostBox.x + hostBox.width - PRICE_SCALE_MIN_WIDTH);
+  });
+
+  test("the RSI row's settings button opens its settings", async ({ page }) => {
+    const row = paneLegend(page).locator(ROW_SELECTOR).first();
+
+    await row.hover();
+    await row.getByRole('button', { name: SETTINGS_BUTTON_LABEL, exact: true }).click();
+
+    await expect(page.getByRole('dialog', { name: RSI_SETTINGS_DIALOG })).toBeVisible();
+  });
+
+  test('hovering the line between the panes paints no band', async ({ page }) => {
+    const handle = page.locator(RESIZE_HANDLE_SELECTOR);
+    const box = await handle.boundingBox();
+    if (box === null) {
+      throw new Error('The pane separator has no resize handle.');
+    }
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+    await expect(handle).toHaveCSS('background-color', TRANSPARENT_COLOR);
   });
 });
 

@@ -20,6 +20,13 @@ interface ChartSurface {
 
 const FALLBACK_CHART_LOCALE = 'en-GB';
 
+/**
+ * The library's pane separator and its resize handle's hover band span both price-scale columns, so
+ * both are hidden and each indicator pane paints its own top border across the pane only (see
+ * IndicatorPaneOverlay). The handle still takes the pointer, so a pane can still be resized.
+ */
+const PANE_SEPARATOR_COLOR = 'transparent';
+
 // Linux WebKitGTK reports navigator.language as 'C' under LANG=C, which is not a language
 // tag: the library's toLocaleString(locale) throws on it and aborts the whole paint.
 function chartLocale(): string {
@@ -53,7 +60,14 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
     autoSize: false,
     // This background is also the fill the A/L price-scale toggles mask the axis labels with; see
     // features/chart/engine/priceScale/price-scale-controls.css.
-    layout: { ...layout, attributionLogo: false },
+    layout: {
+      ...layout,
+      attributionLogo: false,
+      panes: {
+        separatorColor: PANE_SEPARATOR_COLOR,
+        separatorHoverColor: PANE_SEPARATOR_COLOR,
+      },
+    },
     localization: { locale: chartLocale() },
     grid,
     crosshair: {

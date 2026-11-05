@@ -10,6 +10,7 @@ import { useChartDrawn } from './useChartDrawn';
 import { ChartDrawingPersistence } from './drawingPersistence/ChartDrawingPersistence';
 import { ChartDrawingToolbar } from '../tools/drawingToolbar/ChartDrawingToolbar';
 
+import { ChartIndicatorLegendCommands } from '../indicators/ChartIndicatorLegendCommands';
 import { ChartIndicatorSync } from '../indicators/ChartIndicatorSync';
 
 export function ChartWorkspaceView() {
@@ -29,6 +30,7 @@ export function ChartWorkspaceView() {
         <ChartCanvas>
           <ChartDrawingPersistence />
           <ChartIndicatorSync />
+          <ChartIndicatorLegendCommands />
           <ChartPartialClose />
           <ChartDrawingToolbar />
         </ChartCanvas>

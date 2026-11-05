@@ -1,4 +1,5 @@
 import type { IndicatorLegendValue } from '../indicators/indicatorLayer';
+import { INDICATOR_SETTINGS_LABEL, INDICATOR_VISIBILITY_LABELS, REMOVE_INDICATOR_LABEL } from './indicatorLegendLabels';
 
 /** One attached indicator's legend line: its words for the settings, then its plot values. */
 export interface IndicatorLegendRow {
@@ -8,6 +9,15 @@ export interface IndicatorLegendRow {
   /** Decimals its values are written with; null writes them with the chart's price precision. */
   readonly digits: number | null;
   readonly values: readonly IndicatorLegendValue[];
+  /** The element of the indicator's own pane its row sits in; null puts it under the OHLC line. */
+  readonly paneHost: HTMLElement | null;
+}
+
+/** What the row buttons ask the app to do; the app saves and the chart follows. */
+export interface IndicatorLegendCommands {
+  openSettings(instanceId: string): void;
+  setHidden(instanceId: string, hidden: boolean): void;
+  remove(instanceId: string): void;
 }
 
 /** What the legend reads to draw its rows; the chart surface supplies it. */
@@ -20,6 +30,23 @@ export interface IndicatorLegendSource {
   digits(): number;
 }
 
+/** One row's elements; they outlive a refresh, so hover and focus survive a crosshair move. */
+interface RowView {
+  readonly element: HTMLDivElement;
+  readonly hiddenIcon: SVGSVGElement;
+  readonly title: HTMLSpanElement;
+  readonly visibilityIcon: SVGSVGElement;
+  readonly visibility: HTMLButtonElement;
+  readonly values: HTMLSpanElement;
+  hidden: boolean;
+}
+
+/** A source row and the view drawing it. */
+interface RowEntry {
+  readonly row: IndicatorLegendRow;
+  readonly view: RowView;
+}
+
 const LEGEND_LABEL = 'Indicator legend';
 const COLLAPSE_LABEL = 'Collapse indicator legend';
 const EXPAND_LABEL = 'Expand indicator legend';
@@ -30,6 +57,10 @@ const ROWS_CLASS = 'chart-indicator-legend-rows';
 const ROW_CLASS = 'chart-indicator-legend-row';
 const TITLE_CLASS = 'chart-indicator-legend-title';
 const VALUE_CLASS = 'chart-indicator-legend-value';
+const VALUES_CLASS = 'chart-indicator-legend-values';
+const ACTIONS_CLASS = 'chart-indicator-legend-actions';
+const ACTION_CLASS = 'chart-indicator-legend-action';
+const ACTION_ICON_CLASS = 'chart-indicator-legend-action-icon';
 const TOGGLE_CLASS = 'chart-indicator-legend-toggle';
 const COUNT_CLASS = 'chart-indicator-legend-count';
 const CHEVRON_CLASS = 'chart-indicator-legend-chevron';
@@ -37,12 +68,14 @@ const HIDDEN_ICON_CLASS = 'chart-indicator-legend-hidden-icon';
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const CHEVRON_VIEW_BOX = '0 0 10 10';
 const CHEVRON_PATHS = ['M2 3.5l3 3 3-3'];
-const HIDDEN_ICON_VIEW_BOX = '0 0 12 12';
-const HIDDEN_ICON_PATHS = [
-  'M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z',
-  'M6 4.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3z',
-  'M2 10L10 2',
+const ICON_VIEW_BOX = '0 0 12 12';
+const EYE_PATHS = ['M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z', 'M6 4.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3z'];
+const HIDDEN_ICON_PATHS = [...EYE_PATHS, 'M2 10L10 2'];
+const GEAR_PATHS = [
+  'M6 4a2 2 0 1 1 0 4a2 2 0 1 1 0-4z',
+  'M6 1v1.5M6 9.5V11M1 6h1.5M9.5 6H11M2.5 2.5l1 1M8.5 8.5l1 1M2.5 9.5l1-1M8.5 3.5l1-1',
 ];
+const TRASH_PATHS = ['M2 3h8', 'M4.5 3V2h3v1', 'M3 3l.5 7.5h5L9 3', 'M5 5v4M7 5v4'];
 
 function createElementWithClass<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -70,14 +103,48 @@ function createIconPath(d: string): SVGPathElement {
   return path;
 }
 
+/** A row button: an icon whose label is spoken and shown on hover. */
+function createActionButton(label: string, icon: SVGSVGElement, clicked: () => void): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = ACTION_CLASS;
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.append(icon);
+  button.addEventListener('click', clicked);
+  return button;
+}
+
 /** A plot's value written with `decimals` digits; a plot without a value shows the empty marker. */
 function formatValue(value: number | null, decimals: number): string {
   return value === null ? NO_VALUE_TEXT : value.toFixed(decimals);
 }
 
+function createValueElement(value: IndicatorLegendValue, decimals: number): HTMLSpanElement {
+  const element = createElementWithClass('span', VALUE_CLASS);
+  element.textContent = formatValue(value.value, decimals);
+  element.style.color = value.color;
+  return element;
+}
+
+function hasSameChildren(parent: HTMLElement, wanted: readonly HTMLDivElement[]): boolean {
+  if (parent.children.length !== wanted.length) {
+    return false;
+  }
+  return wanted.every((child, index) => parent.children[index] === child);
+}
+
+function placeInHost(element: HTMLDivElement, host: HTMLElement): void {
+  if (element.parentElement !== host) {
+    host.append(element);
+  }
+}
+
 /**
- * The indicator rows under the OHLC legend: one line per attached indicator, following the
- * crosshair bar (or the latest bar), with a chevron that collapses them to their count.
+ * The indicator rows of the legend: one line per attached indicator, following the crosshair bar
+ * (or the latest bar), each with buttons that hide it, open its settings or remove it, and a
+ * chevron that collapses the price-pane rows to their count. An indicator holding a pane of its own
+ * shows its row at the top-left of that pane instead.
  */
 export class IndicatorLegend {
   private readonly element: HTMLDivElement;
@@ -85,6 +152,8 @@ export class IndicatorLegend {
   private readonly toggle: HTMLButtonElement;
   private readonly count: HTMLSpanElement;
   private readonly source: IndicatorLegendSource;
+  private readonly commands: IndicatorLegendCommands;
+  private readonly views = new Map<string, RowView>();
   private readonly toggleClicked = (): void => {
     this.collapsed = !this.collapsed;
     this.refresh();
@@ -93,8 +162,9 @@ export class IndicatorLegend {
   private collapsed = false;
   private crosshairLogical: number | null = null;
 
-  constructor(host: HTMLElement, source: IndicatorLegendSource) {
+  constructor(host: HTMLElement, source: IndicatorLegendSource, commands: IndicatorLegendCommands) {
     this.source = source;
+    this.commands = commands;
     this.element = createElementWithClass('div', CONTAINER_CLASS);
     this.element.setAttribute('aria-label', LEGEND_LABEL);
     this.rows = createElementWithClass('div', ROWS_CLASS);
@@ -114,14 +184,28 @@ export class IndicatorLegend {
   }
 
   refresh(): void {
-    const rows = this.source.rows(this.barIndex());
-    this.rows.replaceChildren(...rows.map((row) => this.createRow(row)));
-    this.element.hidden = rows.length === 0;
-    this.applyToggleState(rows.length);
+    const entries = this.source.rows(this.barIndex()).map((row) => this.entryOf(row));
+    for (const { row, view } of entries) {
+      this.applyRow(view, row);
+    }
+    this.dropUnusedViews(entries);
+    const pricePaneEntries = entries.filter(({ row }) => row.paneHost === null);
+    this.placePricePaneRows(pricePaneEntries);
+    for (const { row, view } of entries) {
+      if (row.paneHost !== null) {
+        placeInHost(view.element, row.paneHost);
+      }
+    }
+    this.element.hidden = pricePaneEntries.length === 0;
+    this.applyToggleState(pricePaneEntries.length);
   }
 
   destroy(): void {
     this.toggle.removeEventListener('click', this.toggleClicked);
+    for (const view of this.views.values()) {
+      view.element.remove();
+    }
+    this.views.clear();
     this.element.remove();
   }
 
@@ -133,27 +217,92 @@ export class IndicatorLegend {
     return Math.min(Math.round(this.crosshairLogical), lastBarIndex);
   }
 
-  private createRow(row: IndicatorLegendRow): HTMLDivElement {
-    const element = createElementWithClass('div', ROW_CLASS);
-    element.dataset.instanceId = row.instanceId;
-    if (row.hidden) {
-      element.dataset.hidden = 'true';
-      element.append(createIcon(HIDDEN_ICON_CLASS, HIDDEN_ICON_VIEW_BOX, HIDDEN_ICON_PATHS));
+  /** The view drawing `row`, made the first time the indicator shows a row. */
+  private entryOf(row: IndicatorLegendRow): RowEntry {
+    const existing = this.views.get(row.instanceId);
+    if (existing !== undefined) {
+      return { row, view: existing };
     }
-    const title = createElementWithClass('span', TITLE_CLASS);
-    title.textContent = row.title;
-    element.append(title);
-    for (const value of row.values) {
-      element.append(VALUE_SEPARATOR, this.createValue(value, row.digits));
-    }
-    return element;
+    const view = this.createRow(row.instanceId);
+    this.views.set(row.instanceId, view);
+    return { row, view };
   }
 
-  private createValue(value: IndicatorLegendValue, digits: number | null): HTMLSpanElement {
-    const element = createElementWithClass('span', VALUE_CLASS);
-    element.textContent = formatValue(value.value, digits ?? this.source.digits());
-    element.style.color = value.color;
-    return element;
+  private createRow(instanceId: string): RowView {
+    const element = createElementWithClass('div', ROW_CLASS);
+    element.dataset.instanceId = instanceId;
+    const hiddenIcon = createIcon(HIDDEN_ICON_CLASS, ICON_VIEW_BOX, HIDDEN_ICON_PATHS);
+    const title = createElementWithClass('span', TITLE_CLASS);
+    title.addEventListener('dblclick', () => this.commands.openSettings(instanceId));
+    const visibilityIcon = createIcon(ACTION_ICON_CLASS, ICON_VIEW_BOX, EYE_PATHS);
+    const visibility = createActionButton(INDICATOR_VISIBILITY_LABELS.off, visibilityIcon, () => {
+      const view = this.views.get(instanceId);
+      if (view !== undefined) {
+        this.commands.setHidden(instanceId, !view.hidden);
+      }
+    });
+    const settings = createActionButton(
+      INDICATOR_SETTINGS_LABEL,
+      createIcon(ACTION_ICON_CLASS, ICON_VIEW_BOX, GEAR_PATHS),
+      () => this.commands.openSettings(instanceId),
+    );
+    const remove = createActionButton(
+      REMOVE_INDICATOR_LABEL,
+      createIcon(ACTION_ICON_CLASS, ICON_VIEW_BOX, TRASH_PATHS),
+      () => this.commands.remove(instanceId),
+    );
+    const actions = createElementWithClass('span', ACTIONS_CLASS);
+    actions.append(visibility, settings, remove);
+    const values = createElementWithClass('span', VALUES_CLASS);
+    element.append(hiddenIcon, title, actions, values);
+    return { element, hiddenIcon, title, visibilityIcon, visibility, values, hidden: false };
+  }
+
+  private applyRow(view: RowView, row: IndicatorLegendRow): void {
+    view.hidden = row.hidden;
+    view.title.textContent = row.title;
+    if (row.hidden) {
+      view.element.dataset.hidden = 'true';
+    } else {
+      delete view.element.dataset.hidden;
+    }
+    view.hiddenIcon.toggleAttribute('hidden', !row.hidden);
+    this.applyVisibilityButton(view);
+    this.applyValues(view, row);
+  }
+
+  private applyVisibilityButton(view: RowView): void {
+    const label = view.hidden ? INDICATOR_VISIBILITY_LABELS.on : INDICATOR_VISIBILITY_LABELS.off;
+    const paths = view.hidden ? HIDDEN_ICON_PATHS : EYE_PATHS;
+    view.visibilityIcon.replaceChildren(...paths.map(createIconPath));
+    view.visibility.setAttribute('aria-label', label);
+    view.visibility.title = label;
+    view.visibility.setAttribute('aria-pressed', String(view.hidden));
+  }
+
+  private applyValues(view: RowView, row: IndicatorLegendRow): void {
+    const decimals = row.digits ?? this.source.digits();
+    view.values.replaceChildren(VALUE_SEPARATOR, ...row.values.map((value) => createValueElement(value, decimals)));
+  }
+
+  /** Forgets the views of the indicators whose row is gone, and takes their element off the chart. */
+  private dropUnusedViews(entries: readonly RowEntry[]): void {
+    const keptIds = new Set(entries.map(({ row }) => row.instanceId));
+    for (const [instanceId, view] of [...this.views]) {
+      if (keptIds.has(instanceId)) {
+        continue;
+      }
+      view.element.remove();
+      this.views.delete(instanceId);
+    }
+  }
+
+  /** Puts the price-pane rows in attach order, touching the DOM only when that order differs. */
+  private placePricePaneRows(entries: readonly RowEntry[]): void {
+    const wanted = entries.map(({ view }) => view.element);
+    if (!hasSameChildren(this.rows, wanted)) {
+      this.rows.replaceChildren(...wanted);
+    }
   }
 
   private applyToggleState(rowCount: number): void {
