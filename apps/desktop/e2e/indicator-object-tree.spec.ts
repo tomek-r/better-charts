@@ -1,4 +1,12 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import {
+  SMA_9_CLOSE,
+  indicatorList,
+  indicatorRows,
+  openObjectTree,
+  openSmaSettingsDialog,
+  smaSettingsDialog,
+} from './helpers/indicatorObjectTree';
 import { attachedIndicators } from './helpers/indicatorsDialog';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { latestSavedIndicators, openWithSavedIndicators } from './helpers/savedIndicators';
@@ -16,10 +24,8 @@ failOnPageNoise();
 const SMA_INSTANCE_ID = 'sma-1';
 const SMA_DEFINITION_ID = 'sma';
 
-/** The names the seeded moving average goes by: its legend name at both lengths, and its dialog's title. */
-const SMA_9_CLOSE = 'SMA 9 close';
+/** The name the seeded moving average goes by once its length changed. */
 const SMA_20_CLOSE = 'SMA 20 close';
-const SMA_DIALOG_NAME = 'Moving Average Simple settings';
 
 /** The length these cases type into the settings form, and one the form refuses. */
 const NEW_LENGTH = 20;
@@ -28,31 +34,15 @@ const INVALID_LENGTH = '0';
 /** The saved indicator these cases start from: a moving average on default settings. */
 const SAVED_SMA_9 = { instanceId: SMA_INSTANCE_ID, definitionId: SMA_DEFINITION_ID, settings: {} };
 
-/** The indicator list, which sits under the drawings and leaves the tree once it holds no row. */
-function indicatorList(page: Page): Locator {
-  return page.getByRole('list', { name: 'Indicators' });
-}
-
-/** Every row of the indicator list. */
-function indicatorRows(page: Page): Locator {
-  return indicatorList(page).getByRole('listitem');
-}
-
-/** The settings dialog of the seeded moving average. */
-function settingsDialog(page: Page): Locator {
-  return page.getByRole('dialog', { name: SMA_DIALOG_NAME });
-}
-
 /** The length field of the settings dialog. */
 function lengthField(page: Page): Locator {
-  return settingsDialog(page).getByRole('spinbutton', { name: 'Length' });
+  return smaSettingsDialog(page).getByRole('spinbutton', { name: 'Length' });
 }
 
 /** Boots the app with one saved moving average on the price pane and opens the object tree drawer. */
 async function openTreeWithSavedSma(page: Page): Promise<void> {
   await openWithSavedIndicators(page, [SAVED_SMA_9]);
-  await page.getByRole('button', { name: 'Object tree', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Object tree' })).toBeVisible();
+  await openObjectTree(page);
 }
 
 /** The single indicator row, hovered so that its action buttons are in sight. */
@@ -91,11 +81,11 @@ test('the settings dialog saves a new length and the chart recomputes', async ({
   const row = await hoveredIndicatorRow(page);
 
   await row.getByRole('button', { name: 'Indicator settings', exact: true }).click();
-  await expect(settingsDialog(page)).toBeVisible();
+  await expect(smaSettingsDialog(page)).toBeVisible();
   await lengthField(page).fill(String(NEW_LENGTH));
-  await settingsDialog(page).getByRole('button', { name: 'OK', exact: true }).click();
+  await smaSettingsDialog(page).getByRole('button', { name: 'OK', exact: true }).click();
 
-  await expect(settingsDialog(page)).toBeHidden();
+  await expect(smaSettingsDialog(page)).toBeHidden();
   await expect.poll(async () => (await attachedIndicators(page))[0]?.settings.length).toBe(NEW_LENGTH);
   await expect(row).toContainText(SMA_20_CLOSE);
   const legendRows = page.getByLabel('Indicator legend', { exact: true }).locator('.chart-indicator-legend-row');
@@ -105,11 +95,10 @@ test('the settings dialog saves a new length and the chart recomputes', async ({
 test('an invalid length keeps OK disabled', async ({ page }) => {
   await openTreeWithSavedSma(page);
 
-  await indicatorRows(page).getByRole('button', { name: SMA_9_CLOSE, exact: true }).dblclick();
-  await expect(settingsDialog(page)).toBeVisible();
+  const dialog = await openSmaSettingsDialog(page);
   await lengthField(page).fill(INVALID_LENGTH);
 
-  await expect(settingsDialog(page).getByRole('button', { name: 'OK', exact: true })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'OK', exact: true })).toBeDisabled();
 });
 
 test('Remove detaches the indicator and drops its row', async ({ page }) => {

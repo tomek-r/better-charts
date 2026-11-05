@@ -1,6 +1,10 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useChartSettings } from '../chart/chartSettings/ChartSettingsProvider';
+import {
+  DEFAULT_TIMEFRAME_VISIBILITY,
+  type DrawingTimeframeVisibility,
+} from '../chart/engine/drawings/timeframeVisibility';
 import type { SettingValues } from '../chart/engine/settings/settingInputs';
 import { resolveSettingValues } from '../chart/engine/settings/settingsSchema';
 import { useRequiredContext } from '../../shared/context/useRequiredContext';
@@ -33,6 +37,9 @@ interface IndicatorSettingsDialogProps {
   readonly onClose: () => void;
 }
 
+/** What the settings form reports for an indicator: it anchors nothing, so only the timeframes it shows on matter. */
+type IndicatorSettingsSave = [points?: unknown, timeframeVisibility?: DrawingTimeframeVisibility];
+
 /**
  * The settings dialog of one saved indicator, portalled to the page body for the same reason as the
  * drawing dialog: the chart frame is a clipped stacking context. An indicator that detached, or whose
@@ -46,8 +53,8 @@ function IndicatorSettingsDialog({ instanceId, onClose }: IndicatorSettingsDialo
   if (saved === undefined || plugin === undefined) {
     return null;
   }
-  const saveSettings = (values: SettingValues) => {
-    commands.setSettings(instanceId, values);
+  const saveSettings = (values: SettingValues, ...[, timeframeVisibility]: IndicatorSettingsSave) => {
+    commands.setSettings(instanceId, values, timeframeVisibility);
     onClose();
     return true;
   };
@@ -59,8 +66,9 @@ function IndicatorSettingsDialog({ instanceId, onClose }: IndicatorSettingsDialo
       headerActions={<ModalDialogCloseButton label="Close indicator settings" onClick={onClose} />}
     >
       <DrawingSettingsForm
-        settings={plugin}
+        settings={{ ...plugin, timeframeVisibility: 'editable' }}
         initialValues={resolveSettingValues(plugin, saved.settings)}
+        initialTimeframeVisibility={saved.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY}
         onSave={saveSettings}
         onCancel={onClose}
       />

@@ -1,3 +1,9 @@
+import {
+  DEFAULT_TIMEFRAME_VISIBILITY,
+  readTimeframeVisibility,
+  sameTimeframeVisibility,
+  type DrawingTimeframeVisibility,
+} from '../engine/drawings/timeframeVisibility';
 import type { SettingValue, SettingValues } from '../engine/settings/settingInputs';
 import { isPlainRecord } from '../engine/settings/settingInputs';
 
@@ -9,6 +15,8 @@ export interface SavedIndicator {
   readonly settings: SettingValues;
   /** Present only while the user has hidden the indicator: it stays attached and draws nothing. */
   readonly hidden?: true;
+  /** Present only when the user limited the timeframes it shows on; absent means every timeframe. */
+  readonly timeframeVisibility?: DrawingTimeframeVisibility;
 }
 
 /**
@@ -40,7 +48,10 @@ export function readSavedIndicators(raw: unknown): readonly SavedIndicator[] | u
   return indicators;
 }
 
-/** True when both lists hold the same indicators, in the same order, the same settings and the same hidden state. */
+/**
+ * True when both lists hold the same indicators, in the same order, the same settings, the same hidden state
+ * and the same timeframes they show on.
+ */
 export function sameSavedIndicators(left: readonly SavedIndicator[], right: readonly SavedIndicator[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -60,12 +71,27 @@ function readSavedIndicator(raw: unknown): SavedIndicator | undefined {
     return undefined;
   }
 
-  return { instanceId, definitionId, settings: readSettingValues(raw.settings), ...hiddenFlag(raw.hidden) };
+  return {
+    instanceId,
+    definitionId,
+    settings: readSettingValues(raw.settings),
+    ...hiddenFlag(raw.hidden),
+    ...timeframeVisibilityField(raw.timeframeVisibility),
+  };
 }
 
 /** The `hidden` flag as a spreadable field, so a shown indicator carries no `hidden` key at all. */
 function hiddenFlag(raw: unknown): { hidden?: true } {
   return raw === true ? { hidden: true } : {};
+}
+
+/**
+ * The timeframes the indicator shows on as a spreadable field. Showing on every timeframe stores no key at all,
+ * which is also what a missing or an unreadable value reads as.
+ */
+export function timeframeVisibilityField(raw: unknown): Pick<SavedIndicator, 'timeframeVisibility'> {
+  const timeframeVisibility = readTimeframeVisibility(raw);
+  return sameTimeframeVisibility(timeframeVisibility, DEFAULT_TIMEFRAME_VISIBILITY) ? {} : { timeframeVisibility };
 }
 
 function readSettingValues(raw: unknown): SettingValues {
@@ -100,6 +126,10 @@ function sameSavedIndicator(left: SavedIndicator, right: SavedIndicator): boolea
     left.instanceId === right.instanceId &&
     left.definitionId === right.definitionId &&
     left.hidden === right.hidden &&
+    sameTimeframeVisibility(
+      left.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY,
+      right.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY,
+    ) &&
     sameSettingValues(left.settings, right.settings)
   );
 }

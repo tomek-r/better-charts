@@ -352,7 +352,10 @@ name; indicators with a pane of their own get no row (owner decision). A row's b
 indicator's settings, hide or show it and remove it, and a double click or Delete on its name
 does the same as in a drawing row. The settings dialog is the drawing settings form with the
 indicator's Inputs and Style tabs; OK stays disabled while a value is invalid and recomputes the
-indicator. A plot or band switched off in the Style tab hides only that line.
+indicator. A plot or band switched off in the Style tab hides only that line. The settings dialog
+also has the drawings' Visibility tab: an indicator limited to some timeframes is not attached on
+the others, so its line, legend row and pane leave and come back with the timeframe; the Object
+tree keeps listing it.
 
 ## Execution and configuration
 
