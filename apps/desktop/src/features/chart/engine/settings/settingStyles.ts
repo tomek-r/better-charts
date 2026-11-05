@@ -32,6 +32,8 @@ interface SettingStyleCommon<Kind extends string> {
   readonly id: string;
   readonly title: string;
   readonly parentId?: string;
+  /** The caption of the group this style opens in the Style tab; the styles after it belong to that group. */
+  readonly section?: string;
 }
 
 /** A line: a checkbox, a colour, and a width and dash pattern. */

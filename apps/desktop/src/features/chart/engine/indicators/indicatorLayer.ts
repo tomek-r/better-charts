@@ -11,7 +11,14 @@ import type { ChartIndicatorPane } from './indicatorContract';
 import { IndicatorFillPrimitive } from './indicatorFillPrimitive';
 import type { IndicatorBar, IndicatorFill, IndicatorFillEdge, IndicatorFrame, IndicatorLevel } from './indicatorFrame';
 import { createLevelLines, removeLevelLines, setLevelLinesHidden } from './indicatorLevels';
-import { PRICE_PANE_INDEX, addOwnPane, paneIndexOf, removeOwnPane, type OwnPane } from './indicatorPanes';
+import {
+  PRICE_PANE_INDEX,
+  addOwnPane,
+  paneIndexOf,
+  pricePaneStretchFactor,
+  removeOwnPane,
+  type OwnPane,
+} from './indicatorPanes';
 import {
   addPlotSeries,
   isHistogramPlotSeries,
@@ -46,8 +53,16 @@ export interface IndicatorLayerState {
   readonly fills: readonly IndicatorFillState[];
   /** The pane its first plot series is in: the price pane for an overlay, its own pane otherwise. */
   readonly paneIndex: number;
+  /** Its own pane's height relative to the price pane; null for an overlay. */
+  readonly paneHeight: number | null;
   /** Decimals its values are written with; null when the frame states none. */
   readonly precision: number | null;
+}
+
+/** How tall one indicator's own pane is: its stretch factor over the price pane's, so the price pane's stays 1. */
+export interface IndicatorPaneHeight {
+  readonly instanceId: string;
+  readonly paneHeight: number;
 }
 
 /** One plot's value at one bar and the colour it is drawn in. */
@@ -55,6 +70,20 @@ export interface IndicatorLegendValue {
   readonly value: number | null;
   readonly color: string;
 }
+
+/** What a caller says about drawing a frame, beyond the frame itself. */
+export interface IndicatorShowOptions {
+  /** Whether each visible plot writes its last value on the price scale. */
+  readonly priceLabelsVisible: boolean;
+  /**
+   * The height an indicator's own pane was saved with, relative to the price pane. It sizes a pane the layer
+   * does not hold yet; an overlay, or a pane the layer already holds, is left at the height it has.
+   */
+  readonly paneHeight?: number;
+}
+
+/** A caller that says nothing about a frame gets no price labels, the default the labels switch carries. */
+const DEFAULT_SHOW_OPTIONS: IndicatorShowOptions = { priceLabelsVisible: false };
 
 /**
  * What the layer holds for one shown indicator: one series per plot, the lines and fills the frame
@@ -140,12 +169,17 @@ export class IndicatorLayer {
    * Draws a whole frame for `id`, replacing everything it drew before, including the levels and
    * fills it kept from an earlier frame. A frame without plots draws no levels and no fills: there
    * is no series to hang them on. `pane` says whether the indicator draws on the price pane or in a
-   * pane of its own.
+   * pane of its own, `options` what it says about the frame beside its plots.
    */
-  show(id: string, frame: IndicatorFrame, pane: ChartIndicatorPane = 'overlay'): void {
+  show(
+    id: string,
+    frame: IndicatorFrame,
+    pane: ChartIndicatorPane = 'overlay',
+    options: IndicatorShowOptions = DEFAULT_SHOW_OPTIONS,
+  ): void {
     const heldPane = this.shown.get(id)?.ownPane ?? null;
     this.clear(id);
-    this.draw(id, frame, this.paneToDrawIn(heldPane, pane));
+    this.draw(id, frame, this.paneToDrawIn(heldPane, pane, options.paneHeight), options);
   }
 
   /**
@@ -207,8 +241,21 @@ export class IndicatorLayer {
       levels: shown.levels.map(levelStateOf),
       fills: shown.fills.map(fillStateOf),
       paneIndex: shown.series[0]?.getPane().paneIndex() ?? PRICE_PANE_INDEX,
+      paneHeight: this.paneHeightOf(shown),
       precision: shown.precision,
     }));
+  }
+
+  /** The height of every own pane it holds, relative to the price pane, for the app to save. */
+  paneHeights(): IndicatorPaneHeight[] {
+    const heights: IndicatorPaneHeight[] = [];
+    for (const [instanceId, shown] of this.shown) {
+      const paneHeight = this.paneHeightOf(shown);
+      if (paneHeight !== null) {
+        heights.push({ instanceId, paneHeight });
+      }
+    }
+    return heights;
   }
 
   /** The decimals `id` writes its values with; null for an unknown id or a frame that states none. */
@@ -231,12 +278,12 @@ export class IndicatorLayer {
   }
 
   /** Draws `frame` for `id`, in its own pane or on the price pane when `ownPane` is null. */
-  private draw(id: string, frame: IndicatorFrame, ownPane: OwnPane | null): void {
+  private draw(id: string, frame: IndicatorFrame, ownPane: OwnPane | null, options: IndicatorShowOptions): void {
     // The pane's index is read here rather than when it was added: indices shift when another pane goes.
     const paneIndex = paneIndexOf(ownPane);
     const precision = frame.precision ?? null;
     const series = frame.plots.map((plot, plotIndex) => {
-      const plotSeries = addPlotSeries(this.chart, plot, paneIndex, precision);
+      const plotSeries = addPlotSeries(this.chart, plot, paneIndex, precision, options.priceLabelsVisible);
       plotSeries.setData(frame.bars.map((bar) => pointOf(bar, plotIndex)));
       return plotSeries;
     });
@@ -274,14 +321,27 @@ export class IndicatorLayer {
 
   /**
    * The pane `id` draws in next: the pane of its own it already holds or a new one, and none for an
-   * overlay, which gives a held pane back to the chart.
+   * overlay, which gives a held pane back to the chart. A new pane takes the height the indicator was
+   * saved with; a pane already held keeps the one the user gave it.
    */
-  private paneToDrawIn(heldPane: OwnPane | null, pane: ChartIndicatorPane): OwnPane | null {
+  private paneToDrawIn(
+    heldPane: OwnPane | null,
+    pane: ChartIndicatorPane,
+    paneHeight: number | undefined,
+  ): OwnPane | null {
     if (pane === 'own') {
-      return heldPane ?? addOwnPane(this.chart);
+      return heldPane ?? addOwnPane(this.chart, paneHeight);
     }
     removeOwnPane(this.chart, heldPane);
     return null;
+  }
+
+  /** An own pane's height relative to the price pane; null for an overlay. */
+  private paneHeightOf(shown: Shown): number | null {
+    if (shown.ownPane === null) {
+      return null;
+    }
+    return shown.ownPane.pane.getStretchFactor() / pricePaneStretchFactor(this.chart);
   }
 
   /** Attaches the fill primitive to the host series, which owns the pane the band is drawn in. */

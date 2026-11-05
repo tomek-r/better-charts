@@ -51,24 +51,31 @@ export interface IndicatorPlotState {
   readonly lineType: IndicatorLineType;
   readonly lineStyle: IndicatorLineStyle;
   readonly visible: boolean;
+  /** Whether the plot's last value is written on the price scale. */
+  readonly priceLabelVisible: boolean;
   readonly points: readonly IndicatorPointState[];
 }
 
 /**
  * Adds one plot's series at `paneIndex`, writing its values with `precision` decimals when the frame
  * states them. A line plot draws a line, its own switch deciding whether the line is drawn at all; a
- * histogram plot draws its values as columns from zero.
+ * histogram plot draws its values as columns from zero. `priceLabelsVisible` writes each visible
+ * plot's last value on the price scale.
  */
 export function addPlotSeries(
   chart: IChartApi,
   plot: IndicatorPlot,
   paneIndex: number | undefined,
   precision: number | null,
+  priceLabelsVisible: boolean,
 ): IndicatorPlotSeries {
   if (plot.style === 'histogram') {
-    return withPriceFormat(chart.addSeries(HistogramSeries, histogramOptionsOf(plot), paneIndex), precision);
+    return withPriceFormat(
+      chart.addSeries(HistogramSeries, histogramOptionsOf(plot, priceLabelsVisible), paneIndex),
+      precision,
+    );
   }
-  return withPriceFormat(chart.addSeries(LineSeries, lineOptionsOf(plot), paneIndex), precision);
+  return withPriceFormat(chart.addSeries(LineSeries, lineOptionsOf(plot, priceLabelsVisible), paneIndex), precision);
 }
 
 /** Whether `series` draws columns from zero rather than a line. */
@@ -98,8 +105,13 @@ export function plotStateOf(series: IndicatorPlotSeries, title: string): Indicat
   return isHistogramPlotSeries(series) ? histogramStateOf(series, title) : lineStateOf(series, title);
 }
 
+/** Whether a plot writes its last value on the price scale: a switched-off plot writes none. */
+function writesPriceLabel(plot: IndicatorPlot, priceLabelsVisible: boolean): boolean {
+  return priceLabelsVisible && plot.visible !== false;
+}
+
 /** The options a line plot's series is created with; `lineVisible` is the plot's own switch. */
-function lineOptionsOf(plot: IndicatorPlot) {
+function lineOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
   return {
     color: plot.color,
     lineWidth: toLineWidth(plot.lineWidth),
@@ -107,7 +119,7 @@ function lineOptionsOf(plot: IndicatorPlot) {
     lineType: plot.style === 'stepline' ? LineType.WithSteps : LineType.Simple,
     lineVisible: plot.visible !== false,
     priceLineVisible: false,
-    lastValueVisible: false,
+    lastValueVisible: writesPriceLabel(plot, priceLabelsVisible),
     crosshairMarkerVisible: false,
   };
 }
@@ -116,12 +128,12 @@ function lineOptionsOf(plot: IndicatorPlot) {
  * The options a histogram plot's series is created with: one colour for every column, unless a bar
  * carries a colour of its own.
  */
-function histogramOptionsOf(plot: IndicatorPlot) {
+function histogramOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
   return {
     color: plot.color,
     base: HISTOGRAM_BASE,
     priceLineVisible: false,
-    lastValueVisible: false,
+    lastValueVisible: writesPriceLabel(plot, priceLabelsVisible),
     visible: plot.visible !== false,
   };
 }
@@ -147,6 +159,7 @@ function lineStateOf(series: ISeriesApi<'Line'>, title: string): IndicatorPlotSt
     lineType: options.lineType === LineType.WithSteps ? 'step' : 'simple',
     lineStyle: toIndicatorLineStyle(options.lineStyle),
     visible: options.lineVisible,
+    priceLabelVisible: options.lastValueVisible,
     points: pointStatesOf(series.data()),
   };
 }
@@ -160,6 +173,7 @@ function histogramStateOf(series: ISeriesApi<'Histogram'>, title: string): Indic
     lineType: 'histogram',
     lineStyle: 'solid',
     visible: options.visible,
+    priceLabelVisible: options.lastValueVisible,
     points: pointStatesOf(series.data()),
   };
 }

@@ -1,4 +1,4 @@
-import type { ChartDrawingCommands } from '../drawings/chartDrawings';
+import type { ChartDrawingCommands, ShownDrawingSettings } from '../drawings/chartDrawings';
 import type { ChartDrawingPoint, ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import { DrawingRegistry } from '../drawings/drawingRegistry';
 import { drawingsAroundBars, type DrawingRef, type DrawingStackEntry } from '../drawings/drawingStack';
@@ -234,12 +234,24 @@ export class ChartToolSet implements ChartDrawingCommands, ChartToolInput {
     this.registry.setDrawingSettings(toolId, drawingId, settings);
   }
 
+  previewDrawingSettings(toolId: string, drawingId: string, settings: SettingValues): void {
+    this.registry.previewDrawingSettings(toolId, drawingId, settings);
+  }
+
+  endDrawingSettingsPreview(toolId: string, drawingId: string): void {
+    this.registry.endDrawingSettingsPreview(toolId, drawingId);
+  }
+
   setDrawingPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean {
     return this.registry.setDrawingPoints(toolId, drawingId, points);
   }
 
   exportDrawings(): ChartDrawingRecord[] {
     return this.registry.exportDrawings();
+  }
+
+  shownDrawingSettings(): ShownDrawingSettings[] {
+    return this.registry.shownDrawingSettings();
   }
 
   replaceDrawings(records: readonly ChartDrawingRecord[]): void {

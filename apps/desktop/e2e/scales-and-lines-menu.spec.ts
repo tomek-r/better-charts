@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { bidAskDrawingModeOf, bidAskDrawingsOf } from '../src/features/chart/scalesAndLinesMenu/bidAskDrawingMode';
 import { palette } from '../src/shared/theme/palette';
+import { OBJECT_SETTINGS_ICON_PATHS } from '../src/shared/ui/icons/objectSettingsIcon';
 import { openScalesAndLinesMenu } from './helpers/chartMenu';
 import { chartScalesState } from './helpers/chartScalesState';
 import { chartSettingsDialog } from './helpers/chartSettingsDialog';
@@ -141,6 +142,19 @@ test('the gear opens the menu above itself, in the price scale order', async ({ 
   await expect(menu.getByRole('menuitem', { name: 'Labels' })).toHaveAttribute('aria-haspopup', 'menu');
   await expect(menu.getByRole('menuitem', { name: 'Lines' })).toHaveAttribute('aria-haspopup', 'menu');
   await expect(menu.getByRole('separator')).toHaveCount(3);
+  expectNoErrors(collected);
+});
+
+test('the gear draws the settings icon the drawing toolbar and the Object tree draw', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  await openChart(page);
+
+  const drawn = await gear(page)
+    .locator('svg path')
+    .evaluateAll((elements) => elements.map((element) => element.getAttribute('d')));
+
+  // Both hexagon subpaths in one `d`, exactly the outline the shared settings icon holds.
+  expect(drawn).toEqual([OBJECT_SETTINGS_ICON_PATHS.join(' ')]);
   expectNoErrors(collected);
 });
 

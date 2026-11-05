@@ -81,8 +81,23 @@ export interface ChartToolDrawings {
   setVisible(drawingId: string, visible: boolean): boolean;
   /** Whether the drawing is painted; false when the tool has no drawing with that id. */
   isVisible(drawingId: string): boolean;
-  /** Replaces one drawing's settings; false when the tool has no drawing with that id. */
+  /**
+   * The settings this drawing is shown with, which is what a paint pass reads: the ones a settings dialog
+   * previews while it edits, else the stored ones. Undefined when the tool has no drawing with that id.
+   */
+  settingsShown(drawingId: string): SettingValues | undefined;
+  /** Replaces one drawing's stored settings, dropping any preview; false when the tool has no such drawing. */
   setSettings(drawingId: string, settings: SettingValues): boolean;
+  /**
+   * Shows other settings on one drawing without storing them, so a later save of any drawing cannot pick
+   * them up: what a settings dialog shows while the user edits. False when the tool has no such drawing.
+   */
+  previewSettings(drawingId: string, settings: SettingValues): boolean;
+  /**
+   * Drops a settings preview and shows the stored settings again; false when the tool has no such drawing
+   * or the drawing holds no preview.
+   */
+  endSettingsPreview(drawingId: string): boolean;
   /**
    * Moves one drawing to new anchors, keeping its id, flags, settings, selection and paint position;
    * false when the tool has no such drawing or does not accept the anchors.

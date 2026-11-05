@@ -11,12 +11,23 @@ export interface ChartDrawingCommands {
   setDrawingLocked(toolId: string, drawingId: string, locked: boolean): void;
   setDrawingVisible(toolId: string, drawingId: string, visible: boolean): void;
   setDrawingSettings(toolId: string, drawingId: string, settings: SettingValues): void;
+  previewDrawingSettings(toolId: string, drawingId: string, settings: SettingValues): void;
+  endDrawingSettingsPreview(toolId: string, drawingId: string): void;
   setDrawingTimeframeVisibility(toolId: string, drawingId: string, visibility: DrawingTimeframeVisibility): void;
   setDrawingPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean;
   exportDrawings(): ChartDrawingRecord[];
+  /** The settings each drawing is shown with, a settings dialog's preview included; never what is saved. */
+  shownDrawingSettings(): ShownDrawingSettings[];
   replaceDrawings(records: readonly ChartDrawingRecord[]): void;
   drawingStack(): readonly DrawingStackEntry[];
   moveStackEntry(fromIndex: number, toIndex: number): boolean;
+}
+
+/** One drawing's shown settings: a settings dialog's preview while it edits, else the stored ones. */
+export interface ShownDrawingSettings {
+  readonly toolId: string;
+  readonly id: string;
+  readonly settings: SettingValues;
 }
 
 /**
@@ -172,6 +183,24 @@ export class ChartDrawings {
     this.repaint();
   }
 
+  /**
+   * Shows other settings on one drawing of any tool without saving them, which is what a settings dialog
+   * previews while the user edits; nothing is reported as a change, so the stored set stays as it was.
+   */
+  previewSettings(toolId: string, drawingId: string, settings: SettingValues): void {
+    this.commands.previewDrawingSettings(toolId, drawingId, settings);
+    this.repaint();
+  }
+
+  /**
+   * Puts the stored settings back on one drawing of any tool, dropping a preview: what closing a settings
+   * dialog without OK does. Nothing is reported as a change, so the stored set stays as it was.
+   */
+  endSettingsPreview(toolId: string, drawingId: string): void {
+    this.commands.endDrawingSettingsPreview(toolId, drawingId);
+    this.repaint();
+  }
+
   /** Sets on which timeframes one drawing of any tool paints; the drawing keeps its own visible flag. */
   setTimeframeVisibility(toolId: string, drawingId: string, visibility: DrawingTimeframeVisibility): void {
     this.commands.setDrawingTimeframeVisibility(toolId, drawingId, visibility);
@@ -198,6 +227,14 @@ export class ChartDrawings {
 
   exportRecords(): ChartDrawingRecord[] {
     return this.commands.exportDrawings();
+  }
+
+  /**
+   * The settings each drawing is shown with, a settings dialog's preview included, in the chart's order.
+   * `exportRecords` keeps the stored ones, which is what the app saves.
+   */
+  shownDrawingSettings(): ShownDrawingSettings[] {
+    return this.commands.shownDrawingSettings();
   }
 
   replaceRecords(records: readonly ChartDrawingRecord[]): void {

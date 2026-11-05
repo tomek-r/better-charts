@@ -1,4 +1,5 @@
-import type { IndicatorLegendValue } from '../indicators/indicatorLayer';
+import { OBJECT_SETTINGS_ICON_PATHS } from '../../../../shared/ui/icons/objectSettingsIcon';
+import type { IndicatorLegendValue, IndicatorPaneHeight } from '../indicators/indicatorLayer';
 import { INDICATOR_SETTINGS_LABEL, INDICATOR_VISIBILITY_LABELS, REMOVE_INDICATOR_LABEL } from './indicatorLegendLabels';
 
 /** One attached indicator's legend line: its words for the settings, then its plot values. */
@@ -18,6 +19,11 @@ export interface IndicatorLegendCommands {
   openSettings(instanceId: string): void;
   setHidden(instanceId: string, hidden: boolean): void;
   remove(instanceId: string): void;
+  /**
+   * Saves the pane heights the user dragged the separators to, each relative to the price pane; the app
+   * stores them with the indicators they belong to, so a chart opened again restores them.
+   */
+  setPaneHeights(heights: readonly IndicatorPaneHeight[]): void;
 }
 
 /** What the legend reads to draw its rows; the chart surface supplies it. */
@@ -60,6 +66,7 @@ const VALUES_CLASS = 'chart-indicator-legend-values';
 const ACTIONS_CLASS = 'chart-indicator-legend-actions';
 const ACTION_CLASS = 'chart-indicator-legend-action';
 const ACTION_ICON_CLASS = 'chart-indicator-legend-action-icon';
+const GEAR_ICON_CLASS = `${ACTION_ICON_CLASS} chart-indicator-legend-gear-icon`;
 const TOGGLE_CLASS = 'chart-indicator-legend-toggle';
 const COUNT_CLASS = 'chart-indicator-legend-count';
 const CHEVRON_CLASS = 'chart-indicator-legend-chevron';
@@ -69,10 +76,12 @@ const CHEVRON_PATHS = ['M2 3.5l3 3 3-3'];
 const ICON_VIEW_BOX = '0 0 12 12';
 const EYE_PATHS = ['M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z', 'M6 4.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3z'];
 const EYE_OFF_PATHS = [...EYE_PATHS, 'M2 10L10 2'];
-const GEAR_PATHS = [
-  'M6 4a2 2 0 1 1 0 4a2 2 0 1 1 0-4z',
-  'M6 1v1.5M6 9.5V11M1 6h1.5M9.5 6H11M2.5 2.5l1 1M8.5 8.5l1 1M2.5 9.5l1-1M8.5 3.5l1-1',
-];
+/**
+ * The settings icon the drawing toolbar and the Object tree use, drawn in the 24-unit square the outline
+ * icons use.
+ */
+const GEAR_VIEW_BOX = '0 0 24 24';
+const GEAR_PATHS = OBJECT_SETTINGS_ICON_PATHS;
 const TRASH_PATHS = ['M2 3h8', 'M4.5 3V2h3v1', 'M3 3l.5 7.5h5L9 3', 'M5 5v4M7 5v4'];
 
 function createElementWithClass<K extends keyof HTMLElementTagNameMap>(
@@ -240,7 +249,7 @@ export class IndicatorLegend {
     });
     const settings = createActionButton(
       INDICATOR_SETTINGS_LABEL,
-      createIcon(ACTION_ICON_CLASS, ICON_VIEW_BOX, GEAR_PATHS),
+      createIcon(GEAR_ICON_CLASS, GEAR_VIEW_BOX, GEAR_PATHS),
       () => this.commands.openSettings(instanceId),
     );
     const remove = createActionButton(
@@ -277,6 +286,11 @@ export class IndicatorLegend {
   }
 
   private applyValues(view: RowView, row: IndicatorLegendRow): void {
+    if (row.values.length === 0) {
+      // An indicator whose status line shows no values keeps only its words, with no separator left over.
+      view.values.replaceChildren();
+      return;
+    }
     const decimals = row.digits ?? this.source.digits();
     view.values.replaceChildren(VALUE_SEPARATOR, ...row.values.map((value) => createValueElement(value, decimals)));
   }

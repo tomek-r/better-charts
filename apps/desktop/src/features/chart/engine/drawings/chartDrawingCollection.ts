@@ -50,12 +50,21 @@ interface KeptDrawing<Drawing extends ChartDrawingShape> {
   locked: boolean;
   visible: boolean;
   settings: SettingValues;
+  /** What a settings dialog shows while the user edits; null when no dialog previews this drawing. */
+  previewSettings: SettingValues | null;
+}
+
+/** The settings a paint pass and a gesture read: the previewed ones while a dialog edits, else the stored ones. */
+function shownSettings(kept: Pick<KeptDrawing<ChartDrawingShape>, 'previewSettings' | 'settings'>): SettingValues {
+  return kept.previewSettings ?? kept.settings;
 }
 
 /**
  * Everything the drawings of one tool share: the paint order (the last drawing is the topmost), the
- * selection, each drawing's lock, visibility and settings, and the records the app stores. What stays
- * with the tool is the gesture that places a drawing, how a drawing paints itself and how it is hit.
+ * selection, each drawing's lock, visibility and settings, and the records the app stores. A settings
+ * dialog's preview paints on the drawing but stays out of the stored settings, so a save of anything
+ * else never picks it up. What stays with the tool is the gesture that places a drawing, how a drawing
+ * paints itself and how it is hit.
  *
  * The settings and the anchors are checked against the tool's own rules, so a stored record the tool
  * could not paint again is dropped before it reaches a drawing.
@@ -86,13 +95,13 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
 
   /** Every drawing, bottom to top, with the state a paint pass or a gesture needs. */
   entries(): readonly ChartDrawingEntry<Drawing>[] {
-    return this.kept.map(({ id, drawing, locked, visible, settings }) => ({
-      id,
-      drawing,
-      locked,
-      visible,
-      settings,
-      selected: id === this.selectedId,
+    return this.kept.map((kept) => ({
+      id: kept.id,
+      drawing: kept.drawing,
+      locked: kept.locked,
+      visible: kept.visible,
+      settings: shownSettings(kept),
+      selected: kept.id === this.selectedId,
     }));
   }
 
@@ -102,6 +111,12 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
 
   isVisible(drawingId: string): boolean {
     return this.find(drawingId)?.visible ?? false;
+  }
+
+  /** The settings one drawing is shown with, preview included; undefined when the collection holds no such id. */
+  settingsShown(drawingId: string): SettingValues | undefined {
+    const entry = this.find(drawingId);
+    return entry === undefined ? undefined : shownSettings(entry);
   }
 
   /** Whether that drawing is visible and holds the pane point: the test the chart's stacking order walks. */
@@ -179,13 +194,44 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     return true;
   }
 
-  /** Replaces one drawing's settings with the values the tool's definitions accept. */
+  /** Replaces one drawing's stored settings with the values the tool's definitions accept, dropping any preview. */
   setSettings(drawingId: string, settings: SettingValues): boolean {
     const entry = this.find(drawingId);
     if (entry === undefined) {
       return false;
     }
     entry.settings = resolveSettingValues(this.rules, settings);
+    entry.previewSettings = null;
+    entry.drawing.settingsChanged?.(entry.settings);
+    this.requestRepaint();
+    return true;
+  }
+
+  /**
+   * Shows other settings on one drawing without storing them, so they are never exported: what a settings
+   * dialog shows while the user edits. False, with nothing changed, when the collection holds no such id.
+   */
+  previewSettings(drawingId: string, settings: SettingValues): boolean {
+    const entry = this.find(drawingId);
+    if (entry === undefined) {
+      return false;
+    }
+    entry.previewSettings = resolveSettingValues(this.rules, settings);
+    entry.drawing.settingsChanged?.(shownSettings(entry));
+    this.requestRepaint();
+    return true;
+  }
+
+  /**
+   * Drops the preview and shows the stored settings again. False, with nothing changed, when the id is
+   * unknown or the drawing holds no preview, so a repeated revert changes nothing.
+   */
+  endSettingsPreview(drawingId: string): boolean {
+    const entry = this.find(drawingId);
+    if (entry === undefined || entry.previewSettings === null) {
+      return false;
+    }
+    entry.previewSettings = null;
     entry.drawing.settingsChanged?.(entry.settings);
     this.requestRepaint();
     return true;
@@ -193,8 +239,8 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
 
   /**
    * Moves a drawing to new anchors: the tool restores a drawing from them and that one takes the old
-   * one's place, keeping its id, lock, visibility, settings, selection and paint position. False, with
-   * nothing changed, when the id is unknown or the tool refuses the anchors.
+   * one's place, keeping its id, lock, visibility, settings, selection, paint position and any settings
+   * preview. False, with nothing changed, when the id is unknown or the tool refuses the anchors.
    */
   setPoints(drawingId: string, points: readonly ChartDrawingPoint[]): boolean {
     const index = this.kept.findIndex((entry) => entry.id === drawingId);
@@ -205,15 +251,17 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
     if (drawing === undefined) {
       return false;
     }
-    const { id, locked, visible, settings, drawing: previous } = this.kept[index];
-    this.kept[index] = { id, drawing, locked, visible, settings };
+    const { id, locked, visible, settings, previewSettings, drawing: previous } = this.kept[index];
+    const kept = { id, drawing, locked, visible, settings, previewSettings };
+    this.kept[index] = kept;
     previous.dispose();
-    drawing.settingsChanged?.(settings);
+    drawing.settingsChanged?.(shownSettings(kept));
     drawing.visibilityChanged(visible);
     this.requestRepaint();
     return true;
   }
 
+  /** Every drawing as the app stores it, with the stored settings only: a preview a dialog shows never reaches it. */
   exportRecords(): ChartToolDrawingRecord[] {
     return this.kept.map(({ id, drawing, locked, visible, settings }) => ({
       id,
@@ -253,6 +301,7 @@ export class ChartDrawingCollection<Drawing extends ChartDrawingShape> implement
       locked: state.locked ?? false,
       visible: state.visible ?? true,
       settings: resolveSettingValues(this.rules, state.settings),
+      previewSettings: null,
     };
     this.kept.push(kept);
     drawing.settingsChanged?.(kept.settings);

@@ -176,6 +176,16 @@
   gap: var(--drawing-settings-row-gap);
 }
 
+/* The caption a style opens its group with, written like the chart settings' own captions. */
+.drawing-settings-style-section {
+  margin: 8px 0 0;
+  color: var(--color-muted-strong);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .drawing-settings-style-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--drawing-settings-control-width);
@@ -192,6 +202,11 @@
   align-items: center;
   gap: 9px;
   color: var(--color-text-label);
+}
+
+/* A checkbox-only row has no control, so its title takes the control's column too instead of wrapping. */
+.drawing-settings-style-title:only-child {
+  grid-column: 1 / -1;
 }
 
 .drawing-settings-style-row .color-trigger {

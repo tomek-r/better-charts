@@ -1,3 +1,4 @@
+import { indicatorDisplayOf } from '../chart/engine/indicators/indicatorDisplaySettings';
 import type { SettingValues } from '../chart/engine/settings/settingInputs';
 import type { ChartIndicatorPlugin } from './chartIndicatorPlugin';
 import { findChartIndicatorPlugin } from './registry';
@@ -22,4 +23,16 @@ export function indicatorLegendTitle(definitionId: string, settings: SettingValu
     }
   }
   return words.join(WORD_SEPARATOR);
+}
+
+/**
+ * The legend row's words: the short title with the inputs after it while the indicator shows them in its
+ * status line, e.g. "SMA 9 close", and the bare short title otherwise. An unregistered definition reads as
+ * its id.
+ */
+export function indicatorStatusLineTitle(definitionId: string, settings: SettingValues): string {
+  if (indicatorDisplayOf(settings).inputsInStatusLine) {
+    return indicatorLegendTitle(definitionId, settings);
+  }
+  return findChartIndicatorPlugin(definitionId)?.shortTitle ?? definitionId;
 }

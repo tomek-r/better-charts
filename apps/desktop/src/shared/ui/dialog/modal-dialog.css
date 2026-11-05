@@ -42,6 +42,9 @@
   align-items: center;
   justify-content: space-between;
   margin: 0 0 20px;
+  /* The header drags the panel (see useDraggablePanel); its buttons keep their own cursor. */
+  cursor: move;
+  touch-action: none;
 }
 
 .modal-dialog-title {
@@ -207,7 +210,10 @@
   animation: settings-fade-out 180ms ease-in forwards;
 }
 
+/* A closing panel ignores input, so a second press cannot reach its controls; the backdrop still covers the
+   page, so nothing behind the fading modal can be reached either. */
 .modal-dialog-backdrop.is-closing .modal-dialog {
+  pointer-events: none;
   animation: settings-panel-out 180ms ease-in forwards;
 }
 

@@ -1,5 +1,6 @@
-import { timeframeVisibilityField, type SavedIndicator } from '../chart/chartSettings/savedIndicators';
+import { paneHeightField, timeframeVisibilityField, type SavedIndicator } from '../chart/chartSettings/savedIndicators';
 import type { DrawingTimeframeVisibility } from '../chart/engine/drawings/timeframeVisibility';
+import type { IndicatorPaneHeight } from '../chart/engine/indicators/indicatorLayer';
 import type { SettingValues } from '../chart/engine/settings/settingInputs';
 
 /**
@@ -48,10 +49,34 @@ export function withoutIndicator(indicators: readonly SavedIndicator[], instance
   return indicators.filter((indicator) => indicator.instanceId !== instanceId);
 }
 
+/**
+ * Gives the named saved indicators the heights the user dragged their own panes to, leaving every other entry
+ * untouched and the ones no height is named for as they are.
+ */
+export function withIndicatorPaneHeights(
+  indicators: readonly SavedIndicator[],
+  heights: readonly IndicatorPaneHeight[],
+): SavedIndicator[] {
+  const heightsByInstanceId = new Map(heights.map((entry) => [entry.instanceId, entry.paneHeight]));
+  return indicators.map((indicator) => {
+    const paneHeight = heightsByInstanceId.get(indicator.instanceId);
+    if (paneHeight === undefined) {
+      return indicator;
+    }
+    return { ...withoutPaneHeight(indicator), ...paneHeightField(paneHeight) };
+  });
+}
+
 /** The entry without its `hidden` key, so showing it again leaves no trace of the flag. */
 function withoutHiddenFlag(indicator: SavedIndicator): SavedIndicator {
   const { hidden: _hidden, ...shown } = indicator;
   return shown;
+}
+
+/** The entry without its `paneHeight` key, so a height that no longer reads leaves no trace of the one it had. */
+function withoutPaneHeight(indicator: SavedIndicator): SavedIndicator {
+  const { paneHeight: _paneHeight, ...rest } = indicator;
+  return rest;
 }
 
 /** The entry without its `timeframeVisibility` key, so a new visibility, or none of them, can be written. */

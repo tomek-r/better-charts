@@ -2,6 +2,7 @@ import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { StarIcon } from '../../shared/ui/icons/StarIcon';
 import { ErrorNotification } from '../../shared/ui/notification/ErrorNotifications';
 import { afterExitAnimation } from '../../shared/ui/animation/afterExitAnimation';
+import { useDraggablePanel } from '../../shared/ui/dialog/useDraggablePanel';
 import type { BrokerSymbol } from '../../shared/bridge/types';
 
 function SymbolResultRow({
@@ -66,6 +67,8 @@ export function SymbolSearchDialog({
   toggleFavorite: (item: BrokerSymbol) => void;
 }) {
   const backdrop = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const { panelStyle, onHandlePointerDown } = useDraggablePanel(panel);
   // The fade is the backdrop's own animation, so its `animationend` decides when to unmount.
   useEffect(() => {
     if (!closing) {
@@ -88,8 +91,15 @@ export function SymbolSearchDialog({
         }
       }}
     >
-      <section className="search-panel" role="dialog" aria-modal="true" aria-labelledby="search-title">
-        <div className="search-title">
+      <section
+        ref={panel}
+        className="search-panel"
+        style={panelStyle}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="search-title"
+      >
+        <div className="search-title" onPointerDown={onHandlePointerDown}>
           <h2 id="search-title">Search symbols</h2>
           <button onClick={onClose} aria-label="Close search">
             ×

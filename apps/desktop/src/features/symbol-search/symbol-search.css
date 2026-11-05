@@ -27,6 +27,8 @@
 }
 
 .search-backdrop.is-closing .search-panel {
+  /* A closing panel ignores input; its backdrop still covers the page while it fades. */
+  pointer-events: none;
   animation: search-panel-out 180ms ease-in forwards;
 }
 
@@ -64,6 +66,9 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 14px;
+  /* The title bar drags the panel (see useDraggablePanel); its button keeps its own cursor. */
+  cursor: move;
+  touch-action: none;
 }
 
 .search-title h2 {

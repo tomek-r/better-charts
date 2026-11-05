@@ -12,8 +12,9 @@ const FIRST_TAB_ID = CHART_SETTINGS_TABS[0].id;
 const OpenChartSettingsContext = createContext<OpenChartSettings | null>(null);
 
 /**
- * Owns the chart's settings dialog: the chart menu, and the settings row of the Scales and lines menu, both
- * open this one. It sits around the chart frame, which holds the menus that offer the settings.
+ * Owns the chart's settings dialog: the chart menu, the settings row of the Scales and lines menu and the
+ * Settings button of the chart header all open this one. It sits around the chart workspace, which holds the
+ * header and the frame with the menus that offer the settings.
  */
 export function ChartSettingsDialogHost({ children }: { children: ReactNode }) {
   /** The tab the dialog was asked for; undefined while it is closed. */
@@ -29,7 +30,8 @@ export function ChartSettingsDialogHost({ children }: { children: ReactNode }) {
   );
 }
 
-/** Opens the chart's settings dialog from wherever it is offered: the chart menu, or the Scales and lines menu. */
+/** Opens the chart's settings dialog from wherever it is offered: the chart menu, the Scales and lines menu,
+ * or the header's Settings button. */
 export function useOpenChartSettings(): OpenChartSettings {
   return useRequiredContext(
     OpenChartSettingsContext,

@@ -10,7 +10,7 @@ import {
   type Time,
   type WhitespaceData,
 } from 'lightweight-charts';
-import type { ChartDrawings } from '../drawings/chartDrawings';
+import type { ChartDrawings, ShownDrawingSettings } from '../drawings/chartDrawings';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import type { RenderBar } from '../bars/renderBar';
 import { candleSeriesColors, type CandlePointColors } from '../bars/candleAppearance';
@@ -97,6 +97,11 @@ export interface DevTestApi {
   tool(id: string): unknown;
   /** Every drawing the tools hold, in registry order, each stamped with its tool id. */
   drawings(): ChartDrawingRecord[];
+  /**
+   * The settings each drawing is shown with, a settings dialog's preview included, in the chart's order.
+   * `drawings` keeps the saved records, so a preview shows up here and never there.
+   */
+  shownDrawingSettings(): ShownDrawingSettings[];
   /** The drawing the user has selected and whether it is locked; null when none. */
   selectedDrawing(): ChartDrawingSelection | null;
   /** The pointer's time/price labels, shown for every tool; null while no pointer is over the pane. */
@@ -308,6 +313,7 @@ function buildDevTestApi({
     timeToX,
     tool: toolTestApi,
     drawings: () => drawings.exportRecords(),
+    shownDrawingSettings: () => drawings.shownDrawingSettings(),
     selectedDrawing: () => drawings.selected(),
     pointerReadout,
     appearance: () => appearanceState({ chart, rightMarginBars, crosshairStyle }),

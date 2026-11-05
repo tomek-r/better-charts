@@ -17,6 +17,11 @@ export interface SavedIndicator {
   readonly hidden?: true;
   /** Present only when the user limited the timeframes it shows on; absent means every timeframe. */
   readonly timeframeVisibility?: DrawingTimeframeVisibility;
+  /**
+   * Present only when the user resized the indicator's own pane: its height relative to the price pane, which an
+   * overlay never has. Absent keeps the pane at its default height, as every document saved before it does.
+   */
+  readonly paneHeight?: number;
 }
 
 /**
@@ -49,8 +54,8 @@ export function readSavedIndicators(raw: unknown): readonly SavedIndicator[] | u
 }
 
 /**
- * True when both lists hold the same indicators, in the same order, the same settings, the same hidden state
- * and the same timeframes they show on.
+ * True when both lists hold the same indicators, in the same order, the same settings, the same hidden state,
+ * the same timeframes they show on and the same pane heights.
  */
 export function sameSavedIndicators(left: readonly SavedIndicator[], right: readonly SavedIndicator[]): boolean {
   if (left.length !== right.length) {
@@ -77,6 +82,7 @@ function readSavedIndicator(raw: unknown): SavedIndicator | undefined {
     settings: readSettingValues(raw.settings),
     ...hiddenFlag(raw.hidden),
     ...timeframeVisibilityField(raw.timeframeVisibility),
+    ...paneHeightField(raw.paneHeight),
   };
 }
 
@@ -92,6 +98,14 @@ function hiddenFlag(raw: unknown): { hidden?: true } {
 export function timeframeVisibilityField(raw: unknown): Pick<SavedIndicator, 'timeframeVisibility'> {
   const timeframeVisibility = readTimeframeVisibility(raw);
   return sameTimeframeVisibility(timeframeVisibility, DEFAULT_TIMEFRAME_VISIBILITY) ? {} : { timeframeVisibility };
+}
+
+/**
+ * The height of the indicator's own pane as a spreadable field. A height that is not a positive number, and one
+ * the indicator never had, store no key: both keep the pane at its default height.
+ */
+export function paneHeightField(raw: unknown): Pick<SavedIndicator, 'paneHeight'> {
+  return isPaneHeight(raw) ? { paneHeight: raw } : {};
 }
 
 function readSettingValues(raw: unknown): SettingValues {
@@ -121,11 +135,17 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
 }
 
+/** A pane height the chart can restore: a finite stretch ratio above zero. */
+function isPaneHeight(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
 function sameSavedIndicator(left: SavedIndicator, right: SavedIndicator): boolean {
   return (
     left.instanceId === right.instanceId &&
     left.definitionId === right.definitionId &&
     left.hidden === right.hidden &&
+    left.paneHeight === right.paneHeight &&
     sameTimeframeVisibility(
       left.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY,
       right.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY,

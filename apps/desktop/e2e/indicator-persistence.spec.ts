@@ -80,6 +80,24 @@ test.describe('saved indicators', () => {
   });
 });
 
+test('readSavedIndicators keeps a positive pane height and drops one the chart cannot restore', () => {
+  const read = readSavedIndicators([
+    { instanceId: 'a', definitionId: 'rsi', settings: {}, paneHeight: 0.5 },
+    { instanceId: 'b', definitionId: 'rsi', settings: {}, paneHeight: 0 },
+    { instanceId: 'c', definitionId: 'rsi', settings: {}, paneHeight: -1 },
+    { instanceId: 'd', definitionId: 'rsi', settings: {}, paneHeight: 'x' },
+    { instanceId: 'e', definitionId: 'rsi', settings: {}, paneHeight: Number.POSITIVE_INFINITY },
+  ]);
+
+  expect(read).toEqual([
+    { instanceId: 'a', definitionId: 'rsi', settings: {}, paneHeight: 0.5 },
+    { instanceId: 'b', definitionId: 'rsi', settings: {} },
+    { instanceId: 'c', definitionId: 'rsi', settings: {} },
+    { instanceId: 'd', definitionId: 'rsi', settings: {} },
+    { instanceId: 'e', definitionId: 'rsi', settings: {} },
+  ]);
+});
+
 test('readSavedIndicators keeps well-formed entries, the first of a repeated id, and only plain values', () => {
   expect(readSavedIndicators({})).toBeUndefined();
 

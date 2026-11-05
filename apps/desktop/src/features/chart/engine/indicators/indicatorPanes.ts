@@ -2,8 +2,8 @@ import type { IChartApi, IPaneApi, PriceFormatBuiltIn, Time } from 'lightweight-
 import { IndicatorPaneOverlay } from './indicatorPaneOverlay';
 
 /**
- * The stretch factor of an indicator pane. The price pane keeps the library's default factor of 1,
- * so an indicator pane takes about a fifth of the chart's height.
+ * The stretch factor of an indicator pane the user has not resized. The library starts the price pane at a
+ * factor of 2, so such a pane takes about a ninth of the chart's height.
  */
 const OWN_PANE_STRETCH_FACTOR = 0.25;
 
@@ -19,11 +19,27 @@ export interface OwnPane {
   readonly overlay: IndicatorPaneOverlay;
 }
 
-/** Adds a pane under the ones already there, and sizes it for the single indicator it holds. */
-export function addOwnPane(chart: IChartApi): OwnPane {
+/** The stretch factor the price pane holds now, which every own pane's height is measured against. */
+export function pricePaneStretchFactor(chart: IChartApi): number {
+  return chart.panes()[PRICE_PANE_INDEX]?.getStretchFactor() ?? 1;
+}
+
+/**
+ * The stretch factor a new own pane is given: the height the user gave its indicator relative to the price
+ * pane, or the default one while they never resized it.
+ */
+export function ownPaneStretchFactor(chart: IChartApi, paneHeight: number | undefined): number {
+  if (paneHeight === undefined) {
+    return OWN_PANE_STRETCH_FACTOR;
+  }
+  return paneHeight * pricePaneStretchFactor(chart);
+}
+
+/** Adds a pane under the ones already there, sized to the height its indicator was saved with. */
+export function addOwnPane(chart: IChartApi, paneHeight: number | undefined): OwnPane {
   // The pane is kept while it holds no series, so showing the same indicator again reuses it.
   const pane = chart.addPane(true);
-  pane.setStretchFactor(OWN_PANE_STRETCH_FACTOR);
+  pane.setStretchFactor(ownPaneStretchFactor(chart, paneHeight));
   // The library's separator crosses both price scales too, so the pane paints its own top border,
   // in the colour the appearance settings give the price scale's line.
   const overlay = new IndicatorPaneOverlay(() => chart.options().rightPriceScale.borderColor);

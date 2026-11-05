@@ -3,9 +3,13 @@ import { resolveSettingValues } from '../src/features/chart/engine/settings/sett
 import { indicatorLegendTitle } from '../src/features/indicators/indicatorLegendTitle';
 import { rsiPlugin } from '../src/features/indicators/rsi/rsiPlugin';
 import { smaPlugin } from '../src/features/indicators/sma/smaPlugin';
+import { palette } from '../src/shared/theme/palette';
+import { OBJECT_SETTINGS_ICON_PATHS } from '../src/shared/ui/icons/objectSettingsIcon';
+import { CHART_HOST_SELECTOR, RESIZE_HANDLE_SELECTOR, paneSeparatorCenter } from './helpers/chartHost';
 import { attachedIndicators, attachSma } from './helpers/indicatorsDialog';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { openChart } from './helpers/openChart';
+import { parseHexColor } from './helpers/pngPixels';
 import { openWithSavedIndicators } from './helpers/savedIndicators';
 import { gotoWithStub } from './helpers/tauriStub';
 
@@ -14,7 +18,6 @@ const CANDLE_LEGEND_LABEL = 'Candle OHLC';
 const COLLAPSE_BUTTON = 'Collapse indicator legend';
 const EXPAND_BUTTON = 'Expand indicator legend';
 const ROW_SELECTOR = '.chart-indicator-legend-row';
-const CHART_HOST_SELECTOR = '.chart-host';
 const SMA_ROW_TEXT = 'SMA 9 close';
 const NO_VALUE_TEXT = '∅';
 const SMA_ROW_COUNT = '1';
@@ -25,18 +28,31 @@ const SHOW_BUTTON_LABEL = 'Show indicator';
 const SETTINGS_BUTTON_LABEL = 'Indicator settings';
 const REMOVE_BUTTON_LABEL = 'Remove indicator';
 const TITLE_SELECTOR = '.chart-indicator-legend-title';
+const ACTIONS_SELECTOR = '.chart-indicator-legend-actions';
 const HIDDEN_ATTRIBUTE = 'data-hidden';
+const ACTION_ICON_SIZE = '16x16';
+const OHLC_FONT_SIZE = '13px';
+const INDICATOR_FONT_SIZE = '12px';
+const HIDDEN_WORDS_OPACITY = '0.5';
 const PANE_LEGEND_LABEL = 'Indicator pane legend';
 const SMA_SETTINGS_DIALOG = 'Moving Average Simple settings';
 const RSI_SETTINGS_DIALOG = 'Relative Strength Index settings';
 const RSI_DEFINITION_ID = 'rsi';
 const RSI_INSTANCE_ID = 'rsi-1';
 const PRICE_SCALE_MIN_WIDTH = 70;
-/** The library's resize handle on the pane separator; its full-window drag backdrop is the fixed one. */
-const RESIZE_HANDLE_SELECTOR = '.chart-host td[colspan="3"] > div[style*="position: absolute"]';
 const TRANSPARENT_COLOR = 'rgba(0, 0, 0, 0)';
+/** The white a row's action icons are drawn in, whatever the row's text colour is. */
+const WHITE_ICON_COLOR = rgbOf(palette.textBright);
 /** The app's own hover band on that separator, drawn over the pane's width instead. */
 const SEPARATOR_BAND_SELECTOR = '.chart-pane-separator-band';
+/** A saved SMA that starts hidden, so its row shows the eye-off button from the first paint. */
+const HIDDEN_SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {}, hidden: true };
+
+/** A palette hex colour written the way `toHaveCSS` reports a computed colour. */
+function rgbOf(hex: string): string {
+  const [red, green, blue] = parseHexColor(hex);
+  return `rgb(${red}, ${green}, ${blue})`;
+}
 
 /** The legend an indicator holding a pane of its own shows its row in. */
 function paneLegend(page: Page): Locator {
@@ -103,6 +119,21 @@ test.describe('indicator legend', () => {
     await expect(rows.first()).toHaveText(`${SMA_ROW_TEXT} ${value.toFixed(digits)}`);
   });
 
+  test('the OHLC line is written at 13 px and the indicator rows at 12 px', async ({ page }) => {
+    await attachSma(page);
+
+    const ohlc = page.getByLabel(CANDLE_LEGEND_LABEL);
+    await expect(ohlc).toHaveCSS('font-size', OHLC_FONT_SIZE);
+    await expect(rows.first()).toHaveCSS('font-size', INDICATOR_FONT_SIZE);
+
+    const ohlcBox = await ohlc.boundingBox();
+    const rowBox = await rows.first().boundingBox();
+    if (ohlcBox === null || rowBox === null) {
+      throw new Error('The OHLC legend or the indicator legend row is not laid out.');
+    }
+    expect(rowBox.y).toBeGreaterThanOrEqual(ohlcBox.y + ohlcBox.height);
+  });
+
   test('the row follows the crosshair and returns to the last bar when it leaves', async ({ page }) => {
     await attachSma(page);
     // The range the time zone spec pins: bar 0 sits in the pane, where SMA(9) has no value yet.
@@ -150,6 +181,42 @@ test.describe('indicator legend', () => {
     await expect.poll(async () => (await attachedIndicators(page))[0]?.hidden).toBe(false);
   });
 
+  test('the row buttons are white', async ({ page }) => {
+    await attachSma(page);
+
+    await rows.first().hover();
+    await expect(rows.first().getByRole('button', { name: REMOVE_BUTTON_LABEL, exact: true })).toHaveCSS(
+      'color',
+      WHITE_ICON_COLOR,
+    );
+  });
+
+  test('the row buttons draw their icons at one size, 16 px', async ({ page }) => {
+    await attachSma(page);
+
+    await rows.first().hover();
+    const sizes = await Promise.all(
+      [HIDE_BUTTON_LABEL, SETTINGS_BUTTON_LABEL, REMOVE_BUTTON_LABEL].map(async (name) => {
+        const icon = rows.first().getByRole('button', { name, exact: true }).locator('svg');
+        const box = await icon.boundingBox();
+        if (box === null) {
+          throw new Error(`The ${name} icon is not laid out.`);
+        }
+        return `${box.width}x${box.height}`;
+      }),
+    );
+    expect(sizes).toEqual([ACTION_ICON_SIZE, ACTION_ICON_SIZE, ACTION_ICON_SIZE]);
+  });
+
+  test('the settings button draws the Object tree settings icon', async ({ page }) => {
+    await attachSma(page);
+
+    await rows.first().hover();
+    const paths = rows.first().getByRole('button', { name: SETTINGS_BUTTON_LABEL, exact: true }).locator('path');
+    const drawn = await paths.evaluateAll((elements) => elements.map((element) => element.getAttribute('d')));
+    expect(drawn).toEqual([...OBJECT_SETTINGS_ICON_PATHS]);
+  });
+
   test('the settings button and a double click on the title open the settings dialog', async ({ page }) => {
     await attachSma(page);
     const dialog = page.getByRole('dialog', { name: SMA_SETTINGS_DIALOG });
@@ -190,6 +257,25 @@ test.describe('indicator legend', () => {
     }
     expect(after.height).toBeCloseTo(before.height, 0);
     expect(after.y).toBeCloseTo(before.y, 0);
+  });
+});
+
+test.describe('hidden indicator legend row', () => {
+  failOnPageNoise();
+
+  test.beforeEach(async ({ page }) => {
+    await openWithSavedIndicators(page, [HIDDEN_SMA_ENTRY]);
+  });
+
+  test('a hidden row shows its buttons without hovering, and only its words are dimmed', async ({ page }) => {
+    const row = page.getByLabel(INDICATOR_LEGEND_LABEL, { exact: true }).locator(ROW_SELECTOR).first();
+
+    await page.mouse.move(0, 0);
+
+    await expect(row.getByRole('button', { name: SHOW_BUTTON_LABEL, exact: true })).toBeVisible();
+    await expect(row.locator(ACTIONS_SELECTOR)).toHaveCSS('opacity', '1');
+    await expect(row).toHaveCSS('opacity', '1');
+    await expect(row.locator(TITLE_SELECTOR)).toHaveCSS('opacity', HIDDEN_WORDS_OPACITY);
   });
 });
 
@@ -236,12 +322,9 @@ test.describe('own-pane indicator legend', () => {
 
   test('hovering the line between the panes paints a band over the pane only', async ({ page }) => {
     const handle = page.locator(RESIZE_HANDLE_SELECTOR);
-    const box = await handle.boundingBox();
-    if (box === null) {
-      throw new Error('The pane separator has no resize handle.');
-    }
+    const centre = await paneSeparatorCenter(page);
 
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.move(centre.x, centre.y);
 
     await expect(handle).toHaveCSS('background-color', TRANSPARENT_COLOR);
 

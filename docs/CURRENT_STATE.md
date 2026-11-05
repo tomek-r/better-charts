@@ -293,10 +293,13 @@ Settings are the tool's typed inputs (`int`, `float`, `bool`,
 `time`, `enum`), rendered generically from the definitions a tool declares, one control
 per kind, grouped in fieldsets as the definitions ask, and OK stays disabled while a
 value fails its kind's rule. The Fixed Range Volume Profile declares its inputs and styles
-(see above), so its dialog opens on the Inputs and Style tabs. A hidden drawing keeps its stored `visible` flag and is neither
+(see above), so its dialog opens on the Inputs and Style tabs. Inputs and Style edits show on the drawing as
+they are made (after a short pause) and are saved only on OK; every other way out restores the settings the
+dialog opened with. A hidden drawing keeps its stored `visible` flag and is neither
 painted nor hit; the toolbar's Hide/Show button sets that flag.
 
-A strip down the chart's right edge holds the Trade panel and Object tree buttons: one
+A strip down the chart's right edge holds the Trade panel and Object tree buttons, and the far
+right of the chart header holds a Settings button that opens the chart's settings dialog: one
 drawer is open at a time, and the chart shrinks beside the open drawer instead of sitting
 under it. The Object tree lists every drawing of the account and symbol, topmost first,
 the way TradingView lists its objects. A click on a row selects that drawing on the chart,
@@ -323,7 +326,9 @@ with the band between them filled), Relative Strength Index (RSI 14 close, with 
 30 bands, a dotted 50 band and the background between 70 and 30) and MACD (MACD 12 26 close 9:
 a histogram coloured by sign and by whether it grew, the MACD and signal lines and a zero line).
 SMA and Bollinger Bands draw on the price pane; RSI and MACD each get a pane of their own under
-it, about a fifth of the height, which closes when the indicator is removed. Every value is
+it, about a ninth of the height, which closes when the indicator is removed. A pane resized by
+dragging its separator keeps that height, relative to the price pane, with the saved indicator,
+and the chart restores it on load. Every value is
 computed in the frontend from the bars the chart draws, as Pine's `ta.sma`, `ta.stdev`,
 `ta.rsi` and `ta.ema` compute them; a live tick redraws only the forming bar and never moves
 an indicator's state. Indicator values are display-only and never reach order, account or
@@ -352,10 +357,15 @@ name; indicators with a pane of their own get no row (owner decision). A row's b
 indicator's settings, hide or show it and remove it, and a double click or Delete on its name
 does the same as in a drawing row. The settings dialog is the drawing settings form with the
 indicator's Inputs and Style tabs; OK stays disabled while a value is invalid and recomputes the
-indicator. A plot or band switched off in the Style tab hides only that line. The settings dialog
-also has the drawings' Visibility tab: an indicator limited to some timeframes is not attached on
-the others, so its line, legend row and pane leave and come back with the timeframe; the Object
-tree keeps listing it.
+indicator. Its Inputs and Style edits show on the chart as they are made, after a short pause, and
+are stored only on OK; Cancel, the close button, Escape and a backdrop click put the stored
+settings back. A plot or band switched off in the Style tab hides only that line. Its Style tab ends
+with three display switches: Labels on price scale, off by default (each visible plot's last value on
+the price scale), Values in status line (the plot values in the legend row), and Inputs in status
+line (the inputs after the short title there; the Object tree name keeps them either way), with the
+last two on by default. The settings dialog also has the drawings' Visibility tab: an indicator
+limited to some timeframes is not attached on the others, so its line, legend row and pane leave and
+come back with the timeframe; the Object tree keeps listing it.
 
 ## Execution and configuration
 

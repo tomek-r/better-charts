@@ -11,7 +11,6 @@ import { useChartContextMenu } from './contextMenu/useChartContextMenu';
 import { useResetChartViewShortcut } from './contextMenu/useResetChartViewShortcut';
 import { useScalesAndLinesMenu } from './scalesAndLinesMenu/useScalesAndLinesMenu';
 import { useScalesAndLinesShortcuts } from './scalesAndLinesMenu/useScalesAndLinesShortcuts';
-import { ChartSettingsDialogHost } from './chartSettings/dialog/ChartSettingsDialogHost';
 
 /** A protocol error nothing else explains is the only thing worth a toast: the setup screen below covers a token
  * mismatch, an outdated component has its own notice, and a completed setup adds its fix to this same toast. */
@@ -77,9 +76,5 @@ export function ChartCanvas({ children }: { children?: ReactNode }) {
   useResetChartViewShortcut();
   useScalesAndLinesShortcuts();
 
-  return (
-    <ChartSettingsDialogHost>
-      <ChartFrame loading={loading}>{children}</ChartFrame>
-    </ChartSettingsDialogHost>
-  );
+  return <ChartFrame loading={loading}>{children}</ChartFrame>;
 }

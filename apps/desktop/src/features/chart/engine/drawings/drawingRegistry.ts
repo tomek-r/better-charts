@@ -1,4 +1,4 @@
-import type { ChartDrawingCommands } from './chartDrawings';
+import type { ChartDrawingCommands, ShownDrawingSettings } from './chartDrawings';
 import type {
   ChartDrawingPoint,
   ChartDrawingRecord,
@@ -135,6 +135,19 @@ export class DrawingRegistry implements ChartDrawingCommands {
     }
   }
 
+  /**
+   * Shows other settings on one drawing without storing them or reporting a change, so nothing is saved:
+   * what a settings dialog shows while the user edits. `endDrawingSettingsPreview` puts the stored ones back.
+   */
+  previewDrawingSettings(toolId: string, drawingId: string, settings: SettingValues): void {
+    this.drawingsOf(toolId)?.previewSettings(drawingId, settings);
+  }
+
+  /** Drops a settings preview and shows the stored settings again, without reporting a change, so nothing is saved. */
+  endDrawingSettingsPreview(toolId: string, drawingId: string): void {
+    this.drawingsOf(toolId)?.endSettingsPreview(drawingId);
+  }
+
   /** Moves one drawing to new anchors; answers whether the tool accepted them, and only then reports a change. */
   setDrawingPoints(toolId: string, drawingId: string, points: readonly ChartDrawingPoint[]): boolean {
     if (this.drawingsOf(toolId)?.setPoints(drawingId, points) !== true) {
@@ -179,6 +192,17 @@ export class DrawingRegistry implements ChartDrawingCommands {
       }
     }
     return records;
+  }
+
+  /**
+   * The settings each drawing is shown with, in the chart's stacking order and a settings dialog's preview
+   * included; nothing is saved from these, which is why `exportDrawings` keeps the stored ones.
+   */
+  shownDrawingSettings(): ShownDrawingSettings[] {
+    return drawingRefs(this.drawingStack()).flatMap(({ toolId, drawingId }) => {
+      const settings = this.drawingsOf(toolId)?.settingsShown(drawingId);
+      return settings === undefined ? [] : [{ toolId, id: drawingId, settings }];
+    });
   }
 
   /** Replaces every tool's drawings and the order they stack in; records of unknown tool ids are dropped. */

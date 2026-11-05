@@ -95,6 +95,7 @@ test('a frame draws one line per plot with its values', async ({ page }) => {
       lineType: 'simple',
       lineStyle: 'solid',
       visible: true,
+      priceLabelVisible: false,
       points: pointsOf(times, (bar) => bar + 1),
     },
     {
@@ -104,6 +105,7 @@ test('a frame draws one line per plot with its values', async ({ page }) => {
       lineType: 'step',
       lineStyle: 'solid',
       visible: true,
+      priceLabelVisible: false,
       points: pointsOf(times, (bar) => (bar + 1) * 2),
     },
   ]);

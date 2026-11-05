@@ -1,6 +1,7 @@
 import { useId, useState, type SubmitEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../../../shared/ui/dialog/ModalDialog';
+import { useModalExit } from '../../../../shared/ui/dialog/useModalExit';
 import { SettingsNav, settingsNavTabId } from '../../../../shared/ui/settingsNav/SettingsNav';
 import { useChartSettings } from '../ChartSettingsProvider';
 import type { ChartSettings } from '../chartSettings';
@@ -21,6 +22,7 @@ export function ChartSettingsDialog({ onClose, initialTabId }: { onClose: () => 
   const [draft, setDraft] = useState(settings);
   const [selectedTabId, setSelectedTabId] = useState(initialTabId ?? CHART_SETTINGS_TABS[0].id);
   const panelId = useId();
+  const { backdropRef, closing, close } = useModalExit(onClose);
   const selectedTab = CHART_SETTINGS_TABS.find((tab) => tab.id === selectedTabId) ?? CHART_SETTINGS_TABS[0];
 
   const edit = (next: ChartSettings) => {
@@ -29,12 +31,12 @@ export function ChartSettingsDialog({ onClose, initialTabId }: { onClose: () => 
   };
   const cancel = () => {
     revert();
-    onClose();
+    close();
   };
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
     keep(draft);
-    onClose();
+    close();
   };
 
   return createPortal(
@@ -43,6 +45,8 @@ export function ChartSettingsDialog({ onClose, initialTabId }: { onClose: () => 
       layout="scrollable"
       size="wide"
       bodyClassName="settings-body"
+      backdropRef={backdropRef}
+      closing={closing}
       onDismiss={cancel}
       onSubmit={submit}
       headerActions={<ModalDialogCloseButton label="Close chart settings" onClick={cancel} />}

@@ -19,6 +19,8 @@ const LINE_COLOR = parseHexColor(palette.textLabel);
 const POINTER = { x: 300, y: 150 };
 const CLIP_HALF_SPAN = 6;
 const CLIP_LENGTH = 40;
+/** Below the OHLC legend line in the pane's top-left corner. */
+const LEGEND_CLEARANCE = 50;
 
 interface Clip {
   x: number;
@@ -109,10 +111,11 @@ async function expectSharpCrosshairLines(page: Page, deviceScaleFactor: number):
     .poll(async () => page.evaluate(() => window.__chartTest?.pointerReadout()?.priceLabelBox?.width))
     .toBeGreaterThan(0);
 
-  // Vertical line: a short slice of the pane above the horizontal line. On the time axis the
-  // readout pill is centred on the line and covers it, so only the pane is checked there.
+  // Vertical line: a short slice of the pane above the horizontal line and below the OHLC legend,
+  // whose text is drawn over the line. On the time axis the readout pill is centred on the line
+  // and covers it, so only the pane is checked there.
   const verticalClips: Clip[] = [
-    { x: pointerX - CLIP_HALF_SPAN, y: host.y + 20, width: 2 * CLIP_HALF_SPAN, height: CLIP_LENGTH },
+    { x: pointerX - CLIP_HALF_SPAN, y: host.y + LEGEND_CLEARANCE, width: 2 * CLIP_HALF_SPAN, height: CLIP_LENGTH },
   ];
   // Horizontal line: a short slice of the pane left of the vertical line. The price readout pill
   // fills the whole price axis at the pointer y, so only the pane is checked there.

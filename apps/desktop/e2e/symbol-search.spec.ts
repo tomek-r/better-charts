@@ -1,9 +1,14 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { dragBy } from './helpers/dragPanel';
 import { answerSymbolSearch, chooseSearchResult, openSymbolSearch } from './helpers/panel';
 import { brokerSymbolFixture, gotoWithStub, pushEvent, stubInvocations, type StubInternals } from './helpers/tauriStub';
 
 // Headless Chromium hides scrollbars by default; keep them visible for layout checks and screenshots.
 test.use({ launchOptions: { ignoreDefaultArgs: ['--hide-scrollbars'] } });
+
+/** How far the drag test moves the panel: unmistakable, and well inside the drag's limits. */
+const DRAG_RIGHT = 80;
+const DRAG_DOWN = 40;
 
 /** The stub's Tauri global plus the hooks the delayed-search specs install in the page. */
 type SearchInternals = StubInternals & {
@@ -342,4 +347,18 @@ test('a stale symbol history failure cannot affect a newer accepted selection', 
   await expect(page.locator('.chart-overlay')).toHaveCount(0);
   const recent = await page.evaluate(() => JSON.parse(localStorage.getItem('better-charts.symbol-recent.v1') ?? '[]'));
   expect(recent.map((item: { symbol: string }) => item.symbol)).toEqual(['NEW']);
+});
+
+test('the search panel follows the pointer when its title is dragged', async ({ page }) => {
+  // No entry animation moving the panel, so the boxes the test compares are the panel's own.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await gotoWithStub(page);
+  const { dialog } = await openSymbolSearch(page);
+  const before = await dialog.boundingBox();
+
+  await dragBy(page, dialog.locator('.search-title'), DRAG_RIGHT, DRAG_DOWN);
+
+  const after = await dialog.boundingBox();
+  expect(after!.x).toBeCloseTo(before!.x + DRAG_RIGHT, 0);
+  expect(after!.y).toBeCloseTo(before!.y + DRAG_DOWN, 0);
 });

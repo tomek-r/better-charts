@@ -11,6 +11,7 @@ import {
 import { indicatorsShownOn } from '../src/features/indicators/indicatorsOnTimeframe';
 import {
   withIndicatorHidden,
+  withIndicatorPaneHeights,
   withIndicatorSettings,
   withoutIndicator,
 } from '../src/features/indicators/savedIndicatorEdits';
@@ -40,6 +41,12 @@ const OFF_MINUTES: DrawingTimeframeVisibility = {
 
 /** The same saved moving average, limited to the timeframes this chart's minutes range excludes. */
 const SAVED_LIMITED_SMA_9: SavedIndicator = { ...SAVED_SMA_9, timeframeVisibility: OFF_MINUTES };
+
+/** The own-pane indicator the height cases resize, hidden and limited, so an edit has to keep more than its id. */
+const SAVED_LIMITED_RSI: SavedIndicator = { ...SAVED_RSI, hidden: true, timeframeVisibility: OFF_MINUTES };
+
+/** A height the user dragged the RSI's pane to, relative to the price pane. */
+const DRAGGED_RSI_PANE_HEIGHT = 0.4;
 
 test('hiding marks only its own entry, and showing takes the key away again', () => {
   const hidden = withIndicatorHidden([SAVED_SMA_9, SAVED_SMA_21], SAVED_SMA_9.instanceId, true);
@@ -93,6 +100,15 @@ test('removing drops only its own entry', () => {
   expect(remaining).toEqual([SAVED_SMA_21]);
 });
 
+test('a dragged pane height lands on its own entry and keeps everything else it stores', () => {
+  const resized = withIndicatorPaneHeights(
+    [SAVED_LIMITED_RSI, SAVED_SMA_9],
+    [{ instanceId: SAVED_RSI.instanceId, paneHeight: DRAGGED_RSI_PANE_HEIGHT }],
+  );
+
+  expect(resized).toEqual([{ ...SAVED_LIMITED_RSI, paneHeight: DRAGGED_RSI_PANE_HEIGHT }, SAVED_SMA_9]);
+});
+
 test('readSavedIndicators keeps a limited visibility and drops a default or unreadable one', () => {
   const read = readSavedIndicators([
     { instanceId: 'a', definitionId: 'sma', settings: {}, timeframeVisibility: OFF_MINUTES },
@@ -109,6 +125,13 @@ test('readSavedIndicators keeps a limited visibility and drops a default or unre
 test('sameSavedIndicators tells two entries apart by the timeframes they show on', () => {
   expect(sameSavedIndicators([SAVED_SMA_9], [SAVED_LIMITED_SMA_9])).toBe(false);
   expect(sameSavedIndicators([SAVED_LIMITED_SMA_9], [SAVED_LIMITED_SMA_9])).toBe(true);
+});
+
+test('sameSavedIndicators tells two entries apart by the height of their pane', () => {
+  const resized: SavedIndicator = { ...SAVED_RSI, paneHeight: DRAGGED_RSI_PANE_HEIGHT };
+
+  expect(sameSavedIndicators([SAVED_RSI], [resized])).toBe(false);
+  expect(sameSavedIndicators([resized], [resized])).toBe(true);
 });
 
 test('an indicator limited away from a timeframe is attached only on the other ones', () => {

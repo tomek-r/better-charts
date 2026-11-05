@@ -1,4 +1,5 @@
 import type { SavedIndicator } from '../chart/chartSettings/savedIndicators';
+import { indicatorSettingsSchema } from '../chart/engine/indicators/indicatorDisplaySettings';
 import type { IndicatorRuntime } from '../chart/engine/indicators/indicatorRuntime';
 import type { SettingValues } from '../chart/engine/settings/settingInputs';
 import { resolveSettingValues } from '../chart/engine/settings/settingsSchema';
@@ -8,11 +9,11 @@ type IndicatorSyncRuntime = Pick<IndicatorRuntime, 'attach' | 'detach' | 'attach
 
 /**
  * Makes the attached indicators match the saved ones: an attached instance the settings no longer keep is
- * detached, a saved instance the chart does not show yet is attached with the settings it was saved with, and
- * an instance already attached with those same resolved settings is left alone, so it is not reloaded.
- * The hidden flag follows the saved one too, without reloading an indicator whose visibility alone changed.
- * A saved instance this build does not register is skipped, since only a build that knows its definition can
- * draw it; it stays saved for the build that does.
+ * detached, a saved instance the chart does not show yet is attached with the settings and the pane height it
+ * was saved with, and an instance already attached with those same resolved settings is left alone, so it is
+ * not reloaded. The hidden flag follows the saved one too, without reloading an indicator whose visibility
+ * alone changed. A saved instance this build does not register is skipped, since only a build that knows its
+ * definition can draw it; it stays saved for the build that does.
  */
 export function syncIndicators(runtime: IndicatorSyncRuntime, saved: readonly SavedIndicator[]): void {
   detachUnkeptInstances(runtime, saved);
@@ -40,7 +41,7 @@ function attachUnlessAlreadyAttached(runtime: IndicatorSyncRuntime, saved: Saved
   if (showsSavedInstance(runtime, saved, plugin)) {
     return;
   }
-  runtime.attach(saved.instanceId, saved.definitionId, saved.settings);
+  runtime.attach(saved.instanceId, saved.definitionId, saved.settings, saved.paneHeight);
 }
 
 /** Whether the chart already shows the instance with the definition and the settings the saved one resolves to. */
@@ -53,7 +54,9 @@ function showsSavedInstance(
   if (attached === undefined || attached.definitionId !== saved.definitionId) {
     return false;
   }
-  return sameResolvedSettings(attached.settings, resolveSettingValues(plugin, saved.settings));
+  // The runtime resolves with the display switches too, so this side resolves with the same schema.
+  const resolved = resolveSettingValues(indicatorSettingsSchema(plugin), saved.settings);
+  return sameResolvedSettings(attached.settings, resolved);
 }
 
 function sameResolvedSettings(left: SettingValues, right: SettingValues): boolean {

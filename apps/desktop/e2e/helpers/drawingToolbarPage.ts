@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import type { ShownDrawingSettings } from '../../src/features/chart/engine/drawings/chartDrawings';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../../src/features/chart/engine/drawings/drawingRecord';
 import { commitProfile, position } from './fixedRangeProfilePage';
 import { chartScopeKey, stubChartDrawings } from './tauriStub';
@@ -24,9 +25,14 @@ export async function selectedDrawing(page: Page): Promise<ChartDrawingSelection
   return page.evaluate(() => window.__chartTest?.selectedDrawing() ?? null);
 }
 
-/** Every drawing on the chart, in registry order. */
+/** Every drawing on the chart, in registry order, with the settings the app stores for it. */
 export async function chartDrawings(page: Page): Promise<ChartDrawingRecord[]> {
   return page.evaluate(() => window.__chartTest?.drawings() ?? []);
+}
+
+/** The settings each drawing is shown with, a settings dialog's preview included; never what the app saves. */
+export async function shownDrawingSettings(page: Page): Promise<ShownDrawingSettings[]> {
+  return page.evaluate(() => window.__chartTest?.shownDrawingSettings() ?? []);
 }
 
 /** The records the stub's backend holds for the plot, in save order. */

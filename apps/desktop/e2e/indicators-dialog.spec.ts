@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { indicatorSettingsSchema } from '../src/features/chart/engine/indicators/indicatorDisplaySettings';
+import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
 import { matchingIndicators } from '../src/features/indicators/indicatorSearch';
+import { smaPlugin } from '../src/features/indicators/sma/smaPlugin';
 import {
   attachedDefinitions,
   attachedIndicators,
@@ -15,7 +18,8 @@ import { gotoWithStub } from './helpers/tauriStub';
 
 const NO_MATCHES = 'No indicators found.';
 const SMA_TITLE = 'Moving Average Simple';
-const SMA_SETTING_COUNT = 9;
+/** Every key an attached SMA resolves with: its inputs, its styles and the display switches. */
+const SMA_SETTING_COUNT = Object.keys(resolveSettingValues(indicatorSettingsSchema(smaPlugin), {})).length;
 
 const ROW_FONT_SIZE = '14px';
 

@@ -1,5 +1,6 @@
 import { ChartTitle } from './header/ChartTitle';
 import { ChartQuotes } from './header/ChartQuotes';
+import { ChartHeaderEndButtons } from './header/ChartHeaderEndButtons';
 import { ChartTimeframes } from './timeframes/ChartTimeframes';
 import { IndicatorsButton } from '../indicators/IndicatorsButton';
 import { ChartBarStyleMenu } from './barStyleMenu/ChartBarStyleMenu';
@@ -9,6 +10,7 @@ import { ChartPartialClose } from '../partial-close/ChartPartialClose';
 import { useChartDrawn } from './useChartDrawn';
 import { ChartDrawingPersistence } from './drawingPersistence/ChartDrawingPersistence';
 import { ChartDrawingToolbar } from '../tools/drawingToolbar/ChartDrawingToolbar';
+import { ChartSettingsDialogHost } from './chartSettings/dialog/ChartSettingsDialogHost';
 
 import { ChartIndicatorLegendCommands } from '../indicators/ChartIndicatorLegendCommands';
 import { ChartIndicatorSync } from '../indicators/ChartIndicatorSync';
@@ -16,28 +18,31 @@ import { ChartIndicatorSync } from '../indicators/ChartIndicatorSync';
 export function ChartWorkspaceView() {
   const chartDrawn = useChartDrawn();
   return (
-    <div className="chart-workspace">
-      <section className={chartDrawn ? 'chart-section' : 'chart-section chart-section-waiting'}>
-        <div className="chart-heading">
-          <ChartTitle />
-          <ChartQuotes />
+    <ChartSettingsDialogHost>
+      <div className="chart-workspace">
+        <section className={chartDrawn ? 'chart-section' : 'chart-section chart-section-waiting'}>
+          <div className="chart-heading">
+            <ChartTitle />
+            <ChartQuotes />
+          </div>
+          <div className="chart-header-tools">
+            <ChartTimeframes />
+            <ChartBarStyleMenu />
+            <IndicatorsButton />
+            <ChartHeaderEndButtons />
+          </div>
+          <ChartCanvas>
+            <ChartDrawingPersistence />
+            <ChartIndicatorSync />
+            <ChartIndicatorLegendCommands />
+            <ChartPartialClose />
+            <ChartDrawingToolbar />
+          </ChartCanvas>
+        </section>
+        <div className="chart-footer">
+          <ChartTimeZoneControl />
         </div>
-        <div className="chart-header-tools">
-          <ChartTimeframes />
-          <ChartBarStyleMenu />
-          <IndicatorsButton />
-        </div>
-        <ChartCanvas>
-          <ChartDrawingPersistence />
-          <ChartIndicatorSync />
-          <ChartIndicatorLegendCommands />
-          <ChartPartialClose />
-          <ChartDrawingToolbar />
-        </ChartCanvas>
-      </section>
-      <div className="chart-footer">
-        <ChartTimeZoneControl />
       </div>
-    </div>
+    </ChartSettingsDialogHost>
   );
 }
