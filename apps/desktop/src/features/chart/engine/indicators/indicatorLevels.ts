@@ -7,7 +7,7 @@ const LIBRARY_LINE_STYLES: Record<IndicatorLineStyle, LineStyle> = {
   solid: LineStyle.Solid,
   // The owner's dash: 6 on, 6 off, the rhythm the canvas tools draw too.
   dashed: LineStyle.LargeDashed,
-  dotted: LineStyle.Dotted,
+  dotted: LineStyle.SparseDotted,
 };
 
 /** The library's stroke style for a plot's or a level's style; a missing style is solid. */

@@ -12,12 +12,16 @@ test('a line styled dashed draws 6 px on, 6 px off', () => {
   expect(dashPatternOf('dashed')).toEqual([6, 6]);
 });
 
-test('a line styled dotted keeps the 1 px dot every 3 px the dialog previews', () => {
-  expect(dashPatternOf('dotted')).toEqual([1, 3]);
+test('a line styled dotted draws a 1 px dot every 5 px', () => {
+  expect(dashPatternOf('dotted')).toEqual([1, 4]);
 });
 
 test('a dashed style reaches the chart library as its large dash', () => {
   expect(toLibraryLineStyle('dashed')).toBe(LineStyle.LargeDashed);
+});
+
+test('a dotted style reaches the chart library as its sparse dots', () => {
+  expect(toLibraryLineStyle('dotted')).toBe(LineStyle.SparseDotted);
 });
 
 test('a line drawn in the large dash reads back as the dashed style', () => {

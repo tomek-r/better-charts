@@ -285,7 +285,7 @@ test('a hidden level paints no line and reports no y', () => {
 test('a level takes its own colour and dash', () => {
   const { lines } = paint({ 'poc.color': '#112233', 'poc.style': 'dotted', 'vah.style': 'solid' });
   expect(lines.map((line) => [line.style, line.dash])).toEqual([
-    ['#112233', [1, 3]],
+    ['#112233', [1, 4]],
     ['#f2f5fa', []],
     ['#f2f5fa', [6, 6]],
   ]);

@@ -88,7 +88,7 @@ const LINE_STYLE_BY_DASH: Readonly<Record<LineDashKind, LineStyle>> = {
   solid: LineStyle.Solid,
   // The owner's dash: 6 on, 6 off, the rhythm the canvas tools draw too.
   dashed: LineStyle.LargeDashed,
-  dotted: LineStyle.Dotted,
+  dotted: LineStyle.SparseDotted,
 };
 
 const PERCENT = 100;
