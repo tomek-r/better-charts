@@ -64,7 +64,7 @@ test('a dashed grid line and a dotted one map to their library line styles', () 
     }),
   ).grid;
 
-  expect(grid.vertLines.style).toBe(LineStyle.Dashed);
+  expect(grid.vertLines.style).toBe(LineStyle.LargeDashed);
   expect(grid.horzLines.style).toBe(LineStyle.Dotted);
 });
 

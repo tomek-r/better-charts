@@ -5,7 +5,8 @@ import { toLineWidth } from './indicatorLineWidth';
 /** The library style of each indicator style; the indicator format has the three the display needs. */
 const LIBRARY_LINE_STYLES: Record<IndicatorLineStyle, LineStyle> = {
   solid: LineStyle.Solid,
-  dashed: LineStyle.Dashed,
+  // The owner's dash: 6 on, 6 off, the rhythm the canvas tools draw too.
+  dashed: LineStyle.LargeDashed,
   dotted: LineStyle.Dotted,
 };
 

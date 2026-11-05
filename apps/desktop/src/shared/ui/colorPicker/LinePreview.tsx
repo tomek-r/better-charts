@@ -4,7 +4,7 @@ export type LineDashStyle = 'solid' | 'dashed' | 'dotted';
 /** SVG dash pattern of each line style in a preview, in px; a solid line has none. */
 const PREVIEW_DASH: Readonly<Record<LineDashStyle, string | undefined>> = {
   solid: undefined,
-  dashed: '6 4',
+  dashed: '6 6',
   dotted: '1 3',
 };
 const MARGIN_PX = 2;

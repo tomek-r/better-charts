@@ -40,7 +40,7 @@ import { formatDayMonth, MS_PER_DAY, STUB_NOW } from './helpers/stubClock';
  *    with i located by binary search over bar times (interpolate inside, clamp outside);
  *  - mirrored rows around the anchor (BID left / ASK right), ONE common weight denominator;
  *  - POC row alpha 1 vs 0.75 for every other row, whole paint clipped to chartRect;
- *  - level lines from the range start (anchorX) to the chartRect's right edge, painted AFTER the rows — POC solid, VAH/VAL dashed [4,3]; NO text labels;
+ *  - level lines from the range start (anchorX) to the chartRect's right edge, painted AFTER the rows — POC solid, VAH/VAL dashed [6, 6]; NO text labels;
  *  - null range / missing profile / empty bins → zero paint ops and an empty `hit`.
  */
 
@@ -240,10 +240,10 @@ test('level lines run from the range start (anchorX) to the chartRect right edge
   for (const line of lines) {
     expect(line.minX).toBeCloseTo(anchorX, 9);
     expect(line.maxX).toBe(chartRect.x + chartRect.width);
-    // POC is solid; VAH/VAL keep the [4, 3] dash (owner).
+    // POC is solid; VAH/VAL keep the styled [6, 6] dash (owner).
     const isPoc = line.style === '#ffd200';
     expect(line.dashed).toBe(!isPoc);
-    expect(line.dash).toEqual(isPoc ? [] : [4, 3]);
+    expect(line.dash).toEqual(isPoc ? [] : [6, 6]);
   }
   // POC yellow at y 225; VAH/VAL near-white at 185 / 265.
   expect(lines.find((l) => l.style === '#ffd200')?.minY).toBeCloseTo(225, 6);

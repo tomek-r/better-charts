@@ -98,7 +98,7 @@ test('a chart whose vertical grid was turned off draws none, and keeps the horiz
   await openChart(page);
 
   await expect.poll(async () => (await appearance(page)).grid.vertLines.visible).toBe(false);
-  await expect.poll(async () => (await appearance(page)).grid.vertLines.style).toBe(LineStyle.Dashed);
+  await expect.poll(async () => (await appearance(page)).grid.vertLines.style).toBe(LineStyle.LargeDashed);
   expect((await appearance(page)).grid.vertLines.color).toBe(palette.borderSubtle);
   expect((await appearance(page)).grid.horzLines.visible).toBe(true);
   expectNoErrors(collected);
