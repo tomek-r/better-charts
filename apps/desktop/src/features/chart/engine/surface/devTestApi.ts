@@ -118,6 +118,8 @@ export interface DevTestApi {
     settings?: Readonly<Record<string, number | boolean | string>>,
   ): boolean;
   detachIndicator(instanceId: string): void;
+  /** Hides or shows the attached indicator `instanceId`. */
+  setIndicatorHidden(instanceId: string, hidden: boolean): void;
   setIndicatorSettings(instanceId: string, settings: Readonly<Record<string, number | boolean | string>>): void;
   /** Every attached indicator, in attach order, with its resolved settings, as plain copies. */
   attachedIndicators(): AttachedIndicatorState[];
@@ -312,6 +314,7 @@ function buildDevTestApi({
     attachIndicator: (instanceId, definitionId, settings) =>
       indicatorRuntime.attach(instanceId, definitionId, settings),
     detachIndicator: (instanceId) => indicatorRuntime.detach(instanceId),
+    setIndicatorHidden: (instanceId, hidden) => indicatorRuntime.setHidden(instanceId, hidden),
     setIndicatorSettings: (instanceId, settings) => indicatorRuntime.setSettings(instanceId, settings),
     attachedIndicators: () => indicatorRuntime.attachedState(),
     priceScale: () => {

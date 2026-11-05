@@ -7,6 +7,8 @@ export interface SavedIndicator {
   readonly definitionId: string;
   /** What the user changed; omitted settings take their defaults. */
   readonly settings: SettingValues;
+  /** Present only while the user has hidden the indicator: it stays attached and draws nothing. */
+  readonly hidden?: true;
 }
 
 /**
@@ -38,7 +40,7 @@ export function readSavedIndicators(raw: unknown): readonly SavedIndicator[] | u
   return indicators;
 }
 
-/** True when both lists hold the same indicators, in the same order, with the same settings. */
+/** True when both lists hold the same indicators, in the same order, the same settings and the same hidden state. */
 export function sameSavedIndicators(left: readonly SavedIndicator[], right: readonly SavedIndicator[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -58,7 +60,12 @@ function readSavedIndicator(raw: unknown): SavedIndicator | undefined {
     return undefined;
   }
 
-  return { instanceId, definitionId, settings: readSettingValues(raw.settings) };
+  return { instanceId, definitionId, settings: readSettingValues(raw.settings), ...hiddenFlag(raw.hidden) };
+}
+
+/** The `hidden` flag as a spreadable field, so a shown indicator carries no `hidden` key at all. */
+function hiddenFlag(raw: unknown): { hidden?: true } {
+  return raw === true ? { hidden: true } : {};
 }
 
 function readSettingValues(raw: unknown): SettingValues {
@@ -92,6 +99,7 @@ function sameSavedIndicator(left: SavedIndicator, right: SavedIndicator): boolea
   return (
     left.instanceId === right.instanceId &&
     left.definitionId === right.definitionId &&
+    left.hidden === right.hidden &&
     sameSettingValues(left.settings, right.settings)
   );
 }

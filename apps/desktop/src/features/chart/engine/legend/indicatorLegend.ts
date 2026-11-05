@@ -4,6 +4,7 @@ import type { IndicatorLegendValue } from '../indicators/indicatorLayer';
 export interface IndicatorLegendRow {
   readonly instanceId: string;
   readonly title: string;
+  readonly hidden: boolean;
   readonly values: readonly IndicatorLegendValue[];
 }
 
@@ -30,9 +31,16 @@ const VALUE_CLASS = 'chart-indicator-legend-value';
 const TOGGLE_CLASS = 'chart-indicator-legend-toggle';
 const COUNT_CLASS = 'chart-indicator-legend-count';
 const CHEVRON_CLASS = 'chart-indicator-legend-chevron';
+const HIDDEN_ICON_CLASS = 'chart-indicator-legend-hidden-icon';
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const CHEVRON_VIEW_BOX = '0 0 10 10';
-const CHEVRON_PATH = 'M2 3.5l3 3 3-3';
+const CHEVRON_PATHS = ['M2 3.5l3 3 3-3'];
+const HIDDEN_ICON_VIEW_BOX = '0 0 12 12';
+const HIDDEN_ICON_PATHS = [
+  'M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z',
+  'M6 4.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3z',
+  'M2 10L10 2',
+];
 
 function createElementWithClass<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -43,17 +51,21 @@ function createElementWithClass<K extends keyof HTMLElementTagNameMap>(
   return element;
 }
 
-function createChevron(): SVGSVGElement {
-  const chevron = document.createElementNS(SVG_NAMESPACE, 'svg');
-  chevron.setAttribute('viewBox', CHEVRON_VIEW_BOX);
-  chevron.setAttribute('aria-hidden', 'true');
-  chevron.setAttribute('class', CHEVRON_CLASS);
+function createIcon(className: string, viewBox: string, paths: readonly string[]): SVGSVGElement {
+  const icon = document.createElementNS(SVG_NAMESPACE, 'svg');
+  icon.setAttribute('viewBox', viewBox);
+  icon.setAttribute('aria-hidden', 'true');
+  icon.setAttribute('class', className);
+  icon.append(...paths.map(createIconPath));
+  return icon;
+}
+
+function createIconPath(d: string): SVGPathElement {
   const path = document.createElementNS(SVG_NAMESPACE, 'path');
-  path.setAttribute('d', CHEVRON_PATH);
+  path.setAttribute('d', d);
   path.setAttribute('stroke', 'currentColor');
   path.setAttribute('fill', 'none');
-  chevron.append(path);
-  return chevron;
+  return path;
 }
 
 /**
@@ -82,7 +94,7 @@ export class IndicatorLegend {
     this.count = createElementWithClass('span', COUNT_CLASS);
     this.toggle = createElementWithClass('button', TOGGLE_CLASS);
     this.toggle.type = 'button';
-    this.toggle.append(createChevron(), this.count);
+    this.toggle.append(createIcon(CHEVRON_CLASS, CHEVRON_VIEW_BOX, CHEVRON_PATHS), this.count);
     this.toggle.addEventListener('click', this.toggleClicked);
     this.element.append(this.rows, this.toggle);
     host.append(this.element);
@@ -117,6 +129,10 @@ export class IndicatorLegend {
   private createRow(row: IndicatorLegendRow): HTMLDivElement {
     const element = createElementWithClass('div', ROW_CLASS);
     element.dataset.instanceId = row.instanceId;
+    if (row.hidden) {
+      element.dataset.hidden = 'true';
+      element.append(createIcon(HIDDEN_ICON_CLASS, HIDDEN_ICON_VIEW_BOX, HIDDEN_ICON_PATHS));
+    }
     const title = createElementWithClass('span', TITLE_CLASS);
     title.textContent = row.title;
     element.append(title);

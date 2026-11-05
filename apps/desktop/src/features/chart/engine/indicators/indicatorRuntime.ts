@@ -12,12 +12,14 @@ export interface AttachedIndicatorState {
   readonly instanceId: string;
   readonly definitionId: string;
   readonly settings: SettingValues;
+  readonly hidden: boolean;
 }
 
 interface AttachedIndicator {
   readonly definition: ChartIndicatorDefinition;
   readonly indicator: ChartIndicator;
   settings: SettingValues;
+  hidden: boolean;
 }
 
 export class IndicatorRuntime {
@@ -43,6 +45,7 @@ export class IndicatorRuntime {
       definition,
       indicator: new definition.indicatorClass(),
       settings: resolveSettingValues(definition, stored),
+      hidden: false,
     };
     this.attached.set(instanceId, entry);
     this.reload(instanceId, entry);
@@ -70,6 +73,17 @@ export class IndicatorRuntime {
     }
     entry.settings = resolveSettingValues(entry.definition, stored);
     this.reload(instanceId, entry);
+    this.changed();
+  }
+
+  /** Hides or shows `instanceId` without reloading it; an unknown id or an unchanged state does nothing. */
+  setHidden(instanceId: string, hidden: boolean): void {
+    const entry = this.attached.get(instanceId);
+    if (!entry || entry.hidden === hidden) {
+      return;
+    }
+    entry.hidden = hidden;
+    this.layer.setHidden(instanceId, hidden);
     this.changed();
   }
 
@@ -112,6 +126,7 @@ export class IndicatorRuntime {
       instanceId,
       definitionId: entry.definition.id,
       settings: { ...entry.settings },
+      hidden: entry.hidden,
     }));
   }
 
@@ -125,5 +140,9 @@ export class IndicatorRuntime {
   /** Loads the whole history into `instanceId` and draws the frame that comes back. */
   private reload(instanceId: string, entry: AttachedIndicator): void {
     this.layer.show(instanceId, entry.indicator.load(this.bars(), entry.settings));
+    if (entry.hidden) {
+      // A new frame is drawn visible, so a hidden indicator has to be hidden again after every reload.
+      this.layer.setHidden(instanceId, true);
+    }
   }
 }

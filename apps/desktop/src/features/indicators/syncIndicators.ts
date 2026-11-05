@@ -4,12 +4,13 @@ import type { SettingValues } from '../chart/engine/settings/settingInputs';
 import { resolveSettingValues } from '../chart/engine/settings/settingsSchema';
 import { findChartIndicatorPlugin, type RegisteredChartIndicatorPlugin } from './registry';
 
-type IndicatorSyncRuntime = Pick<IndicatorRuntime, 'attach' | 'detach' | 'attachedState'>;
+type IndicatorSyncRuntime = Pick<IndicatorRuntime, 'attach' | 'detach' | 'attachedState' | 'setHidden'>;
 
 /**
  * Makes the attached indicators match the saved ones: an attached instance the settings no longer keep is
  * detached, a saved instance the chart does not show yet is attached with the settings it was saved with, and
  * an instance already attached with those same resolved settings is left alone, so it is not reloaded.
+ * The hidden flag follows the saved one too, without reloading an indicator whose visibility alone changed.
  * A saved instance this build does not register is skipped, since only a build that knows its definition can
  * draw it; it stays saved for the build that does.
  */
@@ -17,6 +18,8 @@ export function syncIndicators(runtime: IndicatorSyncRuntime, saved: readonly Sa
   detachUnkeptInstances(runtime, saved);
   for (const indicator of saved) {
     attachUnlessAlreadyAttached(runtime, indicator);
+    // A hidden indicator stays attached and draws nothing; the runtime ignores an id it does not hold.
+    runtime.setHidden(indicator.instanceId, indicator.hidden === true);
   }
 }
 

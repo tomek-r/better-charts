@@ -3,19 +3,9 @@ import { readSavedIndicators } from '../src/features/chart/chartSettings/savedIn
 import { attachSma, attachedDefinitions, attachedIndicators } from './helpers/indicatorsDialog';
 import { openChart } from './helpers/openChart';
 import { failOnPageNoise } from './helpers/pageNoise';
+import { openWithSavedIndicators } from './helpers/savedIndicators';
 import { savedOverrides } from './helpers/savedOverrides';
-import { chartScopeKey, gotoWithStub } from './helpers/tauriStub';
-
-const EURUSD_CHART = chartScopeKey('50123456@Broker-Demo', 'EURUSD');
-
-/**
- * Opens the app with the given raw indicator entries stored in the chart's overrides and waits for the
- * stub's bars, so that the chart has processed them.
- */
-async function openWithSavedIndicators(page: Page, indicators: unknown[]): Promise<void> {
-  await gotoWithStub(page, { chartSettingOverrides: { [EURUSD_CHART]: { indicators } } });
-  await openChart(page);
-}
+import { gotoWithStub } from './helpers/tauriStub';
 
 /** Returns the raw `indicators` value of the most recently saved overrides object. */
 function latestSavedIndicators(page: Page): Promise<unknown> {

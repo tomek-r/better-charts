@@ -42,6 +42,7 @@ export class ChartIndicators {
         this.runtime.attachedState().map((attached) => ({
           instanceId: attached.instanceId,
           title: options.legendTitle(attached.definitionId, attached.settings),
+          hidden: attached.hidden,
           values: this.layer.valuesAt(attached.instanceId, logicalIndex),
         })),
       lastBarIndex: () => options.bars().length - 1,

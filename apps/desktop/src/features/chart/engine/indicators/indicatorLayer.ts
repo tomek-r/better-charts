@@ -19,6 +19,7 @@ const MAX_LINE_WIDTH = 4;
 /** Every indicator the layer draws, in the order it was shown, as plain copies of its lines. */
 export interface IndicatorLayerState {
   readonly id: string;
+  readonly hidden: boolean;
   readonly plots: readonly {
     readonly title: string;
     readonly color: string;
@@ -39,6 +40,7 @@ interface Shown {
   series: ISeriesApi<'Line'>[];
   titles: string[];
   lastTimeSeconds: number | null;
+  hidden: boolean;
 }
 
 /** The chart's bar time of an indicator bar: the UTC seconds every series point is keyed by. */
@@ -127,7 +129,12 @@ export class IndicatorLayer {
     });
     const titles = frame.plots.map((plot) => plot.title);
     const lastBar = frame.bars[frame.bars.length - 1];
-    this.shown.set(id, { series, titles, lastTimeSeconds: lastBar === undefined ? null : timeOf(lastBar) });
+    this.shown.set(id, {
+      series,
+      titles,
+      lastTimeSeconds: lastBar === undefined ? null : timeOf(lastBar),
+      hidden: false,
+    });
   }
 
   /**
@@ -152,6 +159,18 @@ export class IndicatorLayer {
     }
   }
 
+  /** Hides or shows every line of `id`; an unknown id does nothing. */
+  setHidden(id: string, hidden: boolean): void {
+    const shown = this.shown.get(id);
+    if (shown === undefined) {
+      return;
+    }
+    shown.hidden = hidden;
+    for (const series of shown.series) {
+      series.applyOptions({ visible: !hidden });
+    }
+  }
+
   remove(id: string): void {
     const shown = this.shown.get(id);
     if (shown === undefined) {
@@ -173,6 +192,7 @@ export class IndicatorLayer {
   state(): IndicatorLayerState[] {
     return [...this.shown.entries()].map(([id, shown]) => ({
       id,
+      hidden: shown.hidden,
       plots: shown.series.map((series, plotIndex) => plotStateOf(series, shown.titles[plotIndex])),
     }));
   }

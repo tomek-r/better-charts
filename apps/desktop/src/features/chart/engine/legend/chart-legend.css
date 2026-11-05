@@ -65,6 +65,18 @@
   white-space: nowrap;
 }
 
+.chart-indicator-legend-row[data-hidden='true'] {
+  opacity: 0.5;
+}
+
+.chart-indicator-legend-hidden-icon {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: middle;
+  stroke-width: 1.2;
+}
+
 .chart-indicator-legend-toggle {
   pointer-events: auto;
   display: inline-flex;

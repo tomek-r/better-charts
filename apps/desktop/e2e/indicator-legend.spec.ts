@@ -70,6 +70,8 @@ test.describe('indicator legend', () => {
 
   test('an attached SMA shows its short title, inputs and last value', async ({ page }) => {
     await attachSma(page);
+    // The dialog closes under the pointer; off the chart, the row reads the last bar.
+    await page.mouse.move(0, 0);
 
     const digits = await priceDecimals(page);
     const value = await attachedSmaValue(page);
