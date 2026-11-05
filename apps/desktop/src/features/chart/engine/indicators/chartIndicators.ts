@@ -43,6 +43,7 @@ export class ChartIndicators {
           instanceId: attached.instanceId,
           title: options.legendTitle(attached.definitionId, attached.settings),
           hidden: attached.hidden,
+          digits: this.layer.precisionOf(attached.instanceId),
           values: this.layer.valuesAt(attached.instanceId, logicalIndex),
         })),
       lastBarIndex: () => options.bars().length - 1,

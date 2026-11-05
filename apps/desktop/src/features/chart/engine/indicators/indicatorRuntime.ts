@@ -137,9 +137,10 @@ export class IndicatorRuntime {
     }
   }
 
-  /** Loads the whole history into `instanceId` and draws the frame that comes back. */
+  /** Loads the whole history into `instanceId` and draws the frame that comes back, in the indicator's pane. */
   private reload(instanceId: string, entry: AttachedIndicator): void {
-    this.layer.show(instanceId, entry.indicator.load(this.bars(), entry.settings));
+    const frame = entry.indicator.load(this.bars(), entry.settings);
+    this.layer.show(instanceId, frame, entry.definition.pane);
     if (entry.hidden) {
       // A new frame is drawn visible, so a hidden indicator has to be hidden again after every reload.
       this.layer.setHidden(instanceId, true);

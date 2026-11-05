@@ -71,4 +71,6 @@ export interface IndicatorFrame {
   readonly bars: readonly IndicatorBar[];
   readonly levels?: readonly IndicatorLevel[];
   readonly fills?: readonly IndicatorFill[];
+  /** Decimals the indicator's values are written with; omitted uses the chart's price precision. */
+  readonly precision?: number;
 }

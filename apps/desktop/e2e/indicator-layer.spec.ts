@@ -5,8 +5,15 @@ import type {
   IndicatorLevel,
   IndicatorPlot,
 } from '../src/features/chart/engine/indicators/indicatorFrame';
-import { openChart } from './helpers/openChart';
-import { gotoWithStub } from './helpers/tauriStub';
+import {
+  DEMO_ID,
+  FAST_PLOT,
+  SLOW_PLOT,
+  drawnIndicators,
+  frameOf,
+  openChartTimes,
+  showFrame,
+} from './helpers/indicatorFrames';
 
 /**
  * The display layer for indicator frames: one line per plot on the price pane, a missing value breaking
@@ -16,11 +23,6 @@ import { gotoWithStub } from './helpers/tauriStub';
 
 /** The bars the stub's snapshot holds. */
 const STUB_BAR_COUNT = 10;
-/** The id the demo indicator is drawn under. */
-const DEMO_ID = 'demo';
-/** The two plots of the demo indicator: a plain line and a stepped one. */
-const FAST_PLOT: IndicatorPlot = { title: 'fast', style: 'line', color: '#2962ff', lineWidth: 2 };
-const SLOW_PLOT: IndicatorPlot = { title: 'slow', style: 'stepline', color: '#ff6d00', lineWidth: 1 };
 /** The colour one point paints, which no plot is drawn with. */
 const POINT_COLOR = '#ff0000';
 /** The bar a test colours; its neighbours must keep their own colour. */
@@ -52,22 +54,6 @@ function withLevelsAndFills(
   return { ...frame, levels, fills };
 }
 
-/** A frame of `plots` over `times`, where `valueAt` says what plot `plotIndex` plots on bar `barIndex`. */
-function frameOf(
-  plots: readonly IndicatorPlot[],
-  times: readonly number[],
-  valueAt: (plotIndex: number, barIndex: number) => number | null,
-): IndicatorFrame {
-  return {
-    plots,
-    bars: times.map((time, barIndex) => ({
-      timeMs: time * 1000,
-      confirmed: true,
-      values: plots.map((_, plotIndex) => valueAt(plotIndex, barIndex)),
-    })),
-  };
-}
-
 /** The same frame with one bar's per-plot colours set, as a producer reporting coloured points sends it. */
 function colouredFrame(frame: IndicatorFrame, barIndex: number, colors: readonly (string | null)[]): IndicatorFrame {
   return { ...frame, bars: frame.bars.map((bar, index) => (index === barIndex ? { ...bar, colors } : bar)) };
@@ -76,21 +62,6 @@ function colouredFrame(frame: IndicatorFrame, barIndex: number, colors: readonly
 /** The drawn points of a plot that plots `valueAt(barIndex)` on every bar, with no per-point colour. */
 function pointsOf(times: readonly number[], valueAt: (barIndex: number) => number | null) {
   return times.map((time, barIndex) => ({ time, value: valueAt(barIndex), color: null }));
-}
-
-/**
- * The opening every test shares: the stub page, the chart it opens, and the bar times that chart holds,
- * in the UTC seconds every point is keyed by.
- */
-async function openChartTimes(page: Page): Promise<number[]> {
-  await gotoWithStub(page);
-  await openChart(page);
-  const bars = await page.evaluate(() => window.__chartTest!.data());
-  return bars.map((bar) => bar.time);
-}
-
-async function showFrame(page: Page, id: string, frame: IndicatorFrame): Promise<void> {
-  await page.evaluate(({ id, frame }) => window.__chartTest!.showIndicatorFrame(id, frame), { id, frame });
 }
 
 /** Shows one `plot` under `id` over `times`, where `valueAt` says what it plots on bar `barIndex`. */
@@ -110,11 +81,6 @@ async function showPlot(
 
 async function updateFrame(page: Page, id: string, frame: IndicatorFrame): Promise<void> {
   await page.evaluate(({ id, frame }) => window.__chartTest!.updateIndicatorFrame(id, frame), { id, frame });
-}
-
-/** Every indicator the display layer draws, in the order it was shown. */
-async function drawnIndicators(page: Page) {
-  return page.evaluate(() => window.__chartTest!.indicators());
 }
 
 test('a frame draws one line per plot with its values', async ({ page }) => {

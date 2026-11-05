@@ -5,6 +5,8 @@ export interface IndicatorLegendRow {
   readonly instanceId: string;
   readonly title: string;
   readonly hidden: boolean;
+  /** Decimals its values are written with; null writes them with the chart's price precision. */
+  readonly digits: number | null;
   readonly values: readonly IndicatorLegendValue[];
 }
 
@@ -66,6 +68,11 @@ function createIconPath(d: string): SVGPathElement {
   path.setAttribute('stroke', 'currentColor');
   path.setAttribute('fill', 'none');
   return path;
+}
+
+/** A plot's value written with `decimals` digits; a plot without a value shows the empty marker. */
+function formatValue(value: number | null, decimals: number): string {
+  return value === null ? NO_VALUE_TEXT : value.toFixed(decimals);
 }
 
 /**
@@ -137,14 +144,14 @@ export class IndicatorLegend {
     title.textContent = row.title;
     element.append(title);
     for (const value of row.values) {
-      element.append(VALUE_SEPARATOR, this.createValue(value));
+      element.append(VALUE_SEPARATOR, this.createValue(value, row.digits));
     }
     return element;
   }
 
-  private createValue(value: IndicatorLegendValue): HTMLSpanElement {
+  private createValue(value: IndicatorLegendValue, digits: number | null): HTMLSpanElement {
     const element = createElementWithClass('span', VALUE_CLASS);
-    element.textContent = value.value === null ? NO_VALUE_TEXT : value.value.toFixed(this.source.digits());
+    element.textContent = formatValue(value.value, digits ?? this.source.digits());
     element.style.color = value.color;
     return element;
   }

@@ -3,6 +3,7 @@ import {
   LineType,
   MismatchDirection,
   type IChartApi,
+  type IPaneApi,
   type IPriceLine,
   type ISeriesApi,
   type LineData,
@@ -10,6 +11,7 @@ import {
   type UTCTimestamp,
   type WhitespaceData,
 } from 'lightweight-charts';
+import type { ChartIndicatorPane } from './indicatorContract';
 import { IndicatorFillPrimitive } from './indicatorFillPrimitive';
 import type {
   IndicatorBar,
@@ -28,6 +30,7 @@ import {
   toLibraryLineStyle,
 } from './indicatorLevels';
 import { toLineWidth } from './indicatorLineWidth';
+import { PRICE_PANE_INDEX, addOwnPane, paneIndexOf, priceFormatOf, removeOwnPane } from './indicatorPanes';
 
 /** One horizontal level as the dev hook shows it. */
 export interface IndicatorLevelState {
@@ -59,6 +62,10 @@ export interface IndicatorLayerState {
   }[];
   readonly levels: readonly IndicatorLevelState[];
   readonly fills: readonly IndicatorFillState[];
+  /** The pane its first plot series is in: the price pane for an overlay, its own pane otherwise. */
+  readonly paneIndex: number;
+  /** Decimals its values are written with; null when the frame states none. */
+  readonly precision: number | null;
 }
 
 /** One drawn plot as the dev hook shows it. */
@@ -69,7 +76,8 @@ type IndicatorPointState = IndicatorPlotState['points'][number];
 
 /**
  * What the layer holds for one shown indicator: one series per plot, the lines and fills the frame
- * added to them, and the titles it was shown with.
+ * added to them, the titles it was shown with, the pane of its own it keeps while it is shown, and
+ * the decimals it writes its values with.
  */
 interface Shown {
   series: ISeriesApi<'Line'>[];
@@ -80,6 +88,8 @@ interface Shown {
   levelLines: IPriceLine[];
   fills: readonly IndicatorFill[];
   fillPrimitive: IndicatorFillPrimitive | null;
+  ownPane: IPaneApi<Time> | null;
+  precision: number | null;
 }
 
 /** The chart's bar time of an indicator bar: the UTC seconds every series point is keyed by. */
@@ -155,9 +165,11 @@ function fillStateOf(fill: IndicatorFill): IndicatorFillState {
 }
 
 /**
- * The display layer for indicator frames: one line series per plot on the price pane, plus the
- * levels and fills the frame describes. Levels are price lines and fills are a primitive, both hung
- * on the first plot series, so they share its pane, its price scale and its hide/show.
+ * The display layer for indicator frames: one line series per plot, plus the levels and fills the
+ * frame describes. Levels are price lines and fills are a primitive, both hung on the first plot
+ * series, so they share its pane, its price scale and its hide/show. An indicator shown in a pane of
+ * its own draws every plot there, keeps that pane across reloads, and gives it back when it is
+ * removed.
  */
 export class IndicatorLayer {
   private readonly shown = new Map<string, Shown>();
@@ -167,30 +179,13 @@ export class IndicatorLayer {
   /**
    * Draws a whole frame for `id`, replacing everything it drew before, including the levels and
    * fills it kept from an earlier frame. A frame without plots draws no levels and no fills: there
-   * is no series to hang them on.
+   * is no series to hang them on. `pane` says whether the indicator draws on the price pane or in a
+   * pane of its own.
    */
-  show(id: string, frame: IndicatorFrame): void {
-    this.remove(id);
-    const series = frame.plots.map((plot, plotIndex) => {
-      const line = this.addPlot(plot);
-      line.setData(frame.bars.map((bar) => pointOf(bar, plotIndex)));
-      return line;
-    });
-    const titles = frame.plots.map((plot) => plot.title);
-    const lastBar = frame.bars[frame.bars.length - 1];
-    const levels = frame.levels ?? [];
-    const fills = frame.fills ?? [];
-    const hostSeries = series[0];
-    this.shown.set(id, {
-      series,
-      titles,
-      lastTimeSeconds: lastBar === undefined ? null : timeOf(lastBar),
-      hidden: false,
-      levels,
-      levelLines: hostSeries === undefined ? [] : createLevelLines(hostSeries, levels),
-      fills,
-      fillPrimitive: hostSeries === undefined ? null : this.attachFill(hostSeries, series, levels, fills),
-    });
+  show(id: string, frame: IndicatorFrame, pane: ChartIndicatorPane = 'overlay'): void {
+    const heldPane = this.shown.get(id)?.ownPane ?? null;
+    this.clear(id);
+    this.draw(id, frame, this.paneToDrawIn(heldPane, pane));
   }
 
   /**
@@ -230,16 +225,11 @@ export class IndicatorLayer {
     shown.fillPrimitive?.setHidden(hidden);
   }
 
+  /** Removes everything `id` drew and gives back the pane it held, if any. */
   remove(id: string): void {
-    const shown = this.shown.get(id);
-    if (shown === undefined) {
-      return;
-    }
-    this.detachExtras(shown);
-    for (const series of shown.series) {
-      this.chart.removeSeries(series);
-    }
-    this.shown.delete(id);
+    const heldPane = this.shown.get(id)?.ownPane ?? null;
+    this.clear(id);
+    removeOwnPane(this.chart, heldPane);
   }
 
   destroy(): void {
@@ -256,7 +246,14 @@ export class IndicatorLayer {
       plots: shown.series.map((series, plotIndex) => plotStateOf(series, shown.titles[plotIndex])),
       levels: shown.levels.map(levelStateOf),
       fills: shown.fills.map(fillStateOf),
+      paneIndex: shown.series[0]?.getPane().paneIndex() ?? PRICE_PANE_INDEX,
+      precision: shown.precision,
     }));
+  }
+
+  /** The decimals `id` writes its values with; null for an unknown id or a frame that states none. */
+  precisionOf(id: string): number | null {
+    return this.shown.get(id)?.precision ?? null;
   }
 
   /** Each plot's value at the bar with `logicalIndex`, for the legend; an unknown id has none. */
@@ -266,6 +263,59 @@ export class IndicatorLayer {
       return [];
     }
     return shown.series.map((series) => legendValueOf(series, logicalIndex));
+  }
+
+  /** Draws `frame` for `id`, in its own pane or on the price pane when `ownPane` is null. */
+  private draw(id: string, frame: IndicatorFrame, ownPane: IPaneApi<Time> | null): void {
+    // The pane's index is read here rather than when it was added: indices shift when another pane goes.
+    const paneIndex = paneIndexOf(ownPane);
+    const precision = frame.precision ?? null;
+    const series = frame.plots.map((plot, plotIndex) => {
+      const line = this.addPlot(plot, paneIndex, precision);
+      line.setData(frame.bars.map((bar) => pointOf(bar, plotIndex)));
+      return line;
+    });
+    const lastBar = frame.bars[frame.bars.length - 1];
+    const levels = frame.levels ?? [];
+    const fills = frame.fills ?? [];
+    const hostSeries = series[0];
+    this.shown.set(id, {
+      series,
+      titles: frame.plots.map((plot) => plot.title),
+      lastTimeSeconds: lastBar === undefined ? null : timeOf(lastBar),
+      hidden: false,
+      levels,
+      levelLines: hostSeries === undefined ? [] : createLevelLines(hostSeries, levels),
+      fills,
+      fillPrimitive: hostSeries === undefined ? null : this.attachFill(hostSeries, series, levels, fills),
+      ownPane,
+      precision,
+    });
+  }
+
+  /** Removes every series, level line and fill of `id`; the pane it holds stays with the layer. */
+  private clear(id: string): void {
+    const shown = this.shown.get(id);
+    if (shown === undefined) {
+      return;
+    }
+    this.detachExtras(shown);
+    for (const series of shown.series) {
+      this.chart.removeSeries(series);
+    }
+    this.shown.delete(id);
+  }
+
+  /**
+   * The pane `id` draws in next: the pane of its own it already holds or a new one, and none for an
+   * overlay, which gives a held pane back to the chart.
+   */
+  private paneToDrawIn(heldPane: IPaneApi<Time> | null, pane: ChartIndicatorPane): IPaneApi<Time> | null {
+    if (pane === 'own') {
+      return heldPane ?? addOwnPane(this.chart);
+    }
+    removeOwnPane(this.chart, heldPane);
+    return null;
   }
 
   /** Attaches the fill primitive to the first plot series, which owns the pane the band is drawn in. */
@@ -295,17 +345,30 @@ export class IndicatorLayer {
     removeLevelLines(hostSeries, shown.levelLines);
   }
 
-  /** Adds one plot's series; a switched-off plot hides only its line, because the levels and fills hang on the first plot's series. */
-  private addPlot(plot: IndicatorPlot): ISeriesApi<'Line'> {
-    return this.chart.addSeries(LineSeries, {
-      color: plot.color,
-      lineWidth: toLineWidth(plot.lineWidth),
-      lineStyle: toLibraryLineStyle(plot.lineStyle),
-      lineType: plot.style === 'stepline' ? LineType.WithSteps : LineType.Simple,
-      lineVisible: plot.visible !== false,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    });
+  /**
+   * Adds one plot's series at `paneIndex`, writing its values with `precision` decimals when the
+   * frame states them. A switched-off plot hides only its line, because the levels and fills hang on
+   * the first plot's series.
+   */
+  private addPlot(plot: IndicatorPlot, paneIndex: number | undefined, precision: number | null): ISeriesApi<'Line'> {
+    const line = this.chart.addSeries(
+      LineSeries,
+      {
+        color: plot.color,
+        lineWidth: toLineWidth(plot.lineWidth),
+        lineStyle: toLibraryLineStyle(plot.lineStyle),
+        lineType: plot.style === 'stepline' ? LineType.WithSteps : LineType.Simple,
+        lineVisible: plot.visible !== false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      },
+      paneIndex,
+    );
+    const priceFormat = priceFormatOf(precision);
+    if (priceFormat !== undefined) {
+      line.applyOptions({ priceFormat });
+    }
+    return line;
   }
 }

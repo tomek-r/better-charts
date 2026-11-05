@@ -18,6 +18,7 @@ import type { BarStyleSeriesState } from '../barStyle/barStyleSeries';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
 import type { ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesState } from './chartScalesAppearance';
+import type { ChartIndicatorPane } from '../indicators/indicatorContract';
 import type { IndicatorFrame } from '../indicators/indicatorFrame';
 import type { IndicatorLayer, IndicatorLayerState } from '../indicators/indicatorLayer';
 import type { AttachedIndicatorState, IndicatorRuntime } from '../indicators/indicatorRuntime';
@@ -106,8 +107,10 @@ export interface DevTestApi {
   scales(): ChartScalesState;
   /** Every indicator the display layer draws, in the order it was shown, as plain copies of its lines. */
   indicators(): IndicatorLayerState[];
-  /** Draws a whole frame for indicator `id`, replacing what it drew. */
-  showIndicatorFrame(id: string, frame: IndicatorFrame): void;
+  /** How many panes the chart has, the price pane included. */
+  paneCount(): number;
+  /** Draws a whole frame for indicator `id` in `pane`, replacing what it drew. */
+  showIndicatorFrame(id: string, frame: IndicatorFrame, pane?: ChartIndicatorPane): void;
   /** Applies a live frame (the closed and the forming bar) to indicator `id`. */
   updateIndicatorFrame(id: string, frame: IndicatorFrame): void;
   removeIndicator(id: string): void;
@@ -308,7 +311,8 @@ function buildDevTestApi({
     appearance: () => appearanceState({ chart, rightMarginBars, crosshairStyle }),
     scales: scalesState,
     indicators: () => indicatorLayer.state(),
-    showIndicatorFrame: (id, frame) => indicatorLayer.show(id, frame),
+    paneCount: () => chart.panes().length,
+    showIndicatorFrame: (id, frame, pane) => indicatorLayer.show(id, frame, pane),
     updateIndicatorFrame: (id, frame) => indicatorLayer.update(id, frame),
     removeIndicator: (id) => indicatorLayer.remove(id),
     attachIndicator: (instanceId, definitionId, settings) =>
