@@ -6,20 +6,25 @@
  * frame. Own panes are added to this format later.
  */
 
-/** How a plot's line joins its points. */
-export type IndicatorPlotStyle = 'line' | 'stepline';
+/**
+ * How a plot is drawn: a line joining its points, a stepped line, or columns drawn from zero.
+ *
+ * A histogram's columns take their bar's own colour when the frame gives one, and the plot's colour
+ * otherwise.
+ */
+export type IndicatorPlotStyle = 'line' | 'stepline' | 'histogram';
 
 /** How a plot's or a level's line is stroked; a missing style is solid. */
 export type IndicatorLineStyle = 'solid' | 'dashed' | 'dotted';
 
-/** One line of an indicator, described once for every bar. */
+/** One plot of an indicator, described once for every bar. */
 export interface IndicatorPlot {
   readonly title: string;
   readonly style: IndicatorPlotStyle;
   readonly color: string;
   readonly lineWidth: number;
   readonly lineStyle?: IndicatorLineStyle;
-  /** False draws no line for this plot, while the legend still reports its value. */
+  /** False draws nothing for this plot, while the legend still reports its value. */
   readonly visible?: boolean;
 }
 

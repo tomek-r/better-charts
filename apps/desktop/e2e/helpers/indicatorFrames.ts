@@ -32,6 +32,15 @@ export function frameOf(
   };
 }
 
+/** The same frame with one bar's per-plot colours set, as a producer reporting coloured points sends it. */
+export function colouredFrame(
+  frame: IndicatorFrame,
+  barIndex: number,
+  colors: readonly (string | null)[],
+): IndicatorFrame {
+  return { ...frame, bars: frame.bars.map((bar, index) => (index === barIndex ? { ...bar, colors } : bar)) };
+}
+
 /**
  * The opening every test shares: the stub page, the chart it opens, and the bar times that chart holds,
  * in the UTC seconds every point is keyed by.

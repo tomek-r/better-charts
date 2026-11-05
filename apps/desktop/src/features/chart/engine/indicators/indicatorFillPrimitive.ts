@@ -2,18 +2,15 @@ import {
   MismatchDirection,
   type IPrimitivePaneRenderer,
   type IPrimitivePaneView,
-  type ISeriesApi,
-  type LineData,
   type Logical,
   type LogicalRange,
   type PrimitivePaneViewZOrder,
-  type Time,
-  type WhitespaceData,
 } from 'lightweight-charts';
 import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
 import { fillPolygons, type FillColumn, type FillPoint } from './indicatorFillPolygons';
 import type { IndicatorFill, IndicatorFillEdge, IndicatorLevel } from './indicatorFrame';
+import type { IndicatorPlotSeries } from './indicatorPlotSeries';
 
 /** A fill sits under the lines it belongs to, above nothing but the background. */
 const FILL_VIEW_Z_ORDER: PrimitivePaneViewZOrder = 'bottom';
@@ -42,7 +39,7 @@ export class IndicatorFillPrimitive extends ChartSeriesPrimitive {
   private hidden = false;
 
   constructor(
-    private readonly plotSeries: readonly ISeriesApi<'Line'>[],
+    private readonly plotSeries: readonly IndicatorPlotSeries[],
     private readonly levels: readonly IndicatorLevel[],
     private readonly fills: readonly IndicatorFill[],
   ) {
@@ -132,21 +129,20 @@ export class IndicatorFillPrimitive extends ChartSeriesPrimitive {
       const level = this.levels[edge.index];
       return level === undefined ? null : level.price;
     }
-    const point = this.plotPointAt(edge.index, index);
-    return point === null ? null : point.value;
+    return this.plotValueAt(edge.index, index);
   }
 
-  /** The plot's point at one bar; null where that bar has no value or that plot does not exist. */
-  private plotPointAt(plotIndex: number, index: number): LineData<Time> | null {
+  /** The plot's value at one bar; null where that bar has no value or that plot does not exist. */
+  private plotValueAt(plotIndex: number, index: number): number | null {
     const series = this.plotSeries[plotIndex];
     if (series === undefined) {
       return null;
     }
-    const point: LineData<Time> | WhitespaceData<Time> | null = series.dataByIndex(index, MismatchDirection.None);
-    if (point === null || !('value' in point)) {
+    const point = series.dataByIndex(index, MismatchDirection.None);
+    if (point === null || !('value' in point) || typeof point.value !== 'number') {
       return null;
     }
-    return point;
+    return point.value;
   }
 }
 

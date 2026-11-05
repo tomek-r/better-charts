@@ -1,4 +1,4 @@
-import { LineStyle, type IPriceLine, type ISeriesApi } from 'lightweight-charts';
+import { LineStyle, type IPriceLine, type ISeriesApi, type SeriesType } from 'lightweight-charts';
 import type { IndicatorLevel, IndicatorLineStyle } from './indicatorFrame';
 import { toLineWidth } from './indicatorLineWidth';
 
@@ -26,7 +26,7 @@ export function toIndicatorLineStyle(style: LineStyle): IndicatorLineStyle {
 }
 
 /** Draws `levels` as price lines on `series`, each one exactly as its level describes it. */
-export function createLevelLines(series: ISeriesApi<'Line'>, levels: readonly IndicatorLevel[]): IPriceLine[] {
+export function createLevelLines(series: ISeriesApi<SeriesType>, levels: readonly IndicatorLevel[]): IPriceLine[] {
   return levels.map((level) =>
     series.createPriceLine({
       price: level.price,
@@ -52,7 +52,7 @@ export function setLevelLinesHidden(
 }
 
 /** Removes level lines from the series that drew them. */
-export function removeLevelLines(series: ISeriesApi<'Line'>, lines: readonly IPriceLine[]): void {
+export function removeLevelLines(series: ISeriesApi<SeriesType>, lines: readonly IPriceLine[]): void {
   for (const line of lines) {
     series.removePriceLine(line);
   }

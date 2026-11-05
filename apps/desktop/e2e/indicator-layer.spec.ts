@@ -9,6 +9,7 @@ import {
   DEMO_ID,
   FAST_PLOT,
   SLOW_PLOT,
+  colouredFrame,
   drawnIndicators,
   frameOf,
   openChartTimes,
@@ -52,11 +53,6 @@ function withLevelsAndFills(
   fills: readonly IndicatorFill[],
 ): IndicatorFrame {
   return { ...frame, levels, fills };
-}
-
-/** The same frame with one bar's per-plot colours set, as a producer reporting coloured points sends it. */
-function colouredFrame(frame: IndicatorFrame, barIndex: number, colors: readonly (string | null)[]): IndicatorFrame {
-  return { ...frame, bars: frame.bars.map((bar, index) => (index === barIndex ? { ...bar, colors } : bar)) };
 }
 
 /** The drawn points of a plot that plots `valueAt(barIndex)` on every bar, with no per-point colour. */

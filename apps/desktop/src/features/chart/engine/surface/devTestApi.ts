@@ -114,6 +114,8 @@ export interface DevTestApi {
   /** Applies a live frame (the closed and the forming bar) to indicator `id`. */
   updateIndicatorFrame(id: string, frame: IndicatorFrame): void;
   removeIndicator(id: string): void;
+  /** Hides or shows the frame indicator `id`, as switching the indicator itself off does. */
+  setIndicatorFrameHidden(id: string, hidden: boolean): void;
   /** Attaches the registered indicator `definitionId` as `instanceId`; false when no such indicator exists. */
   attachIndicator(
     instanceId: string,
@@ -315,6 +317,7 @@ function buildDevTestApi({
     showIndicatorFrame: (id, frame, pane) => indicatorLayer.show(id, frame, pane),
     updateIndicatorFrame: (id, frame) => indicatorLayer.update(id, frame),
     removeIndicator: (id) => indicatorLayer.remove(id),
+    setIndicatorFrameHidden: (id, hidden) => indicatorLayer.setHidden(id, hidden),
     attachIndicator: (instanceId, definitionId, settings) =>
       indicatorRuntime.attach(instanceId, definitionId, settings),
     detachIndicator: (instanceId) => indicatorRuntime.detach(instanceId),
