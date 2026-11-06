@@ -1,23 +1,12 @@
-import {
-  PriceScaleMode,
-  type IChartApi,
-  type IPriceScaleApi,
-  type ISeriesApi,
-  type SeriesType,
-} from 'lightweight-charts';
+import { PriceScaleMode, type IChartApi, type IPriceScaleApi, type ISeriesApi } from 'lightweight-charts';
 import { priceScaleModeOf, type ChartPriceScaleMode, type ScaleButtonsMode } from '../surface/chartScalesAppearance';
 import { ChartSettingsCornerButton } from './chartSettingsCornerButton';
+import { IndicatorPaneRows } from './indicatorPaneRows';
 import { axisHitAt, type AxisHit } from './paneAxisHitTest';
 import { PaneLayoutWatcher } from './paneLayoutWatcher';
 import { PaneScaleRow, type PaneScaleLabels } from './paneScaleRow';
 import { PRICE_SCALE_ID } from './priceScaleId';
-import { setPriceScaleRange } from './priceScaleRange';
-
-/** One pane as the chart lists it. Read it by index each time: the list shifts when a pane goes. */
-type ChartPane = ReturnType<IChartApi['panes']>[number];
-
-/** The series a pane's prices are drawn from, whichever kind of series it is. */
-type PaneSeries = ISeriesApi<SeriesType>;
+import { scaleAllowsLogarithmic, writeScaleMode, type ChartPane } from './priceScaleMode';
 
 /** The panes list the price pane first, so its row comes first and is never removed. */
 const PRICE_PANE_INDEX = 0;
@@ -26,13 +15,6 @@ const PRICE_PANE_LABELS: PaneScaleLabels = {
   group: 'Price scale',
   auto: 'Auto scale — fit the visible data to the pane',
   log: 'Logarithmic price scale',
-};
-
-/** An indicator pane's own scale is not a saved setting: its choices last until the chart is reloaded. */
-const INDICATOR_PANE_LABELS: PaneScaleLabels = {
-  group: 'Indicator price scale',
-  auto: 'Auto scale — fit this pane',
-  log: 'Logarithmic scale for this pane',
 };
 
 /**
@@ -84,13 +66,11 @@ export interface PriceScaleState extends PriceScaleShape {
 export class PriceScaleController {
   private readonly axis: IPriceScaleApi;
   private readonly priceRow: PaneScaleRow;
-  private readonly indicatorRows: PaneScaleRow[] = [];
+  private readonly indicatorRows: IndicatorPaneRows;
   private readonly settingsButton: ChartSettingsCornerButton;
   private readonly layout: PaneLayoutWatcher;
   /** How the rows reach the screen: revealed by the pointer, kept on screen, or never drawn. */
   private modeButtons: ScaleButtonsMode = 'mouseOver';
-  /** The axis mask colour, kept so a row created later is painted like the ones already there. */
-  private maskColor: string | null = null;
   /** The auto scale the app was last told about; only a real change is announced. */
   private autoScale = false;
 
@@ -101,6 +81,7 @@ export class PriceScaleController {
   ) {
     this.axis = chart.priceScale(PRICE_SCALE_ID);
     this.priceRow = new PaneScaleRow(host, PRICE_PANE_LABELS, this.toggleAutoScale, this.requestOtherMode);
+    this.indicatorRows = new IndicatorPaneRows(host, chart, this.modeButtons, () => this.sync());
     host.addEventListener('pointermove', this.onPointerMove);
     // Touch has no hover, so the same hit test also runs on press: a tap on the
     // axis reveals the toggles, and the next tap on one of them toggles it.
@@ -135,10 +116,7 @@ export class PriceScaleController {
    * regular spacing. Those choices are not saved settings, so nothing else can put them back.
    */
   resetIndicatorPanes(): void {
-    for (let paneIndex = PRICE_PANE_INDEX + 1; paneIndex <= this.indicatorRows.length; paneIndex += 1) {
-      const scale = this.scaleOf(paneIndex);
-      scale?.applyOptions({ autoScale: true, mode: PriceScaleMode.Normal });
-    }
+    this.indicatorRows.resetScales();
     this.sync();
   }
 
@@ -174,7 +152,8 @@ export class PriceScaleController {
       return;
     }
     this.modeButtons = mode;
-    this.rows().forEach((row) => row.setModeButtons(mode));
+    this.priceRow.setModeButtons(mode);
+    this.indicatorRows.setModeButtons(mode);
     this.sync();
   }
 
@@ -199,8 +178,8 @@ export class PriceScaleController {
    * `null` drops the inline colour, leaving the rows painted by their opaque CSS default.
    */
   setMaskColor(color: string | null): void {
-    this.maskColor = color;
-    this.rows().forEach((row) => row.setMaskColor(color));
+    this.priceRow.setMaskColor(color);
+    this.indicatorRows.setMaskColor(color);
   }
 
   destroy(): void {
@@ -211,37 +190,19 @@ export class PriceScaleController {
     this.host.removeEventListener('dblclick', this.onDoubleClick);
     this.layout.destroy();
     this.priceRow.destroy();
-    this.indicatorRows.forEach((row) => row.destroy());
+    this.indicatorRows.destroy();
     this.settingsButton.destroy();
   }
 
   /** Every row in pane order, so a row's index is its pane's. */
   private rows(): PaneScaleRow[] {
-    return [this.priceRow, ...this.indicatorRows];
+    return [this.priceRow, ...this.indicatorRows.all()];
   }
 
   /** One row per pane: the price pane's first, then one per further pane, as the chart lists them. */
   private syncRows(): void {
-    const extraPanes = Math.max(this.chart.panes().length - 1, 0);
-    while (this.indicatorRows.length > extraPanes) {
-      this.indicatorRows.pop()?.destroy();
-    }
-    while (this.indicatorRows.length < extraPanes) {
-      this.indicatorRows.push(this.createIndicatorRow(this.indicatorRows.length + 1));
-    }
+    this.indicatorRows.matchPaneCount();
     this.layout.watchPanes();
-  }
-
-  private createIndicatorRow(paneIndex: number): PaneScaleRow {
-    const row = new PaneScaleRow(
-      this.host,
-      INDICATOR_PANE_LABELS,
-      () => this.togglePaneAutoScale(paneIndex),
-      () => this.switchPaneScaleMode(paneIndex),
-    );
-    row.setModeButtons(this.modeButtons);
-    row.setMaskColor(this.maskColor);
-    return row;
   }
 
   /** Places a row on its pane and reads everything that row shows from that pane's own scale. */
@@ -282,10 +243,7 @@ export class PriceScaleController {
     if (paneIndex === PRICE_PANE_INDEX || scale === undefined) {
       return true;
     }
-    if (scale.options().mode === PriceScaleMode.Logarithmic) {
-      return true;
-    }
-    return (pane?.getSeries() ?? []).every(seriesAllowsLogarithmic);
+    return scaleAllowsLogarithmic(scale, pane);
   }
 
   /** A pane's own right scale; the price pane's is the one the saved shape is written to. */
@@ -307,45 +265,9 @@ export class PriceScaleController {
     this.host.dispatchEvent(new CustomEvent(PRICE_SCALE_MODE_REQUESTED_EVENT, { bubbles: true, detail }));
   };
 
-  /** An indicator pane's `A`: that pane's own scale is not saved, so its row writes the scale directly. */
-  private togglePaneAutoScale(paneIndex: number): void {
-    const scale = this.scaleOf(paneIndex);
-    if (scale === undefined) {
-      return;
-    }
-    scale.applyOptions({ autoScale: !scale.options().autoScale });
-    this.sync();
-  }
-
-  /**
-   * An indicator pane's `L`: the other mode, written straight to that pane's scale, with a manual range
-   * carried over through the pane's first series, as the price pane's own switch does.
-   */
-  private switchPaneScaleMode(paneIndex: number): void {
-    const pane = this.chart.panes()[paneIndex];
-    const scale = this.scaleOf(paneIndex);
-    if (pane === undefined || scale === undefined) {
-      return;
-    }
-    this.writeScaleMode(scale, pane.getSeries()[0], otherModeOf(scale));
-    this.sync();
-  }
-
   /** Writes the price pane's mode, holding the actual-price range across the library's own switch. */
   private applyMode(mode: PriceScaleMode): void {
-    this.writeScaleMode(this.axis, this.candles, mode);
-  }
-
-  /**
-   * Writes one scale's mode, holding its manual range across the switch: the library writes a manual
-   * range in the coordinates of the mode it was set in, so without this the range would land elsewhere.
-   */
-  private writeScaleMode(scale: IPriceScaleApi, series: PaneSeries | undefined, mode: PriceScaleMode): void {
-    const range = scale.options().autoScale ? null : scale.getVisibleRange();
-    scale.applyOptions({ mode });
-    if (range !== null && series !== undefined) {
-      setPriceScaleRange(series, range);
-    }
+    writeScaleMode(this.axis, this.candles, mode);
   }
 
   /**
@@ -418,28 +340,4 @@ export class PriceScaleController {
   private readonly followPaneLayout = (): void => {
     this.sync();
   };
-}
-
-/** The mode a toggle asks for: the one the scale it belongs to is not drawn in now. */
-function otherModeOf(scale: IPriceScaleApi): PriceScaleMode {
-  const logarithmic = scale.options().mode === PriceScaleMode.Logarithmic;
-  return logarithmic ? PriceScaleMode.Normal : PriceScaleMode.Logarithmic;
-}
-
-/** Whether a series draws no value below zero, which a logarithmic scale needs of every point it holds. */
-function seriesAllowsLogarithmic(series: PaneSeries): boolean {
-  return series.data().every(valueAllowsLogarithmic);
-}
-
-/** A point carrying a value below zero rules the scale out; a point without one says nothing about it. */
-function valueAllowsLogarithmic(point: unknown): boolean {
-  return !isValuePoint(point) || point.value >= 0;
-}
-
-/** Whether a series point carries a value: a candle and a whitespace point carry a time only. */
-function isValuePoint(point: unknown): point is { readonly value: number } {
-  if (typeof point !== 'object' || point === null || !('value' in point)) {
-    return false;
-  }
-  return typeof point.value === 'number';
 }
