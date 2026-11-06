@@ -12,7 +12,7 @@ import { BrokerTime } from '../brokerTime/brokerTime';
 import { ChartTimeZoneDisplay } from '../brokerTime/chartTimeZoneDisplay';
 import { BarCountdownPrimitive } from '../barCountdown/barCountdownPrimitive';
 import { CountdownController } from '../barCountdown/countdownController';
-import { OhlcLegend } from '../legend/ohlcLegend';
+import { OhlcReadout } from '../legend/ohlcReadout';
 import { MarketStatusIndicator } from '../legend/marketStatusIndicator';
 import type { MarketStatus } from '../legend/marketStatus';
 import { PointerReadoutPrimitive } from '../legend/pointerReadoutPrimitive';
@@ -62,7 +62,7 @@ export class ChartController {
   private readonly priceLines: PriceLineController;
   private readonly primitive: WorkspacePrimitive;
   private readonly observer: ResizeObserver;
-  private readonly legend: OhlcLegend;
+  private readonly ohlcReadout: OhlcReadout;
   private readonly marketStatus: MarketStatusIndicator;
   // Broker time from the live ticks; the countdown and the time zone clock both read it.
   private readonly brokerTime = new BrokerTime();
@@ -115,11 +115,11 @@ export class ChartController {
     private readonly state: ChartOverlayState,
     options: ChartControllerOptions,
   ) {
-    const { chart, candles, volume, future } = createChartSurface(host);
+    const { chart, candles, future } = createChartSurface(host);
     this.chart = chart;
     this.candles = candles;
     this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
-    this.data = new BarSeriesController(this.candles, volume, this.chart);
+    this.data = new BarSeriesController(this.candles, this.chart);
     const { toolDefinitions, defaultToolId, indicatorDefinitions, indicatorLegendTitle, ...hostOptions } = options;
     this.chartIndicators = new ChartIndicators(this.chart, host, {
       definitions: indicatorDefinitions,
@@ -175,8 +175,8 @@ export class ChartController {
     this.candles.attachPrimitive(this.countdownPrimitive);
     this.candles.attachPrimitive(this.priceTags);
     this.candles.attachPrimitive(this.pointerReadout);
-    this.legend = new OhlcLegend(host);
-    this.marketStatus = new MarketStatusIndicator(this.legend.container());
+    this.ohlcReadout = new OhlcReadout(this.chart, host, this.data, () => this.symbol);
+    this.marketStatus = new MarketStatusIndicator(this.ohlcReadout.container());
     // The price scale is painted on the library's own canvas, so its toggles
     // (A = auto scale, L = the price scale mode) are DOM buttons in the axis column, as
     // is the gear in its corner; the gear asks for the settings with an event.
@@ -285,14 +285,14 @@ export class ChartController {
       this.scales.changeSymbolTag(symbol);
     }
     this.symbol = symbol;
-    this.updateLegend();
+    this.ohlcReadout.refresh();
     this.scales.syncCountdown();
   }
   setPricePrecision(digits: number): void {
     if (!this.data.setPrecision(digits)) {
       return;
     }
-    this.updateLegend();
+    this.ohlcReadout.refresh();
   }
   /** Shows every bar in `zone`'s wall clock; broker time until the broker offset is known. */
   setTimeZone(zone: string, brokerUtcOffsetMinutes: number | null): void {
@@ -304,6 +304,7 @@ export class ChartController {
       return;
     }
     this.data.setBarStyle(appearance);
+    this.ohlcReadout.refresh();
     this.refreshOverlays();
   }
   /**
@@ -450,7 +451,7 @@ export class ChartController {
     this.observer.disconnect();
     this.liveCandleHold.destroy();
     this.marketStatus.destroy();
-    this.legend.destroy();
+    this.ohlcReadout.destroy();
     this.scaleControls.destroy();
     this.candles.detachPrimitive(this.pointerReadout);
     this.candles.detachPrimitive(this.countdownPrimitive);
@@ -498,7 +499,7 @@ export class ChartController {
 
   /** Brings everything that reads the bars up to date after they changed. */
   private afterBarsChanged(): void {
-    this.updateLegend();
+    this.ohlcReadout.refresh();
     this.refreshOverlays();
     this.scales.syncCountdown();
     this.tools.barsChanged();
@@ -507,9 +508,5 @@ export class ChartController {
   /** Read-only seam onto the bar cache, which BarSeriesController owns and writes. */
   private get bars(): readonly RenderBar[] {
     return this.data.bars;
-  }
-
-  private updateLegend(): void {
-    this.legend.apply(this.symbol, this.data.lastBar(), this.data.pricePrecision);
   }
 }

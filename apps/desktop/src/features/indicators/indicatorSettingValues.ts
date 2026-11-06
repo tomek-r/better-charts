@@ -30,6 +30,11 @@ export function booleanSetting(settings: SettingValues, key: string, fallback: b
   return typeof value === 'boolean' ? value : fallback;
 }
 
+/** A colour style's stored colour, or the colour that style starts from. */
+export function colorSetting(settings: SettingValues, styleId: string, fallback: string): string {
+  return stringSetting(settings, settingStyleKey(styleId, 'color'), fallback);
+}
+
 function isSettingInputSource(value: string): value is SettingInputSource {
   return (SETTING_INPUT_SOURCES as readonly string[]).includes(value);
 }

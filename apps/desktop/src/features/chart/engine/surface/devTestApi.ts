@@ -114,6 +114,8 @@ export interface DevTestApi {
   indicators(): IndicatorLayerState[];
   /** How many panes the chart has, the price pane included. */
   paneCount(): number;
+  /** The series types the price pane holds, in draw order, so a test can prove which series exist. */
+  priceSeriesTypes(): string[];
   /** Draws a whole frame for indicator `id` in `pane`, replacing what it drew. */
   showIndicatorFrame(id: string, frame: IndicatorFrame, pane?: ChartIndicatorPane): void;
   /** Applies a live frame (the closed and the forming bar) to indicator `id`. */
@@ -320,6 +322,11 @@ function buildDevTestApi({
     scales: scalesState,
     indicators: () => indicatorLayer.state(),
     paneCount: () => chart.panes().length,
+    priceSeriesTypes: () =>
+      chart
+        .panes()[0]
+        ?.getSeries()
+        .map((series) => series.seriesType()) ?? [],
     showIndicatorFrame: (id, frame, pane) => indicatorLayer.show(id, frame, pane),
     updateIndicatorFrame: (id, frame) => indicatorLayer.update(id, frame),
     removeIndicator: (id) => indicatorLayer.remove(id),

@@ -1,7 +1,6 @@
 import {
   CandlestickSeries,
   CrosshairMode,
-  HistogramSeries,
   LineSeries,
   createChart,
   type IChartApi,
@@ -14,7 +13,6 @@ import { chartLayoutOptions, DEFAULT_CHART_APPEARANCE, priceScaleMargins } from 
 interface ChartSurface {
   chart: IChartApi;
   candles: ISeriesApi<'Candlestick'>;
-  volume: ISeriesApi<'Histogram'>;
   future: ISeriesApi<'Line'>;
 }
 
@@ -41,11 +39,11 @@ function chartLocale(): string {
 }
 
 /**
- * Builds the chart and the three series it owns. This is the only module that
+ * Builds the chart and the two series it owns. This is the only module that
  * creates the chart and its series, so the visual configuration lives here rather
  * than being spread through the controller: the hidden crosshair, the time scale's
- * end margin, and the separate price scales that keep the volume and the helper
- * points out of the price fit.
+ * end margin, and the separate price scale that keeps the helper points out of
+ * the price fit.
  *
  * The chart's own paint — background, grids, scale text and borders, margins —
  * comes from `DEFAULT_CHART_APPEARANCE` through the mappers, which is the same
@@ -113,13 +111,6 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
     priceLineVisible: false,
     lastValueVisible: false,
   });
-  const volume = chart.addSeries(HistogramSeries, {
-    priceScaleId: 'volume',
-    priceFormat: { type: 'volume' },
-    priceLineVisible: false,
-    lastValueVisible: false,
-  });
-  volume.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 }, visible: false });
   // Real-valued invisible points extend the time scale using public API. A
   // separate scale and null autoscale provider keep them out of price fits.
   const future = chart.addSeries(LineSeries, {
@@ -129,5 +120,5 @@ export function createChartSurface(host: HTMLElement): ChartSurface {
     lastValueVisible: false,
     autoscaleInfoProvider: () => null,
   });
-  return { chart, candles, volume, future };
+  return { chart, candles, future };
 }

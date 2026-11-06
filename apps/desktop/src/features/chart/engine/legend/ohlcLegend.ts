@@ -26,12 +26,30 @@ export class OhlcLegend {
     return this.element;
   }
 
-  apply(symbol: string, bar: RenderBar | undefined, digits: number): void {
+  apply(symbol: string, bar: RenderBar | undefined, digits: number, valueColor: string | null): void {
     if (!bar) {
       this.text.textContent = '';
       return;
     }
-    this.text.textContent = `${symbol}  O ${bar.open.toFixed(digits)}  H ${bar.high.toFixed(digits)}  L ${bar.low.toFixed(digits)}  C ${bar.close.toFixed(digits)}`;
+    this.text.replaceChildren(
+      `${symbol}  O `,
+      this.value(bar.open, digits, valueColor),
+      '  H ',
+      this.value(bar.high, digits, valueColor),
+      '  L ',
+      this.value(bar.low, digits, valueColor),
+      '  C ',
+      this.value(bar.close, digits, valueColor),
+    );
+  }
+
+  /** One price as its own span, so the numbers take the bar's body colour and the labels keep theirs. */
+  private value(price: number, digits: number, color: string | null): HTMLSpanElement {
+    const value = document.createElement('span');
+    value.className = 'chart-legend-value';
+    value.textContent = price.toFixed(digits);
+    value.style.color = color ?? '';
+    return value;
   }
 
   destroy(): void {

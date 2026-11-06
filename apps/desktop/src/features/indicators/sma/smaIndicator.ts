@@ -3,18 +3,21 @@ import type { IndicatorFrame, IndicatorPlot } from '../../chart/engine/indicator
 import { sourceValue } from '../../chart/engine/indicators/indicatorSource';
 import type { SettingInputSource, SettingValues } from '../../chart/engine/settings/settingInputs';
 import { BarByBarIndicator } from '../barByBarIndicator';
-import { ClosedValueWindow, resolveWindowSettings, type WindowSettings } from '../closedValueWindow';
+import { ClosedValueWindow, resolveWindowSettings } from '../closedValueWindow';
 import { linePlotSetting } from '../indicatorSettingValues';
+import {
+  DEFAULT_COLOR,
+  DEFAULT_LENGTH,
+  DEFAULT_SOURCE,
+  DEFAULT_WIDTH,
+  PLOT_STYLE,
+  WINDOW_DEFAULTS,
+} from '../movingAverageDefaults';
 
 export { LENGTH_INPUT, SOURCE_INPUT } from '../indicatorInputs';
-export const PLOT_STYLE = 'plot';
-export const DEFAULT_LENGTH = 9;
-export const DEFAULT_SOURCE: SettingInputSource = 'close';
-export const DEFAULT_COLOR = '#2962FF';
-export const DEFAULT_WIDTH = 1;
+export { DEFAULT_COLOR, DEFAULT_LENGTH, DEFAULT_SOURCE, DEFAULT_WIDTH, PLOT_STYLE } from '../movingAverageDefaults';
 
 const PLOT_TITLE = 'SMA';
-const DEFAULT_WINDOW_SETTINGS: WindowSettings = { length: DEFAULT_LENGTH, source: DEFAULT_SOURCE };
 
 function resolvePlot(settings: SettingValues): IndicatorPlot {
   return linePlotSetting(settings, PLOT_STYLE, { title: PLOT_TITLE, color: DEFAULT_COLOR, width: DEFAULT_WIDTH });
@@ -32,7 +35,7 @@ export class SmaIndicator extends BarByBarIndicator {
   private windowSum = 0;
 
   protected reset(settings: SettingValues): void {
-    const { length, source } = resolveWindowSettings(settings, DEFAULT_WINDOW_SETTINGS);
+    const { length, source } = resolveWindowSettings(settings, WINDOW_DEFAULTS);
     this.length = length;
     this.source = source;
     this.window.reset(length - 1);

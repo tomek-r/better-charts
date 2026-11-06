@@ -7,6 +7,7 @@ import {
   type DrawnBarStyleAppearance,
 } from './barStyleAppearance';
 import { barStylePoint, barStylePoints } from './barStylePoints';
+import { barBodyColor } from './barBodyColor';
 import { canRepaintBarStyleSeries, drawBarStyleSeries } from './barStyleSeriesFactory';
 import { BaselineLevel, priceBaseValue } from './baselineLevel';
 import { HeikinAshiChain } from './heikinAshi';
@@ -75,6 +76,19 @@ export class BarStyleSeries {
     const plotted = appearance.style === 'heikinAshi' ? this.heikinAshiChain.advance(bar) : { bar, previous };
     this.baselineLevel?.setLastBar(plotted.bar);
     series.update(barStylePoint(appearance, plotted.bar, plotted.previous));
+  }
+
+  /**
+   * The colour the body of the bar at `index` is drawn in, or null while the style draws no up and down
+   * colours. For Heikin Ashi it is the drawn candle the chain holds at the cached bar's index, not the raw
+   * bar given.
+   */
+  bodyColor(index: number, bar: RenderBar, previous: RenderBar | undefined): string | null {
+    if (this.appearance.style !== 'heikinAshi') {
+      return barBodyColor(this.appearance, bar, previous);
+    }
+    const drawn = this.heikinAshiChain.at(index);
+    return barBodyColor(this.appearance, drawn.bar ?? bar, drawn.previous);
   }
 
   /** Applies the anchor series' price precision, which repaints every label a bar style writes. */

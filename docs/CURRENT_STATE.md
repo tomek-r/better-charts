@@ -320,12 +320,16 @@ The tree keeps no data window and no toolbar of its own (owner decision).
 The Indicators button beside the bar-type control opens a dialog titled "Indicators" with a
 search field (a case-insensitive part of the name or short name) and the list of indicator
 names; choosing one, or Enter for the first match, attaches it with its defaults and closes
-the dialog. TradingView's tabs and categories are left out (owner decision). The list holds
-Moving Average Simple (SMA 9 close), Bollinger Bands (BB 20 close 2: basis, upper and lower,
-with the band between them filled), Relative Strength Index (RSI 14 close, with dashed 70 and
-30 bands, a dotted 50 band and the background between 70 and 30) and MACD (MACD 12 26 close 9:
-a histogram coloured by sign and by whether it grew, the MACD and signal lines and a zero line).
-SMA and Bollinger Bands draw on the price pane; RSI and MACD each get a pane of their own under
+the dialog. TradingView's tabs and categories are left out (owner decision). The list is kept
+alphabetical by title and holds Bollinger Bands (BB 20 close 2: basis, upper and lower, with
+the band between them filled), MACD (MACD 12 26 close 9: a histogram coloured by sign and by
+whether it grew, the MACD and signal lines and a zero line), Moving Average Exponential (EMA 9
+close), Moving Average Simple (SMA 9 close), Relative Strength Index (RSI 14 close, with
+dashed 70 and 30 bands, a dotted 50 band and the background between 70 and 30) and Volume
+(Vol SMA 20: the bar's tick volume in columns coloured by whether the bar closed at or above
+its open, with a Volume MA line, SMA or EMA, that is off until switched on in the Style tab).
+The chart no longer draws volume by itself; volume shows through the Volume indicator.
+SMA, EMA and Bollinger Bands draw on the price pane; RSI, MACD and Volume each get a pane of their own under
 it, about a ninth of the height, which closes when the indicator is removed. A pane resized by
 dragging its separator keeps that height, relative to the price pane, with the saved indicator,
 and the chart restores it on load. Every value is
@@ -338,6 +342,11 @@ Attached indicators are saved per chart, account and symbol in the chart's setti
 (id, indicator id, the settings the user changed, and `hidden: true` while hidden), so they
 come back when that chart opens. An entry that does not read is dropped, and one this build
 does not know stays saved and draws nothing.
+
+The OHLC line writes the four values of the bar under the pointer, or of the last bar while the
+pointer is off the chart or over no bar, in that bar's body colour as it is drawn, following the
+bar style and its up and down colours; a style without them (Line, Line with markers, Step line,
+Area, Baseline, High-low) keeps the label colour.
 
 Under the OHLC line the legend lists one row per price-pane indicator: its short title, its input
 values and each plot's value at the crosshair bar, or at the last bar while the pointer is off the

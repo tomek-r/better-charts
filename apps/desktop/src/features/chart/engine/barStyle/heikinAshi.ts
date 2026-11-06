@@ -36,6 +36,12 @@ export class HeikinAshiChain {
     return this.chain;
   }
 
+  /** The Heikin Ashi bar of a cached bar's index and the one before it, as the last write left them. */
+  at(index: number): { bar: RenderBar | undefined; previous: RenderBar | undefined } {
+    const chain = this.chain;
+    return { bar: chain[index], previous: chain[index - 1] };
+  }
+
   /**
    * The Heikin Ashi bar of one live update with the Heikin Ashi bar before it: a bar past the chain's
    * last one extends the chain, any other replaces the last, so a tick never falls back to a raw bar.

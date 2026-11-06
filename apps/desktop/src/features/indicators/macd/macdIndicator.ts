@@ -8,11 +8,11 @@ import { emaAfter, emaValue, INITIAL_EMA_STATE, type EmaState } from '../emaStat
 import { SOURCE_INPUT } from '../indicatorInputs';
 import {
   booleanSetting,
+  colorSetting,
   levelSetting,
   linePlotSetting,
   numberSetting,
   sourceSetting,
-  stringSetting,
 } from '../indicatorSettingValues';
 
 export const FAST_LENGTH_INPUT = 'fastLength';
@@ -100,11 +100,6 @@ function histogramColor(
     return grew ? colors.aboveGrow : colors.aboveFall;
   }
   return grew ? colors.belowGrow : colors.belowFall;
-}
-
-/** A colour style's stored colour, or the colour that style starts from. */
-function colorSetting(settings: SettingValues, styleId: string, fallback: string): string {
-  return stringSetting(settings, settingStyleKey(styleId, 'color'), fallback);
 }
 
 /** The four column colours as the settings store them. */
