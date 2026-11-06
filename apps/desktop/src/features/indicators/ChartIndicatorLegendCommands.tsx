@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useChartResources } from '../chart/ChartWorkspaceProvider';
 import { useOpenIndicatorSettings } from './IndicatorSettingsProvider';
-import { useIndicatorCommands } from './useIndicatorCommands';
+import { useIndicatorRowCommands } from './useIndicatorCommands';
 
 /**
  * Hands the chart's indicator legend the app's row commands while it is mounted: the legend asks to
@@ -11,7 +11,7 @@ import { useIndicatorCommands } from './useIndicatorCommands';
  */
 export function ChartIndicatorLegendCommands() {
   const { chart } = useChartResources();
-  const { setHidden, remove, setPaneHeights, setLegendCollapsed } = useIndicatorCommands();
+  const { setHidden, remove, setPaneHeights, setLegendCollapsed } = useIndicatorRowCommands();
   const openSettings = useOpenIndicatorSettings();
 
   useEffect(() => {

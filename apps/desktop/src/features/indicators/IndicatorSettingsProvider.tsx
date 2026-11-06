@@ -15,7 +15,7 @@ import { ModalDialog, ModalDialogCloseButton } from '../../shared/ui/dialog/Moda
 import { useModalExit } from '../../shared/ui/dialog/useModalExit';
 import { useRevertUnlessSettled } from '../../shared/ui/dialog/useRevertUnlessSettled';
 import { findChartIndicatorPlugin, type RegisteredChartIndicatorPlugin } from './registry';
-import { useIndicatorCommands } from './useIndicatorCommands';
+import { useIndicatorSettingsCommands } from './useIndicatorCommands';
 
 /** What the app shares about indicator settings: the one command that opens them. */
 interface IndicatorSettingsContextValue {
@@ -53,7 +53,7 @@ type IndicatorSettingsSave = [points?: unknown, timeframeVisibility?: DrawingTim
  */
 function IndicatorSettingsDialog({ instanceId, onClose }: IndicatorSettingsDialogProps) {
   const { settings } = useChartSettings();
-  const commands = useIndicatorCommands();
+  const commands = useIndicatorSettingsCommands();
   const { backdropRef, closing, close } = useModalExit(onClose);
   const markSettled = useRevertUnlessSettled(commands.revertPreview);
   const saved = settings.indicators.find((entry) => entry.instanceId === instanceId);

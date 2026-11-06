@@ -10,7 +10,7 @@ import { IndicatorLineIcon } from '../indicators/IndicatorLineIcon';
 import { indicatorLegendTitle } from '../indicators/indicatorLegendTitle';
 import { useOpenIndicatorSettings } from '../indicators/IndicatorSettingsProvider';
 import type { RegisteredChartIndicatorPlugin } from '../indicators/registry';
-import { useIndicatorCommands } from '../indicators/useIndicatorCommands';
+import { useIndicatorRowCommands } from '../indicators/useIndicatorCommands';
 import { CommandButton } from '../../shared/ui/button/CommandButton';
 import { SettingsIcon } from '../../shared/ui/icons/SettingsIcon';
 import {
@@ -35,7 +35,7 @@ export interface ObjectTreeIndicatorRowProps {
  */
 export function ObjectTreeIndicatorRow({ saved, plugin }: ObjectTreeIndicatorRowProps) {
   const openIndicatorSettings = useOpenIndicatorSettings();
-  const commands = useIndicatorCommands();
+  const commands = useIndicatorRowCommands();
   const name = indicatorLegendTitle(saved.definitionId, resolveSettingValues(plugin, saved.settings));
   const hidden = saved.hidden === true;
 
