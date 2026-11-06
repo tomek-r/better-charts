@@ -1,6 +1,7 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useChartSettings } from '../chart/chartSettings/ChartSettingsProvider';
+import type { SavedIndicator } from '../chart/chartSettings/savedIndicators';
 import {
   DEFAULT_TIMEFRAME_VISIBILITY,
   type DrawingTimeframeVisibility,
@@ -11,8 +12,9 @@ import { resolveSettingValues } from '../chart/engine/settings/settingsSchema';
 import { useRequiredContext } from '../../shared/context/useRequiredContext';
 import { ModalDialog, ModalDialogCloseButton } from '../../shared/ui/dialog/ModalDialog';
 import { useModalExit } from '../../shared/ui/dialog/useModalExit';
-import { DrawingSettingsForm } from '../tools/drawingSettings/DrawingSettingsDialog';
-import { findChartIndicatorPlugin } from './registry';
+import { useRevertUnlessSettled } from '../../shared/ui/dialog/useRevertUnlessSettled';
+import { DrawingSettingsForm, type DrawingSettingsFormProps } from '../tools/drawingSettings/DrawingSettingsDialog';
+import { findChartIndicatorPlugin, type RegisteredChartIndicatorPlugin } from './registry';
 import { useIndicatorCommands } from './useIndicatorCommands';
 
 /** What the app shares about indicator settings: the one command that opens them. */
@@ -53,21 +55,24 @@ function IndicatorSettingsDialog({ instanceId, onClose }: IndicatorSettingsDialo
   const { settings } = useChartSettings();
   const commands = useIndicatorCommands();
   const { backdropRef, closing, close } = useModalExit(onClose);
+  const markSettled = useRevertUnlessSettled(commands.revertPreview);
   const saved = settings.indicators.find((entry) => entry.instanceId === instanceId);
   const plugin = saved === undefined ? undefined : findChartIndicatorPlugin(saved.definitionId);
-  if (saved === undefined || plugin === undefined) {
-    return null;
-  }
   const cancel = () => {
+    markSettled();
     commands.revertPreview();
     close();
   };
   const saveSettings = (values: SettingValues, ...[, timeframeVisibility]: IndicatorSettingsSave) => {
     commands.setSettings(instanceId, values, timeframeVisibility);
+    markSettled();
     close();
     return true;
   };
   const previewDraft = (values: SettingValues) => commands.previewSettings(instanceId, values);
+  if (saved === undefined || plugin === undefined) {
+    return null;
+  }
   return createPortal(
     <ModalDialog
       title={`${plugin.title} settings`}
@@ -77,17 +82,53 @@ function IndicatorSettingsDialog({ instanceId, onClose }: IndicatorSettingsDialo
       onDismiss={cancel}
       headerActions={<ModalDialogCloseButton label="Close indicator settings" onClick={cancel} />}
     >
-      <DrawingSettingsForm
-        settings={{ ...plugin, ...indicatorSettingsSchema(plugin), timeframeVisibility: 'editable' }}
-        initialValues={resolveSettingValues(indicatorSettingsSchema(plugin), saved.settings)}
-        initialTimeframeVisibility={saved.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY}
-        // A draft still resting must not reach the chart once the dialog is leaving: OK kept it, Cancel reverted.
-        onPreview={closing ? undefined : previewDraft}
+      <IndicatorSettingsFields
+        plugin={plugin}
+        saved={saved}
+        closing={closing}
+        onPreview={previewDraft}
         onSave={saveSettings}
         onCancel={cancel}
       />
     </ModalDialog>,
     document.body,
+  );
+}
+
+interface IndicatorSettingsFieldsProps {
+  readonly plugin: RegisteredChartIndicatorPlugin;
+  readonly saved: SavedIndicator;
+  readonly closing: boolean;
+  readonly onPreview: (values: SettingValues) => void;
+  readonly onSave: DrawingSettingsFormProps['onSave'];
+  readonly onCancel: () => void;
+}
+
+/**
+ * The form of one indicator's settings. It reads the values it starts from once, when it mounts, because a
+ * preview rewrites the saved list the dialog was handed them from: what the form edits against, and what it
+ * compares a draft with, stays the settings the dialog opened on.
+ */
+function IndicatorSettingsFields({
+  plugin,
+  saved,
+  closing,
+  onPreview,
+  onSave,
+  onCancel,
+}: IndicatorSettingsFieldsProps) {
+  const [initialValues] = useState(() => resolveSettingValues(indicatorSettingsSchema(plugin), saved.settings));
+  const [initialTimeframeVisibility] = useState(() => saved.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY);
+  return (
+    <DrawingSettingsForm
+      settings={{ ...plugin, ...indicatorSettingsSchema(plugin), timeframeVisibility: 'editable' }}
+      initialValues={initialValues}
+      initialTimeframeVisibility={initialTimeframeVisibility}
+      // A draft still resting must not reach the chart once the dialog is leaving: OK kept it, Cancel reverted.
+      onPreview={closing ? undefined : onPreview}
+      onSave={onSave}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -100,6 +141,7 @@ export interface IndicatorSettingsProviderProps {
  * chart and the object tree, so the tree opens a dialog the chart's settings keep in step.
  */
 export function IndicatorSettingsProvider({ children }: IndicatorSettingsProviderProps) {
+  const { settings } = useChartSettings();
   const [openInstanceId, setOpenInstanceId] = useState<string | null>(null);
 
   const openIndicatorSettings = useCallback((instanceId: string) => {
@@ -111,6 +153,14 @@ export function IndicatorSettingsProvider({ children }: IndicatorSettingsProvide
   const closeSettings = () => {
     setOpenInstanceId(null);
   };
+
+  // An indicator the user removed while its dialog was open leaves nothing to edit. Clearing the id here
+  // rather than in the dialog keeps that dialog shut when an instance of the same id comes back.
+  const openInstanceLeftSettings =
+    openInstanceId !== null && !settings.indicators.some((entry) => entry.instanceId === openInstanceId);
+  if (openInstanceLeftSettings) {
+    setOpenInstanceId(null);
+  }
 
   return (
     <IndicatorSettingsContext value={contextValue}>

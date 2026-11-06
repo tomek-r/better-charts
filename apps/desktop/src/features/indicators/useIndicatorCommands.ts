@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
-import { withIndicators } from '../chart/chartSettings/chartSettings';
+import { useEffect, useMemo, useRef } from 'react';
+import { withIndicators, type ChartSettings } from '../chart/chartSettings/chartSettings';
 import { useChartSettings } from '../chart/chartSettings/ChartSettingsProvider';
+import type { SavedIndicator } from '../chart/chartSettings/savedIndicators';
 import type { DrawingTimeframeVisibility } from '../chart/engine/drawings/timeframeVisibility';
 import type { IndicatorPaneHeight } from '../chart/engine/indicators/indicatorLayer';
 import type { SettingValues } from '../chart/engine/settings/settingInputs';
@@ -10,6 +11,9 @@ import {
   withIndicatorSettings,
   withoutIndicator,
 } from './savedIndicatorEdits';
+
+/** What one command does to the saved indicators: the list it should hold after the edit. */
+type IndicatorListEdit = (saved: readonly SavedIndicator[]) => readonly SavedIndicator[];
 
 /**
  * What the object tree does to the saved indicators: each command saves, except the previews, which only show,
@@ -37,28 +41,29 @@ export interface IndicatorCommands {
  */
 export function useIndicatorCommands(): IndicatorCommands {
   const { settings, keep, preview, revert } = useChartSettings();
-  return useMemo(
-    () => ({
-      setHidden: (instanceId, hidden) => {
-        keep(withIndicators(settings, withIndicatorHidden(settings.indicators, instanceId, hidden)));
-      },
-      setSettings: (instanceId, values, timeframeVisibility) => {
-        const edited = withIndicatorSettings(settings.indicators, instanceId, values, timeframeVisibility);
-        keep(withIndicators(settings, edited));
-      },
-      previewSettings: (instanceId, values) => {
-        preview(withIndicators(settings, withIndicatorSettings(settings.indicators, instanceId, values)));
-      },
-      revertPreview: () => {
-        revert();
-      },
-      remove: (instanceId) => {
-        keep(withIndicators(settings, withoutIndicator(settings.indicators, instanceId)));
-      },
-      setPaneHeights: (heights) => {
-        keep(withIndicators(settings, withIndicatorPaneHeights(settings.indicators, heights)));
-      },
-    }),
-    [settings, keep, preview, revert],
-  );
+  // The settings of the latest render, which a command reads when it is called rather than when it was made.
+  const latestSettings = useRef(settings);
+  useEffect(() => {
+    latestSettings.current = settings;
+  }, [settings]);
+
+  // The commands keep the identity of the chart's own saving commands, so a row that holds them is not
+  // re-registered with the legend on every settings change.
+  return useMemo<IndicatorCommands>(() => {
+    const editedSettings = (edit: IndicatorListEdit): ChartSettings => {
+      const current = latestSettings.current;
+      return withIndicators(current, edit(current.indicators));
+    };
+    return {
+      setHidden: (instanceId, hidden) =>
+        keep(editedSettings((saved) => withIndicatorHidden(saved, instanceId, hidden))),
+      setSettings: (instanceId, values, timeframeVisibility) =>
+        keep(editedSettings((saved) => withIndicatorSettings(saved, instanceId, values, timeframeVisibility))),
+      previewSettings: (instanceId, values) =>
+        preview(editedSettings((saved) => withIndicatorSettings(saved, instanceId, values))),
+      revertPreview: () => revert(),
+      remove: (instanceId) => keep(editedSettings((saved) => withoutIndicator(saved, instanceId))),
+      setPaneHeights: (heights) => keep(editedSettings((saved) => withIndicatorPaneHeights(saved, heights))),
+    };
+  }, [keep, preview, revert]);
 }

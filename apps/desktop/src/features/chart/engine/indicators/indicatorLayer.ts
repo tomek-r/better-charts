@@ -30,6 +30,7 @@ import {
   type IndicatorPlotSeries,
   type IndicatorPlotState,
 } from './indicatorPlotSeries';
+import { readOwnPaneScale, restoreOwnPaneScale } from './ownPaneScale';
 
 /** One horizontal level as the dev hook shows it. */
 export interface IndicatorLevelState {
@@ -196,8 +197,12 @@ export class IndicatorLayer {
     options: IndicatorShowOptions = DEFAULT_SHOW_OPTIONS,
   ): void {
     const heldPane = this.shown.get(id)?.ownPane ?? null;
+    const heldScale = heldPane === null ? null : readOwnPaneScale(heldPane);
     this.clear(id);
     this.draw(id, frame, this.paneToDrawIn(heldPane, pane, options.paneHeight), options);
+    if (heldPane !== null && heldScale !== null && this.shown.get(id)?.ownPane === heldPane) {
+      restoreOwnPaneScale(heldPane, heldScale);
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState, type SubmitEvent } from 'react';
+import { useState, type SubmitEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { ChartDrawingPoint } from '../../chart/engine/drawings/drawingRecord';
 import type { SettingValue, SettingValues } from '../../chart/engine/settings/settingInputs';
@@ -12,6 +12,7 @@ import {
 } from '../../chart/engine/settings/settingsSchema';
 import { ModalDialog, ModalDialogButton, ModalDialogCloseButton } from '../../../shared/ui/dialog/ModalDialog';
 import { useModalExit } from '../../../shared/ui/dialog/useModalExit';
+import { useRevertUnlessSettled } from '../../../shared/ui/dialog/useRevertUnlessSettled';
 import { SettingsTabs } from './SettingsTabs';
 import { buildSettingsTabs, COORDINATES_TAB_ID, type DrawingSettingsSchema } from './settingsTabModel';
 import { useCoordinateDraft } from './coordinates/useCoordinateDraft';
@@ -143,27 +144,18 @@ export function DrawingSettingsDialog({
   onClose,
 }: DrawingSettingsDialogProps) {
   const { backdropRef, closing, close } = useModalExit(onClose);
-  /** Whether the dialog leaves through OK or Cancel, which have already settled the drawing themselves. */
-  const settled = useRef(false);
-  const revertUnlessSettled = useEffectEvent(() => {
-    if (!settled.current) {
-      onRevert();
-    }
-  });
-  // A selection that moved off the drawing unmounts the dialog with no close at all, so an unmount that
-  // neither saved nor cancelled drops the preview and shows the stored settings again.
-  useEffect(() => revertUnlessSettled, []);
+  const markSettled = useRevertUnlessSettled(onRevert);
   const save: DrawingSettingsFormProps['onSave'] = (values, points, timeframeVisibility) => {
     // The tool's answer decides it: a refused anchor keeps the form open, a saved one lets it leave.
     if (!onSave(values, points, timeframeVisibility)) {
       return false;
     }
-    settled.current = true;
+    markSettled();
     close();
     return true;
   };
   const cancel = () => {
-    settled.current = true;
+    markSettled();
     onRevert();
     close();
   };

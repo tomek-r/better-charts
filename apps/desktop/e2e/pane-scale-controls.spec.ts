@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import type { IndicatorPlot } from '../src/features/chart/engine/indicators/indicatorFrame';
+import type { IndicatorFrame, IndicatorPlot } from '../src/features/chart/engine/indicators/indicatorFrame';
 import { DEMO_ID, frameOf, openChartTimes, showFrame } from './helpers/indicatorFrames';
 import { waitTwoAnimationFrames } from './helpers/animationFrames';
 import { failOnPageNoise } from './helpers/pageNoise';
@@ -170,6 +170,11 @@ function stepValueAt(barIndex: number, barCount: number): number {
   return STEP_VALUE_START + (span * barIndex) / Math.max(barCount - 1, 1);
 }
 
+/** The frame `plot` alone draws over `times`, with the whole history of the values above. */
+function stepFrame(plot: IndicatorPlot, times: readonly number[]): IndicatorFrame {
+  return frameOf([plot], times, (_plotIndex, barIndex) => stepValueAt(barIndex, times.length));
+}
+
 /** Fits pane 1 to its data when it opens unfitted: pressing `A` is the only way back to autoscale. */
 async function fitIndicatorPane(page: Page): Promise<void> {
   if ((await paneScaleAt(page, INDICATOR_PANE)).autoScale) {
@@ -181,16 +186,19 @@ async function fitIndicatorPane(page: Page): Promise<void> {
   await expect.poll(async () => (await paneScaleAt(page, INDICATOR_PANE)).autoScale).toBe(true);
 }
 
-/** Opens the app with `plot` alone in a pane of its own, drawn over values that all sit above zero. */
-async function openWithStepPlot(page: Page, plot: IndicatorPlot): Promise<void> {
+/**
+ * Opens the app with `plot` alone in a pane of its own, drawn over values that all sit above zero, and
+ * answers the bar times that history holds.
+ */
+async function openWithStepPlot(page: Page, plot: IndicatorPlot): Promise<readonly number[]> {
   const times = await openChartTimes(page);
-  const frame = frameOf([plot], times, (_plotIndex, barIndex) => stepValueAt(barIndex, times.length));
-  await showFrame(page, DEMO_ID, frame, 'own');
+  await showFrame(page, DEMO_ID, stepFrame(plot, times), 'own');
   await expect.poll(async () => page.evaluate(() => window.__chartTest!.paneCount())).toBe(2);
   // The row of the new pane is created from the panes' layout, which lands a frame after the pane does.
   await expect.poll(async () => page.locator('.price-scale-controls').count()).toBe(2);
   await waitTwoAnimationFrames(page);
   await fitIndicatorPane(page);
+  return times;
 }
 
 /** Waits until pane 1's lowest drawn price satisfies `accepts`, which a scale holding no range never does. */
@@ -253,6 +261,17 @@ test('the RSI row A and L change only the RSI pane', async ({ page }) => {
   const logButton = paneRow(page, INDICATOR_ROW).getByRole('button', { name: INDICATOR_LOG });
   await expectOnlyIndicatorPaneFlips(page, autoButton, (scale) => scale.autoScale);
   await expectOnlyIndicatorPaneFlips(page, logButton, (scale) => scale.logarithmic);
+});
+
+test('an A choice on an indicator pane survives a reload of its history', async ({ page }) => {
+  const times = await openWithStepPlot(page, STEP_PLOT);
+  await hoverAxis(page, await chartLayout(page), 'indicator');
+  const autoButton = paneRow(page, INDICATOR_ROW).getByRole('button', { name: INDICATOR_AUTO });
+  await expectOnlyIndicatorPaneFlips(page, autoButton, (scale) => scale.autoScale);
+  const chosen = (await paneScaleAt(page, INDICATOR_PANE)).autoScale;
+  // A reload draws the whole frame again, on the pane the indicator already holds.
+  await showFrame(page, DEMO_ID, stepFrame(STEP_PLOT, times), 'own');
+  await expect.poll(async () => (await paneScaleAt(page, INDICATOR_PANE)).autoScale).toBe(chosen);
 });
 
 test('the MACD pane takes a logarithmic scale without page errors', async ({ page }) => {

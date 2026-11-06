@@ -3,12 +3,13 @@ import type { IChartApi } from 'lightweight-charts';
 /**
  * Watches the chart host and every pane element for size changes: a row is placed from that geometry,
  * so a pane the chart has just laid out or resized would otherwise keep its row beside the wrong axis.
- * The panes' elements are new whenever the pane count changes, so they are re-observed then. However
- * many elements change, the layout callback runs once, in the next frame.
+ * A pane the chart replaces hands out a new element, so the panes are compared by identity and re-observed
+ * whenever one of them changed, however many panes the chart has. Whatever changed, the layout callback
+ * runs once, in the next frame.
  */
 export class PaneLayoutWatcher {
   private readonly resizeObserver: ResizeObserver;
-  private paneCount = 0;
+  private observedPanes: readonly HTMLElement[] = [];
   private frame = 0;
 
   constructor(
@@ -20,18 +21,18 @@ export class PaneLayoutWatcher {
     this.resizeObserver.observe(host);
   }
 
-  /** Re-observes the host and the panes after the pane count changed; unchanged panes are left alone. */
-  watchPanes(paneCount: number): void {
-    if (paneCount === this.paneCount) {
-      return;
-    }
+  /** Re-observes the host and the panes when the chart replaced one of them; an unchanged set is left alone. */
+  watchPanes(): void {
     const elements = this.paneElements();
-    // A pane whose DOM the chart has not built yet is picked up by a later call, so the count is kept
-    // unchanged until every pane has one.
-    if (elements.length !== paneCount) {
+    // A pane whose DOM the chart has not built yet is picked up by a later call, so nothing is re-observed
+    // until every pane has an element.
+    if (elements === undefined) {
       return;
     }
-    this.paneCount = paneCount;
+    if (sameElements(elements, this.observedPanes)) {
+      return;
+    }
+    this.observedPanes = elements;
     this.resizeObserver.disconnect();
     this.resizeObserver.observe(this.host);
     for (const element of elements) {
@@ -45,9 +46,17 @@ export class PaneLayoutWatcher {
     this.resizeObserver.disconnect();
   }
 
-  private paneElements(): HTMLElement[] {
-    const elements = this.chart.panes().map((pane) => pane.getHTMLElement());
-    return elements.filter((element): element is HTMLElement => element !== null);
+  /** Every pane's element, or undefined while the chart has not built one of them yet. */
+  private paneElements(): HTMLElement[] | undefined {
+    const elements: HTMLElement[] = [];
+    for (const pane of this.chart.panes()) {
+      const element = pane.getHTMLElement();
+      if (element === null) {
+        return undefined;
+      }
+      elements.push(element);
+    }
+    return elements;
   }
 
   private readonly requestLayout = (): void => {
@@ -59,4 +68,8 @@ export class PaneLayoutWatcher {
       this.onLayout();
     });
   };
+}
+
+function sameElements(left: readonly HTMLElement[], right: readonly HTMLElement[]): boolean {
+  return left.length === right.length && left.every((element, index) => element === right[index]);
 }

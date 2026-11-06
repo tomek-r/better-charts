@@ -204,7 +204,7 @@ export class PriceScaleController {
     while (this.indicatorRows.length < extraPanes) {
       this.indicatorRows.push(this.createIndicatorRow(this.indicatorRows.length + 1));
     }
-    this.layout.watchPanes(extraPanes + 1);
+    this.layout.watchPanes();
   }
 
   private createIndicatorRow(paneIndex: number): PaneScaleRow {
