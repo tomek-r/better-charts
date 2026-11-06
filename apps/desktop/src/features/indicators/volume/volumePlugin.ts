@@ -1,17 +1,21 @@
 import type { SettingStyleColor } from '../../chart/engine/settings/settingStyles';
 import type { ChartIndicatorPlugin } from '../chartIndicatorPlugin';
 import { lineStyle } from '../indicatorInputs';
+import { plotTypeStyle, priceLineStyle } from '../plotTypes';
 import {
   DEFAULT_FALLING_COLOR,
   DEFAULT_GROWING_COLOR,
   DEFAULT_MA_COLOR,
   DEFAULT_MA_LENGTH,
   DEFAULT_MA_TYPE,
+  DEFAULT_PLOT_TYPE,
   FALLING_STYLE,
   GROWING_STYLE,
   MA_LENGTH_INPUT,
   MA_STYLE,
   MA_TYPE_INPUT,
+  PLOT_TYPE_STYLE,
+  PRICE_LINE_STYLE,
   VOLUME_STYLE,
   VolumeIndicator,
 } from './volumeIndicator';
@@ -60,6 +64,8 @@ export const volumePlugin = {
   ],
   styles: [
     { kind: 'toggle', id: VOLUME_STYLE, title: 'Volume', defaults: { visible: true } },
+    plotTypeStyle(PLOT_TYPE_STYLE, { defaultType: DEFAULT_PLOT_TYPE, parentId: VOLUME_STYLE }),
+    priceLineStyle(PRICE_LINE_STYLE, VOLUME_STYLE),
     volumeColorStyle(GROWING_STYLE, 'Growing', DEFAULT_GROWING_COLOR),
     volumeColorStyle(FALLING_STYLE, 'Falling', DEFAULT_FALLING_COLOR),
     volumeAverageStyle(),

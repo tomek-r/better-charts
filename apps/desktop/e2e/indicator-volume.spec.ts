@@ -4,6 +4,7 @@ import type { RenderBar } from '../src/features/chart/engine/bars/renderBar';
 import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
 import { settingStyleKey } from '../src/features/chart/engine/settings/settingStyles';
 import { indicatorLegendTitle } from '../src/features/indicators/indicatorLegendTitle';
+import { PLOT_TYPES, plotDrawingOf } from '../src/features/indicators/plotTypes';
 import { findChartIndicatorPlugin } from '../src/features/indicators/registry';
 import { EMA_TYPE, SMA_TYPE } from '../src/features/indicators/volume/volumeAverage';
 import {
@@ -12,6 +13,8 @@ import {
   MA_LENGTH_INPUT,
   MA_STYLE,
   MA_TYPE_INPUT,
+  PLOT_TYPE_STYLE,
+  PRICE_LINE_STYLE,
   VOLUME_STYLE,
   VolumeIndicator,
 } from '../src/features/indicators/volume/volumeIndicator';
@@ -22,12 +25,29 @@ const DEFAULT_SETTINGS = resolveSettingValues(volumePlugin, {});
 const DEFAULT_PLOT = {
   title: 'Volume',
   style: 'histogram',
+  gaps: 'break',
   color: '#08998180',
   lineWidth: 1,
   visible: true,
+  priceLine: false,
 };
 const GROWING_COLUMN = ['#08998180'];
 const FALLING_COLUMN = ['#F2364580'];
+
+/** Every Plot type Volume offers, with the style and gap behaviour its stored value resolves to. */
+const PLOT_TYPE_CASES = [
+  { value: 'line', style: 'line', gaps: 'connect' },
+  { value: 'lineBreaks', style: 'line', gaps: 'break' },
+  { value: 'step', style: 'stepline', gaps: 'connect' },
+  { value: 'stepBreaks', style: 'stepline', gaps: 'break' },
+  { value: 'stepDiamonds', style: 'steplineDiamonds', gaps: 'connect' },
+  { value: 'histogram', style: 'stems', gaps: 'break' },
+  { value: 'cross', style: 'crosses', gaps: 'break' },
+  { value: 'area', style: 'area', gaps: 'connect' },
+  { value: 'areaBreaks', style: 'area', gaps: 'break' },
+  { value: 'columns', style: 'histogram', gaps: 'break' },
+  { value: 'circles', style: 'circles', gaps: 'break' },
+] as const;
 
 const MA_LENGTH = 3;
 const MA_COLOR = '#2196F3';
@@ -69,6 +89,47 @@ test('the Volume histogram starts in the style defaults', () => {
   const frame = new VolumeIndicator().load([GROWING_BAR], DEFAULT_SETTINGS);
 
   expect(frame.plots).toEqual([DEFAULT_PLOT]);
+});
+
+test('the Plot type list offers eleven ways to draw the volume plot, in the order it shows them', () => {
+  const values = PLOT_TYPES.map((plotType) => plotType.value);
+
+  expect(values).toEqual(PLOT_TYPE_CASES.map((plotType) => plotType.value));
+});
+
+test('a plot with its own style ids and a line default draws from settings alone, with no Volume key', () => {
+  const drawing = plotDrawingOf({}, 'otherPlotType', 'otherPriceLine', 'line');
+
+  expect(drawing).toEqual({ style: 'line', gaps: 'connect', priceLine: false });
+});
+
+for (const { value, style, gaps } of PLOT_TYPE_CASES) {
+  test(`the ${value} Plot type draws a ${style} plot with ${gaps} gaps`, () => {
+    const settings = resolveSettingValues(volumePlugin, { [PLOT_TYPE_STYLE]: value });
+    const frame = new VolumeIndicator().load([GROWING_BAR], settings);
+
+    expect(frame.plots[0]).toMatchObject({ title: 'Volume', style, gaps });
+  });
+}
+
+test('the default Plot type is Columns, drawing columns that break at a missing value', () => {
+  const frame = new VolumeIndicator().load([GROWING_BAR], DEFAULT_SETTINGS);
+
+  expect(frame.plots[0]).toMatchObject({ style: 'histogram', gaps: 'break' });
+});
+
+test('a stored Plot type the list does not know reads as the Columns default', () => {
+  const frame = new VolumeIndicator().load([GROWING_BAR], { [PLOT_TYPE_STYLE]: 'sausages' });
+
+  expect(frame.plots).toEqual([DEFAULT_PLOT]);
+});
+
+test('the Price line switch reaches the plot', () => {
+  const settings = resolveSettingValues(volumePlugin, { [settingStyleKey(PRICE_LINE_STYLE, 'visible')]: true });
+
+  const frame = new VolumeIndicator().load([GROWING_BAR], settings);
+
+  expect(frame.plots[0]).toMatchObject({ priceLine: true });
 });
 
 test('the stored growing and falling colours reach the columns', () => {
