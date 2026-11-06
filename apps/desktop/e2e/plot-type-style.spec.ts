@@ -6,6 +6,7 @@ import {
   settingStyleKey,
 } from '../src/features/chart/engine/settings/settingStyles';
 import { PLOT_TYPES, plotTypeStyle } from '../src/features/indicators/plotTypes';
+import { plotTypeGlyph } from '../src/features/tools/drawingSettings/style/plotTypeIcons';
 import { drawnIndicators } from './helpers/indicatorFrames';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { openWithSavedIndicators } from './helpers/savedIndicators';
@@ -21,6 +22,9 @@ const PLOT_TYPE_ID = 'plotTypeId';
 const PRICE_LINE_ID = 'priceLineId';
 const DEFAULT_TYPE = 'columns';
 const UNKNOWN_TYPE = 'sausages';
+
+/** The stored value of the plain line, the icon every stored value no glyph names falls back to. */
+const LINE_TYPE = 'line';
 
 /** The style a plot type shares a row with, when it names one. */
 const INLINE_ROW_ID = 'growingId';
@@ -43,6 +47,7 @@ const CANCEL_LABEL = 'Cancel';
 const PLOT_TYPE_LABEL = 'Plot type';
 const PRICE_LINE_LABEL = 'Price line';
 const COLUMNS_LABEL = 'Columns';
+const CIRCLES_LABEL = 'Circles';
 const LINE_LABEL = 'Line';
 
 /** The Style tab's rows and their titles, and the style whose row Volume draws the Plot type button on. */
@@ -124,6 +129,13 @@ test.describe('plot type style', () => {
 
     expect(style.inlineWithId).toBe(INLINE_ROW_ID);
   });
+
+  test('every plot type in the list has an icon of its own', () => {
+    const glyphs = PLOT_TYPES.map((plotType) => plotTypeGlyph(plotType.value));
+
+    expect(new Set(glyphs).size).toBe(PLOT_TYPES.length);
+    expect(plotTypeGlyph(UNKNOWN_TYPE)).toBe(plotTypeGlyph(LINE_TYPE));
+  });
 });
 
 test.describe('plot type menu', () => {
@@ -160,6 +172,19 @@ test.describe('plot type menu', () => {
     await expect(menu.locator(MENU_ROW_SELECTOR)).toHaveText([PRICE_LINE_LABEL, ...PLOT_TYPE_NAMES]);
     await expect(menu.getByRole('menuitemcheckbox')).toHaveAccessibleName(PRICE_LINE_LABEL);
     await expect(menu.locator(CHECKED_TYPE_SELECTOR)).toHaveText([COLUMNS_LABEL]);
+  });
+
+  test('Home and End move the focus to the Price line switch and to the last type', async ({ page }) => {
+    const dialog = await openVolumeStyleTab(page);
+    const menu = await openPlotTypeMenu(page, dialog);
+
+    await page.keyboard.press('Home');
+
+    await expect(menu.getByRole('menuitemcheckbox', { name: PRICE_LINE_LABEL })).toBeFocused();
+
+    await page.keyboard.press('End');
+
+    await expect(menu.getByRole('menuitemradio', { name: CIRCLES_LABEL, exact: true })).toBeFocused();
   });
 
   test('choosing Line closes the menu, focuses the button and previews the line', async ({ page }) => {

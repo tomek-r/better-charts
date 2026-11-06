@@ -6,6 +6,7 @@ import {
   type SettingStyleChoiceOption,
   type SettingStylePlotType,
 } from '../../../chart/engine/settings/settingStyles';
+import { focusCheckedRow, handleMenuKey } from '../../../../shared/ui/popup/popupMenuKeys';
 import { useOutsidePress } from '../../../../shared/ui/popup/useOutsidePress';
 import { usePopupPlacement } from '../../../../shared/ui/popup/usePopupPlacement';
 import { stringText } from '../inputs/settingInputFields';
@@ -15,18 +16,6 @@ import { plotTypeIcon } from './plotTypeIcons';
 /** The switch every plot offers above its list of types: whether a line is drawn at its last value. */
 const PRICE_LINE_LABEL = 'Price line';
 
-/** The rows the arrow keys walk, in the order the menu draws them: the switch, then every plot type. */
-const ROW_SELECTOR = '[role="menuitemradio"], [role="menuitemcheckbox"]';
-
-/** The type in use, which takes the focus as the menu opens. */
-const CHECKED_ROW_SELECTOR = '[role="menuitemradio"][aria-checked="true"]';
-
-/** How far one key moves the focus down the menu's rows. */
-const ROW_STEPS = new Map<string, number>([
-  ['ArrowDown', 1],
-  ['ArrowUp', -1],
-]);
-
 /** The entry `value` names, or nothing when the list has no such entry. */
 function optionNamed(
   options: readonly SettingStyleChoiceOption[],
@@ -35,28 +24,16 @@ function optionNamed(
   return options.find((option) => option.value === value);
 }
 
-/** Moves the focus one row down or up the menu, wrapping at its ends. */
-function moveRowFocus(menu: HTMLElement, step: number): void {
-  const rows = Array.from(menu.querySelectorAll<HTMLElement>(ROW_SELECTOR));
-  const focused = rows.findIndex((row) => row === document.activeElement);
-  rows.at(focused < 0 ? 0 : (focused + step + rows.length) % rows.length)?.focus();
-}
-
-/** Runs the key the menu answers to: Escape closes it alone, the arrows walk its rows. */
-function handleMenuKey(event: KeyboardEvent<HTMLDivElement>, menu: HTMLElement | null, onClose: () => void): void {
+/** Runs the key the menu answers to, keeping Escape in it so the settings dialog under it keeps its own. */
+function handlePlotTypeMenuKey(
+  event: KeyboardEvent<HTMLDivElement>,
+  menu: HTMLElement | null,
+  onClose: () => void,
+): void {
   if (event.key === 'Escape') {
-    // The menu stops the key here: the settings dialog it hangs over keeps its own Escape.
-    event.preventDefault();
     event.stopPropagation();
-    onClose();
-    return;
   }
-  const step = ROW_STEPS.get(event.key);
-  if (step === undefined || menu === null) {
-    return;
-  }
-  event.preventDefault();
-  moveRowFocus(menu, step);
+  handleMenuKey(event, menu, onClose);
 }
 
 /** One plot type of the list: its icon and its name; the one in use is shown by its highlight alone. */
@@ -123,9 +100,9 @@ function PlotTypeMenu({ definition, values, onChange, anchorRef, onChoose, onClo
   const menuRef = useRef<HTMLDivElement>(null);
   usePopupPlacement(anchorRef, menuRef);
   useOutsidePress(menuRef, anchorRef, onDismiss);
-  // The focus lands on the type in use as the menu opens, so the arrow keys walk the list straight away.
+  // The focus lands on the type in use as the menu opens, so the keys walk the list straight away.
   useLayoutEffect(() => {
-    menuRef.current?.querySelector<HTMLElement>(CHECKED_ROW_SELECTOR)?.focus();
+    focusCheckedRow(menuRef.current);
   }, []);
   const priceLineKey = settingStyleKey(definition.priceLineId, 'visible');
   const priceLineOn = values[priceLineKey] === true;
@@ -136,7 +113,7 @@ function PlotTypeMenu({ definition, values, onChange, anchorRef, onChoose, onClo
       className="popup-surface drawing-settings-plot-type-menu"
       role="menu"
       aria-label={definition.title}
-      onKeyDown={(event) => handleMenuKey(event, menuRef.current, onClose)}
+      onKeyDown={(event) => handlePlotTypeMenuKey(event, menuRef.current, onClose)}
     >
       <PriceLineRow checked={priceLineOn} onToggle={() => onChange(priceLineKey, !priceLineOn)} />
       <div role="separator" className="drawing-settings-plot-type-separator" />

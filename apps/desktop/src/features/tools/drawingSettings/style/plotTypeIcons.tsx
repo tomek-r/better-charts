@@ -129,9 +129,14 @@ const PLOT_TYPE_GLYPHS: Readonly<Record<string, () => ReactNode>> = {
   circles: CirclesGlyph,
 };
 
-/** The icon of one plot type, and a plain line for a stored value no glyph names. */
+/** The glyph of one plot type, and the plain line for a stored value no glyph names. */
+export function plotTypeGlyph(value: string): () => ReactNode {
+  return PLOT_TYPE_GLYPHS[value] ?? LineGlyph;
+}
+
+/** The icon of one plot type. */
 export function plotTypeIcon(value: string): ReactNode {
-  const Glyph = PLOT_TYPE_GLYPHS[value] ?? LineGlyph;
+  const Glyph = plotTypeGlyph(value);
   return (
     <OutlineIcon className="drawing-settings-plot-type-icon">
       <Glyph />

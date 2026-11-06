@@ -7,10 +7,10 @@ import type {
 } from '../../chart/engine/indicators/indicatorFrame';
 import { sourceValue } from '../../chart/engine/indicators/indicatorSource';
 import type { SettingInputSource, SettingValues } from '../../chart/engine/settings/settingInputs';
-import { settingStyleKey } from '../../chart/engine/settings/settingStyles';
+import { backgroundFill } from '../backgroundFill';
 import { BarByBarIndicator } from '../barByBarIndicator';
 import { resolveWindowSettings, type WindowSettings } from '../closedValueWindow';
-import { booleanSetting, levelSetting, linePlotSetting, stringSetting } from '../indicatorSettingValues';
+import { levelSetting, linePlotSetting } from '../indicatorSettingValues';
 
 export const PLOT_STYLE = 'plot';
 export const UPPER_BAND_STYLE = 'upperBand';
@@ -126,16 +126,13 @@ function resolveLevels(settings: SettingValues): IndicatorLevel[] {
 
 /** The band between the upper and the lower band, unless the Background style switches it off. */
 function resolveFills(settings: SettingValues): IndicatorFill[] {
-  if (!booleanSetting(settings, settingStyleKey(BACKGROUND_STYLE, 'visible'), true)) {
-    return [];
-  }
-  return [
-    {
-      from: { kind: 'level', index: UPPER_LEVEL_INDEX },
-      to: { kind: 'level', index: LOWER_LEVEL_INDEX },
-      color: stringSetting(settings, settingStyleKey(BACKGROUND_STYLE, 'color'), DEFAULT_BACKGROUND_COLOR),
-    },
-  ];
+  return backgroundFill(
+    settings,
+    BACKGROUND_STYLE,
+    DEFAULT_BACKGROUND_COLOR,
+    { kind: 'level', index: UPPER_LEVEL_INDEX },
+    { kind: 'level', index: LOWER_LEVEL_INDEX },
+  );
 }
 
 /**

@@ -1,7 +1,6 @@
-import type { SettingInputInt } from '../../chart/engine/settings/settingInputs';
 import type { SettingStyleColor } from '../../chart/engine/settings/settingStyles';
 import type { ChartIndicatorPlugin } from '../chartIndicatorPlugin';
-import { lineStyle, sourceInput } from '../indicatorInputs';
+import { lengthInput, lineStyle, sourceInput } from '../indicatorInputs';
 import {
   DEFAULT_FAST_LENGTH,
   DEFAULT_HISTOGRAM_ABOVE_FALL_COLOR,
@@ -28,15 +27,8 @@ import {
   ZERO_LINE_STYLE,
 } from './macdIndicator';
 
-const LENGTH_MIN = 1;
-const LENGTH_STEP = 1;
-const LENGTH_MAX = 5000;
+/** The signal line smooths over a short window, so its bound is 50 and not the shared 5000. */
 const SIGNAL_LENGTH_MAX = 50;
-
-/** The `int` input one MACD length is asked for, the two line lengths sharing the bounds of a window. */
-function macdLengthInput(id: string, title: string, defaultValue: number, maxValue: number): SettingInputInt {
-  return { kind: 'int', id, title, defaultValue, minValue: LENGTH_MIN, maxValue, step: LENGTH_STEP };
-}
 
 /** One histogram column colour, rendered under the histogram's toggle. */
 function histogramColorStyle(id: string, title: string, color: string): SettingStyleColor {
@@ -49,10 +41,14 @@ export const macdPlugin = {
   shortTitle: 'MACD',
   pane: 'own',
   inputs: [
-    macdLengthInput(FAST_LENGTH_INPUT, 'Fast Length', DEFAULT_FAST_LENGTH, LENGTH_MAX),
-    macdLengthInput(SLOW_LENGTH_INPUT, 'Slow Length', DEFAULT_SLOW_LENGTH, LENGTH_MAX),
+    lengthInput(DEFAULT_FAST_LENGTH, { id: FAST_LENGTH_INPUT, title: 'Fast Length' }),
+    lengthInput(DEFAULT_SLOW_LENGTH, { id: SLOW_LENGTH_INPUT, title: 'Slow Length' }),
     sourceInput(DEFAULT_SOURCE),
-    macdLengthInput(SIGNAL_LENGTH_INPUT, 'Signal Smoothing', DEFAULT_SIGNAL_LENGTH, SIGNAL_LENGTH_MAX),
+    lengthInput(DEFAULT_SIGNAL_LENGTH, {
+      id: SIGNAL_LENGTH_INPUT,
+      title: 'Signal Smoothing',
+      maxValue: SIGNAL_LENGTH_MAX,
+    }),
   ],
   styles: [
     { kind: 'toggle', id: HISTOGRAM_STYLE, title: 'Histogram', defaults: { visible: true } },

@@ -13,18 +13,25 @@ export const SOURCE_INPUT = 'source';
 const LENGTH_MIN = 1;
 const LENGTH_MAX = 5000;
 const LENGTH_STEP = 1;
+const LENGTH_TITLE = 'Length';
 const LINE_WIDTH = 1;
 const LINE_DASH: SettingStyleLineStyle = 'solid';
 
-/** The `int` input a window indicator asks for its length, starting at `defaultValue`. */
-export function lengthInput(defaultValue: number): SettingInputInt {
+/**
+ * The `int` input a window indicator asks for its length, starting at `defaultValue` and storing the
+ * shared `length` key unless `options` names another id, title or upper bound.
+ */
+export function lengthInput(
+  defaultValue: number,
+  options: { id?: string; title?: string; maxValue?: number } = {},
+): SettingInputInt {
   return {
     kind: 'int',
-    id: LENGTH_INPUT,
-    title: 'Length',
+    id: options.id ?? LENGTH_INPUT,
+    title: options.title ?? LENGTH_TITLE,
     defaultValue,
     minValue: LENGTH_MIN,
-    maxValue: LENGTH_MAX,
+    maxValue: options.maxValue ?? LENGTH_MAX,
     step: LENGTH_STEP,
   };
 }

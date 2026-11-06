@@ -2,10 +2,10 @@ import type { RenderBar } from '../../chart/engine/bars/renderBar';
 import type { IndicatorFill, IndicatorFrame, IndicatorPlot } from '../../chart/engine/indicators/indicatorFrame';
 import { sourceValue } from '../../chart/engine/indicators/indicatorSource';
 import type { SettingInputSource, SettingValues } from '../../chart/engine/settings/settingInputs';
-import { settingStyleKey } from '../../chart/engine/settings/settingStyles';
+import { backgroundFill } from '../backgroundFill';
 import { BarByBarIndicator } from '../barByBarIndicator';
 import { ClosedValueWindow, resolveWindowSettings, type WindowSettings } from '../closedValueWindow';
-import { booleanSetting, linePlotSetting, numberSetting, stringSetting } from '../indicatorSettingValues';
+import { linePlotSetting, numberSetting } from '../indicatorSettingValues';
 
 export { LENGTH_INPUT, SOURCE_INPUT } from '../indicatorInputs';
 export const MULT_INPUT = 'mult';
@@ -39,16 +39,13 @@ function resolvePlots(settings: SettingValues): readonly IndicatorPlot[] {
 
 /** The band between the upper and the lower plot, unless the Background style switches it off. */
 function resolveFills(settings: SettingValues): readonly IndicatorFill[] {
-  if (!booleanSetting(settings, settingStyleKey(BACKGROUND_STYLE, 'visible'), true)) {
-    return [];
-  }
-  return [
-    {
-      from: { kind: 'plot', index: UPPER_PLOT_INDEX },
-      to: { kind: 'plot', index: LOWER_PLOT_INDEX },
-      color: stringSetting(settings, settingStyleKey(BACKGROUND_STYLE, 'color'), DEFAULT_BACKGROUND_COLOR),
-    },
-  ];
+  return backgroundFill(
+    settings,
+    BACKGROUND_STYLE,
+    DEFAULT_BACKGROUND_COLOR,
+    { kind: 'plot', index: UPPER_PLOT_INDEX },
+    { kind: 'plot', index: LOWER_PLOT_INDEX },
+  );
 }
 
 function meanOf(values: readonly number[]): number {

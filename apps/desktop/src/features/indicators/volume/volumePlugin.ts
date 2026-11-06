@@ -2,7 +2,7 @@ import type { SettingValues } from '../../chart/engine/settings/settingInputs';
 import { settingStyleKey, type SettingStyleColor } from '../../chart/engine/settings/settingStyles';
 import type { ChartIndicatorPlugin } from '../chartIndicatorPlugin';
 import { booleanSetting } from '../indicatorSettingValues';
-import { lineStyle } from '../indicatorInputs';
+import { lengthInput, lineStyle } from '../indicatorInputs';
 import { plotTypeStyle } from '../plotTypes';
 import {
   DEFAULT_FALLING_COLOR,
@@ -23,9 +23,6 @@ import {
 } from './volumeIndicator';
 import { EMA_TYPE, SMA_TYPE } from './volumeAverage';
 
-const MA_LENGTH_MIN = 1;
-const MA_LENGTH_MAX = 5000;
-const MA_LENGTH_STEP = 1;
 /** The MA line is off until the user switches it on in the Style tab. */
 const MA_LINE_VISIBLE = false;
 /** The MA's two inputs, in the order the legend names them. */
@@ -68,15 +65,7 @@ export const volumePlugin = {
         { value: EMA_TYPE, title: EMA_TYPE },
       ],
     },
-    {
-      kind: 'int',
-      id: MA_LENGTH_INPUT,
-      title: 'MA Length',
-      defaultValue: DEFAULT_MA_LENGTH,
-      minValue: MA_LENGTH_MIN,
-      maxValue: MA_LENGTH_MAX,
-      step: MA_LENGTH_STEP,
-    },
+    lengthInput(DEFAULT_MA_LENGTH, { id: MA_LENGTH_INPUT, title: 'MA Length' }),
   ],
   styles: [
     { kind: 'toggle', id: VOLUME_STYLE, title: 'Volume', defaults: { visible: true } },

@@ -3,9 +3,10 @@ import type { IndicatorFrame, IndicatorPlot } from '../../chart/engine/indicator
 import type { SettingValues } from '../../chart/engine/settings/settingInputs';
 import { settingStyleKey } from '../../chart/engine/settings/settingStyles';
 import { BarByBarIndicator } from '../barByBarIndicator';
+import type { ClosedAverage } from '../closedAverage';
 import { booleanSetting, colorSetting, linePlotSetting, numberSetting, stringSetting } from '../indicatorSettingValues';
 import { plotDrawingOf } from '../plotTypes';
-import { SMA_TYPE, volumeAverageOf, type VolumeAverage } from './volumeAverage';
+import { SMA_TYPE, volumeAverageOf } from './volumeAverage';
 
 export const VOLUME_STYLE = 'volume';
 export const GROWING_STYLE = 'volumeGrowing';
@@ -60,7 +61,7 @@ function averagePlot(settings: SettingValues): IndicatorPlot {
 export class VolumeIndicator extends BarByBarIndicator {
   private growingColor = DEFAULT_GROWING_COLOR;
   private fallingColor = DEFAULT_FALLING_COLOR;
-  private average: VolumeAverage = volumeAverageOf(DEFAULT_MA_TYPE, DEFAULT_MA_LENGTH);
+  private average: ClosedAverage = volumeAverageOf(DEFAULT_MA_TYPE, DEFAULT_MA_LENGTH);
   private averageVisible = DEFAULT_MA_VISIBLE;
 
   protected reset(settings: SettingValues): void {
