@@ -14,7 +14,7 @@ import type { SettingStyleFieldProps } from './settingStyleFieldProps';
 import { plotTypeIcon } from './plotTypeIcons';
 
 /** The switch every plot offers above its list of types: whether a line is drawn at its last value. */
-const PRICE_LINE_LABEL = 'Price line';
+const CURRENT_VALUE_LINE_LABEL = 'Current value line';
 
 /** The entry `value` names, or nothing when the list has no such entry. */
 function optionNamed(
@@ -70,7 +70,7 @@ function PriceLineRow({ checked, onToggle }: { readonly checked: boolean; readon
       className="popup-menu-row drawing-settings-plot-type-row"
       onClick={onToggle}
     >
-      <span className="drawing-settings-plot-type-label">{PRICE_LINE_LABEL}</span>
+      <span className="drawing-settings-plot-type-label">{CURRENT_VALUE_LINE_LABEL}</span>
       <span className="drawing-settings-plot-type-switch" aria-hidden="true">
         <span />
       </span>
@@ -93,8 +93,8 @@ interface PlotTypeMenuProps {
 }
 
 /**
- * The open list: the Price line switch, a separator, then every plot type. It is portalled to the page body
- * so the dialog's scrolling panel cannot clip it, and the switch leaves it open while a type closes it.
+ * The open list: the Current value line switch, a separator, then every plot type. It is portalled to the page
+ * body so the dialog's scrolling panel cannot clip it, and the switch leaves it open while a type closes it.
  */
 function PlotTypeMenu({ definition, values, onChange, anchorRef, onChoose, onClose, onDismiss }: PlotTypeMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);

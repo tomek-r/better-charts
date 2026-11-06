@@ -32,11 +32,11 @@ export const PLOT_TYPES: readonly PlotType[] = [
 ];
 
 const PLOT_TYPE_TITLE = 'Plot type';
-/** No plot draws a line at its last value until the user turns its Price line switch on. */
+/** No plot draws a line at its last value until the user turns its Current value line switch on. */
 const PRICE_LINE_VISIBLE = false;
 
 /**
- * The Plot type style an indicator plot offers: its list of types and its Price line switch, titled
+ * The Plot type style an indicator plot offers: its list of types and its Current value line switch, titled
  * 'Plot type' unless the indicator titles it otherwise. `priceLineId` names the switch's stored style, and
  * `inlineWithId` the style whose row draws the button, beside that row's own controls.
  */
@@ -78,7 +78,7 @@ function plotTypeOf(settings: SettingValues, styleId: string, defaultType: strin
 }
 
 /**
- * The plot fields the Plot type and Price line styles describe: how the plot is drawn, what it does at
+ * The plot fields the Plot type and Current value line styles describe: how the plot is drawn, what it does at
  * a bar without a value, and whether it draws a line at its last value. A stored type the list does not
  * know reads as `defaultType`.
  */

@@ -344,13 +344,13 @@ an indicator's state. Indicator values are display-only and never reach order, a
 journal data.
 
 Volume's Style tab offers one Plot type icon button, on the Growing row beside its colour, which
-opens a menu holding the Price line switch and the eleven ways to draw the plot. Columns, the
+opens a menu holding the Current value line switch and the eleven ways to draw the plot. Columns, the
 default, draws the columns an attached Volume showed before the choice existed. The other choices
 are Line, Line with breaks, Step line, Step line with breaks, Step line with diamonds, Histogram,
 Cross, Area, Area with breaks and Circles; a type with breaks differs from its plain one only
-where a plot has a missing value, which Volume never has. Price line draws the horizontal line at
-the last volume and is off by default. A bar that has just opened does not lower Volume's scale, and the
-columns stand on the pane's foot.
+where a plot has a missing value, which Volume never has. Current value line draws the horizontal
+line at the last volume and is off by default. A bar that has just opened does not lower Volume's
+scale, and the columns stand on the pane's foot.
 
 Attached indicators are saved per chart, account and symbol in the chart's settings overrides
 (id, indicator id, the settings the user changed, and `hidden: true` while hidden), so they

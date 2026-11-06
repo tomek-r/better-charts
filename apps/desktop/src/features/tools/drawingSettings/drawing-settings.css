@@ -312,7 +312,7 @@
   background: var(--color-border);
 }
 
-/* The Price line switch: a pill track whose round thumb sits right and turns accent while the line is on. */
+/* The Current value line switch: a pill track whose round thumb sits right and turns accent while the line is on. */
 .drawing-settings-plot-type-switch {
   box-sizing: border-box;
   flex: 0 0 auto;

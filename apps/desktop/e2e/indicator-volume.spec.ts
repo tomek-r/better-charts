@@ -126,7 +126,7 @@ test('a stored Plot type the list does not know reads as the Columns default', (
   expect(frame.plots).toEqual([DEFAULT_PLOT]);
 });
 
-test('the Price line switch reaches the plot', () => {
+test('the Current value line switch reaches the plot', () => {
   const settings = resolveSettingValues(volumePlugin, { [settingStyleKey(PRICE_LINE_STYLE, 'visible')]: true });
 
   const frame = new VolumeIndicator().load([GROWING_BAR], settings);

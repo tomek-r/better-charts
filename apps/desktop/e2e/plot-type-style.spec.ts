@@ -12,7 +12,7 @@ import { failOnPageNoise } from './helpers/pageNoise';
 import { openWithSavedIndicators } from './helpers/savedIndicators';
 
 /**
- * The Plot type row of an indicator's Style tab: one icon button opening a menu that holds the Price line
+ * The Plot type row of an indicator's Style tab: one icon button opening a menu that holds the Current value line
  * switch and the eleven ways to draw the plot. Escape and a press elsewhere close the menu alone, so the
  * settings dialog under it stays open.
  */
@@ -45,7 +45,7 @@ const CANCEL_LABEL = 'Cancel';
 
 /** What the Style tab and its menu call the row and its switch, and the types these cases choose. */
 const PLOT_TYPE_LABEL = 'Plot type';
-const PRICE_LINE_LABEL = 'Price line';
+const CURRENT_VALUE_LINE_LABEL = 'Current value line';
 const COLUMNS_LABEL = 'Columns';
 const CIRCLES_LABEL = 'Circles';
 const LINE_LABEL = 'Line';
@@ -141,13 +141,15 @@ test.describe('plot type style', () => {
 test.describe('plot type menu', () => {
   failOnPageNoise();
 
-  test('the Style tab shows the Plot type button, with no drop-down and no Price line checkbox', async ({ page }) => {
+  test('the Style tab shows the Plot type button, with no drop-down and no Current value line checkbox', async ({
+    page,
+  }) => {
     const dialog = await openVolumeStyleTab(page);
     const tab = dialog.getByRole('tabpanel');
 
     await expect(plotTypeButton(dialog)).toBeVisible();
     await expect(tab.getByRole('combobox', { name: PLOT_TYPE_LABEL })).toHaveCount(0);
-    await expect(tab.getByRole('checkbox', { name: PRICE_LINE_LABEL })).toHaveCount(0);
+    await expect(tab.getByRole('checkbox', { name: CURRENT_VALUE_LINE_LABEL })).toHaveCount(0);
   });
 
   test('the Plot type button sits on the Growing row, beside its colour', async ({ page }) => {
@@ -165,22 +167,24 @@ test.describe('plot type menu', () => {
     await expect(dialog.locator(STYLE_ROW_TITLE_SELECTOR).getByText(PLOT_TYPE_LABEL)).toHaveCount(0);
   });
 
-  test('the menu lists the Price line switch above the eleven types, with Columns checked', async ({ page }) => {
+  test('the menu lists the Current value line switch above the eleven types, with Columns checked', async ({
+    page,
+  }) => {
     const dialog = await openVolumeStyleTab(page);
     const menu = await openPlotTypeMenu(page, dialog);
 
-    await expect(menu.locator(MENU_ROW_SELECTOR)).toHaveText([PRICE_LINE_LABEL, ...PLOT_TYPE_NAMES]);
-    await expect(menu.getByRole('menuitemcheckbox')).toHaveAccessibleName(PRICE_LINE_LABEL);
+    await expect(menu.locator(MENU_ROW_SELECTOR)).toHaveText([CURRENT_VALUE_LINE_LABEL, ...PLOT_TYPE_NAMES]);
+    await expect(menu.getByRole('menuitemcheckbox')).toHaveAccessibleName(CURRENT_VALUE_LINE_LABEL);
     await expect(menu.locator(CHECKED_TYPE_SELECTOR)).toHaveText([COLUMNS_LABEL]);
   });
 
-  test('Home and End move the focus to the Price line switch and to the last type', async ({ page }) => {
+  test('Home and End move the focus to the Current value line switch and to the last type', async ({ page }) => {
     const dialog = await openVolumeStyleTab(page);
     const menu = await openPlotTypeMenu(page, dialog);
 
     await page.keyboard.press('Home');
 
-    await expect(menu.getByRole('menuitemcheckbox', { name: PRICE_LINE_LABEL })).toBeFocused();
+    await expect(menu.getByRole('menuitemcheckbox', { name: CURRENT_VALUE_LINE_LABEL })).toBeFocused();
 
     await page.keyboard.press('End');
 
@@ -198,11 +202,13 @@ test.describe('plot type menu', () => {
     await expect.poll(() => volumeLineType(page)).toBe('simple');
   });
 
-  test('the Price line switch keeps the menu open and previews the line at the last value', async ({ page }) => {
+  test('the Current value line switch keeps the menu open and previews the line at the last value', async ({
+    page,
+  }) => {
     const dialog = await openVolumeStyleTab(page);
     const menu = await openPlotTypeMenu(page, dialog);
 
-    await menu.getByRole('menuitemcheckbox', { name: PRICE_LINE_LABEL }).click();
+    await menu.getByRole('menuitemcheckbox', { name: CURRENT_VALUE_LINE_LABEL }).click();
 
     await expect(menu).toBeVisible();
     await expect(menu.getByRole('menuitemcheckbox')).toHaveAttribute('aria-checked', 'true');
