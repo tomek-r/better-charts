@@ -30,7 +30,8 @@ import {
   type IndicatorPlotSeries,
   type IndicatorPlotState,
 } from './indicatorPlotSeries';
-import { readOwnPaneScale, restoreOwnPaneScale } from './ownPaneScale';
+import { applyPlotScaleMargins } from './indicatorScaleFit';
+import { OPENING_OWN_PANE_SCALE, readOwnPaneScale, restoreOwnPaneScale } from './ownPaneScale';
 
 /** One horizontal level as the dev hook shows it. */
 export interface IndicatorLevelState {
@@ -78,10 +79,7 @@ export interface IndicatorLegendValue {
 export interface IndicatorShowOptions {
   /** Whether each visible plot writes its last value on the price scale. */
   readonly priceLabelsVisible: boolean;
-  /**
-   * The height an indicator's own pane was saved with, relative to the price pane. It sizes a pane the layer
-   * does not hold yet; an overlay, or a pane the layer already holds, is left at the height it has.
-   */
+  /** The height an own pane was saved with, relative to the price pane; a pane already held keeps its own. */
   readonly paneHeight?: number;
 }
 
@@ -185,10 +183,8 @@ export class IndicatorLayer {
   constructor(private readonly chart: IChartApi) {}
 
   /**
-   * Draws a whole frame for `id`, replacing everything it drew before, including the levels and
-   * fills it kept from an earlier frame. A frame without plots draws no levels and no fills: there
-   * is no series to hang them on. `pane` says whether the indicator draws on the price pane or in a
-   * pane of its own, `options` what it says about the frame beside its plots.
+   * Draws a whole frame for `id`, replacing everything it drew before; a frame without plots keeps neither.
+   * `pane` picks the price pane or a pane of its own, which opens on auto scale, fitting its own data.
    */
   show(
     id: string,
@@ -200,8 +196,9 @@ export class IndicatorLayer {
     const heldScale = heldPane === null ? null : readOwnPaneScale(heldPane);
     this.clear(id);
     this.draw(id, frame, this.paneToDrawIn(heldPane, pane, options.paneHeight), options);
-    if (heldPane !== null && heldScale !== null && this.shown.get(id)?.ownPane === heldPane) {
-      restoreOwnPaneScale(heldPane, heldScale);
+    const drawnPane = this.shown.get(id)?.ownPane ?? null;
+    if (drawnPane !== null) {
+      restoreOwnPaneScale(drawnPane, drawnPane === heldPane && heldScale !== null ? heldScale : OPENING_OWN_PANE_SCALE);
     }
   }
 
@@ -313,6 +310,9 @@ export class IndicatorLayer {
       plotSeries.setData(pointsOf(frame.bars, plot, plotIndex));
       return plotSeries;
     });
+    if (ownPane !== null) {
+      applyPlotScaleMargins(this.chart, ownPane.pane, frame.plots[0]);
+    }
     const lastBar = frame.bars[frame.bars.length - 1];
     const levels = frame.levels ?? [];
     const fills = frame.fills ?? [];

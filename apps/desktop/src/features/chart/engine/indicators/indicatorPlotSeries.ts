@@ -3,6 +3,7 @@ import {
   HistogramSeries,
   LineSeries,
   LineType,
+  type AutoscaleInfoProvider,
   type HistogramData,
   type IChartApi,
   type ISeriesApi,
@@ -16,6 +17,7 @@ import { toIndicatorLineStyle, toLibraryLineStyle } from './indicatorLevels';
 import { toLineWidth } from './indicatorLineWidth';
 import { priceFormatOf } from './indicatorPanes';
 import { IndicatorPlotMarkers, type IndicatorMarkerShape } from './indicatorPlotMarkers';
+import { closedBarsFloor, drawsFromZero } from './indicatorScaleFit';
 
 /** The library's own names for its column and area series, which `seriesType()` reports back. */
 const HISTOGRAM_SERIES_TYPE = 'Histogram';
@@ -105,14 +107,14 @@ export function addPlotSeries(
 ): IndicatorPlotSeries {
   if (plot.style === 'area') {
     const areaSeries = chart.addSeries(AreaSeries, areaOptionsOf(plot, priceLabelsVisible), paneIndex);
-    return withPriceFormat(areaSeries, precision);
+    return withClosedBarsFloor(withPriceFormat(areaSeries, precision), plot, chart);
   }
   if (plot.style === 'histogram') {
     const histogramSeries = chart.addSeries(HistogramSeries, histogramOptionsOf(plot, priceLabelsVisible), paneIndex);
-    return withPriceFormat(histogramSeries, precision);
+    return withClosedBarsFloor(withPriceFormat(histogramSeries, precision), plot, chart);
   }
   const lineSeries = chart.addSeries(LineSeries, lineSeriesOptionsOf(plot, priceLabelsVisible), paneIndex);
-  return withMarkers(withPriceFormat(lineSeries, precision), plot);
+  return withMarkers(withClosedBarsFloor(withPriceFormat(lineSeries, precision), plot, chart), plot);
 }
 
 /** Whether `series` draws columns from zero rather than a line. */
@@ -209,17 +211,31 @@ function withMarkers(series: ISeriesApi<'Line'>, plot: IndicatorPlot): Indicator
   return series;
 }
 
+/**
+ * Raises the plot's scale floor over the low value of its forming bar: a plot that only grows while its
+ * bar forms would otherwise squash the pane on the bar's first ticks. A plot drawn from zero already
+ * stands on the pane's foot, so its columns and stems keep their own anchor.
+ */
+function withClosedBarsFloor<TSeries extends IndicatorPlotSeries>(
+  series: TSeries,
+  plot: IndicatorPlot,
+  chart: IChartApi,
+): TSeries {
+  if (plot.growsDuringBar !== true || drawsFromZero(plot.style)) {
+    return series;
+  }
+  series.applyOptions({ autoscaleInfoProvider: closedBarsFloor(series, chart) });
+  return series;
+}
+
 /** Whether a plot writes its last value on the price scale: a switched-off plot writes none. */
 function writesPriceLabel(plot: IndicatorPlot, priceLabelsVisible: boolean): boolean {
   return priceLabelsVisible && plot.visible !== false;
 }
 
-/**
- * The options that keep price zero on the plot's scale: stems reach down to zero, and a plot may ask
- * for the anchor itself, so a small value cannot rescale the pane.
- */
+/** The options that keep price zero on the scale of a plot drawn from it: stems reach down to zero. */
 function zeroAnchorOptionsOf(plot: IndicatorPlot) {
-  return plot.style === 'stems' || plot.scaleFromZero === true ? { autoscaleInfoProvider: includingZeroPrice } : {};
+  return plot.style === 'stems' ? { autoscaleInfoProvider: includingZeroPrice } : {};
 }
 
 /** The stroke settings every plotted line shares, area or plain. */
@@ -293,14 +309,8 @@ function withAlphaByte(color: string, alphaByte: number): string {
   return `${color.slice(0, OPAQUE_HEX_LENGTH)}${alphaHex}`;
 }
 
-/** An autoscale report shaped as the library's own, narrowed to the one field a provider reads. */
-interface PlotAutoscaleInfo {
-  readonly priceRange: { readonly minValue: number; readonly maxValue: number } | null;
-  readonly margins?: { readonly above: number; readonly below: number };
-}
-
 /** Keeps price zero on the scale even when every value sits above it. */
-function includingZeroPrice(baseImplementation: () => PlotAutoscaleInfo | null): PlotAutoscaleInfo | null {
+const includingZeroPrice: AutoscaleInfoProvider = (baseImplementation) => {
   const autoscale = baseImplementation();
   if (autoscale === null || autoscale.priceRange === null) {
     return autoscale;
@@ -312,7 +322,7 @@ function includingZeroPrice(baseImplementation: () => PlotAutoscaleInfo | null):
       maxValue: Math.max(autoscale.priceRange.maxValue, ZERO_PRICE),
     },
   };
-}
+};
 
 /** `series` writing its values with `precision` decimals when the frame states them. */
 function withPriceFormat<TSeries extends SeriesType>(

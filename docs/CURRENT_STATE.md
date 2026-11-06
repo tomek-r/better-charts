@@ -349,8 +349,8 @@ default, draws the columns an attached Volume showed before the choice existed. 
 are Line, Line with breaks, Step line, Step line with breaks, Step line with diamonds, Histogram,
 Cross, Area, Area with breaks and Circles; a type with breaks differs from its plain one only
 where a plot has a missing value, which Volume never has. Price line draws the horizontal line at
-the last volume and is off by default. Volume's scale always includes zero, so a bar that has just
-opened does not rescale its pane.
+the last volume and is off by default. A bar that has just opened does not lower Volume's scale, and the
+columns stand on the pane's foot.
 
 Attached indicators are saved per chart, account and symbol in the chart's settings overrides
 (id, indicator id, the settings the user changed, and `hidden: true` while hidden), so they

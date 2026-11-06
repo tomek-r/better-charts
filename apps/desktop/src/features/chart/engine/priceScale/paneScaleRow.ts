@@ -16,6 +16,10 @@ const AUTO_GLYPH = 'A';
 const LOG_GLYPH = 'L';
 /** The title the `L` button carries while its pane holds a value a logarithmic scale cannot draw. */
 const LOG_NEEDS_POSITIVE_VALUES = 'Logarithmic scale needs values above zero';
+/** How far above its pane's bottom line the row's foot stands, clear of the line the pane draws there. */
+const ROW_FOOT_GAP_PX = 4;
+/** The axis's left border, which the row's opaque fill leaves showing. */
+const AXIS_BORDER_PX = 1;
 
 function control(glyph: string, label: string): HTMLButtonElement {
   const button = document.createElement('button');
@@ -80,15 +84,16 @@ export class PaneScaleRow {
   }
 
   /**
-   * Puts the row's foot on the pane's bottom edge, measured from the host's own foot. A pane whose DOM
-   * does not exist yet hands over `null`, and the stylesheet's default stays in place until it does.
+   * Puts the row's foot just above the pane's bottom line, measured from the host's own foot. A pane whose
+   * DOM does not exist yet hands over `null`, and the stylesheet's default stays in place until it does.
    */
   place(host: HTMLElement, paneElement: HTMLElement | null): void {
     if (paneElement === null) {
       this.root.style.bottom = '';
       return;
     }
-    this.root.style.bottom = `${host.getBoundingClientRect().bottom - paneElement.getBoundingClientRect().bottom}px`;
+    const paneFootOffset = host.getBoundingClientRect().bottom - paneElement.getBoundingClientRect().bottom;
+    this.root.style.bottom = `${paneFootOffset + ROW_FOOT_GAP_PX}px`;
   }
 
   /** Writes the state its scale reports, and only the part of it that moved; the caller knows the scale. */
@@ -116,9 +121,9 @@ export class PaneScaleRow {
     this.logButton.title = allowed ? this.logLabel : LOG_NEEDS_POSITIVE_VALUES;
   }
 
-  /** Matches the row to its axis width, so its fill masks the whole axis column. */
-  setWidth(width: number): void {
-    const next = `${width}px`;
+  /** Matches the row to its axis column, stopping short of the axis's left border so that border shows. */
+  setWidth(axisWidth: number): void {
+    const next = `${axisWidth - AXIS_BORDER_PX}px`;
     if (this.root.style.width !== next) {
       this.root.style.width = next;
     }

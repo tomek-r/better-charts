@@ -40,8 +40,9 @@ function volumePlot(settings: SettingValues, growingColor: string): IndicatorPlo
     color: growingColor,
     lineWidth: VOLUME_WIDTH,
     visible: booleanSetting(settings, settingStyleKey(VOLUME_STYLE, 'visible'), DEFAULT_VOLUME_VISIBLE),
-    // A bar that has just opened holds almost no volume, which must not rescale the pane.
-    scaleFromZero: true,
+    // A bar that has just opened holds almost no volume, which must not lower the pane's scale; the
+    // columns stand on the pane's foot.
+    growsDuringBar: true,
   };
 }
 

@@ -1,7 +1,9 @@
 import { expect, test, type JSHandle, type Locator, type Page } from '@playwright/test';
 import type { IndicatorFrame, IndicatorPlot } from '../src/features/chart/engine/indicators/indicatorFrame';
+import { lowestClosedValue } from '../src/features/chart/engine/indicators/indicatorScaleFit';
 import { DEMO_ID, frameOf, openChartTimes, showFrame } from './helpers/indicatorFrames';
 import { waitTwoAnimationFrames } from './helpers/animationFrames';
+import { openChartMenu } from './helpers/chartMenu';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { gotoWithStub } from './helpers/tauriStub';
 
@@ -50,6 +52,9 @@ const INDICATOR_AUTO = 'Auto scale — fit this pane';
 const INDICATOR_LOG = 'Logarithmic scale for this pane';
 const PRICE_PANE = 0;
 const INDICATOR_PANE = 1;
+/** The two definitions the opening-scale cases attach: an oscillator and the volume pane. */
+const RSI_DEFINITION = 'rsi';
+const VOLUME_DEFINITION = 'volume';
 const STUB_BARS = 10;
 const REVEALED = /price-scale-controls-revealed/;
 /** Deep inside the axis column: a scale that shows labels is wider than this. */
@@ -58,12 +63,33 @@ const AXIS_INSET = 4;
 const ROW_OFFSET_LIMIT = 40;
 /** Slack for the pane separator and for the sub-pixel rounding of the rows' inline placement. */
 const PLACEMENT_SLACK = 2;
-/** The stepped plot the anchored cases draw, and the same plot without the anchor as the counter-case. */
+/** Half a pixel of layout rounding, which CSS widths and positions keep to themselves. */
+const SUBPIXEL_SLACK = 0.5;
+/** How far above its pane's bottom a row's foot must stand, less the sub-pixel rounding of its placement. */
+const ROW_FOOT_CLEARANCE = 3;
+/** How far right of the axis column's left edge a row starts, leaving the axis's own border showing. */
+const ROW_AXIS_INSET = 1;
+/** The stepped plot a growing case draws with the flag, and the same plot without it as the counter-case. */
 const STEP_PLOT: IndicatorPlot = { title: 'step', style: 'stepline', color: '#2962ff', lineWidth: 1 };
-const ANCHORED_STEP_PLOT: IndicatorPlot = { ...STEP_PLOT, scaleFromZero: true };
-/** The stepped plot's values run from 500 to 600, so every one of them sits far above price zero. */
+const GROWING_STEP_PLOT: IndicatorPlot = { ...STEP_PLOT, growsDuringBar: true };
+/** The column plot a bar that has just opened must leave standing on its pane's foot. */
+const GROWING_COLUMN_PLOT: IndicatorPlot = {
+  title: 'volume',
+  style: 'histogram',
+  color: '#08998180',
+  lineWidth: 1,
+  gaps: 'break',
+  growsDuringBar: true,
+};
+/** The stepped plot's closed values run from 500 to 600, so every one of them sits far above price zero. */
 const STEP_VALUE_START = 500;
 const STEP_VALUE_END = 600;
+/** The value the forming bar holds, as a bar that has just opened has traded almost no volume. */
+const FORMING_STEP_VALUE = 5;
+/** A price the closed history keeps the pane scale above and the forming bar's value alone drags it below. */
+const FLOOR_PRICE = 100;
+/** One price unit of slack for the pixel rounding of a pane scale's foot. */
+const SCALE_FOOT_SLACK = 1;
 /** Values that dip below zero, which a logarithmic scale cannot draw. */
 const NEGATIVE_VALUE_START = -50;
 /** The title the `L` button carries while its pane holds a value below zero. */
@@ -196,6 +222,35 @@ function stepFrame(plot: IndicatorPlot, times: readonly number[]): IndicatorFram
   return risingFrame(plot, times, STEP_VALUE_START, STEP_VALUE_END);
 }
 
+/** The value a bar holds: the closed history rises to `STEP_VALUE_END`, the forming bar holds almost nothing. */
+function formingValueAt(barIndex: number, closedBars: number): number {
+  if (barIndex === closedBars) {
+    return FORMING_STEP_VALUE;
+  }
+  return valueBetween(barIndex, closedBars, STEP_VALUE_START, STEP_VALUE_END);
+}
+
+/** A frame of `plot` over the closed bars of `times`, with `FORMING_STEP_VALUE` on the forming bar after them. */
+function formingFrame(plot: IndicatorPlot, times: readonly number[]): IndicatorFrame {
+  const closedBars = times.length - 1;
+  return frameOf([plot], times, (_plotIndex, barIndex) => formingValueAt(barIndex, closedBars));
+}
+
+/**
+ * Opens the definition `definitionId` in a pane of its own and proves the pane arrives fitted to its own
+ * data: the scale is already auto scaled on a regular scale the moment the pane is there, which its row's
+ * `A` button says as well.
+ */
+async function expectPaneOpensAutoScaled(page: Page, definitionId: string): Promise<void> {
+  await openWithIndicatorPane(page, definitionId);
+  const opened = await paneScaleAt(page, INDICATOR_PANE);
+  expect(opened.autoScale).toBe(true);
+  expect(opened.logarithmic).toBe(false);
+  await hoverAxis(page, await chartLayout(page), 'indicator');
+  const autoButton = paneRow(page, INDICATOR_ROW).getByRole('button', { name: INDICATOR_AUTO });
+  await expect(autoButton).toHaveAttribute('aria-pressed', 'true');
+}
+
 /** Fits pane 1 to its data when it opens unfitted: pressing `A` is the only way back to autoscale. */
 async function fitIndicatorPane(page: Page): Promise<void> {
   if ((await paneScaleAt(page, INDICATOR_PANE)).autoScale) {
@@ -207,6 +262,15 @@ async function fitIndicatorPane(page: Page): Promise<void> {
   await expect.poll(async () => (await paneScaleAt(page, INDICATOR_PANE)).autoScale).toBe(true);
 }
 
+/** Shows `frame` in a pane of its own, and waits until that pane and its row are on screen. */
+async function openWithFrame(page: Page, frame: IndicatorFrame): Promise<void> {
+  await showFrame(page, DEMO_ID, frame, 'own');
+  await expect.poll(async () => page.evaluate(() => window.__chartTest!.paneCount())).toBe(2);
+  // The row of the new pane is created from the panes' layout, which lands a frame after the pane does.
+  await expect.poll(async () => page.locator('.price-scale-controls').count()).toBe(2);
+  await waitTwoAnimationFrames(page);
+}
+
 /** Opens the app with `plot` alone in a pane of its own, its values rising from `first` to `last`. */
 async function openWithValues(
   page: Page,
@@ -215,11 +279,7 @@ async function openWithValues(
   last: number,
 ): Promise<readonly number[]> {
   const times = await openChartTimes(page);
-  await showFrame(page, DEMO_ID, risingFrame(plot, times, first, last), 'own');
-  await expect.poll(async () => page.evaluate(() => window.__chartTest!.paneCount())).toBe(2);
-  // The row of the new pane is created from the panes' layout, which lands a frame after the pane does.
-  await expect.poll(async () => page.locator('.price-scale-controls').count()).toBe(2);
-  await waitTwoAnimationFrames(page);
+  await openWithFrame(page, risingFrame(plot, times, first, last));
   return times;
 }
 
@@ -231,6 +291,13 @@ async function openWithStepPlot(page: Page, plot: IndicatorPlot): Promise<readon
   const times = await openWithValues(page, plot, STEP_VALUE_START, STEP_VALUE_END);
   await fitIndicatorPane(page);
   return times;
+}
+
+/** Opens the app with `plot` alone in an own pane, over a closed history and a nearly empty forming bar. */
+async function openWithFormingBar(page: Page, plot: IndicatorPlot): Promise<void> {
+  const times = await openChartTimes(page);
+  await openWithFrame(page, formingFrame(plot, times));
+  await fitIndicatorPane(page);
 }
 
 /** Waits until pane 1's lowest drawn price satisfies `accepts`, which a scale holding no range never does. */
@@ -304,14 +371,28 @@ async function stopLayoutProbe(probe: JSHandle<LayoutProbe>): Promise<LayoutProb
   return readings;
 }
 
-test('a stepped plot anchored at zero keeps price zero on its pane scale', async ({ page }) => {
-  await openWithStepPlot(page, ANCHORED_STEP_PLOT);
-  await expectLowestVisiblePrice(page, (lowestPrice) => lowestPrice <= 0);
+test('the lowest closed value leaves the forming bar out', () => {
+  expect(lowestClosedValue([5, 3, 1])).toBe(3);
 });
 
-test('the same stepped plot without the anchor fits only the values it draws', async ({ page }) => {
-  await openWithStepPlot(page, STEP_PLOT);
-  await expectLowestVisiblePrice(page, (lowestPrice) => lowestPrice > 0);
+test('a plot without a closed bar has no closed value', () => {
+  expect(lowestClosedValue([5])).toBeNull();
+  expect(lowestClosedValue([])).toBeNull();
+});
+
+test('a stepped plot that grows during its bar keeps the forming bar low off its pane scale', async ({ page }) => {
+  await openWithFormingBar(page, GROWING_STEP_PLOT);
+  await expectLowestVisiblePrice(page, (lowestPrice) => lowestPrice > FLOOR_PRICE);
+});
+
+test('the same stepped plot without the flag fits the forming bar low into its pane scale', async ({ page }) => {
+  await openWithFormingBar(page, STEP_PLOT);
+  await expectLowestVisiblePrice(page, (lowestPrice) => lowestPrice < FLOOR_PRICE);
+});
+
+test('a column plot that grows during its bar stands on its pane foot with no negative range', async ({ page }) => {
+  await openWithFormingBar(page, GROWING_COLUMN_PLOT);
+  await expectLowestVisiblePrice(page, (lowestPrice) => lowestPrice >= -SCALE_FOOT_SLACK);
 });
 
 test('an indicator pane adds its own row under the price pane row', async ({ page }) => {
@@ -327,6 +408,11 @@ test('an indicator pane adds its own row under the price pane row', async ({ pag
   // Inside the RSI pane, at the foot of its own axis.
   expect(indicatorRow.top).toBeGreaterThanOrEqual(layout.priceBottom - PLACEMENT_SLACK);
   expectRowAtPaneFoot(indicatorRow, layout.indicatorBottom);
+  // Its foot stands clear of the pane's bottom line, and its fill leaves the axis's left border showing.
+  expect(layout.indicatorBottom - indicatorRow.bottom).toBeGreaterThanOrEqual(ROW_FOOT_CLEARANCE);
+  expect(indicatorRow.left).toBeGreaterThanOrEqual(
+    layout.host.right - layout.axisWidth + ROW_AXIS_INSET - SUBPIXEL_SLACK,
+  );
   // Both rows sit in the axis column, never over the plot area.
   for (const row of layout.rows) {
     expect(row.right).toBeLessThanOrEqual(layout.host.right + PLACEMENT_SLACK);
@@ -352,6 +438,34 @@ test('the RSI row A and L change only the RSI pane', async ({ page }) => {
   const logButton = paneRow(page, INDICATOR_ROW).getByRole('button', { name: INDICATOR_LOG });
   await expectOnlyIndicatorPaneFlips(page, autoButton, (scale) => scale.autoScale);
   await expectOnlyIndicatorPaneFlips(page, logButton, (scale) => scale.logarithmic);
+});
+
+test('a new RSI pane opens on auto scale with its A pressed', async ({ page }) => {
+  await expectPaneOpensAutoScaled(page, RSI_DEFINITION);
+});
+
+test('a new volume pane opens on auto scale with its A pressed', async ({ page }) => {
+  await expectPaneOpensAutoScaled(page, VOLUME_DEFINITION);
+});
+
+test('Reset chart view fits the indicator panes as well as the price pane', async ({ page }) => {
+  await openWithIndicatorPane(page, 'rsi');
+  await hoverAxis(page, await chartLayout(page), 'indicator');
+  const autoButton = paneRow(page, INDICATOR_ROW).getByRole('button', { name: INDICATOR_AUTO });
+  const logButton = paneRow(page, INDICATOR_ROW).getByRole('button', { name: INDICATOR_LOG });
+  // The pane opens with auto scale on and a regular scale, so these presses leave it on neither.
+  await expectOnlyIndicatorPaneFlips(page, autoButton, (scale) => scale.autoScale);
+  await expectOnlyIndicatorPaneFlips(page, logButton, (scale) => scale.logarithmic);
+  const menu = await openChartMenu(page);
+  await menu.getByRole('menuitem', { name: 'Reset chart view' }).click();
+  await expect
+    .poll(async () => {
+      const { autoScale, logarithmic } = await paneScaleAt(page, INDICATOR_PANE);
+      return { autoScale, logarithmic };
+    })
+    .toEqual({ autoScale: true, logarithmic: false });
+  await expect(autoButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(logButton).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('an A choice on an indicator pane survives a reload of its history', async ({ page }) => {

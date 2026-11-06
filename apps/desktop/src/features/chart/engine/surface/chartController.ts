@@ -253,11 +253,11 @@ export class ChartController {
   }
 
   /**
-   * The chart menu's Reset chart view: the pane back to the end anchor with the default zoom, and the
+   * The chart menu's Reset chart view: the pane back to the end anchor with the default zoom, and every
    * price scale back to fitting the bars it shows by itself, which is the view a chart opens on.
    */
   resetChartView(): void {
-    this.setAutoScale(true);
+    this.scales.fitAllPanes();
     this.resetView();
   }
 

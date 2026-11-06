@@ -3,7 +3,7 @@
   position: absolute;
   right: 0;
   /* The fallback while a pane has no DOM to measure: the time axis sits below the panes. */
-  bottom: 28px;
+  bottom: 32px;
   z-index: 2;
   display: flex;
   justify-content: center;

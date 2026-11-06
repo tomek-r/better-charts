@@ -1,4 +1,4 @@
-import type { IRange, PriceScaleMode } from 'lightweight-charts';
+import { PriceScaleMode, type IRange } from 'lightweight-charts';
 import { PRICE_SCALE_ID } from '../priceScale/priceScaleId';
 import { setPriceScaleRange } from '../priceScale/priceScaleRange';
 import type { OwnPane } from './indicatorPanes';
@@ -10,6 +10,17 @@ export interface OwnPaneScale {
   /** The range the scale shows while it fits nothing itself; null while auto scale is on. */
   readonly visibleRange: IRange<number> | null;
 }
+
+/**
+ * What an own pane's right scale holds as it opens: a pane fitting its own data on a regular scale, so its
+ * `A` button opens pressed. The chart keeps auto scale off on its own `rightPriceScale`, so a pane left to
+ * inherit would open unfitted.
+ */
+export const OPENING_OWN_PANE_SCALE: OwnPaneScale = {
+  autoScale: true,
+  mode: PriceScaleMode.Normal,
+  visibleRange: null,
+};
 
 /** Reads the choices made on an own pane's right scale, so a reload can put them back afterwards. */
 export function readOwnPaneScale(ownPane: OwnPane): OwnPaneScale {

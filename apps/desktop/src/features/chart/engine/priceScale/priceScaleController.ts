@@ -131,6 +131,18 @@ export class PriceScaleController {
   }
 
   /**
+   * Puts every indicator pane's scale back on the view its pane opens on: fitting its own data, in the
+   * regular spacing. Those choices are not saved settings, so nothing else can put them back.
+   */
+  resetIndicatorPanes(): void {
+    for (let paneIndex = PRICE_PANE_INDEX + 1; paneIndex <= this.indicatorRows.length; paneIndex += 1) {
+      const scale = this.scaleOf(paneIndex);
+      scale?.applyOptions({ autoScale: true, mode: PriceScaleMode.Normal });
+    }
+    this.sync();
+  }
+
+  /**
    * The saved shape of the scale, each part written only when it differs from the scale's own. The
    * prices' spacing is the one write that has to carry the range over with it.
    */

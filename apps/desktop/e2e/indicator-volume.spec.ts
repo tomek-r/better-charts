@@ -31,7 +31,7 @@ const DEFAULT_PLOT = {
   lineWidth: 1,
   visible: true,
   priceLine: false,
-  scaleFromZero: true,
+  growsDuringBar: true,
 };
 const GROWING_COLUMN = ['#08998180'];
 const FALLING_COLUMN = ['#F2364580'];
