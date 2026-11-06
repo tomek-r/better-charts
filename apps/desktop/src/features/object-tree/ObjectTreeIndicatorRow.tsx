@@ -12,8 +12,13 @@ import { useOpenIndicatorSettings } from '../indicators/IndicatorSettingsProvide
 import type { RegisteredChartIndicatorPlugin } from '../indicators/registry';
 import { useIndicatorCommands } from '../indicators/useIndicatorCommands';
 import { CommandButton } from '../../shared/ui/button/CommandButton';
-import { SettingsIcon } from '../tools/drawingToolbar/drawingToolbarIcons';
-import { ObjectTreeRemoveButton, ObjectTreeVisibilityButton, ROW_ACTION_CLASS } from './objectTreeRowActions';
+import { SettingsIcon } from '../../shared/ui/icons/SettingsIcon';
+import {
+  ObjectTreeRemoveButton,
+  ObjectTreeVisibilityButton,
+  ROW_ACTION_CLASS,
+  ROW_ACTION_ICON_CLASS,
+} from './objectTreeRowActions';
 import { presentWhileTrue } from './objectTreeRowAttributes';
 import { ROW_NAME_CLASS } from './objectTreeRowFocus';
 
@@ -58,7 +63,7 @@ export function ObjectTreeIndicatorRow({ saved, plugin }: ObjectTreeIndicatorRow
       </button>
       <div className="object-tree-row-actions">
         <CommandButton className={ROW_ACTION_CLASS} label={INDICATOR_SETTINGS_LABEL} onClick={openSettings}>
-          <SettingsIcon />
+          <SettingsIcon className={ROW_ACTION_ICON_CLASS} />
         </CommandButton>
         <ObjectTreeVisibilityButton
           labels={INDICATOR_VISIBILITY_LABELS}

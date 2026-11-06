@@ -2,6 +2,8 @@ import { useRef, type KeyboardEvent } from 'react';
 import type { ChartDrawingRecord } from '../chart/engine/drawings/drawingRecord';
 import { CommandButton } from '../../shared/ui/button/CommandButton';
 import { ToggleCommandButton } from '../../shared/ui/button/ToggleCommandButton';
+import { LockClosedIcon, LockOpenIcon } from '../../shared/ui/icons/drawingActionIcons';
+import { SettingsIcon } from '../../shared/ui/icons/SettingsIcon';
 import { useOpenDrawingSettings } from '../tools/drawingSettings/DrawingSettingsProvider';
 import { DrawingToolIcon } from '../tools/DrawingToolIcon';
 import {
@@ -10,10 +12,14 @@ import {
   DRAWING_VISIBILITY_LABELS,
   REMOVE_DRAWING_LABEL,
 } from '../tools/drawingToolbar/drawingCommandLabels';
-import { LockClosedIcon, LockOpenIcon, SettingsIcon } from '../tools/drawingToolbar/drawingToolbarIcons';
 import type { RegisteredChartToolPlugin } from '../tools/registry';
 import { useDrawingCommands } from '../tools/useDrawingCommands';
-import { ObjectTreeRemoveButton, ObjectTreeVisibilityButton, ROW_ACTION_CLASS } from './objectTreeRowActions';
+import {
+  ObjectTreeRemoveButton,
+  ObjectTreeVisibilityButton,
+  ROW_ACTION_CLASS,
+  ROW_ACTION_ICON_CLASS,
+} from './objectTreeRowActions';
 import { presentWhileTrue } from './objectTreeRowAttributes';
 import { ROW_NAME_CLASS, rowNameButtons } from './objectTreeRowFocus';
 import type { LayerRowReorder } from './useLayerReorder';
@@ -90,14 +96,14 @@ export function ObjectTreeRow({ record, plugin, selected, reorder }: ObjectTreeR
           label={DRAWING_SETTINGS_LABEL}
           onClick={() => openDrawingSettings(plugin.id, record.id)}
         >
-          <SettingsIcon />
+          <SettingsIcon className={ROW_ACTION_ICON_CLASS} />
         </CommandButton>
         <ToggleCommandButton
           className={ROW_ACTION_CLASS}
           labels={DRAWING_LOCK_LABELS}
           pressed={record.locked}
-          offIcon={<LockOpenIcon />}
-          onIcon={<LockClosedIcon />}
+          offIcon={<LockOpenIcon className={ROW_ACTION_ICON_CLASS} />}
+          onIcon={<LockClosedIcon className={ROW_ACTION_ICON_CLASS} />}
           onClick={() => commands.setLocked(!record.locked)}
         />
         <ObjectTreeVisibilityButton

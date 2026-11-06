@@ -155,7 +155,7 @@
 }
 
 /* The glyphs of a row are 16px: a 28px button in a 36px row leaves them room to breathe. */
-.object-tree-row-action .drawing-toolbar-icon {
+.object-tree-row-action .object-tree-action-icon {
   display: block;
   width: 16px;
   height: 16px;
