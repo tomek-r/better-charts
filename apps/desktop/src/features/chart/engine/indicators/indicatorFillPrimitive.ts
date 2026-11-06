@@ -1,5 +1,4 @@
 import {
-  MismatchDirection,
   type IPrimitivePaneRenderer,
   type IPrimitivePaneView,
   type Logical,
@@ -11,6 +10,7 @@ import type { RenderTarget } from '../surface/drawTarget';
 import { fillPolygons, type FillColumn, type FillPoint } from './indicatorFillPolygons';
 import type { IndicatorFill, IndicatorFillEdge, IndicatorLevel } from './indicatorFrame';
 import type { IndicatorPlotSeries } from './indicatorPlotSeries';
+import { numericPointAt } from './indicatorSeriesValue';
 
 /** A fill sits under the lines it belongs to, above nothing but the background. */
 const FILL_VIEW_Z_ORDER: PrimitivePaneViewZOrder = 'bottom';
@@ -138,11 +138,8 @@ export class IndicatorFillPrimitive extends ChartSeriesPrimitive {
     if (series === undefined) {
       return null;
     }
-    const point = series.dataByIndex(index, MismatchDirection.None);
-    if (point === null || !('value' in point) || typeof point.value !== 'number') {
-      return null;
-    }
-    return point.value;
+    const point = numericPointAt(series, index);
+    return point === null ? null : point.value;
   }
 }
 

@@ -7,12 +7,31 @@
  */
 
 /**
- * How a plot is drawn: a line joining its points, a stepped line, or columns drawn from zero.
+ * How a plot is drawn.
  *
- * A histogram's columns take their bar's own colour when the frame gives one, and the plot's colour
- * otherwise.
+ * A histogram's columns, and the shapes of a marker plot, take their bar's own colour when the frame
+ * gives one, and the plot's colour otherwise.
  */
-export type IndicatorPlotStyle = 'line' | 'stepline' | 'histogram';
+export type IndicatorPlotStyle =
+  /** A line joining its points. */
+  | 'line'
+  /** A line that steps across each bar instead of sloping. */
+  | 'stepline'
+  /** A stepped line with a diamond at every point. */
+  | 'steplineDiamonds'
+  /** A line with the region between it and the baseline shaded. */
+  | 'area'
+  /** Columns drawn from zero. */
+  | 'histogram'
+  /** A stem from zero up to each point. */
+  | 'stems'
+  /** A cross at every point. */
+  | 'crosses'
+  /** A circle at every point. */
+  | 'circles';
+
+/** What a plot does at a bar without a value: 'break' leaves a gap, 'connect' joins across it. */
+export type IndicatorPlotGaps = 'break' | 'connect';
 
 /** How a plot's or a level's line is stroked; a missing style is solid. */
 export type IndicatorLineStyle = 'solid' | 'dashed' | 'dotted';
@@ -26,6 +45,10 @@ export interface IndicatorPlot {
   readonly lineStyle?: IndicatorLineStyle;
   /** False draws nothing for this plot, while the legend still reports its value. */
   readonly visible?: boolean;
+  /** A missing value breaks the plot unless this is 'connect', which joins across it. */
+  readonly gaps?: IndicatorPlotGaps;
+  /** True draws the horizontal line at the plot's last value; missing is off. */
+  readonly priceLine?: boolean;
 }
 
 /** A horizontal line at a fixed price, the way Pine Script's `hline` draws one. */

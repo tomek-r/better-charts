@@ -1,15 +1,14 @@
-import {
-  MismatchDirection,
-  type IChartApi,
-  type IPriceLine,
-  type LineData,
-  type Time,
-  type UTCTimestamp,
-  type WhitespaceData,
-} from 'lightweight-charts';
+import { MismatchDirection, type IChartApi, type IPriceLine, type UTCTimestamp } from 'lightweight-charts';
 import type { ChartIndicatorPane } from './indicatorContract';
 import { IndicatorFillPrimitive } from './indicatorFillPrimitive';
-import type { IndicatorBar, IndicatorFill, IndicatorFillEdge, IndicatorFrame, IndicatorLevel } from './indicatorFrame';
+import type {
+  IndicatorBar,
+  IndicatorFill,
+  IndicatorFillEdge,
+  IndicatorFrame,
+  IndicatorLevel,
+  IndicatorPlot,
+} from './indicatorFrame';
 import { createLevelLines, removeLevelLines, setLevelLinesHidden } from './indicatorLevels';
 import {
   PRICE_PANE_INDEX,
@@ -23,8 +22,11 @@ import {
   addPlotSeries,
   isHistogramPlotSeries,
   isValuePoint,
+  plotColorOf,
   plotStateOf,
+  removePlotSeries,
   setPlotSeriesHidden,
+  type IndicatorPlotPoint,
   type IndicatorPlotSeries,
   type IndicatorPlotState,
 } from './indicatorPlotSeries';
@@ -109,15 +111,31 @@ function timeOf(bar: IndicatorBar): UTCTimestamp {
   return Math.floor(bar.timeMs / 1000) as UTCTimestamp;
 }
 
-/** One bar's point for one plot: a value the plot draws, or a time-only whitespace point that breaks it. */
-function pointOf(bar: IndicatorBar, plotIndex: number): LineData<Time> | WhitespaceData<Time> {
+/**
+ * One bar's point for one plot: a value the plot draws, a time-only whitespace point that breaks it,
+ * or no point at all when the plot joins across a missing value.
+ */
+function pointOf(bar: IndicatorBar, plot: IndicatorPlot, plotIndex: number): IndicatorPlotPoint | null {
   const time = timeOf(bar);
   const value = bar.values[plotIndex];
   if (value === null || !Number.isFinite(value)) {
-    return { time };
+    return plot.gaps === 'connect' ? null : { time };
   }
-  const color = bar.colors?.[plotIndex];
+  // An area shades one colour, so it takes no per-bar colour.
+  const color = plot.style === 'area' ? undefined : bar.colors?.[plotIndex];
   return typeof color === 'string' ? { time, value, color } : { time, value };
+}
+
+/** One plot's whole data: a bar without a value is left out where the plot joins across it. */
+function pointsOf(bars: readonly IndicatorBar[], plot: IndicatorPlot, plotIndex: number): IndicatorPlotPoint[] {
+  const points: IndicatorPlotPoint[] = [];
+  for (const bar of bars) {
+    const point = pointOf(bar, plot, plotIndex);
+    if (point !== null) {
+      points.push(point);
+    }
+  }
+  return points;
 }
 
 /**
@@ -125,7 +143,7 @@ function pointOf(bar: IndicatorBar, plotIndex: number): LineData<Time> | Whitesp
  * point carries one, and no value where the plot has no point (a whitespace bar or a bar before it).
  */
 function legendValueOf(series: IndicatorPlotSeries, logicalIndex: number): IndicatorLegendValue {
-  const color = series.options().color;
+  const color = plotColorOf(series);
   if (logicalIndex < 0) {
     return { value: null, color };
   }
@@ -199,7 +217,10 @@ export class IndicatorLayer {
         continue;
       }
       for (const [plotIndex, series] of shown.series.entries()) {
-        series.update(pointOf(bar, plotIndex));
+        const point = pointOf(bar, frame.plots[plotIndex], plotIndex);
+        if (point !== null) {
+          series.update(point);
+        }
       }
       shown.lastTimeSeconds = seconds;
     }
@@ -284,7 +305,7 @@ export class IndicatorLayer {
     const precision = frame.precision ?? null;
     const series = frame.plots.map((plot, plotIndex) => {
       const plotSeries = addPlotSeries(this.chart, plot, paneIndex, precision, options.priceLabelsVisible);
-      plotSeries.setData(frame.bars.map((bar) => pointOf(bar, plotIndex)));
+      plotSeries.setData(pointsOf(frame.bars, plot, plotIndex));
       return plotSeries;
     });
     const lastBar = frame.bars[frame.bars.length - 1];
@@ -314,7 +335,7 @@ export class IndicatorLayer {
     }
     this.detachExtras(shown);
     for (const series of shown.series) {
-      this.chart.removeSeries(series);
+      removePlotSeries(this.chart, series);
     }
     this.shown.delete(id);
   }
