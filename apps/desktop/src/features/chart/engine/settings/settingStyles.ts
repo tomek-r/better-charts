@@ -64,21 +64,42 @@ export interface SettingStyleNumber extends SettingStyleCommon<'number'> {
   readonly step?: number;
 }
 
-/** One choice of a `choice` style. */
+/** One choice of a style that offers a list of them. */
 export interface SettingStyleChoiceOption {
   readonly value: string;
   readonly title: string;
 }
 
-/** One of the given choices, shown as a drop-down. */
-export interface SettingStyleChoice extends SettingStyleCommon<'choice'> {
+/** The list a style offers: the one it starts with, and every one it accepts. */
+interface SettingStyleChoiceList {
   readonly defaultValue: string;
   readonly options: readonly SettingStyleChoiceOption[];
 }
 
+/** One of the given choices, shown as a drop-down. */
+export interface SettingStyleChoice extends SettingStyleCommon<'choice'>, SettingStyleChoiceList {}
+
+/**
+ * One way a plot is drawn, plus whether it draws a line at its last value. The chosen type is stored under
+ * `id`; the switch is the `visible` key of the `priceLineId` style, which this style owns.
+ */
+export interface SettingStylePlotType extends SettingStyleCommon<'plotType'>, SettingStyleChoiceList {
+  readonly priceLineId: string;
+  /**
+   * The style whose row draws this button after its own controls, in place of a row of its own. A style the
+   * drawing does not declare leaves the button on a row of its own, so it is never lost.
+   */
+  readonly inlineWithId?: string;
+}
+
 /** Every kind of style a drawing may carry; `kind` says which one this is. */
 export type SettingStyleDefinition =
-  SettingStyleLine | SettingStyleColor | SettingStyleToggle | SettingStyleNumber | SettingStyleChoice;
+  | SettingStyleLine
+  | SettingStyleColor
+  | SettingStyleToggle
+  | SettingStyleNumber
+  | SettingStyleChoice
+  | SettingStylePlotType;
 
 /** The part of a style one stored key holds; a number or choice style is the key `id` itself. */
 export type SettingStyleField = 'visible' | 'color' | 'width' | 'style';
@@ -141,8 +162,13 @@ function numberSlots(definition: SettingStyleNumber): SettingStyleSlot[] {
   ];
 }
 
-function choiceSlots({ id, defaultValue, options }: SettingStyleChoice): SettingStyleSlot[] {
+function choiceSlots({ id, defaultValue, options }: SettingStyleChoice | SettingStylePlotType): SettingStyleSlot[] {
   return [{ key: id, defaultValue, isValid: (value) => options.some((option) => option.value === value) }];
+}
+
+/** A plot type and its price line switch: the chosen type, then whether a line is drawn at its last value. */
+function plotTypeSlots(definition: SettingStylePlotType): SettingStyleSlot[] {
+  return [...choiceSlots(definition), visibleSlot(definition.priceLineId, false)];
 }
 
 /** The shape of one slot builder once the union of definitions is behind it. */
@@ -155,6 +181,7 @@ const SETTING_STYLE_SLOTS = {
   toggle: toggleSlots,
   number: numberSlots,
   choice: choiceSlots,
+  plotType: plotTypeSlots,
 } satisfies {
   readonly [Kind in SettingStyleDefinition['kind']]: (
     definition: Extract<SettingStyleDefinition, { kind: Kind }>,

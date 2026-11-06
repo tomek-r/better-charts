@@ -1,12 +1,12 @@
 import type { IndicatorPlot, IndicatorPlotGaps, IndicatorPlotStyle } from '../chart/engine/indicators/indicatorFrame';
 import type { SettingValues } from '../chart/engine/settings/settingInputs';
-import type { SettingStyleChoice, SettingStyleToggle } from '../chart/engine/settings/settingStyles';
+import type { SettingStylePlotType } from '../chart/engine/settings/settingStyles';
 import { settingStyleKey } from '../chart/engine/settings/settingStyles';
 import { booleanSetting, stringSetting } from './indicatorSettingValues';
 
-// The Plot type and Price line styles every indicator plot can offer, whatever it draws. An indicator
-// offers them by declaring `plotTypeStyle` and `priceLineStyle` among its styles and spreading
-// `plotDrawingOf` into the plot it builds.
+// The Plot type style every indicator plot can offer, whatever it draws: one way a plot is drawn, plus
+// whether it draws a line at its last value. An indicator offers it by declaring `plotTypeStyle` among its
+// styles and spreading `plotDrawingOf` into the plot it builds.
 
 /** One way an indicator plot can be drawn, and what it does at a bar without a value. */
 export interface PlotType {
@@ -32,28 +32,34 @@ export const PLOT_TYPES: readonly PlotType[] = [
 ];
 
 const PLOT_TYPE_TITLE = 'Plot type';
-const PRICE_LINE_TITLE = 'Price line';
 /** No plot draws a line at its last value until the user turns its Price line switch on. */
 const PRICE_LINE_VISIBLE = false;
 
-/** The Plot type choice an indicator plot offers, titled 'Plot type' unless the indicator titles it otherwise. */
+/**
+ * The Plot type style an indicator plot offers: its list of types and its Price line switch, titled
+ * 'Plot type' unless the indicator titles it otherwise. `priceLineId` names the switch's stored style, and
+ * `inlineWithId` the style whose row draws the button, beside that row's own controls.
+ */
 export function plotTypeStyle(
   id: string,
-  options: { title?: string; defaultType: string; parentId?: string },
-): SettingStyleChoice {
+  options: {
+    title?: string;
+    defaultType: string;
+    parentId?: string;
+    priceLineId: string;
+    inlineWithId?: string;
+  },
+): SettingStylePlotType {
   return {
-    kind: 'choice',
+    kind: 'plotType',
     id,
     title: options.title ?? PLOT_TYPE_TITLE,
     parentId: options.parentId,
     defaultValue: options.defaultType,
     options: PLOT_TYPES.map((plotType) => ({ value: plotType.value, title: plotType.title })),
+    priceLineId: options.priceLineId,
+    inlineWithId: options.inlineWithId,
   };
-}
-
-/** The Price line switch an indicator plot can offer, off until the user turns it on. */
-export function priceLineStyle(id: string, parentId?: string): SettingStyleToggle {
-  return { kind: 'toggle', id, title: PRICE_LINE_TITLE, parentId, defaults: { visible: PRICE_LINE_VISIBLE } };
 }
 
 /** The entry `value` names, or nothing when the list has no such entry. */

@@ -17,12 +17,19 @@ const MODE_INPUT = {
   options: ['volume', 'trades', 'delta'],
 } satisfies SettingInputDefinition;
 
+const LENGTH_INPUT = {
+  kind: 'int',
+  id: 'length',
+  title: 'Length',
+  defaultValue: 20,
+} satisfies SettingInputDefinition;
+
 const modeButton = (page: Page) => page.getByLabel('Mode', { exact: true });
 const listbox = (page: Page) => page.getByRole('listbox');
 const option = (page: Page, name: string) => page.getByRole('option', { name, exact: true });
 
 test.beforeEach(async ({ page }) => {
-  await mountSettingsForm(page, { inputs: [MODE_INPUT], styles: [PLACEMENT] });
+  await mountSettingsForm(page, { inputs: [MODE_INPUT, LENGTH_INPUT], styles: [PLACEMENT] });
 });
 
 test('the Inputs options and the Style choices are custom drop-downs, never a native select', async ({ page }) => {
@@ -32,11 +39,24 @@ test('the Inputs options and the Style choices are custom drop-downs, never a na
   await expect(page.locator('select')).toHaveCount(0);
 });
 
-test('drawing settings drop-downs read at 15px, closed and open', async ({ page }) => {
-  const settingsFontSize = '15px';
+test('drawing settings drop-downs read at 14px, closed and open', async ({ page }) => {
+  const settingsFontSize = '14px';
   await modeButton(page).click();
   await expect(listbox(page)).toHaveCSS('font-size', settingsFontSize);
   await expect(modeButton(page)).toHaveCSS('font-size', settingsFontSize);
+});
+
+test('a field writes its value at the size and weight of its label', async ({ page }) => {
+  const label = page.locator('.drawing-settings-label').first();
+  const labelFont = await label.evaluate((element) => {
+    const { fontSize, fontWeight } = getComputedStyle(element);
+    return { fontSize, fontWeight };
+  });
+
+  for (const field of [modeButton(page), page.getByLabel('Length', { exact: true })]) {
+    await expect(field).toHaveCSS('font-size', labelFont.fontSize);
+    await expect(field).toHaveCSS('font-weight', labelFont.fontWeight);
+  }
 });
 
 test('a click opens the list under the button with the chosen option marked', async ({ page }) => {

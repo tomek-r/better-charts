@@ -18,7 +18,7 @@
 
 .drawing-settings {
   /* One step above the 13px the dialog used before, so labels and fields read comfortably. */
-  --drawing-settings-font-size: 15px;
+  --drawing-settings-font-size: 14px;
   --drawing-settings-control-width: 200px;
   --drawing-settings-row-gap: 22px;
   display: flex;
@@ -104,7 +104,7 @@
 
 .drawing-settings-color-hex {
   color: var(--color-text-tertiary);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 /* Tabs: a dim track under the row, with a light underline on the active tab. */
@@ -122,6 +122,7 @@
   color: var(--color-muted-strong);
   background: none;
   font: inherit;
+  font-size: 16px;
   cursor: pointer;
 }
 
@@ -211,6 +212,138 @@
 
 .drawing-settings-style-row .color-trigger {
   justify-self: start;
+}
+
+/*
+ * A row that carries a Plot type button as well (Volume draws it beside its Growing colour): the title keeps the
+ * width of the label column, and the swatch and the button follow it side by side, so the swatch still starts
+ * the control column as it does on every other colour row.
+ */
+.drawing-settings-style-row:has(.drawing-settings-plot-type-trigger) {
+  --drawing-settings-plot-type-gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: var(--drawing-settings-plot-type-gap);
+}
+
+.drawing-settings-style-row:has(.drawing-settings-plot-type-trigger) > :first-child {
+  flex: 0 0 calc(100% - var(--drawing-settings-control-width) - var(--drawing-settings-plot-type-gap));
+}
+
+/* The Plot type row's button: a small square showing the type in use, in the Style tab's control column. */
+.drawing-settings-plot-type-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  justify-self: start;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  color: var(--color-text);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.drawing-settings-plot-type-trigger:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.drawing-settings-plot-type-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* A type's glyph, at the size of a line of text in the menu and a shade smaller on the button. */
+.drawing-settings-plot-type-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.drawing-settings-plot-type-trigger .drawing-settings-plot-type-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* The drop-downs' open lists: portalled to the body, so each sets the dialog's 14px for itself. */
+.select-list.drawing-settings-select-list {
+  font-size: 14px;
+}
+
+/* Wide enough for 'Step line with diamonds' on one line, and capped so a short window scrolls the list. */
+.drawing-settings-plot-type-menu {
+  /* Portalled to the body, so the menu cannot inherit the dialog's size and sets its own. */
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  width: 236px;
+  max-height: 60vh;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+/* The shared menu rows, tightened like the bar type menu's so the eleven types fit without a scrollbar. */
+.drawing-settings-plot-type-menu .drawing-settings-plot-type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 6px;
+}
+
+/* The type in use: the brightest text colour as a band, with the panel's dark colour for its text. */
+.drawing-settings-plot-type-row[role='menuitemradio'][aria-checked='true'] {
+  color: var(--color-surface);
+  background: var(--color-text-bright);
+}
+
+.drawing-settings-plot-type-label {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.drawing-settings-plot-type-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--color-border);
+}
+
+/* The Price line switch: a pill track whose round thumb sits right and turns accent while the line is on. */
+.drawing-settings-plot-type-switch {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 16px;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.drawing-settings-plot-type-switch > span {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-muted-strong);
+  transition:
+    transform 120ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.drawing-settings-plot-type-row[aria-checked='true'] .drawing-settings-plot-type-switch > span {
+  transform: translateX(12px);
+  background: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawing-settings-plot-type-switch > span {
+    transition: none;
+  }
 }
 
 /* Coordinates tab: one row per anchor, its label on the left and its fields side by side on the right. */

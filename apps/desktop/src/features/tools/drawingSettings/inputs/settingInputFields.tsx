@@ -167,10 +167,14 @@ function TextAreaControl(props: SettingInputFieldProps<'textArea'>) {
   );
 }
 
+/** The open list is portalled out of the dialog, so it takes the dialog's size from this class. */
+export const SETTINGS_SELECT_LIST_CLASS = 'drawing-settings-select-list';
+
 function SelectControl(props: FieldPropsFor<ChoiceKind>) {
   return (
     <Select
       id={props.controlId}
+      listClassName={SETTINGS_SELECT_LIST_CLASS}
       title={props.definition.tooltip}
       describedBy={props.tooltipId}
       invalid={props.invalid}
