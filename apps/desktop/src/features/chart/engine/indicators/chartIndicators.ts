@@ -103,6 +103,7 @@ export class ChartIndicators {
         setHidden: (instanceId, hidden) => this.commands?.setHidden(instanceId, hidden),
         remove: (instanceId) => this.commands?.remove(instanceId),
         setPaneHeights: (heights) => this.commands?.setPaneHeights(heights),
+        setLegendCollapsed: (collapsed) => this.commands?.setLegendCollapsed(collapsed),
       },
     );
     this.hoveredBar.subscribe(() => this.legend.refresh());
@@ -118,6 +119,7 @@ export class ChartIndicators {
   /** Applies the Status line tab's switches to the legend rows and redraws them. */
   setStatusLine(appearance: ChartStatusLineAppearance): void {
     this.statusLine = appearance;
+    this.legend.setCollapsed(appearance.indicatorLegendCollapsed);
     this.legend.refresh();
   }
 

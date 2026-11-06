@@ -31,6 +31,7 @@ export function statusLineAppearanceOf(values: StatusLineSettingValues): ChartSt
     indicatorTitles: readBoolean(values.indicatorTitles, defaults.indicatorTitles),
     indicatorInputs: readBoolean(values.indicatorInputs, defaults.indicatorInputs),
     indicatorValues: readBoolean(values.indicatorValues, defaults.indicatorValues),
+    indicatorLegendCollapsed: readBoolean(values.indicatorLegendCollapsed, defaults.indicatorLegendCollapsed),
     background: backgroundOf(values.background),
   };
 }

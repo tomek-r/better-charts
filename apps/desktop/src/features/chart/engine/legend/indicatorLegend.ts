@@ -24,6 +24,8 @@ export interface IndicatorLegendCommands {
    * stores them with the indicators they belong to, so a chart opened again restores them.
    */
   setPaneHeights(heights: readonly IndicatorPaneHeight[]): void;
+  /** Saves whether the rows are collapsed to their count, so a chart opened again draws them so. */
+  setLegendCollapsed(collapsed: boolean): void;
 }
 
 /** What the legend reads to draw its rows; the chart surface supplies it. */
@@ -162,8 +164,9 @@ export class IndicatorLegend {
   private readonly commands: IndicatorLegendCommands;
   private readonly views = new Map<string, RowView>();
   private readonly toggleClicked = (): void => {
-    this.collapsed = !this.collapsed;
-    this.refresh();
+    const next = !this.collapsed;
+    this.setCollapsed(next);
+    this.commands.setLegendCollapsed(next);
   };
 
   private collapsed = false;
@@ -199,6 +202,15 @@ export class IndicatorLegend {
     }
     this.element.hidden = pricePaneEntries.length === 0;
     this.applyToggleState(pricePaneEntries.length);
+  }
+
+  /** Shows the rows collapsed to their count or expanded, redrawing only when the state changed. */
+  setCollapsed(collapsed: boolean): void {
+    if (this.collapsed === collapsed) {
+      return;
+    }
+    this.collapsed = collapsed;
+    this.refresh();
   }
 
   destroy(): void {

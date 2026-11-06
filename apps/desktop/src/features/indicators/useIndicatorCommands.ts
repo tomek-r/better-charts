@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { withIndicators, type ChartSettings } from '../chart/chartSettings/chartSettings';
+import { withIndicators, withStatusLineValue, type ChartSettings } from '../chart/chartSettings/chartSettings';
 import { useChartSettings } from '../chart/chartSettings/ChartSettingsProvider';
 import type { SavedIndicator } from '../chart/chartSettings/savedIndicators';
 import type { DrawingTimeframeVisibility } from '../chart/engine/drawings/timeframeVisibility';
@@ -32,12 +32,15 @@ export interface IndicatorCommands {
   readonly remove: (instanceId: string) => void;
   /** Saves the heights the user dragged the pane separators to, relative to the price pane. */
   readonly setPaneHeights: (heights: readonly IndicatorPaneHeight[]) => void;
+  /** Saves whether the legend's rows are collapsed to their count, which the legend's chevron edits. */
+  readonly setLegendCollapsed: (collapsed: boolean) => void;
 }
 
 /**
  * The commands of an indicator row: hide or show one saved indicator, replace its settings and the timeframes it
- * shows on, detach it, show a draft without saving it, and save the heights of the panes the user resized. Every
- * saving one writes the edited list through the chart settings, which the chart's sync follows.
+ * shows on, detach it, show a draft without saving it, save the heights of the panes the user resized, and save
+ * the legend's collapsed state. Every saving one writes the settings through the chart settings, which the
+ * chart's sync follows.
  */
 export function useIndicatorCommands(): IndicatorCommands {
   const { settings, keep, preview, revert } = useChartSettings();
@@ -64,6 +67,8 @@ export function useIndicatorCommands(): IndicatorCommands {
       revertPreview: () => revert(),
       remove: (instanceId) => keep(editedSettings((saved) => withoutIndicator(saved, instanceId))),
       setPaneHeights: (heights) => keep(editedSettings((saved) => withIndicatorPaneHeights(saved, heights))),
+      setLegendCollapsed: (collapsed) =>
+        keep(withStatusLineValue(latestSettings.current, 'indicatorLegendCollapsed', collapsed)),
     };
   }, [keep, preview, revert]);
 }

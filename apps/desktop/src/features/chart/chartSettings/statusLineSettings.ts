@@ -3,7 +3,7 @@ import {
   STATUS_LINE_TITLE_FORMATS,
   type StatusLineTitleFormat,
 } from '../engine/legend/statusLineAppearance';
-import type { ChartSettingField, SettingsSectionFields } from './settingFields';
+import type { ChartSettingField, CheckboxSettingField, SettingsSectionFields } from './settingFields';
 
 const TITLE_FORMAT_LABELS: Record<StatusLineTitleFormat, string> = {
   name: 'Name',
@@ -97,7 +97,18 @@ export const STATUS_LINE_SETTINGS: readonly SettingsSectionFields[] = [
   },
 ];
 
-/** Every row of the tab in one list, for the readers that look a stored value up by its key. */
+/**
+ * Whether the indicator rows are collapsed to their count: saved with the status line settings, like the
+ * rows above, but the tab draws no row for it because the legend's own chevron is what edits it.
+ */
+const INDICATOR_LEGEND_COLLAPSED_FIELD: CheckboxSettingField = {
+  kind: 'checkbox',
+  key: 'indicatorLegendCollapsed',
+  label: 'Indicator legend collapsed',
+  defaultValue: DEFAULT_STATUS_LINE_APPEARANCE.indicatorLegendCollapsed,
+};
+
+/** Every status line field storage reads and writes: the rows the tab draws, then the chevron's own. */
 export function statusLineFields(): ChartSettingField[] {
-  return STATUS_LINE_SETTINGS.flatMap((section) => section.fields);
+  return [...STATUS_LINE_SETTINGS.flatMap((section) => section.fields), INDICATOR_LEGEND_COLLAPSED_FIELD];
 }

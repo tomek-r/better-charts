@@ -13,6 +13,8 @@ export interface ChartStatusLineAppearance {
   readonly indicatorTitles: boolean;
   readonly indicatorInputs: boolean;
   readonly indicatorValues: boolean;
+  /** Whether the indicator rows are collapsed to their count, as the legend's chevron last set. */
+  readonly indicatorLegendCollapsed: boolean;
   readonly background: { visible: boolean; color: string };
 }
 
@@ -27,6 +29,7 @@ export const DEFAULT_STATUS_LINE_APPEARANCE: ChartStatusLineAppearance = {
   indicatorTitles: true,
   indicatorInputs: true,
   indicatorValues: true,
+  indicatorLegendCollapsed: false,
   background: { visible: false, color: '#131722B3' },
 };
 

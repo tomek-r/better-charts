@@ -6,11 +6,13 @@ import { smaPlugin } from '../src/features/indicators/sma/smaPlugin';
 import { palette } from '../src/shared/theme/palette';
 import { OBJECT_SETTINGS_ICON_PATHS } from '../src/shared/ui/icons/objectSettingsIcon';
 import { CHART_HOST_SELECTOR, RESIZE_HANDLE_SELECTOR, paneSeparatorCenter } from './helpers/chartHost';
+import { openChartSettingsTab } from './helpers/chartSettingsDialog';
 import { attachedIndicators, attachSma } from './helpers/indicatorsDialog';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { openChart } from './helpers/openChart';
 import { parseHexColor } from './helpers/pngPixels';
-import { openWithSavedIndicators } from './helpers/savedIndicators';
+import { EURUSD_CHART, openWithSavedIndicators } from './helpers/savedIndicators';
+import { savedOverrides } from './helpers/savedOverrides';
 import { gotoWithStub } from './helpers/tauriStub';
 
 const INDICATOR_LEGEND_LABEL = 'Indicator legend';
@@ -45,8 +47,12 @@ const TRANSPARENT_COLOR = 'rgba(0, 0, 0, 0)';
 const WHITE_ICON_COLOR = rgbOf(palette.textBright);
 /** The app's own hover band on that separator, drawn over the pane's width instead. */
 const SEPARATOR_BAND_SELECTOR = '.chart-pane-separator-band';
+/** The label of the stored checkbox the Status line tab draws no row for. */
+const INDICATOR_LEGEND_COLLAPSED_LABEL = 'Indicator legend collapsed';
 /** A saved SMA that starts hidden, so its row shows the eye-off button from the first paint. */
 const HIDDEN_SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {}, hidden: true };
+/** A saved SMA a collapsed legend counts. */
+const SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {} };
 
 /** A palette hex colour written the way `toHaveCSS` reports a computed colour. */
 function rgbOf(hex: string): string {
@@ -84,6 +90,22 @@ async function attachedSmaValue(page: Page): Promise<number> {
     throw new Error('The attached SMA plots no value on the stub history.');
   }
   return value;
+}
+
+/** The status line group of the overrides the app saved last, read the way the e2e helpers read them. */
+async function savedStatusLine(page: Page): Promise<unknown> {
+  const latest = (await savedOverrides(page)).at(-1);
+  if (typeof latest !== 'object' || latest === null) {
+    return undefined;
+  }
+  return (latest as Readonly<Record<string, unknown>>).statusLine;
+}
+
+/** Opens the app with the legend collapsed as the chart's settings stored it, and one SMA row to count. */
+async function openWithCollapsedLegend(page: Page): Promise<void> {
+  const overrides = { statusLine: { indicatorLegendCollapsed: true }, indicators: [SMA_ENTRY] };
+  await gotoWithStub(page, { chartSettingOverrides: { [EURUSD_CHART]: overrides } });
+  await openChart(page);
 }
 
 test.describe('indicator legend', () => {
@@ -166,6 +188,20 @@ test.describe('indicator legend', () => {
 
     await expand.click();
     await expect(rows.first()).toBeVisible();
+  });
+
+  test('the chevron saves the collapsed legend with the chart settings', async ({ page }) => {
+    await attachSma(page);
+
+    await legend.getByRole('button', { name: COLLAPSE_BUTTON }).click();
+
+    await expect.poll(() => savedStatusLine(page)).toEqual({ indicatorLegendCollapsed: true });
+  });
+
+  test('the Status line tab draws no row for the legend collapse', async ({ page }) => {
+    const dialog = await openChartSettingsTab(page, 'Status line');
+
+    await expect(dialog.getByRole('checkbox', { name: INDICATOR_LEGEND_COLLAPSED_LABEL })).toHaveCount(0);
   });
 
   test('a hovered row offers Hide and Show, which save the hidden flag and dim the row', async ({ page }) => {
@@ -341,6 +377,29 @@ test.describe('own-pane indicator legend', () => {
 
     await page.mouse.move(0, 0);
     await expect(band).toHaveCSS('opacity', '0');
+  });
+});
+
+test.describe('saved collapsed indicator legend', () => {
+  failOnPageNoise();
+
+  test('a legend saved collapsed opens collapsed', async ({ page }) => {
+    await openWithCollapsedLegend(page);
+    const legend = page.getByLabel(INDICATOR_LEGEND_LABEL, { exact: true });
+
+    await expect(legend.locator(ROW_SELECTOR).first()).toBeHidden();
+    await expect(legend.getByRole('button', { name: EXPAND_BUTTON })).toHaveText(SMA_ROW_COUNT);
+  });
+
+  test('expanding a legend saved collapsed saves that', async ({ page }) => {
+    await openWithCollapsedLegend(page);
+    const legend = page.getByLabel(INDICATOR_LEGEND_LABEL, { exact: true });
+    const rows = legend.locator(ROW_SELECTOR);
+
+    await legend.getByRole('button', { name: EXPAND_BUTTON }).click();
+
+    await expect(rows.first()).toBeVisible();
+    await expect.poll(async () => (await savedStatusLine(page)) ?? {}).not.toEqual({ indicatorLegendCollapsed: true });
   });
 });
 
