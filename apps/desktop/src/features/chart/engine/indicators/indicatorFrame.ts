@@ -3,14 +3,14 @@
  *
  * The split is absolute: producers never touch the chart, and the display layer never
  * computes a number. A producer turns bars into a frame; the display layer draws that
- * frame. Own panes are added to this format later.
+ * frame.
  */
 
 /**
  * How a plot is drawn.
  *
- * A histogram's columns, and the shapes of a marker plot, take their bar's own colour when the frame
- * gives one, and the plot's colour otherwise.
+ * A histogram's columns, an area's band and the shapes of a marker plot take their bar's own colour when
+ * the frame gives one, and the plot's colour otherwise.
  */
 export type IndicatorPlotStyle =
   /** A line joining its points. */

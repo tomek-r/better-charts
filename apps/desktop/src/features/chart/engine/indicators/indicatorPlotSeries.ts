@@ -12,6 +12,7 @@ import {
   type Time,
   type WhitespaceData,
 } from 'lightweight-charts';
+import { withOpacityPercent } from '../../../../shared/theme/hexColor';
 import type { IndicatorLineStyle, IndicatorPlot, IndicatorPlotStyle } from './indicatorFrame';
 import { toIndicatorLineStyle, toLibraryLineStyle } from './indicatorLevels';
 import { toLineWidth } from './indicatorLineWidth';
@@ -29,12 +30,9 @@ const ZERO_PRICE = 0;
 /** Columns have no stroke, so they report the thinnest width the legend can still paint a swatch in. */
 const HISTOGRAM_LINE_WIDTH = 1;
 
-/** An area plot's shaded top is its colour at 40% alpha; its bottom is fully transparent. */
-const AREA_TOP_ALPHA_BYTE = 0x66;
-const AREA_BOTTOM_ALPHA_BYTE = 0x00;
-
-/** Length of `#RRGGBB` in a CSS colour; an alpha the producer already wrote is replaced, not kept. */
-const OPAQUE_HEX_LENGTH = 7;
+/** An area plot's shaded top is its colour at 40% opacity; its bottom is fully transparent. */
+export const AREA_TOP_OPACITY_PERCENT = 40;
+export const AREA_BOTTOM_OPACITY_PERCENT = 0;
 
 /** The marker each style draws, when it draws one. */
 const MARKER_SHAPES: Record<IndicatorPlotStyle, IndicatorMarkerShape | null> = {
@@ -66,8 +64,14 @@ export type IndicatorPlotSeries = ISeriesApi<'Line'> | ISeriesApi<'Area'> | ISer
 export type IndicatorLineType =
   'simple' | 'step' | 'stepDiamonds' | 'area' | 'histogram' | 'stems' | 'crosses' | 'circles';
 
+/** An area point: its value and the colours its bar shades the band with. */
+export type IndicatorAreaPoint = LineData<Time> & {
+  readonly lineColor?: string;
+  readonly topColor?: string;
+  readonly bottomColor?: string;
+};
 /** A point as the library holds it: a value to draw, or the time-only gap that breaks the plot. */
-export type IndicatorPlotPoint = LineData<Time> | WhitespaceData<Time> | HistogramData<Time>;
+export type IndicatorPlotPoint = LineData<Time> | IndicatorAreaPoint | WhitespaceData<Time> | HistogramData<Time>;
 
 /**
  * One drawn point as the dev hook shows it: a bar without a value has no point here, as the library
@@ -152,6 +156,17 @@ export function setPlotSeriesHidden(series: IndicatorPlotSeries, hidden: boolean
 /** Whether `point` draws a value rather than marking the gap that breaks the plot. */
 export function isValuePoint(point: IndicatorPlotPoint): point is LineData<Time> | HistogramData<Time> {
   return 'value' in point;
+}
+
+/** The colour a drawn point carries: an area keeps it on `lineColor`, every other point on `color`. */
+export function pointColorOf(point: IndicatorPlotPoint): string | null {
+  if ('lineColor' in point) {
+    return point.lineColor ?? null;
+  }
+  if (!('color' in point)) {
+    return null;
+  }
+  return point.color ?? null;
 }
 
 /** One plot as the dev hook shows it, read back out of its series. */
@@ -260,28 +275,21 @@ function lineOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
   };
 }
 
-/** The options a marker-only plot's series is created with: its markers are all it shows. */
-function markerOnlyOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
-  return {
-    ...lineOptionsOf(plot, priceLabelsVisible),
-    lineVisible: false,
-    visible: plot.visible !== false,
-  };
-}
-
-/** The options a line-backed plot's series is created with, by what its style draws. */
+/** The options a marker-only style's line plot is created with: its markers are all it shows. */
 function lineSeriesOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
-  return drawsMarkersOnly(plot.style)
-    ? markerOnlyOptionsOf(plot, priceLabelsVisible)
-    : lineOptionsOf(plot, priceLabelsVisible);
+  const lineOptions = lineOptionsOf(plot, priceLabelsVisible);
+  if (!drawsMarkersOnly(plot.style)) {
+    return lineOptions;
+  }
+  return { ...lineOptions, lineVisible: false, visible: plot.visible !== false };
 }
 
 /** The options an area plot's series is created with: its colour shades the region under the line. */
 function areaOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
   return {
     lineColor: plot.color,
-    topColor: withAlphaByte(plot.color, AREA_TOP_ALPHA_BYTE),
-    bottomColor: withAlphaByte(plot.color, AREA_BOTTOM_ALPHA_BYTE),
+    topColor: withOpacityPercent(plot.color, AREA_TOP_OPACITY_PERCENT),
+    bottomColor: withOpacityPercent(plot.color, AREA_BOTTOM_OPACITY_PERCENT),
     ...strokeOptionsOf(plot, priceLabelsVisible),
     ...zeroAnchorOptionsOf(plot),
   };
@@ -301,12 +309,6 @@ function histogramOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
 /** The library's line type for a plot's style: both step styles draw across each bar. */
 function plotLineType(plot: IndicatorPlot): LineType {
   return plot.style === 'stepline' || plot.style === 'steplineDiamonds' ? LineType.WithSteps : LineType.Simple;
-}
-
-/** `color` written as `#RRGGBBAA` with `alphaByte`, whatever alpha the colour already carried. */
-function withAlphaByte(color: string, alphaByte: number): string {
-  const alphaHex = alphaByte.toString(16).padStart(2, '0');
-  return `${color.slice(0, OPAQUE_HEX_LENGTH)}${alphaHex}`;
 }
 
 /** Keeps price zero on the scale even when every value sits above it. */
@@ -387,7 +389,7 @@ function pointStatesOf(points: readonly IndicatorPlotPoint[]): IndicatorPointSta
 }
 
 function pointStateOf(point: LineData<Time> | HistogramData<Time>): IndicatorPointState {
-  return { time: secondsOf(point.time), value: point.value, color: point.color ?? null };
+  return { time: secondsOf(point.time), value: point.value, color: pointColorOf(point) };
 }
 
 /** The seconds of a point's time; the layer only ever writes `UTCTimestamp` values. */

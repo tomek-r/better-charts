@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { IndicatorPlot, IndicatorPlotStyle } from '../src/features/chart/engine/indicators/indicatorFrame';
+import { frameLookKey } from '../src/features/chart/engine/indicators/indicatorFrameLook';
 import {
   crossSegments,
   diamondSegments,
@@ -12,6 +13,7 @@ import type { IndicatorPlotState } from '../src/features/chart/engine/indicators
 import { PLOT_TYPE_STYLE } from '../src/features/indicators/volume/volumeIndicator';
 import {
   DEMO_ID,
+  colouredFrame,
   drawnIndicators,
   frameOf,
   openChartTimes,
@@ -38,6 +40,12 @@ const PLOT_TYPE_CASES = [
 
 const PLOT_TITLE = 'marks';
 const PLOT_COLOR = '#26a69a';
+
+/** The level both shows of the repeated-show test declare, which the second show must leave as it is. */
+const LEVEL = { title: 'zero', price: 0, color: '#787b86', lineWidth: 1 };
+
+/** How far the second show of the repeated-show test moves every value on. */
+const NEW_VALUE_OFFSET = 10;
 
 /** The value every bar plots unless a test says otherwise. */
 function barValue(_plotIndex: number, barIndex: number): number {
@@ -110,6 +118,52 @@ test.describe('plot types', () => {
     });
   }
 
+  test('a repeated show with the same look keeps the level lines and rewrites the bars', async ({ page }) => {
+    const times = await openChartTimes(page);
+    const plots = [plotOf('area')];
+    await showFrame(page, DEMO_ID, { ...frameOf(plots, times, barValue), levels: [LEVEL] });
+    const [firstShow] = await drawnIndicators(page);
+
+    await showFrame(page, DEMO_ID, {
+      ...frameOf(plots, times, (_plotIndex, barIndex) => barValue(0, barIndex) + NEW_VALUE_OFFSET),
+      levels: [LEVEL],
+    });
+    const [secondShow] = await drawnIndicators(page);
+
+    expect(secondShow.levels).toEqual(firstShow.levels);
+    expect(secondShow.paneIndex).toBe(firstShow.paneIndex);
+    expect(secondShow.plots[0].lineType).toBe(firstShow.plots[0].lineType);
+    expect(secondShow.plots[0].points.map((point) => point.value)).toEqual(
+      firstShow.plots[0].points.map((point) => point.value + NEW_VALUE_OFFSET),
+    );
+  });
+
+  test('a show whose look changed draws its plots again in the new style', async ({ page }) => {
+    const times = await openChartTimes(page);
+    await showFrame(page, DEMO_ID, frameOf([plotOf('area')], times, barValue));
+    await showFrame(page, DEMO_ID, frameOf([plotOf('histogram')], times, barValue));
+
+    const [demo] = await drawnIndicators(page);
+    expect(demo.plots[0]).toMatchObject({ title: PLOT_TITLE, lineType: 'histogram' });
+    expect(demo.plots[0].points).toHaveLength(times.length);
+  });
+
+  test('an area plot reports the colour its bar carries', async ({ page }) => {
+    const times = await openChartTimes(page);
+    const colouredBar = 1;
+    const barColor = '#ef5350';
+    await showFrame(page, DEMO_ID, colouredFrame(frameOf([plotOf('area')], times, barValue), colouredBar, [barColor]));
+
+    const [demo] = await drawnIndicators(page);
+    const [plot] = demo.plots;
+    expect(plot.points[colouredBar]).toEqual({
+      time: times[colouredBar],
+      value: barValue(0, colouredBar),
+      color: barColor,
+    });
+    expect(plot.points[colouredBar - 1].color).toBeNull();
+  });
+
   test('a saved Volume set to the Cross plot type draws crosses under its own title', async ({ page }) => {
     await openWithSavedIndicators(page, [
       { instanceId: 'volume-1', definitionId: 'volume', settings: { [PLOT_TYPE_STYLE]: 'cross' } },
@@ -152,5 +206,24 @@ test.describe('marker geometry', () => {
 
   test('draws a circle whose diameter is the marker size', () => {
     expect(markerCircle({ x: 4, y: 6 }, 3.5)).toEqual({ centre: { x: 4, y: 6 }, radius: 3.5 });
+  });
+});
+
+test.describe('frame look key', () => {
+  const times = [1_700_000_000, 1_700_000_060];
+
+  test('the same style over different bars keys the same', () => {
+    const flatBars = frameOf([plotOf('line')], times, () => 1);
+    const risingBars = frameOf([plotOf('line')], times, (_plotIndex, barIndex) => barIndex + 1);
+
+    expect(frameLookKey(risingBars, 'overlay', false)).toBe(frameLookKey(flatBars, 'overlay', false));
+  });
+
+  test('another plot colour keys differently', () => {
+    const plot = plotOf('line');
+    const flatBars = frameOf([plot], times, () => 1);
+    const recolouredBars = frameOf([{ ...plot, color: '#ff6d00' }], times, () => 1);
+
+    expect(frameLookKey(recolouredBars, 'overlay', false)).not.toBe(frameLookKey(flatBars, 'overlay', false));
   });
 });

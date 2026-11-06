@@ -1,14 +1,8 @@
-import { MismatchDirection, type IChartApi, type IPriceLine, type UTCTimestamp } from 'lightweight-charts';
+import { MismatchDirection, type IChartApi, type IPriceLine } from 'lightweight-charts';
 import type { ChartIndicatorPane } from './indicatorContract';
 import { IndicatorFillPrimitive } from './indicatorFillPrimitive';
-import type {
-  IndicatorBar,
-  IndicatorFill,
-  IndicatorFillEdge,
-  IndicatorFrame,
-  IndicatorLevel,
-  IndicatorPlot,
-} from './indicatorFrame';
+import type { IndicatorFill, IndicatorFillEdge, IndicatorFrame, IndicatorLevel } from './indicatorFrame';
+import { frameLookKey } from './indicatorFrameLook';
 import { createLevelLines, removeLevelLines, setLevelLinesHidden } from './indicatorLevels';
 import {
   PRICE_PANE_INDEX,
@@ -24,12 +18,13 @@ import {
   isValuePoint,
   plotColorOf,
   plotStateOf,
+  pointColorOf,
   removePlotSeries,
   setPlotSeriesHidden,
-  type IndicatorPlotPoint,
   type IndicatorPlotSeries,
   type IndicatorPlotState,
 } from './indicatorPlotSeries';
+import { lastTimeOf, pointOf, pointsOf, timeOf } from './indicatorPoints';
 import { applyPlotScaleMargins } from './indicatorScaleFit';
 import { OPENING_OWN_PANE_SCALE, readOwnPaneScale, restoreOwnPaneScale } from './ownPaneScale';
 
@@ -103,43 +98,13 @@ interface Shown {
   fillPrimitive: IndicatorFillPrimitive | null;
   ownPane: OwnPane | null;
   precision: number | null;
-}
-
-/** The chart's bar time of an indicator bar: the UTC seconds every series point is keyed by. */
-function timeOf(bar: IndicatorBar): UTCTimestamp {
-  return Math.floor(bar.timeMs / 1000) as UTCTimestamp;
+  /** What the frame draws beyond its bars, which decides whether a later frame can keep these series. */
+  lookKey: string;
 }
 
 /**
- * One bar's point for one plot: a value the plot draws, a time-only whitespace point that breaks it,
- * or no point at all when the plot joins across a missing value.
- */
-function pointOf(bar: IndicatorBar, plot: IndicatorPlot, plotIndex: number): IndicatorPlotPoint | null {
-  const time = timeOf(bar);
-  const value = bar.values[plotIndex];
-  if (value === null || !Number.isFinite(value)) {
-    return plot.gaps === 'connect' ? null : { time };
-  }
-  // An area shades one colour, so it takes no per-bar colour.
-  const color = plot.style === 'area' ? undefined : bar.colors?.[plotIndex];
-  return typeof color === 'string' ? { time, value, color } : { time, value };
-}
-
-/** One plot's whole data: a bar without a value is left out where the plot joins across it. */
-function pointsOf(bars: readonly IndicatorBar[], plot: IndicatorPlot, plotIndex: number): IndicatorPlotPoint[] {
-  const points: IndicatorPlotPoint[] = [];
-  for (const bar of bars) {
-    const point = pointOf(bar, plot, plotIndex);
-    if (point !== null) {
-      points.push(point);
-    }
-  }
-  return points;
-}
-
-/**
- * The legend's value for one plot at the bar with `logicalIndex`: the plot's own colour where its
- * point carries one, and no value where the plot has no point (a whitespace bar or a bar before it).
+ * The legend's value for one plot at the bar with `logicalIndex`: the colour its point carries, and no
+ * value where the plot has no point (a whitespace bar or a bar before it).
  */
 function legendValueOf(series: IndicatorPlotSeries, logicalIndex: number): IndicatorLegendValue {
   const color = plotColorOf(series);
@@ -150,7 +115,7 @@ function legendValueOf(series: IndicatorPlotSeries, logicalIndex: number): Indic
   if (point === null || !isValuePoint(point)) {
     return { value: null, color };
   }
-  return { value: point.value, color: point.color ?? color };
+  return { value: point.value, color: pointColorOf(point) ?? color };
 }
 
 function levelStateOf(level: IndicatorLevel): IndicatorLevelState {
@@ -183,8 +148,9 @@ export class IndicatorLayer {
   constructor(private readonly chart: IChartApi) {}
 
   /**
-   * Draws a whole frame for `id`, replacing everything it drew before; a frame without plots keeps neither.
-   * `pane` picks the price pane or a pane of its own, which opens on auto scale, fitting its own data.
+   * Draws a whole frame for `id`; a frame without plots keeps neither. A frame whose look is the one
+   * already shown only rewrites its bars, so its series, level lines, fills and pane scale stay as they
+   * are. `pane` picks the price pane or a pane of its own, which opens on auto scale, fitting its own data.
    */
   show(
     id: string,
@@ -192,10 +158,16 @@ export class IndicatorLayer {
     pane: ChartIndicatorPane = 'overlay',
     options: IndicatorShowOptions = DEFAULT_SHOW_OPTIONS,
   ): void {
-    const heldPane = this.shown.get(id)?.ownPane ?? null;
+    const lookKey = frameLookKey(frame, pane, options.priceLabelsVisible);
+    const shown = this.shown.get(id);
+    if (shown !== undefined && shown.lookKey === lookKey) {
+      this.writeBars(shown, frame);
+      return;
+    }
+    const heldPane = shown?.ownPane ?? null;
     const heldScale = heldPane === null ? null : readOwnPaneScale(heldPane);
     this.clear(id);
-    this.draw(id, frame, this.paneToDrawIn(heldPane, pane, options.paneHeight), options);
+    this.draw(id, frame, this.paneToDrawIn(heldPane, pane, options.paneHeight), options, lookKey);
     const drawnPane = this.shown.get(id)?.ownPane ?? null;
     if (drawnPane !== null) {
       restoreOwnPaneScale(drawnPane, drawnPane === heldPane && heldScale !== null ? heldScale : OPENING_OWN_PANE_SCALE);
@@ -301,7 +273,13 @@ export class IndicatorLayer {
   }
 
   /** Draws `frame` for `id`, in its own pane or on the price pane when `ownPane` is null. */
-  private draw(id: string, frame: IndicatorFrame, ownPane: OwnPane | null, options: IndicatorShowOptions): void {
+  private draw(
+    id: string,
+    frame: IndicatorFrame,
+    ownPane: OwnPane | null,
+    options: IndicatorShowOptions,
+    lookKey: string,
+  ): void {
     // The pane's index is read here rather than when it was added: indices shift when another pane goes.
     const paneIndex = paneIndexOf(ownPane);
     const precision = frame.precision ?? null;
@@ -313,7 +291,6 @@ export class IndicatorLayer {
     if (ownPane !== null) {
       applyPlotScaleMargins(this.chart, ownPane.pane, frame.plots[0]);
     }
-    const lastBar = frame.bars[frame.bars.length - 1];
     const levels = frame.levels ?? [];
     const fills = frame.fills ?? [];
     const hostSeries = hostSeriesOf(series);
@@ -321,7 +298,7 @@ export class IndicatorLayer {
       series,
       titles: frame.plots.map((plot) => plot.title),
       plotVisible: frame.plots.map((plot) => plot.visible !== false),
-      lastTimeSeconds: lastBar === undefined ? null : timeOf(lastBar),
+      lastTimeSeconds: lastTimeOf(frame.bars),
       hidden: false,
       levels,
       levelLines: hostSeries === undefined ? [] : createLevelLines(hostSeries, levels),
@@ -329,7 +306,16 @@ export class IndicatorLayer {
       fillPrimitive: hostSeries === undefined ? null : this.attachFill(hostSeries, series, levels, fills),
       ownPane,
       precision,
+      lookKey,
     });
+  }
+
+  /** Rewrites the bars of a shown indicator whose look is unchanged, leaving everything it draws alone. */
+  private writeBars(shown: Shown, frame: IndicatorFrame): void {
+    for (const [plotIndex, series] of shown.series.entries()) {
+      series.setData(pointsOf(frame.bars, frame.plots[plotIndex], plotIndex));
+    }
+    shown.lastTimeSeconds = lastTimeOf(frame.bars);
   }
 
   /** Removes every series, level line and fill of `id`; the pane it holds stays with the layer. */

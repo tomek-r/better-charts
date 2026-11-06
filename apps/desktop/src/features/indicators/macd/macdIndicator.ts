@@ -69,6 +69,13 @@ interface MacdState {
   histogram: number | null;
 }
 
+/** The values a bar was read as, and the state they were read from, so one bar is computed once. */
+interface ComputedMacd {
+  readonly bar: RenderBar;
+  readonly state: MacdState;
+  readonly values: MacdValues;
+}
+
 const DEFAULT_HISTOGRAM_COLORS: HistogramColors = {
   aboveGrow: DEFAULT_HISTOGRAM_ABOVE_GROW_COLOR,
   aboveFall: DEFAULT_HISTOGRAM_ABOVE_FALL_COLOR,
@@ -155,6 +162,7 @@ export class MacdIndicator extends BarByBarIndicator {
   private source: SettingInputSource = DEFAULT_SOURCE;
   private colors: HistogramColors = DEFAULT_HISTOGRAM_COLORS;
   private state: MacdState = INITIAL_STATE;
+  private computed: ComputedMacd | null = null;
 
   protected reset(settings: SettingValues): void {
     this.fastLength = numberSetting(settings, FAST_LENGTH_INPUT, DEFAULT_FAST_LENGTH);
@@ -163,6 +171,7 @@ export class MacdIndicator extends BarByBarIndicator {
     this.source = sourceSetting(settings, SOURCE_INPUT, DEFAULT_SOURCE);
     this.colors = resolveColors(settings);
     this.state = INITIAL_STATE;
+    this.computed = null;
   }
 
   /** The histogram, the MACD and the signal of a bar, in the order the frame's plots draw them. */
@@ -180,6 +189,7 @@ export class MacdIndicator extends BarByBarIndicator {
   /** Moves the state on to a bar that closed, so the next bar starts from that bar's averages. */
   protected commit(bar: RenderBar): void {
     this.state = this.stateAfter(bar);
+    this.computed = null;
   }
 
   /** The way the MACD is drawn, which no bar changes: three plots and the zero line they sit on. */
@@ -199,8 +209,22 @@ export class MacdIndicator extends BarByBarIndicator {
     };
   }
 
-  /** The three values a bar plots, read from the state without moving it on. */
+  /**
+   * The three values a bar plots, read from the state without moving it on. `valuesAt`, `colorsAt` and
+   * `stateAfter` all ask for the same bar, so the values kept for the bar and the state are handed back.
+   */
   private macdAt(bar: RenderBar): MacdValues {
+    const computed = this.computed;
+    if (computed !== null && computed.bar === bar && computed.state === this.state) {
+      return computed.values;
+    }
+    const values = this.macdValuesOf(bar);
+    this.computed = { bar, state: this.state, values };
+    return values;
+  }
+
+  /** The three values a bar plots, from the state as it stands. */
+  private macdValuesOf(bar: RenderBar): MacdValues {
     const source = sourceValue(bar, this.source);
     const fast = emaValue(emaAfter(this.state.fast, source, this.fastLength));
     const slow = emaValue(emaAfter(this.state.slow, source, this.slowLength));

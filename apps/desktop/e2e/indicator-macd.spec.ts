@@ -90,6 +90,15 @@ function loadedBars(bars: readonly RenderBar[], settings: SettingValues): readon
   return new MacdIndicator().load(bars, settings).bars;
 }
 
+/** The bars a chart ends up showing: a later frame's bar replaces the earlier one with the same time. */
+function drawnBars(frames: readonly (readonly IndicatorBar[])[]): IndicatorBar[] {
+  const byTime = new Map<number, IndicatorBar>();
+  for (const bar of frames.flat()) {
+    byTime.set(bar.timeMs, bar);
+  }
+  return [...byTime.values()];
+}
+
 function meanOf(values: readonly number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
@@ -249,6 +258,18 @@ test('live updates end where a fresh load of the same bars ends', () => {
 
   expect(closingFrame.bars[0]).toEqual(freshBars[freshBars.length - 2]);
   expect(tickedFrame.bars).toEqual([freshBars[freshBars.length - 1]]);
+});
+
+test('a load of one bar and a tick per bar draw the values and colours of one load of every bar', () => {
+  const settings = shortSettings();
+  const bars = barsFromCloses(COLOR_CLOSES);
+  const live = new MacdIndicator();
+  const frames = [live.load(bars.slice(0, 1), settings).bars];
+  for (const bar of bars.slice(1)) {
+    frames.push(live.update(bar, settings).bars);
+  }
+
+  expect(drawnBars(frames)).toEqual(loadedBars(bars, settings));
 });
 
 test('the registry names the MACD and draws it in a pane of its own', () => {

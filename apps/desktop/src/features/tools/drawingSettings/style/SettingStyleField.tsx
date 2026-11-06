@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { createElement, useId, type ReactNode } from 'react';
 import type { SettingValue, SettingValues } from '../../../chart/engine/settings/settingInputs';
 import {
   SETTING_STYLE_LINE_STYLES,
@@ -167,9 +167,9 @@ function ChoiceStyleField({ definition, values, onChange, disabled }: SettingSty
 
 /**
  * One field per style kind: a new kind is one entry here, and TypeScript refuses a table that misses one.
- * A field holding state is entered as an element (`(props) => <Field {...props} />`) rather than called as a
- * function: a plain call keeps the field's hooks in this component, where the compiler plugin may reuse the
- * call's output for unchanged props, so the field's own state never reaches the screen.
+ * A field is always rendered as its own element, never called as a plain function: a call would keep the
+ * field's hooks in this row, where the compiler plugin may reuse the call's output for unchanged props, so
+ * the field's own state would never reach the screen.
  */
 const SETTING_STYLE_FIELDS: {
   readonly [Kind in SettingStyleDefinition['kind']]: (props: SettingStyleFieldProps<Kind>) => ReactNode;
@@ -179,10 +179,10 @@ const SETTING_STYLE_FIELDS: {
   toggle: ToggleStyleField,
   number: NumberStyleField,
   choice: ChoiceStyleField,
-  plotType: (props) => <PlotTypeStyleField {...props} />,
+  plotType: PlotTypeStyleField,
 };
 
-/** The table indexed by one kind is the union of its entries; this names the one call. */
+/** The table indexed by one kind is the union of its entries; this names the one `createElement` call. */
 type RenderSettingStyleField = (props: SettingStyleFieldProps<SettingStyleDefinition['kind']>) => ReactNode;
 
 interface SettingStyleRowProps extends SettingStyleFieldProps<SettingStyleDefinition['kind']> {
@@ -192,10 +192,10 @@ interface SettingStyleRowProps extends SettingStyleFieldProps<SettingStyleDefini
 
 /** One row of the Style tab; a child row is marked so the stylesheet indents it under its parent. */
 export function SettingStyleField({ trailing, ...props }: SettingStyleRowProps) {
-  const render = SETTING_STYLE_FIELDS[props.definition.kind] as RenderSettingStyleField;
+  const Field = SETTING_STYLE_FIELDS[props.definition.kind] as RenderSettingStyleField;
   return (
     <div className="drawing-settings-style-row" data-child={props.definition.parentId !== undefined}>
-      {render(props)}
+      {createElement(Field, props)}
       {trailing}
     </div>
   );

@@ -5,6 +5,12 @@ import type { SettingValues } from '../chart/engine/settings/settingInputs';
 import { FormingBar } from './formingBar';
 import { indicatorFrameBar } from './indicatorFrameBars';
 
+/** The parts of a frame the settings alone decide, which one tick never changes. */
+type FrameStyle = Omit<IndicatorFrame, 'bars'>;
+
+/** What a tick draws before any load has read the settings: the frame has no plot, and so draws no bar. */
+const NO_STYLE: FrameStyle = { plots: [] };
+
 /**
  * An indicator whose value per bar comes from the state the closed bars left behind.
  *
@@ -15,10 +21,12 @@ import { indicatorFrameBar } from './indicatorFrameBars';
  */
 export abstract class BarByBarIndicator implements ChartIndicator {
   private readonly forming = new FormingBar();
+  private style: FrameStyle = NO_STYLE;
 
   load(bars: readonly RenderBar[], settings: SettingValues): IndicatorFrame {
     this.reset(settings);
     this.forming.reset();
+    this.style = this.frameStyle(settings);
 
     const formingIndex = bars.length - 1;
     const indicatorBars = bars.map((bar, index) => {
@@ -28,17 +36,20 @@ export abstract class BarByBarIndicator implements ChartIndicator {
       }
       return this.confirmedBar(bar);
     });
-    return { ...this.frameStyle(settings), bars: indicatorBars };
+    return { ...this.style, bars: indicatorBars };
   }
 
-  update(bar: RenderBar, settings: SettingValues): IndicatorFrame {
-    const frame = this.frameStyle(settings);
+  /**
+   * Redraws the bars a tick changes from the style the load built: the settings alone decide that
+   * style, and a caller that changes them shows the whole frame again.
+   */
+  update(bar: RenderBar, _settings: SettingValues): IndicatorFrame {
     if (this.forming.isBehind(bar)) {
-      return { ...frame, bars: [] };
+      return { ...this.style, bars: [] };
     }
     const closedBar = this.forming.adopt(bar);
     const closedBars = closedBar === null ? [] : [this.confirmedBar(closedBar)];
-    return { ...frame, bars: [...closedBars, this.formingBar(bar)] };
+    return { ...this.style, bars: [...closedBars, this.formingBar(bar)] };
   }
 
   /** Starts the state over from the settings, as every load does. */
@@ -56,7 +67,7 @@ export abstract class BarByBarIndicator implements ChartIndicator {
   protected abstract commit(bar: RenderBar): void;
 
   /** The parts of the frame the bars do not touch, which the settings alone decide. */
-  protected abstract frameStyle(settings: SettingValues): Omit<IndicatorFrame, 'bars'>;
+  protected abstract frameStyle(settings: SettingValues): FrameStyle;
 
   /** Frames a bar that is final: its values and colours are read before the bar moves the state on. */
   private confirmedBar(bar: RenderBar): IndicatorBar {
