@@ -43,6 +43,9 @@
   justify-content: space-between;
   padding: 18px 22px;
   border-bottom: 1px solid var(--color-border-dialog);
+  /* The header drags the guide (see useDraggablePanel); its button keeps its own cursor. */
+  cursor: move;
+  touch-action: none;
 }
 
 .setup-guide-header h2 {
@@ -403,6 +406,8 @@
 }
 
 .setup-guide-backdrop.is-closing .setup-guide {
+  /* A closing guide ignores input; its backdrop still covers what lies behind it. */
+  pointer-events: none;
   animation: settings-panel-out 180ms ease-in forwards;
 }
 

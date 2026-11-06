@@ -64,8 +64,8 @@ test('a dashed grid line and a dotted one map to their library line styles', () 
     }),
   ).grid;
 
-  expect(grid.vertLines.style).toBe(LineStyle.Dashed);
-  expect(grid.horzLines.style).toBe(LineStyle.Dotted);
+  expect(grid.vertLines.style).toBe(LineStyle.LargeDashed);
+  expect(grid.horzLines.style).toBe(LineStyle.SparseDotted);
 });
 
 test('the margins are the share of the pane the price fit leaves empty', () => {

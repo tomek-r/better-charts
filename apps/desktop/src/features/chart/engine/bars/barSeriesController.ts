@@ -2,7 +2,6 @@ import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { Candle } from '../../../../shared/bridge/types';
 import { toRenderBar, type RenderBar } from './renderBar';
 import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../../shared/bridge/timeframes';
-import { palette } from '../../../../shared/theme/palette';
 import {
   candlePointColors,
   candleSeriesColors,
@@ -13,6 +12,13 @@ import {
 } from './candleAppearance';
 import { BarStyleSeries, type BarStyleSeriesState } from '../barStyle/barStyleSeries';
 import type { BarStyleAppearance } from '../barStyle/barStyleAppearance';
+
+/** One bar as the legend shows it, with the colour its body is drawn in; null while the style has none. */
+export interface LegendBar {
+  readonly bar: RenderBar;
+  readonly bodyColor: string | null;
+  readonly previous: RenderBar | undefined;
+}
 
 /**
  * Owns the renderable bar cache and the series it feeds, so every mutation
@@ -33,7 +39,6 @@ export class BarSeriesController {
 
   constructor(
     private readonly candles: ISeriesApi<'Candlestick'>,
-    private readonly volume: ISeriesApi<'Histogram'>,
     chart: IChartApi,
   ) {
     // Built after the surface's series (see createChartSurface), so its series paints above them.
@@ -59,6 +64,30 @@ export class BarSeriesController {
 
   lastBar(): RenderBar | undefined {
     return this.cache[this.cache.length - 1];
+  }
+
+  /**
+   * The bar at `index` as the legend shows it, with the colour its body is drawn in, or undefined while
+   * the chart holds no bar at that index.
+   */
+  legendBar(index: number): LegendBar | undefined {
+    const bar = this.cache[index];
+    if (!bar) {
+      return undefined;
+    }
+    return {
+      bar,
+      bodyColor: this.barStyle.bodyColor(index, bar, this.cache[index - 1]),
+      previous: this.cache[index - 1],
+    };
+  }
+
+  /**
+   * The colour the current bar style gives a rising or a falling bar, which the last day change takes; null
+   * for a style with no up and down colours, whose legend then keeps its own label colour.
+   */
+  directionColor(rising: boolean): string | null {
+    return this.barStyle.directionColor(rising);
   }
 
   /** Replaces the whole history. Returns false when the input was rejected. */
@@ -129,7 +158,6 @@ export class BarSeriesController {
     }
     this.candles.update(this.candleData(bar, previous));
     this.barStyle.updateBar(bar, previous);
-    this.volume.update(this.volumeBar(bar));
     return appended;
   }
 
@@ -188,7 +216,6 @@ export class BarSeriesController {
   private writeAll(bars: readonly RenderBar[]): void {
     this.writeCandles(bars);
     this.barStyle.replaceBars(bars);
-    this.volume.setData(bars.map((bar) => this.volumeBar(bar)));
   }
 
   /** Rewrites the candle series; the bar before each one decides the colours it overrides. */
@@ -198,13 +225,5 @@ export class BarSeriesController {
 
   private candleData(bar: RenderBar, previous: RenderBar | undefined) {
     return { ...bar, time: bar.time as UTCTimestamp, ...candlePointColors(this.appearance, bar, previous) };
-  }
-
-  private volumeBar(bar: RenderBar) {
-    return {
-      time: bar.time as UTCTimestamp,
-      value: bar.volume,
-      color: bar.close >= bar.open ? palette.upWash : palette.sellWashStrong,
-    };
   }
 }

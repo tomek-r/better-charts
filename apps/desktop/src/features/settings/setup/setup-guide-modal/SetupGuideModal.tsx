@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useExitAnimation } from '../../../../shared/ui/animation/useExitAnimation';
+import { useBackdropDismiss } from '../../../../shared/ui/dialog/useBackdropDismiss';
+import { useDraggablePanel } from '../../../../shared/ui/dialog/useDraggablePanel';
 import { popupOwnsKeyboard } from '../../../../shared/ui/popup/popupKeyboardOwnership';
 import { useAppSettingsActions, useSetupGuideStep } from '../../AppSettingsProvider';
 import { SetupGuideStep } from '../../useAppSettings';
@@ -58,6 +60,7 @@ export function SetupGuideModal({
 }) {
   const dialog = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
+  const { panelStyle, onHandlePointerDown } = useDraggablePanel(dialog);
   const { exiting: closing, startExit } = useExitAnimation(backdrop);
   const setupGuideStep = useSetupGuideStep();
   const { showSetupGuideStep } = useAppSettingsActions();
@@ -81,6 +84,8 @@ export function SetupGuideModal({
   const backdropClassName = `setup-guide-backdrop${standalone ? ' setup-guide-backdrop-standalone' : ''}${
     closing ? ' is-closing' : ''
   }${finishing ? ' is-finishing' : ''}`;
+  // The dismissal Escape runs, under the same guard: an open popup owns the press too.
+  const backdropDismiss = useBackdropDismiss(requestClose, popupOwnsKeyboard);
 
   // Re-runs with `requestClose`, as the combined focus and Escape effect did before it was split.
   useEffect(() => {
@@ -102,17 +107,18 @@ export function SetupGuideModal({
   }, [requestClose]);
 
   return (
-    <div ref={backdrop} className={backdropClassName}>
+    <div ref={backdrop} className={backdropClassName} role="presentation" {...backdropDismiss}>
       <div
         ref={dialog}
         className="setup-guide"
+        style={panelStyle}
         role="dialog"
         aria-modal="true"
         aria-labelledby="setup-guide-title"
         data-setup-guide
         tabIndex={-1}
       >
-        <div className="setup-guide-header">
+        <div className="setup-guide-header" onPointerDown={onHandlePointerDown}>
           <h2 id="setup-guide-title">Set up the MT5 bridge</h2>
           <button type="button" className="setup-guide-close" onClick={requestClose} aria-label="Close setup guide">
             <GuideCloseIcon />

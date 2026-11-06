@@ -6,18 +6,24 @@ import {
   type IChartApi,
   type ISeriesApi,
   type LineStyle,
-  type PriceScaleMode,
   type Time,
   type WhitespaceData,
 } from 'lightweight-charts';
-import type { ChartDrawings } from '../drawings/chartDrawings';
+import type { ChartDrawings, ShownDrawingSettings } from '../drawings/chartDrawings';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../drawings/drawingRecord';
 import type { RenderBar } from '../bars/renderBar';
 import { candleSeriesColors, type CandlePointColors } from '../bars/candleAppearance';
 import type { BarStyleSeriesState } from '../barStyle/barStyleSeries';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
+import {
+  readPaneScale,
+  readPriceScale,
+  type PaneScaleReading,
+  type PriceScaleReading,
+} from '../priceScale/priceScaleReadings';
 import type { ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesState } from './chartScalesAppearance';
+import type { ChartIndicatorPane } from '../indicators/indicatorContract';
 import type { IndicatorFrame } from '../indicators/indicatorFrame';
 import type { IndicatorLayer, IndicatorLayerState } from '../indicators/indicatorLayer';
 import type { AttachedIndicatorState, IndicatorRuntime } from '../indicators/indicatorRuntime';
@@ -96,6 +102,11 @@ export interface DevTestApi {
   tool(id: string): unknown;
   /** Every drawing the tools hold, in registry order, each stamped with its tool id. */
   drawings(): ChartDrawingRecord[];
+  /**
+   * The settings each drawing is shown with, a settings dialog's preview included, in the chart's order.
+   * `drawings` keeps the saved records, so a preview shows up here and never there.
+   */
+  shownDrawingSettings(): ShownDrawingSettings[];
   /** The drawing the user has selected and whether it is locked; null when none. */
   selectedDrawing(): ChartDrawingSelection | null;
   /** The pointer's time/price labels, shown for every tool; null while no pointer is over the pane. */
@@ -106,11 +117,19 @@ export interface DevTestApi {
   scales(): ChartScalesState;
   /** Every indicator the display layer draws, in the order it was shown, as plain copies of its lines. */
   indicators(): IndicatorLayerState[];
-  /** Draws a whole frame for indicator `id`, replacing what it drew. */
-  showIndicatorFrame(id: string, frame: IndicatorFrame): void;
+  /** How many panes the chart has, the price pane included. */
+  paneCount(): number;
+  /** Pane `index`'s own right scale as plain values; null when the chart has no such pane. */
+  paneScale(index: number): PaneScaleReading | null;
+  /** The series types the price pane holds, in draw order, so a test can prove which series exist. */
+  priceSeriesTypes(): string[];
+  /** Draws a whole frame for indicator `id` in `pane`, replacing what it drew. */
+  showIndicatorFrame(id: string, frame: IndicatorFrame, pane?: ChartIndicatorPane): void;
   /** Applies a live frame (the closed and the forming bar) to indicator `id`. */
   updateIndicatorFrame(id: string, frame: IndicatorFrame): void;
   removeIndicator(id: string): void;
+  /** Hides or shows the frame indicator `id`, as switching the indicator itself off does. */
+  setIndicatorFrameHidden(id: string, hidden: boolean): void;
   /** Attaches the registered indicator `definitionId` as `instanceId`; false when no such indicator exists. */
   attachIndicator(
     instanceId: string,
@@ -118,18 +137,12 @@ export interface DevTestApi {
     settings?: Readonly<Record<string, number | boolean | string>>,
   ): boolean;
   detachIndicator(instanceId: string): void;
+  /** Hides or shows the attached indicator `instanceId`. */
+  setIndicatorHidden(instanceId: string, hidden: boolean): void;
   setIndicatorSettings(instanceId: string, settings: Readonly<Record<string, number | boolean | string>>): void;
   /** Every attached indicator, in attach order, with its resolved settings, as plain copies. */
   attachedIndicators(): AttachedIndicatorState[];
-  priceScale(): {
-    autoScale: boolean;
-    mode: PriceScaleMode;
-    invertScale: boolean;
-    axisWidth: number;
-    paneHeight: number;
-    timeAxisHeight: number;
-    range: { from: number; to: number } | null;
-  };
+  priceScale(): PriceScaleReading;
 }
 
 type DevWindow = { __chartTest?: DevTestApi; __viewportLog?: () => void };
@@ -301,32 +314,30 @@ function buildDevTestApi({
     timeToX,
     tool: toolTestApi,
     drawings: () => drawings.exportRecords(),
+    shownDrawingSettings: () => drawings.shownDrawingSettings(),
     selectedDrawing: () => drawings.selected(),
     pointerReadout,
     appearance: () => appearanceState({ chart, rightMarginBars, crosshairStyle }),
     scales: scalesState,
     indicators: () => indicatorLayer.state(),
-    showIndicatorFrame: (id, frame) => indicatorLayer.show(id, frame),
+    paneCount: () => chart.panes().length,
+    priceSeriesTypes: () =>
+      chart
+        .panes()[0]
+        ?.getSeries()
+        .map((series) => series.seriesType()) ?? [],
+    showIndicatorFrame: (id, frame, pane) => indicatorLayer.show(id, frame, pane),
     updateIndicatorFrame: (id, frame) => indicatorLayer.update(id, frame),
     removeIndicator: (id) => indicatorLayer.remove(id),
+    setIndicatorFrameHidden: (id, hidden) => indicatorLayer.setHidden(id, hidden),
     attachIndicator: (instanceId, definitionId, settings) =>
       indicatorRuntime.attach(instanceId, definitionId, settings),
     detachIndicator: (instanceId) => indicatorRuntime.detach(instanceId),
+    setIndicatorHidden: (instanceId, hidden) => indicatorRuntime.setHidden(instanceId, hidden),
     setIndicatorSettings: (instanceId, settings) => indicatorRuntime.setSettings(instanceId, settings),
     attachedIndicators: () => indicatorRuntime.attachedState(),
-    priceScale: () => {
-      const scale = chart.priceScale('right');
-      const options = scale.options();
-      return {
-        autoScale: options.autoScale,
-        mode: options.mode,
-        invertScale: options.invertScale,
-        axisWidth: scale.width(),
-        paneHeight: chart.panes()[0]?.getHeight() ?? 0,
-        timeAxisHeight: chart.timeScale().height(),
-        range: scale.getVisibleRange(),
-      };
-    },
+    priceScale: () => readPriceScale(chart),
+    paneScale: (index) => readPaneScale(chart, index),
   };
 }
 

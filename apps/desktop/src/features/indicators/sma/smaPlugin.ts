@@ -1,39 +1,13 @@
 import type { ChartIndicatorPlugin } from '../chartIndicatorPlugin';
-import {
-  DEFAULT_COLOR,
-  DEFAULT_LENGTH,
-  DEFAULT_SOURCE,
-  DEFAULT_WIDTH,
-  LENGTH_INPUT,
-  PLOT_STYLE,
-  SmaIndicator,
-  SOURCE_INPUT,
-} from './smaIndicator';
+import { lengthInput, lineStyle, sourceInput } from '../indicatorInputs';
+import { DEFAULT_COLOR, DEFAULT_LENGTH, DEFAULT_SOURCE, PLOT_STYLE, SmaIndicator } from './smaIndicator';
 
 export const smaPlugin = {
   id: 'sma',
   title: 'Moving Average Simple',
   shortTitle: 'SMA',
   pane: 'overlay',
-  inputs: [
-    {
-      kind: 'int',
-      id: LENGTH_INPUT,
-      title: 'Length',
-      defaultValue: DEFAULT_LENGTH,
-      minValue: 1,
-      maxValue: 5000,
-      step: 1,
-    },
-    { kind: 'source', id: SOURCE_INPUT, title: 'Source', defaultValue: DEFAULT_SOURCE },
-  ],
-  styles: [
-    {
-      kind: 'line',
-      id: PLOT_STYLE,
-      title: 'MA',
-      defaults: { visible: true, color: DEFAULT_COLOR, width: DEFAULT_WIDTH, style: 'solid' },
-    },
-  ],
+  inputs: [lengthInput(DEFAULT_LENGTH), sourceInput(DEFAULT_SOURCE)],
+  styles: [lineStyle(PLOT_STYLE, 'MA', DEFAULT_COLOR)],
   indicatorClass: SmaIndicator,
 } as const satisfies ChartIndicatorPlugin;

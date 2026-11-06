@@ -81,8 +81,8 @@ test('no stored settings paint exactly what the defaults paint, and what the too
   expect(withColor(defaults.rows, UP_COLOR).every((row) => row.minX >= LEFT_AXIS_X - 1e-9)).toBe(true);
   expect(defaults.lines.map((line) => [line.style, line.dash])).toEqual([
     ['#ffd200', []],
-    ['#f2f5fa', [4, 3]],
-    ['#f2f5fa', [4, 3]],
+    ['#f2f5fa', [6, 6]],
+    ['#f2f5fa', [6, 6]],
   ]);
   for (const line of defaults.lines) {
     expect([line.minX, line.maxX]).toEqual([START_X, chartRect.x + chartRect.width]);
@@ -285,9 +285,9 @@ test('a hidden level paints no line and reports no y', () => {
 test('a level takes its own colour and dash', () => {
   const { lines } = paint({ 'poc.color': '#112233', 'poc.style': 'dotted', 'vah.style': 'solid' });
   expect(lines.map((line) => [line.style, line.dash])).toEqual([
-    ['#112233', [1, 3]],
+    ['#112233', [1, 4]],
     ['#f2f5fa', []],
-    ['#f2f5fa', [4, 3]],
+    ['#f2f5fa', [6, 6]],
   ]);
 });
 

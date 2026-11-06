@@ -185,7 +185,7 @@ test('thickness and line style update the pending values and the swatch preview'
     'true',
   );
   await expect(trigger(page).locator('line')).toHaveAttribute('stroke-width', '4');
-  await expect(trigger(page).locator('line')).toHaveAttribute('stroke-dasharray', '6 4');
+  await expect(trigger(page).locator('line')).toHaveAttribute('stroke-dasharray', '3 3');
   await page.keyboard.press('Escape');
   await expect(popover(page)).toHaveCount(0);
   await ok(page).click();

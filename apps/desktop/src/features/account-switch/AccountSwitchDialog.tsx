@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { formatAccountMoney, formatMarginThreshold, marginModeName } from '../../shared/accountFormat';
 import type { AccountSnapshot } from '../../shared/bridge/types';
 import { ModalDialog, ModalDialogButton } from '../../shared/ui/dialog/ModalDialog';
+import { useModalExit } from '../../shared/ui/dialog/useModalExit';
 import { Separated } from '../../shared/ui/icons/SeparatorIcon';
 import { AlgoTradingIcon } from './AlgoTradingIcon';
 
@@ -49,12 +50,15 @@ export function AccountSwitchDialog({
   onDismiss: () => void;
 }) {
   const algoTrading = tradingEnabled ? ALGO_TRADING_ENABLED : ALGO_TRADING_DISABLED;
+  const { backdropRef, closing, close } = useModalExit(onDismiss);
   return (
     <ModalDialog
       title={message}
-      onDismiss={onDismiss}
+      backdropRef={backdropRef}
+      closing={closing}
+      onDismiss={close}
       actions={
-        <ModalDialogButton variant="primary" onClick={onDismiss}>
+        <ModalDialogButton variant="primary" onClick={close}>
           Dismiss
         </ModalDialogButton>
       }

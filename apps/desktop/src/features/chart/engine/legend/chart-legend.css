@@ -5,12 +5,16 @@
   left: 12px;
   z-index: 4;
   color: var(--color-text-label);
-  font-size: 11px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   display: flex;
   align-items: center;
   gap: 7px;
+  background: var(--chart-status-line-background, transparent);
+  padding: 0 4px;
+  margin-left: -4px;
+  border-radius: 4px;
 }
 
 .chart-market-dot {
@@ -18,6 +22,10 @@
   height: 9px;
   flex: none;
   border-radius: 50%;
+}
+
+.chart-legend[data-market-status='off'] .chart-market-dot {
+  display: none;
 }
 
 .chart-market-open {
@@ -32,4 +40,181 @@
 
 .chart-market-unknown {
   background: var(--color-muted);
+}
+
+/* The indicator rows sit under the OHLC line; only the toggle takes the pointer. */
+.chart-indicator-legend {
+  position: absolute;
+  top: 34px;
+  left: 12px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  color: var(--color-text-label);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.chart-indicator-legend-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chart-indicator-legend-rows[hidden],
+.chart-indicator-legend[hidden] {
+  display: none;
+}
+
+.chart-indicator-legend-row {
+  --indicator-legend-row-height: 22px;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* One height with or without the hover buttons: the 20 px buttons plus the 1 px border on each side. */
+  height: var(--indicator-legend-row-height);
+  padding: 0 4px;
+  margin-left: -5px;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius);
+  background: var(--chart-status-line-background, transparent);
+  white-space: nowrap;
+}
+
+.chart-indicator-legend-row:hover,
+.chart-indicator-legend-row:focus-within {
+  border-color: var(--color-border);
+  background: var(--color-root);
+}
+
+/* A hidden indicator dims its words and keeps its buttons in sight, so Show is one click away. */
+.chart-indicator-legend-row[data-hidden='true'] .chart-indicator-legend-title,
+.chart-indicator-legend-row[data-hidden='true'] .chart-indicator-legend-values {
+  opacity: 0.5;
+}
+
+.chart-indicator-legend-row[data-hidden='true'] .chart-indicator-legend-actions {
+  display: inline-flex;
+}
+
+.chart-indicator-legend-toggle {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px;
+  margin-left: -4px;
+  border: 0;
+  border-radius: var(--border-radius);
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chart-indicator-legend-toggle:hover {
+  background: var(--color-border-subtle);
+}
+
+.chart-indicator-legend-chevron {
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.5;
+  transition: none;
+}
+
+.chart-indicator-legend[data-collapsed='false'] .chart-indicator-legend-chevron {
+  transform: rotate(180deg);
+}
+
+.chart-indicator-legend-count[hidden] {
+  display: none;
+}
+
+/* A row offers its buttons on hover or while one of them has the focus. */
+.chart-indicator-legend-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.chart-indicator-legend-row:hover .chart-indicator-legend-actions,
+.chart-indicator-legend-row:focus-within .chart-indicator-legend-actions {
+  display: inline-flex;
+}
+
+.chart-indicator-legend-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--border-radius);
+  /* White whatever the row's text colour, so the icons read on the hover background. */
+  color: var(--color-text-bright);
+  background: transparent;
+  cursor: pointer;
+}
+
+.chart-indicator-legend-action:hover,
+.chart-indicator-legend-action:focus-visible {
+  background: var(--color-border-subtle);
+}
+
+.chart-indicator-legend-action-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.2;
+}
+
+/* The settings icon is drawn in a 24-unit square, twice the other icons', so its stroke is doubled to
+   draw the others' line width. */
+.chart-indicator-legend-gear-icon {
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+}
+
+/* The overlay is the pane's top border, because the library separator crosses the price axis too,
+   and it holds the legend row of the indicator that owns the pane. */
+.chart-indicator-pane-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  border-top: 1px solid;
+  pointer-events: none;
+  color: var(--color-text-label);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-indicator-pane-overlay .chart-indicator-legend-row {
+  position: absolute;
+  top: 4px;
+  left: 12px;
+}
+
+/* The pane separator's hover band, drawn over the pane's width only: the library's own band (made
+   transparent) spans the price axis too. It shows while the library's resize handle beside it is
+   hovered, and while a drag shows the library's full-window backdrop. */
+.chart-pane-separator-band {
+  position: absolute;
+  top: -4px;
+  z-index: 49;
+  height: 9px;
+  pointer-events: none;
+  background: var(--color-border-subtle);
+  opacity: 0;
+}
+
+.chart-host td[colspan='3'] > div[style*='position: absolute']:hover ~ .chart-pane-separator-band,
+.chart-host td[colspan='3']:has(> div[style*='display: block']) > .chart-pane-separator-band {
+  opacity: 1;
 }

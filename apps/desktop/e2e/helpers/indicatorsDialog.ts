@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import type { AttachedIndicatorState } from '../../src/features/chart/engine/indicators/indicatorRuntime';
 
 export const DIALOG_NAME = 'Indicators';
 export const BUTTON_NAME = 'Indicators';
@@ -8,11 +9,7 @@ const SEARCH_NAME = 'Search indicators';
 const LIST_NAME = 'Indicators';
 const SMA_SEARCH = 'sma';
 
-export type AttachedIndicator = {
-  instanceId: string;
-  definitionId: string;
-  settings: unknown;
-};
+export type AttachedIndicator = AttachedIndicatorState;
 
 export function indicatorsButton(page: Page) {
   return page.getByRole('button', { name: BUTTON_NAME, exact: true });

@@ -1,7 +1,7 @@
-import { MismatchDirection, PriceScaleMode, type IRange, type ISeriesApi } from 'lightweight-charts';
+import { MismatchDirection, PriceScaleMode, type IRange, type ISeriesApi, type SeriesType } from 'lightweight-charts';
 
-/** Fits actual prices once, then holds the range independently of live ticks. */
-export function setPriceScaleRange(series: ISeriesApi<'Candlestick'>, range: IRange<number>): void {
+/** Fits actual prices once, then holds the range independently of live ticks, on any pane's own series. */
+export function setPriceScaleRange(series: ISeriesApi<SeriesType>, range: IRange<number>): void {
   const scale = series.priceScale();
   if (scale.options().mode !== PriceScaleMode.Logarithmic) {
     scale.setVisibleRange(range);
@@ -19,7 +19,7 @@ export function setPriceScaleRange(series: ISeriesApi<'Candlestick'>, range: IRa
     scale.applyOptions({ autoScale: true });
     if (last !== null && 'open' in last) {
       // A scale held since startup may have no cached visible bars. Reapplying
-      // the unchanged candle refreshes that cache through the public data API.
+      // the unchanged last point refreshes that cache through the public data API.
       series.update(last);
     }
     scale.getVisibleRange();

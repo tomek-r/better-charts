@@ -114,13 +114,21 @@ edit generated `target/`, `dist/`, `node_modules/`, `.vite/`, `test-results/`,
   final newline.
 - TypeScript uses strict mode. Use existing domain types, avoid `any`, keep
   bridge data transformations in the adapter, and keep chart-rendering logic in
-  `features/chart/engine/` domain folders (surface, bars, viewport, timeScale, priceScale, quotes, trading, legend, text, tools, barCountdown)
-  (or, for a drawing tool, in its plugin under `features/tools/<tool>/`).
+  `features/chart/engine/` domain folders (surface, bars, viewport, timeScale, priceScale, quotes, trading, legend, text, tools, indicators, barCountdown)
+  (or, for a drawing tool, in its plugin under `features/tools/<tool>/`; for an
+  indicator, in its plugin under `features/indicators/<indicator>/`).
 - Drawing tools implement `ChartToolPlugin` from
   `features/chart/engine/tools/toolContract.ts` and register in
   `features/tools/registry.ts`. They reach the bridge only through the read-only
   `MarketDataPort` (no Tauri `invoke`/`listen`, no app stores); the engine never
   imports a concrete tool or the registry.
+- Indicators implement `ChartIndicatorPlugin` from
+  `features/indicators/chartIndicatorPlugin.ts` and register in
+  `features/indicators/registry.ts`. An indicator reads only the bars and
+  settings it is given and returns an `IndicatorFrame`; it never touches the
+  chart, Tauri or app stores, and its values are display-only, never order
+  inputs. The engine's display layer draws frames and never computes; it never
+  imports a concrete indicator or the registry.
 - Rust must be `rustfmt`-clean and pass Clippy without warnings. Validate at
   boundaries, use typed errors, and keep state transitions deterministic.
   `unsafe_code` is prohibited at workspace level.

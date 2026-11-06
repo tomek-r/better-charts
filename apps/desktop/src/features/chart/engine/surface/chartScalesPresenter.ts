@@ -78,6 +78,19 @@ export class ChartScalesPresenter {
   }
 
   /**
+   * Puts every pane's price scale back on the view a chart opens on: fitting the data it shows, and
+   * spacing the prices regularly. The indicator panes' own choices are not saved, so this is the only
+   * way back to what their panes opened with.
+   */
+  fitAllPanes(): void {
+    if (this.targets.isDisposed()) {
+      return;
+    }
+    this.setAutoScale(true);
+    this.targets.priceScale.resetIndicatorPanes();
+  }
+
+  /**
    * Another instrument formats its prices differently: the axis sizes itself for its own prices
    * instead of carrying the widest label of the previous one, and its symbol tag follows at once.
    */

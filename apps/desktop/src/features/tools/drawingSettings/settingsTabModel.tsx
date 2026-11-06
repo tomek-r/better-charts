@@ -12,9 +12,14 @@ export const COORDINATES_TAB_ID = 'coordinates';
 
 const VISIBILITY_TAB_ID = 'visibility';
 
-/** What a tool declares for its dialog: its settings and the anchors each drawing holds. */
+/**
+ * What a tool declares for its dialog: its settings, the anchors each drawing holds, and whether it earns a
+ * Visibility tab without anchors.
+ */
 export interface DrawingSettingsSchema extends SettingsSchema {
   readonly points?: ChartDrawingPointRule;
+  /** Set by a settings target that has no anchors but can still be limited to some timeframes (an indicator). */
+  readonly timeframeVisibility?: 'editable';
 }
 
 /** What every tab's content is given: the tool's declaration, the merged draft values, the anchors, and the ways to edit them. */
@@ -50,7 +55,12 @@ function VisibilityPanel({ timeframeVisibility }: SettingsPanelProps) {
 }
 
 /** The tabs a tool's declaration earns, in tab order: a tab with nothing to show is not built. */
-export function buildSettingsTabs({ inputs = [], styles = [], points }: DrawingSettingsSchema): SettingsTab[] {
+export function buildSettingsTabs({
+  inputs = [],
+  styles = [],
+  points,
+  timeframeVisibility,
+}: DrawingSettingsSchema): SettingsTab[] {
   const tabs: SettingsTab[] = [];
   if (inputs.length > 0) {
     tabs.push({ id: 'inputs', title: 'Inputs', Panel: InputsPanel });
@@ -60,7 +70,10 @@ export function buildSettingsTabs({ inputs = [], styles = [], points }: DrawingS
   }
   if (points !== undefined) {
     tabs.push({ id: COORDINATES_TAB_ID, title: 'Coordinates', Panel: CoordinatesPanel });
-    // A tool that anchors drawings places them, and every placed drawing can be hidden per timeframe.
+  }
+  // A tool that anchors drawings places them, and every placed drawing can be hidden per timeframe; an
+  // indicator anchors nothing but can be limited to some timeframes all the same.
+  if (points !== undefined || timeframeVisibility === 'editable') {
     tabs.push({ id: VISIBILITY_TAB_ID, title: 'Visibility', Panel: VisibilityPanel });
   }
   return tabs;

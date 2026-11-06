@@ -5,6 +5,7 @@ import { BridgeSessionProvider, useBridgeSessionRuntime } from '../../src/featur
 import { ChartWorkspaceProvider, useChartWorkspaceRuntime } from '../../src/features/chart/ChartWorkspaceProvider';
 import { ChartCanvas } from '../../src/features/chart/ChartCanvas';
 import { ChartSettingsProvider } from '../../src/features/chart/chartSettings/ChartSettingsProvider';
+import { ChartSettingsDialogHost } from '../../src/features/chart/chartSettings/dialog/ChartSettingsDialogHost';
 import { AppSettingsProvider } from '../../src/features/settings/AppSettingsProvider';
 import { ExecutionProvider } from '../../src/features/execution/ExecutionProvider';
 import { OrderTicketProvider } from '../../src/features/order-ticket/OrderTicketProvider';
@@ -51,7 +52,9 @@ export function mountLiveCandleHarness(container: HTMLElement) {
           <ExecutionProvider>
             <AppSettingsProvider tauriAvailable>
               <ChartSettingsProvider>
-                <ChartCanvas />
+                <ChartSettingsDialogHost>
+                  <ChartCanvas />
+                </ChartSettingsDialogHost>
               </ChartSettingsProvider>
             </AppSettingsProvider>
             <OrderTicketProvider>

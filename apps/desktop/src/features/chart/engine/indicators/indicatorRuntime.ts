@@ -6,18 +6,23 @@ import type { RenderBar } from '../bars/renderBar';
 import type { SettingValues } from '../settings/settingInputs';
 import { resolveSettingValues } from '../settings/settingsSchema';
 import type { ChartIndicator, ChartIndicatorDefinition } from './indicatorContract';
+import { indicatorDisplayOf, indicatorSettingsSchema } from './indicatorDisplaySettings';
 import type { IndicatorLayer } from './indicatorLayer';
 
 export interface AttachedIndicatorState {
   readonly instanceId: string;
   readonly definitionId: string;
   readonly settings: SettingValues;
+  readonly hidden: boolean;
 }
 
 interface AttachedIndicator {
   readonly definition: ChartIndicatorDefinition;
   readonly indicator: ChartIndicator;
+  /** The height of its own pane relative to the price pane, as it was saved; undefined until the user resized it. */
+  readonly paneHeight: number | undefined;
   settings: SettingValues;
+  hidden: boolean;
 }
 
 export class IndicatorRuntime {
@@ -27,10 +32,15 @@ export class IndicatorRuntime {
     private readonly layer: IndicatorLayer,
     private readonly definitions: readonly ChartIndicatorDefinition[],
     private readonly bars: () => readonly RenderBar[],
+    /** Called after the attached indicators or the values they draw changed, so the legend follows. */
+    private readonly changed: () => void,
   ) {}
 
-  /** Attaches `definitionId` as `instanceId`, replacing one already attached; false when unknown. */
-  attach(instanceId: string, definitionId: string, stored: unknown): boolean {
+  /**
+   * Attaches `definitionId` as `instanceId`, replacing one already attached; false when unknown. `paneHeight`
+   * is the height its own pane was saved with, relative to the price pane, and is left out while it has none.
+   */
+  attach(instanceId: string, definitionId: string, stored: unknown, paneHeight?: number): boolean {
     const definition = this.definitions.find((candidate) => candidate.id === definitionId);
     if (!definition) {
       return false;
@@ -40,10 +50,13 @@ export class IndicatorRuntime {
     const entry: AttachedIndicator = {
       definition,
       indicator: new definition.indicatorClass(),
-      settings: resolveSettingValues(definition, stored),
+      paneHeight,
+      settings: resolveSettingValues(indicatorSettingsSchema(definition), stored),
+      hidden: false,
     };
     this.attached.set(instanceId, entry);
     this.reload(instanceId, entry);
+    this.changed();
     return true;
   }
 
@@ -56,6 +69,7 @@ export class IndicatorRuntime {
     entry.indicator.dispose?.();
     this.layer.remove(instanceId);
     this.attached.delete(instanceId);
+    this.changed();
   }
 
   /** Resolves `stored` again and reloads `instanceId`; an unknown id does nothing. */
@@ -64,8 +78,20 @@ export class IndicatorRuntime {
     if (!entry) {
       return;
     }
-    entry.settings = resolveSettingValues(entry.definition, stored);
+    entry.settings = resolveSettingValues(indicatorSettingsSchema(entry.definition), stored);
     this.reload(instanceId, entry);
+    this.changed();
+  }
+
+  /** Hides or shows `instanceId` without reloading it; an unknown id or an unchanged state does nothing. */
+  setHidden(instanceId: string, hidden: boolean): void {
+    const entry = this.attached.get(instanceId);
+    if (!entry || entry.hidden === hidden) {
+      return;
+    }
+    entry.hidden = hidden;
+    this.layer.setHidden(instanceId, hidden);
+    this.changed();
   }
 
   /** Loads every attached indicator again after a new history, symbol, timeframe or older page. */
@@ -73,6 +99,7 @@ export class IndicatorRuntime {
     for (const [instanceId, entry] of this.attached) {
       this.reload(instanceId, entry);
     }
+    this.changed();
   }
 
   /** Hands the live bar to every attached indicator, each of which keeps its own state. */
@@ -80,6 +107,7 @@ export class IndicatorRuntime {
     for (const [instanceId, entry] of this.attached) {
       this.layer.update(instanceId, entry.indicator.update(bar, entry.settings));
     }
+    this.changed();
   }
 
   /** The newest bar changed or a new one opened: hands that bar to every attached indicator. */
@@ -105,6 +133,7 @@ export class IndicatorRuntime {
       instanceId,
       definitionId: entry.definition.id,
       settings: { ...entry.settings },
+      hidden: entry.hidden,
     }));
   }
 
@@ -115,8 +144,16 @@ export class IndicatorRuntime {
     }
   }
 
-  /** Loads the whole history into `instanceId` and draws the frame that comes back. */
+  /** Loads the whole history into `instanceId` and draws the frame that comes back, in the indicator's pane. */
   private reload(instanceId: string, entry: AttachedIndicator): void {
-    this.layer.show(instanceId, entry.indicator.load(this.bars(), entry.settings));
+    const frame = entry.indicator.load(this.bars(), entry.settings);
+    this.layer.show(instanceId, frame, entry.definition.pane, {
+      priceLabelsVisible: indicatorDisplayOf(entry.settings).labelsOnPriceScale,
+      paneHeight: entry.paneHeight,
+    });
+    if (entry.hidden) {
+      // A new frame is drawn visible, so a hidden indicator has to be hidden again after every reload.
+      this.layer.setHidden(instanceId, true);
+    }
   }
 }

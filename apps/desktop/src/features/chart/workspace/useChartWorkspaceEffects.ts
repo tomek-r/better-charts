@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect } from 'react';
 import { ChartController } from '../engine/surface/chartController';
 import { CHART_TOOL_PLUGINS, DEFAULT_CHART_TOOL_ID } from '../../tools/registry';
 import { CHART_INDICATOR_PLUGINS } from '../../indicators/registry';
+import { indicatorStatusLineTitle } from '../../indicators/indicatorLegendTitle';
 import { Mt5DataAdapter } from '../engine/bars/mt5DataAdapter';
 import { bridgeIdentityKey } from '../../../shared/bridge/bridgeIdentity';
 import { marketStatusLabel, marketStatusOf } from '../engine/legend/marketStatus';
@@ -47,6 +48,7 @@ export function useChartWorkspaceInitEffects(
           notifyError,
           toolDefinitions: CHART_TOOL_PLUGINS,
           indicatorDefinitions: CHART_INDICATOR_PLUGINS,
+          indicatorLegendTitle: indicatorStatusLineTitle,
           defaultToolId: DEFAULT_CHART_TOOL_ID,
         },
       );
@@ -150,6 +152,11 @@ export function useChartWorkspaceChartEffects(
     const label = marketStatusLabel({ status: marketStatus, bridgeState: status.state });
     chart.current?.setMarketStatus(marketStatus, label);
   }, [chart, snapshot.symbol, status.marketSession, status.state]);
+  // The title names the instrument on screen: metadata of another symbol describes nothing here.
+  useEffect(() => {
+    const description = instrument?.symbol === snapshot.symbol ? instrument?.description : undefined;
+    chart.current?.statusLine().setSymbolDescription(description);
+  }, [chart, instrument?.description, instrument?.symbol, snapshot.symbol]);
   useEffect(() => {
     setPendingModification(undefined);
     clearStagedWidget();

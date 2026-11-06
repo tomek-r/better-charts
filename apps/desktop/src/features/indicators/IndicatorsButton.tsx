@@ -21,15 +21,7 @@ export function IndicatorsButton() {
         <IndicatorsIcon className="indicators-trigger-icon" />
         <span>Indicators</span>
       </button>
-      {open && (
-        <IndicatorsDialog
-          onChoose={(plugin) => {
-            attach(plugin);
-            setOpen(false);
-          }}
-          onDismiss={() => setOpen(false)}
-        />
-      )}
+      {open && <IndicatorsDialog onChoose={attach} onDismiss={() => setOpen(false)} />}
     </>
   );
 }

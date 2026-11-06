@@ -25,12 +25,12 @@ export type BarStylePoint =
 const TRANSPARENT = 'transparent';
 
 /** A bar rises when it closes at or above the reference its style compares it with. */
-function roseTo(bar: RenderBar, reference: number): boolean {
+export function roseTo(bar: RenderBar, reference: number): boolean {
   return bar.close >= reference;
 }
 
 /** The colour a direction takes: the up colour for a bar that rose, the down one for a bar that fell. */
-function directionColor(colors: BarDirectionColors, rising: boolean): string {
+export function directionColor(colors: BarDirectionColors, rising: boolean): string {
   return rising ? colors.up : colors.down;
 }
 
@@ -38,12 +38,12 @@ function directionColor(colors: BarDirectionColors, rising: boolean): string {
  * The direction of the previous-close rules: what the bar did against the bar before it. The first bar
  * has none, so it is read against its own open.
  */
-function roseAgainstPreviousClose(bar: RenderBar, previous: RenderBar | undefined): boolean {
+export function roseAgainstPreviousClose(bar: RenderBar, previous: RenderBar | undefined): boolean {
   return roseTo(bar, previous?.close ?? bar.open);
 }
 
 /** The colour one bar takes in a style that colours its points one by one. */
-function barColor(
+export function barColor(
   bar: RenderBar,
   previous: RenderBar | undefined,
   appearance: BarsAppearance | ColumnsAppearance,

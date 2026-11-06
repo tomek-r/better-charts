@@ -1,10 +1,39 @@
-import { PriceScaleMode, type IChartApi, type IPriceScaleApi, type ISeriesApi } from 'lightweight-charts';
+import {
+  PriceScaleMode,
+  type IChartApi,
+  type IPriceScaleApi,
+  type ISeriesApi,
+  type SeriesType,
+} from 'lightweight-charts';
 import { priceScaleModeOf, type ChartPriceScaleMode, type ScaleButtonsMode } from '../surface/chartScalesAppearance';
 import { ChartSettingsCornerButton } from './chartSettingsCornerButton';
+import { axisHitAt, type AxisHit } from './paneAxisHitTest';
+import { PaneLayoutWatcher } from './paneLayoutWatcher';
+import { PaneScaleRow, type PaneScaleLabels } from './paneScaleRow';
+import { PRICE_SCALE_ID } from './priceScaleId';
 import { setPriceScaleRange } from './priceScaleRange';
 
-/** The scale the candles and the price axis are bound to. */
-const PRICE_SCALE_ID = 'right';
+/** One pane as the chart lists it. Read it by index each time: the list shifts when a pane goes. */
+type ChartPane = ReturnType<IChartApi['panes']>[number];
+
+/** The series a pane's prices are drawn from, whichever kind of series it is. */
+type PaneSeries = ISeriesApi<SeriesType>;
+
+/** The panes list the price pane first, so its row comes first and is never removed. */
+const PRICE_PANE_INDEX = 0;
+
+const PRICE_PANE_LABELS: PaneScaleLabels = {
+  group: 'Price scale',
+  auto: 'Auto scale — fit the visible data to the pane',
+  log: 'Logarithmic price scale',
+};
+
+/** An indicator pane's own scale is not a saved setting: its choices last until the chart is reloaded. */
+const INDICATOR_PANE_LABELS: PaneScaleLabels = {
+  group: 'Indicator price scale',
+  auto: 'Auto scale — fit this pane',
+  log: 'Logarithmic scale for this pane',
+};
 
 /**
  * The event the `L` toggle raises on the chart's host: the price scale mode it asks the chart to keep.
@@ -36,57 +65,32 @@ export interface PriceScaleState extends PriceScaleShape {
   readonly autoScale: boolean;
 }
 
-function control(glyph: string, label: string): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.textContent = glyph;
-  button.title = label;
-  button.setAttribute('aria-label', label);
-  return button;
-}
-
-function setPressed(button: HTMLButtonElement, pressed: boolean): void {
-  button.setAttribute('aria-pressed', String(pressed));
-  button.classList.toggle('price-scale-control-on', pressed);
-}
-
 /**
- * Toggles on the right price scale: `A` fits the visible data (auto scale) and
- * `L` switches the scale between regular and logarithmic prices. The settings gear sits below
- * them, in the corner where the price axis meets the time axis.
+ * Every pane's `A` / `L` row: the price pane's own first, with the settings gear below it in the corner
+ * where the price axis meets the time axis, then one row per indicator pane, each at the foot of that
+ * pane's own axis. A row belongs to the pane it is placed on, so a pointer over one pane's axis reveals
+ * that pane's row alone — the price pane's row sits above the indicator panes instead of beside the
+ * whole chart's bottom edge.
  *
- * Both are ordinary HTML buttons in the axis column rather than a primitive:
- * the library paints the axis on its own canvas and gives plugins no hit
- * testing, cursor or focus there, so a drawn button could not be clicked with
- * the mouse or reached with the keyboard. By default the row is revealed by a
- * pointer hit test built from public geometry only — the axis width
- * (`IPriceScaleApi.width()`) and the pane height — which is also the region
- * Lightweight Charts itself treats as the price scale, so the toggles appear
- * exactly where the axis is. The Scale modes setting keeps it on screen, or
- * takes it away.
+ * `A` and `L` on the price pane are what they always were: `A` fits the visible data, and `L` only asks
+ * for the other mode, because the mode is a saved setting that the settings apply through
+ * `setScaleShape`. The events travel up to the chart's host, which is the only way out of the engine.
+ * An indicator pane's own rows write that pane's scale directly and are not saved, so nothing there
+ * reaches the chart's settings.
  *
- * The toggles are price-scale options, so their pressed state is read back from
- * the scale instead of being cached: the library changes those options on its
- * own too, by turning auto scale off when the axis is dragged and on again when
- * it is double-clicked.
- *
- * `A` is a plain view toggle, but the mode is a saved setting: `L` only asks for
- * the other mode, and the settings apply it through `setScaleShape` like any
- * other saved value. The events travel up to the chart's host, which is the only
- * way out of the engine.
- *
- * Position and paint are CSS (`.price-scale-controls` in features/chart/engine/priceScale/price-scale-controls.css). Only
- * the row's width is set here, because the axis width is runtime geometry.
+ * The rows are created and removed by comparing the chart's pane count, and every row is re-read and
+ * re-placed from its pane's own geometry whenever the panes are laid out again.
  */
 export class PriceScaleController {
   private readonly axis: IPriceScaleApi;
-  private readonly root: HTMLDivElement;
-  private readonly autoButton: HTMLButtonElement;
-  private readonly logButton: HTMLButtonElement;
+  private readonly priceRow: PaneScaleRow;
+  private readonly indicatorRows: PaneScaleRow[] = [];
   private readonly settingsButton: ChartSettingsCornerButton;
-  private revealed = false;
-  /** How the row reaches the screen: revealed by the pointer, kept on screen, or never drawn. */
+  private readonly layout: PaneLayoutWatcher;
+  /** How the rows reach the screen: revealed by the pointer, kept on screen, or never drawn. */
   private modeButtons: ScaleButtonsMode = 'mouseOver';
+  /** The axis mask colour, kept so a row created later is painted like the ones already there. */
+  private maskColor: string | null = null;
   /** The auto scale the app was last told about; only a real change is announced. */
   private autoScale = false;
 
@@ -96,46 +100,45 @@ export class PriceScaleController {
     private readonly candles: ISeriesApi<'Candlestick'>,
   ) {
     this.axis = chart.priceScale(PRICE_SCALE_ID);
-    this.root = document.createElement('div');
-    this.root.className = 'price-scale-controls';
-    this.root.setAttribute('role', 'group');
-    this.root.setAttribute('aria-label', 'Price scale');
-    this.autoButton = control('A', 'Auto scale — fit the visible data to the pane');
-    this.logButton = control('L', 'Logarithmic price scale');
-    this.autoButton.addEventListener('click', this.toggleAutoScale);
-    this.logButton.addEventListener('click', this.requestOtherMode);
-    this.root.append(this.autoButton, this.logButton);
-    host.appendChild(this.root);
+    this.priceRow = new PaneScaleRow(host, PRICE_PANE_LABELS, this.toggleAutoScale, this.requestOtherMode);
     host.addEventListener('pointermove', this.onPointerMove);
     // Touch has no hover, so the same hit test also runs on press: a tap on the
     // axis reveals the toggles, and the next tap on one of them toggles it.
     host.addEventListener('pointerdown', this.onPointerMove);
     host.addEventListener('pointerleave', this.onPointerLeave);
     // The library resets a dragged scale from the same pointer gestures, so the
-    // row is re-read when one ends instead of trusting the state it last wrote.
+    // rows are re-read when one ends instead of trusting the state they last wrote.
     host.addEventListener('pointerup', this.onPointerUp);
     host.addEventListener('dblclick', this.onDoubleClick);
     this.settingsButton = new ChartSettingsCornerButton(host, chart);
+    this.layout = new PaneLayoutWatcher(host, chart, this.followPaneLayout);
     this.sync();
   }
 
-  /** Re-reads the scale. Call after changing it anywhere else (e.g. resetView). */
+  /** Re-reads every row from its own scale and re-places it on its pane. Call after changing the scale. */
   sync(): void {
-    const options = this.axis.options();
-    setPressed(this.autoButton, options.autoScale);
-    setPressed(this.logButton, options.mode === PriceScaleMode.Logarithmic);
-    this.noticeAutoScale(options.autoScale);
-    if (this.modeButtons === 'always') {
-      this.setWidth(this.axis.width());
-    }
+    this.syncRows();
+    this.rows().forEach((row, paneIndex) => this.syncRow(row, paneIndex));
   }
 
-  /** Fits the visible data to the pane, or stops doing so, whichever way the caller asks. */
+  /** Fits the visible data to the price pane, or stops doing so, whichever way the caller asks. */
   setAutoScale(on: boolean): void {
     if (this.axis.options().autoScale === on) {
       return;
     }
     this.axis.applyOptions({ autoScale: on });
+    this.sync();
+  }
+
+  /**
+   * Puts every indicator pane's scale back on the view its pane opens on: fitting its own data, in the
+   * regular spacing. Those choices are not saved settings, so nothing else can put them back.
+   */
+  resetIndicatorPanes(): void {
+    for (let paneIndex = PRICE_PANE_INDEX + 1; paneIndex <= this.indicatorRows.length; paneIndex += 1) {
+      const scale = this.scaleOf(paneIndex);
+      scale?.applyOptions({ autoScale: true, mode: PriceScaleMode.Normal });
+    }
     this.sync();
   }
 
@@ -165,43 +168,39 @@ export class PriceScaleController {
     };
   }
 
-  /**
-   * What the Scale modes setting asks of the row: `mouseOver` reveals it while the pointer is over the
-   * axis, `always` keeps it on screen, and `hidden` removes it — a `hidden` element takes no pointer
-   * press and no focus, so the toggles cannot be reached at all.
-   */
+  /** What the Scale modes setting asks of every row, the ones created later included. */
   setScaleModeButtons(mode: ScaleButtonsMode): void {
     if (mode === this.modeButtons) {
       return;
     }
     this.modeButtons = mode;
-    this.root.hidden = mode === 'hidden';
-    this.root.classList.toggle('price-scale-controls-always', mode === 'always');
-    // A row kept on screen masks the axis labels from the start; a revealed one is measured by the hit test.
-    if (mode === 'always') {
-      this.setWidth(this.axis.width());
-    }
-    this.conceal();
+    this.rows().forEach((row) => row.setModeButtons(mode));
+    this.sync();
   }
 
-  /** The mode the row is drawn with, which the dev test hook reads back. */
+  /** The mode the rows are drawn with, which the dev test hook reads back. */
   scaleModeButtons(): ScaleButtonsMode {
     return this.modeButtons;
   }
 
-  /** Re-measures the gear on the axes' geometry. Call wherever the pane or the price labels changed. */
+  /**
+   * Re-measures the gear on the axes' geometry and re-reads every row's buttons. A live bar repaints the
+   * overlays on every tick, so this path reads no rect and writes no placement: only `sync` places a row.
+   */
   syncSettingsButton(): void {
     this.settingsButton.sync();
+    this.rows().forEach((row, paneIndex) => this.syncRowState(row, paneIndex));
   }
 
   /**
-   * Fills the row's box with the chart's own background colour. That fill is what masks the axis
-   * labels behind the toggles (see price-scale-controls.css), so it takes the background the chart
-   * is drawn on, a gradient's top colour included, and it must be opaque to hide the labels.
-   * `null` drops the inline colour, leaving the row painted by its opaque CSS default.
+   * Fills every row's box with the chart's own background colour, keeping it for the rows created
+   * later. That fill is what masks the axis labels behind the buttons, so it takes the background the
+   * chart is drawn on, a gradient's top colour included, and it must be opaque to hide the labels.
+   * `null` drops the inline colour, leaving the rows painted by their opaque CSS default.
    */
   setMaskColor(color: string | null): void {
-    this.root.style.backgroundColor = color ?? '';
+    this.maskColor = color;
+    this.rows().forEach((row) => row.setMaskColor(color));
   }
 
   destroy(): void {
@@ -210,10 +209,91 @@ export class PriceScaleController {
     this.host.removeEventListener('pointerleave', this.onPointerLeave);
     this.host.removeEventListener('pointerup', this.onPointerUp);
     this.host.removeEventListener('dblclick', this.onDoubleClick);
-    this.autoButton.removeEventListener('click', this.toggleAutoScale);
-    this.logButton.removeEventListener('click', this.requestOtherMode);
+    this.layout.destroy();
+    this.priceRow.destroy();
+    this.indicatorRows.forEach((row) => row.destroy());
     this.settingsButton.destroy();
-    this.root.remove();
+  }
+
+  /** Every row in pane order, so a row's index is its pane's. */
+  private rows(): PaneScaleRow[] {
+    return [this.priceRow, ...this.indicatorRows];
+  }
+
+  /** One row per pane: the price pane's first, then one per further pane, as the chart lists them. */
+  private syncRows(): void {
+    const extraPanes = Math.max(this.chart.panes().length - 1, 0);
+    while (this.indicatorRows.length > extraPanes) {
+      this.indicatorRows.pop()?.destroy();
+    }
+    while (this.indicatorRows.length < extraPanes) {
+      this.indicatorRows.push(this.createIndicatorRow(this.indicatorRows.length + 1));
+    }
+    this.layout.watchPanes();
+  }
+
+  private createIndicatorRow(paneIndex: number): PaneScaleRow {
+    const row = new PaneScaleRow(
+      this.host,
+      INDICATOR_PANE_LABELS,
+      () => this.togglePaneAutoScale(paneIndex),
+      () => this.switchPaneScaleMode(paneIndex),
+    );
+    row.setModeButtons(this.modeButtons);
+    row.setMaskColor(this.maskColor);
+    return row;
+  }
+
+  /** Places a row on its pane and reads everything that row shows from that pane's own scale. */
+  private syncRow(row: PaneScaleRow, paneIndex: number): void {
+    const pane = this.chart.panes()[paneIndex];
+    row.place(this.host, pane?.getHTMLElement() ?? null);
+    this.syncRowState(row, paneIndex);
+    row.setLogAllowed(this.logAllowed(pane, paneIndex));
+    if (paneIndex === PRICE_PANE_INDEX) {
+      this.noticeAutoScale(this.axis.options().autoScale);
+    }
+  }
+
+  /**
+   * What a row's own scale says about its buttons. It reads the scale's options, and its width in the
+   * `always` mode, but never a rect, so the tick path may run it.
+   */
+  private syncRowState(row: PaneScaleRow, paneIndex: number): void {
+    const scale = this.scaleOf(paneIndex);
+    if (scale === undefined) {
+      return;
+    }
+    const options = scale.options();
+    row.setPressed(options.autoScale, options.mode === PriceScaleMode.Logarithmic);
+    if (this.modeButtons === 'always') {
+      row.setWidth(scale.width());
+    }
+  }
+
+  /**
+   * Whether a pane can hold a logarithmic scale: the price pane always can, a pane that already holds
+   * one can be switched back, and an indicator pane only while every value it draws is at or above zero
+   * — a zero is allowed, since a volume pane holds one. Reading a pane's points is why only `sync` asks
+   * this, and the tick path never does.
+   */
+  private logAllowed(pane: ChartPane | undefined, paneIndex: number): boolean {
+    const scale = this.scaleOf(paneIndex);
+    if (paneIndex === PRICE_PANE_INDEX || scale === undefined) {
+      return true;
+    }
+    if (scale.options().mode === PriceScaleMode.Logarithmic) {
+      return true;
+    }
+    return (pane?.getSeries() ?? []).every(seriesAllowsLogarithmic);
+  }
+
+  /** A pane's own right scale; the price pane's is the one the saved shape is written to. */
+  private scaleOf(paneIndex: number): IPriceScaleApi | undefined {
+    if (paneIndex === PRICE_PANE_INDEX) {
+      return this.axis;
+    }
+    return this.chart.panes()[paneIndex]?.priceScale(PRICE_SCALE_ID);
   }
 
   private readonly toggleAutoScale = (): void => {
@@ -224,18 +304,47 @@ export class PriceScaleController {
   private readonly requestOtherMode = (): void => {
     const mode = priceScaleModeOf(!this.scaleShape().logarithmic);
     const detail: PriceScaleModeRequestDetail = { mode };
-    this.logButton.dispatchEvent(new CustomEvent(PRICE_SCALE_MODE_REQUESTED_EVENT, { bubbles: true, detail }));
+    this.host.dispatchEvent(new CustomEvent(PRICE_SCALE_MODE_REQUESTED_EVENT, { bubbles: true, detail }));
   };
 
+  /** An indicator pane's `A`: that pane's own scale is not saved, so its row writes the scale directly. */
+  private togglePaneAutoScale(paneIndex: number): void {
+    const scale = this.scaleOf(paneIndex);
+    if (scale === undefined) {
+      return;
+    }
+    scale.applyOptions({ autoScale: !scale.options().autoScale });
+    this.sync();
+  }
+
   /**
-   * Writes the mode, holding the actual-price range across the library's own manual switch: a manual
-   * range is written in the coordinates of the mode it was set in, so it would land elsewhere.
+   * An indicator pane's `L`: the other mode, written straight to that pane's scale, with a manual range
+   * carried over through the pane's first series, as the price pane's own switch does.
    */
+  private switchPaneScaleMode(paneIndex: number): void {
+    const pane = this.chart.panes()[paneIndex];
+    const scale = this.scaleOf(paneIndex);
+    if (pane === undefined || scale === undefined) {
+      return;
+    }
+    this.writeScaleMode(scale, pane.getSeries()[0], otherModeOf(scale));
+    this.sync();
+  }
+
+  /** Writes the price pane's mode, holding the actual-price range across the library's own switch. */
   private applyMode(mode: PriceScaleMode): void {
-    const range = this.axis.options().autoScale ? null : this.axis.getVisibleRange();
-    this.axis.applyOptions({ mode });
-    if (range !== null) {
-      setPriceScaleRange(this.candles, range);
+    this.writeScaleMode(this.axis, this.candles, mode);
+  }
+
+  /**
+   * Writes one scale's mode, holding its manual range across the switch: the library writes a manual
+   * range in the coordinates of the mode it was set in, so without this the range would land elsewhere.
+   */
+  private writeScaleMode(scale: IPriceScaleApi, series: PaneSeries | undefined, mode: PriceScaleMode): void {
+    const range = scale.options().autoScale ? null : scale.getVisibleRange();
+    scale.applyOptions({ mode });
+    if (range !== null && series !== undefined) {
+      setPriceScaleRange(series, range);
     }
   }
 
@@ -252,90 +361,85 @@ export class PriceScaleController {
     this.host.dispatchEvent(new CustomEvent(PRICE_SCALE_AUTO_CHANGED_EVENT, { bubbles: true, detail }));
   }
 
+  /** A move reveals or conceals rows only: creating and placing them belongs to the layout watcher. */
   private readonly onPointerMove = (event: PointerEvent): void => {
     if (!this.revealsOnHover()) {
       return;
     }
-    const width = this.axisWidthUnderPointer(event);
-    if (width === 0) {
-      this.conceal();
+    const hit = axisHitAt(this.chart, this.host, event);
+    if (hit === null && !this.anyRowRevealed()) {
       return;
     }
-    this.setWidth(width);
-    this.reveal();
+    this.rows().forEach((row, paneIndex) => this.hoverRow(row, paneIndex, hit));
   };
+
+  /** Only the row of the pane the pointer's axis belongs to shows; every other row hides. */
+  private hoverRow(row: PaneScaleRow, paneIndex: number, hit: AxisHit | null): void {
+    if (hit === null || hit.paneIndex !== paneIndex) {
+      row.conceal();
+      return;
+    }
+    row.setWidth(hit.width);
+    if (row.isRevealed()) {
+      return;
+    }
+    row.reveal();
+    this.syncRow(row, paneIndex);
+  }
 
   private readonly onPointerLeave = (): void => {
     if (!this.revealsOnHover()) {
       return;
     }
-    this.conceal();
+    this.rows().forEach((row) => row.conceal());
   };
 
-  private readonly onPointerUp = (): void => {
-    if (this.revealed) {
+  private readonly onPointerUp = (): void => this.refreshRevealed();
+
+  private readonly onDoubleClick = (): void => this.refreshRevealed();
+
+  private refreshRevealed(): void {
+    if (this.anyRowRevealed()) {
       this.sync();
     }
-  };
-
-  private readonly onDoubleClick = (): void => {
-    if (this.revealed) {
-      this.sync();
-    }
-  };
-
-  /**
-   * Axis width while the pointer is over the right price scale, otherwise 0:
-   * the last `width()` pixels of the host, down to the end of the pane (the
-   * time axis below it is not the price scale). Invisible scales report width
-   * 0, and the toggles stay out of the way of an empty chart.
-   */
-  private axisWidthUnderPointer(event: PointerEvent): number {
-    const width = this.axis.width();
-    if (width <= 0) {
-      return 0;
-    }
-    const bounds = this.host.getBoundingClientRect();
-    const x = event.clientX - bounds.left;
-    const y = event.clientY - bounds.top;
-    const over = x >= bounds.width - width && x <= bounds.width && y >= 0 && y <= this.paneHeight();
-    return over ? width : 0;
   }
 
-  /**
-   * Matches the row to the axis width, so its fill masks the whole axis column.
-   * Re-read on every reveal, because the axis widens with the price labels.
-   */
-  private setWidth(width: number): void {
-    const next = `${width}px`;
-    if (this.root.style.width !== next) {
-      this.root.style.width = next;
-    }
+  /** Whether any row is on screen, which is when a move that hits no axis still has rows to conceal. */
+  private anyRowRevealed(): boolean {
+    return this.rows().some((row) => row.isRevealed());
   }
 
-  private paneHeight(): number {
-    return this.chart.panes()[0]?.getHeight() ?? this.host.clientHeight;
-  }
-
-  /** Only the mouse-over row follows the pointer; the other two modes draw a row that never moves. */
+  /** Only the mouse-over rows follow the pointer; the rows of the other two modes never move. */
   private revealsOnHover(): boolean {
     return this.modeButtons === 'mouseOver';
   }
 
-  private reveal(): void {
-    if (this.revealed) {
-      return;
-    }
-    this.revealed = true;
+  /** The panes were laid out again: every row is placed from its own pane's geometry, so all re-read. */
+  private readonly followPaneLayout = (): void => {
     this.sync();
-    this.root.classList.add('price-scale-controls-revealed');
-  }
+  };
+}
 
-  private conceal(): void {
-    if (!this.revealed) {
-      return;
-    }
-    this.revealed = false;
-    this.root.classList.remove('price-scale-controls-revealed');
+/** The mode a toggle asks for: the one the scale it belongs to is not drawn in now. */
+function otherModeOf(scale: IPriceScaleApi): PriceScaleMode {
+  const logarithmic = scale.options().mode === PriceScaleMode.Logarithmic;
+  return logarithmic ? PriceScaleMode.Normal : PriceScaleMode.Logarithmic;
+}
+
+/** Whether a series draws no value below zero, which a logarithmic scale needs of every point it holds. */
+function seriesAllowsLogarithmic(series: PaneSeries): boolean {
+  return series.data().every(valueAllowsLogarithmic);
+}
+
+/** A point carrying a value below zero rules the scale out; a point without one says nothing about it. */
+function valueAllowsLogarithmic(point: unknown): boolean {
+  return !isValuePoint(point) || point.value >= 0;
+}
+
+/** Whether a series point carries a value: a candle and a whitespace point carry a time only. */
+function isValuePoint(point: unknown): point is { readonly value: number } {
+  if (typeof point !== 'object' || point === null || !('value' in point)) {
+    return false;
   }
+  return typeof point.value === 'number';
 }

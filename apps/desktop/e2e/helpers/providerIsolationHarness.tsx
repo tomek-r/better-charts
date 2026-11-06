@@ -26,6 +26,7 @@ import { BridgeAwaitingScreen, useAwaitingBridgeData } from '../../src/features/
 import { BridgeScreen } from '../../src/features/settings/setup/BridgeScreen';
 import { ChartWorkspaceProvider, useChartResources } from '../../src/features/chart/ChartWorkspaceProvider';
 import { ChartSettingsProvider } from '../../src/features/chart/chartSettings/ChartSettingsProvider';
+import { ChartSettingsDialogHost } from '../../src/features/chart/chartSettings/dialog/ChartSettingsDialogHost';
 import { ChartTitle } from '../../src/features/chart/header/ChartTitle';
 import { ChartQuotes } from '../../src/features/chart/header/ChartQuotes';
 import { ChartCanvas } from '../../src/features/chart/ChartCanvas';
@@ -118,7 +119,9 @@ function ChartHeaderProbes() {
       {/* The canvas reads the setup flow to know whether a reconnect loader may show. */}
       <AppSettingsProvider tauriAvailable={tauriAvailable}>
         <Probe id="chart-canvas">
-          <ChartCanvas />
+          <ChartSettingsDialogHost>
+            <ChartCanvas />
+          </ChartSettingsDialogHost>
         </Probe>
       </AppSettingsProvider>
     </div>

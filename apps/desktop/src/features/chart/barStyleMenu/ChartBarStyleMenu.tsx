@@ -1,13 +1,14 @@
 import { Fragment, useLayoutEffect, useRef, type RefObject } from 'react';
 import { CaretIcon } from '../../../shared/ui/icons/CaretIcon';
 import { CheckIcon } from '../../../shared/ui/icons/CheckIcon';
+import { focusCheckedRow, handleMenuKey } from '../../../shared/ui/popup/popupMenuKeys';
 import { useOutsidePress } from '../../../shared/ui/popup/useOutsidePress';
 import { usePopupPlacement } from '../../../shared/ui/popup/usePopupPlacement';
 import { useChartSettings } from '../chartSettings/ChartSettingsProvider';
 import { withBarStyle } from '../chartSettings/chartSettings';
 import { BAR_STYLE_GROUPS, barStyleLabel, type BarStyle, type BarStyleOption } from '../engine/barStyle/barStyles';
 import { BarStyleIcon } from './BarStyleIcon';
-import { focusCheckedRow, handleMenuKey, useBarStyleMenu } from './useBarStyleMenu';
+import { useBarStyleMenu } from './useBarStyleMenu';
 import './bar-style-menu.css';
 
 /** One row of the menu: the bar type's icon and name, with a tick on the one the chart draws. */

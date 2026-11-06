@@ -90,6 +90,12 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
     setDrawingSettings: (toolId, drawingId, settings) => {
       calls.push({ name: 'setDrawingSettings', args: [toolId, drawingId, settings] });
     },
+    previewDrawingSettings: (toolId, drawingId, settings) => {
+      calls.push({ name: 'previewDrawingSettings', args: [toolId, drawingId, settings] });
+    },
+    endDrawingSettingsPreview: (toolId, drawingId) => {
+      calls.push({ name: 'endDrawingSettingsPreview', args: [toolId, drawingId] });
+    },
     setDrawingTimeframeVisibility: (toolId, drawingId, visibility) => {
       calls.push({ name: 'setDrawingTimeframeVisibility', args: [toolId, drawingId, visibility] });
     },
@@ -100,6 +106,10 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
     exportDrawings: () => {
       calls.push({ name: 'exportDrawings', args: [] });
       return answers.records;
+    },
+    shownDrawingSettings: () => {
+      calls.push({ name: 'shownDrawingSettings', args: [] });
+      return [];
     },
     replaceDrawings: (records) => {
       calls.push({ name: 'replaceDrawings', args: [records] });
@@ -240,6 +250,21 @@ test('new settings reach the commands with the same arguments and repaint once',
   const settings: SettingValues = { period: 30 };
   drawings.setSettings('trend-line', 'line-1', settings);
   expect(calls).toEqual([{ name: 'setDrawingSettings', args: ['trend-line', 'line-1', settings] }]);
+  expect(timeline).toEqual(['repaint']);
+});
+
+test('previewed settings reach the preview command with the same arguments and repaint once', () => {
+  const { drawings, calls, timeline } = buildHarness();
+  const settings: SettingValues = { period: 30 };
+  drawings.previewSettings('trend-line', 'line-1', settings);
+  expect(calls).toEqual([{ name: 'previewDrawingSettings', args: ['trend-line', 'line-1', settings] }]);
+  expect(timeline).toEqual(['repaint']);
+});
+
+test('ending a settings preview reaches its command with the same arguments and repaints once', () => {
+  const { drawings, calls, timeline } = buildHarness();
+  drawings.endSettingsPreview('trend-line', 'line-1');
+  expect(calls).toEqual([{ name: 'endDrawingSettingsPreview', args: ['trend-line', 'line-1'] }]);
   expect(timeline).toEqual(['repaint']);
 });
 

@@ -67,12 +67,21 @@ export function useOpenDrawingSettings(): (toolId: string, drawingId: string) =>
 interface OpenDrawingSettingsDialogProps {
   readonly target: OpenDrawingSettings | null;
   readonly selection: ChartDrawingSelection | null;
+  readonly onPreview: DrawingSettingsDialogProps['onPreview'];
+  readonly onRevert: DrawingSettingsDialogProps['onRevert'];
   readonly onSave: DrawingSettingsDialogProps['onSave'];
   readonly onClose: () => void;
 }
 
 /** The dialog of the open target, for as long as its drawing stays the selected one. */
-function OpenDrawingSettingsDialog({ target, selection, onSave, onClose }: OpenDrawingSettingsDialogProps) {
+function OpenDrawingSettingsDialog({
+  target,
+  selection,
+  onPreview,
+  onRevert,
+  onSave,
+  onClose,
+}: OpenDrawingSettingsDialogProps) {
   if (target === null) {
     return null;
   }
@@ -91,6 +100,8 @@ function OpenDrawingSettingsDialog({ target, selection, onSave, onClose }: OpenD
       initialValues={target.values}
       initialPoints={target.points}
       initialTimeframeVisibility={target.timeframeVisibility}
+      onPreview={onPreview}
+      onRevert={onRevert}
       onSave={onSave}
       onClose={onClose}
     />
@@ -127,6 +138,7 @@ export function DrawingSettingsProvider({ children }: DrawingSettingsProviderPro
 
   const contextValue = useMemo(() => ({ openDrawingSettings }), [openDrawingSettings]);
 
+  // The dialog closes itself once its exit animation ends, which is when `closeSettings` clears the target.
   const saveSettings: DrawingSettingsDialogProps['onSave'] = (values, points, timeframeVisibility) => {
     const drawings = chart.current?.drawings;
     if (target !== null && drawings !== undefined) {
@@ -139,8 +151,21 @@ export function DrawingSettingsProvider({ children }: DrawingSettingsProviderPro
         drawings.setTimeframeVisibility(target.toolId, target.drawingId, timeframeVisibility);
       }
     }
-    setTarget(null);
     return true;
+  };
+
+  /** Shows values on the open drawing without saving them: what a resting draft does. */
+  const previewSettings: DrawingSettingsDialogProps['onPreview'] = (values) => {
+    if (target !== null) {
+      chart.current?.drawings.previewSettings(target.toolId, target.drawingId, values);
+    }
+  };
+
+  // Closing without OK puts the stored settings back, undoing any preview; repeating it changes nothing.
+  const revertPreview: DrawingSettingsDialogProps['onRevert'] = () => {
+    if (target !== null) {
+      chart.current?.drawings.endSettingsPreview(target.toolId, target.drawingId);
+    }
   };
 
   const closeSettings = () => {
@@ -150,7 +175,14 @@ export function DrawingSettingsProvider({ children }: DrawingSettingsProviderPro
   return (
     <DrawingSettingsContext value={contextValue}>
       {children}
-      <OpenDrawingSettingsDialog target={target} selection={selection} onSave={saveSettings} onClose={closeSettings} />
+      <OpenDrawingSettingsDialog
+        target={target}
+        selection={selection}
+        onPreview={previewSettings}
+        onRevert={revertPreview}
+        onSave={saveSettings}
+        onClose={closeSettings}
+      />
     </DrawingSettingsContext>
   );
 }

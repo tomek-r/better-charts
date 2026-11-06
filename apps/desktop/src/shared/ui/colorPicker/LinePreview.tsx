@@ -1,11 +1,14 @@
 /** The dash patterns a line may have; the names are what a stored line style holds. */
 export type LineDashStyle = 'solid' | 'dashed' | 'dotted';
 
-/** SVG dash pattern of each line style in a preview, in px; a solid line has none. */
+/**
+ * SVG dash pattern of each line style in a preview, in px: the chart's dots, and its dashes at half
+ * length so a short sample shows several; a solid line has none.
+ */
 const PREVIEW_DASH: Readonly<Record<LineDashStyle, string | undefined>> = {
   solid: undefined,
-  dashed: '6 4',
-  dotted: '1 3',
+  dashed: '3 3',
+  dotted: '1 4',
 };
 const MARGIN_PX = 2;
 
@@ -16,7 +19,7 @@ interface LinePreviewProps {
   readonly pixelWidth?: number;
 }
 
-/** A short sample of a line, drawn the way the chart will draw it. */
+/** A short sample of a line in its colour, width and style. */
 export function LinePreview({ color, width, dash, pixelWidth = 36 }: LinePreviewProps) {
   const height = 12;
   const middle = height / 2;

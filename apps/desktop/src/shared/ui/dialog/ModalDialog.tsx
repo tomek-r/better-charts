@@ -8,6 +8,8 @@ import {
   type RefObject,
   type SubmitEvent,
 } from 'react';
+import { useBackdropDismiss } from './useBackdropDismiss';
+import { useDraggablePanel } from './useDraggablePanel';
 
 // `:not(:disabled)` (not `[disabled]`) so controls inside a disabled fieldset are skipped too.
 const FOCUSABLE_SELECTOR =
@@ -20,6 +22,15 @@ export type ModalDialogSize = 'compact' | 'wide';
 
 function focusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+}
+
+/**
+ * Whether something over the panel owns the keyboard: a dialog nested in it (e.g. a guide opened from the
+ * body) or a popup (a drop-down list, a colour picker) opened by one of its controls, which is portalled out
+ * of the panel.
+ */
+function panelOwnsKeyboard(panelElement: HTMLElement | null): boolean {
+  return panelElement !== null && panelElement.querySelector(OWNS_KEYBOARD_SELECTOR) !== null;
 }
 
 /** Footer action styled for a modal; `primary` is the filled accent button, `secondary` the outlined one. */
@@ -48,10 +59,14 @@ export function ModalDialogCloseButton({
 /**
  * Generic modal: backdrop, titled panel, body and a footer for actions.
  * Focus starts on `initialFocusRef` (else the first focusable element), Tab/Shift+Tab cycle inside the panel,
- * Escape calls `onDismiss`, and focus returns to the previously focused element on unmount.
+ * Escape calls `onDismiss` and so does a click on the backdrop, and focus returns to the previously focused
+ * element on unmount.
  *
  * Keystrokes from outside the panel never reach the page's shortcuts; keystrokes from inside it (typing in an
  * input, Enter to submit) reach their own handlers, while the page's global shortcuts yield to `[data-modal-dialog]`.
+ *
+ * The header drags the panel (see `useDraggablePanel`); the position is not saved, so every opening starts
+ * where `size`, `layout` and the CSS put the panel.
  *
  * `layout="scrollable"` gives a fixed header and footer with a body that fills the remaining height, for
  * dialogs with their own scrolling regions. Pass `onSubmit` to wrap body and footer in a `<form>` so a
@@ -105,21 +120,24 @@ export function ModalDialog({
 }) {
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
+  const { panelStyle, onHandlePointerDown } = useDraggablePanel(panel);
   // Latest callback without re-running the focus effect (which would steal and restore focus).
   const dismissRef = useRef(onDismiss);
   useEffect(() => {
     dismissRef.current = onDismiss;
   });
+  // The same dismissal Escape runs, under the same guard: nothing over the panel owns the keyboard.
+  const backdropDismiss = useBackdropDismiss(
+    () => dismissRef.current(),
+    () => panelOwnsKeyboard(panel.current),
+  );
 
   useEffect(() => {
     const previous = document.activeElement;
     const panelElement = panel.current;
     (initialFocusRef?.current ?? (panelElement ? focusableElements(panelElement)[0] : null) ?? panelElement)?.focus();
     const onKey = (event: KeyboardEvent) => {
-      // A dialog nested in the panel (e.g. a guide opened from the body) owns the keyboard, and so does a
-      // popup (a drop-down list, a colour picker) opened by a control of the panel: it is portalled out of
-      // the panel, so its keys would otherwise be swallowed here and Escape would close the whole modal.
-      if (panelElement?.querySelector(OWNS_KEYBOARD_SELECTOR)) {
+      if (panelOwnsKeyboard(panelElement)) {
         return;
       }
       const isModalKey = event.key === 'Escape' || event.key === 'Tab';
@@ -183,10 +201,13 @@ export function ModalDialog({
     <div
       ref={backdropRef}
       className={`modal-dialog-backdrop${modifiers}${closing ? ' is-closing' : ''}${backdropClassName ? ` ${backdropClassName}` : ''}`}
+      role="presentation"
+      {...backdropDismiss}
     >
       <div
         ref={panel}
         className={`modal-dialog${modifiers}${className ? ` ${className}` : ''}`}
+        style={panelStyle}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -194,7 +215,7 @@ export function ModalDialog({
         data-size={size}
         data-modal-dialog
       >
-        <header className="modal-dialog-header">
+        <header className="modal-dialog-header" onPointerDown={onHandlePointerDown}>
           <h2 id={titleId} className="modal-dialog-title">
             {title}
           </h2>

@@ -1,4 +1,5 @@
 import { OutlineIcon } from '../../../shared/ui/icons/OutlineIcon';
+import { OBJECT_SETTINGS_ICON_PATHS } from '../../../shared/ui/icons/objectSettingsIcon';
 
 /** The class every toolbar glyph carries: drawing-toolbar.css sizes it for its 32 px button. */
 const ICON_CLASS = 'drawing-toolbar-icon';
@@ -19,8 +20,9 @@ const GRIP_DOTS = (
 
 const SETTINGS_GLYPH = (
   <>
-    <path d="M12 2.8 19.5 7.1v9.8L12 21.2 4.5 16.9V7.1z" />
-    <circle cx="12" cy="12" r="3.1" />
+    {OBJECT_SETTINGS_ICON_PATHS.map((d) => (
+      <path key={d} d={d} />
+    ))}
   </>
 );
 

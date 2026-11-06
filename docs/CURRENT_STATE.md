@@ -3,7 +3,7 @@
 Current behavior and owner decisions. See [architecture](architecture/README.md)
 and the [bridge contract](protocol/bridge-v1.md) for implementation details.
 
-React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object. The lifecycle coordinator passes non-quote props to ordered children; only quote-dependent children subscribe to live quotes. Chart tools, the Arrow and Crosshair pointers included, are plugins: one folder per tool under `features/tools/` implementing the `ChartToolPlugin`/`ChartTool` contract (`features/chart/engine/tools/toolContract.ts`), registered by one line in `features/tools/registry.ts`; the chart lifecycle passes that list to `ChartController` (`toolPlugins`), so the engine imports no concrete tool; the rail and icon iterate the registry, plugins sharing a `railGroup` (the pointers) render as one flyout button, and `DEFAULT_CHART_TOOL_ID` (arrow) is active when nothing else is. The engine owns only the pointer's time/price axis labels (`pointerReadoutPrimitive.ts`, shown for every tool); the Crosshair lines are drawn by `CrosshairTool` through the generic `pointerHover`/`pointerLeave` hooks and the layered `draw(ctx, viewport, layer)` hook (`aboveTradingOverlays*` layers); every plugin is built from its `toolClass`. Tools see the bridge only through the read-only `MarketDataPort` (`features/bridge/marketDataPort.ts`), never `invoke` or execution commands.
+React state ownership follows the 2026-10-08 [domain-store decision](reviews/domain-store-migration.md): scoped Zustand stores own frequent bridge/ticket and provider data; contexts inject stable dependencies or retain rare state. Chart effects and state hooks live in separate `effects/` and `state/` folders. Order-ticket producers expose commands; lifecycle effects consume focused entry, order-check, preview, and chart interfaces instead of a full ticket-state object. The lifecycle coordinator passes non-quote props to ordered children; only quote-dependent children subscribe to live quotes. Chart tools, the Arrow and Crosshair pointers included, are plugins: one folder per tool under `features/tools/` implementing the `ChartToolPlugin`/`ChartTool` contract (`features/chart/engine/tools/toolContract.ts`), registered by one line in `features/tools/registry.ts`; the chart lifecycle passes that list to `ChartController` (`toolPlugins`), so the engine imports no concrete tool; the rail and icon iterate the registry, plugins sharing a `railGroup` (the pointers) render as one flyout button, and `DEFAULT_CHART_TOOL_ID` (arrow) is active when nothing else is. The engine owns only the pointer's time/price axis labels (`pointerReadoutPrimitive.ts`, shown for every tool); the Crosshair lines are drawn by `CrosshairTool` through the generic `pointerHover`/`pointerLeave` hooks and the layered `draw(ctx, viewport, layer)` hook (`aboveTradingOverlays*` layers); every plugin is built from its `toolClass`. Tools see the bridge only through the read-only `MarketDataPort` (`features/bridge/marketDataPort.ts`), never `invoke` or execution commands. Chart indicators are plugins the same way: one folder per indicator under `features/indicators/` implementing `ChartIndicatorPlugin` (`features/indicators/chartIndicatorPlugin.ts`, built on the engine's `ChartIndicatorDefinition`/`ChartIndicator` in `features/chart/engine/indicators/indicatorContract.ts`), registered in `features/indicators/registry.ts` and handed to `ChartController` as `indicatorDefinitions`. An indicator turns bars into an `IndicatorFrame` (plots, levels, fills, per-bar values and colours, an optional precision) and never touches the chart; the engine's display layer (`features/chart/engine/indicators/`) draws any frame and never computes, so another producer can attach later. Bar-by-bar indicators extend `BarByBarIndicator`, which owns the load/update and forming-bar contract.
 
 ## Available
 
@@ -160,12 +160,16 @@ Not implemented: break even or multiple charts.
   the start line) and on the painted value labels column; with no profile painted
   (previewing, no bins) only the handles and the band select it.
 - Price scale fits on load, then holds until rescaled; axis hover exposes `A`/`L`.
-  The first history request covers only the visible pane (`initialHistoryBars`
-  in `config/bridge.json`; the UI measures the pane), then one older page is
-  prefetched when idle. A reconnect of the same terminal and account reopens
-  the symbol and timeframe the user was viewing (the bridge requests them
-  itself); if they cannot be served, the EA's chart symbol is shown with a
-  notice, and another account starts from the chart symbol. History paging
+  Every pane has its own `A`/`L` at the foot of its own axis, and the price
+  pane's row sits above the indicator panes: the price pane's `L` is the saved
+  scale type, while an indicator pane's choices are not saved and last until
+  the chart is reloaded. The first history request covers only the visible pane
+  (`initialHistoryBars` in `config/bridge.json`; the UI measures the pane), then
+  one older page is prefetched when idle. A reconnect of the same terminal and
+  account reopens the symbol and timeframe the user was viewing (the bridge
+  requests them itself); if they cannot be served, the EA's chart symbol is
+  shown with a notice, and another account starts from the chart symbol.
+  History paging
   preserves viewport; reconnecting or a
   new symbol resets to the latest history, while any replacement of the same
   symbol's series (a timeframe change or a fresh window) preserves bar spacing
@@ -293,10 +297,13 @@ Settings are the tool's typed inputs (`int`, `float`, `bool`,
 `time`, `enum`), rendered generically from the definitions a tool declares, one control
 per kind, grouped in fieldsets as the definitions ask, and OK stays disabled while a
 value fails its kind's rule. The Fixed Range Volume Profile declares its inputs and styles
-(see above), so its dialog opens on the Inputs and Style tabs. A hidden drawing keeps its stored `visible` flag and is neither
+(see above), so its dialog opens on the Inputs and Style tabs. Inputs and Style edits show on the drawing as
+they are made (after a short pause) and are saved only on OK; every other way out restores the settings the
+dialog opened with. A hidden drawing keeps its stored `visible` flag and is neither
 painted nor hit; the toolbar's Hide/Show button sets that flag.
 
-A strip down the chart's right edge holds the Trade panel and Object tree buttons: one
+A strip down the chart's right edge holds the Trade panel and Object tree buttons, and the far
+right of the chart header holds a Settings button that opens the chart's settings dialog: one
 drawer is open at a time, and the chart shrinks beside the open drawer instead of sitting
 under it. The Object tree lists every drawing of the account and symbol, topmost first,
 the way TradingView lists its objects. A click on a row selects that drawing on the chart,
@@ -311,6 +318,84 @@ side of the bars are saved. A locked or hidden drawing keeps its toggle in sight
 hidden row's name is dimmed while the row stays listed and clickable. The dialog is the
 same one the floating toolbar opens, held by one provider above the chart and the tree.
 The tree keeps no data window and no toolbar of its own (owner decision).
+
+## Chart indicators
+
+The Indicators button beside the bar-type control opens a dialog titled "Indicators" with a
+search field (a case-insensitive part of the name or short name) and the list of indicator
+names; choosing one, or Enter for the first match, attaches it with its defaults and closes
+the dialog. TradingView's tabs and categories are left out (owner decision). The list is kept
+alphabetical by title and holds Bollinger Bands (BB 20 close 2: basis, upper and lower, with
+the band between them filled), MACD (MACD 12 26 close 9: a histogram coloured by sign and by
+whether it grew, the MACD and signal lines and a zero line), Moving Average Exponential (EMA 9
+close), Moving Average Simple (SMA 9 close), Relative Strength Index (RSI 14 close, with
+dashed 70 and 30 bands, a dotted 50 band and the background between 70 and 30) and Volume
+(Vol, or Vol SMA 20 while its MA line is on: the bar's tick volume in columns coloured by
+whether the bar closed at or above its open, with a Volume MA line, SMA or EMA, that is off
+until switched on in the Style tab).
+The chart no longer draws volume by itself; volume shows through the Volume indicator.
+SMA, EMA and Bollinger Bands draw on the price pane; RSI, MACD and Volume each get a pane of their own under
+it, about a ninth of the height, which closes when the indicator is removed. A pane resized by
+dragging its separator keeps that height, relative to the price pane, with the saved indicator,
+and the chart restores it on load. Every value is
+computed in the frontend from the bars the chart draws, as Pine's `ta.sma`, `ta.stdev`,
+`ta.rsi` and `ta.ema` compute them; a live tick redraws only the forming bar and never moves
+an indicator's state. Indicator values are display-only and never reach order, account or
+journal data.
+
+Volume's Style tab offers one Plot type icon button, on the Growing row beside its colour, which
+opens a menu holding the Current value line switch and the eleven ways to draw the plot. Columns, the
+default, draws the columns an attached Volume showed before the choice existed. The other choices
+are Line, Line with breaks, Step line, Step line with breaks, Step line with diamonds, Histogram,
+Cross, Area, Area with breaks and Circles; a type with breaks differs from its plain one only
+where a plot has a missing value, which Volume never has. Current value line draws the horizontal
+line at the last volume and is off by default. A bar that has just opened does not lower Volume's
+scale, and the columns stand on the pane's foot.
+
+Attached indicators are saved per chart, account and symbol in the chart's settings overrides
+(id, indicator id, the settings the user changed, and `hidden: true` while hidden), so they
+come back when that chart opens. An entry that does not read is dropped, and one this build
+does not know stays saved and draws nothing.
+
+The OHLC line writes the four values of the bar under the pointer, or of the last bar while the
+pointer is off the chart or over no bar, in that bar's body colour as it is drawn, following the
+bar style and its up and down colours; a style without them (Line, Line with markers, Step line,
+Area, Baseline, High-low) keeps the label colour.
+
+The chart settings dialog's Status line tab switches the title (name, symbol or both), the market
+status dot, the chart values, the bar change against the previous close, the bar's tick volume,
+the last day change, and the indicator titles, inputs and values, and draws a background behind
+them. The last day change is the last price against the close of the newest loaded bar on an
+earlier broker day, so it is not shown on timeframes above one day or while no earlier day is
+loaded.
+
+Under the OHLC line the legend lists one row per price-pane indicator: its short title, its input
+values and each plot's value at the crosshair bar, or at the last bar while the pointer is off the
+chart (e.g. "SMA 9 close 1.08520"); oscillators write two decimals. An indicator with a pane of
+its own shows the same row at the top-left of that pane instead. A hovered row offers Hide/Show,
+Settings and Remove buttons, and a double click on its title opens the settings. A hidden
+indicator's row is dimmed, and a chevron collapses the price-pane rows to their count ("˅ 2").
+Each indicator pane draws its own top border, which stops at the price axis; the library's pane
+separator and its hover band, which would cross the axis, are transparent, and a band of the
+pane's width shows while the line between the panes is hovered or dragged.
+
+The Indicators dialog sits at a fixed offset from the top of the window, like the settings
+dialogs.
+
+The Object tree lists, under the drawings, every indicator drawn on the price pane by its legend
+name; indicators with a pane of their own get no row (owner decision). A row's buttons open the
+indicator's settings, hide or show it and remove it, and a double click or Delete on its name
+does the same as in a drawing row. The settings dialog is the drawing settings form with the
+indicator's Inputs and Style tabs; OK stays disabled while a value is invalid and recomputes the
+indicator. Its Inputs and Style edits show on the chart as they are made, after a short pause, and
+are stored only on OK; Cancel, the close button, Escape and a backdrop click put the stored
+settings back. A plot or band switched off in the Style tab hides only that line. Its Style tab ends
+with three display switches: Labels on price scale, off by default (each visible plot's last value on
+the price scale), Values in status line (the plot values in the legend row), and Inputs in status
+line (the inputs after the short title there; the Object tree name keeps them either way), with the
+last two on by default. The settings dialog also has the drawings' Visibility tab: an indicator
+limited to some timeframes is not attached on the others, so its line, legend row and pane leave and
+come back with the timeframe; the Object tree keeps listing it.
 
 ## Execution and configuration
 

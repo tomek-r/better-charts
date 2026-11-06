@@ -16,7 +16,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: E2E_DEV_SERVER_URL,
-    trace: 'on-failure',
+    trace: 'retain-on-failure',
   },
   projects: [
     {

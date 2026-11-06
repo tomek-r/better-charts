@@ -11,7 +11,7 @@ import {
   type DrawingTimeframeVisibility,
 } from '../src/features/chart/engine/drawings/timeframeVisibility';
 import type { ChartDrawingPointRule } from '../src/features/chart/engine/drawings/toolDrawings';
-import type { SettingInputDefinition } from '../src/features/chart/engine/settings/settingInputs';
+import type { SettingInputDefinition, SettingValues } from '../src/features/chart/engine/settings/settingInputs';
 import type {
   ChartDrawingPaintTarget,
   ChartDrawTarget,
@@ -123,6 +123,20 @@ function selectedInTool(harness: Harness, toolId: string): string | null {
       ?.entries()
       .find((entry) => entry.selected)?.id ?? null
   );
+}
+
+/** The settings the set reports one drawing is shown with, a settings dialog's preview included. */
+function shownSettingsOf(harness: Harness, toolId: string, drawingId: string): SettingValues | undefined {
+  return harness.tools.shownDrawingSettings().find((shown) => shown.toolId === toolId && shown.id === drawingId)
+    ?.settings;
+}
+
+/** A tool set holding one drawing of tool 'a', stored at period 20, that a settings dialog previews at period 30. */
+function toolSetPreviewingOneDrawing(): { harness: Harness; drawingId: string } {
+  const harness = buildToolSet();
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.previewDrawingSettings('a', drawingId, { period: 30 });
+  return { harness, drawingId };
 }
 
 function buildToolSet({ toolIds = ['a', 'b', 'c'], placementToolIds = [] }: ToolKinds = {}): Harness {
@@ -516,6 +530,75 @@ test('new settings on a drawing are reported only when the tool accepts them', (
   harness.tools.setDrawingSettings('a', 'missing', { period: 50 });
   expect(harness.reports.drawingsChanged).toBe(1);
   expect(harness.drawings.get('a')?.exportRecords()[0]?.settings).toEqual({ period: 30 });
+});
+
+test('previewed settings reach the drawing without reporting a change, so nothing is saved', () => {
+  const { harness, drawingId } = toolSetPreviewingOneDrawing();
+
+  expect(harness.reports.drawingsChanged).toBe(0);
+  expect(shownSettingsOf(harness, 'a', drawingId)).toEqual({ period: 30 });
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.settings).toEqual({ period: 20 });
+});
+
+test('a preview survives a saved change to the same drawing, which exports the stored settings', () => {
+  const { harness, drawingId } = toolSetPreviewingOneDrawing();
+
+  harness.tools.setDrawingLocked('a', drawingId, true);
+
+  expect(harness.reports.drawingsChanged).toBe(1);
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.settings).toEqual({ period: 20 });
+  expect(shownSettingsOf(harness, 'a', drawingId)).toEqual({ period: 30 });
+});
+
+test('a saved change to another drawing of the tool exports the stored settings, not the preview', () => {
+  const harness = buildToolSet({ toolIds: ['a'] });
+  const previewed = seedDrawing(harness, 'a', 5);
+  const other = seedDrawing(harness, 'a', 20);
+  harness.tools.previewDrawingSettings('a', previewed, { period: 30 });
+
+  harness.tools.setDrawingSettings('a', other, { period: 40 });
+
+  expect(harness.reports.drawingsChanged).toBe(1);
+  expect(
+    harness.drawings
+      .get('a')
+      ?.exportRecords()
+      .map(({ settings }) => settings),
+  ).toEqual([{ period: 20 }, { period: 40 }]);
+  expect(shownSettingsOf(harness, 'a', previewed)).toEqual({ period: 30 });
+});
+
+test('ending a settings preview shows the stored settings again and reports no change', () => {
+  const { harness, drawingId } = toolSetPreviewingOneDrawing();
+
+  harness.tools.endDrawingSettingsPreview('a', drawingId);
+
+  expect(shownSettingsOf(harness, 'a', drawingId)).toEqual({ period: 20 });
+  expect(harness.reports.drawingsChanged).toBe(0);
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.settings).toEqual({ period: 20 });
+});
+
+test('ending a preview the drawing does not hold, or of an unknown drawing, changes nothing', () => {
+  const { harness, drawingId } = toolSetPreviewingOneDrawing();
+  harness.tools.endDrawingSettingsPreview('a', drawingId);
+
+  harness.tools.endDrawingSettingsPreview('a', drawingId);
+  harness.tools.endDrawingSettingsPreview('a', 'missing');
+
+  expect(harness.reports.drawingsChanged).toBe(0);
+  expect(shownSettingsOf(harness, 'a', drawingId)).toEqual({ period: 20 });
+});
+
+test('settings saved after a preview are stored and replace the preview', () => {
+  const harness = buildToolSet();
+  const drawingId = seedDrawing(harness, 'a', 5);
+  harness.tools.previewDrawingSettings('a', drawingId, { period: 30 });
+
+  harness.tools.setDrawingSettings('a', drawingId, { period: 45 });
+
+  expect(harness.reports.drawingsChanged).toBe(1);
+  expect(harness.drawings.get('a')?.exportRecords()[0]?.settings).toEqual({ period: 45 });
+  expect(shownSettingsOf(harness, 'a', drawingId)).toEqual({ period: 45 });
 });
 
 test('new anchors on the selected drawing are reported once and keep it selected', () => {

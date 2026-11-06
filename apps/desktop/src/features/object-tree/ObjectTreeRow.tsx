@@ -10,29 +10,16 @@ import {
   DRAWING_VISIBILITY_LABELS,
   REMOVE_DRAWING_LABEL,
 } from '../tools/drawingToolbar/drawingCommandLabels';
-import {
-  EyeCrossedIcon,
-  EyeIcon,
-  LockClosedIcon,
-  LockOpenIcon,
-  SettingsIcon,
-  TrashIcon,
-} from '../tools/drawingToolbar/drawingToolbarIcons';
+import { LockClosedIcon, LockOpenIcon, SettingsIcon } from '../tools/drawingToolbar/drawingToolbarIcons';
 import type { RegisteredChartToolPlugin } from '../tools/registry';
 import { useDrawingCommands } from '../tools/useDrawingCommands';
+import { ObjectTreeRemoveButton, ObjectTreeVisibilityButton, ROW_ACTION_CLASS } from './objectTreeRowActions';
+import { presentWhileTrue } from './objectTreeRowAttributes';
 import { ROW_NAME_CLASS, rowNameButtons } from './objectTreeRowFocus';
 import type { LayerRowReorder } from './useLayerReorder';
 
 /** The row glyph, sized like the floating toolbar's. */
 const ROW_ICON_SIZE_PX = 18;
-
-/** The class of the small icon buttons of a row's actions. */
-const ROW_ACTION_CLASS = 'object-tree-row-action';
-
-/** A data attribute that exists only while its condition holds, which is how object-tree.css selects it. */
-function presentWhileTrue(holds: boolean): 'true' | undefined {
-  return holds ? 'true' : undefined;
-}
 
 export interface ObjectTreeRowProps {
   readonly record: ChartDrawingRecord;
@@ -113,17 +100,12 @@ export function ObjectTreeRow({ record, plugin, selected, reorder }: ObjectTreeR
           onIcon={<LockClosedIcon />}
           onClick={() => commands.setLocked(!record.locked)}
         />
-        <ToggleCommandButton
-          className={ROW_ACTION_CLASS}
+        <ObjectTreeVisibilityButton
           labels={DRAWING_VISIBILITY_LABELS}
-          pressed={!record.visible}
-          offIcon={<EyeIcon />}
-          onIcon={<EyeCrossedIcon />}
-          onClick={() => commands.setVisible(!record.visible)}
+          hidden={!record.visible}
+          onToggle={() => commands.setVisible(!record.visible)}
         />
-        <CommandButton className={ROW_ACTION_CLASS} label={REMOVE_DRAWING_LABEL} onClick={removeAndFocusRow}>
-          <TrashIcon />
-        </CommandButton>
+        <ObjectTreeRemoveButton label={REMOVE_DRAWING_LABEL} onRemove={removeAndFocusRow} />
       </div>
     </li>
   );

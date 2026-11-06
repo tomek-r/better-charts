@@ -55,6 +55,14 @@
   min-width: 0;
 }
 
+/* The header row's right end: Settings and the Object tree stay on the right edge whatever the timeframes
+   beside them take. */
+.chart-header-end {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
 /* The look every button of the chart header shares; a button adds only the spacing and the marks it needs. */
 .chart-header-button {
   display: flex;
@@ -69,8 +77,24 @@
   cursor: pointer;
 }
 
+/* An icon-only header button is square: the row's 30px height, so it never sets a taller row, and the icon
+   centred in it. */
+.chart-header-icon-button {
+  justify-content: center;
+  width: 30px;
+  padding: 0;
+}
+
+/* The icon of a header icon button, at the size the Indicators button draws its own. */
+.chart-header-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
 .chart-header-button:hover,
-.chart-header-button[aria-expanded='true'] {
+.chart-header-button[aria-expanded='true'],
+.chart-header-button[aria-pressed='true'] {
   color: var(--color-text);
   border-color: var(--color-text-secondary);
   background: var(--color-border-subtle);

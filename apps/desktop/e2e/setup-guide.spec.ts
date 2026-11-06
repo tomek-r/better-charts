@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { dragBy } from './helpers/dragPanel';
 import {
   currentGuideStep,
   expectGuideOnStep,
@@ -24,6 +25,13 @@ const DETECTED_FOLDER_NOTE = 'MetaTrader 5 folder: C:\\Program Files\\MetaTrader
 const PICKED_FOLDER_NOTE = 'MetaTrader 5 folder: D:\\Trading\\MetaTrader 5';
 
 const MT5_NOT_FOUND_NOTE = 'MetaTrader 5 was not found. Use Choose folder… or the manual steps.';
+
+/** A point this far inside the guide's backdrop, clear of the guide itself. */
+const GUIDE_BACKDROP_INSET = 8;
+
+/** How far the drag test moves the guide: unmistakable, and well inside the drag's limits. */
+const DRAG_RIGHT = 80;
+const DRAG_DOWN = 40;
 
 test('the guide opens on Find MetaTrader 5 and walks to Install and back', async ({ page }) => {
   await gotoWithStub(page);
@@ -196,4 +204,36 @@ test('Escape and the close button dismiss only the guide; focus returns to the t
   await guide.getByRole('button', { name: 'Close setup guide' }).click();
   await expect(guide).toBeHidden();
   await expect(dialog).toBeVisible();
+});
+
+test('a click on the guide backdrop dismisses only the guide', async ({ page }) => {
+  await gotoWithStub(page);
+  await page.getByRole('button', { name: 'App settings', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'App settings' });
+  await dialog.getByRole('button', { name: 'How to set up the bridge connection' }).click();
+  const guide = setupGuideDialog(page);
+  await expect(guide).toBeVisible();
+  const backdrop = await page.locator('.setup-guide-backdrop').boundingBox();
+  if (backdrop === null) {
+    throw new Error('The setup guide backdrop is not laid out.');
+  }
+
+  await page.mouse.click(backdrop.x + GUIDE_BACKDROP_INSET, backdrop.y + GUIDE_BACKDROP_INSET);
+
+  await expect(guide).toBeHidden();
+  await expect(dialog).toBeVisible();
+});
+
+test('the guide follows the pointer when its header is dragged', async ({ page }) => {
+  // No entry animation scaling the guide, so the boxes the test compares are the guide's own.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await gotoWithStub(page);
+  const guide = await openSetupGuide(page);
+  const before = await guide.boundingBox();
+
+  await dragBy(page, guide.locator('.setup-guide-header'), DRAG_RIGHT, DRAG_DOWN);
+
+  const after = await guide.boundingBox();
+  expect(after!.x).toBeCloseTo(before!.x + DRAG_RIGHT, 0);
+  expect(after!.y).toBeCloseTo(before!.y + DRAG_DOWN, 0);
 });

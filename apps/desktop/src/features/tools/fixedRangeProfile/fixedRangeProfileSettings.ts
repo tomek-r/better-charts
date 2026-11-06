@@ -1,4 +1,4 @@
-import { DASHED_LINE_PATTERN } from '../../../shared/canvas/dashPatterns';
+import { STYLED_DASHED_LINE_PATTERN, STYLED_DOTTED_LINE_PATTERN } from '../../../shared/canvas/dashPatterns';
 import type { ProfileRequestParams, ProfileRowsLayout } from '../../bridge/marketDataPort';
 import type { SettingValues } from '../../chart/engine/settings/settingInputs';
 import { resolveSettingValues } from '../../chart/engine/settings/settingsSchema';
@@ -75,11 +75,11 @@ const VALUES_SIDE_BY_OPTION: Readonly<Partial<Record<string, FixedRangeProfileVa
   [VALUES_RIGHT_OF_LINE]: 'right',
 };
 
-/** The dash of each line style: dashed is the owner's 4 on, 3 off; dotted matches the dialog's preview. */
+/** The dash of each line style: dashed and dotted are the styled patterns every canvas line uses. */
 const LINE_DASH_BY_STYLE: Readonly<Partial<Record<string, readonly number[]>>> = {
   solid: [],
-  dashed: DASHED_LINE_PATTERN,
-  dotted: [1, 3],
+  dashed: STYLED_DASHED_LINE_PATTERN,
+  dotted: STYLED_DOTTED_LINE_PATTERN,
 };
 
 const SETTINGS_SCHEMA = { inputs: FIXED_RANGE_PROFILE_INPUTS, styles: FIXED_RANGE_PROFILE_STYLES };

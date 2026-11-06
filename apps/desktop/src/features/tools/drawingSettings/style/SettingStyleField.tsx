@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { createElement, useId, type ReactNode } from 'react';
 import type { SettingValue, SettingValues } from '../../../chart/engine/settings/settingInputs';
 import {
   SETTING_STYLE_LINE_STYLES,
@@ -9,17 +9,16 @@ import {
 import { ColorPickerButton } from '../../../../shared/ui/colorPicker/ColorPickerButton';
 import type { LineOptions } from '../../../../shared/ui/colorPicker/LineOptionsSection';
 import { Select } from '../../../../shared/ui/select/Select';
-import { numberFromInput, numberText, stringText, titledOptions } from '../inputs/settingInputFields';
+import {
+  numberFromInput,
+  numberText,
+  SETTINGS_SELECT_LIST_CLASS,
+  stringText,
+  titledOptions,
+} from '../inputs/settingInputFields';
+import { PlotTypeStyleField } from './PlotTypeStyleField';
+import type { SettingStyleFieldProps } from './settingStyleFieldProps';
 import { VisibleCheckbox } from './styleControls';
-
-/** What one style field is given: its definition, every draft value, and whether its row is locked. */
-export interface SettingStyleFieldProps<Kind extends SettingStyleDefinition['kind']> {
-  readonly definition: Extract<SettingStyleDefinition, { kind: Kind }>;
-  readonly values: SettingValues;
-  readonly onChange: (key: string, value: SettingValue) => void;
-  /** Whether the parent's checkbox, or this row's own, switches the row's controls off. */
-  readonly disabled: boolean;
-}
 
 /** The thickness and dash pattern a line's picker edits; an invalid draft reads as a plain thin solid line. */
 function lineOptionsOf(
@@ -156,6 +155,7 @@ function ChoiceStyleField({ definition, values, onChange, disabled }: SettingSty
       </label>
       <Select
         id={controlId}
+        listClassName={SETTINGS_SELECT_LIST_CLASS}
         options={titledOptions(definition.options)}
         value={stringText(values[definition.id])}
         disabled={disabled}
@@ -165,7 +165,12 @@ function ChoiceStyleField({ definition, values, onChange, disabled }: SettingSty
   );
 }
 
-/** One field per style kind: a new kind is one entry here, and TypeScript refuses a table that misses one. */
+/**
+ * One field per style kind: a new kind is one entry here, and TypeScript refuses a table that misses one.
+ * A field is always rendered as its own element, never called as a plain function: a call would keep the
+ * field's hooks in this row, where the compiler plugin may reuse the call's output for unchanged props, so
+ * the field's own state would never reach the screen.
+ */
 const SETTING_STYLE_FIELDS: {
   readonly [Kind in SettingStyleDefinition['kind']]: (props: SettingStyleFieldProps<Kind>) => ReactNode;
 } = {
@@ -174,17 +179,24 @@ const SETTING_STYLE_FIELDS: {
   toggle: ToggleStyleField,
   number: NumberStyleField,
   choice: ChoiceStyleField,
+  plotType: PlotTypeStyleField,
 };
 
-/** The table indexed by one kind is the union of its entries; this names the one call. */
+/** The table indexed by one kind is the union of its entries; this names the one `createElement` call. */
 type RenderSettingStyleField = (props: SettingStyleFieldProps<SettingStyleDefinition['kind']>) => ReactNode;
 
+interface SettingStyleRowProps extends SettingStyleFieldProps<SettingStyleDefinition['kind']> {
+  /** Drawn last inside the row, for a style that puts a control on another style's row: a Plot type button. */
+  readonly trailing?: ReactNode;
+}
+
 /** One row of the Style tab; a child row is marked so the stylesheet indents it under its parent. */
-export function SettingStyleField(props: SettingStyleFieldProps<SettingStyleDefinition['kind']>) {
-  const render = SETTING_STYLE_FIELDS[props.definition.kind] as RenderSettingStyleField;
+export function SettingStyleField({ trailing, ...props }: SettingStyleRowProps) {
+  const Field = SETTING_STYLE_FIELDS[props.definition.kind] as RenderSettingStyleField;
   return (
     <div className="drawing-settings-style-row" data-child={props.definition.parentId !== undefined}>
-      {render(props)}
+      {createElement(Field, props)}
+      {trailing}
     </div>
   );
 }
