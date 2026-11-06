@@ -15,16 +15,13 @@ import {
 import {
   addPlotSeries,
   isHistogramPlotSeries,
-  isValuePoint,
   plotColorOf,
-  plotStateOf,
-  pointColorOf,
   removePlotSeries,
   setPlotSeriesHidden,
-  type IndicatorPlotSeries,
-  type IndicatorPlotState,
 } from './indicatorPlotSeries';
-import { lastTimeOf, pointOf, pointsOf, timeOf } from './indicatorPoints';
+import { plotStateOf, type IndicatorPlotState } from './indicatorPlotState';
+import type { IndicatorPlotSeries } from './indicatorPlotStyles';
+import { isValuePoint, lastTimeOf, pointColorOf, pointOf, pointsOf, timeOf } from './indicatorPoints';
 import { applyPlotScaleMargins } from './indicatorScaleFit';
 import { OPENING_OWN_PANE_SCALE, readOwnPaneScale, restoreOwnPaneScale } from './ownPaneScale';
 

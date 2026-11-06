@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import type { IndicatorPlotState } from '../src/features/chart/engine/indicators/indicatorPlotSeries';
+import type { IndicatorPlotState } from '../src/features/chart/engine/indicators/indicatorPlotState';
 import {
   defaultSettingStyleValues,
   resolveSettingStyleValues,

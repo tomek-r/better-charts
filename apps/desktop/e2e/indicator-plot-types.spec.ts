@@ -9,7 +9,7 @@ import {
   markerStrokeWidth,
   stemSegment,
 } from '../src/features/chart/engine/indicators/indicatorPlotMarkers';
-import type { IndicatorPlotState } from '../src/features/chart/engine/indicators/indicatorPlotSeries';
+import type { IndicatorPlotState } from '../src/features/chart/engine/indicators/indicatorPlotState';
 import { PLOT_TYPE_STYLE } from '../src/features/indicators/volume/volumeIndicator';
 import {
   DEMO_ID,

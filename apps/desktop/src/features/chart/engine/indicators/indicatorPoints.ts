@@ -1,12 +1,19 @@
-import type { UTCTimestamp } from 'lightweight-charts';
+import type { HistogramData, LineData, Time, UTCTimestamp, WhitespaceData } from 'lightweight-charts';
 import { withOpacityPercent } from '../../../../shared/theme/hexColor';
 import type { IndicatorBar, IndicatorPlot } from './indicatorFrame';
-import {
-  AREA_BOTTOM_OPACITY_PERCENT,
-  AREA_TOP_OPACITY_PERCENT,
-  type IndicatorAreaPoint,
-  type IndicatorPlotPoint,
-} from './indicatorPlotSeries';
+
+/** An area plot's shaded top is its colour at 40% opacity; its bottom is fully transparent. */
+export const AREA_TOP_OPACITY_PERCENT = 40;
+export const AREA_BOTTOM_OPACITY_PERCENT = 0;
+
+/** An area point: its value and the colours its bar shades the band with. */
+export type IndicatorAreaPoint = LineData<Time> & {
+  readonly lineColor?: string;
+  readonly topColor?: string;
+  readonly bottomColor?: string;
+};
+/** A point as the library holds it: a value to draw, or the time-only gap that breaks the plot. */
+export type IndicatorPlotPoint = LineData<Time> | IndicatorAreaPoint | WhitespaceData<Time> | HistogramData<Time>;
 
 /** The chart's bar time of an indicator bar: the UTC seconds every series point is keyed by. */
 export function timeOf(bar: IndicatorBar): UTCTimestamp {
@@ -57,4 +64,20 @@ export function pointsOf(bars: readonly IndicatorBar[], plot: IndicatorPlot, plo
 export function lastTimeOf(bars: readonly IndicatorBar[]): number | null {
   const lastBar = bars[bars.length - 1];
   return lastBar === undefined ? null : timeOf(lastBar);
+}
+
+/** Whether `point` draws a value rather than marking the gap that breaks the plot. */
+export function isValuePoint(point: IndicatorPlotPoint): point is LineData<Time> | HistogramData<Time> {
+  return 'value' in point;
+}
+
+/** The colour a drawn point carries: an area keeps it on `lineColor`, every other point on `color`. */
+export function pointColorOf(point: IndicatorPlotPoint): string | null {
+  if ('lineColor' in point) {
+    return point.lineColor ?? null;
+  }
+  if (!('color' in point)) {
+    return null;
+  }
+  return point.color ?? null;
 }
