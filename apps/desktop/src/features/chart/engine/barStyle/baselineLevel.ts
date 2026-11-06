@@ -8,11 +8,9 @@ import {
   type Time,
 } from 'lightweight-charts';
 import type { RenderBar } from '../bars/renderBar';
+import { PRICE_SCALE_ID } from '../priceScale/priceScaleId';
 import type { BaselineAppearance } from './barStyleAppearance';
 import { priceAt } from './priceSource';
-
-/** The price scale the bar style series are drawn on, which the level reads its range from. */
-const PRICE_SCALE_ID = 'right';
 
 /** The baseline's level is a whole percent: a hundred steps from the bottom of the range to its top. */
 const WHOLE_PERCENT = 100;

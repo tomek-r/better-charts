@@ -1,7 +1,5 @@
 import { PriceScaleMode, type IChartApi } from 'lightweight-charts';
-
-/** The scale the candles and every pane's own prices are drawn against. */
-const PRICE_SCALE_ID = 'right';
+import { PRICE_SCALE_ID } from './priceScaleId';
 
 /** The price pane's scale as the dev test hook reports it: its shape, its geometry and its range. */
 export interface PriceScaleReading {

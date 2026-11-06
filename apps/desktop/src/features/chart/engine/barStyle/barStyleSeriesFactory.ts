@@ -13,6 +13,7 @@ import {
   type SeriesType,
 } from 'lightweight-charts';
 import { candleSeriesColors } from '../bars/candleAppearance';
+import { PRICE_SCALE_ID } from '../priceScale/priceScaleId';
 import {
   isCustomBarStyle,
   type DrawnBarStyleAppearance,
@@ -36,9 +37,6 @@ export interface DrawnBarStyleSeries {
   readonly series: ISeriesApi<SeriesType>;
   readonly options: Readonly<Record<string, unknown>>;
 }
-
-/** The price scale the bars are drawn on, which is the anchor series' own. */
-const PRICE_SCALE_ID = 'right';
 
 /** The library series that draws each bar style a library type paints; the custom styles have pane views. */
 const SERIES_DEFINITION_BY_STYLE: Readonly<Record<LibraryBarStyle, SeriesDefinition<SeriesType>>> = {

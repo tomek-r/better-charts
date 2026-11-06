@@ -1,4 +1,5 @@
 import type { IRange, PriceScaleMode } from 'lightweight-charts';
+import { PRICE_SCALE_ID } from '../priceScale/priceScaleId';
 import { setPriceScaleRange } from '../priceScale/priceScaleRange';
 import type { OwnPane } from './indicatorPanes';
 
@@ -12,7 +13,7 @@ export interface OwnPaneScale {
 
 /** Reads the choices made on an own pane's right scale, so a reload can put them back afterwards. */
 export function readOwnPaneScale(ownPane: OwnPane): OwnPaneScale {
-  const priceScale = ownPane.pane.priceScale('right');
+  const priceScale = ownPane.pane.priceScale(PRICE_SCALE_ID);
   const options = priceScale.options();
   return {
     autoScale: options.autoScale,
@@ -28,7 +29,7 @@ export function readOwnPaneScale(ownPane: OwnPane): OwnPaneScale {
  * no series: that, and not a choice of the user's, is what empties the scale in between.
  */
 export function restoreOwnPaneScale(ownPane: OwnPane, scale: OwnPaneScale): void {
-  const priceScale = ownPane.pane.priceScale('right');
+  const priceScale = ownPane.pane.priceScale(PRICE_SCALE_ID);
   priceScale.applyOptions({ autoScale: scale.autoScale, mode: scale.mode });
   const series = ownPane.pane.getSeries()[0];
   if (scale.visibleRange === null || series === undefined) {

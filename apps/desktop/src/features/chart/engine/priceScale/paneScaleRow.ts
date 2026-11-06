@@ -14,6 +14,8 @@ const ALWAYS_CLASS = 'price-scale-controls-always';
 const PRESSED_CLASS = 'price-scale-control-on';
 const AUTO_GLYPH = 'A';
 const LOG_GLYPH = 'L';
+/** The title the `L` button carries while its pane holds a value a logarithmic scale cannot draw. */
+const LOG_NEEDS_POSITIVE_VALUES = 'Logarithmic scale needs values above zero';
 
 function control(glyph: string, label: string): HTMLButtonElement {
   const button = document.createElement('button');
@@ -39,10 +41,11 @@ function markPressed(button: HTMLButtonElement, pressed: boolean): void {
  * Lightweight Charts itself treats as the price scale. The Scale modes setting keeps every row on
  * screen, or takes it away.
  *
- * The pressed state is read back from the scale instead of being cached: the library changes those
+ * The pressed state is read back from the scale, never held as the truth: the library changes those
  * options on its own too, by turning auto scale off when the axis is dragged and on again when it is
- * double-clicked. Position and paint are CSS; only the runtime geometry (the axis width and the
- * distance to the pane's foot) is written here.
+ * double-clicked. What the row holds is only what it last wrote, so a repeated read writes nothing.
+ * Position and paint are CSS; only the runtime geometry (the axis width and the distance to the pane's
+ * foot) is written here.
  */
 export class PaneScaleRow {
   private readonly root: HTMLDivElement;
@@ -50,17 +53,26 @@ export class PaneScaleRow {
   private readonly logButton: HTMLButtonElement;
   private readonly onAuto: () => void;
   private readonly onLog: () => void;
+  /** The `L` button's own wording, restored when the pane allows a logarithmic scale again. */
+  private readonly logLabel: string;
   private revealed = false;
+  private autoScale = false;
+  private logarithmic = false;
+  private logAllowed = true;
 
   constructor(host: HTMLElement, labels: PaneScaleLabels, onAuto: () => void, onLog: () => void) {
     this.onAuto = onAuto;
     this.onLog = onLog;
+    this.logLabel = labels.log;
     this.root = document.createElement('div');
     this.root.className = ROW_CLASS;
     this.root.setAttribute('role', 'group');
     this.root.setAttribute('aria-label', labels.group);
     this.autoButton = control(AUTO_GLYPH, labels.auto);
     this.logButton = control(LOG_GLYPH, labels.log);
+    // Both buttons start unpressed and both fields say so, so the first read of a scale writes nothing.
+    markPressed(this.autoButton, this.autoScale);
+    markPressed(this.logButton, this.logarithmic);
     this.autoButton.addEventListener('click', onAuto);
     this.logButton.addEventListener('click', onLog);
     this.root.append(this.autoButton, this.logButton);
@@ -79,10 +91,29 @@ export class PaneScaleRow {
     this.root.style.bottom = `${host.getBoundingClientRect().bottom - paneElement.getBoundingClientRect().bottom}px`;
   }
 
-  /** Writes the state its scale reports; only the caller knows which scale that is. */
+  /** Writes the state its scale reports, and only the part of it that moved; the caller knows the scale. */
   setPressed(autoScale: boolean, logarithmic: boolean): void {
-    markPressed(this.autoButton, autoScale);
-    markPressed(this.logButton, logarithmic);
+    if (autoScale !== this.autoScale) {
+      this.autoScale = autoScale;
+      markPressed(this.autoButton, autoScale);
+    }
+    if (logarithmic !== this.logarithmic) {
+      this.logarithmic = logarithmic;
+      markPressed(this.logButton, logarithmic);
+    }
+  }
+
+  /**
+   * Whether the `L` button can be used: a logarithmic scale cannot draw a pane holding a value below
+   * zero, so the button is disabled and its title says why until the pane's values allow it again.
+   */
+  setLogAllowed(allowed: boolean): void {
+    if (allowed === this.logAllowed) {
+      return;
+    }
+    this.logAllowed = allowed;
+    this.logButton.disabled = !allowed;
+    this.logButton.title = allowed ? this.logLabel : LOG_NEEDS_POSITIVE_VALUES;
   }
 
   /** Matches the row to its axis width, so its fill masks the whole axis column. */

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type JSHandle, type Locator, type Page } from '@playwright/test';
 import type { IndicatorFrame, IndicatorPlot } from '../src/features/chart/engine/indicators/indicatorFrame';
 import { DEMO_ID, frameOf, openChartTimes, showFrame } from './helpers/indicatorFrames';
 import { waitTwoAnimationFrames } from './helpers/animationFrames';
@@ -64,6 +64,16 @@ const ANCHORED_STEP_PLOT: IndicatorPlot = { ...STEP_PLOT, scaleFromZero: true };
 /** The stepped plot's values run from 500 to 600, so every one of them sits far above price zero. */
 const STEP_VALUE_START = 500;
 const STEP_VALUE_END = 600;
+/** Values that dip below zero, which a logarithmic scale cannot draw. */
+const NEGATIVE_VALUE_START = -50;
+/** The title the `L` button carries while its pane holds a value below zero. */
+const LOG_NEEDS_POSITIVE_VALUES = 'Logarithmic scale needs values above zero';
+/** A plot-area probe this far below the pane seam is inside the indicator pane, clear of its axis. */
+const PLOT_PROBE_INSET = 20;
+/** A second plot-area probe point, one step away from the warm-up one. */
+const PLOT_PROBE_STEP = 12;
+/** How much shorter the viewport gets, so every pane and its row move up the page. */
+const VIEWPORT_HEIGHT_STEP = 120;
 
 failOnPageNoise();
 
@@ -132,6 +142,12 @@ function paneRow(page: Page, label: string): Locator {
   return page.getByRole('group', { name: label, exact: true });
 }
 
+/** Proves `row` sits at the foot of the pane whose bottom edge is `paneBottom` pixels down the page. */
+function expectRowAtPaneFoot(row: PaneRow, paneBottom: number): void {
+  expect(row.bottom).toBeGreaterThan(paneBottom - ROW_OFFSET_LIMIT);
+  expect(row.bottom).toBeLessThanOrEqual(paneBottom + PLACEMENT_SLACK);
+}
+
 async function paneScaleAt(page: Page, paneIndex: number): Promise<PaneScale> {
   const scale = await page.evaluate((index) => window.__chartTest!.paneScale(index), paneIndex);
   if (scale === null) {
@@ -164,15 +180,20 @@ async function expectOnlyIndicatorPaneFlips(
   await expect(button).toHaveAttribute('aria-pressed', String(!indicatorBefore));
 }
 
-/** The stepped plot's value on bar `barIndex`: 500 at the oldest bar, rising to 600 at the newest. */
-function stepValueAt(barIndex: number, barCount: number): number {
-  const span = STEP_VALUE_END - STEP_VALUE_START;
-  return STEP_VALUE_START + (span * barIndex) / Math.max(barCount - 1, 1);
+/** The value on bar `barIndex`, rising from `first` at the oldest bar to `last` at the newest. */
+function valueBetween(barIndex: number, barCount: number, first: number, last: number): number {
+  const span = last - first;
+  return first + (span * barIndex) / Math.max(barCount - 1, 1);
+}
+
+/** The frame `plot` alone draws over `times`, its values rising from `first` to `last`. */
+function risingFrame(plot: IndicatorPlot, times: readonly number[], first: number, last: number): IndicatorFrame {
+  return frameOf([plot], times, (_plotIndex, barIndex) => valueBetween(barIndex, times.length, first, last));
 }
 
 /** The frame `plot` alone draws over `times`, with the whole history of the values above. */
 function stepFrame(plot: IndicatorPlot, times: readonly number[]): IndicatorFrame {
-  return frameOf([plot], times, (_plotIndex, barIndex) => stepValueAt(barIndex, times.length));
+  return risingFrame(plot, times, STEP_VALUE_START, STEP_VALUE_END);
 }
 
 /** Fits pane 1 to its data when it opens unfitted: pressing `A` is the only way back to autoscale. */
@@ -186,17 +207,28 @@ async function fitIndicatorPane(page: Page): Promise<void> {
   await expect.poll(async () => (await paneScaleAt(page, INDICATOR_PANE)).autoScale).toBe(true);
 }
 
+/** Opens the app with `plot` alone in a pane of its own, its values rising from `first` to `last`. */
+async function openWithValues(
+  page: Page,
+  plot: IndicatorPlot,
+  first: number,
+  last: number,
+): Promise<readonly number[]> {
+  const times = await openChartTimes(page);
+  await showFrame(page, DEMO_ID, risingFrame(plot, times, first, last), 'own');
+  await expect.poll(async () => page.evaluate(() => window.__chartTest!.paneCount())).toBe(2);
+  // The row of the new pane is created from the panes' layout, which lands a frame after the pane does.
+  await expect.poll(async () => page.locator('.price-scale-controls').count()).toBe(2);
+  await waitTwoAnimationFrames(page);
+  return times;
+}
+
 /**
  * Opens the app with `plot` alone in a pane of its own, drawn over values that all sit above zero, and
  * answers the bar times that history holds.
  */
 async function openWithStepPlot(page: Page, plot: IndicatorPlot): Promise<readonly number[]> {
-  const times = await openChartTimes(page);
-  await showFrame(page, DEMO_ID, stepFrame(plot, times), 'own');
-  await expect.poll(async () => page.evaluate(() => window.__chartTest!.paneCount())).toBe(2);
-  // The row of the new pane is created from the panes' layout, which lands a frame after the pane does.
-  await expect.poll(async () => page.locator('.price-scale-controls').count()).toBe(2);
-  await waitTwoAnimationFrames(page);
+  const times = await openWithValues(page, plot, STEP_VALUE_START, STEP_VALUE_END);
   await fitIndicatorPane(page);
   return times;
 }
@@ -209,6 +241,67 @@ async function expectLowestVisiblePrice(page: Page, accepts: (lowestPrice: numbe
       return lowestVisiblePrice !== null && accepts(lowestVisiblePrice);
     })
     .toBe(true);
+}
+
+/** What the page measured between starting the probe and reading it back. */
+interface LayoutProbeReadings {
+  /** The elements inside the chart host, the host itself aside, whose rect was read. */
+  readonly rectReads: string[];
+  /** How many times a scale row's inline style was written. */
+  readonly styleWrites: number;
+}
+
+/** A measurement running in the page, whose `stop` puts the page back as it found it. */
+interface LayoutProbe {
+  readings(): LayoutProbeReadings;
+  stop(): void;
+}
+
+/**
+ * Measures the page from now on: every rect read of an element inside the chart host, and every write to
+ * a scale row's inline style. The host's own rect and the library's canvases are left out — the pointer
+ * hit test and the library read those on every move, and the panes and the rows are what a move must leave
+ * alone.
+ */
+async function startLayoutProbe(page: Page): Promise<JSHandle<LayoutProbe>> {
+  return page.evaluateHandle((): LayoutProbe => {
+    // The library reads its own canvases on every move, which the panes and the rows have no part in.
+    const LIBRARY_CANVAS_TAG = 'CANVAS';
+    const host = document.querySelector('.chart-host');
+    const rectReads: string[] = [];
+    let styleWrites = 0;
+    const measure = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function probedRect(this: Element): DOMRect {
+      if (host !== null && this !== host && host.contains(this) && this.tagName !== LIBRARY_CANVAS_TAG) {
+        rectReads.push(this.getAttribute('class') ?? this.tagName);
+      }
+      return measure.call(this);
+    };
+    const observer = new MutationObserver(() => {
+      styleWrites += 1;
+    });
+    document.querySelectorAll('.price-scale-controls').forEach((row) => {
+      observer.observe(row, { attributes: true, attributeFilter: ['style'] });
+    });
+    return {
+      readings: () => ({ rectReads: [...rectReads], styleWrites }),
+      stop: () => {
+        Element.prototype.getBoundingClientRect = measure;
+        observer.disconnect();
+      },
+    };
+  });
+}
+
+/** Reads the probe back and stops it, so no wrapped rect read outlives the test. */
+async function stopLayoutProbe(probe: JSHandle<LayoutProbe>): Promise<LayoutProbeReadings> {
+  const readings = await probe.evaluate((running) => {
+    const measured = running.readings();
+    running.stop();
+    return measured;
+  });
+  await probe.dispose();
+  return readings;
 }
 
 test('a stepped plot anchored at zero keeps price zero on its pane scale', async ({ page }) => {
@@ -229,13 +322,11 @@ test('an indicator pane adds its own row under the price pane row', async ({ pag
   const priceRow = rowAt(layout, PRICE_ROW);
   const indicatorRow = rowAt(layout, INDICATOR_ROW);
   // At the foot of the price pane, and at or above the top of the RSI pane's own row.
-  expect(priceRow.bottom).toBeGreaterThan(layout.priceBottom - ROW_OFFSET_LIMIT);
-  expect(priceRow.bottom).toBeLessThanOrEqual(layout.priceBottom + PLACEMENT_SLACK);
+  expectRowAtPaneFoot(priceRow, layout.priceBottom);
   expect(priceRow.bottom).toBeLessThanOrEqual(indicatorRow.top);
   // Inside the RSI pane, at the foot of its own axis.
   expect(indicatorRow.top).toBeGreaterThanOrEqual(layout.priceBottom - PLACEMENT_SLACK);
-  expect(indicatorRow.bottom).toBeGreaterThan(layout.indicatorBottom - ROW_OFFSET_LIMIT);
-  expect(indicatorRow.bottom).toBeLessThanOrEqual(layout.indicatorBottom + PLACEMENT_SLACK);
+  expectRowAtPaneFoot(indicatorRow, layout.indicatorBottom);
   // Both rows sit in the axis column, never over the plot area.
   for (const row of layout.rows) {
     expect(row.right).toBeLessThanOrEqual(layout.host.right + PLACEMENT_SLACK);
@@ -274,12 +365,22 @@ test('an A choice on an indicator pane survives a reload of its history', async 
   await expect.poll(async () => (await paneScaleAt(page, INDICATOR_PANE)).autoScale).toBe(chosen);
 });
 
-test('the MACD pane takes a logarithmic scale without page errors', async ({ page }) => {
-  await openWithIndicatorPane(page, 'macd');
+test('a pane holding a value below zero disables its logarithmic button', async ({ page }) => {
+  await openWithValues(page, STEP_PLOT, NEGATIVE_VALUE_START, STEP_VALUE_END);
   await hoverAxis(page, await chartLayout(page), 'indicator');
-  // The MACD's values run below zero, which a logarithmic scale cannot draw: the press must not throw.
-  await paneRow(page, INDICATOR_ROW).getByRole('button', { name: INDICATOR_LOG }).click();
+  const logButton = paneRow(page, INDICATOR_ROW).getByRole('button', { name: INDICATOR_LOG });
+  await expect(logButton).toBeDisabled();
+  await expect(logButton).toHaveAttribute('title', LOG_NEEDS_POSITIVE_VALUES);
+});
+
+test('a pane holding only values above zero keeps its logarithmic button and takes the press', async ({ page }) => {
+  await openWithStepPlot(page, STEP_PLOT);
+  await hoverAxis(page, await chartLayout(page), 'indicator');
+  const logButton = paneRow(page, INDICATOR_ROW).getByRole('button', { name: INDICATOR_LOG });
+  await expect(logButton).toBeEnabled();
+  await logButton.click();
   await expect.poll(async () => (await paneScaleAt(page, INDICATOR_PANE)).logarithmic).toBe(true);
+  await expect(logButton).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('removing the indicator leaves the price pane row alone', async ({ page }) => {
@@ -287,4 +388,29 @@ test('removing the indicator leaves the price pane row alone', async ({ page }) 
   await page.evaluate((instance) => window.__chartTest!.detachIndicator(instance), paneInstanceId('rsi'));
   await expect.poll(async () => page.evaluate(() => window.__chartTest!.paneCount())).toBe(1);
   await expect(page.locator('.price-scale-controls')).toHaveCount(1);
+});
+
+test('a pointer move over the plot area measures no pane and writes no row', async ({ page }) => {
+  await openWithIndicatorPane(page, 'rsi');
+  const layout = await chartLayout(page);
+  const plotX = (layout.host.left + layout.host.right) / 2;
+  const plotY = layout.priceBottom + PLOT_PROBE_INSET;
+  // A warm-up move first, so the probe measures a move the chart has already answered once.
+  await page.mouse.move(plotX, plotY);
+  const probe = await startLayoutProbe(page);
+  await page.mouse.move(plotX + PLOT_PROBE_STEP, plotY + PLOT_PROBE_STEP);
+  const readings = await stopLayoutProbe(probe);
+  expect(readings.rectReads).toEqual([]);
+  expect(readings.styleWrites).toBe(0);
+});
+
+test('a row follows its pane when the viewport shrinks', async ({ page }) => {
+  await openWithIndicatorPane(page, 'rsi');
+  const openedRow = rowAt(await chartLayout(page), INDICATOR_ROW);
+  const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  await page.setViewportSize({ width: viewport.width, height: viewport.height - VIEWPORT_HEIGHT_STEP });
+  // The layout watcher re-places every row from its pane's new geometry, with no drag of the user's.
+  await expect.poll(async () => rowAt(await chartLayout(page), INDICATOR_ROW).bottom).toBeLessThan(openedRow.bottom);
+  const resized = await chartLayout(page);
+  expectRowAtPaneFoot(rowAt(resized, INDICATOR_ROW), resized.indicatorBottom);
 });

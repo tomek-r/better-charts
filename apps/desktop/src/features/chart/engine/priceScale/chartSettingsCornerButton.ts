@@ -1,14 +1,12 @@
 import type { IChartApi } from 'lightweight-charts';
 import { SETTINGS_ICON_PATH } from '../../../../shared/ui/icons/SettingsIcon';
+import { PRICE_SCALE_ID } from './priceScaleId';
 
 /**
  * The event the gear raises on the chart's host when it is pressed. The Scales and lines menu listens for it,
  * so the engine asks for the menu without ever holding a React callback.
  */
 export const SCALES_AND_LINES_MENU_REQUESTED_EVENT = 'chart-scales-and-lines-menu-requested';
-
-/** The scale the gear is measured against: the one the price axis and the candles are bound to. */
-const PRICE_SCALE_ID = 'right';
 
 /** The square OutlineIcon draws in, which the gear the settings menu shows is drawn in too. */
 const GEAR_VIEW_BOX = '0 0 24 24';
