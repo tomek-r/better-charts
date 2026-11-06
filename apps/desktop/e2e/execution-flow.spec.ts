@@ -1908,7 +1908,9 @@ test('equity allocation defaults to 100 and invalidates sizing and review when e
     await page.getByRole('button', { name: 'Start creating order' }).click();
     await expect(page.locator('.order-check-result')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Send order', exact: true })).toBeEnabled();
-    const checkedVersion = (await wasInvoked(page, 'request_order_check'))?.args.draftVersion as number;
+    // The latest check, not the first: the poll below must wait for the preview this pass's Cancel schedules.
+    const checkedVersion = (await stubInvocations(page)).filter((item) => item.cmd === 'request_order_check').at(-1)
+      ?.args.draftVersion as number;
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect
       .poll(
