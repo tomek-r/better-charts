@@ -9,7 +9,7 @@ import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
 import { fillPolygons, type FillColumn, type FillPoint } from './indicatorFillPolygons';
 import type { IndicatorFill, IndicatorFillEdge, IndicatorLevel } from './indicatorFrame';
-import type { IndicatorPlotSeries } from './indicatorPlotSeries';
+import type { IndicatorPlotSeries } from './indicatorPlotStyles';
 import { numericPointAt } from './indicatorSeriesValue';
 
 /** A fill sits under the lines it belongs to, above nothing but the background. */

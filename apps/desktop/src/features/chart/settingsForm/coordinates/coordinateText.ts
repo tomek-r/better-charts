@@ -1,5 +1,5 @@
-import { parsePointPrice, type ChartDrawingPoint } from '../../../chart/engine/drawings/drawingRecord';
-import type { ChartDrawingAnchor } from '../../../chart/engine/drawings/toolDrawings';
+import { parsePointPrice, type ChartDrawingPoint } from '../../engine/drawings/drawingRecord';
+import type { ChartDrawingAnchor } from '../../engine/drawings/toolDrawings';
 import { MS_PER_MINUTE, nearestMinuteMs } from '../../../../shared/time/minutes';
 
 /**

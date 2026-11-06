@@ -1,6 +1,6 @@
 import { ColorPickerButton } from '../../../../../shared/ui/colorPicker/ColorPickerButton';
 import type { LineOptions, LineThickness } from '../../../../../shared/ui/colorPicker/LineOptionsSection';
-import { LabelledCheckbox } from '../../../../tools/drawingSettings/LabelledCheckbox';
+import { LabelledCheckbox } from '../../../settingsForm/LabelledCheckbox';
 import { LINE_DASH_STYLES, LINE_WIDTHS, type LineValue } from '../../settingFields';
 import type { SettingRowProps } from './settingRowProps';
 

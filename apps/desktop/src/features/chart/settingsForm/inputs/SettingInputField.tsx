@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import type { SettingInputDefinition, SettingValue } from '../../../chart/engine/settings/settingInputs';
+import type { SettingInputDefinition, SettingValue } from '../../engine/settings/settingInputs';
 import { SETTING_INPUT_FIELDS, type SettingInputFieldProps } from './settingInputFields';
 
 /** The table indexed by one kind is the union of its entries; this names the one call, as the validators do. */

@@ -1,5 +1,5 @@
-import type { SettingValue, SettingValues } from '../../../chart/engine/settings/settingInputs';
-import type { SettingStyleDefinition } from '../../../chart/engine/settings/settingStyles';
+import type { SettingValue, SettingValues } from '../../engine/settings/settingInputs';
+import type { SettingStyleDefinition } from '../../engine/settings/settingStyles';
 
 /** What one style field is given: its definition, every draft value, and whether its row is locked. */
 export interface SettingStyleFieldProps<Kind extends SettingStyleDefinition['kind']> {

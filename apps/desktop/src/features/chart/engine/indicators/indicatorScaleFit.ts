@@ -1,6 +1,7 @@
 import type { AutoscaleInfoProvider, IChartApi, IPaneApi, PriceScaleMargins, Time } from 'lightweight-charts';
 import { PRICE_SCALE_ID } from '../priceScale/priceScaleId';
 import type { IndicatorPlot, IndicatorPlotStyle } from './indicatorFrame';
+import { PLOT_STYLE_RULES } from './indicatorPlotStyles';
 import { numericPointAt } from './indicatorSeriesValue';
 
 /** The series a floor is read from: whatever `numericPointAt` reads one point out of. */
@@ -50,7 +51,7 @@ export function closedBarsFloor(series: PointSeries, chart: IChartApi): Autoscal
 
 /** Whether a plot style draws its values from price zero, as columns and stems do. */
 export function drawsFromZero(style: IndicatorPlotStyle): boolean {
-  return style === 'histogram' || style === 'stems';
+  return PLOT_STYLE_RULES[style].drawsFromZero;
 }
 
 /**

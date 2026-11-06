@@ -1,11 +1,8 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 
-import type { SettingValues } from '../../chart/engine/settings/settingInputs';
-import {
-  areSettingValuesValid,
-  withStoredValuesForInvalidInactiveInputs,
-} from '../../chart/engine/settings/settingsSchema';
-import type { DrawingSettingsSchema } from './settingsTabModel';
+import type { SettingValues } from '../engine/settings/settingInputs';
+import { areSettingValuesValid, withStoredValuesForInvalidInactiveInputs } from '../engine/settings/settingsSchema';
+import type { SettingsFormSchema } from './settingsTabModel';
 
 // A short pause after the last edit keeps typing responsive while the chart still follows along.
 const PREVIEW_DELAY_MS = 250;
@@ -18,7 +15,7 @@ const PREVIEW_DELAY_MS = 250;
 export function useDebouncedPreview(
   values: SettingValues,
   initialValues: SettingValues,
-  settings: DrawingSettingsSchema,
+  settings: SettingsFormSchema,
   onPreview: ((values: SettingValues) => void) | undefined,
 ): void {
   const previewsDraft = onPreview !== undefined;

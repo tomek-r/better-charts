@@ -4,7 +4,7 @@ import {
   type SettingInputDefinition,
   type SettingValue,
   type SettingValues,
-} from '../../../chart/engine/settings/settingInputs';
+} from '../../engine/settings/settingInputs';
 import { SettingInputField } from './SettingInputField';
 
 /** The inputs sharing one group, or the ungrouped ones; `legend` is undefined for those. */

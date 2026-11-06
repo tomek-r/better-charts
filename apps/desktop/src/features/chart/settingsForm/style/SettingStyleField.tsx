@@ -1,11 +1,11 @@
 import { createElement, useId, type ReactNode } from 'react';
-import type { SettingValue, SettingValues } from '../../../chart/engine/settings/settingInputs';
+import type { SettingValue, SettingValues } from '../../engine/settings/settingInputs';
 import {
   SETTING_STYLE_LINE_STYLES,
   SETTING_STYLE_LINE_WIDTHS,
   settingStyleKey,
   type SettingStyleDefinition,
-} from '../../../chart/engine/settings/settingStyles';
+} from '../../engine/settings/settingStyles';
 import { ColorPickerButton } from '../../../../shared/ui/colorPicker/ColorPickerButton';
 import type { LineOptions } from '../../../../shared/ui/colorPicker/LineOptionsSection';
 import { Select } from '../../../../shared/ui/select/Select';

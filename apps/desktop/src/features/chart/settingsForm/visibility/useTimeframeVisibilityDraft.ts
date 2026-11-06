@@ -1,8 +1,5 @@
 import { useState } from 'react';
-import {
-  sameTimeframeVisibility,
-  type DrawingTimeframeVisibility,
-} from '../../../chart/engine/drawings/timeframeVisibility';
+import { sameTimeframeVisibility, type DrawingTimeframeVisibility } from '../../engine/drawings/timeframeVisibility';
 import type { TimeframeVisibilityEditing } from './VisibilityTab';
 
 /** The draft of a drawing's timeframe setting, and which value to save: only an edited one. */

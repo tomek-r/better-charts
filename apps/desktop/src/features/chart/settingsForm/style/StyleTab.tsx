@@ -1,10 +1,10 @@
 import { Fragment } from 'react';
-import type { SettingValue, SettingValues } from '../../../chart/engine/settings/settingInputs';
+import type { SettingValue, SettingValues } from '../../engine/settings/settingInputs';
 import {
   settingStyleKey,
   type SettingStyleDefinition,
   type SettingStylePlotType,
-} from '../../../chart/engine/settings/settingStyles';
+} from '../../engine/settings/settingStyles';
 import { PlotTypeButton } from './PlotTypeStyleField';
 import { SettingStyleField } from './SettingStyleField';
 

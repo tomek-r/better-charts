@@ -1,9 +1,12 @@
 import { CommandButton } from '../../shared/ui/button/CommandButton';
 import { ToggleCommandButton, type ToggleCommandLabels } from '../../shared/ui/button/ToggleCommandButton';
-import { EyeCrossedIcon, EyeIcon, TrashIcon } from '../tools/drawingToolbar/drawingToolbarIcons';
+import { EyeCrossedIcon, EyeIcon, TrashIcon } from '../../shared/ui/icons/drawingActionIcons';
 
 /** The class of the small icon buttons of a row's actions. */
 export const ROW_ACTION_CLASS = 'object-tree-row-action';
+
+/** The class of the glyph inside a row's action button; object-tree.css sizes it. */
+export const ROW_ACTION_ICON_CLASS = 'object-tree-action-icon';
 
 /**
  * The visibility toggle shared by every object tree row, so drawing rows and
@@ -23,8 +26,8 @@ export function ObjectTreeVisibilityButton({
       className={ROW_ACTION_CLASS}
       labels={labels}
       pressed={hidden}
-      offIcon={<EyeIcon />}
-      onIcon={<EyeCrossedIcon />}
+      offIcon={<EyeIcon className={ROW_ACTION_ICON_CLASS} />}
+      onIcon={<EyeCrossedIcon className={ROW_ACTION_ICON_CLASS} />}
       onClick={onToggle}
     />
   );
@@ -37,7 +40,7 @@ export function ObjectTreeVisibilityButton({
 export function ObjectTreeRemoveButton({ label, onRemove }: { readonly label: string; readonly onRemove: () => void }) {
   return (
     <CommandButton className={ROW_ACTION_CLASS} label={label} onClick={onRemove}>
-      <TrashIcon />
+      <TrashIcon className={ROW_ACTION_ICON_CLASS} />
     </CommandButton>
   );
 }

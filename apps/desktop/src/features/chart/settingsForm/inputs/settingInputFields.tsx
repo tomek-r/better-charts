@@ -3,7 +3,7 @@ import {
   SETTING_INPUT_SOURCES,
   type SettingInputDefinition,
   type SettingValue,
-} from '../../../chart/engine/settings/settingInputs';
+} from '../../engine/settings/settingInputs';
 import { timeframeOptions } from '../../../../shared/bridge/timeframes';
 import { Select, type SelectOption } from '../../../../shared/ui/select/Select';
 

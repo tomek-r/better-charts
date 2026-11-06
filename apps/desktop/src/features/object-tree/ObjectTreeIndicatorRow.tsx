@@ -10,10 +10,15 @@ import { IndicatorLineIcon } from '../indicators/IndicatorLineIcon';
 import { indicatorLegendTitle } from '../indicators/indicatorLegendTitle';
 import { useOpenIndicatorSettings } from '../indicators/IndicatorSettingsProvider';
 import type { RegisteredChartIndicatorPlugin } from '../indicators/registry';
-import { useIndicatorCommands } from '../indicators/useIndicatorCommands';
+import { useIndicatorRowCommands } from '../indicators/useIndicatorCommands';
 import { CommandButton } from '../../shared/ui/button/CommandButton';
-import { SettingsIcon } from '../tools/drawingToolbar/drawingToolbarIcons';
-import { ObjectTreeRemoveButton, ObjectTreeVisibilityButton, ROW_ACTION_CLASS } from './objectTreeRowActions';
+import { SettingsIcon } from '../../shared/ui/icons/SettingsIcon';
+import {
+  ObjectTreeRemoveButton,
+  ObjectTreeVisibilityButton,
+  ROW_ACTION_CLASS,
+  ROW_ACTION_ICON_CLASS,
+} from './objectTreeRowActions';
 import { presentWhileTrue } from './objectTreeRowAttributes';
 import { ROW_NAME_CLASS } from './objectTreeRowFocus';
 
@@ -30,7 +35,7 @@ export interface ObjectTreeIndicatorRowProps {
  */
 export function ObjectTreeIndicatorRow({ saved, plugin }: ObjectTreeIndicatorRowProps) {
   const openIndicatorSettings = useOpenIndicatorSettings();
-  const commands = useIndicatorCommands();
+  const commands = useIndicatorRowCommands();
   const name = indicatorLegendTitle(saved.definitionId, resolveSettingValues(plugin, saved.settings));
   const hidden = saved.hidden === true;
 
@@ -58,7 +63,7 @@ export function ObjectTreeIndicatorRow({ saved, plugin }: ObjectTreeIndicatorRow
       </button>
       <div className="object-tree-row-actions">
         <CommandButton className={ROW_ACTION_CLASS} label={INDICATOR_SETTINGS_LABEL} onClick={openSettings}>
-          <SettingsIcon />
+          <SettingsIcon className={ROW_ACTION_ICON_CLASS} />
         </CommandButton>
         <ObjectTreeVisibilityButton
           labels={INDICATOR_VISIBILITY_LABELS}

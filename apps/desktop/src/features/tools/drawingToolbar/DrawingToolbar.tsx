@@ -3,20 +3,20 @@ import { CommandButton } from '../../../shared/ui/button/CommandButton';
 import { ToggleCommandButton } from '../../../shared/ui/button/ToggleCommandButton';
 import { arrowStep, wrapIndex, type ArrowSteps } from '../../../shared/ui/keyboard/arrowStep';
 import {
+  EyeCrossedIcon,
+  EyeIcon,
+  LockClosedIcon,
+  LockOpenIcon,
+  TrashIcon,
+} from '../../../shared/ui/icons/drawingActionIcons';
+import { SettingsIcon } from '../../../shared/ui/icons/SettingsIcon';
+import {
   DRAWING_LOCK_LABELS,
   DRAWING_SETTINGS_LABEL,
   DRAWING_VISIBILITY_LABELS,
   REMOVE_DRAWING_LABEL,
 } from './drawingCommandLabels';
-import {
-  EyeCrossedIcon,
-  EyeIcon,
-  GripIcon,
-  LockClosedIcon,
-  LockOpenIcon,
-  SettingsIcon,
-  TrashIcon,
-} from './drawingToolbarIcons';
+import { GripIcon, TOOLBAR_ICON_CLASS } from './drawingToolbarIcons';
 import type { DrawingToolbarPosition, GripHandlers } from './useDrawingToolbarPosition';
 
 /** Distance of the default position from the frame's top edge, in CSS px. */
@@ -118,12 +118,12 @@ export function DrawingToolbar({
         {...tabStop('settings')}
         onClick={onOpenSettings}
       >
-        <SettingsIcon />
+        <SettingsIcon className={TOOLBAR_ICON_CLASS} />
       </CommandButton>
       <ToggleCommandButton
         labels={DRAWING_LOCK_LABELS}
-        offIcon={<LockOpenIcon />}
-        onIcon={<LockClosedIcon />}
+        offIcon={<LockOpenIcon className={TOOLBAR_ICON_CLASS} />}
+        onIcon={<LockClosedIcon className={TOOLBAR_ICON_CLASS} />}
         pressed={locked}
         className={TOOLBAR_BUTTON_CLASS}
         {...tabStop('lock')}
@@ -131,8 +131,8 @@ export function DrawingToolbar({
       />
       <ToggleCommandButton
         labels={DRAWING_VISIBILITY_LABELS}
-        offIcon={<EyeIcon />}
-        onIcon={<EyeCrossedIcon />}
+        offIcon={<EyeIcon className={TOOLBAR_ICON_CLASS} />}
+        onIcon={<EyeCrossedIcon className={TOOLBAR_ICON_CLASS} />}
         pressed={!visible}
         className={TOOLBAR_BUTTON_CLASS}
         {...tabStop('visibility')}
@@ -144,7 +144,7 @@ export function DrawingToolbar({
         {...tabStop('remove')}
         onClick={onRemove}
       >
-        <TrashIcon />
+        <TrashIcon className={TOOLBAR_ICON_CLASS} />
       </CommandButton>
     </div>
   );

@@ -9,13 +9,13 @@ import {
 import { indicatorSettingsSchema } from '../chart/engine/indicators/indicatorDisplaySettings';
 import type { SettingValues } from '../chart/engine/settings/settingInputs';
 import { resolveSettingValues } from '../chart/engine/settings/settingsSchema';
+import { SettingsForm, type SettingsFormProps } from '../chart/settingsForm/SettingsForm';
 import { useRequiredContext } from '../../shared/context/useRequiredContext';
 import { ModalDialog, ModalDialogCloseButton } from '../../shared/ui/dialog/ModalDialog';
 import { useModalExit } from '../../shared/ui/dialog/useModalExit';
 import { useRevertUnlessSettled } from '../../shared/ui/dialog/useRevertUnlessSettled';
-import { DrawingSettingsForm, type DrawingSettingsFormProps } from '../tools/drawingSettings/DrawingSettingsDialog';
 import { findChartIndicatorPlugin, type RegisteredChartIndicatorPlugin } from './registry';
-import { useIndicatorCommands } from './useIndicatorCommands';
+import { useIndicatorSettingsCommands } from './useIndicatorCommands';
 
 /** What the app shares about indicator settings: the one command that opens them. */
 interface IndicatorSettingsContextValue {
@@ -53,7 +53,7 @@ type IndicatorSettingsSave = [points?: unknown, timeframeVisibility?: DrawingTim
  */
 function IndicatorSettingsDialog({ instanceId, onClose }: IndicatorSettingsDialogProps) {
   const { settings } = useChartSettings();
-  const commands = useIndicatorCommands();
+  const commands = useIndicatorSettingsCommands();
   const { backdropRef, closing, close } = useModalExit(onClose);
   const markSettled = useRevertUnlessSettled(commands.revertPreview);
   const saved = settings.indicators.find((entry) => entry.instanceId === instanceId);
@@ -100,7 +100,7 @@ interface IndicatorSettingsFieldsProps {
   readonly saved: SavedIndicator;
   readonly closing: boolean;
   readonly onPreview: (values: SettingValues) => void;
-  readonly onSave: DrawingSettingsFormProps['onSave'];
+  readonly onSave: SettingsFormProps['onSave'];
   readonly onCancel: () => void;
 }
 
@@ -120,7 +120,7 @@ function IndicatorSettingsFields({
   const [initialValues] = useState(() => resolveSettingValues(indicatorSettingsSchema(plugin), saved.settings));
   const [initialTimeframeVisibility] = useState(() => saved.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY);
   return (
-    <DrawingSettingsForm
+    <SettingsForm
       settings={{ ...plugin, ...indicatorSettingsSchema(plugin), timeframeVisibility: 'editable' }}
       initialValues={initialValues}
       initialTimeframeVisibility={initialTimeframeVisibility}
