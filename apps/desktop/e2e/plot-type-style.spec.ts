@@ -6,7 +6,7 @@ import {
   settingStyleKey,
 } from '../src/features/chart/engine/settings/settingStyles';
 import { PLOT_TYPES, plotTypeStyle } from '../src/features/indicators/plotTypes';
-import { plotTypeGlyph } from '../src/features/tools/drawingSettings/style/plotTypeIcons';
+import { plotTypeGlyph } from '../src/features/chart/settingsForm/style/plotTypeIcons';
 import { drawnIndicators } from './helpers/indicatorFrames';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { openWithSavedIndicators } from './helpers/savedIndicators';

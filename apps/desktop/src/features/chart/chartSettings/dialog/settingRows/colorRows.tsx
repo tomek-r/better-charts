@@ -1,5 +1,5 @@
 import { ColorPickerButton } from '../../../../../shared/ui/colorPicker/ColorPickerButton';
-import { LabelledCheckbox } from '../../../../tools/drawingSettings/LabelledCheckbox';
+import { LabelledCheckbox } from '../../../settingsForm/LabelledCheckbox';
 import type { ColorPairValue } from '../../settingFields';
 import type { SettingRowProps } from './settingRowProps';
 

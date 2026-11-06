@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
-import type { ChartDrawingPointRule } from '../../chart/engine/drawings/toolDrawings';
-import type { SettingValue, SettingValues } from '../../chart/engine/settings/settingInputs';
-import type { SettingsSchema } from '../../chart/engine/settings/settingsSchema';
+import type { ChartDrawingPointRule } from '../engine/drawings/toolDrawings';
+import type { SettingValue, SettingValues } from '../engine/settings/settingInputs';
+import type { SettingsSchema } from '../engine/settings/settingsSchema';
 import { CoordinatesTab, type CoordinateEditing } from './coordinates/CoordinatesTab';
 import { InputsTab } from './inputs/InputsTab';
 import { StyleTab } from './style/StyleTab';
@@ -16,7 +16,7 @@ const VISIBILITY_TAB_ID = 'visibility';
  * What a tool declares for its dialog: its settings, the anchors each drawing holds, and whether it earns a
  * Visibility tab without anchors.
  */
-export interface DrawingSettingsSchema extends SettingsSchema {
+export interface SettingsFormSchema extends SettingsSchema {
   readonly points?: ChartDrawingPointRule;
   /** Set by a settings target that has no anchors but can still be limited to some timeframes (an indicator). */
   readonly timeframeVisibility?: 'editable';
@@ -24,7 +24,7 @@ export interface DrawingSettingsSchema extends SettingsSchema {
 
 /** What every tab's content is given: the tool's declaration, the merged draft values, the anchors, and the ways to edit them. */
 export interface SettingsPanelProps {
-  readonly settings: DrawingSettingsSchema;
+  readonly settings: SettingsFormSchema;
   readonly values: SettingValues;
   readonly onChange: (key: string, value: SettingValue) => void;
   readonly coordinates: CoordinateEditing;
@@ -60,7 +60,7 @@ export function buildSettingsTabs({
   styles = [],
   points,
   timeframeVisibility,
-}: DrawingSettingsSchema): SettingsTab[] {
+}: SettingsFormSchema): SettingsTab[] {
   const tabs: SettingsTab[] = [];
   if (inputs.length > 0) {
     tabs.push({ id: 'inputs', title: 'Inputs', Panel: InputsPanel });

@@ -20,7 +20,7 @@
 @import './features/chart/timeZone/chart-time-zone.css';
 @import './features/tools/drawing-tool-rail.css';
 @import './features/tools/drawingToolbar/drawing-toolbar.css';
-@import './features/tools/drawingSettings/drawing-settings.css';
+@import './features/chart/settingsForm/drawing-settings.css';
 @import './features/symbol-search/symbol-search.css';
 @import './features/side-drawers/side-drawers.css';
 @import './features/object-tree/object-tree.css';

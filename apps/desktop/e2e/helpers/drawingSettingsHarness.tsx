@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import type { SettingInputDefinition, SettingValues } from '../../src/features/chart/engine/settings/settingInputs';
 import { resolveSettingValues, type SettingsSchema } from '../../src/features/chart/engine/settings/settingsSchema';
-import { DrawingSettingsForm } from '../../src/features/tools/drawingSettings/DrawingSettingsDialog';
+import { SettingsForm } from '../../src/features/chart/settingsForm/SettingsForm';
 import { timeframeOptions } from '../../src/shared/bridge/timeframes';
 
 /**
@@ -85,7 +85,7 @@ export function mountSettingsFormHarness(
   // Renders synchronously so the spec can query the DOM at once; act() is for test runners, not a real browser.
   flushSync(() => {
     createRoot(container).render(
-      createElement(DrawingSettingsForm, {
+      createElement(SettingsForm, {
         settings,
         initialValues: { ...resolveSettingValues(settings, undefined), ...overrides },
         onSave: (values) => {

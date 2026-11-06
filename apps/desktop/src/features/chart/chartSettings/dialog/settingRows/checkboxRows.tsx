@@ -1,4 +1,4 @@
-import { LabelledCheckbox } from '../../../../tools/drawingSettings/LabelledCheckbox';
+import { LabelledCheckbox } from '../../../settingsForm/LabelledCheckbox';
 import type { SettingRowProps } from './settingRowProps';
 
 /** A checkbox whose label is the row's only text, so the row spans the panel. */

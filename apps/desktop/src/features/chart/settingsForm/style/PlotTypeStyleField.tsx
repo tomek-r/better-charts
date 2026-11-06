@@ -1,11 +1,11 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import type { SettingValue, SettingValues } from '../../../chart/engine/settings/settingInputs';
+import type { SettingValue, SettingValues } from '../../engine/settings/settingInputs';
 import {
   settingStyleKey,
   type SettingStyleChoiceOption,
   type SettingStylePlotType,
-} from '../../../chart/engine/settings/settingStyles';
+} from '../../engine/settings/settingStyles';
 import { focusCheckedRow, handleMenuKey } from '../../../../shared/ui/popup/popupMenuKeys';
 import { useOutsidePress } from '../../../../shared/ui/popup/useOutsidePress';
 import { usePopupPlacement } from '../../../../shared/ui/popup/usePopupPlacement';
