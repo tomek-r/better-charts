@@ -34,22 +34,13 @@ import { ChartDrawings } from '../drawings/chartDrawings';
 import { WorkspacePrimitive } from './workspacePrimitive';
 import { installChartDevTestApi, removeDevTestApi } from './devTestApi';
 import type { ChartControllerOptions } from './chartControllerOptions';
+import { ChartHistory, type ReplaceHistoryOptions } from './chartHistory';
 import type { IndicatorLayer } from '../indicators/indicatorLayer';
 import type { IndicatorRuntime } from '../indicators/indicatorRuntime';
 import { ChartIndicators } from '../indicators/chartIndicators';
 import type { IndicatorLegendCommands } from '../legend/indicatorLegend';
 import { LiveBarController } from './liveBarController';
-import { HistoryViewportMode } from '../bars/historyViewportMode';
-import { initialHistoryWindow } from '../bars/initialHistoryWindow';
-import { OlderHistoryPager } from '../bars/olderHistoryPager';
 import { PointerCandleHold } from '../bars/pointerCandleHold';
-
-/** How a whole history replaces the series: for which timeframe, and where the pane goes afterwards. */
-interface ReplaceHistoryOptions {
-  /** The timeframe the history belongs to; omitted keeps the default one. */
-  timeframe?: string;
-  viewportMode?: HistoryViewportMode;
-}
 
 /**
  * One class owns the chart surface's lifecycle: the handles chartFactory builds,
@@ -95,7 +86,7 @@ export class ChartController {
   private readonly tools: ChartToolSet;
   /** Pointer and selection commands for the active tool; the same tool set, narrowed to what input routing needs. */
   readonly toolInput: ChartToolInput;
-  private readonly olderHistory: OlderHistoryPager;
+  private readonly history: ChartHistory;
   /** Selection, user commands and saved records of the chart's drawings. */
   readonly drawings: ChartDrawings;
   /** The indicators drawn on the price pane, each from the frames its producer hands over. */
@@ -132,13 +123,14 @@ export class ChartController {
     this.indicators = this.chartIndicators.runtime;
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
     this.view = new ViewportController(this.chart, this.candles, future, this.data, () => this.removed);
-    this.olderHistory = new OlderHistoryPager({
+    this.history = new ChartHistory({
+      chart: this.chart,
+      view: this.view,
+      data: this.data,
+      indicators: this.indicators,
       isDestroyed: () => this.removed,
-      isBeforeHistory: () => this.view.isBeforeHistory(),
-      oldestBarTimeSeconds: () => this.bars[0]?.time,
-      visibleRange: () => this.visibleRange(),
-      prependBars: (candles) => this.indicators.olderBarsAdded(this.data.prepend(candles)),
-      anchorAfterPrepend: (previous, added) => this.view.anchorAfterPrepend(previous, added),
+      discardHeldCandles: () => this.liveCandleHold.discard(),
+      barsChanged: () => this.afterBarsChanged(),
       refreshOverlays: () => this.refreshOverlays(),
     });
     const toolHost: ChartToolHostBase = {
@@ -203,7 +195,7 @@ export class ChartController {
       },
     });
     this.resize();
-    this.view.onViewportChanged = () => this.olderHistory.requestIfGapRevealed();
+    this.view.onViewportChanged = () => this.history.requestIfGapRevealed();
     this.view.start();
     // Last of the construction: a tool's `activate` may repaint, which reaches the
     // primitives and controllers built above.
@@ -218,11 +210,11 @@ export class ChartController {
    * The hook owns the request; the chart only decides that the user revealed a gap worth filling.
    */
   get onOlderHistoryNeeded(): ((beforeMs: number) => void) | undefined {
-    return this.olderHistory.onNeeded;
+    return this.history.onOlderHistoryNeeded;
   }
 
   set onOlderHistoryNeeded(callback: ((beforeMs: number) => void) | undefined) {
-    this.olderHistory.onNeeded = callback;
+    this.history.onOlderHistoryNeeded = callback;
   }
 
   /**
@@ -232,7 +224,7 @@ export class ChartController {
    * changes can retain the bars-from-end position; other replacements reset.
    */
   replaceHistory(candles: readonly Candle[], options: ReplaceHistoryOptions = {}): boolean {
-    return this.view.traced('replaceHistory', () => this.swapHistory(candles, options));
+    return this.history.replace(candles, options);
   }
 
   updateCandle(candle: Candle): void {
@@ -263,13 +255,12 @@ export class ChartController {
 
   /** Asks for one older page now; the idle prefetch calls it, the scroll path gates it on a revealed gap. */
   prefetchOlderHistory(): void {
-    this.olderHistory.prefetch();
+    this.history.prefetchOlder();
   }
 
   /** Bars the first history request should ask for, given the pane as measured now. */
   initialHistoryBars(): number {
-    const scale = this.chart.timeScale();
-    return initialHistoryWindow(scale.width(), scale.options().barSpacing, this.view.rightMarginBars());
+    return this.history.initialBars();
   }
 
   /**
@@ -277,7 +268,7 @@ export class ChartController {
    * not move. `complete` is the broker's own end-of-history signal.
    */
   appendOlderHistory(candles: readonly Candle[], complete: boolean): void {
-    this.olderHistory.append(candles, complete);
+    this.history.appendOlder(candles, complete);
   }
 
   setSymbol(symbol: string): void {
@@ -467,38 +458,6 @@ export class ChartController {
     if (import.meta.env.DEV) {
       removeDevTestApi();
     }
-  }
-
-  private swapHistory(candles: readonly Candle[], options: ReplaceHistoryOptions): boolean {
-    const { timeframe, viewportMode = HistoryViewportMode.Reset } = options;
-    if (this.removed) {
-      return false;
-    }
-    const previousAnchor = viewportMode === HistoryViewportMode.BarsFromEnd ? this.view.visibleAnchor() : null;
-    const previousSpacing = this.chart.timeScale().options().barSpacing;
-    if (!this.data.replace(candles, timeframe)) {
-      return false;
-    }
-    // A replaced window is a new history: paging may resume where the last
-    // series had already reached its end, and candles held for the old one are stale.
-    this.olderHistory.resumePaging();
-    this.liveCandleHold.discard();
-    this.view.resetFuture();
-    this.view.extendFuture();
-    // Carried over in time, never in logical indices: the same index is another
-    // moment once the interval or the bar count changes, which is what left the
-    // pane empty when a paged series handed its index to a shorter one.
-    const preserved = previousAnchor !== null && this.view.restoreVisibleAnchor(previousAnchor, previousSpacing);
-    this.afterBarsChanged();
-    this.indicators.historyChanged();
-    // The carried-over position can sit deeper than this window reaches, which
-    // leaves space before the oldest bar. Filling it is a page request, not a
-    // nudge of the viewport: the range subscription may not notify for a restored
-    // range, so ask here rather than leave the pane looking empty.
-    if (preserved) {
-      this.olderHistory.requestIfGapRevealed();
-    }
-    return preserved;
   }
 
   /** Brings everything that reads the bars up to date after they changed. */
