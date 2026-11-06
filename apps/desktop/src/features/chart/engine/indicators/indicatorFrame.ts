@@ -49,6 +49,8 @@ export interface IndicatorPlot {
   readonly gaps?: IndicatorPlotGaps;
   /** True draws the horizontal line at the plot's last value; missing is off. */
   readonly priceLine?: boolean;
+  /** Keeps price zero on the scale whatever the values are, so a small value cannot rescale the pane. */
+  readonly scaleFromZero?: boolean;
 }
 
 /** A horizontal line at a fixed price, the way Pine Script's `hline` draws one. */

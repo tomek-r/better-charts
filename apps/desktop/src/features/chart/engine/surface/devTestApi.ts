@@ -6,7 +6,6 @@ import {
   type IChartApi,
   type ISeriesApi,
   type LineStyle,
-  type PriceScaleMode,
   type Time,
   type WhitespaceData,
 } from 'lightweight-charts';
@@ -16,6 +15,12 @@ import type { RenderBar } from '../bars/renderBar';
 import { candleSeriesColors, type CandlePointColors } from '../bars/candleAppearance';
 import type { BarStyleSeriesState } from '../barStyle/barStyleSeries';
 import type { PointerReadout } from '../legend/pointerReadoutPrimitive';
+import {
+  readPaneScale,
+  readPriceScale,
+  type PaneScaleReading,
+  type PriceScaleReading,
+} from '../priceScale/priceScaleReadings';
 import type { ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesState } from './chartScalesAppearance';
 import type { ChartIndicatorPane } from '../indicators/indicatorContract';
@@ -114,6 +119,8 @@ export interface DevTestApi {
   indicators(): IndicatorLayerState[];
   /** How many panes the chart has, the price pane included. */
   paneCount(): number;
+  /** Pane `index`'s own right scale as plain values; null when the chart has no such pane. */
+  paneScale(index: number): PaneScaleReading | null;
   /** The series types the price pane holds, in draw order, so a test can prove which series exist. */
   priceSeriesTypes(): string[];
   /** Draws a whole frame for indicator `id` in `pane`, replacing what it drew. */
@@ -135,15 +142,7 @@ export interface DevTestApi {
   setIndicatorSettings(instanceId: string, settings: Readonly<Record<string, number | boolean | string>>): void;
   /** Every attached indicator, in attach order, with its resolved settings, as plain copies. */
   attachedIndicators(): AttachedIndicatorState[];
-  priceScale(): {
-    autoScale: boolean;
-    mode: PriceScaleMode;
-    invertScale: boolean;
-    axisWidth: number;
-    paneHeight: number;
-    timeAxisHeight: number;
-    range: { from: number; to: number } | null;
-  };
+  priceScale(): PriceScaleReading;
 }
 
 type DevWindow = { __chartTest?: DevTestApi; __viewportLog?: () => void };
@@ -337,19 +336,8 @@ function buildDevTestApi({
     setIndicatorHidden: (instanceId, hidden) => indicatorRuntime.setHidden(instanceId, hidden),
     setIndicatorSettings: (instanceId, settings) => indicatorRuntime.setSettings(instanceId, settings),
     attachedIndicators: () => indicatorRuntime.attachedState(),
-    priceScale: () => {
-      const scale = chart.priceScale('right');
-      const options = scale.options();
-      return {
-        autoScale: options.autoScale,
-        mode: options.mode,
-        invertScale: options.invertScale,
-        axisWidth: scale.width(),
-        paneHeight: chart.panes()[0]?.getHeight() ?? 0,
-        timeAxisHeight: chart.timeScale().height(),
-        range: scale.getVisibleRange(),
-      };
-    },
+    priceScale: () => readPriceScale(chart),
+    paneScale: (index) => readPaneScale(chart, index),
   };
 }
 

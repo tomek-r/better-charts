@@ -1,7 +1,8 @@
-/* A / L price-scale toggles at the foot of the price axis (engine/priceScale). */
+/* One A / L row per pane, at the foot of that pane's own axis (engine/priceScale). */
 .price-scale-controls {
   position: absolute;
   right: 0;
+  /* The fallback while a pane has no DOM to measure: the time axis sits below the panes. */
   bottom: 28px;
   z-index: 2;
   display: flex;

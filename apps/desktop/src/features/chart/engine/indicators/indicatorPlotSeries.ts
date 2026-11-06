@@ -214,6 +214,14 @@ function writesPriceLabel(plot: IndicatorPlot, priceLabelsVisible: boolean): boo
   return priceLabelsVisible && plot.visible !== false;
 }
 
+/**
+ * The options that keep price zero on the plot's scale: stems reach down to zero, and a plot may ask
+ * for the anchor itself, so a small value cannot rescale the pane.
+ */
+function zeroAnchorOptionsOf(plot: IndicatorPlot) {
+  return plot.style === 'stems' || plot.scaleFromZero === true ? { autoscaleInfoProvider: includingZeroPrice } : {};
+}
+
 /** The stroke settings every plotted line shares, area or plain. */
 function strokeOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
   return {
@@ -232,6 +240,7 @@ function lineOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
     color: plot.color,
     lineType: plotLineType(plot),
     ...strokeOptionsOf(plot, priceLabelsVisible),
+    ...zeroAnchorOptionsOf(plot),
   };
 }
 
@@ -246,14 +255,9 @@ function markerOnlyOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
 
 /** The options a line-backed plot's series is created with, by what its style draws. */
 function lineSeriesOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
-  if (!drawsMarkersOnly(plot.style)) {
-    return lineOptionsOf(plot, priceLabelsVisible);
-  }
-  const markerOptions = markerOnlyOptionsOf(plot, priceLabelsVisible);
-  if (plot.style !== 'stems') {
-    return markerOptions;
-  }
-  return { ...markerOptions, autoscaleInfoProvider: includingZeroPrice };
+  return drawsMarkersOnly(plot.style)
+    ? markerOnlyOptionsOf(plot, priceLabelsVisible)
+    : lineOptionsOf(plot, priceLabelsVisible);
 }
 
 /** The options an area plot's series is created with: its colour shades the region under the line. */
@@ -263,6 +267,7 @@ function areaOptionsOf(plot: IndicatorPlot, priceLabelsVisible: boolean) {
     topColor: withAlphaByte(plot.color, AREA_TOP_ALPHA_BYTE),
     bottomColor: withAlphaByte(plot.color, AREA_BOTTOM_ALPHA_BYTE),
     ...strokeOptionsOf(plot, priceLabelsVisible),
+    ...zeroAnchorOptionsOf(plot),
   };
 }
 
@@ -294,7 +299,7 @@ interface PlotAutoscaleInfo {
   readonly margins?: { readonly above: number; readonly below: number };
 }
 
-/** Stems reach down to price zero, so the scale must include it even when every value sits above it. */
+/** Keeps price zero on the scale even when every value sits above it. */
 function includingZeroPrice(baseImplementation: () => PlotAutoscaleInfo | null): PlotAutoscaleInfo | null {
   const autoscale = baseImplementation();
   if (autoscale === null || autoscale.priceRange === null) {

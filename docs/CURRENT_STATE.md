@@ -160,12 +160,16 @@ Not implemented: break even or multiple charts.
   the start line) and on the painted value labels column; with no profile painted
   (previewing, no bins) only the handles and the band select it.
 - Price scale fits on load, then holds until rescaled; axis hover exposes `A`/`L`.
-  The first history request covers only the visible pane (`initialHistoryBars`
-  in `config/bridge.json`; the UI measures the pane), then one older page is
-  prefetched when idle. A reconnect of the same terminal and account reopens
-  the symbol and timeframe the user was viewing (the bridge requests them
-  itself); if they cannot be served, the EA's chart symbol is shown with a
-  notice, and another account starts from the chart symbol. History paging
+  Every pane has its own `A`/`L` at the foot of its own axis, and the price
+  pane's row sits above the indicator panes: the price pane's `L` is the saved
+  scale type, while an indicator pane's choices are not saved and last until
+  the chart is reloaded. The first history request covers only the visible pane
+  (`initialHistoryBars` in `config/bridge.json`; the UI measures the pane), then
+  one older page is prefetched when idle. A reconnect of the same terminal and
+  account reopens the symbol and timeframe the user was viewing (the bridge
+  requests them itself); if they cannot be served, the EA's chart symbol is
+  shown with a notice, and another account starts from the chart symbol.
+  History paging
   preserves viewport; reconnecting or a
   new symbol resets to the latest history, while any replacement of the same
   symbol's series (a timeframe change or a fresh window) preserves bar spacing
@@ -344,7 +348,8 @@ default, draws the columns an attached Volume showed before the choice existed. 
 are Line, Line with breaks, Step line, Step line with breaks, Step line with diamonds, Histogram,
 Cross, Area, Area with breaks and Circles; a type with breaks differs from its plain one only
 where a plot has a missing value, which Volume never has. Price line draws the horizontal line at
-the last volume and is off by default.
+the last volume and is off by default. Volume's scale always includes zero, so a bar that has just
+opened does not rescale its pane.
 
 Attached indicators are saved per chart, account and symbol in the chart's settings overrides
 (id, indicator id, the settings the user changed, and `hidden: true` while hidden), so they
