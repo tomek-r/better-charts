@@ -18,6 +18,7 @@ import { legendBarIndex } from '../legend/legendBarIndex';
 export interface LegendBar {
   readonly bar: RenderBar;
   readonly bodyColor: string | null;
+  readonly previous: RenderBar | undefined;
 }
 
 /**
@@ -76,7 +77,11 @@ export class BarSeriesController {
     if (!bar) {
       return undefined;
     }
-    return { bar, bodyColor: this.barStyle.bodyColor(index, bar, this.cache[index - 1]) };
+    return {
+      bar,
+      bodyColor: this.barStyle.bodyColor(index, bar, this.cache[index - 1]),
+      previous: this.cache[index - 1],
+    };
   }
 
   /** Replaces the whole history. Returns false when the input was rejected. */

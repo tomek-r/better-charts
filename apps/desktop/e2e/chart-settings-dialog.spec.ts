@@ -453,11 +453,11 @@ test('Cancel on the Canvas tab saves nothing', async ({ page }) => {
   expectNoErrors(collected);
 });
 
-test('the tabs read Symbol, Scales and lines, Canvas in that order', async ({ page }) => {
+test('the tabs read Symbol, Status line, Scales and lines, Canvas in that order', async ({ page }) => {
   const collected = await gotoWithStub(page);
   const dialog = await openSettingsDialog(page);
 
-  await expect(dialog.getByRole('tab')).toHaveText(['Symbol', 'Scales and lines', 'Canvas']);
+  await expect(dialog.getByRole('tab')).toHaveText(['Symbol', 'Status line', 'Scales and lines', 'Canvas']);
   expectNoErrors(collected);
 });
 

@@ -16,6 +16,7 @@ import {
 } from './chartSettings';
 import { createTauriChartSettingsStore, type ChartSettingsStore, type StoredChartSettings } from './chartSettingsStore';
 import { scalesAppearanceOf } from './scalesAppearanceSetting';
+import { statusLineAppearanceOf } from './statusLineAppearanceSetting';
 import { usePriceScaleModeRequests } from './usePriceScaleModeRequests';
 
 /** What the settings of the chart on screen offer: what it shows, and the ways to change it. */
@@ -222,6 +223,13 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
   useEffect(() => {
     chart.current?.setScalesAppearance(scalesAppearanceOf(scalesSettings));
   }, [chart, scalesSettings]);
+
+  // The engine writes the OHLC line and the indicator legend rows with the Status line tab's settings.
+  // The status line values object is the dependency, so every preview and every keep reaches the chart.
+  const statusLineSettings = settings.statusLine;
+  useEffect(() => {
+    chart.current?.statusLine().setAppearance(statusLineAppearanceOf(statusLineSettings));
+  }, [chart, statusLineSettings]);
 
   return choice;
 }

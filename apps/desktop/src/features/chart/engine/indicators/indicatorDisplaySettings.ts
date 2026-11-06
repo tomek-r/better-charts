@@ -74,6 +74,11 @@ function storedToggle(settings: SettingValues, toggleId: string): boolean | null
   return typeof value === 'boolean' ? value : null;
 }
 
+/** The same settings with the inputs switch off, so a title built from them names no input. */
+export function withoutStatusLineInputs(settings: SettingValues): SettingValues {
+  return { ...settings, [settingStyleKey(INPUTS_IN_STATUS_LINE_ID, 'visible')]: false };
+}
+
 /** Whether the display switch `toggleId` is on: a stored value wins, otherwise the toggle's own default. */
 function isToggleOn(settings: SettingValues, toggleId: string, defaults: ToggleDefaults): boolean {
   return storedToggle(settings, toggleId) ?? defaults.visible;

@@ -175,7 +175,7 @@ export class ChartController {
     this.candles.attachPrimitive(this.countdownPrimitive);
     this.candles.attachPrimitive(this.priceTags);
     this.candles.attachPrimitive(this.pointerReadout);
-    this.ohlcReadout = new OhlcReadout(this.chart, host, this.data, () => this.symbol);
+    this.ohlcReadout = new OhlcReadout(this.chart, host, this.data, this.chartIndicators, () => this.symbol);
     this.marketStatus = new MarketStatusIndicator(this.ohlcReadout.container());
     // The price scale is painted on the library's own canvas, so its toggles
     // (A = auto scale, L = the price scale mode) are DOM buttons in the axis column, as
@@ -330,6 +330,10 @@ export class ChartController {
   /** What the chart draws of its scales and lines, read back from the collaborators that own each part. */
   scalesState(): ChartScalesState {
     return this.scales.drawnState();
+  }
+  /** The OHLC line and the indicator rows that the settings dialog's Status line tab controls. */
+  statusLine(): OhlcReadout {
+    return this.ohlcReadout;
   }
   /** The price scale as it is drawn now: whether it fits the data itself, its spacing and its direction. */
   priceScaleState(): PriceScaleState {

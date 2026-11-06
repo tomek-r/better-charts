@@ -348,6 +348,13 @@ pointer is off the chart or over no bar, in that bar's body colour as it is draw
 bar style and its up and down colours; a style without them (Line, Line with markers, Step line,
 Area, Baseline, High-low) keeps the label colour.
 
+The chart settings dialog's Status line tab switches the title (name, symbol or both), the market
+status dot, the chart values, the bar change against the previous close, the bar's tick volume,
+the last day change, and the indicator titles, inputs and values, and draws a background behind
+them. The last day change is the last price against the close of the newest loaded bar on an
+earlier broker day, so it is not shown on timeframes above one day or while no earlier day is
+loaded.
+
 Under the OHLC line the legend lists one row per price-pane indicator: its short title, its input
 values and each plot's value at the crosshair bar, or at the last bar while the pointer is off the
 chart (e.g. "SMA 9 close 1.08520"); oscillators write two decimals. An indicator with a pane of

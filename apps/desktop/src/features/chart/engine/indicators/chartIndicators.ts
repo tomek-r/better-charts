@@ -3,7 +3,8 @@ import type { RenderBar } from '../bars/renderBar';
 import { IndicatorLegend, type IndicatorLegendCommands } from '../legend/indicatorLegend';
 import type { SettingValues } from '../settings/settingInputs';
 import type { ChartIndicatorDefinition } from './indicatorContract';
-import { indicatorDisplayOf } from './indicatorDisplaySettings';
+import { indicatorDisplayOf, withoutStatusLineInputs } from './indicatorDisplaySettings';
+import { DEFAULT_STATUS_LINE_APPEARANCE, type ChartStatusLineAppearance } from '../legend/statusLineAppearance';
 import { IndicatorLayer, type IndicatorLegendValue, type IndicatorPaneHeight } from './indicatorLayer';
 import { IndicatorRuntime } from './indicatorRuntime';
 
@@ -44,6 +45,9 @@ export class ChartIndicators {
   private commands: IndicatorLegendCommands | null = null;
   readonly runtime: IndicatorRuntime;
   private readonly legend: IndicatorLegend;
+  private readonly legendTitle: ChartIndicatorsOptions['legendTitle'];
+  /** The Status line tab's switches: which legend parts draw, and whether an indicator's inputs are named. */
+  private statusLine = DEFAULT_STATUS_LINE_APPEARANCE;
   /** The pane heights when the pointer went down; null while no drag is watched and none just ended. */
   private paneHeightsBeforeDrag: readonly IndicatorPaneHeight[] | null = null;
   private readonly crosshairMoved = (param: MouseEventParams<Time>): void => {
@@ -75,6 +79,7 @@ export class ChartIndicators {
     private readonly host: HTMLElement,
     options: ChartIndicatorsOptions,
   ) {
+    this.legendTitle = options.legendTitle;
     this.layer = new IndicatorLayer(chart);
     this.runtime = new IndicatorRuntime(this.layer, options.definitions, options.bars, () => this.legend.refresh());
     this.legend = new IndicatorLegend(
@@ -83,7 +88,7 @@ export class ChartIndicators {
         rows: (logicalIndex) =>
           this.runtime.attachedState().map((attached) => ({
             instanceId: attached.instanceId,
-            title: options.legendTitle(attached.definitionId, attached.settings),
+            title: this.titleOf(attached.definitionId, attached.settings),
             hidden: attached.hidden,
             digits: this.layer.precisionOf(attached.instanceId),
             values: this.legendValuesOf(attached.instanceId, attached.settings, logicalIndex),
@@ -109,6 +114,12 @@ export class ChartIndicators {
     this.commands = commands;
   }
 
+  /** Applies the Status line tab's switches to the legend rows and redraws them. */
+  setStatusLine(appearance: ChartStatusLineAppearance): void {
+    this.statusLine = appearance;
+    this.legend.refresh();
+  }
+
   destroy(): void {
     this.host.removeEventListener('pointerdown', this.pointerDown, true);
     this.stopWatchingDrag();
@@ -119,9 +130,18 @@ export class ChartIndicators {
     this.layer.destroy();
   }
 
-  /** The values the legend writes after `instanceId`'s words: none while its status line shows no values. */
+  /** The legend's words for an attached indicator: empty while the status line shows no titles. */
+  private titleOf(definitionId: string, settings: SettingValues): string {
+    if (!this.statusLine.indicatorTitles) {
+      return '';
+    }
+    const namedSettings = this.statusLine.indicatorInputs ? settings : withoutStatusLineInputs(settings);
+    return this.legendTitle(definitionId, namedSettings);
+  }
+
+  /** The values the legend writes after `instanceId`'s words: none while the status line shows no values. */
   private legendValuesOf(instanceId: string, settings: SettingValues, logicalIndex: number): IndicatorLegendValue[] {
-    if (!indicatorDisplayOf(settings).valuesInStatusLine) {
+    if (!this.statusLine.indicatorValues || !indicatorDisplayOf(settings).valuesInStatusLine) {
       return [];
     }
     return this.layer.valuesAt(instanceId, logicalIndex);

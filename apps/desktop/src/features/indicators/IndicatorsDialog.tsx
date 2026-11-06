@@ -62,6 +62,10 @@ export function IndicatorsDialog({
         className="indicators-dialog-search"
         aria-label={SEARCH_LABEL}
         placeholder={SEARCH_PLACEHOLDER}
+        autoComplete="one-time-code"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {

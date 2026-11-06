@@ -1,0 +1,5 @@
+/* The Status line tab's icon, drawn at the tab icons' size in the surrounding text colour. */
+.status-line-icon {
+  width: 16px;
+  height: 16px;
+}

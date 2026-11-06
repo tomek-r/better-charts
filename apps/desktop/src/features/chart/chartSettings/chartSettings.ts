@@ -4,6 +4,7 @@ import { BAR_STYLE_SETTINGS } from './barStyleSettings';
 import { canvasFields } from './canvasSettings';
 import { readSavedIndicators, sameSavedIndicators, type SavedIndicator } from './savedIndicators';
 import { scalesFields } from './scalesSettings';
+import { statusLineFields } from './statusLineSettings';
 import { readSettingValue, sameSettingValue, type ChartSettingField, type ChartSettingValue } from './settingFields';
 
 /** The values one group of fields holds, keyed by field key. */
@@ -18,8 +19,11 @@ export type CanvasSettingValues = SettingValues;
 /** The scales and lines fields a chart sets, keyed by field key. */
 export type ScalesSettingValues = SettingValues;
 
+/** The status line fields a chart sets, keyed by field key. */
+export type StatusLineSettingValues = SettingValues;
+
 /** The groups of settings a chart keeps as layers of their own, beside its bar style and time zone. */
-type SettingsGroupKey = 'canvas' | 'scales';
+type SettingsGroupKey = 'canvas' | 'scales' | 'statusLine';
 
 /** A chart's settings with every bar type's fields, the canvas's and the scales' filled in. */
 export interface ChartSettings {
@@ -28,6 +32,7 @@ export interface ChartSettings {
   readonly barStyles: Readonly<Record<BarStyle, BarStyleSettingValues>>;
   readonly canvas: CanvasSettingValues;
   readonly scales: ScalesSettingValues;
+  readonly statusLine: StatusLineSettingValues;
   readonly indicators: readonly SavedIndicator[];
 }
 
@@ -38,6 +43,7 @@ export interface ChartSettingsLayer {
   readonly barStyles?: Readonly<Partial<Record<BarStyle, BarStyleSettingValues>>>;
   readonly canvas?: CanvasSettingValues;
   readonly scales?: ScalesSettingValues;
+  readonly statusLine?: StatusLineSettingValues;
   readonly indicators?: readonly SavedIndicator[];
 }
 
@@ -105,14 +111,21 @@ const CANVAS_GROUP: SettingsGroup = {
 
 const SCALES_GROUP: SettingsGroup = { key: 'scales', fields: scalesFields() };
 
+const STATUS_LINE_GROUP: SettingsGroup = { key: 'statusLine', fields: statusLineFields() };
+
 /** Every group the chart resolves and stores, in one table so each is read, merged and diffed the same way. */
-const SETTINGS_GROUPS: readonly SettingsGroup[] = [CANVAS_GROUP, SCALES_GROUP];
+const SETTINGS_GROUPS: readonly SettingsGroup[] = [CANVAS_GROUP, SCALES_GROUP, STATUS_LINE_GROUP];
 
 const CANVAS_DEFAULTS = defaultValues(CANVAS_GROUP.fields);
 const SCALES_DEFAULTS = defaultValues(SCALES_GROUP.fields);
+const STATUS_LINE_DEFAULTS = defaultValues(STATUS_LINE_GROUP.fields);
 
 /** Every group's defaults, keyed by the group that names them. */
-const GROUP_DEFAULTS: GroupValues = { canvas: CANVAS_DEFAULTS, scales: SCALES_DEFAULTS };
+const GROUP_DEFAULTS: GroupValues = {
+  canvas: CANVAS_DEFAULTS,
+  scales: SCALES_DEFAULTS,
+  statusLine: STATUS_LINE_DEFAULTS,
+};
 
 function isSettingsRecord(raw: unknown): raw is Readonly<Record<string, unknown>> {
   return typeof raw === 'object' && raw !== null && !Array.isArray(raw);
@@ -211,7 +224,11 @@ function chartSettingsLayer(parts: ChartSettingsLayer, groups: SparseGroupValues
 
 /** Each group's values with a layer's over them, every group merged by the same rule. */
 function mergedGroups(settings: ChartSettings, layer: ChartSettingsLayer): GroupValues {
-  return { canvas: mergedValues(settings.canvas, layer.canvas), scales: mergedValues(settings.scales, layer.scales) };
+  return {
+    canvas: mergedValues(settings.canvas, layer.canvas),
+    scales: mergedValues(settings.scales, layer.scales),
+    statusLine: mergedValues(settings.statusLine, layer.statusLine),
+  };
 }
 
 function withLayer(settings: ChartSettings, layer: ChartSettingsLayer): ChartSettings {
@@ -314,6 +331,10 @@ export function withCanvasValue(settings: ChartSettings, key: string, value: Cha
 
 export function withScalesValue(settings: ChartSettings, key: string, value: ChartSettingValue): ChartSettings {
   return { ...settings, scales: { ...settings.scales, [key]: value } };
+}
+
+export function withStatusLineValue(settings: ChartSettings, key: string, value: ChartSettingValue): ChartSettings {
+  return { ...settings, statusLine: { ...settings.statusLine, [key]: value } };
 }
 
 export function withBarStyle(settings: ChartSettings, barStyle: BarStyle): ChartSettings {

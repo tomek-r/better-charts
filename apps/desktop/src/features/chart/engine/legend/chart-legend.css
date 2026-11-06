@@ -11,6 +11,10 @@
   display: flex;
   align-items: center;
   gap: 7px;
+  background: var(--chart-status-line-background, transparent);
+  padding: 0 4px;
+  margin-left: -4px;
+  border-radius: 4px;
 }
 
 .chart-market-dot {
@@ -18,6 +22,10 @@
   height: 9px;
   flex: none;
   border-radius: 50%;
+}
+
+.chart-legend[data-market-status='off'] .chart-market-dot {
+  display: none;
 }
 
 .chart-market-open {
@@ -73,6 +81,7 @@
   margin-left: -5px;
   border: 1px solid transparent;
   border-radius: var(--border-radius);
+  background: var(--chart-status-line-background, transparent);
   white-space: nowrap;
 }
 

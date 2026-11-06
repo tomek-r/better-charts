@@ -37,6 +37,11 @@ const ROW_FONT_SIZE = '14px';
 const PRICE_PANE_COUNT = 1;
 const PRICE_AND_VOLUME_PANE_COUNT = 2;
 
+/** Stops macOS showing its autocorrect bubble, autocapitalising or spell checking the search field. */
+const AUTOCORRECT_OFF = 'off';
+const SPELLCHECK_OFF = 'false';
+const SEARCH_AUTOCOMPLETE = 'one-time-code';
+
 test.describe('indicators dialog', () => {
   failOnPageNoise();
 
@@ -62,6 +67,14 @@ test.describe('indicators dialog', () => {
     await openIndicators(page);
 
     await expect(listRows(page).first()).toHaveCSS('font-size', ROW_FONT_SIZE);
+  });
+
+  test('the search field turns off autocorrect and spelling aids', async ({ page }) => {
+    const search = await openIndicators(page);
+
+    await expect(search).toHaveAttribute('autocorrect', AUTOCORRECT_OFF);
+    await expect(search).toHaveAttribute('spellcheck', SPELLCHECK_OFF);
+    await expect(search).toHaveAttribute('autocomplete', SEARCH_AUTOCOMPLETE);
   });
 
   test('the Indicators button opens a dialog with the search field focused and every indicator listed', async ({

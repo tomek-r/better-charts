@@ -152,6 +152,11 @@ export function useChartWorkspaceChartEffects(
     const label = marketStatusLabel({ status: marketStatus, bridgeState: status.state });
     chart.current?.setMarketStatus(marketStatus, label);
   }, [chart, snapshot.symbol, status.marketSession, status.state]);
+  // The title names the instrument on screen: metadata of another symbol describes nothing here.
+  useEffect(() => {
+    const description = instrument?.symbol === snapshot.symbol ? instrument?.description : undefined;
+    chart.current?.statusLine().setSymbolDescription(description);
+  }, [chart, instrument?.description, instrument?.symbol, snapshot.symbol]);
   useEffect(() => {
     setPendingModification(undefined);
     clearStagedWidget();
