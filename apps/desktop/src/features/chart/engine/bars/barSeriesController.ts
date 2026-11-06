@@ -12,7 +12,6 @@ import {
 } from './candleAppearance';
 import { BarStyleSeries, type BarStyleSeriesState } from '../barStyle/barStyleSeries';
 import type { BarStyleAppearance } from '../barStyle/barStyleAppearance';
-import { legendBarIndex } from '../legend/legendBarIndex';
 
 /** One bar as the legend shows it, with the colour its body is drawn in; null while the style has none. */
 export interface LegendBar {
@@ -68,11 +67,10 @@ export class BarSeriesController {
   }
 
   /**
-   * The bar the legend shows for a crosshair logical index, with the colour its body is drawn in, or
-   * undefined while there are no bars.
+   * The bar at `index` as the legend shows it, with the colour its body is drawn in, or undefined while
+   * the chart holds no bar at that index.
    */
-  legendBar(logical: number | null): LegendBar | undefined {
-    const index = legendBarIndex(logical, this.cache.length);
+  legendBar(index: number): LegendBar | undefined {
     const bar = this.cache[index];
     if (!bar) {
       return undefined;
@@ -82,6 +80,14 @@ export class BarSeriesController {
       bodyColor: this.barStyle.bodyColor(index, bar, this.cache[index - 1]),
       previous: this.cache[index - 1],
     };
+  }
+
+  /**
+   * The colour the current bar style gives a rising or a falling bar, which the last day change takes; null
+   * for a style with no up and down colours, whose legend then keeps its own label colour.
+   */
+  directionColor(rising: boolean): string | null {
+    return this.barStyle.directionColor(rising);
   }
 
   /** Replaces the whole history. Returns false when the input was rejected. */

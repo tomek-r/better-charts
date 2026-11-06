@@ -330,8 +330,9 @@ the band between them filled), MACD (MACD 12 26 close 9: a histogram coloured by
 whether it grew, the MACD and signal lines and a zero line), Moving Average Exponential (EMA 9
 close), Moving Average Simple (SMA 9 close), Relative Strength Index (RSI 14 close, with
 dashed 70 and 30 bands, a dotted 50 band and the background between 70 and 30) and Volume
-(Vol SMA 20: the bar's tick volume in columns coloured by whether the bar closed at or above
-its open, with a Volume MA line, SMA or EMA, that is off until switched on in the Style tab).
+(Vol, or Vol SMA 20 while its MA line is on: the bar's tick volume in columns coloured by
+whether the bar closed at or above its open, with a Volume MA line, SMA or EMA, that is off
+until switched on in the Style tab).
 The chart no longer draws volume by itself; volume shows through the Volume indicator.
 SMA, EMA and Bollinger Bands draw on the price pane; RSI, MACD and Volume each get a pane of their own under
 it, about a ninth of the height, which closes when the indicator is removed. A pane resized by

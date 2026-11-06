@@ -1,5 +1,6 @@
-import type { IChartApi, MouseEventParams, Time } from 'lightweight-charts';
+import type { IChartApi } from 'lightweight-charts';
 import type { RenderBar } from '../bars/renderBar';
+import { HoveredBar } from '../legend/hoveredBar';
 import { IndicatorLegend, type IndicatorLegendCommands } from '../legend/indicatorLegend';
 import type { SettingValues } from '../settings/settingInputs';
 import type { ChartIndicatorDefinition } from './indicatorContract';
@@ -40,6 +41,8 @@ function draggedPaneHeights(
  * them and the legend that names them, built and torn down together.
  */
 export class ChartIndicators {
+  /** The bar the pointer is over, which this legend follows and the OHLC line shares. */
+  readonly hoveredBar: HoveredBar;
   readonly layer: IndicatorLayer;
   /** The app's row commands; null while none is mounted, and the legend's buttons then do nothing. */
   private commands: IndicatorLegendCommands | null = null;
@@ -50,9 +53,6 @@ export class ChartIndicators {
   private statusLine = DEFAULT_STATUS_LINE_APPEARANCE;
   /** The pane heights when the pointer went down; null while no drag is watched and none just ended. */
   private paneHeightsBeforeDrag: readonly IndicatorPaneHeight[] | null = null;
-  private readonly crosshairMoved = (param: MouseEventParams<Time>): void => {
-    this.legend.crosshairMoved(param.logical ?? null);
-  };
   /**
    * The pointer going down anywhere on the chart may start a drag of a pane separator, which only the
    * library knows about: the heights are snapshotted here and compared when the pointer comes up.
@@ -75,26 +75,27 @@ export class ChartIndicators {
   };
 
   constructor(
-    private readonly chart: IChartApi,
+    chart: IChartApi,
     private readonly host: HTMLElement,
     options: ChartIndicatorsOptions,
   ) {
     this.legendTitle = options.legendTitle;
+    this.hoveredBar = new HoveredBar(chart, options.bars);
     this.layer = new IndicatorLayer(chart);
     this.runtime = new IndicatorRuntime(this.layer, options.definitions, options.bars, () => this.legend.refresh());
     this.legend = new IndicatorLegend(
       host,
       {
-        rows: (logicalIndex) =>
+        rows: (hoveredIndex) =>
           this.runtime.attachedState().map((attached) => ({
             instanceId: attached.instanceId,
             title: this.titleOf(attached.definitionId, attached.settings),
             hidden: attached.hidden,
             digits: this.layer.precisionOf(attached.instanceId),
-            values: this.legendValuesOf(attached.instanceId, attached.settings, logicalIndex),
+            values: this.legendValuesOf(attached.instanceId, attached.settings, hoveredIndex),
             paneHost: this.layer.paneLegendHost(attached.instanceId),
           })),
-        lastBarIndex: () => options.bars().length - 1,
+        hoveredIndex: () => this.hoveredBar.index(),
         digits: options.digits,
       },
       {
@@ -104,7 +105,7 @@ export class ChartIndicators {
         setPaneHeights: (heights) => this.commands?.setPaneHeights(heights),
       },
     );
-    this.chart.subscribeCrosshairMove(this.crosshairMoved);
+    this.hoveredBar.subscribe(() => this.legend.refresh());
     // The capture phase sees the pointer before the library's separator handle takes it for its drag.
     this.host.addEventListener('pointerdown', this.pointerDown, true);
   }
@@ -123,7 +124,7 @@ export class ChartIndicators {
   destroy(): void {
     this.host.removeEventListener('pointerdown', this.pointerDown, true);
     this.stopWatchingDrag();
-    this.chart.unsubscribeCrosshairMove(this.crosshairMoved);
+    this.hoveredBar.destroy();
     this.legend.destroy();
     // The runtime before the layer it draws through, as the controller tore them down.
     this.runtime.destroy();
@@ -140,11 +141,11 @@ export class ChartIndicators {
   }
 
   /** The values the legend writes after `instanceId`'s words: none while the status line shows no values. */
-  private legendValuesOf(instanceId: string, settings: SettingValues, logicalIndex: number): IndicatorLegendValue[] {
+  private legendValuesOf(instanceId: string, settings: SettingValues, barIndex: number): IndicatorLegendValue[] {
     if (!this.statusLine.indicatorValues || !indicatorDisplayOf(settings).valuesInStatusLine) {
       return [];
     }
-    return this.layer.valuesAt(instanceId, logicalIndex);
+    return this.layer.valuesAt(instanceId, barIndex);
   }
 
   /** Stops watching for the end of a drag the pointer may never finish. */

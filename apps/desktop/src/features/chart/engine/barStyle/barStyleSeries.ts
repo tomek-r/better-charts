@@ -6,8 +6,8 @@ import {
   type BarStyleAppearance,
   type DrawnBarStyleAppearance,
 } from './barStyleAppearance';
-import { barStylePoint, barStylePoints } from './barStylePoints';
-import { barBodyColor } from './barBodyColor';
+import { barStylePoint, barStylePoints, directionColor as colorOfDirection } from './barStylePoints';
+import { barBodyColor, barDirectionColors } from './barBodyColor';
 import { canRepaintBarStyleSeries, drawBarStyleSeries } from './barStyleSeriesFactory';
 import { BaselineLevel, priceBaseValue } from './baselineLevel';
 import { HeikinAshiChain } from './heikinAshi';
@@ -89,6 +89,18 @@ export class BarStyleSeries {
     }
     const drawn = this.heikinAshiChain.at(index);
     return barBodyColor(this.appearance, drawn.bar ?? bar, drawn.previous);
+  }
+
+  /**
+   * The colour the current style gives a rising or a falling bar, whichever bar it is drawn for; null while
+   * the style has no up and down colours.
+   */
+  directionColor(rising: boolean): string | null {
+    const colors = barDirectionColors(this.appearance);
+    if (colors === null) {
+      return null;
+    }
+    return colorOfDirection(colors, rising);
   }
 
   /** Applies the anchor series' price precision, which repaints every label a bar style writes. */

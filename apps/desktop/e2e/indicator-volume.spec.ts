@@ -8,6 +8,7 @@ import { PLOT_TYPES, plotDrawingOf } from '../src/features/indicators/plotTypes'
 import { findChartIndicatorPlugin } from '../src/features/indicators/registry';
 import { EMA_TYPE, SMA_TYPE } from '../src/features/indicators/volume/volumeAverage';
 import {
+  DEFAULT_MA_LENGTH,
   FALLING_STYLE,
   GROWING_STYLE,
   MA_LENGTH_INPUT,
@@ -214,14 +215,18 @@ test('the MA follows the forming bar and moves on the one that closes', () => {
   expect(closed.bars.map((bar) => bar.confirmed)).toEqual([true, false]);
 });
 
-test('the plugin registers in a pane of its own and titles itself Vol SMA 20', () => {
+test('the plugin registers in a pane of its own and names itself Vol while its MA line is off', () => {
   expect(findChartIndicatorPlugin('volume')).toBe(volumePlugin);
   expect(volumePlugin.pane).toBe('own');
-  expect(indicatorLegendTitle('volume', DEFAULT_SETTINGS)).toBe('Vol SMA 20');
+  expect(indicatorLegendTitle('volume', DEFAULT_SETTINGS)).toBe('Vol');
 });
 
-test('the legend title follows the chosen MA type', () => {
-  const settings = resolveSettingValues(volumePlugin, { [MA_TYPE_INPUT]: EMA_TYPE });
+test('the legend names the MA inputs only while the MA line is on', () => {
+  const simple = averageSettings(SMA_TYPE, DEFAULT_MA_LENGTH);
+  const exponential = averageSettings(EMA_TYPE, DEFAULT_MA_LENGTH);
+  const averageChosenButOff = resolveSettingValues(volumePlugin, { [MA_TYPE_INPUT]: EMA_TYPE });
 
-  expect(indicatorLegendTitle('volume', settings)).toBe('Vol EMA 20');
+  expect(indicatorLegendTitle('volume', simple)).toBe('Vol SMA 20');
+  expect(indicatorLegendTitle('volume', exponential)).toBe('Vol EMA 20');
+  expect(indicatorLegendTitle('volume', averageChosenButOff)).toBe('Vol');
 });

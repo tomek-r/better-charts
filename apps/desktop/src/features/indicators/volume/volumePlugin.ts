@@ -1,5 +1,7 @@
-import type { SettingStyleColor } from '../../chart/engine/settings/settingStyles';
+import type { SettingValues } from '../../chart/engine/settings/settingInputs';
+import { settingStyleKey, type SettingStyleColor } from '../../chart/engine/settings/settingStyles';
 import type { ChartIndicatorPlugin } from '../chartIndicatorPlugin';
+import { booleanSetting } from '../indicatorSettingValues';
 import { lineStyle } from '../indicatorInputs';
 import { plotTypeStyle } from '../plotTypes';
 import {
@@ -24,6 +26,10 @@ import { EMA_TYPE, SMA_TYPE } from './volumeAverage';
 const MA_LENGTH_MIN = 1;
 const MA_LENGTH_MAX = 5000;
 const MA_LENGTH_STEP = 1;
+/** The MA line is off until the user switches it on in the Style tab. */
+const MA_LINE_VISIBLE = false;
+/** The MA's two inputs, in the order the legend names them. */
+const MA_INPUT_IDS = [MA_TYPE_INPUT, MA_LENGTH_INPUT];
 
 /** One column colour, rendered under the Volume toggle. */
 function volumeColorStyle(id: string, title: string, color: string): SettingStyleColor {
@@ -33,7 +39,16 @@ function volumeColorStyle(id: string, title: string, color: string): SettingStyl
 /** The MA line's style entry, off until the user switches it on in the Style tab. */
 function volumeAverageStyle(): ReturnType<typeof lineStyle> {
   const line = lineStyle(MA_STYLE, 'Volume MA', DEFAULT_MA_COLOR);
-  return { ...line, defaults: { ...line.defaults, visible: false } };
+  return { ...line, defaults: { ...line.defaults, visible: MA_LINE_VISIBLE } };
+}
+
+/** The legend names the MA inputs only while the MA line is on: off, they describe nothing it draws. */
+function averageInputIds(settings: SettingValues): readonly string[] {
+  const averageShown = booleanSetting(settings, settingStyleKey(MA_STYLE, 'visible'), MA_LINE_VISIBLE);
+  if (!averageShown) {
+    return [];
+  }
+  return MA_INPUT_IDS;
 }
 
 export const volumePlugin = {
@@ -41,6 +56,7 @@ export const volumePlugin = {
   title: 'Volume',
   shortTitle: 'Vol',
   pane: 'own',
+  legendInputIds: averageInputIds,
   inputs: [
     {
       kind: 'enum',

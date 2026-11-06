@@ -28,10 +28,10 @@ export interface IndicatorLegendCommands {
 
 /** What the legend reads to draw its rows; the chart surface supplies it. */
 export interface IndicatorLegendSource {
-  /** The rows for the bar with `logicalIndex`, in attach order. */
-  rows(logicalIndex: number): readonly IndicatorLegendRow[];
-  /** Index of the newest bar, used while no crosshair is on the chart. */
-  lastBarIndex(): number;
+  /** The rows for the bar at `barIndex`, in attach order. */
+  rows(barIndex: number): readonly IndicatorLegendRow[];
+  /** The index of the bar the pointer is over, the last bar while no bar has its time, and -1 with no bars. */
+  hoveredIndex(): number;
   /** Price decimals for the plot values. */
   digits(): number;
 }
@@ -167,7 +167,6 @@ export class IndicatorLegend {
   };
 
   private collapsed = false;
-  private crosshairLogical: number | null = null;
 
   constructor(host: HTMLElement, source: IndicatorLegendSource, commands: IndicatorLegendCommands) {
     this.source = source;
@@ -185,13 +184,8 @@ export class IndicatorLegend {
     this.refresh();
   }
 
-  crosshairMoved(logical: number | null): void {
-    this.crosshairLogical = logical;
-    this.refresh();
-  }
-
   refresh(): void {
-    const entries = this.source.rows(this.barIndex()).map((row) => this.entryOf(row));
+    const entries = this.source.rows(this.source.hoveredIndex()).map((row) => this.entryOf(row));
     for (const { row, view } of entries) {
       this.applyRow(view, row);
     }
@@ -214,14 +208,6 @@ export class IndicatorLegend {
     }
     this.views.clear();
     this.element.remove();
-  }
-
-  private barIndex(): number {
-    const lastBarIndex = this.source.lastBarIndex();
-    if (this.crosshairLogical === null) {
-      return lastBarIndex;
-    }
-    return Math.min(Math.round(this.crosshairLogical), lastBarIndex);
   }
 
   /** The view drawing `row`, made the first time the indicator shows a row. */

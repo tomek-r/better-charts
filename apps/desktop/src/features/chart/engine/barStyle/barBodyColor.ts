@@ -1,6 +1,53 @@
 import type { RenderBar } from '../bars/renderBar';
-import type { BarStyleAppearance } from './barStyleAppearance';
-import { barColor, directionColor, roseAgainstPreviousClose, roseTo } from './barStylePoints';
+import type { BarDirectionColors, BarStyleAppearance } from './barStyleAppearance';
+import { directionColor, roseAgainstPreviousClose, roseTo } from './barStylePoints';
+
+/** The up and down colours a style's bodies take, or null for a style that has no such pair. */
+export function barDirectionColors(appearance: BarStyleAppearance): BarDirectionColors | null {
+  switch (appearance.style) {
+    case 'candles':
+    case 'heikinAshi':
+    case 'volumeCandles':
+    case 'hollowCandles':
+      return appearance.candles.body;
+    case 'bars':
+    case 'columns':
+      return appearance.colors;
+    case 'line':
+    case 'lineWithMarkers':
+    case 'stepLine':
+    case 'area':
+    case 'baseline':
+    case 'highLow':
+      return null;
+  }
+}
+
+/**
+ * Whether the body of `bar` is read as rising: the previous close decides for hollow candles and for the
+ * styles set to colour by it, and the bar's own open decides otherwise.
+ */
+function bodyRose(appearance: BarStyleAppearance, bar: RenderBar, previous: RenderBar | undefined): boolean {
+  switch (appearance.style) {
+    case 'hollowCandles':
+      return roseAgainstPreviousClose(bar, previous);
+    case 'candles':
+    case 'heikinAshi':
+    case 'volumeCandles':
+      return appearance.candles.colorByPreviousClose ? roseAgainstPreviousClose(bar, previous) : roseTo(bar, bar.open);
+    case 'bars':
+    case 'columns':
+      return appearance.colorByPreviousClose ? roseAgainstPreviousClose(bar, previous) : roseTo(bar, bar.open);
+    case 'line':
+    case 'lineWithMarkers':
+    case 'stepLine':
+    case 'area':
+    case 'baseline':
+    case 'highLow':
+      // These styles draw no body colour, so the direction read for them is never written anywhere.
+      return roseTo(bar, bar.open);
+  }
+}
 
 /**
  * The colour the body of `bar` is drawn in, or null for a style that draws no body. A body that is
@@ -11,26 +58,9 @@ export function barBodyColor(
   bar: RenderBar,
   previous: RenderBar | undefined,
 ): string | null {
-  switch (appearance.style) {
-    case 'candles':
-    case 'heikinAshi':
-    case 'volumeCandles': {
-      const { body, colorByPreviousClose } = appearance.candles;
-      const rising = colorByPreviousClose ? roseAgainstPreviousClose(bar, previous) : roseTo(bar, bar.open);
-      return directionColor(body, rising);
-    }
-    case 'hollowCandles':
-      return directionColor(appearance.candles.body, roseAgainstPreviousClose(bar, previous));
-    case 'bars':
-    case 'columns':
-      return barColor(bar, previous, appearance);
-    case 'line':
-    case 'lineWithMarkers':
-    case 'stepLine':
-    case 'area':
-    case 'baseline':
-    case 'highLow':
-      // These styles have no up and down colours, so the legend keeps its label colour.
-      return null;
+  const colors = barDirectionColors(appearance);
+  if (colors === null) {
+    return null;
   }
+  return directionColor(colors, bodyRose(appearance, bar, previous));
 }

@@ -3,6 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { RenderBar } from '../src/features/chart/engine/bars/renderBar';
 import { DEFAULT_CANDLE_APPEARANCE } from '../src/features/chart/engine/bars/candleAppearance';
 import type {
+  AreaAppearance,
   BarsAppearance,
   CandleStyleAppearance,
   ColumnsAppearance,
@@ -10,11 +11,11 @@ import type {
   HollowCandlesAppearance,
   LineStyleAppearance,
 } from '../src/features/chart/engine/barStyle/barStyleAppearance';
-import { barBodyColor } from '../src/features/chart/engine/barStyle/barBodyColor';
+import { barBodyColor, barDirectionColors } from '../src/features/chart/engine/barStyle/barBodyColor';
 import { HeikinAshiChain } from '../src/features/chart/engine/barStyle/heikinAshi';
-import { legendBarIndex } from '../src/features/chart/engine/legend/legendBarIndex';
 import { waitTwoAnimationFrames } from './helpers/animationFrames';
 import { CHART_HOST_SELECTOR } from './helpers/chartHost';
+import { attachSma } from './helpers/indicatorsDialog';
 import { chartScopeKey, gotoWithStub } from './helpers/tauriStub';
 
 const STUB_BAR_COUNT = 10;
@@ -23,10 +24,17 @@ const LEGEND_VALUE_COUNT = 4;
 const RISING_BODY_COLOR = 'rgb(38, 166, 154)';
 const SECONDS_TO_MS = 1000;
 const CANDLE_LEGEND_LABEL = 'Candle OHLC';
+const NO_VALUE_TEXT = '∅';
 /** Bar 0 in the pane with empty space right of the last bar, so the pointer meets one bar at a time. */
 const HOVER_RANGE = { from: -2, to: 14 };
 /** Two bar spacings right of the last stub bar: chart space with no bar under the pointer. */
 const PAST_LAST_BAR_OFFSET = STUB_BAR_COUNT + 1;
+/** A third of a bar spacing into bar 0, so the pointer moves without leaving the bar. */
+const WITHIN_FIRST_BAR = 0.3;
+/** The second stub bar, one bar spacing right of the first. */
+const SECOND_BAR = 1;
+/** Inside the pane and left of bar 0, where no bar has a time. */
+const BEFORE_FIRST_BAR = -1.5;
 
 /** A bar with a body; its range always holds the two prices the test sets. */
 function barOf(open: number, close: number, time = 0): RenderBar {
@@ -46,6 +54,16 @@ const BARS: BarsAppearance = {
   thinBars: false,
   hlcBars: false,
 };
+
+/** A legend value node once `markLegendValues` has written its place on it. */
+interface MarkedValue extends HTMLElement {
+  legendMark?: number;
+}
+
+/** The count of DOM changes the OHLC value nodes made, held on the page's own window. */
+interface LegendWatch {
+  writes: number;
+}
 
 /** The decimals the OHLC legend writes its close price with, read from the line's own text. */
 async function legendDecimals(page: Page): Promise<number> {
@@ -67,14 +85,14 @@ function closeText(close: number | undefined, decimals: number): string {
   return `C ${close.toFixed(decimals)}`;
 }
 
-/**
- * Points the pointer `spacings` bar spacings right of bar 0, at half the host's height, and returns the
- * stub bars' closes so a test can name the bar it is over.
- */
-async function hoverFromBar0(page: Page, spacings: number): Promise<readonly number[]> {
+/** Scrolls the pane so bar 0 has empty space on both sides, and waits until it is drawn. */
+async function scrollToHoverRange(page: Page): Promise<void> {
   await page.evaluate((range) => window.__chartTest!.scrollToRange(range), HOVER_RANGE);
   await waitTwoAnimationFrames(page);
-  const closes = await page.evaluate(() => window.__chartTest!.data().map((bar) => bar.close));
+}
+
+/** Points the pointer `spacings` bar spacings right of bar 0; a negative count points into the space before it. */
+async function pointFromBar0(page: Page, spacings: number): Promise<void> {
   const xs = await page.evaluate((secondsToMs) => {
     const chart = window.__chartTest!;
     return chart.data().map((bar) => chart.timeToX(bar.time * secondsToMs));
@@ -85,7 +103,16 @@ async function hoverFromBar0(page: Page, spacings: number): Promise<readonly num
   }
   const spacing = xs[1]! - xs[0]!;
   await page.mouse.move(host.x + xs[0]! + spacings * spacing, host.y + host.height / 2);
-  return closes;
+}
+
+/**
+ * Scrolls the pane to the hover range, points the pointer `spacings` bar spacings right of bar 0 and
+ * returns the stub bars' closes, so a test can name the bar it is over.
+ */
+async function hoverFromBar0(page: Page, spacings: number): Promise<readonly number[]> {
+  await scrollToHoverRange(page);
+  await pointFromBar0(page, spacings);
+  return page.evaluate(() => window.__chartTest!.data().map((bar) => bar.close));
 }
 
 /** Opens the stub chart and waits until it has drawn every stub bar. */
@@ -109,6 +136,41 @@ async function hoverFirstBar(page: Page): Promise<{ legend: Locator; decimals: n
   const { legend, decimals } = await openHoverLegend(page);
   const closes = await hoverFromBar0(page, 0);
   return { legend, decimals, closes };
+}
+
+/** Writes its place on every OHLC value node, so a later read tells whether the line kept those very nodes. */
+async function markLegendValues(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    Array.from(document.querySelectorAll<MarkedValue>('.chart-legend-value')).forEach((value, index) => {
+      value.legendMark = index;
+    });
+  });
+}
+
+/** The marks `markLegendValues` left on the value nodes, in draw order; a rebuilt line has none. */
+async function legendValueMarks(page: Page): Promise<readonly (number | undefined)[]> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll<MarkedValue>('.chart-legend-value'), (value) => value.legendMark),
+  );
+}
+
+/** Counts the DOM changes the OHLC value nodes make from now on; `legendValueWrites` reads the count. */
+async function watchLegendValues(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const watch: LegendWatch = { writes: 0 };
+    (window as Window & { legendWatch?: LegendWatch }).legendWatch = watch;
+    const observer = new MutationObserver((records) => {
+      watch.writes += records.length;
+    });
+    for (const value of Array.from(document.querySelectorAll('.chart-legend-value'))) {
+      observer.observe(value, { attributes: true, characterData: true, childList: true, subtree: true });
+    }
+  });
+}
+
+/** The changes `watchLegendValues` has seen so far. */
+async function legendValueWrites(page: Page): Promise<number> {
+  return page.evaluate(() => (window as Window & { legendWatch?: LegendWatch }).legendWatch?.writes ?? 0);
 }
 
 test('a candle takes the body colour of the direction it closed in', () => {
@@ -157,6 +219,26 @@ test('a style with no up and down colours leaves the legend its label colour', (
   expect(barBodyColor(highLow, FALLING, undefined)).toBeNull();
 });
 
+test('every style family names the up and down colours a last day change takes, or none at all', () => {
+  const candles: CandleStyleAppearance = { style: 'candles', candles: DEFAULT_CANDLE_APPEARANCE };
+  const hollow: HollowCandlesAppearance = { style: 'hollowCandles', candles: DEFAULT_CANDLE_APPEARANCE };
+  const columns: ColumnsAppearance = { style: 'columns', colorByPreviousClose: false, colors: BAR_COLORS };
+  const area: AreaAppearance = {
+    style: 'area',
+    priceSource: 'close',
+    lineColor: '#123456',
+    lineWidth: 1,
+    fillTop: '#123456',
+    fillBottom: '#123456',
+  };
+
+  expect(barDirectionColors(candles)).toEqual(DEFAULT_CANDLE_APPEARANCE.body);
+  expect(barDirectionColors(hollow)).toEqual(DEFAULT_CANDLE_APPEARANCE.body);
+  expect(barDirectionColors(BARS)).toEqual(BAR_COLORS);
+  expect(barDirectionColors(columns)).toEqual(BAR_COLORS);
+  expect(barDirectionColors(area)).toBeNull();
+});
+
 test('a raw bar closing below its open still draws a rising Heikin Ashi bar', () => {
   const fallingRawBar: RenderBar = { time: 0, open: 20, high: 30, low: 8, close: 10, volume: 0 };
   const chain = new HeikinAshiChain();
@@ -172,15 +254,6 @@ test('the Heikin Ashi chain reads a bar and the one before it by index', () => {
   chain.rebuild([barOf(1, 2, 0), barOf(2, 3, 300)]);
 
   expect(chain.at(1).previous).toEqual(chain.at(0).bar);
-});
-
-test('the legend index rounds a pointer over a bar and falls back to the last bar elsewhere', () => {
-  expect(legendBarIndex(2, STUB_BAR_COUNT)).toBe(2);
-  expect(legendBarIndex(2.4, STUB_BAR_COUNT)).toBe(2);
-  expect(legendBarIndex(null, STUB_BAR_COUNT)).toBe(STUB_BAR_COUNT - 1);
-  expect(legendBarIndex(-1, STUB_BAR_COUNT)).toBe(STUB_BAR_COUNT - 1);
-  expect(legendBarIndex(STUB_BAR_COUNT, STUB_BAR_COUNT)).toBe(STUB_BAR_COUNT - 1);
-  expect(legendBarIndex(null, 0)).toBe(-1);
 });
 
 test('the OHLC values take the body colour of the rising last bar', async ({ page }) => {
@@ -232,4 +305,45 @@ test('the OHLC values keep the last bar while the pointer is over no bar', async
   const closes = await hoverFromBar0(page, PAST_LAST_BAR_OFFSET);
 
   await expect(legend).toContainText(closeText(closes[closes.length - 1], decimals));
+});
+
+test('a move inside one bar keeps the OHLC value nodes and writes nothing into them', async ({ page }) => {
+  const { legend, decimals, closes } = await hoverFirstBar(page);
+  await expect(legend).toContainText(closeText(closes[0], decimals));
+  await markLegendValues(page);
+  const marks = await legendValueMarks(page);
+  await watchLegendValues(page);
+
+  await pointFromBar0(page, WITHIN_FIRST_BAR);
+
+  await expect(legend).toContainText(closeText(closes[0], decimals));
+  expect(await legendValueMarks(page)).toEqual(marks);
+  expect(await legendValueWrites(page)).toBe(0);
+});
+
+test('a move to another bar keeps the OHLC value nodes and writes that bar into them', async ({ page }) => {
+  const { legend, decimals, closes } = await hoverFirstBar(page);
+  const firstBarText = (await legend.textContent()) ?? '';
+  await markLegendValues(page);
+  const marks = await legendValueMarks(page);
+
+  await pointFromBar0(page, SECOND_BAR);
+
+  await expect(legend).toContainText(closeText(closes[1], decimals));
+  expect(await legend.textContent()).not.toBe(firstBarText);
+  expect(await legendValueMarks(page)).toEqual(marks);
+});
+
+test('hovering left of the first bar reads the last bar in the line and in the indicator row', async ({ page }) => {
+  const { legend, decimals } = await openHoverLegend(page);
+  await attachSma(page);
+  const indicatorValue = page.locator('.chart-indicator-legend-value').first();
+  const closes = await hoverFromBar0(page, 0);
+
+  await expect(indicatorValue).toHaveText(NO_VALUE_TEXT);
+
+  await pointFromBar0(page, BEFORE_FIRST_BAR);
+
+  await expect(legend).toContainText(closeText(closes[closes.length - 1], decimals));
+  await expect(indicatorValue).not.toHaveText(NO_VALUE_TEXT);
 });

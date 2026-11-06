@@ -12,6 +12,7 @@ import { BrokerTime } from '../brokerTime/brokerTime';
 import { ChartTimeZoneDisplay } from '../brokerTime/chartTimeZoneDisplay';
 import { BarCountdownPrimitive } from '../barCountdown/barCountdownPrimitive';
 import { CountdownController } from '../barCountdown/countdownController';
+import { chartStatusLine, type ChartStatusLine } from '../legend/chartStatusLine';
 import { OhlcReadout } from '../legend/ohlcReadout';
 import { MarketStatusIndicator } from '../legend/marketStatusIndicator';
 import type { MarketStatus } from '../legend/marketStatus';
@@ -175,7 +176,7 @@ export class ChartController {
     this.candles.attachPrimitive(this.countdownPrimitive);
     this.candles.attachPrimitive(this.priceTags);
     this.candles.attachPrimitive(this.pointerReadout);
-    this.ohlcReadout = new OhlcReadout(this.chart, host, this.data, this.chartIndicators, () => this.symbol);
+    this.ohlcReadout = new OhlcReadout(host, this.data, this.chartIndicators.hoveredBar, () => this.symbol);
     this.marketStatus = new MarketStatusIndicator(this.ohlcReadout.container());
     // The price scale is painted on the library's own canvas, so its toggles
     // (A = auto scale, L = the price scale mode) are DOM buttons in the axis column, as
@@ -213,9 +214,8 @@ export class ChartController {
   }
 
   /**
-   * Set by the session hook: request a page of bars strictly older than this
-   * epoch-millisecond boundary. The hook owns the request; the chart only
-   * decides that the user revealed a gap worth filling.
+   * Set by the session hook: request a page of bars strictly older than this epoch-millisecond boundary.
+   * The hook owns the request; the chart only decides that the user revealed a gap worth filling.
    */
   get onOlderHistoryNeeded(): ((beforeMs: number) => void) | undefined {
     return this.olderHistory.onNeeded;
@@ -332,8 +332,8 @@ export class ChartController {
     return this.scales.drawnState();
   }
   /** The OHLC line and the indicator rows that the settings dialog's Status line tab controls. */
-  statusLine(): OhlcReadout {
-    return this.ohlcReadout;
+  statusLine(): ChartStatusLine {
+    return chartStatusLine(this.ohlcReadout, this.chartIndicators);
   }
   /** The price scale as it is drawn now: whether it fits the data itself, its spacing and its direction. */
   priceScaleState(): PriceScaleState {
