@@ -1,4 +1,4 @@
-import type { IChartApi } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { RenderBar } from '../bars/renderBar';
 import { HoveredBar } from '../legend/hoveredBar';
 import { IndicatorLegend, type IndicatorLegendCommands } from '../legend/indicatorLegend';
@@ -20,6 +20,8 @@ export interface ChartIndicatorsOptions {
   readonly bars: () => readonly RenderBar[];
   /** The price decimals the legend writes its values with. */
   readonly digits: () => number;
+  /** The chart's price series, handed to an indicator that pushes frames. */
+  readonly priceSeries: ISeriesApi<'Candlestick'>;
 }
 
 /**
@@ -43,7 +45,13 @@ export class ChartIndicators {
     this.legendTitle = options.legendTitle;
     this.hoveredBar = new HoveredBar(chart, options.bars);
     this.layer = new IndicatorLayer(chart);
-    this.runtime = new IndicatorRuntime(this.layer, options.definitions, options.bars, () => this.legend.refresh());
+    this.runtime = new IndicatorRuntime(
+      this.layer,
+      options.definitions,
+      options.bars,
+      () => this.legend.refresh(),
+      options.priceSeries,
+    );
     this.legend = new IndicatorLegend(
       host,
       {
