@@ -2,11 +2,13 @@
  * The indicators attached to one chart: the engine feeds them every bar they need and
  * never imports a concrete indicator or the registry they are registered in.
  */
+import type { ISeriesApi } from 'lightweight-charts';
 import type { RenderBar } from '../bars/renderBar';
 import type { SettingValues } from '../settings/settingInputs';
 import { resolveSettingValues } from '../settings/settingsSchema';
-import type { ChartIndicator, ChartIndicatorDefinition } from './indicatorContract';
+import type { ChartIndicator, ChartIndicatorDefinition, ChartIndicatorOutlet } from './indicatorContract';
 import { indicatorDisplayOf, indicatorSettingsSchema } from './indicatorDisplaySettings';
+import type { IndicatorFrame } from './indicatorFrame';
 import type { IndicatorLayer } from './indicatorLayer';
 
 export interface AttachedIndicatorState {
@@ -34,6 +36,7 @@ export class IndicatorRuntime {
     private readonly bars: () => readonly RenderBar[],
     /** Called after the attached indicators or the values they draw changed, so the legend follows. */
     private readonly changed: () => void,
+    private readonly priceSeries: ISeriesApi<'Candlestick'>,
   ) {}
 
   /**
@@ -55,6 +58,7 @@ export class IndicatorRuntime {
       hidden: false,
     };
     this.attached.set(instanceId, entry);
+    entry.indicator.connect?.(this.outletOf(instanceId, entry));
     this.reload(instanceId, entry);
     this.changed();
     return true;
@@ -90,6 +94,7 @@ export class IndicatorRuntime {
       return;
     }
     entry.hidden = hidden;
+    entry.indicator.setHidden?.(hidden);
     this.layer.setHidden(instanceId, hidden);
     this.changed();
   }
@@ -144,9 +149,35 @@ export class IndicatorRuntime {
     }
   }
 
+  /** What `instanceId` pushes frames through; it stops drawing once this entry is detached or replaced. */
+  private outletOf(instanceId: string, entry: AttachedIndicator): ChartIndicatorOutlet {
+    return {
+      showFrame: (frame) => {
+        this.drawWhileAttached(instanceId, entry, () => this.showFrameOf(instanceId, entry, frame));
+      },
+      updateFrame: (frame) => {
+        this.drawWhileAttached(instanceId, entry, () => this.layer.update(instanceId, frame));
+      },
+      priceSeries: this.priceSeries,
+    };
+  }
+
+  /** Draws a frame an indicator handed over, unless that indicator has been detached or replaced. */
+  private drawWhileAttached(instanceId: string, entry: AttachedIndicator, draw: () => void): void {
+    if (this.attached.get(instanceId) !== entry) {
+      return;
+    }
+    draw();
+    this.changed();
+  }
+
   /** Loads the whole history into `instanceId` and draws the frame that comes back, in the indicator's pane. */
   private reload(instanceId: string, entry: AttachedIndicator): void {
-    const frame = entry.indicator.load(this.bars(), entry.settings);
+    this.showFrameOf(instanceId, entry, entry.indicator.load(this.bars(), entry.settings));
+  }
+
+  /** Draws a whole frame in the indicator's pane. */
+  private showFrameOf(instanceId: string, entry: AttachedIndicator, frame: IndicatorFrame): void {
     this.layer.show(instanceId, frame, entry.definition.pane, {
       priceLabelsVisible: indicatorDisplayOf(entry.settings).labelsOnPriceScale,
       paneHeight: entry.paneHeight,

@@ -118,6 +118,7 @@ export class ChartController {
       legendTitle: indicatorLegendTitle,
       bars: () => this.bars,
       digits: () => this.data.pricePrecision,
+      priceSeries: this.candles,
     });
     this.indicatorLayer = this.chartIndicators.layer;
     this.indicators = this.chartIndicators.runtime;
