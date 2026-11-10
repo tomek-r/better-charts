@@ -44,6 +44,7 @@ const LOW_LABEL = 'L ';
 const CLOSE_LABEL = 'C ';
 const VOLUME_LABEL = 'Vol ';
 const DAY_LABEL = 'Day ';
+const BAR_LABEL = 'Bar ';
 
 function labelOf(text: string): LegendLabel {
   return { kind: 'label', text };
@@ -113,7 +114,7 @@ function segmentsOf(view: OhlcLegendView): LegendSegment[] {
     groups.push(...priceGroups(bar, view.digits, view.valueColor));
   }
   if (view.barChange !== null) {
-    groups.push([valueOf(CHANGE_CLASS, view.barChange, view.valueColor)]);
+    groups.push([labelOf(BAR_LABEL), valueOf(CHANGE_CLASS, view.barChange, view.valueColor)]);
   }
   if (view.volume !== null) {
     groups.push([labelOf(VOLUME_LABEL), valueOf(VOLUME_VALUE_CLASS, view.volume, view.valueColor)]);

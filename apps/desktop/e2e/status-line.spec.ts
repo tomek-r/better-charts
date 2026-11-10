@@ -83,32 +83,32 @@ async function openStatusLineTab(page: Page): Promise<Locator> {
   return openChartSettingsTab(page, 'Status line');
 }
 
-/** The left edge and width of a value on screen, so two values' gaps compare. */
+/** The left edge and width of a legend piece on screen, so the gaps between two pieces compare. */
 type ValueBox = {
   readonly x: number;
   readonly width: number;
 };
 
-/** Measures every value of a values locator in order. */
-async function valueBoxes(values: Locator): Promise<ValueBox[]> {
-  const valueCount = await values.count();
+/** Measures the given legend pieces in order. */
+async function valueBoxes(pieces: readonly Locator[]): Promise<ValueBox[]> {
   const boxes: ValueBox[] = [];
-  for (let index = 0; index < valueCount; index += 1) {
-    const box = await values.nth(index).boundingBox();
+  for (const piece of pieces) {
+    const box = await piece.boundingBox();
     if (box === null) {
-      throw new Error('value not laid out');
+      throw new Error('legend piece not laid out');
     }
     boxes.push({ x: box.x, width: box.width });
   }
   return boxes;
 }
 
-/** Asserts that adjacent values leave at least the expected gap between them. */
-function expectGapBetweenAdjacentValues(boxes: readonly ValueBox[]): void {
+/** Asserts that every neighbouring pair leaves the same gap between them, within a pixel of rounding. */
+function expectEqualGaps(boxes: readonly ValueBox[]): void {
   let previous: ValueBox | undefined;
   for (const box of boxes) {
     if (previous !== undefined) {
-      expect(box.x - (previous.x + previous.width)).toBeGreaterThanOrEqual(VALUE_GAP_PX - 1);
+      const gap = box.x - (previous.x + previous.width);
+      expect(Math.abs(gap - VALUE_GAP_PX)).toBeLessThanOrEqual(1);
     }
     previous = box;
   }
@@ -192,6 +192,13 @@ test('the default OHLC line reads the volume and a change beside the prices', as
   await openChart(page);
   await expect(chartLegend(page)).toContainText('Vol ');
   expect(await changeSpans(page).count()).toBeGreaterThanOrEqual(1);
+  expectNoErrors(collected);
+});
+
+test('the bar change reads after a Bar label, as Vol and Day do', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  await openChart(page);
+  await expect(chartLegend(page)).toContainText(/Bar [+−]\d/);
   expectNoErrors(collected);
 });
 
@@ -285,7 +292,7 @@ test('the last day change appears once an older page brings in the previous brok
   expectNoErrors(collected);
 });
 
-test('adjacent indicator values keep a gap between them', async ({ page }) => {
+test('the title and every indicator value sit the same gap apart', async ({ page }) => {
   const collected = await gotoWithStub(page);
   await openChart(page);
   const search = await openIndicators(page);
@@ -294,6 +301,6 @@ test('adjacent indicator values keep a gap between them', async ({ page }) => {
   await expect(indicatorsDialog(page)).toBeHidden();
   const values = indicatorValues(page);
   await expect(values).toHaveCount(3);
-  expectGapBetweenAdjacentValues(await valueBoxes(values));
+  expectEqualGaps(await valueBoxes([indicatorTitle(page), values.nth(0), values.nth(1), values.nth(2)]));
   expectNoErrors(collected);
 });
