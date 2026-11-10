@@ -25,6 +25,9 @@ import type { TickProfileRequestQueue } from '../requests/tickProfileRequestQueu
 import { fixedRangeProfilePoints } from './fixedRangeProfilePoints';
 import { boundaryAtX, drawHandles, handleXsFor, outsidePane, type HandleEdges } from './handles';
 
+/** Bar times arrive in epoch seconds; the viewport maps epoch milliseconds. */
+const MS_PER_SECOND = 1000;
+
 /** Whether the point lies in a rectangle the last paint reported; an unreported edge means nothing was painted. */
 function isInsideReportedArea(
   x: number,
@@ -258,7 +261,7 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
     // The histogram first, isolated so its style does not leak, then the handles.
     const handles = this.handleXs(placed);
     ctx.save();
-    drawFixedRangeProfile(ctx, viewport, this.state, this.settings.appearance, handles);
+    drawFixedRangeProfile(ctx, viewport, this.state, this.settings.appearance, handles, this.newestBarX());
     ctx.restore();
     // Veil the histogram but not the handles, which stay crisp; the loader goes on top of both.
     drawFixedRangeProfileLoadingWash(ctx, viewport, this.state, handles);
@@ -297,6 +300,12 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
   dispose(): void {
     this.requester.cancelRequest();
     this.requester.dispose();
+  }
+
+  /** The pane x of the newest loaded bar, where Extend Right reaches; undefined while no bars are loaded. */
+  private newestBarX(): number | undefined {
+    const newestBar = this.host.barSeries.bars.at(-1);
+    return newestBar === undefined ? undefined : this.host.geometry.timeToX(newestBar.time * MS_PER_SECOND);
   }
 
   /** Records the window and the timeframe whose bars judge whether it may still gain ticks. */

@@ -12,6 +12,9 @@ import { DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE, type FixedRangeProfileAppearanc
 // Level lines keep the TAP look: same alpha.
 const LEVEL_ALPHA = 0.95;
 
+// A bar's right edge is its centre plus half a bar slot.
+const HALF_BAR = 0.5;
+
 const BAR_LABEL_COLOR = palette.muted;
 /** A profile whose history starts inside the range must not look complete. */
 const BAR_LABEL_PARTIAL_COLOR = palette.warnText;
@@ -35,10 +38,22 @@ function levelY(raw: string, viewport: RenderViewport): number | undefined {
   return viewport.priceToY(price);
 }
 
-/** The horizontal span a level line covers: from the range start to the pane edge or to the range end. */
+/** The horizontal span a level line covers: from the range start to the newest bar or to the range end. */
 interface LevelSpan {
   readonly startX: number;
   readonly endX: number;
+}
+
+/**
+ * Where Extend Right reaches: the right edge of the newest bar, so the box covers it whole, unless the range
+ * already ends after it.
+ */
+function extendedRightX(endX: number, newestBarX: number | undefined, barWidth: number): number {
+  if (newestBarX === undefined || !Number.isFinite(newestBarX)) {
+    return endX;
+  }
+  const newestBarRightX = newestBarX + barWidth * HALF_BAR;
+  return Number.isFinite(newestBarRightX) ? Math.max(endX, newestBarRightX) : endX;
 }
 
 /**
@@ -72,7 +87,7 @@ function drawLevelLines(
   }
 }
 
-/** The painted histogram box: the range box horizontally, the rows' price extent vertically. */
+/** The painted histogram box: from the range's left edge to where Extend Right reaches, the rows' extent vertically. */
 interface HistogramBox {
   readonly left: number;
   readonly right: number;
@@ -134,7 +149,7 @@ function drawBarTimeframeLabel(
  * The profile of the drawn range. The bars hang from the anchor line, the range start (placement left) or the range
  * end (placement right); Total and Delta grow inward, Up/Down mirrors around the line so one side leaves the range.
  * Everything is clipped to the pane only. `handles` gives the end x, which is otherwise the end of the requested
- * range.
+ * range; `newestBarX` is the centre x of the newest loaded bar, whose right edge is where Extend Right reaches.
  */
 export function drawFixedRangeProfile(
   ctx: CanvasRenderingContext2D,
@@ -142,6 +157,7 @@ export function drawFixedRangeProfile(
   state: FixedRangeProfileState,
   appearance: FixedRangeProfileAppearance = DEFAULT_FIXED_RANGE_PROFILE_APPEARANCE,
   handles?: HandleEdges,
+  newestBarX?: number,
 ): void {
   const range = state.range;
   const profile = state.profile;
@@ -157,6 +173,7 @@ export function drawFixedRangeProfile(
     state.hit = {};
     return;
   }
+  const rightX = appearance.extendRight ? extendedRightX(endX, newestBarX, viewport.barWidth) : endX;
   const layout = layoutProfileBars(profile, viewport, appearance, Math.max(0, endX - startX));
   const hit: FixedRangeProfileState['hit'] = {
     anchorX,
@@ -170,7 +187,7 @@ export function drawFixedRangeProfile(
   ctx.beginPath();
   ctx.rect(x, viewport.chartRect.y, width, viewport.chartRect.height);
   ctx.clip();
-  const box = histogramBoxOf(layout, appearance.histogramBoxColor, handles?.fromX ?? startX, endX);
+  const box = histogramBoxOf(layout, appearance.histogramBoxColor, handles?.fromX ?? startX, rightX);
   if (box !== undefined) {
     drawHistogramBox(ctx, box, appearance.histogramBoxColor);
     Object.assign(hit, { boxLeft: box.left, boxRight: box.right, boxTop: box.top, boxBottom: box.bottom });
@@ -195,9 +212,8 @@ export function drawFixedRangeProfile(
   }
   hit.valueLabelX = valueLabels.textX;
   hit.valueLabelAlign = valueLabels.textAlign;
-  const lineEndX = appearance.extendRight ? x + width : endX;
-  if (Number.isFinite(lineEndX)) {
-    drawLevelLines(ctx, viewport, profile, appearance, { startX, endX: lineEndX }, hit);
+  if (Number.isFinite(rightX)) {
+    drawLevelLines(ctx, viewport, profile, appearance, { startX, endX: rightX }, hit);
   }
   if (profile.source === 'bars' && profile.barTimeframe) {
     drawBarTimeframeLabel(ctx, viewport, startX, profile.barTimeframe, profile.coveredFromMs);
