@@ -103,7 +103,7 @@ export class ChartHistory {
     // pane empty when a paged series handed its index to a shorter one.
     const preserved = previousAnchor !== null && view.restoreVisibleAnchor(previousAnchor, previousSpacing);
     barsChanged();
-    indicators.historyChanged();
+    indicators.historyReplaced();
     // The carried-over position can sit deeper than this window reaches, which
     // leaves space before the oldest bar. Filling it is a page request, not a
     // nudge of the viewport: the range subscription may not notify for a restored

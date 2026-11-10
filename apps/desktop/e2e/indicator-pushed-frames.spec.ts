@@ -11,6 +11,9 @@ const DEFINITION_ID = 'pushed';
 /** Instance the tests attach under; the runtime keys everything by instance. */
 const INSTANCE_ID = 'pushed-instance';
 
+/** Bars an older page adds in the tests that exercise the older-page path. */
+const OLDER_PAGE_BARS = 5;
+
 /** A layer call recorded by the fake layer, as `[method, instanceId, value]`. */
 type LayerCall = [method: string, instanceId: string, value: number | boolean];
 
@@ -34,12 +37,15 @@ type IndicatorOutlet = {
 type PushedFramesWindow = {
   __layerCalls: LayerCall[];
   __hiddenCalls: boolean[];
+  __indicatorCalls: string[];
   __changedCount: number;
   __outlets: IndicatorOutlet[];
   __sentinel: unknown;
   __attach(instanceId: string): void;
   __detach(instanceId: string): void;
   __setHidden(instanceId: string, hidden: boolean): void;
+  __historyReplaced(): void;
+  __olderBarsAdded(added: number): void;
   __pushFrame(outletIndex: number, kind: PushedFrameKind): void;
 };
 
@@ -62,6 +68,7 @@ async function gotoWithPushedFrames(page: Page): Promise<void> {
       const emptyFrame = { plots: [], bars: [] };
       pageWindow.__layerCalls = [];
       pageWindow.__hiddenCalls = [];
+      pageWindow.__indicatorCalls = [];
       pageWindow.__changedCount = 0;
       pageWindow.__outlets = [];
       pageWindow.__sentinel = priceSeries;
@@ -82,6 +89,7 @@ async function gotoWithPushedFrames(page: Page): Promise<void> {
       };
       const indicatorClass = class {
         load(): unknown {
+          pageWindow.__indicatorCalls.push('load');
           return emptyFrame;
         }
         update(): unknown {
@@ -92,6 +100,9 @@ async function gotoWithPushedFrames(page: Page): Promise<void> {
         }
         setHidden(hidden: boolean): void {
           pageWindow.__hiddenCalls.push(hidden);
+        }
+        historyReplaced(): void {
+          pageWindow.__indicatorCalls.push('historyReplaced');
         }
       };
 
@@ -110,6 +121,8 @@ async function gotoWithPushedFrames(page: Page): Promise<void> {
         attach(instanceId: string, definitionId: string, stored: Readonly<Record<string, never>>): boolean;
         detach(instanceId: string): void;
         setHidden(instanceId: string, hidden: boolean): void;
+        historyReplaced(): void;
+        olderBarsAdded(added: number): number;
       };
 
       pageWindow.__attach = (instanceId: string) => {
@@ -120,6 +133,12 @@ async function gotoWithPushedFrames(page: Page): Promise<void> {
       };
       pageWindow.__setHidden = (instanceId: string, hidden: boolean) => {
         seam.setHidden(instanceId, hidden);
+      };
+      pageWindow.__historyReplaced = () => {
+        seam.historyReplaced();
+      };
+      pageWindow.__olderBarsAdded = (added: number) => {
+        seam.olderBarsAdded(added);
       };
       pageWindow.__pushFrame = (outletIndex: number, kind: PushedFrameKind) => {
         const frame: PushedFrame = { plots: [{ line: [1] }], bars: [] };
@@ -164,6 +183,25 @@ async function setInstanceHidden(page: Page, hidden: boolean): Promise<void> {
     },
     { instanceId: INSTANCE_ID, nextHidden: hidden },
   );
+}
+
+/** Tells the runtime that a whole new history replaced the series. */
+async function replaceHistory(page: Page): Promise<void> {
+  await page.evaluate(() => (window as unknown as PushedFramesWindow).__historyReplaced());
+}
+
+/** Widens the history by an older page of `added` bars through the runtime. */
+async function addOlderBars(page: Page, added: number): Promise<void> {
+  await page.evaluate((count) => (window as unknown as PushedFramesWindow).__olderBarsAdded(count), added);
+}
+
+/** The calls the fake indicator recorded around `action`, from a clean slate: attach loads it already. */
+async function indicatorCallsAfter(page: Page, action: (target: Page) => Promise<void>): Promise<string[]> {
+  await page.evaluate(() => {
+    (window as unknown as PushedFramesWindow).__indicatorCalls.length = 0;
+  });
+  await action(page);
+  return page.evaluate(() => (window as unknown as PushedFramesWindow).__indicatorCalls);
 }
 
 test('an indicator with an outlet pushes a whole frame and a live frame', async ({ page }) => {
@@ -230,4 +268,22 @@ test('hiding is forwarded to the indicator', async ({ page }) => {
   await setInstanceHidden(page, false);
 
   expect(await page.evaluate(() => (window as unknown as PushedFramesWindow).__hiddenCalls)).toEqual([true, false]);
+});
+
+test('a new history tells the indicator before it loads again', async ({ page }) => {
+  await gotoWithAttachedIndicator(page);
+
+  expect(await indicatorCallsAfter(page, replaceHistory)).toEqual(['historyReplaced', 'load']);
+});
+
+test('an older page loads the indicator again without telling it the history was replaced', async ({ page }) => {
+  await gotoWithAttachedIndicator(page);
+
+  expect(await indicatorCallsAfter(page, (target) => addOlderBars(target, OLDER_PAGE_BARS))).toEqual(['load']);
+});
+
+test('an empty older page neither loads nor tells the indicator anything', async ({ page }) => {
+  await gotoWithAttachedIndicator(page);
+
+  expect(await indicatorCallsAfter(page, (target) => addOlderBars(target, 0))).toEqual([]);
 });

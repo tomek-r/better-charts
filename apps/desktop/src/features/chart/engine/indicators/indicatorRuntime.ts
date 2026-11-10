@@ -99,7 +99,18 @@ export class IndicatorRuntime {
     this.changed();
   }
 
-  /** Loads every attached indicator again after a new history, symbol, timeframe or older page. */
+  /** A whole new history replaced the series: every attached indicator is told so, then loads again. */
+  historyReplaced(): void {
+    for (const entry of this.attached.values()) {
+      entry.indicator.historyReplaced?.();
+    }
+    this.historyChanged();
+  }
+
+  /**
+   * Loads every attached indicator again over the bars it holds now: after an older page, or after a new
+   * history once its indicators were told.
+   */
   historyChanged(): void {
     for (const [instanceId, entry] of this.attached) {
       this.reload(instanceId, entry);

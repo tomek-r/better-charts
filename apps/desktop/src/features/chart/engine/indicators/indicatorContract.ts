@@ -41,6 +41,12 @@ export interface ChartIndicator {
   connect?(outlet: ChartIndicatorOutlet): void;
   /** Told when the user hides or shows it, for an indicator that draws outside its frames. */
   setHidden?(hidden: boolean): void;
+  /**
+   * Told before the `load` that follows a whole new history — another symbol, another timeframe or a
+   * reconnect — and never for an older page: an indicator holding results computed for the old bars drops
+   * them here, so it never draws them on the new ones.
+   */
+  historyReplaced?(): void;
   /** Development builds only: a read-only view of the indicator's state for the e2e suite. */
   testApi?(): unknown;
 }
