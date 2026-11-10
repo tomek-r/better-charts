@@ -1,8 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openChartSettingsTab } from './helpers/chartSettingsDialog';
-import { attachSma } from './helpers/indicatorsDialog';
+import { attachSma, indicatorsDialog, listRows, openIndicators } from './helpers/indicatorsDialog';
 import { openChart } from './helpers/openChart';
-import { chartScopeKey, expectNoErrors, gotoWithStub } from './helpers/tauriStub';
+import { chartScopeKey, expectNoErrors, gotoWithStub, holdIdleCallbacks, windowCandles } from './helpers/tauriStub';
 import type { RenderBar } from '../src/features/chart/engine/bars/renderBar';
 import {
   barChangeReference,
@@ -29,6 +29,10 @@ const SECOND_DAY = 11 * DAY_SECONDS;
 const STUB_VOLUME = 120;
 const OHLC_VALUE_COUNT = 4;
 const RISING_BODY_COLOR = 'rgb(38, 166, 154)';
+const SAME_DAY_BARS = 20;
+const PREVIOUS_DAY_PAGE_BARS = 300;
+const VALUE_GAP_PX = 6;
+const BOLLINGER_SEARCH = 'bollinger';
 
 /** A bar of the stub's shape, flat and with one volume, so only the field a test reads varies. */
 function barOf(time: number, close: number): RenderBar {
@@ -77,6 +81,37 @@ async function openStatusLineTab(page: Page): Promise<Locator> {
   await gotoWithStub(page);
   await openChart(page);
   return openChartSettingsTab(page, 'Status line');
+}
+
+/** The left edge and width of a value on screen, so two values' gaps compare. */
+type ValueBox = {
+  readonly x: number;
+  readonly width: number;
+};
+
+/** Measures every value of a values locator in order. */
+async function valueBoxes(values: Locator): Promise<ValueBox[]> {
+  const valueCount = await values.count();
+  const boxes: ValueBox[] = [];
+  for (let index = 0; index < valueCount; index += 1) {
+    const box = await values.nth(index).boundingBox();
+    if (box === null) {
+      throw new Error('value not laid out');
+    }
+    boxes.push({ x: box.x, width: box.width });
+  }
+  return boxes;
+}
+
+/** Asserts that adjacent values leave at least the expected gap between them. */
+function expectGapBetweenAdjacentValues(boxes: readonly ValueBox[]): void {
+  let previous: ValueBox | undefined;
+  for (const box of boxes) {
+    if (previous !== undefined) {
+      expect(box.x - (previous.x + previous.width)).toBeGreaterThanOrEqual(VALUE_GAP_PX - 1);
+    }
+    previous = box;
+  }
 }
 
 test('the bar change reads in the price digits with the percent of its reference', () => {
@@ -228,5 +263,37 @@ test('unchecking Chart values clears the prices at once, and Cancel brings them 
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
   await expect(prices).toHaveCount(OHLC_VALUE_COUNT);
+  expectNoErrors(collected);
+});
+
+test('the last day change appears once an older page brings in the previous broker day', async ({ page }) => {
+  await holdIdleCallbacks(page);
+  const todayCandles = windowCandles(SAME_DAY_BARS);
+  const collected = await gotoWithStub(page, {
+    responses: {
+      get_market_snapshot: { symbol: SYMBOL, timeframe: 'M5', complete: true, candles: todayCandles },
+    },
+    historyByTimeframe: { M5: todayCandles },
+    olderHistoryPages: 1,
+    olderHistoryBars: PREVIOUS_DAY_PAGE_BARS,
+  });
+  // A window this short leaves space before its oldest bar, so the chart asks for the older page by itself.
+  await expect
+    .poll(() => page.evaluate(() => window.__chartTest?.data().length ?? 0))
+    .toBe(SAME_DAY_BARS + PREVIOUS_DAY_PAGE_BARS);
+  await expect(chartLegend(page)).toContainText('Day ');
+  expectNoErrors(collected);
+});
+
+test('adjacent indicator values keep a gap between them', async ({ page }) => {
+  const collected = await gotoWithStub(page);
+  await openChart(page);
+  const search = await openIndicators(page);
+  await search.fill(BOLLINGER_SEARCH);
+  await listRows(page).first().click();
+  await expect(indicatorsDialog(page)).toBeHidden();
+  const values = indicatorValues(page);
+  await expect(values).toHaveCount(3);
+  expectGapBetweenAdjacentValues(await valueBoxes(values));
   expectNoErrors(collected);
 });

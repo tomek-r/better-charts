@@ -132,7 +132,10 @@ export class ChartController {
       isDestroyed: () => this.removed,
       discardHeldCandles: () => this.liveCandleHold.discard(),
       barsChanged: () => this.afterBarsChanged(),
-      refreshOverlays: () => this.refreshOverlays(),
+      olderBarsAdded: () => {
+        this.ohlcReadout.refresh();
+        this.refreshOverlays();
+      },
     });
     const toolHost: ChartToolHostBase = {
       ...hostOptions,

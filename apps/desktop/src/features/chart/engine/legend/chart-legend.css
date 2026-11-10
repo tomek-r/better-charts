@@ -91,6 +91,11 @@
   background: var(--color-root);
 }
 
+/* Plot values sit apart, as the OHLC line's values do, so two numbers never read as one. */
+.chart-indicator-legend-value + .chart-indicator-legend-value {
+  margin-left: 6px;
+}
+
 /* A hidden indicator dims its words and keeps its buttons in sight, so Show is one click away. */
 .chart-indicator-legend-row[data-hidden='true'] .chart-indicator-legend-title,
 .chart-indicator-legend-row[data-hidden='true'] .chart-indicator-legend-values {

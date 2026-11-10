@@ -26,7 +26,8 @@ export interface ChartHistoryOptions {
   readonly discardHeldCandles: () => void;
   /** Told once the bars changed, so the readouts, overlays and tools catch up. */
   readonly barsChanged: () => void;
-  readonly refreshOverlays: () => void;
+  /** Told once a page of older bars was prepended: the last day change and the overlays read those bars too. */
+  readonly olderBarsAdded: () => void;
 }
 
 /**
@@ -46,7 +47,7 @@ export class ChartHistory {
       visibleRange: () => view.visibleRange(),
       prependBars: (candles) => indicators.olderBarsAdded(data.prepend(candles)),
       anchorAfterPrepend: (previous, added) => view.anchorAfterPrepend(previous, added),
-      refreshOverlays: options.refreshOverlays,
+      olderBarsAdded: options.olderBarsAdded,
     });
   }
 
