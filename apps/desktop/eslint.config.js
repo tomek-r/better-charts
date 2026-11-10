@@ -26,6 +26,7 @@ export default defineConfig(
       'target',
       'playwright-report',
       'test-results',
+      '.e2e-bundle',
       'src-tauri',
       'mql5',
       '.react-profiler',

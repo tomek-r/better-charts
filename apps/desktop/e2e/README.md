@@ -12,15 +12,17 @@ pnpm --filter better-charts exec playwright install chromium
 pnpm test:e2e
 ```
 
-Browser installation requires network access once. Playwright starts its own
-Vite on port 1421 (never reusing a running server, so it cannot collide with
-`pnpm tauri dev` on 1420). Traces are saved on failure. On busy
-machines, limit concurrency with `pnpm test:e2e --workers=2`.
+Browser installation requires network access once. Playwright builds the app
+with its dev test hooks and serves the bundle on port 1421, and starts its own
+Vite on 1423 for the specs listed in `SOURCE_MODULE_SPECS` (never reusing a
+running server, so neither collides with `pnpm tauri dev` on 1420). Traces are
+off; rerun a failing test with `--trace on`. On busy machines, limit
+concurrency with `pnpm test:e2e --workers=2`.
 
 Price-scale regressions also have a WebKit suite for the macOS desktop browser
 engine. It covers XBRUSD scale dragging, NAS100 logarithmic switching, and
 keeping manual ranges fixed during live bar updates. It starts its own Vite
-server on port 1421 to avoid reusing a desktop dev session.
+server on port 1422 to avoid reusing a desktop dev session.
 
 ```bash
 pnpm --filter better-charts exec playwright install webkit
