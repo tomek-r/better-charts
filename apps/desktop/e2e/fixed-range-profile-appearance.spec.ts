@@ -295,6 +295,14 @@ test('a level takes its own colour and dash', () => {
   ]);
 });
 
+test('painted level lines report the span they cover, and hidden ones report none', () => {
+  const { hit } = paint();
+  expect([hit.levelLeft, hit.levelRight]).toEqual([START_X, NEWEST_BAR_RIGHT_X]);
+
+  const hidden = paint({ 'poc.visible': false, 'vah.visible': false, 'val.visible': false }).hit;
+  expect([hidden.levelLeft, hidden.levelRight]).toEqual([undefined, undefined]);
+});
+
 test('without extend right the level lines stop at the range end', () => {
   for (const placement of ['Left', 'Right']) {
     const { lines } = paint({ extendRight: false, placement });

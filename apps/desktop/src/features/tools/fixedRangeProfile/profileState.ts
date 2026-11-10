@@ -21,6 +21,9 @@ export interface FixedRangeProfileState {
     pocY?: number;
     vahY?: number;
     valY?: number;
+    /** The x span the painted level lines cover; absent while no level line is painted. */
+    levelLeft?: number;
+    levelRight?: number;
     /** The painted histogram box; absent while nothing is painted for it. */
     boxLeft?: number;
     boxRight?: number;

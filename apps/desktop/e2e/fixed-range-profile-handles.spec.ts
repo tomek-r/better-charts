@@ -8,7 +8,8 @@ import { commitProfile, position } from './helpers/fixedRangeProfilePage';
  */
 
 /** Bar slots of the default range placed by `select`: the band covers slots 2 to 6. */
-const OUTSIDE_BAND_SLOT = 9;
+// Left of the band, where neither the bars nor the level lines Extend Right draws rightwards reach.
+const OUTSIDE_BAND_SLOT = 0;
 const INSIDE_BAND_SLOT = 4;
 
 async function handlesShown(page: Page) {

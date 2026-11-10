@@ -7,7 +7,8 @@ import { TickProfileRequestQueue } from '../src/features/tools/fixedRangeProfile
 
 /**
  * What a press selects: the handles, the band between them, and whatever the last paint reported outside the
- * band, the histogram bars and the values column. The fake host's handles sit at x 20 and 60 (slots 2 and 6).
+ * band, the histogram bars, the values column, the histogram box and the level lines. The fake host's handles sit
+ * at x 20 and 60 (slots 2 and 6).
  */
 
 const WINDOW = { fromMs: 1_140_000, endMs: 1_440_000 };
@@ -15,6 +16,8 @@ const LAST_SLOT_OPEN_MS = 1_380_000;
 const BAND_X = 40;
 /** Left of the start handle by more than the handle's reach, so only a painted extent can contain it. */
 const OUTSIDE_X = 10;
+/** Right of the end handle by more than its reach, where only Extend Right paints. */
+const EXTENDED_X = 100;
 const INSIDE_Y = 150;
 const BELOW_Y = 250;
 
@@ -57,4 +60,19 @@ test('a label of the values column left of the start line is contained, and no c
 test('a column half outside the band, centred on the start line, is contained on its outside half', () => {
   const column = { valuesColumnLeft: 4, valuesColumnRight: 36, valuesColumnTop: 120, valuesColumnBottom: 180 };
   expect(drawingThatPainted(column).contains(OUTSIDE_X, INSIDE_Y)).toBe(true);
+});
+
+test('a press on the painted histogram box past the range end selects the profile', () => {
+  const box = { boxLeft: 20, boxRight: 120, boxTop: 100, boxBottom: 200 };
+  expect(drawingThatPainted(box).contains(EXTENDED_X, INSIDE_Y)).toBe(true);
+  expect(drawingThatPainted(box).contains(EXTENDED_X, BELOW_Y)).toBe(false);
+  expect(drawingThatPainted({}).contains(EXTENDED_X, INSIDE_Y)).toBe(false);
+});
+
+test('a press on a level line past the range end selects the profile, beside it does not', () => {
+  const line = { pocY: INSIDE_Y, levelLeft: 20, levelRight: 120 };
+  expect(drawingThatPainted(line).contains(EXTENDED_X, INSIDE_Y + 3)).toBe(true);
+  expect(drawingThatPainted(line).contains(EXTENDED_X, INSIDE_Y + 10)).toBe(false);
+  // Past the line's right end at 120, and right of the band's reach too.
+  expect(drawingThatPainted(line).contains(130, INSIDE_Y)).toBe(false);
 });

@@ -58,7 +58,8 @@ function extendedRightX(endX: number, newestBarX: number | undefined, barWidth: 
 
 /**
  * Level lines of the TOTAL profile (never the per-mode bidLevels/askLevels sets), painted after the rows.
- * A hidden level paints nothing and reports no y. No text labels (owner).
+ * A hidden level paints nothing and reports no y. No text labels (owner). A frame without any painted line
+ * reports no span.
  */
 function drawLevelLines(
   ctx: CanvasRenderingContext2D,
@@ -69,6 +70,7 @@ function drawLevelLines(
   hit: FixedRangeProfileState['hit'],
 ): void {
   ctx.globalAlpha = LEVEL_ALPHA;
+  let painted = false;
   for (const key of LEVEL_KEYS) {
     const style = appearance[key];
     const lineY = style.visible ? levelY(profile[key], viewport) : undefined;
@@ -84,6 +86,11 @@ function drawLevelLines(
     ctx.stroke();
     ctx.setLineDash([]);
     hit[`${key}Y`] = lineY;
+    painted = true;
+  }
+  if (painted) {
+    hit.levelLeft = span.startX;
+    hit.levelRight = span.endX;
   }
 }
 

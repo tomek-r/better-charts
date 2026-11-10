@@ -28,6 +28,9 @@ import { boundaryAtX, drawHandles, handleXsFor, outsidePane, type HandleEdges } 
 /** Bar times arrive in epoch seconds; the viewport maps epoch milliseconds. */
 const MS_PER_SECOND = 1000;
 
+/** How far above or below a painted level line a press still selects the profile. */
+const LEVEL_LINE_HIT_PX = 4;
+
 /** Whether the point lies in a rectangle the last paint reported; an unreported edge means nothing was painted. */
 function isInsideReportedArea(
   x: number,
@@ -46,7 +49,20 @@ function isInsideReportedArea(
   );
 }
 
-/** Whether the point is on the painted bars or the painted value labels, wherever they reach. */
+/** Whether the point is on or beside a painted level line (POC/VAH/VAL), within the span the lines cover. */
+function nearPaintedLevelLine(hit: FixedRangeProfileState['hit'], x: number, y: number): boolean {
+  const { levelLeft, levelRight } = hit;
+  if (levelLeft === undefined || levelRight === undefined || x < levelLeft || x > levelRight) {
+    return false;
+  }
+  const lineYs = [hit.pocY, hit.vahY, hit.valY];
+  return lineYs.some((lineY) => lineY !== undefined && Math.abs(y - lineY) <= LEVEL_LINE_HIT_PX);
+}
+
+/**
+ * Whether the point is on the painted bars, the painted value labels, the painted histogram box or a painted
+ * level line, wherever Extend Right takes them.
+ */
 function paintedAreaContains(hit: FixedRangeProfileState['hit'], x: number, y: number): boolean {
   return (
     isInsideReportedArea(x, y, [hit.profileLeft, hit.profileRight, hit.profileTop, hit.profileBottom]) ||
@@ -55,7 +71,9 @@ function paintedAreaContains(hit: FixedRangeProfileState['hit'], x: number, y: n
       hit.valuesColumnRight,
       hit.valuesColumnTop,
       hit.valuesColumnBottom,
-    ])
+    ]) ||
+    isInsideReportedArea(x, y, [hit.boxLeft, hit.boxRight, hit.boxTop, hit.boxBottom]) ||
+    nearPaintedLevelLine(hit, x, y)
   );
 }
 
@@ -172,7 +190,8 @@ export class FixedRangeProfileDrawing implements ChartDrawingShape {
 
   /**
    * Whether the pane point selects this profile: on a handle, between the handles, on the painted bars (which
-   * may leave the band) or on the painted value labels.
+   * may leave the band), on the painted value labels, in the painted histogram box or beside a painted level
+   * line, wherever Extend Right takes the box and the lines.
    */
   contains(x: number, y: number): boolean {
     const placed = this.placedRange();
