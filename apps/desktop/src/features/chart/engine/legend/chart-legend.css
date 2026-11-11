@@ -71,10 +71,12 @@
 
 .chart-indicator-legend-row {
   --indicator-legend-row-height: 22px;
+  --indicator-legend-item-gap: 4px;
+  --indicator-legend-value-gap: 6px;
   pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--indicator-legend-item-gap);
   /* One height with or without the hover buttons: the 20 px buttons plus the 1 px border on each side. */
   height: var(--indicator-legend-row-height);
   padding: 0 4px;
@@ -89,6 +91,14 @@
 .chart-indicator-legend-row:focus-within {
   border-color: var(--color-border);
   background: var(--color-root);
+}
+
+/* The title and every value sit one gap apart; the separator space stays in the text for readers but is not
+   rendered in a flex row. */
+.chart-indicator-legend-values {
+  display: inline-flex;
+  gap: var(--indicator-legend-value-gap);
+  margin-left: calc(var(--indicator-legend-value-gap) - var(--indicator-legend-item-gap));
 }
 
 /* A hidden indicator dims its words and keeps its buttons in sight, so Show is one click away. */

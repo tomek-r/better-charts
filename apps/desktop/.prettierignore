@@ -3,6 +3,7 @@ node_modules
 target
 test-results
 playwright-report
+.e2e-bundle
 src-tauri
 mql5
 *.md

@@ -20,6 +20,10 @@ const { chartRect } = viewport;
 // The harness maps bar i to x = 41 + 10 * i - 7 + 4: mid-bar 3 is x 73, bar 8 is x 118.
 const START_X = 73;
 const END_X = 118;
+// Bar 9 sits at x 128, past the range end on bar 8.
+const NEWEST_BAR_X = 128;
+// The newest bar's right edge: its centre plus half the 8 px bar width.
+const NEWEST_BAR_RIGHT_X = 132;
 const RANGE = { fromMs: 1_000 + 3.5 * 60_000, toMs: 1_000 + 8 * 60_000 };
 const UP_COLOR = '#26a69a';
 const DOWN_COLOR = '#f7525f';
@@ -51,12 +55,12 @@ interface Painted {
 }
 
 /** Paints the profile under the given stored settings; no settings paints with the defaults. */
-function paint(stored?: SettingValues): Painted {
+function paint(stored?: SettingValues, newestBarX = NEWEST_BAR_X): Painted {
   const state: FixedRangeProfileState = { range: RANGE, profile: { ...PROFILE, ...LEVELS }, hit: {} };
   const ops: PaintOp[] = [];
   const ctx = createRecordingCtx((op) => ops.push(op), { recordClip: true });
   const { appearance } = readFixedRangeProfileSettings(stored);
-  drawFixedRangeProfile(ctx, renderArgsFor(viewport).viewport, state, appearance);
+  drawFixedRangeProfile(ctx, renderArgsFor(viewport).viewport, state, appearance, undefined, newestBarX);
   return {
     ops,
     hit: state.hit,
@@ -85,7 +89,7 @@ test('no stored settings paint exactly what the defaults paint, and what the too
     ['#f2f5fa', [6, 6]],
   ]);
   for (const line of defaults.lines) {
-    expect([line.minX, line.maxX]).toEqual([START_X, chartRect.x + chartRect.width]);
+    expect([line.minX, line.maxX]).toEqual([START_X, NEWEST_BAR_RIGHT_X]);
   }
 });
 
@@ -150,17 +154,17 @@ test('the histogram box takes a stored #rrggbbaa colour and falls back to the de
   );
 });
 
-test('the histogram box spans the range box and the bins, and is painted first under the bars', () => {
+test('under Extend Right the histogram box reaches the newest bar and is painted first under the bars', () => {
   const { ops, hit } = paint({ 'histogramBox.color': palette.raised });
   expect(hit.boxLeft).toBe(START_X);
-  expect(hit.boxRight).toBe(END_X);
+  expect(hit.boxRight).toBe(NEWEST_BAR_RIGHT_X);
   expect(hit.boxTop).toBe(viewport.priceToY(170));
   expect(hit.boxBottom).toBe(viewport.priceToY(140));
   const boxOps = ops.filter((op) => op.kind === 'fillRect' && op.style === palette.raised);
   expect(boxOps).toHaveLength(1);
   expect([boxOps[0].minX, boxOps[0].maxX, boxOps[0].minY, boxOps[0].maxY]).toEqual([
     START_X,
-    END_X,
+    NEWEST_BAR_RIGHT_X,
     hit.boxTop,
     hit.boxBottom,
   ]);
@@ -291,6 +295,14 @@ test('a level takes its own colour and dash', () => {
   ]);
 });
 
+test('painted level lines report the span they cover, and hidden ones report none', () => {
+  const { hit } = paint();
+  expect([hit.levelLeft, hit.levelRight]).toEqual([START_X, NEWEST_BAR_RIGHT_X]);
+
+  const hidden = paint({ 'poc.visible': false, 'vah.visible': false, 'val.visible': false }).hit;
+  expect([hidden.levelLeft, hidden.levelRight]).toEqual([undefined, undefined]);
+});
+
 test('without extend right the level lines stop at the range end', () => {
   for (const placement of ['Left', 'Right']) {
     const { lines } = paint({ extendRight: false, placement });
@@ -299,6 +311,21 @@ test('without extend right the level lines stop at the range end', () => {
       expect([line.minX, line.maxX]).toEqual([START_X, END_X]);
     }
   }
+});
+
+test('without extend right the histogram box stops at the range end', () => {
+  const { hit } = paint({ extendRight: false, 'histogramBox.color': palette.raised });
+  expect([hit.boxLeft, hit.boxRight]).toEqual([START_X, END_X]);
+});
+
+test('a newest bar before the range end leaves the lines and the box at the range end', () => {
+  // Bar 6 sits at x 98, inside a range that ends on bar 8.
+  const { lines, hit } = paint({ 'histogramBox.color': palette.raised }, 98);
+  expect(lines).toHaveLength(3);
+  for (const line of lines) {
+    expect(line.maxX).toBe(END_X);
+  }
+  expect(hit.boxRight).toBe(END_X);
 });
 
 // Right is set explicitly: the default is Center, and these tests measure the column right of the anchor line.

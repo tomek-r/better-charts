@@ -40,7 +40,8 @@ import { formatDayMonth, MS_PER_DAY, STUB_NOW } from './helpers/stubClock';
  *    with i located by binary search over bar times (interpolate inside, clamp outside);
  *  - mirrored rows around the anchor (BID left / ASK right), ONE common weight denominator;
  *  - POC row alpha 1 vs 0.75 for every other row, whole paint clipped to chartRect;
- *  - level lines from the range start (anchorX) to the chartRect's right edge, painted AFTER the rows — POC solid, VAH/VAL dashed [6, 6]; NO text labels;
+ *  - level lines from the range start (anchorX) to the newest bar, or to the range end when that comes later,
+ *    painted AFTER the rows — POC solid, VAH/VAL dashed [6, 6]; NO text labels;
  *  - null range / missing profile / empty bins → zero paint ops and an empty `hit`.
  */
 
@@ -64,6 +65,10 @@ const bars = Array.from({ length: 10 }, (_, i) => ({
 // Mid-bar 3 → fractional index 3.5 → anchorX = 41 + 3.5*10 - 7 + 8/2 = 73.
 const RANGE_FROM = bars[3].time + 30_000;
 const ANCHOR_X = 73;
+// Bar 9 centre: 41 + 90 - 7 + 4 = 128, past the range end on bar 8 (118).
+const NEWEST_BAR_X = 128;
+// The newest bar's right edge: its centre plus half the 8 px bar width.
+const NEWEST_BAR_RIGHT_X = 132;
 
 const BID_COLOR = '#f7525f';
 const ASK_COLOR = '#26a69a';
@@ -122,6 +127,7 @@ function paint(
   profile?: ProfileResult,
   vp: TestViewport = viewport,
   range?: FixedRangeProfileState['range'],
+  newestBarX?: number,
 ): { ops: Op[]; state: FixedRangeProfileState } {
   const state = makeState(profile);
   if (range !== undefined) {
@@ -129,7 +135,7 @@ function paint(
   }
   const args = renderArgsFor(vp);
   const ops: Op[] = [];
-  drawFixedRangeProfile(recordInto(ops), args.viewport, state);
+  drawFixedRangeProfile(recordInto(ops), args.viewport, state, undefined, undefined, newestBarX);
   return { ops, state };
 }
 
@@ -228,10 +234,10 @@ test('bid rows paint #f7525f, ask rows #26a69a, nothing else', () => {
 });
 
 // ---------------------------------------------------------------------------
-// (c) Level lines run rangeStart(anchorX) → chartRect right edge — POC solid, VAH/VAL dashed; no text labels.
+// (c) Level lines run rangeStart(anchorX) → newest bar — POC solid, VAH/VAL dashed; no text labels.
 // ---------------------------------------------------------------------------
-test('level lines run from the range start (anchorX) to the chartRect right edge — POC solid, VAH/VAL dashed', () => {
-  const { ops, state } = paint(makeProfile(DEFAULT_BINS));
+test("level lines run from the range start (anchorX) to the newest bar's right edge — POC solid, VAH/VAL dashed", () => {
+  const { ops, state } = paint(makeProfile(DEFAULT_BINS), viewport, undefined, NEWEST_BAR_X);
   const lines = linesOf(ops);
   expect(lines).toHaveLength(3);
   // Fixture: the range starts at the anchor — lines begin at anchorX = 73.
@@ -239,7 +245,7 @@ test('level lines run from the range start (anchorX) to the chartRect right edge
   expect(anchorX).toBeCloseTo(ANCHOR_X, 9);
   for (const line of lines) {
     expect(line.minX).toBeCloseTo(anchorX, 9);
-    expect(line.maxX).toBe(chartRect.x + chartRect.width);
+    expect(line.maxX).toBe(NEWEST_BAR_RIGHT_X);
     // POC is solid; VAH/VAL keep the styled [6, 6] dash (owner).
     const isPoc = line.style === '#ffd200';
     expect(line.dashed).toBe(!isPoc);

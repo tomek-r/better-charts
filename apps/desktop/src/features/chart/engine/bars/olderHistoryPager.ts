@@ -12,7 +12,8 @@ export interface OlderHistoryHost {
   prependBars(candles: readonly Candle[]): number;
   /** Shifts the pane by the bars added so the visible bars do not move. */
   anchorAfterPrepend(previous: { from: number; to: number } | null, added: number): void;
-  refreshOverlays(): void;
+  /** Told once a page added bars, so whatever reads the whole series catches up. */
+  olderBarsAdded(): void;
 }
 
 /**
@@ -66,7 +67,7 @@ export class OlderHistoryPager {
     const added = this.host.prependBars(candles);
     if (added > 0) {
       this.host.anchorAfterPrepend(previous, added);
-      this.host.refreshOverlays();
+      this.host.olderBarsAdded();
     }
     // A short page ends this history, and so does a page that held nothing
     // older — which is also how a peer that ignored the anchor answers.

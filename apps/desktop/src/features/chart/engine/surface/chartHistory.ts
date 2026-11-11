@@ -26,7 +26,8 @@ export interface ChartHistoryOptions {
   readonly discardHeldCandles: () => void;
   /** Told once the bars changed, so the readouts, overlays and tools catch up. */
   readonly barsChanged: () => void;
-  readonly refreshOverlays: () => void;
+  /** Told once a page of older bars was prepended: the last day change and the overlays read those bars too. */
+  readonly olderBarsAdded: () => void;
 }
 
 /**
@@ -46,7 +47,7 @@ export class ChartHistory {
       visibleRange: () => view.visibleRange(),
       prependBars: (candles) => indicators.olderBarsAdded(data.prepend(candles)),
       anchorAfterPrepend: (previous, added) => view.anchorAfterPrepend(previous, added),
-      refreshOverlays: options.refreshOverlays,
+      olderBarsAdded: options.olderBarsAdded,
     });
   }
 
@@ -102,7 +103,7 @@ export class ChartHistory {
     // pane empty when a paged series handed its index to a shorter one.
     const preserved = previousAnchor !== null && view.restoreVisibleAnchor(previousAnchor, previousSpacing);
     barsChanged();
-    indicators.historyChanged();
+    indicators.historyReplaced();
     // The carried-over position can sit deeper than this window reaches, which
     // leaves space before the oldest bar. Filling it is a page request, not a
     // nudge of the viewport: the range subscription may not notify for a restored
