@@ -1,17 +1,11 @@
 import type { RenderBar } from '../bars/renderBar';
+import { formatCompactNumber } from '../../../../shared/compactNumber';
 
 const SECONDS_PER_DAY = 86_400;
 const PERCENT = 100;
 const PERCENT_DIGITS = 2;
-const VOLUME_DIGITS = 2;
-const VOLUME_UNIT = 1_000;
 const PLUS_SIGN = '+';
 const MINUS_SIGN = '\u2212';
-const VOLUME_STEPS = [
-  { size: 1_000_000_000, suffix: 'B' },
-  { size: 1_000_000, suffix: 'M' },
-  { size: VOLUME_UNIT, suffix: 'K' },
-] as const;
 
 function brokerDay(time: number): number {
   return Math.floor(time / SECONDS_PER_DAY);
@@ -31,12 +25,9 @@ export function formatPriceChange(close: number, reference: number, digits: numb
   return `${amount} (${signedValue(change, percent)}%)`;
 }
 
+/** The bar volume in the status line, in the compact volume form. */
 export function formatVolume(volume: number): string {
-  const step = VOLUME_STEPS.find((candidate) => volume >= candidate.size);
-  if (step === undefined) {
-    return String(volume);
-  }
-  return `${(volume / step.size).toFixed(VOLUME_DIGITS)}${step.suffix}`;
+  return formatCompactNumber(volume);
 }
 
 export function barChangeReference(bar: RenderBar, previous: RenderBar | undefined): number {

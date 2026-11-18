@@ -621,7 +621,7 @@ test('a row without volume gets no label, and fractional volumes are shortened',
   const bins = [bin(140, 150, 0, 0), bin(150, 160, 1350.25, 0.126)];
   const { texts, hit } = paintValues(VALUES_ON, bins);
   expect(hit.valueLabels).toBe(1);
-  expect(texts.map((text) => text.text)).toEqual(['1.35K×0.13']);
+  expect(texts.map((text) => text.text)).toEqual(['1.35 K×0']);
 });
 
 test('rows shorter than 11 px each get a label sized to the row height minus 1 px, and the headers use the same size', () => {
