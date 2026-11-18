@@ -123,10 +123,10 @@ test('a bar change against no reference shows the amount alone', () => {
   expect(formatPriceChange(0.5, 0, 2)).toBe('+0.50');
 });
 
-test('the volume shortens to two decimals once it reaches a thousand', () => {
+test('the volume shortens to at most two decimals and a spaced unit once it reaches a thousand', () => {
   expect(formatVolume(999)).toBe('999');
-  expect(formatVolume(1_234)).toBe('1.23K');
-  expect(formatVolume(4_500_000)).toBe('4.50M');
+  expect(formatVolume(1_234)).toBe('1.23 K');
+  expect(formatVolume(4_500_000)).toBe('4.5 M');
 });
 
 test('the bar change reference is the previous close, or the bar own open when it is the first', () => {
