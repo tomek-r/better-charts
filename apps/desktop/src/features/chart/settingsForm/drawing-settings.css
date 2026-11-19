@@ -21,6 +21,11 @@
   --drawing-settings-font-size: 14px;
   --drawing-settings-control-width: 200px;
   --drawing-settings-row-gap: 22px;
+  /* The Inputs tab: tighter rows, a narrower control column and a quiet caption for each group. */
+  --drawing-settings-input-control-width: 160px;
+  --drawing-settings-input-row-gap: 16px;
+  --drawing-settings-input-caption-gap: 18px;
+  --drawing-settings-input-group-gap: 28px;
   display: flex;
   flex-direction: column;
   gap: var(--drawing-settings-row-gap);
@@ -31,30 +36,139 @@
   font-size: 16px;
 }
 
-/* A field's label, control and tooltip join the group's grid directly. */
+/* The Defaults menu sits at the left of the footer; Cancel and OK keep the right. */
+.drawing-settings-defaults {
+  margin-right: auto;
+}
+
+/* One row: the menu's surface, with the room its single row asks for. */
+.drawing-settings-defaults-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+}
+
+.drawing-settings-defaults-menu .popup-menu-row {
+  white-space: nowrap;
+}
+
+/* A field's label, control cell and tooltip join the group's grid directly. */
 .drawing-settings-field {
   display: contents;
 }
 
+/* A control and the info mark that follows it, kept on one line of the control column. */
+.drawing-settings-control-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The cell always holds the control column, even for an input that shows no title. */
+.drawing-settings-field > .drawing-settings-control-cell {
+  grid-column: 2;
+}
+
+/* The control takes the cell's width and shares it with the mark, whichever control it is. */
+.drawing-settings-control-cell > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The info mark of an input that declares a tooltip: a round (i) after the control. */
+.drawing-settings-info {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  color: var(--color-muted-strong);
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  cursor: help;
+}
+
+.drawing-settings-info:hover {
+  color: var(--color-text);
+}
+
+/* The bubble the mark shows: fixed and portalled to the body, so the dialog's scrolling never clips it. */
+.drawing-settings-tooltip-bubble {
+  position: fixed;
+  z-index: 130;
+  box-sizing: border-box;
+  max-width: 260px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--border-radius);
+  color: var(--color-text);
+  background: var(--color-raised);
+  box-shadow: 0 12px 32px var(--color-scrim-strong);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* The Inputs tab's groups: wider apart than its rows, with nothing above the first. */
+.drawing-settings-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--drawing-settings-input-group-gap);
+}
+
 .drawing-settings-group {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--drawing-settings-control-width);
+  grid-template-columns: minmax(0, 1fr) var(--drawing-settings-input-control-width);
   align-items: center;
-  gap: var(--drawing-settings-row-gap) 14px;
+  gap: var(--drawing-settings-input-row-gap) 14px;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
+/*
+ * A group's caption: quiet, uppercase, and a shade further from its first row than its rows are from each
+ * other. A fieldset's legend is laid out outside the grid, so the grid's row gap never reaches it and the
+ * caption keeps the whole gap itself.
+ */
 .drawing-settings-group legend {
   grid-column: 1 / -1;
-  padding: 0;
-  color: var(--color-text-bright);
-  font-weight: 500;
+  padding: 0 0 var(--drawing-settings-input-caption-gap);
+  color: var(--color-muted-strong);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .drawing-settings-label {
-  color: var(--color-text-label);
+  color: var(--color-text);
+}
+
+/* A bool row: the checkbox opens the label column and its title names it. */
+.drawing-settings-bool-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.drawing-settings-bool {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: var(--color-text);
+  cursor: pointer;
 }
 
 .drawing-settings-control {
@@ -146,23 +260,32 @@
   gap: 16px;
 }
 
-/* Inputs sharing an `inline` key (a tool opts in): their labels and controls sit in one row of the grid. */
+/* Inputs sharing an `inline` key (a tool opts in): the first one's title, then every control on one line. */
 .drawing-settings-inline-row {
   grid-column: 1 / -1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px 14px;
+  gap: 14px;
 }
 
-.drawing-settings-inline-row .drawing-settings-control,
-.drawing-settings-inline-row .select-button {
-  flex: 1 1 0;
-  width: auto;
+/* The row's controls keep the control column even when its first input shows no title. */
+.drawing-settings-inline-row > .drawing-settings-inline-controls {
+  grid-column: 2;
+}
+
+.drawing-settings-inline-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.drawing-settings-inline-row .drawing-settings-control[type='number'] {
-  min-width: 96px;
+/* Each control keeps the control column's width, so a second one still fits beside it. */
+.drawing-settings-inline-controls > .drawing-settings-control-cell {
+  flex: 0 1 var(--drawing-settings-input-control-width);
+  width: var(--drawing-settings-input-control-width);
+  min-width: 0;
 }
 
 .drawing-settings-control:disabled,
@@ -202,7 +325,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  color: var(--color-text-label);
+  color: var(--color-text);
 }
 
 /* A checkbox-only row has no control, so its title takes the control's column too instead of wrapping. */
@@ -389,7 +512,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  color: var(--color-text-label);
+  color: var(--color-text);
 }
 
 .drawing-settings-range-field {

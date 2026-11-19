@@ -64,3 +64,11 @@ export function withStoredValuesForInvalidInactiveInputs(
 export function resolveSettingValues({ inputs = [], styles = [] }: SettingsSchema, stored: unknown): SettingValues {
   return { ...resolveSettingInputValues(inputs, stored), ...resolveSettingStyleValues(styles, stored) };
 }
+
+/**
+ * Every input's and flattened style's declared default. Nothing stored resolves to exactly these, so the
+ * form's Defaults menu rebuilds them through the same resolution its opening values came from.
+ */
+export function defaultSettingValues(schema: SettingsSchema): SettingValues {
+  return resolveSettingValues(schema, undefined);
+}
