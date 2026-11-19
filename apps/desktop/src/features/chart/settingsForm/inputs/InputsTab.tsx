@@ -1,3 +1,4 @@
+import { Fragment, useId } from 'react';
 import {
   isSettingInputActive,
   isSettingInputInvalid,
@@ -5,7 +6,14 @@ import {
   type SettingValue,
   type SettingValues,
 } from '../../engine/settings/settingInputs';
-import { SettingInputField } from './SettingInputField';
+import {
+  SettingBoolCheckbox,
+  SettingInlineControl,
+  SettingInputField,
+  SettingInputTitle,
+  SettingQuietTitle,
+  type SettingFieldProps,
+} from './SettingInputField';
 
 /** The inputs sharing one group, or the ungrouped ones; `legend` is undefined for those. */
 interface DefinitionGroup {
@@ -55,31 +63,66 @@ interface InputsTabProps extends FieldEditing {
   readonly definitions: readonly SettingInputDefinition[];
 }
 
+/** What one input's field is given, from the draft it edits. */
+function settingFieldProps(
+  definition: SettingInputDefinition,
+  { values, onChange }: FieldEditing,
+  idPrefix: string,
+): SettingFieldProps {
+  return {
+    definition,
+    // The tab's prefix keeps two open forms from handing their labels the same ids.
+    controlId: `${idPrefix}-${definition.id}`,
+    value: values[definition.id],
+    onChange: (value) => onChange(definition.id, value),
+    disabled: !isSettingInputActive(definition, values),
+    invalid: isSettingInputInvalid(definition, values),
+  };
+}
+
+interface SettingsRowProps extends FieldEditing {
+  readonly row: readonly SettingInputDefinition[];
+  readonly idPrefix: string;
+}
+
+/**
+ * One row of the tab: a single input with its title, or the inputs sharing an `inline` key on one line —
+ * the first one's title in the label column, then every control beside it.
+ */
+function SettingsRow({ row, values, onChange, idPrefix }: SettingsRowProps) {
+  const editing = { values, onChange };
+  const fields = row.map((definition) => settingFieldProps(definition, editing, idPrefix));
+  if (fields.length === 1) {
+    return <SettingInputField {...fields[0]} />;
+  }
+  const [first, ...siblings] = fields;
+  const firstIsCheckbox = first.definition.kind === 'bool';
+  return (
+    <div className="drawing-settings-inline-row">
+      {firstIsCheckbox ? <SettingBoolCheckbox {...first} /> : <SettingInputTitle {...first} />}
+      <div className="drawing-settings-inline-controls">
+        {firstIsCheckbox ? null : <SettingInlineControl {...first} />}
+        {siblings.map((field) => (
+          <Fragment key={field.definition.id}>
+            <SettingQuietTitle {...field} />
+            <SettingInlineControl {...field} />
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface DrawingSettingsGroupProps extends FieldEditing {
   readonly group: DefinitionGroup;
+  readonly idPrefix: string;
 }
 
 /** One group of fields: a fieldset with its legend, or a plain block while nothing names the group. */
-function DrawingSettingsGroup({ group, values, onChange }: DrawingSettingsGroupProps) {
-  const renderField = (definition: SettingInputDefinition) => (
-    <SettingInputField
-      key={definition.id}
-      definition={definition}
-      value={values[definition.id]}
-      onChange={(value) => onChange(definition.id, value)}
-      disabled={!isSettingInputActive(definition, values)}
-      invalid={isSettingInputInvalid(definition, values)}
-    />
-  );
-  const rows = inputRows(group.inputs).map((row) =>
-    row.length === 1 ? (
-      renderField(row[0])
-    ) : (
-      <div key={row[0].id} className="drawing-settings-inline-row">
-        {row.map(renderField)}
-      </div>
-    ),
-  );
+function DrawingSettingsGroup({ group, values, onChange, idPrefix }: DrawingSettingsGroupProps) {
+  const rows = inputRows(group.inputs).map((row) => (
+    <SettingsRow key={row[0].id} row={row} values={values} onChange={onChange} idPrefix={idPrefix} />
+  ));
   if (group.legend === undefined) {
     return <div className="drawing-settings-group">{rows}</div>;
   }
@@ -93,7 +136,18 @@ function DrawingSettingsGroup({ group, values, onChange }: DrawingSettingsGroupP
 
 /** The Inputs tab: one field per input, grouped and laid out in rows as the definitions ask. */
 export function InputsTab({ definitions, values, onChange }: InputsTabProps) {
-  return definitionGroups(definitions).map((group) => (
-    <DrawingSettingsGroup key={group.legend ?? 'ungrouped'} group={group} values={values} onChange={onChange} />
-  ));
+  const idPrefix = useId();
+  return (
+    <div className="drawing-settings-inputs">
+      {definitionGroups(definitions).map((group) => (
+        <DrawingSettingsGroup
+          key={group.legend ?? 'ungrouped'}
+          group={group}
+          values={values}
+          onChange={onChange}
+          idPrefix={idPrefix}
+        />
+      ))}
+    </div>
+  );
 }

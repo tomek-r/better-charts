@@ -181,13 +181,18 @@ test('Values Background is an indented swatch with no checkbox, disabled while V
   await expect(background).toBeEnabled();
 });
 
-test('every input sits on its own row, its label on the left and its control on the right', async ({ page }) => {
+test('every input sits on its own row: a label left of its control, a checkbox left of its title', async ({ page }) => {
   const titles = ['Rows Layout', 'Row Size', 'Ticks Per Row', 'Volume', 'Value Area Volume %', 'Extend Right'];
   const boxes = [];
   for (const title of titles) {
-    const labelBox = await page.locator('label.drawing-settings-label', { hasText: title }).first().boundingBox();
-    const controlBox = await label(page, title).boundingBox();
-    expect(controlBox!.x).toBeGreaterThan(labelBox!.x + labelBox!.width - 1);
+    const control = label(page, title);
+    const controlBox = await control.boundingBox();
+    const titleBox = await page.locator('label', { hasText: title }).first().boundingBox();
+    if ((await control.getAttribute('type')) === 'checkbox') {
+      expect(controlBox!.x).toBeLessThan(titleBox!.x + titleBox!.width);
+    } else {
+      expect(controlBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width - 1);
+    }
     boxes.push(controlBox!);
   }
   for (let index = 1; index < boxes.length; index += 1) {

@@ -2,8 +2,13 @@ import { useState, type SubmitEvent } from 'react';
 import type { ChartDrawingPoint } from '../engine/drawings/drawingRecord';
 import type { SettingValue, SettingValues } from '../engine/settings/settingInputs';
 import { DEFAULT_TIMEFRAME_VISIBILITY, type DrawingTimeframeVisibility } from '../engine/drawings/timeframeVisibility';
-import { areSettingValuesValid, withStoredValuesForInvalidInactiveInputs } from '../engine/settings/settingsSchema';
+import {
+  areSettingValuesValid,
+  defaultSettingValues,
+  withStoredValuesForInvalidInactiveInputs,
+} from '../engine/settings/settingsSchema';
 import { ModalDialogButton } from '../../../shared/ui/dialog/ModalDialog';
+import { SettingsDefaultsMenu } from './SettingsDefaultsMenu';
 import { SettingsTabs } from './SettingsTabs';
 import { buildSettingsTabs, COORDINATES_TAB_ID, type SettingsFormSchema } from './settingsTabModel';
 import { useCoordinateDraft } from './coordinates/useCoordinateDraft';
@@ -62,6 +67,8 @@ export function SettingsForm({
   const change = (key: string, value: SettingValue) => {
     setValues((current) => ({ ...current, [key]: value }));
   };
+  // The menu rebuilds the draft only: the anchors and the timeframe setting, and the save itself, are untouched.
+  const resetToDefaults = () => setValues(defaultSettingValues(settings));
   const tabs = buildSettingsTabs(settings);
   const valid = areSettingValuesValid(settings, values) && coordinates.valid;
   const submit = (event: SubmitEvent) => {
@@ -89,6 +96,7 @@ export function SettingsForm({
         />
       )}
       <div className="modal-dialog-footer">
+        <SettingsDefaultsMenu onReset={resetToDefaults} />
         <ModalDialogButton variant="secondary" onClick={onCancel}>
           Cancel
         </ModalDialogButton>

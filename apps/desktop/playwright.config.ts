@@ -18,7 +18,12 @@ const E2E_DEV_SERVER_URL = `http://localhost:${E2E_DEV_SERVER_PORT}`;
 const SOURCE_MODULE_SPECS: string[] = [
   'candle-validation.spec.ts',
   'chart-migration.spec.ts',
+  'color-picker.spec.ts',
+  'drawing-settings-fields.spec.ts',
+  'drawing-settings-tabs.spec.ts',
+  'field-focus.spec.ts',
   'field-store.spec.ts',
+  'fixed-range-profile-settings-dialog.spec.ts',
   'history-adapter-coalescing.spec.ts',
   'indicator-pushed-frames.spec.ts',
   'live-candle-state.spec.ts',
@@ -27,13 +32,9 @@ const SOURCE_MODULE_SPECS: string[] = [
   'native-context-menu.spec.ts',
   'provider-isolation.spec.ts',
   'quote-presentation.spec.ts',
-  'tool-set-construction.spec.ts',
-  'color-picker.spec.ts',
-  'drawing-settings-fields.spec.ts',
-  'drawing-settings-tabs.spec.ts',
-  'field-focus.spec.ts',
-  'fixed-range-profile-settings-dialog.spec.ts',
   'select.spec.ts',
+  'settings-inputs-look.spec.ts',
+  'tool-set-construction.spec.ts',
 ];
 
 /**
