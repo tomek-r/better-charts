@@ -32,6 +32,8 @@ const INDICATOR_TITLES = [
 /** Every key an attached SMA resolves with: its inputs, its styles and the display switches. */
 const SMA_SETTING_COUNT = Object.keys(resolveSettingValues(indicatorSettingsSchema(smaPlugin), {})).length;
 
+/** The button's label, a size below the indicator rows it opens. */
+const BUTTON_FONT_SIZE = '13px';
 const ROW_FONT_SIZE = '14px';
 /** A price pane alone, and the same chart once Volume has a pane of its own below it. */
 const PRICE_PANE_COUNT = 1;
@@ -61,6 +63,12 @@ test.describe('indicators dialog', () => {
 
     // A centred dialog has its middle on the window's middle; one anchored to the top sits above it.
     expect(box.y + box.height / 2).toBeLessThan(viewport.height / 2);
+  });
+
+  test('the Indicators button writes its label at 13px', async ({ page }) => {
+    const trigger = indicatorsButton(page);
+
+    await expect(trigger).toHaveCSS('font-size', BUTTON_FONT_SIZE);
   });
 
   test('indicator names are written at 14px', async ({ page }) => {

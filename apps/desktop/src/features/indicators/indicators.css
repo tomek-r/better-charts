@@ -2,8 +2,10 @@
    box, border and colours are the header's shared button: these rules are only what the indicator parts add. */
 
 .indicators-trigger {
-  /* A button does not take the page's font, and its label is a word like the timeframes beside it. */
+  /* A button does not take the page's font, so `font: inherit` brings in the family; the label is a word like the
+     timeframes beside it but drawn smaller, so the button stays quiet next to them. */
   font: inherit;
+  font-size: 13px;
   gap: 6px;
   padding: 0 8px;
 }
