@@ -124,11 +124,15 @@ async function firstIndicatorAxisPoint(page: Page): Promise<{ x: number; y: numb
 
 /** Presses the first indicator pane's `A`, and answers the auto scale that pane now has. */
 async function choosePaneAutoScale(page: Page): Promise<boolean> {
-  const point = await firstIndicatorAxisPoint(page);
-  await page.mouse.move(point.x, point.y);
   // The first such row in DOM order is the one the chart placed on the first indicator pane.
   const row = page.getByRole('group', { name: INDICATOR_PANE_ROW, exact: true }).first();
-  await expect(row).toHaveClass(REVEALED_ROW_CLASS);
+  // The pane's place is read again on every try: a move made while the second pane still settles lands
+  // outside the first one and reveals nothing.
+  await expect(async () => {
+    const point = await firstIndicatorAxisPoint(page);
+    await page.mouse.move(point.x, point.y);
+    await expect(row).toHaveClass(REVEALED_ROW_CLASS, { timeout: 1000 });
+  }).toPass();
   const chosen = !(await paneAutoScale(page, RSI_PANE));
   await row.getByRole('button', { name: PANE_AUTO_LABEL }).click();
   await expect.poll(() => paneAutoScale(page, RSI_PANE)).toBe(chosen);

@@ -165,13 +165,15 @@ test.describe('indicator legend', () => {
       throw new Error('The chart host is not laid out.');
     }
     const firstBarSeconds = await page.evaluate(() => window.__chartTest!.data()[0]!.time);
-    const firstBarX = await page.evaluate(
-      (timeMs) => window.__chartTest!.timeToX(timeMs),
-      firstBarSeconds * SECONDS_TO_MS,
-    );
-
-    await page.mouse.move(hostBox.x + firstBarX, hostBox.y + hostBox.height / 2);
-    await expect(rows.first()).toHaveText(`${SMA_ROW_TEXT} ${NO_VALUE_TEXT}`);
+    // The bar's place is read again on every try: a move made while the scroll still settles misses the bar.
+    await expect(async () => {
+      const firstBarX = await page.evaluate(
+        (timeMs) => window.__chartTest!.timeToX(timeMs),
+        firstBarSeconds * SECONDS_TO_MS,
+      );
+      await page.mouse.move(hostBox.x + firstBarX, hostBox.y + hostBox.height / 2);
+      await expect(rows.first()).toHaveText(`${SMA_ROW_TEXT} ${NO_VALUE_TEXT}`, { timeout: 1000 });
+    }).toPass();
 
     await page.mouse.move(0, 0);
     await expect(rows.first()).not.toContainText(NO_VALUE_TEXT);
