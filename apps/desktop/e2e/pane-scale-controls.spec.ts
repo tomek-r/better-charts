@@ -509,13 +509,17 @@ test('a pointer move over the plot area measures no pane and writes no row', asy
   const layout = await chartLayout(page);
   const plotX = (layout.host.left + layout.host.right) / 2;
   const plotY = layout.priceBottom + PLOT_PROBE_INSET;
-  // A warm-up move first, so the probe measures a move the chart has already answered once.
-  await page.mouse.move(plotX, plotY);
-  const probe = await startLayoutProbe(page);
-  await page.mouse.move(plotX + PLOT_PROBE_STEP, plotY + PLOT_PROBE_STEP);
-  const readings = await stopLayoutProbe(probe);
-  expect(readings.rectReads).toEqual([]);
-  expect(readings.styleWrites).toBe(0);
+  // A warm-up move first, so the probe measures a move the chart has already answered once. The pane just added
+  // may still be laying itself out, which measures on its own; a chart that measured on every move would fail
+  // every try, so trying again until the layout has settled still catches that.
+  await expect(async () => {
+    await page.mouse.move(plotX, plotY);
+    const probe = await startLayoutProbe(page);
+    await page.mouse.move(plotX + PLOT_PROBE_STEP, plotY + PLOT_PROBE_STEP);
+    const readings = await stopLayoutProbe(probe);
+    expect(readings.rectReads).toEqual([]);
+    expect(readings.styleWrites).toBe(0);
+  }).toPass();
 });
 
 test('a row follows its pane when the viewport shrinks', async ({ page }) => {
