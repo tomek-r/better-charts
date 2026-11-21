@@ -52,9 +52,16 @@ export function numberFromInput(text: string): number | '' {
   return text === '' ? '' : Number(text);
 }
 
-/** The drop-down choices of options that carry a value and a title. */
-export function titledOptions(options: readonly { readonly value: string; readonly title: string }[]): SelectOption[] {
-  return options.map((option) => ({ value: option.value, label: option.title }));
+/** The drop-down choices of options that carry a value and a title, and a reason while one cannot be picked. */
+export function titledOptions(
+  options: readonly { readonly value: string; readonly title: string; readonly disabledReason?: string }[],
+): SelectOption[] {
+  return options.map(({ value, title, disabledReason }) => ({
+    value,
+    label: title,
+    disabled: disabledReason !== undefined,
+    title: disabledReason,
+  }));
 }
 
 /** The text a text-like control shows: empty while the draft holds no string. */

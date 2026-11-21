@@ -4,6 +4,9 @@ import type { RenderBar } from '../../src/features/chart/engine/bars/renderBar';
 import type { ChartIndicator } from '../../src/features/chart/engine/indicators/indicatorContract';
 import type { SettingValues } from '../../src/features/chart/engine/settings/settingInputs';
 
+/** The timeframe of the bars these helpers build: five minutes apart, like the stub chart's own. */
+const CHART_TIMEFRAME = 'M5';
+
 /**
  * The live contract every bar-by-bar indicator keeps: once `history` is loaded, a newer bar returns the
  * bar it closed, confirmed, and then itself, still forming.
@@ -15,7 +18,7 @@ export function expectNewerBarClosesTheFormingOne(
 ): void {
   const closedBar = history[history.length - 1];
   const nextBar = barAt(history.length, (closedBar?.close ?? 0) + 1);
-  indicator.load(history, settings);
+  indicator.load(history, settings, CHART_TIMEFRAME);
 
   const frame = indicator.update(nextBar, settings);
 

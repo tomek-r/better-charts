@@ -34,6 +34,8 @@ export class IndicatorRuntime {
     private readonly layer: IndicatorLayer,
     private readonly definitions: readonly ChartIndicatorDefinition[],
     private readonly bars: () => readonly RenderBar[],
+    /** The chart's own timeframe, which its indicators are told their bars are of. */
+    private readonly timeframe: () => string,
     /** Called after the attached indicators or the values they draw changed, so the legend follows. */
     private readonly changed: () => void,
     private readonly priceSeries: ISeriesApi<'Candlestick'>,
@@ -184,7 +186,7 @@ export class IndicatorRuntime {
 
   /** Loads the whole history into `instanceId` and draws the frame that comes back, in the indicator's pane. */
   private reload(instanceId: string, entry: AttachedIndicator): void {
-    this.showFrameOf(instanceId, entry, entry.indicator.load(this.bars(), entry.settings));
+    this.showFrameOf(instanceId, entry, entry.indicator.load(this.bars(), entry.settings, this.timeframe()));
   }
 
   /** Draws a whole frame in the indicator's pane. */

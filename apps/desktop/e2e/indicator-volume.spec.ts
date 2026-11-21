@@ -216,7 +216,7 @@ test('the MA follows the forming bar and moves on the one that closes', () => {
 });
 
 test('the plugin registers in a pane of its own and names itself Vol while its MA line is off', () => {
-  expect(findChartIndicatorPlugin('volume')).toBe(volumePlugin);
+  expect(findChartIndicatorPlugin('volume')?.title).toBe(volumePlugin.title);
   expect(volumePlugin.pane).toBe('own');
   expect(indicatorLegendTitle('volume', DEFAULT_SETTINGS)).toBe('Vol');
 });

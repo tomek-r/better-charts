@@ -112,10 +112,11 @@ async function gotoWithPushedFrames(page: Page): Promise<void> {
           typeof IndicatorRuntime
         >[1],
         () => [],
+        () => 'M1',
         () => {
           pageWindow.__changedCount += 1;
         },
-        priceSeries as unknown as ConstructorParameters<typeof IndicatorRuntime>[4],
+        priceSeries as unknown as ConstructorParameters<typeof IndicatorRuntime>[5],
       );
       const seam = runtime as unknown as {
         attach(instanceId: string, definitionId: string, stored: Readonly<Record<string, never>>): boolean;

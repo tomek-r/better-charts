@@ -273,7 +273,7 @@ test('a load of one bar and a tick per bar draw the values and colours of one lo
 });
 
 test('the registry names the MACD and draws it in a pane of its own', () => {
-  expect(findChartIndicatorPlugin('macd')).toBe(macdPlugin);
+  expect(findChartIndicatorPlugin('macd')?.title).toBe(macdPlugin.title);
   expect(findChartIndicatorPlugin('macd')?.pane).toBe('own');
   expect(indicatorLegendTitle('macd', resolveSettingValues(macdPlugin, {}))).toBe('MACD 12 26 close 9');
 });

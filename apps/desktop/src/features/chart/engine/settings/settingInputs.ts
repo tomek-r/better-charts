@@ -79,6 +79,8 @@ export type SettingInputTime = SettingInputCommon<'time', number>;
 export interface SettingInputEnumOption {
   readonly value: string;
   readonly title: string;
+  /** Present while the choice cannot be picked yet: the drop-down disables it and shows this as its tooltip. */
+  readonly disabledReason?: string;
 }
 
 /** `enum`: one of the given choices. */

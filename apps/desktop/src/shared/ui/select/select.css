@@ -71,6 +71,11 @@
   color: var(--color-text-bright);
 }
 
+.select-option[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .select-check {
   visibility: hidden;
   color: var(--color-accent);

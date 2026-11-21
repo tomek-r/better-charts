@@ -117,6 +117,7 @@ export class ChartController {
       definitions: indicatorDefinitions,
       legendTitle: indicatorLegendTitle,
       bars: () => this.bars,
+      timeframe: () => this.data.timeframe,
       digits: () => this.data.pricePrecision,
       priceSeries: this.candles,
     });

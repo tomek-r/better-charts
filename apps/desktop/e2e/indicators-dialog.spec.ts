@@ -29,8 +29,10 @@ const INDICATOR_TITLES = [
   'Relative Strength Index',
   'Volume',
 ];
-/** Every key an attached SMA resolves with: its inputs, its styles and the display switches. */
-const SMA_SETTING_COUNT = Object.keys(resolveSettingValues(indicatorSettingsSchema(smaPlugin), {})).length;
+/** The SMA as the registry registers it, which is what the dialog attaches. */
+const SMA_PLUGIN = CHART_INDICATOR_PLUGINS.find((plugin) => plugin.id === 'sma') ?? smaPlugin;
+/** Every key an attached SMA resolves with: its inputs, its styles, the display switches and the calculation. */
+const SMA_SETTING_COUNT = Object.keys(resolveSettingValues(indicatorSettingsSchema(SMA_PLUGIN), {})).length;
 
 /** The button's label, a size below the indicator rows it opens. */
 const BUTTON_FONT_SIZE = '13px';
@@ -140,7 +142,7 @@ test.describe('indicators dialog', () => {
     await expect.poll(async () => (await attachedIndicators(page)).length).toBe(1);
     const attached = await attachedIndicators(page);
     expect(attached[0]?.definitionId).toBe('sma');
-    expect(attached[0]?.settings).toHaveLength(SMA_SETTING_COUNT);
+    expect(Object.keys(attached[0]?.settings ?? {})).toHaveLength(SMA_SETTING_COUNT);
   });
 
   test('the list reads alphabetically by indicator title', async ({ page }) => {

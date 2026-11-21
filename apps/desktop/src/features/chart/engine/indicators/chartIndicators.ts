@@ -18,6 +18,8 @@ export interface ChartIndicatorsOptions {
   readonly legendTitle: (definitionId: string, settings: SettingValues) => string;
   /** The bars the indicators are computed over. */
   readonly bars: () => readonly RenderBar[];
+  /** The chart's own timeframe, which its indicators are told the bars are of. */
+  readonly timeframe: () => string;
   /** The price decimals the legend writes its values with. */
   readonly digits: () => number;
   /** The chart's price series, handed to an indicator that pushes frames. */
@@ -49,6 +51,7 @@ export class ChartIndicators {
       this.layer,
       options.definitions,
       options.bars,
+      options.timeframe,
       () => this.legend.refresh(),
       options.priceSeries,
     );

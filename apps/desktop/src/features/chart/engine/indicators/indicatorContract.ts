@@ -26,9 +26,11 @@ export interface ChartIndicatorOutlet {
 export interface ChartIndicator {
   /**
    * Every bar, after a history, a settings or a symbol/timeframe change: rebuilds the indicator's state
-   * up to the newest bar, which is the one still forming, and returns the whole frame.
+   * up to the newest bar, which is the one still forming, and returns the whole frame. `barTimeframe` is
+   * the timeframe of `bars`: the chart's own, or the higher timeframe an indicator was grouped into before
+   * it was loaded.
    */
-  load(bars: readonly RenderBar[], settings: SettingValues): IndicatorFrame;
+  load(bars: readonly RenderBar[], settings: SettingValues, barTimeframe: string): IndicatorFrame;
   /**
    * One live bar: the forming bar again (same time: a tick) or a newer one (the forming bar closed).
    * Returns only the bars that changed: the closed bar, if any, then the forming one; a bar older than

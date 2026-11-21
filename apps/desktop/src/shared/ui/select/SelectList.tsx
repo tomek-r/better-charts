@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { movedOptionIndex, typedOptionIndex } from './selectNavigation';
+import { initialOptionIndex, movedOptionIndex, typedOptionIndex } from './selectNavigation';
+import type { SelectOption } from './selectOption';
 import { useOutsidePress } from '../popup/useOutsidePress';
 import { usePopupPlacement } from '../popup/usePopupPlacement';
 
-/** One choice of a `Select`: the stored value and the text the user reads. */
-export interface SelectOption {
-  readonly value: string;
-  readonly label: string;
-}
+export type { SelectOption };
 
 interface SelectListProps {
   readonly id: string;
@@ -31,6 +28,7 @@ function optionId(listId: string, index: number): string {
 /**
  * The open list of a `Select`. It is portalled to the page body and fixed to the window, so no ancestor's
  * overflow clips it. Focus stays on the list itself and the highlight follows `aria-activedescendant`.
+ * A disabled choice is listed, with its tooltip, and no key, hover or click can pick it.
  */
 export function SelectList({
   id,
@@ -43,12 +41,7 @@ export function SelectList({
   listClassName,
 }: SelectListProps) {
   const listRef = useRef<HTMLUListElement>(null);
-  const [activeIndex, setActiveIndex] = useState(() =>
-    Math.max(
-      0,
-      options.findIndex((option) => option.value === value),
-    ),
-  );
+  const [activeIndex, setActiveIndex] = useState(() => initialOptionIndex(options, value));
   usePopupPlacement(anchorRef, listRef, { matchAnchorWidth: true });
   useOutsidePress(listRef, anchorRef, () => onClose(false));
 
@@ -59,15 +52,32 @@ export function SelectList({
     document.getElementById(optionId(id, activeIndex))?.scrollIntoView({ block: 'nearest' });
   }, [id, activeIndex]);
 
+  const choose = (option: SelectOption) => {
+    if (option.disabled !== true) {
+      onChoose(option.value);
+    }
+  };
+  const chooseActive = () => {
+    const active = options[activeIndex];
+    if (active !== undefined) {
+      choose(active);
+    }
+  };
+  const highlight = (index: number, option: SelectOption) => {
+    if (option.disabled !== true) {
+      setActiveIndex(index);
+    }
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
-    const moved = movedOptionIndex(event.key, activeIndex, options.length);
+    const moved = movedOptionIndex(event.key, activeIndex, options);
     if (moved !== undefined) {
       event.preventDefault();
       setActiveIndex(moved);
     } else if (event.key === 'Enter') {
       // Prevented so no keypress follows to the button that takes the focus back.
       event.preventDefault();
-      onChoose(options[activeIndex].value);
+      chooseActive();
     } else if (event.key === ' ') {
       // Chosen on keyup: choosing on keydown would hand the focus, and the key's release, to the button.
       event.preventDefault();
@@ -77,11 +87,7 @@ export function SelectList({
     } else if (event.key === 'Tab') {
       onClose(true);
     } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      const typed = typedOptionIndex(
-        event.key,
-        activeIndex,
-        options.map((option) => option.label),
-      );
+      const typed = typedOptionIndex(event.key, activeIndex, options);
       if (typed !== undefined) {
         setActiveIndex(typed);
       }
@@ -91,7 +97,7 @@ export function SelectList({
   const handleKeyUp = (event: KeyboardEvent<HTMLUListElement>) => {
     if (event.key === ' ') {
       event.preventDefault();
-      onChoose(options[activeIndex].value);
+      chooseActive();
     }
   };
 
@@ -114,9 +120,11 @@ export function SelectList({
           className="select-option"
           role="option"
           aria-selected={option.value === value}
+          aria-disabled={option.disabled === true ? true : undefined}
+          title={option.title}
           data-active={index === activeIndex}
-          onMouseMove={() => setActiveIndex(index)}
-          onClick={() => onChoose(option.value)}
+          onMouseMove={() => highlight(index, option)}
+          onClick={() => choose(option)}
         >
           <span>{option.label}</span>
           <span className="select-check" aria-hidden="true">
