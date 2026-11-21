@@ -32,9 +32,12 @@
   font-size: 12px;
 }
 
+/* One width for every button of the row: six digit widths, enough for the longest label ('1000T', five
+   glyphs and bold while it is the active one), plus the button's 8px side paddings. `ch` follows the text
+   size the header is drawn with, so no label resizes its own button and a narrow header still wraps the row. */
 .timeframe-favorites button {
-  width: 44px;
-  flex: 0 0 44px;
+  flex: 0 0 auto;
+  min-width: calc(6ch + 16px);
 }
 
 .timeframe-chevron {

@@ -27,6 +27,7 @@ type InitialStateSession = Pick<
   | 'dataKeyRef'
   | 'currentSymbol'
   | 'currentTimeframe'
+  | 'mt5TimeframeRef'
   | 'latestCandleRef'
 >;
 

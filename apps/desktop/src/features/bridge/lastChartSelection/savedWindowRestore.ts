@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from '../../../shared/bridge/types';
 import { initialHistoryBarsFor } from '../../chart/engine/bars/initialHistoryWindow';
+import { isTickInterval } from '../../../shared/bridge/chartIntervals';
 import type { BridgeSessionState } from '../useBridgeSession';
 import { brokerListsSymbol } from '../market/brokerSymbolList';
 import type { BridgeEffectRun, BridgeMarketResources } from '../market/bridgeMarketRuntime';
@@ -22,6 +23,8 @@ type SavedWindowSession = Pick<
   | 'loadingTimeframeRef'
   | 'currentSymbol'
   | 'currentTimeframe'
+  | 'mt5TimeframeRef'
+  | 'requestedTickIntervalRef'
   | 'setLoadingTimeframe'
   | 'setSymbolLoading'
   | 'setInstrument'
@@ -76,6 +79,8 @@ export function createSavedWindowRestore(
     loadingTimeframeRef,
     currentSymbol,
     currentTimeframe,
+    mt5TimeframeRef,
+    requestedTickIntervalRef,
     historyWaitSetters,
     setLoadingTimeframe,
     setSymbolLoading,
@@ -83,19 +88,27 @@ export function createSavedWindowRestore(
     setQuote,
   } = session;
 
+  /**
+   * A saved tick interval has no series to request, so the bridge is moved to its
+   * symbol with a window of the MT5 timeframe shown last; the runtime then reads
+   * that symbol's ticks and draws them in place of the window's candles.
+   */
   const requestWindow = (adapter: MarketAdapter, selection: LastChartSelection) => {
+    const timeframe = isTickInterval(selection.timeframe) ? mt5TimeframeRef.current : selection.timeframe;
     beginHistoryWait(historyWaitSetters);
     void adapter
-      .requestHistory(selection.symbol, selection.timeframe, initialHistoryBarsFor(resources.chart.current))
+      .requestHistory(selection.symbol, timeframe, initialHistoryBarsFor(resources.chart.current))
       .catch(() => undefined);
   };
 
   // Reopens the saved window exactly like a user pick, so a refusal leaves the
   // session's own window on screen instead of an empty chart.
   const openSavedWindow = (adapter: MarketAdapter, saved: LastChartSelection) => {
+    const tickInterval = isTickInterval(saved.timeframe);
     targetSymbol.current = saved.symbol;
-    loadingTimeframeRef.current = saved.timeframe;
-    setLoadingTimeframe(saved.timeframe);
+    loadingTimeframeRef.current = tickInterval ? undefined : saved.timeframe;
+    requestedTickIntervalRef.current = tickInterval ? saved.timeframe : null;
+    setLoadingTimeframe(tickInterval ? undefined : saved.timeframe);
     setSymbolLoading(true);
     setInstrument(undefined);
     setQuote(undefined);

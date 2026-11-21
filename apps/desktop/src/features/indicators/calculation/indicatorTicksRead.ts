@@ -8,6 +8,7 @@ import type {
 import { LiveKeyedRead } from './liveKeyedRead';
 import {
   TICK_BUDGET,
+  answersTickWindow,
   coveredTickWalk,
   endedTickWalk,
   narrowedTickWalk,
@@ -31,11 +32,6 @@ type TicksWindowKind = 'older' | 'newest';
 interface PendingWindow {
   readonly window: TickWindow;
   readonly kind: TicksWindowKind;
-}
-
-/** Whether `page` answers `window`: the host echoes the range it read. */
-function answersWindow(page: { readonly fromMs: number; readonly toMs: number }, window: TickWindow): boolean {
-  return page.fromMs === window.fromMs && page.toMs === window.toMs;
 }
 
 /** The ticks held with a page of older ticks put in front of the ones it precedes. */
@@ -120,7 +116,7 @@ export class IndicatorTicksRead extends LiveKeyedRead<IndicatorTicksQuery, Indic
     if (pending === null || walk === null) {
       return;
     }
-    if (answer.kind === 'page' && !answersWindow(answer, pending.window)) {
+    if (answer.kind === 'page' && !answersTickWindow(answer, pending.window)) {
       // A page of a window this read replaced: the answer it waits for is still to come.
       return;
     }

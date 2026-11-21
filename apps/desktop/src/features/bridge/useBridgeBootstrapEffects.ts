@@ -64,6 +64,9 @@ export function useBridgeBootstrapEffects(
     | 'pendingMetadata'
     | 'currentSymbol'
     | 'currentTimeframe'
+    | 'requestedTickIntervalRef'
+    | 'mt5TimeframeRef'
+    | 'tickBarsRef'
     | 'latestCandleRef'
     | 'dataKeyRef'
     | 'marketData'
@@ -87,6 +90,9 @@ export function useBridgeBootstrapEffects(
     pendingMetadata,
     currentSymbol,
     currentTimeframe,
+    requestedTickIntervalRef,
+    mt5TimeframeRef,
+    tickBarsRef,
     latestCandleRef,
     dataKeyRef,
     marketData,
@@ -104,9 +110,12 @@ export function useBridgeBootstrapEffects(
       pendingMetadata,
       currentSymbol,
       currentTimeframe,
+      requestedTickIntervalRef,
+      mt5TimeframeRef,
       latestCandleRef,
       dataKeyRef,
       marketData,
+      stores,
       historyWaitSetters,
     };
     const resources = { chart, adapterRef };
@@ -114,7 +123,7 @@ export function useBridgeBootstrapEffects(
     const subscriptions = new SubscriptionScope();
     let runtimeAvailable = false;
     const restoreState = createSavedWindowRestoreState();
-    const marketRuntime = createBridgeMarketRuntime(run, bootstrapSession, resources);
+    const marketRuntime = createBridgeMarketRuntime(run, bootstrapSession, resources, tickBarsRef);
     const ticketHandlers = createBridgeTicketResponseHandlers(run, currentSymbol, ticket, {
       accountLoginRef,
       brokerServerRef,
@@ -198,6 +207,7 @@ export function useBridgeBootstrapEffects(
       run.disposed = true;
       marketRuntime.cancelCandles();
       marketRuntime.cancelPrefetch();
+      marketRuntime.stopTickBars();
       subscriptions.dispose();
     };
     // The app-level listeners are the sole source for history and realtime chart updates.
@@ -208,6 +218,9 @@ export function useBridgeBootstrapEffects(
     pendingMetadata,
     currentSymbol,
     currentTimeframe,
+    requestedTickIntervalRef,
+    mt5TimeframeRef,
+    tickBarsRef,
     latestCandleRef,
     dataKeyRef,
     marketData,

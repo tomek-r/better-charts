@@ -1,4 +1,5 @@
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
+import { isTickInterval } from '../../../shared/bridge/chartIntervals';
 
 /** The chart window one account was last watching: a symbol and a timeframe, nothing else. */
 export interface LastChartSelection {
@@ -48,19 +49,28 @@ export function isSameChartSelection(
 }
 
 /**
- * The saved selection when its timeframe is one this app serves: a
+ * The saved selection when its interval is one this app serves: a
  * `config/timeframes.json` code and, when the handshake advertises any, one of
- * those. An empty handshake list means "not reported", as in the timeframe bar.
+ * those, or a tick interval this app builds from ticks itself. An empty
+ * handshake list means "not reported", as in the timeframe bar.
  */
 export function restorableSelection(
   selection: LastChartSelection | undefined,
   supportedTimeframes: readonly string[] | undefined,
 ): LastChartSelection | undefined {
-  if (!selection || !knownTimeframes.has(selection.timeframe)) {
+  if (!selection || !isServedInterval(selection.timeframe)) {
     return undefined;
+  }
+  if (isTickInterval(selection.timeframe)) {
+    return selection;
   }
   const served = supportedTimeframes?.length ? supportedTimeframes : [...knownTimeframes];
   return served.includes(selection.timeframe) ? selection : undefined;
+}
+
+/** Whether the app can draw `code` at all: an MT5 code of the contract, or a tick interval of its own. */
+function isServedInterval(code: string): boolean {
+  return knownTimeframes.has(code) || isTickInterval(code);
 }
 
 function readSelection(value: unknown): LastChartSelection | undefined {

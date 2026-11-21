@@ -1,4 +1,3 @@
-import { HistoryViewportMode } from '../../chart/engine/bars/historyViewportMode';
 import type { ChartController } from '../../chart/engine/surface/chartController';
 import type { Mt5DataAdapter, Mt5HistoryError } from '../../chart/engine/bars/mt5DataAdapter';
 import { listen } from '@tauri-apps/api/event';
@@ -26,10 +25,13 @@ import {
 } from '../bridgePayloadNormalizers';
 import type { PayloadEvent } from '../bridgeEventTypes';
 import { HISTORY_BARS } from '../../../shared/bridge/config';
+import { isTickInterval } from '../../../shared/bridge/chartIntervals';
 import type { BridgeSessionState } from '../useBridgeSession';
-import { applyAcceptedSnapshot } from './applyAcceptedSnapshot';
+import { applyAcceptedSnapshot, recordMt5Timeframe, snapshotViewportMode } from './applyAcceptedSnapshot';
+import { ChartTickBars, newestKnownInstantMs } from './chartTickBars';
 import { endHistoryWait } from './historyWait';
 import { createIdlePrefetch } from './idlePrefetch';
+import { createIndicatorTickSource } from './indicatorTicksTransport';
 
 export interface BridgeEffectRun {
   disposed: boolean;
@@ -53,9 +55,12 @@ type BridgeMarketSession = Pick<
   | 'pendingMetadata'
   | 'currentSymbol'
   | 'currentTimeframe'
+  | 'mt5TimeframeRef'
+  | 'requestedTickIntervalRef'
   | 'latestCandleRef'
   | 'dataKeyRef'
   | 'marketData'
+  | 'stores'
 >;
 
 export type BridgeMarketResources = {
@@ -73,11 +78,16 @@ interface PageState {
 
 const emptyPageState = (): PageState => ({ key: '', symbol: '', timeframe: '', inFlight: false, anchorMs: undefined });
 
-/** Market history, paging, profiles and live updates share one effect-run lifetime. */
+/**
+ * Market history, paging, profiles and live updates share one effect-run lifetime.
+ * `tickBarsRef` is the slot the run publishes its tick bar source into, so the session's own
+ * tick-interval commands show and stop the read this run owns.
+ */
 export function createBridgeMarketRuntime(
   run: BridgeEffectRun,
   session: BridgeMarketSession,
   resources: BridgeMarketResources,
+  tickBarsRef: { current: ChartTickBars | null },
 ) {
   const chartRef = resources.chart;
   const marketAdapterRef = resources.adapterRef;
@@ -97,14 +107,31 @@ export function createBridgeMarketRuntime(
     pendingMetadata,
     currentSymbol: currentSymbolRef,
     currentTimeframe: currentTimeframeRef,
+    mt5TimeframeRef,
+    requestedTickIntervalRef,
     latestCandleRef,
     dataKeyRef,
     marketData: { publisher },
+    stores,
   } = session;
   const historyWaitSetters = { setHistoryWaitStartedAtMs, setHistoryUnavailable };
   const pendingCandles = new Map<number, Candle>();
   let candleFrame: number | undefined;
   const pageState = emptyPageState();
+  /** The newest instant the bridge reported for the feed: the chart symbol's quote, or the session's clock. */
+  const brokerNowMs = () =>
+    newestKnownInstantMs([
+      stores.quote.getState().quote?.timeMs,
+      stores.connection.getState().status.marketSession?.serverTimeMs,
+    ]);
+  // The chart's own bars while a tick interval is shown; the session's selection commands start its reads.
+  const tickBars = new ChartTickBars({
+    chart: chartRef,
+    session,
+    ticks: createIndicatorTickSource(() => currentSymbolRef.current),
+    brokerNowMs,
+  });
+  tickBarsRef.current = tickBars;
 
   const cancelCandles = () => {
     if (candleFrame !== undefined) {
@@ -118,6 +145,10 @@ export function createBridgeMarketRuntime(
     const candles = [...pendingCandles.values()];
     pendingCandles.clear();
     if (run.disposed || run.bridgeState !== 'connected' || !chartRef.current || candles.length === 0) {
+      return;
+    }
+    // A tick interval draws quotes: a candle queued for the interval before it is not this chart's.
+    if (isTickInterval(currentTimeframeRef.current)) {
       return;
     }
     try {
@@ -139,6 +170,10 @@ export function createBridgeMarketRuntime(
     const timeframe = currentTimeframeRef.current;
     const adapter = marketAdapterRef.current;
     if (run.disposed || run.bridgeState !== 'connected' || !symbol || !timeframe || !adapter) {
+      return;
+    }
+    // A tick interval has no broker pages: its bars are read from ticks, never paged.
+    if (isTickInterval(timeframe)) {
       return;
     }
     const key = `${symbol}|${timeframe}`;
@@ -176,12 +211,14 @@ export function createBridgeMarketRuntime(
     );
   };
 
-  const releaseSymbolSelection = (symbol: string) => {
-    if (targetSymbol.current === symbol) {
-      targetSymbol.current = undefined;
-      pendingMetadata.current = undefined;
-      setSymbolLoading(false);
+  /** Forgets the pick in flight for `symbol`, once its window — or its failure — has settled that pick. */
+  const clearPickedSymbol = (symbol: string | undefined) => {
+    if (targetSymbol.current !== symbol) {
+      return;
     }
+    pendingMetadata.current = undefined;
+    targetSymbol.current = undefined;
+    setSymbolLoading(false);
   };
 
   const onAdapterHistoryError = (failure: Mt5HistoryError) => {
@@ -203,7 +240,7 @@ export function createBridgeMarketRuntime(
       setLoadingTimeframe(undefined);
       endHistoryWait(historyWaitSetters);
       setChartError(failure.kind === 'timeout' ? 'History request timed out.' : 'History request could not be sent.');
-      releaseSymbolSelection(failure.symbol);
+      clearPickedSymbol(failure.symbol);
     }
   };
 
@@ -223,7 +260,7 @@ export function createBridgeMarketRuntime(
     marketAdapterRef.current?.acceptHistoryUnavailable(symbol, timeframe);
     loadingTimeframeRef.current = undefined;
     setLoadingTimeframe(undefined);
-    releaseSymbolSelection(symbol);
+    clearPickedSymbol(symbol);
     setHistoryWaitStartedAtMs(undefined);
     setHistoryUnavailable({ symbol, timeframe });
   };
@@ -249,11 +286,39 @@ export function createBridgeMarketRuntime(
   // fresh session (selection refs cleared) starts from the default view.
   // Auto scale is off by default, so replaceHistory fits the scale to the
   // new candles itself.
-  const viewportModeFor = (symbol: string | undefined) => {
-    const hasHistory = (chartRef.current?.getData().length ?? 0) > 0;
-    return currentSymbolRef.current === symbol && hasHistory
-      ? HistoryViewportMode.BarsFromEnd
-      : HistoryViewportMode.Reset;
+  const viewportModeFor = (symbol: string | undefined) =>
+    snapshotViewportMode(currentSymbolRef.current, (chartRef.current?.getData().length ?? 0) > 0, symbol);
+
+  /** A window that answers the symbol the user picked settles that pick, remembering the metadata it brought. */
+  const settlePickedSymbol = (symbol: string | undefined) => {
+    const metadata = pendingMetadata.current;
+    if (metadata && metadata.symbol === symbol) {
+      setLastSymbolSelection(metadata);
+    }
+    clearPickedSymbol(symbol);
+  };
+
+  /**
+   * While a tick interval is shown the chart draws ticks, not candles: the only
+   * window it takes is the one that moved the bridge to a newly picked symbol,
+   * whose candles the symbol's own tick read replaces. That window's series is
+   * the last MT5 timeframe, which the next switch asks its own window on.
+   */
+  const readTicksInsteadOfWindow = (
+    symbol: string | undefined,
+    tickInterval: string,
+    switchingWindowTimeframe: string | undefined,
+  ) => {
+    if (symbol === undefined || targetSymbol.current !== symbol) {
+      return;
+    }
+    recordMt5Timeframe(mt5TimeframeRef, switchingWindowTimeframe);
+    endHistoryWait(historyWaitSetters);
+    cancelCandles();
+    loadingTimeframeRef.current = undefined;
+    setLoadingTimeframe(undefined);
+    settlePickedSymbol(symbol);
+    tickBars.show(symbol, tickInterval);
   };
 
   const onMarketSnapshot = (event: PayloadEvent<MarketSnapshot>) => {
@@ -261,20 +326,16 @@ export function createBridgeMarketRuntime(
       return;
     }
     const next = normalizeSnapshot(event.payload);
-    const targetSnapshot = targetSymbol.current === next.symbol;
+    const requestedTickInterval = requestedTickIntervalRef.current;
+    if (requestedTickInterval !== null) {
+      readTicksInsteadOfWindow(next.symbol, requestedTickInterval, next.timeframe);
+      return;
+    }
     if (!isExpectedSelection(next.symbol, next.timeframe)) {
       return;
     }
     endHistoryWait(historyWaitSetters);
-    if (targetSnapshot) {
-      const metadata = pendingMetadata.current;
-      if (metadata && metadata.symbol === next.symbol) {
-        setLastSymbolSelection(metadata);
-      }
-      pendingMetadata.current = undefined;
-      targetSymbol.current = undefined;
-      setSymbolLoading(false);
-    }
+    settlePickedSymbol(next.symbol);
     const previousLatest = latestCandleRef.current;
     const validCandles = validCandlesOf(next.candles);
     const nextLatest = validCandles[validCandles.length - 1];
@@ -359,12 +420,17 @@ export function createBridgeMarketRuntime(
       const nextQuote = normalizeQuote(event.payload);
       if (currentSymbolRef.current && nextQuote.symbol === currentSymbolRef.current) {
         setQuote(nextQuote);
+        tickBars.addTick(nextQuote);
       }
     }
   };
 
   const onBarUpdate = (event: PayloadEvent<BarUpdate | Candle>) => {
     if (run.disposed || run.bridgeState !== 'connected' || !chartRef.current) {
+      return;
+    }
+    // A tick interval's bars are built from quotes: a candle of any MT5 series is not this chart's.
+    if (isTickInterval(currentTimeframeRef.current)) {
       return;
     }
     const { candle, symbol, timeframe } = normalizeBarUpdate(event.payload, {
@@ -387,10 +453,20 @@ export function createBridgeMarketRuntime(
     }
   };
 
+  /** Drops the tick interval's read and bars, so a session that starts over shows the bridge's own window. */
+  const stopTickBars = () => {
+    tickBars.stop();
+    requestedTickIntervalRef.current = null;
+    if (tickBarsRef.current === tickBars) {
+      tickBarsRef.current = null;
+    }
+  };
+
   return {
     cancelCandles,
     cancelPrefetch: idlePrefetch.cancel,
     resetPageState,
+    stopTickBars,
     requestOlderHistory,
     onAdapterHistoryError,
     onHistoryUnavailable,

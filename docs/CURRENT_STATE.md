@@ -35,6 +35,26 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   A style's colour (and a line's thickness and line style) is edited in one colour picker
   popover; colours are stored as `#rrggbb`, or `#rrggbbaa` when not fully opaque.
 - The last chart window survives an app restart: on connect the app reopens the symbol and timeframe saved for the same login and broker server, and only when the broker still lists that symbol and serves that timeframe; another account, or a symbol the broker no longer lists, keeps the session default.
+- Tick intervals: the interval selector offers `1T`, `10T`, `100T` and `1000T`
+  before the MT5 timeframes (a "Ticks" section, listed first in the menu as
+  TradingView lists them), and a tick interval can be starred and is restored like
+  any other interval. The codes are frontend-only and never reach the EA. The
+  chart's bars for one are built in the frontend from the chart symbol's raw ticks:
+  they are read backwards from the newest instant the bridge reported through the
+  read-only `request_indicator_ticks` route under the key `chart-ticks`, one page of
+  the negotiated tick bound at a time, until 500 bars are built or the
+  1,000,000-tick budget is spent, then drawn exactly as an accepted MT5 window is.
+  Every quote for the chart symbol adds a tick (bid, else last) to the forming bar,
+  and the tick after a bar's N-th opens the next one. Quote updates are sampled, not
+  lossless: a forming bar holds the ticks that reached the app, not every tick the
+  broker saw. A tick bar has no fixed length, so the bar countdown and the legend's
+  previous-day close are off on tick intervals, and windows, live bars and pages of
+  MT5 timeframes never replace the tick bars while one is shown. Switching back to
+  an MT5 timeframe requests its history as before, and a symbol switch while a tick
+  interval is shown reads the new symbol's ticks: the window that moves the bridge to
+  the new symbol is requested on the last MT5 timeframe and its candles are dropped.
+  A session that starts over (a disconnect, or another account) returns to the
+  bridge's own window.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
 - Chart SL/TP clear chips remove the selected live level from positions or
@@ -193,7 +213,8 @@ Not implemented: break even or multiple charts.
   layer), not on the chart frame. The session, reconciliation and
   dispatch gates are untouched, and the app never retries on its own.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
-  avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
+  avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths (a
+  tick interval's longer label, `1000T`, sets its own).
 - Live P&L right-aligns within the widest amount observed per position, expanding
   only as needed and resetting on removal; units/RR stay in place. Overlapping
   trading rows spread vertically without connector brackets; close buttons follow

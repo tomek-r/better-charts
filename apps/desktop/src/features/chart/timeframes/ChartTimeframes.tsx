@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
+import { TICK_INTERVALS, intervalLabel } from '../../../shared/bridge/chartIntervals';
 import { CaretIcon } from '../../../shared/ui/icons/CaretIcon';
 import { useBridgeActions } from '../../bridge/BridgeSessionProvider';
 import { useBridgeChartState, useBridgeConnection } from '../../bridge/bridgeSelectors';
@@ -34,7 +35,7 @@ function useDismiss(open: boolean, anchor: React.RefObject<HTMLElement | null>, 
 export function ChartTimeframes() {
   const { symbol, timeframe, symbolLoading } = useBridgeChartState();
   const { status } = useBridgeConnection();
-  const { requestHistory } = useBridgeActions();
+  const { requestInterval } = useBridgeActions();
   const { favorites, toggleFavorite } = useTimeframeFavorites();
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -49,6 +50,8 @@ export function ChartTimeframes() {
 
   const supported = status.supportedTimeframes ?? [];
   const disabled = !symbol || status.state !== 'connected' || symbolLoading;
+  // The tick intervals are this app's own, so they are offered whatever the EA advertises, and first.
+  const tickOptions = TICK_INTERVALS.map((interval) => ({ wire: interval.code }));
 
   if (supported.length === 0) {
     // supportedTimeframes arrives with the handshake. Reserve the exact rows the
@@ -57,11 +60,11 @@ export function ChartTimeframes() {
     return (
       <div className="timeframe-tabs placeholder" aria-hidden="true">
         <div className="timeframe-favorites">
-          {timeframeOptions
+          {[...tickOptions, ...timeframeOptions]
             .filter((option) => favorites.includes(option.wire))
             .map((option) => (
               <button key={option.wire} disabled tabIndex={-1}>
-                {option.label}
+                {intervalLabel(option.wire)}
               </button>
             ))}
         </div>
@@ -73,11 +76,12 @@ export function ChartTimeframes() {
   }
 
   const supportedOptions = timeframeOptions.filter((option) => supported.includes(option.wire));
-  // The active timeframe is always visible, even when it is not a favorite.
-  const shown = supportedOptions.filter((option) => favorites.includes(option.wire) || option.wire === timeframe);
+  const options = [...tickOptions, ...supportedOptions];
+  // The active interval is always visible, even when it is not a favorite.
+  const shown = options.filter((option) => favorites.includes(option.wire) || option.wire === timeframe);
   const select = (wire: string) => {
     closeMenu(false);
-    void requestHistory(wire);
+    void requestInterval(wire);
   };
 
   return (
@@ -91,9 +95,9 @@ export function ChartTimeframes() {
               className={isActive ? 'active' : ''}
               disabled={disabled}
               aria-pressed={isActive}
-              onClick={() => void requestHistory(option.wire)}
+              onClick={() => void requestInterval(option.wire)}
             >
-              {option.label}
+              {intervalLabel(option.wire)}
             </button>
           );
         })}
@@ -110,7 +114,7 @@ export function ChartTimeframes() {
         </button>
         {open && (
           <TimeframeMenu
-            options={supportedOptions}
+            options={options}
             active={timeframe}
             favorites={favorites}
             disabled={disabled}

@@ -1,14 +1,16 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
-  timeframeLabel,
-  timeframeLongLabel,
-  timeframeSection,
-  type TimeframeSection,
-} from '../../../../shared/bridge/timeframes';
+  intervalLabel,
+  intervalLongLabel,
+  intervalSection,
+  type IntervalSection,
+} from '../../../../shared/bridge/chartIntervals';
 import { CaretIcon } from '../../../../shared/ui/icons/CaretIcon';
 import { StarIcon } from '../../../../shared/ui/icons/StarIcon';
 
-const sectionTitles: { section: TimeframeSection; title: string }[] = [
+// TradingView lists its tick intervals first, so the section order is the same here.
+const sectionTitles: { section: IntervalSection; title: string }[] = [
+  { section: 'ticks', title: 'Ticks' },
   { section: 'minutes', title: 'Minutes' },
   { section: 'hours', title: 'Hours' },
   { section: 'days', title: 'Days & above' },
@@ -61,8 +63,8 @@ export function TimeframeMenu({
   onToggleFavorite: (wire: string) => void;
 }) {
   const menuRef = useViewportFit();
-  const [collapsed, setCollapsed] = useState<ReadonlySet<TimeframeSection>>(new Set());
-  const toggleSection = (section: TimeframeSection) =>
+  const [collapsed, setCollapsed] = useState<ReadonlySet<IntervalSection>>(new Set());
+  const toggleSection = (section: IntervalSection) =>
     setCollapsed((current) => {
       const next = new Set(current);
       if (!next.delete(section)) {
@@ -74,7 +76,7 @@ export function TimeframeMenu({
   return (
     <div className="timeframe-menu" role="dialog" aria-label="Timeframes" ref={menuRef}>
       {sectionTitles.map(({ section, title }) => {
-        const rows = options.filter((option) => timeframeSection(option.wire) === section);
+        const rows = options.filter((option) => intervalSection(option.wire) === section);
         if (rows.length === 0) {
           return null;
         }
@@ -92,7 +94,7 @@ export function TimeframeMenu({
             {!isCollapsed &&
               rows.map(({ wire }) => {
                 const isFavorite = favorites.includes(wire);
-                const short = timeframeLabel(wire);
+                const short = intervalLabel(wire);
                 return (
                   <div key={wire} className={wire === active ? 'timeframe-menu-row active' : 'timeframe-menu-row'}>
                     <button
@@ -101,7 +103,7 @@ export function TimeframeMenu({
                       aria-current={wire === active ? 'true' : undefined}
                       onClick={() => onSelect(wire)}
                     >
-                      {timeframeLongLabel(wire)}
+                      {intervalLongLabel(wire)}
                     </button>
                     <button
                       className={isFavorite ? 'timeframe-menu-star favorite' : 'timeframe-menu-star'}

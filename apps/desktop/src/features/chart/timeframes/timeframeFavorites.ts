@@ -1,10 +1,14 @@
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
+import { TICK_INTERVALS } from '../../../shared/bridge/chartIntervals';
 
 export const timeframeFavoritesKey = 'better-charts.timeframe-favorites.v1';
 
 export const DEFAULT_TIMEFRAME_FAVORITES: readonly string[] = ['M1', 'M5', 'M15', 'H1', 'H4', 'D1', 'MN1'];
 
-const knownCodes = new Set(timeframeOptions.map((option) => option.wire));
+const knownCodes = new Set([
+  ...timeframeOptions.map((option) => option.wire),
+  ...TICK_INTERVALS.map((interval) => interval.code),
+]);
 
 /** Wire codes the user starred. Missing or malformed storage yields the defaults;
  * an empty array is a deliberate choice and is kept. `storage` is injectable for tests. */

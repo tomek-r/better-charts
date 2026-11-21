@@ -7,6 +7,7 @@ import { priceTagHeight, tagStackTops } from '../quotes/tagStack';
 import { paintTag, tagLayout } from '../text/priceTag';
 import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './barCountdownOptions';
 import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
+import { isTickInterval } from '../../../../shared/bridge/chartIntervals';
 
 /**
  * Counts the current bar down on the price axis, under the Bid label.
@@ -126,10 +127,19 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
     });
   }
 
+  /**
+   * Whether the tag counts anything at all: a tick interval's bar closes after
+   * a number of ticks rather than at a time, so it has nothing to count down to.
+   */
+  private countsDown(): boolean {
+    const { connected, suspended, timeframe } = this.state;
+    return connected && !suspended && !isTickInterval(timeframe);
+  }
+
   /** Countdown text for the current broker second, ignoring visibility. */
   private tagText(): string {
-    const { connected, suspended, symbol, barTimeSeconds, timeframe } = this.state;
-    return connected && !suspended ? this.clock.text(symbol, barTimeSeconds, timeframe) : '';
+    const { symbol, barTimeSeconds, timeframe } = this.state;
+    return this.countsDown() ? this.clock.text(symbol, barTimeSeconds, timeframe) : '';
   }
 
   /** Anchor price to axis coordinate, below which the label is placed. */
@@ -163,8 +173,8 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
    * eventually skips a second.
    */
   private schedule(): void {
-    const { connected, suspended, symbol, barTimeSeconds, timeframe } = this.state;
-    if (!this.requestUpdate || !this.options.shown || !connected || suspended || document.hidden) {
+    const { symbol, barTimeSeconds, timeframe } = this.state;
+    if (!this.requestUpdate || !this.options.shown || !this.countsDown() || document.hidden) {
       this.stopTimer();
       return;
     }

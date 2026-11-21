@@ -15,12 +15,14 @@ export interface TickBarSeries {
   readonly bars: readonly RenderBar[];
   /** For every bar, the epoch milliseconds its last tick arrived: the instant the bar ended. */
   readonly endsMs: readonly number[];
+  /** The prices of the ticks the last bar groups while it is still forming, oldest first; empty once it is closed. */
+  readonly formingPrices: readonly number[];
   /** The bars that hold every tick they group; the forming last one is not among them. */
   readonly closedCount: number;
 }
 
 /** The tick as a price, or null when neither its bid nor its last price reads as one. */
-function tickPrice(tick: IndicatorTick): number | null {
+export function tickPrice(tick: IndicatorTick): number | null {
   const bid = Number(tick.bid);
   if (Number.isFinite(bid) && bid > 0) {
     return bid;
@@ -62,7 +64,7 @@ function tickBarOf(group: readonly PricedTick[]): RenderBar {
  */
 export function buildTickBars(ticks: readonly IndicatorTick[], ticksPerBar: number): TickBarSeries {
   if (ticksPerBar < 1) {
-    return { bars: [], endsMs: [], closedCount: 0 };
+    return { bars: [], endsMs: [], formingPrices: [], closedCount: 0 };
   }
   const priced = pricedTicks(ticks);
   const bars: RenderBar[] = [];
@@ -72,5 +74,7 @@ export function buildTickBars(ticks: readonly IndicatorTick[], ticksPerBar: numb
     bars.push(tickBarOf(group));
     endsMs.push(group[group.length - 1].timeMs);
   }
-  return { bars, endsMs, closedCount: Math.floor(priced.length / ticksPerBar) };
+  const closedCount = Math.floor(priced.length / ticksPerBar);
+  const formingTicks = priced.slice(closedCount * ticksPerBar);
+  return { bars, endsMs, formingPrices: formingTicks.map((tick) => tick.price), closedCount };
 }

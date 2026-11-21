@@ -25,6 +25,14 @@ export interface TickWindow {
   readonly maxTicks: number;
 }
 
+/** Whether `page` answers `window`: the host echoes the range it read. */
+export function answersTickWindow(
+  page: { readonly fromMs: number; readonly toMs: number },
+  window: TickWindow,
+): boolean {
+  return page.fromMs === window.fromMs && page.toMs === window.toMs;
+}
+
 /** How far back a read has walked, and where the window of its next older page ends. */
 export interface TickWalk {
   readonly oldestMs: number;
