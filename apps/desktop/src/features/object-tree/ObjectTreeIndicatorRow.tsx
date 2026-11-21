@@ -23,20 +23,23 @@ import {
 } from './objectTreeRowActions';
 import { presentWhileTrue } from './objectTreeRowAttributes';
 import { ROW_NAME_CLASS } from './objectTreeRowFocus';
+import type { RowReorder } from './useLayerReorder';
 
 export interface ObjectTreeIndicatorRowProps {
   readonly saved: SavedIndicator;
   /** The registry entry that drew the indicator: the row names it as the legend does and edits it. */
   readonly plugin: RegisteredChartIndicatorPlugin;
+  /** The drag and Alt+Arrow reordering of the price pane's rows; absent for an own pane's row, which stays put. */
+  readonly reorder?: RowReorder;
 }
 
 /**
  * One indicator of the object tree, named as the chart's legend names it. A click on its name selects it,
  * which frames its legend row and draws its handles; a double click opens its settings and Delete or
  * Backspace on its name detaches it, while the three small buttons beside it open its settings, hide or
- * show it and remove it.
+ * show it and remove it. A row of the price pane also drags, and moves with Alt+Arrow, among its pane's rows.
  */
-export function ObjectTreeIndicatorRow({ saved, plugin }: ObjectTreeIndicatorRowProps) {
+export function ObjectTreeIndicatorRow({ saved, plugin, reorder }: ObjectTreeIndicatorRowProps) {
   const openIndicatorSettings = useOpenIndicatorSettings();
   const commands = useIndicatorRowCommands();
   const selectIndicator = useSelectIndicator();
@@ -50,6 +53,7 @@ export function ObjectTreeIndicatorRow({ saved, plugin }: ObjectTreeIndicatorRow
   const select = () => selectIndicator(saved.instanceId);
   const onNameKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'Delete' && event.key !== 'Backspace') {
+      reorder?.onNameKeyDown(event);
       return;
     }
     event.preventDefault();
@@ -64,6 +68,7 @@ export function ObjectTreeIndicatorRow({ saved, plugin }: ObjectTreeIndicatorRow
       data-instance-id={saved.instanceId}
       data-selected={presentWhileTrue(selected)}
       data-hidden={presentWhileTrue(hidden)}
+      {...reorder?.listItemProps}
     >
       <button
         type="button"

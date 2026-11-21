@@ -1,32 +1,55 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { useChartSettings } from '../chart/chartSettings/ChartSettingsProvider';
+import { useIndicatorRowCommands } from '../indicators/useIndicatorCommands';
 import { ObjectTreeIndicatorRow } from './ObjectTreeIndicatorRow';
 import { ObjectTreePaneGroup, paneGroupLabel } from './ObjectTreePaneGroup';
 import { objectTreeIndicatorPanes } from './objectTreeIndicatorEntries';
+import { useLayerReorder } from './useLayerReorder';
 
 /** The price pane counts as pane 1, and the chart stacks a new own pane under the ones already there. */
 const FIRST_OWN_PANE = 2;
 
+interface ObjectTreeIndicatorListProps {
+  readonly children: ReactNode;
+  /** The list a moved row's focus is handed back through; absent for an own pane's list, whose row stays put. */
+  readonly listRef?: RefObject<HTMLUListElement | null>;
+}
+
 /** The rows of one pane, in a list of their own, named as the chart's legend names them. */
-function ObjectTreeIndicatorList({ children }: { readonly children: ReactNode }) {
+function ObjectTreeIndicatorList({ children, listRef }: ObjectTreeIndicatorListProps) {
   return (
-    <ul className="object-tree-list object-tree-indicator-list" aria-label="Indicators">
+    <ul ref={listRef} className="object-tree-list object-tree-indicator-list" aria-label="Indicators">
       {children}
     </ul>
   );
 }
 
-/** The indicator rows of the price pane, listed under the drawings; it renders nothing while it has none. */
+/**
+ * The indicator rows of the price pane, listed under the drawings, their top row painting over the ones
+ * under it: a drag or Alt+Arrow moves one indicator among them and saves the order. It renders nothing
+ * while the pane has no row.
+ */
 export function ObjectTreePricePaneIndicators() {
   const { settings } = useChartSettings();
+  const { moveIndicatorRow } = useIndicatorRowCommands();
   const { pricePane } = objectTreeIndicatorPanes(settings.indicators);
+  const moveRow = (fromIndex: number, toIndex: number) => {
+    const moved = pricePane[fromIndex];
+    const target = pricePane[toIndex];
+    if (moved === undefined || target === undefined) {
+      return;
+    }
+    moveIndicatorRow(moved.saved.instanceId, target.saved.instanceId);
+  };
+  const { forRow, listRef } = useLayerReorder(pricePane.length, moveRow);
+
   if (pricePane.length === 0) {
     return null;
   }
   return (
-    <ObjectTreeIndicatorList>
-      {pricePane.map(({ saved, plugin }) => (
-        <ObjectTreeIndicatorRow key={saved.instanceId} saved={saved} plugin={plugin} />
+    <ObjectTreeIndicatorList listRef={listRef}>
+      {pricePane.map(({ saved, plugin }, rowIndex) => (
+        <ObjectTreeIndicatorRow key={saved.instanceId} saved={saved} plugin={plugin} reorder={forRow(rowIndex)} />
       ))}
     </ObjectTreeIndicatorList>
   );

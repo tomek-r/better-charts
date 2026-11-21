@@ -1,5 +1,6 @@
 import type { ChartLayerEntry } from '../chart/engine/drawings/chartDrawings';
 import type { ChartDrawingRecord, ChartDrawingSelection } from '../chart/engine/drawings/drawingRecord';
+import { useChartResources } from '../chart/ChartWorkspaceProvider';
 import { findChartToolPlugin } from '../tools/registry';
 import { useDrawingSelection } from '../tools/drawingToolbar/useDrawingSelection';
 import { ObjectTreeBarsRow } from './ObjectTreeBarsRow';
@@ -24,7 +25,9 @@ function isRecordSelected(selection: ChartDrawingSelection | null, record: Chart
 export function ObjectTreePanel() {
   const layers = useLayerList();
   const selection = useDrawingSelection();
-  const { forRow, listRef } = useLayerReorder(layers.length);
+  const { chart } = useChartResources();
+  const moveRow = (fromIndex: number, toIndex: number) => chart.current?.drawings.moveLayer(fromIndex, toIndex);
+  const { forRow, listRef } = useLayerReorder(layers.length, moveRow);
 
   const layerRow = (layer: ChartLayerEntry, layerIndex: number) => {
     if (layer.kind === 'bars') {

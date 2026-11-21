@@ -1,10 +1,4 @@
-import {
-  MismatchDirection,
-  type IChartApi,
-  type IPriceLine,
-  type Logical,
-  type LogicalRange,
-} from 'lightweight-charts';
+import { MismatchDirection, type IChartApi, type IPriceLine } from 'lightweight-charts';
 import type { ChartIndicatorPane } from './indicatorContract';
 import { IndicatorFillPrimitive } from './indicatorFillPrimitive';
 import type { IndicatorFill, IndicatorFillEdge, IndicatorFrame, IndicatorLevel } from './indicatorFrame';
@@ -18,21 +12,18 @@ import {
   removeOwnPane,
   type OwnPane,
 } from './indicatorPanes';
+import { drawnPaneOf, pickIndicatorAt } from './indicatorPick';
 import {
   addPlotSeries,
   isHistogramPlotSeries,
   plotColorOf,
-  plotStyleRuleOf,
   removePlotSeries,
   setPlotSeriesHandles,
   setPlotSeriesHidden,
 } from './indicatorPlotSeries';
 import { plotStateOf, type IndicatorPlotState } from './indicatorPlotState';
-import { PLOT_BASE_PRICE, plotDrawingOf, type IndicatorPlotSeries } from './indicatorPlotStyles';
-import { hitsInk, type PlotChartPoint, type PlotInk } from './indicatorPlotHits';
-import { runInk, type PlotDrawing } from './indicatorPlotInk';
+import type { IndicatorPlotSeries } from './indicatorPlotStyles';
 import type { PanePoint } from './indicatorPanePoint';
-import { numericPointAt } from './indicatorSeriesValue';
 import { isValuePoint, lastTimeOf, pointColorOf, pointOf, pointsOf, timeOf } from './indicatorPoints';
 import { applyPlotScaleMargins } from './indicatorScaleFit';
 import { OPENING_OWN_PANE_SCALE, readOwnPaneScale, restoreOwnPaneScale } from './ownPaneScale';
@@ -67,6 +58,11 @@ export interface IndicatorLayerState {
   readonly precision: number | null;
   /** Whether its plots paint the handle dots of the selected indicator. */
   readonly selectionHandles: boolean;
+  /**
+   * The index its plots hold among the pane's series, which the library reports: the greater it is, the higher
+   * it paints. Null while it draws no series.
+   */
+  readonly seriesOrder: number | null;
 }
 
 /** How tall one indicator's own pane is: its stretch factor over the price pane's, so the price pane's stays 1. */
@@ -146,24 +142,11 @@ function hostSeriesOf(series: readonly IndicatorPlotSeries[]): IndicatorPlotSeri
   return series.find((plotSeries) => !isHistogramPlotSeries(plotSeries)) ?? series[0];
 }
 
-/** One bar either side of the visible range, so a run leaving the pane can still be clicked near its edge. */
-const HIT_RANGE_MARGIN_BARS = 1;
-
-/** The first bar a hit test reads. */
-function firstHitBar(range: LogicalRange): number {
-  return Math.floor(range.from) - HIT_RANGE_MARGIN_BARS;
-}
-
-/** The last bar a hit test reads. */
-function lastHitBar(range: LogicalRange): number {
-  return Math.ceil(range.to) + HIT_RANGE_MARGIN_BARS;
-}
-
-/** How a plot's series draws what it plots, and where its pane puts the price its columns grow from. */
-function drawingOf(series: IndicatorPlotSeries): PlotDrawing {
-  const rule = plotStyleRuleOf(series);
-  return plotDrawingOf(rule, rule.drawsFromZero ? series.priceToCoordinate(PLOT_BASE_PRICE) : null);
-}
+/**
+ * The order that puts a series over every other one in its pane. The library clamps an order past the end of
+ * the pane's series, so a plot never has to know how many series its pane holds.
+ */
+const TOP_PAINT_ORDER = Number.MAX_SAFE_INTEGER;
 
 /**
  * The display layer for indicator frames: one series per plot, plus the levels and fills the frame
@@ -176,6 +159,8 @@ export class IndicatorLayer {
   private readonly shown = new Map<string, Shown>();
   /** The indicator the chart has selected; its plots paint the handle dots. */
   private selectedId: string | null = null;
+  /** The indicators the app lists topmost first, as its last caller set them: the first paints over the rest. */
+  private paintOrder: readonly string[] = [];
 
   constructor(private readonly chart: IChartApi) {}
 
@@ -256,6 +241,15 @@ export class IndicatorLayer {
     this.showHandles(id, true);
   }
 
+  /**
+   * Paints the indicators in the given topmost-first order: the first of the list draws over the ones under
+   * it, and a frame drawn later keeps the place its indicator holds in it.
+   */
+  setPaintOrder(topFirst: readonly string[]): void {
+    this.paintOrder = topFirst;
+    this.applyPaintOrder();
+  }
+
   /** Removes everything `id` drew and gives back the pane it held, if any. */
   remove(id: string): void {
     const heldPane = this.shown.get(id)?.ownPane ?? null;
@@ -280,10 +274,11 @@ export class IndicatorLayer {
       plots: shown.series.map((series, plotIndex) => plotStateOf(series, shown.titles[plotIndex])),
       levels: shown.levels.map(levelStateOf),
       fills: shown.fills.map(fillStateOf),
-      paneIndex: this.paneOf(shown) ?? PRICE_PANE_INDEX,
+      paneIndex: drawnPaneOf(shown.series) ?? PRICE_PANE_INDEX,
       paneHeight: this.paneHeightOf(shown),
       precision: shown.precision,
       selectionHandles: this.selectedId === id,
+      seriesOrder: shown.series[0]?.seriesOrder() ?? null,
     }));
   }
 
@@ -318,22 +313,9 @@ export class IndicatorLayer {
     return shown.series.map((series) => legendValueOf(series, logicalIndex));
   }
 
-  /**
-   * The indicator whose plot the pane point lands on, topmost first; null when it lands on none. A plot
-   * picks by the ink it draws — its line, its markers or its columns — within the hit tolerance.
-   */
+  /** The indicator whose plot the pane point lands on, topmost first; null when it lands on none. */
   indicatorAt(point: PanePoint): string | null {
-    const topFirst = [...this.shown.keys()].reverse();
-    for (const id of topFirst) {
-      const shown = this.shown.get(id);
-      if (shown === undefined || shown.hidden || this.paneOf(shown) !== point.paneIndex) {
-        continue;
-      }
-      if (this.hitsPlot(shown, point)) {
-        return id;
-      }
-    }
-    return null;
+    return pickIndicatorAt(this.chart, this.shown, point);
   }
 
   /** Draws `frame` for `id`, in its own pane or on the price pane when `ownPane` is null. */
@@ -358,7 +340,7 @@ export class IndicatorLayer {
     const levels = frame.levels ?? [];
     const fills = frame.fills ?? [];
     const hostSeries = hostSeriesOf(series);
-    this.shown.set(id, {
+    const drawn: Shown = {
       series,
       titles: frame.plots.map((plot) => plot.title),
       plotVisible: frame.plots.map((plot) => plot.visible !== false),
@@ -371,9 +353,25 @@ export class IndicatorLayer {
       ownPane,
       precision,
       lookKey,
-    });
+    };
+    this.shown.set(id, drawn);
+    // A frame drawn again appends fresh series, so the whole listed order goes back over the pane.
+    this.applyPaintOrder();
     if (id === this.selectedId) {
       this.showHandles(id, true);
+    }
+  }
+
+  /**
+   * Moves the listed indicators over the other series of their pane, bottom row first: each lift leaves the
+   * ones lifted before it under it, so the list ends topmost first. The plots of one indicator keep their own
+   * order, each moved over the pane's other series in turn.
+   */
+  private applyPaintOrder(): void {
+    for (const id of [...this.paintOrder].reverse()) {
+      for (const series of this.shown.get(id)?.series ?? []) {
+        series.setSeriesOrder(TOP_PAINT_ORDER);
+      }
     }
   }
 
@@ -429,51 +427,6 @@ export class IndicatorLayer {
     for (const series of shown?.series ?? []) {
       setPlotSeriesHandles(series, selected);
     }
-  }
-
-  /** The pane `shown` draws in; null while it holds no series. */
-  private paneOf(shown: Shown): number | null {
-    return shown.series[0]?.getPane().paneIndex() ?? null;
-  }
-
-  /** Whether the point lands on the ink one of `shown`'s drawn plots paints. */
-  private hitsPlot(shown: Shown, point: PanePoint): boolean {
-    const drawnPlots = shown.series.filter((_series, plotIndex) => shown.plotVisible[plotIndex]);
-    return drawnPlots.some((series) => hitsInk(point, this.inkOf(series)));
-  }
-
-  /**
-   * The ink `series` draws inside the visible range, in its pane's CSS pixels: its points run together
-   * while they sit on neighbouring bars, and a bar without a point breaks the run as it breaks the line.
-   */
-  private inkOf(series: IndicatorPlotSeries): readonly PlotInk[] {
-    const range = this.chart.timeScale().getVisibleLogicalRange();
-    if (range === null) {
-      return [];
-    }
-    const drawing = drawingOf(series);
-    const ink: PlotInk[] = [];
-    const last = lastHitBar(range);
-    let run: PlotChartPoint[] = [];
-    for (let index = firstHitBar(range); index <= last; index += 1) {
-      const point = this.plotPointAt(series, index);
-      if (point === null) {
-        ink.push(...runInk(run, drawing));
-        run = [];
-        continue;
-      }
-      run.push(point);
-    }
-    ink.push(...runInk(run, drawing));
-    return ink;
-  }
-
-  /** The point `series` draws at bar `index`, in its pane's CSS pixels; null where it draws none. */
-  private plotPointAt(series: IndicatorPlotSeries, index: number): PlotChartPoint | null {
-    const x = this.chart.timeScale().logicalToCoordinate(index as Logical);
-    const point = numericPointAt(series, index);
-    const y = point === null ? null : series.priceToCoordinate(point.value);
-    return x === null || y === null ? null : { x, y };
   }
 
   /** Attaches the fill primitive to the host series, which owns the pane the band is drawn in. */

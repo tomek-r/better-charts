@@ -11,6 +11,7 @@ import {
 import { indicatorsShownOn } from '../src/features/indicators/indicatorsOnTimeframe';
 import {
   withIndicatorHidden,
+  withIndicatorMoved,
   withIndicatorPaneHeights,
   withIndicatorSettings,
   withoutIndicator,
@@ -98,6 +99,26 @@ test('removing drops only its own entry', () => {
   const remaining = withoutIndicator([SAVED_SMA_9, SAVED_SMA_21], SAVED_SMA_9.instanceId);
 
   expect(remaining).toEqual([SAVED_SMA_21]);
+});
+
+test('moving an indicator takes the place another holds and leaves every other entry in order', () => {
+  const moved = withIndicatorMoved(
+    [SAVED_SMA_9, SAVED_RSI, SAVED_SMA_21],
+    SAVED_SMA_9.instanceId,
+    SAVED_SMA_21.instanceId,
+  );
+
+  expect(moved.map((entry) => entry.instanceId)).toEqual([
+    SAVED_RSI.instanceId,
+    SAVED_SMA_21.instanceId,
+    SAVED_SMA_9.instanceId,
+  ]);
+});
+
+test('moving an indicator the list does not hold leaves the order as it was', () => {
+  const unchanged = withIndicatorMoved([SAVED_SMA_9, SAVED_SMA_21], 'ghost-2', SAVED_SMA_21.instanceId);
+
+  expect(unchanged).toEqual([SAVED_SMA_9, SAVED_SMA_21]);
 });
 
 test('a dragged pane height lands on its own entry and keeps everything else it stores', () => {

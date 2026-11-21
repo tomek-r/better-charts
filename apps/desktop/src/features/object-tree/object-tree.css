@@ -28,7 +28,6 @@
   gap: 2px;
   height: 36px;
   padding-inline: 8px;
-  cursor: grab;
 }
 
 .object-tree-row + .object-tree-row {
@@ -78,7 +77,11 @@
   height: 18px;
 }
 
-/* Every row drags (grab in the base rule): grabbing while it is in flight, dimmed where it started. */
+/* A row its list reorders drags: the grab cursor, grabbing while it is in flight, dimmed where it started. */
+.object-tree-row[data-row-index] {
+  cursor: grab;
+}
+
 .object-tree-row[data-dragging] {
   cursor: grabbing;
   opacity: 0.4;
@@ -179,9 +182,4 @@
    pane's group already carries that rule, so its list adds none. */
 .object-tree-pane-group > .object-tree-list + .object-tree-indicator-list {
   border-top: 1px solid var(--color-border);
-}
-
-/* Indicator rows sit under the drawings; they do not drag, so they keep the default cursor. */
-.object-tree-indicator-row {
-  cursor: default;
 }

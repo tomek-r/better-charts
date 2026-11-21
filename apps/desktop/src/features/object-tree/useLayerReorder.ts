@@ -1,13 +1,12 @@
 import { useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type RefObject } from 'react';
 import { arrowStep, type ArrowSteps } from '../../shared/ui/keyboard/arrowStep';
-import { useChartResources } from '../chart/ChartWorkspaceProvider';
-import { dropEdgeAt, dropTargetIndex, type DropEdge, type LayerDropIndicator } from './layerDropTarget';
-import { focusLayerNameAt, walkRowFocus } from './objectTreeRowFocus';
+import { dropEdgeAt, dropTargetIndex, type DropEdge, type DropIndicator } from './layerDropTarget';
+import { focusRowNameAt, walkRowFocus } from './objectTreeRowFocus';
 
-/** What a row spreads on its `<li>`: the HTML5 drag events, and the attributes object-tree.css selects. */
-export interface LayerRowListItemProps {
+/** What a reorderable row spreads on its `<li>`: the HTML5 drag events, and the attributes object-tree.css selects. */
+export interface ReorderableRowItemProps {
   readonly draggable: true;
-  readonly 'data-layer-index': number;
+  readonly 'data-row-index': number;
   /** 'true' while this row is the dragged one, which dims it. */
   readonly 'data-dragging': 'true' | undefined;
   /** The side of this row a drop would land on: undefined for every row the pointer is not over. */
@@ -20,14 +19,14 @@ export interface LayerRowListItemProps {
 }
 
 /** Everything one row needs to take part in the reordering. */
-export interface LayerRowReorder {
-  readonly listItemProps: LayerRowListItemProps;
+export interface RowReorder {
+  readonly listItemProps: ReorderableRowItemProps;
   /** The row's name-button keys: Alt+Arrow moves the row, a plain arrow walks focus to the next one. */
   readonly onNameKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }
 
-export interface LayerReorder {
-  readonly forRow: (layerIndex: number) => LayerRowReorder;
+export interface RowReorderList {
+  readonly forRow: (rowIndex: number) => RowReorder;
   /** The list the moved row's focus is handed back through. */
   readonly listRef: RefObject<HTMLUListElement | null>;
 }
@@ -36,15 +35,17 @@ export interface LayerReorder {
 const MOVE_STEPS: ArrowSteps = { ArrowUp: -1, ArrowDown: 1 };
 
 /**
- * Reordering of the topmost-first layer list: a row drags with HTML5 drag and drop, or moves with
- * Alt+Arrow while it holds focus. Both move one entry through the chart, which saves the order and
- * repaints by itself; a keyboard move also keeps focus on the moved row.
+ * Reordering of a topmost-first row list: a row drags with HTML5 drag and drop, or moves with Alt+Arrow while
+ * it holds focus. Both hand the move to `moveRow`, which owns what it does — a drawing moves through the
+ * chart, an indicator through the saved settings — and a keyboard move keeps focus on the moved row.
  */
-export function useLayerReorder(layerCount: number): LayerReorder {
-  const { chart } = useChartResources();
+export function useLayerReorder(
+  rowCount: number,
+  moveRow: (fromIndex: number, toIndex: number) => void,
+): RowReorderList {
   const listRef = useRef<HTMLUListElement>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<LayerDropIndicator | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
   const [focusAfterMove, setFocusAfterMove] = useState<number | null>(null);
 
   // The moved row is another element after the re-render, so its focus is handed back here.
@@ -52,7 +53,7 @@ export function useLayerReorder(layerCount: number): LayerReorder {
     if (focusAfterMove === null || listRef.current === null) {
       return;
     }
-    focusLayerNameAt(listRef.current, focusAfterMove);
+    focusRowNameAt(listRef.current, focusAfterMove);
     setFocusAfterMove(null);
   }, [focusAfterMove]);
 
@@ -61,16 +62,16 @@ export function useLayerReorder(layerCount: number): LayerReorder {
     setDropIndicator(null);
   };
 
-  const moveRowByKey = (layerIndex: number, step: number) => {
-    const targetIndex = layerIndex + step;
-    if (targetIndex < 0 || targetIndex >= layerCount) {
+  const moveRowByKey = (rowIndex: number, step: number) => {
+    const targetIndex = rowIndex + step;
+    if (targetIndex < 0 || targetIndex >= rowCount) {
       return;
     }
-    chart.current?.drawings.moveLayer(layerIndex, targetIndex);
+    moveRow(rowIndex, targetIndex);
     setFocusAfterMove(targetIndex);
   };
 
-  const onDragOver = (layerIndex: number, event: DragEvent<HTMLLIElement>) => {
+  const onDragOver = (rowIndex: number, event: DragEvent<HTMLLIElement>) => {
     if (draggingIndex === null) {
       return;
     }
@@ -79,40 +80,45 @@ export function useLayerReorder(layerCount: number): LayerReorder {
     event.dataTransfer.dropEffect = 'move';
     const edge = dropEdgeAt(event);
     setDropIndicator((current) =>
-      current?.index === layerIndex && current.edge === edge ? current : { index: layerIndex, edge },
+      current?.index === rowIndex && current.edge === edge ? current : { index: rowIndex, edge },
     );
   };
 
-  const onDrop = (layerIndex: number, event: DragEvent<HTMLLIElement>) => {
+  const onDrop = (rowIndex: number, event: DragEvent<HTMLLIElement>) => {
     event.preventDefault();
     const source = draggingIndex;
     endDrag();
-    if (source !== null) {
-      chart.current?.drawings.moveLayer(source, dropTargetIndex(source, layerIndex, dropEdgeAt(event)));
+    if (source === null) {
+      return;
+    }
+    // A drop on the row's own place moves nothing.
+    const targetIndex = dropTargetIndex(source, rowIndex, dropEdgeAt(event));
+    if (targetIndex !== source) {
+      moveRow(source, targetIndex);
     }
   };
 
-  const forRow = (layerIndex: number): LayerRowReorder => ({
+  const forRow = (rowIndex: number): RowReorder => ({
     listItemProps: {
       draggable: true,
-      'data-layer-index': layerIndex,
-      'data-dragging': draggingIndex === layerIndex ? 'true' : undefined,
-      'data-drop-edge': dropIndicator?.index === layerIndex ? dropIndicator.edge : undefined,
+      'data-row-index': rowIndex,
+      'data-dragging': draggingIndex === rowIndex ? 'true' : undefined,
+      'data-drop-edge': dropIndicator?.index === rowIndex ? dropIndicator.edge : undefined,
       onDragStart: (event) => {
         event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', String(layerIndex));
-        setDraggingIndex(layerIndex);
+        event.dataTransfer.setData('text/plain', String(rowIndex));
+        setDraggingIndex(rowIndex);
       },
-      onDragOver: (event) => onDragOver(layerIndex, event),
+      onDragOver: (event) => onDragOver(rowIndex, event),
       onDragLeave: () => setDropIndicator(null),
-      onDrop: (event) => onDrop(layerIndex, event),
+      onDrop: (event) => onDrop(rowIndex, event),
       onDragEnd: endDrag,
     },
     onNameKeyDown: (event) => {
       const step = arrowStep(event.key, MOVE_STEPS);
       if (event.altKey && step !== undefined) {
         event.preventDefault();
-        moveRowByKey(layerIndex, step);
+        moveRowByKey(rowIndex, step);
         return;
       }
       walkRowFocus(event);

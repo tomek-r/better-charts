@@ -43,6 +43,11 @@ failOnPageNoise();
 const SMA_INSTANCE_ID = 'sma-1';
 const SMA_DEFINITION_ID = 'sma';
 
+/** The second price-pane indicator these cases seed, so that one row can move over another. */
+const EMA_INSTANCE_ID = 'ema-1';
+const SAVED_EMA_9 = { instanceId: EMA_INSTANCE_ID, definitionId: 'ema', settings: {} };
+const EMA_9_CLOSE = 'EMA 9 close';
+
 /** The name the seeded moving average goes by once its length changed. */
 const SMA_20_CLOSE = 'SMA 20 close';
 
@@ -108,9 +113,37 @@ async function openTreeWithSmaAndDrawing(page: Page, savedSma: unknown = SAVED_S
   await expect(indicatorRows(page)).toHaveCount(1);
 }
 
+/** The name button of one price-pane indicator row, which a click, a double click and the row keys land on. */
+function indicatorRowName(page: Page, name: string): Locator {
+  return indicatorRows(page).getByRole('button', { name, exact: true });
+}
+
 /** The name button of the single price-pane indicator row: what a click and the row keys land on. */
 function smaRowName(page: Page): Locator {
-  return indicatorRows(page).getByRole('button', { name: SMA_9_CLOSE, exact: true });
+  return indicatorRowName(page, SMA_9_CLOSE);
+}
+
+/** The names of the price-pane indicator rows, top to bottom. */
+async function indicatorRowNames(page: Page): Promise<Array<string | null>> {
+  return indicatorRows(page)
+    .locator('.object-tree-row-label')
+    .evaluateAll((labels) => labels.map((label) => label.textContent));
+}
+
+/** The saved indicators' instance ids, in the order the chart settings store them. */
+async function savedIndicatorOrder(page: Page): Promise<string[]> {
+  return (readSavedIndicators(await latestSavedIndicators(page)) ?? []).map((indicator) => indicator.instanceId);
+}
+
+/** The index one indicator's plots hold among its pane's series: the greater it is, the higher it paints. */
+async function seriesOrderOf(page: Page, instanceId: string): Promise<number | null> {
+  return (await drawnIndicators(page)).find((indicator) => indicator.id === instanceId)?.seriesOrder ?? null;
+}
+
+/** Whether the chart paints `top` over `under`: the object tree's top row is the higher series order. */
+async function paintsOver(page: Page, top: string, under: string): Promise<boolean> {
+  const [topOrder, underOrder] = [await seriesOrderOf(page, top), await seriesOrderOf(page, under)];
+  return topOrder !== null && underOrder !== null && topOrder > underOrder;
 }
 
 /** The Remove button of the price-pane legend row, which a selected indicator keeps in sight. */
@@ -201,6 +234,51 @@ test('Remove detaches the indicator and drops its row', async ({ page }) => {
   await removeIndicatorRow(page, row);
 
   await expect(indicatorList(page)).toHaveCount(0);
+});
+
+test('the rows follow the saved order, the top one painting over the ones under it', async ({ page }) => {
+  await openTreeWith(page, [SAVED_SMA_9, SAVED_EMA_9]);
+  await expect(indicatorRows(page)).toHaveCount(2);
+
+  expect(await indicatorRowNames(page)).toEqual([SMA_9_CLOSE, EMA_9_CLOSE]);
+  await expect.poll(() => paintsOver(page, SMA_INSTANCE_ID, EMA_INSTANCE_ID)).toBe(true);
+});
+
+test('Alt+ArrowUp moves an indicator row over the one above it, saves the order and paints it on top', async ({
+  page,
+}) => {
+  await openTreeWith(page, [SAVED_SMA_9, SAVED_EMA_9]);
+  const emaName = indicatorRowName(page, EMA_9_CLOSE);
+
+  await emaName.focus();
+  await page.keyboard.press('Alt+ArrowUp');
+
+  await expect.poll(() => indicatorRowNames(page)).toEqual([EMA_9_CLOSE, SMA_9_CLOSE]);
+  await expect(emaName).toBeFocused();
+  await expect.poll(() => savedIndicatorOrder(page)).toEqual([EMA_INSTANCE_ID, SMA_INSTANCE_ID]);
+  await expect.poll(() => paintsOver(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID)).toBe(true);
+
+  // The saved order is the rows' order, so the reload lists and paints them the same way.
+  await page.reload();
+  await openChart(page);
+  await openObjectTree(page);
+  await expect(indicatorRows(page)).toHaveCount(2);
+  expect(await indicatorRowNames(page)).toEqual([EMA_9_CLOSE, SMA_9_CLOSE]);
+  await expect.poll(() => paintsOver(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID)).toBe(true);
+});
+
+test('dragging an indicator row over another moves it there, saves the order and paints it on top', async ({
+  page,
+}) => {
+  await openTreeWith(page, [SAVED_SMA_9, SAVED_EMA_9]);
+  const rows = indicatorRows(page);
+  await expect(rows).toHaveCount(2);
+
+  await rows.nth(1).dragTo(rows.nth(0), { targetPosition: { x: 20, y: 2 } });
+
+  await expect.poll(() => indicatorRowNames(page)).toEqual([EMA_9_CLOSE, SMA_9_CLOSE]);
+  await expect.poll(() => savedIndicatorOrder(page)).toEqual([EMA_INSTANCE_ID, SMA_INSTANCE_ID]);
+  await expect.poll(() => paintsOver(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID)).toBe(true);
 });
 
 test('an indicator with a pane of its own is listed in a group of its own', async ({ page }) => {

@@ -394,7 +394,11 @@ price bars and, under them, the price-pane indicators by their legend names; the
 per indicator with a pane of its own (RSI, MACD, Volume), in the order those panes stand under the
 price pane, each holding that indicator's row. A row's buttons open the indicator's settings, hide
 or show it and remove it, and a double click or Delete on its name does the same as in a drawing
-row. A click on a row selects that indicator, and so does a click on its plotted lines, markers or
+row. The price-pane indicator rows keep the saved order, the top one painting over the ones under
+it: a drag, or Alt+ArrowUp / Alt+ArrowDown on a focused row, moves one indicator among its pane's
+rows, keeps the focus on it, saves the new order and repaints the chart in it, so a reload keeps
+the order. Own-pane groups keep their order, and indicator rows never move into the drawings list.
+A click on a row selects that indicator, and so does a click on its plotted lines, markers or
 columns: within 4 CSS pixels of the ink a plot draws in the pane it draws in. Either way the row is
 highlighted like a selected drawing row, the chart frames its legend row with its buttons in sight,
 and every plot of it shows small handle dots in its colour, ringed with the pane background, on every

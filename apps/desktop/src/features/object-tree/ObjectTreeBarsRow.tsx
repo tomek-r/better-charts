@@ -7,7 +7,7 @@ import { CandlesIcon } from './CandlesIcon';
 import { ObjectTreeVisibilityButton } from './objectTreeRowActions';
 import { presentWhileTrue } from './objectTreeRowAttributes';
 import { ROW_NAME_CLASS } from './objectTreeRowFocus';
-import type { LayerRowReorder } from './useLayerReorder';
+import type { RowReorder } from './useLayerReorder';
 
 /** The row's name while the chart has no symbol yet. */
 const FALLBACK_BARS_LABEL = 'Price bars';
@@ -28,7 +28,7 @@ function barsLabel(symbol: string | undefined, timeframe: string | undefined): s
  * row paint under the candles. It takes the same drag and keys as a drawing row, and its one button
  * hides the bars from the chart and shows them again; a hidden row's name is dimmed like a drawing's.
  */
-export function ObjectTreeBarsRow({ reorder }: { readonly reorder: LayerRowReorder }) {
+export function ObjectTreeBarsRow({ reorder }: { readonly reorder: RowReorder }) {
   const { symbol, timeframe } = useBridgeChartState();
   const { settings, keep } = useChartSettings();
   const label = barsLabel(symbol, timeframe);
