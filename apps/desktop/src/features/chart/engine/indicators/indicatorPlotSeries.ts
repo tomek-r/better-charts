@@ -1,6 +1,8 @@
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import type { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { IndicatorPlot } from './indicatorFrame';
 import { priceFormatOf } from './indicatorPanes';
+import { IndicatorPlotHandles } from './indicatorPlotHandles';
 import { IndicatorPlotMarkers, type IndicatorMarkerShape } from './indicatorPlotMarkers';
 import { PLOT_STYLE_RULES, type IndicatorPlotSeries, type PlotStyleRule } from './indicatorPlotStyles';
 import { closedBarsFloor } from './indicatorScaleFit';
@@ -11,6 +13,9 @@ const AREA_SERIES_TYPE = 'Area';
 
 /** Each plot's marker primitive, keyed by its series so the primitive goes away with the series. */
 const markerPrimitives = new WeakMap<IndicatorPlotSeries, IndicatorPlotMarkers>();
+
+/** Each plot's selection handles, keyed the same way. */
+const handlePrimitives = new WeakMap<IndicatorPlotSeries, IndicatorPlotHandles>();
 
 /** Each plot's style rule, keyed by its series so the rule goes away with the series. */
 const plotStyleRules = new WeakMap<IndicatorPlotSeries, PlotStyleRule>();
@@ -31,6 +36,7 @@ export function addPlotSeries(
   applyPriceFormat(series, precision);
   applyClosedBarsFloor(series, plot, rule, chart);
   attachMarkers(series, rule.markerShape, plot.color);
+  attachHandles(series, plot.color);
   plotStyleRules.set(series, rule);
   return series;
 }
@@ -45,14 +51,16 @@ function isAreaPlotSeries(series: IndicatorPlotSeries): series is ISeriesApi<'Ar
   return series.seriesType() === AREA_SERIES_TYPE;
 }
 
-/** Takes one plot off the chart, detaching its markers first so no repaint reads a removed series. */
+/** Takes one plot off the chart, detaching its markers and handles first so no repaint reads a removed series. */
 export function removePlotSeries(chart: IChartApi, series: IndicatorPlotSeries): void {
-  const markers = markerPrimitives.get(series);
-  if (markers !== undefined) {
-    series.detachPrimitive(markers);
-    markerPrimitives.delete(series);
-  }
+  detachRecordedPrimitive(series, markerPrimitives);
+  detachRecordedPrimitive(series, handlePrimitives);
   chart.removeSeries(series);
+}
+
+/** Shows or hides the handles a plot draws while its indicator is the chart's selection. */
+export function setPlotSeriesHandles(series: IndicatorPlotSeries, selected: boolean): void {
+  handlePrimitives.get(series)?.setSelected(selected);
 }
 
 /**
@@ -89,6 +97,26 @@ function attachMarkers(series: IndicatorPlotSeries, shape: IndicatorMarkerShape 
   const markers = new IndicatorPlotMarkers(shape, color);
   series.attachPrimitive(markers);
   markerPrimitives.set(series, markers);
+}
+
+/** Gives `series` the handles its indicator shows while selected, recorded so removal can detach them. */
+function attachHandles(series: IndicatorPlotSeries, color: string): void {
+  const handles = new IndicatorPlotHandles(color);
+  series.attachPrimitive(handles);
+  handlePrimitives.set(series, handles);
+}
+
+/** Detaches the primitive one record holds for `series`, if it holds one. */
+function detachRecordedPrimitive<Primitive extends ChartSeriesPrimitive>(
+  series: IndicatorPlotSeries,
+  primitives: WeakMap<IndicatorPlotSeries, Primitive>,
+): void {
+  const primitive = primitives.get(series);
+  if (primitive === undefined) {
+    return;
+  }
+  series.detachPrimitive(primitive);
+  primitives.delete(series);
 }
 
 /**

@@ -17,6 +17,7 @@ import {
   isHistogramPlotSeries,
   plotColorOf,
   removePlotSeries,
+  setPlotSeriesHandles,
   setPlotSeriesHidden,
 } from './indicatorPlotSeries';
 import { plotStateOf, type IndicatorPlotState } from './indicatorPlotState';
@@ -53,6 +54,8 @@ export interface IndicatorLayerState {
   readonly paneHeight: number | null;
   /** Decimals its values are written with; null when the frame states none. */
   readonly precision: number | null;
+  /** Whether its plots paint the handle dots of the selected indicator. */
+  readonly selectionHandles: boolean;
 }
 
 /** How tall one indicator's own pane is: its stretch factor over the price pane's, so the price pane's stays 1. */
@@ -141,6 +144,8 @@ function hostSeriesOf(series: readonly IndicatorPlotSeries[]): IndicatorPlotSeri
  */
 export class IndicatorLayer {
   private readonly shown = new Map<string, Shown>();
+  /** The indicator the chart has selected; its plots paint the handle dots. */
+  private selectedId: string | null = null;
 
   constructor(private readonly chart: IChartApi) {}
 
@@ -211,10 +216,23 @@ export class IndicatorLayer {
     shown.fillPrimitive?.setHidden(hidden);
   }
 
+  /** Draws the handle dots on the plots of `id`, and off those of the indicator selected before it. */
+  setSelected(id: string | null): void {
+    if (this.selectedId === id) {
+      return;
+    }
+    this.showHandles(this.selectedId, false);
+    this.selectedId = id;
+    this.showHandles(id, true);
+  }
+
   /** Removes everything `id` drew and gives back the pane it held, if any. */
   remove(id: string): void {
     const heldPane = this.shown.get(id)?.ownPane ?? null;
     this.clear(id);
+    if (this.selectedId === id) {
+      this.selectedId = null;
+    }
     removeOwnPane(this.chart, heldPane);
   }
 
@@ -235,6 +253,7 @@ export class IndicatorLayer {
       paneIndex: shown.series[0]?.getPane().paneIndex() ?? PRICE_PANE_INDEX,
       paneHeight: this.paneHeightOf(shown),
       precision: shown.precision,
+      selectionHandles: this.selectedId === id,
     }));
   }
 
@@ -305,6 +324,9 @@ export class IndicatorLayer {
       precision,
       lookKey,
     });
+    if (id === this.selectedId) {
+      this.showHandles(id, true);
+    }
   }
 
   /** Rewrites the bars of a shown indicator whose look is unchanged, leaving everything it draws alone. */
@@ -351,6 +373,14 @@ export class IndicatorLayer {
       return null;
     }
     return shown.ownPane.pane.getStretchFactor() / pricePaneStretchFactor(this.chart);
+  }
+
+  /** Shows or hides the selection handles of the plots of `id`; an unknown or absent id shows nothing. */
+  private showHandles(id: string | null, selected: boolean): void {
+    const shown = id === null ? undefined : this.shown.get(id);
+    for (const series of shown?.series ?? []) {
+      setPlotSeriesHandles(series, selected);
+    }
   }
 
   /** Attaches the fill primitive to the host series, which owns the pane the band is drawn in. */

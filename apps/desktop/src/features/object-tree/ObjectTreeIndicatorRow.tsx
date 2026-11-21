@@ -11,6 +11,8 @@ import { indicatorLegendTitle } from '../indicators/indicatorLegendTitle';
 import { useOpenIndicatorSettings } from '../indicators/IndicatorSettingsProvider';
 import type { RegisteredChartIndicatorPlugin } from '../indicators/registry';
 import { useIndicatorRowCommands } from '../indicators/useIndicatorCommands';
+import { useIndicatorSelection } from '../indicators/useIndicatorSelection';
+import { useSelectIndicator } from '../indicators/useSelectIndicator';
 import { CommandButton } from '../../shared/ui/button/CommandButton';
 import { SettingsIcon } from '../../shared/ui/icons/SettingsIcon';
 import {
@@ -29,23 +31,30 @@ export interface ObjectTreeIndicatorRowProps {
 }
 
 /**
- * One indicator of the object tree, named as the chart's legend names it. A double click opens its
- * settings and Delete or Backspace on its name detaches it, while the three small buttons beside it
- * open its settings, hide or show it and remove it.
+ * One indicator of the object tree, named as the chart's legend names it. A click on its name selects it,
+ * which frames its legend row and draws its handles; a double click opens its settings and Delete or
+ * Backspace on its name detaches it, while the three small buttons beside it open its settings, hide or
+ * show it and remove it.
  */
 export function ObjectTreeIndicatorRow({ saved, plugin }: ObjectTreeIndicatorRowProps) {
   const openIndicatorSettings = useOpenIndicatorSettings();
   const commands = useIndicatorRowCommands();
+  const selectIndicator = useSelectIndicator();
+  const selectedInstanceId = useIndicatorSelection();
   const name = indicatorLegendTitle(saved.definitionId, resolveSettingValues(plugin, saved.settings));
   const hidden = saved.hidden === true;
+  const selected = selectedInstanceId === saved.instanceId;
 
   const openSettings = () => openIndicatorSettings(saved.instanceId);
   const remove = () => commands.remove(saved.instanceId);
+  const select = () => selectIndicator(saved.instanceId);
   const onNameKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'Delete' && event.key !== 'Backspace') {
       return;
     }
     event.preventDefault();
+    // The selection's own shortcut must not read the key again from the row that already removed it.
+    event.stopPropagation();
     remove();
   };
 
@@ -53,9 +62,17 @@ export function ObjectTreeIndicatorRow({ saved, plugin }: ObjectTreeIndicatorRow
     <li
       className="object-tree-row object-tree-indicator-row"
       data-instance-id={saved.instanceId}
+      data-selected={presentWhileTrue(selected)}
       data-hidden={presentWhileTrue(hidden)}
     >
-      <button type="button" className={ROW_NAME_CLASS} onDoubleClick={openSettings} onKeyDown={onNameKeyDown}>
+      <button
+        type="button"
+        className={ROW_NAME_CLASS}
+        aria-current={presentWhileTrue(selected)}
+        onClick={select}
+        onDoubleClick={openSettings}
+        onKeyDown={onNameKeyDown}
+      >
         <IndicatorLineIcon className="object-tree-row-icon" />
         <span className="object-tree-row-label" title={name}>
           {name}

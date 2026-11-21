@@ -7,6 +7,7 @@ import type { SettingValues } from '../settings/settingInputs';
 export interface ChartDrawingCommands {
   selectedDrawing(): ChartDrawingSelection | null;
   selectDrawing(toolId: string, drawingId: string): void;
+  clearSelection(): void;
   deleteDrawing(toolId: string, drawingId: string): boolean;
   setDrawingLocked(toolId: string, drawingId: string, locked: boolean): void;
   setDrawingVisible(toolId: string, drawingId: string, visible: boolean): void;
@@ -141,6 +142,11 @@ export class ChartDrawings {
   select(toolId: string, drawingId: string): void {
     this.commands.selectDrawing(toolId, drawingId);
     this.repaint();
+  }
+
+  /** Drops the drawing selection, as selecting an indicator does: the chart selects one object at a time. */
+  clearSelection(): void {
+    this.commands.clearSelection();
   }
 
   /** Removes one drawing of any tool, even when it is locked; false when it removed nothing. */

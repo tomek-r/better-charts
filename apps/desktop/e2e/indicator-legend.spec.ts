@@ -7,10 +7,10 @@ import { palette } from '../src/shared/theme/palette';
 import { OBJECT_SETTINGS_ICON_PATHS } from '../src/shared/ui/icons/objectSettingsIcon';
 import { CHART_HOST_SELECTOR, RESIZE_HANDLE_SELECTOR, paneSeparatorCenter } from './helpers/chartHost';
 import { openChartSettingsTab } from './helpers/chartSettingsDialog';
+import { rgbText } from './helpers/cssColor';
 import { attachedIndicators, attachSma } from './helpers/indicatorsDialog';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { openChart } from './helpers/openChart';
-import { parseHexColor } from './helpers/pngPixels';
 import { EURUSD_CHART, openWithSavedIndicators } from './helpers/savedIndicators';
 import { savedOverrides } from './helpers/savedOverrides';
 import { gotoWithStub } from './helpers/tauriStub';
@@ -44,7 +44,7 @@ const RSI_INSTANCE_ID = 'rsi-1';
 const PRICE_SCALE_MIN_WIDTH = 70;
 const TRANSPARENT_COLOR = 'rgba(0, 0, 0, 0)';
 /** The white a row's action icons are drawn in, whatever the row's text colour is. */
-const WHITE_ICON_COLOR = rgbOf(palette.textBright);
+const WHITE_ICON_COLOR = rgbText(palette.textBright);
 /** The app's own hover band on that separator, drawn over the pane's width instead. */
 const SEPARATOR_BAND_SELECTOR = '.chart-pane-separator-band';
 /** The label of the stored checkbox the Status line tab draws no row for. */
@@ -53,12 +53,6 @@ const INDICATOR_LEGEND_COLLAPSED_LABEL = 'Indicator legend collapsed';
 const HIDDEN_SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {}, hidden: true };
 /** A saved SMA a collapsed legend counts. */
 const SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {} };
-
-/** A palette hex colour written the way `toHaveCSS` reports a computed colour. */
-function rgbOf(hex: string): string {
-  const [red, green, blue] = parseHexColor(hex);
-  return `rgb(${red}, ${green}, ${blue})`;
-}
 
 /** The legend an indicator holding a pane of its own shows its row in. */
 function paneLegend(page: Page): Locator {

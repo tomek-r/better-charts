@@ -7,6 +7,12 @@ export const SMA_DIALOG_NAME = 'Moving Average Simple settings';
 /** The group holding the price pane's rows: the drawings, the bars and the price-pane indicators. */
 export const PRICE_PANE_GROUP = 'Price pane';
 
+/** The legend the chart draws under the OHLC line, where a price-pane indicator's row sits. */
+const PRICE_PANE_LEGEND_LABEL = 'Indicator legend';
+
+/** One row of a legend, which the chart draws outside React. */
+const LEGEND_ROW_SELECTOR = '.chart-indicator-legend-row';
+
 /** Every pane group of the tree, named as the panes of the chart stack them. */
 const PANE_GROUP_NAME = /^(?:Price pane|Pane \d+)$/;
 
@@ -45,6 +51,16 @@ export function indicatorRows(page: Page): Locator {
 /** The settings dialog of the seeded moving average. */
 export function smaSettingsDialog(page: Page): Locator {
   return page.getByRole('dialog', { name: SMA_DIALOG_NAME });
+}
+
+/** The row the legend under the OHLC line draws for the price-pane indicator these cases seed. */
+export function pricePaneLegendRow(page: Page): Locator {
+  return page.getByLabel(PRICE_PANE_LEGEND_LABEL, { exact: true }).locator(LEGEND_ROW_SELECTOR).first();
+}
+
+/** The id the chart reports as its selected indicator, or null while nothing is selected. */
+export function selectedIndicatorId(page: Page): Promise<string | null> {
+  return page.evaluate(() => window.__chartTest?.selectedIndicator() ?? null);
 }
 
 /** Opens the object tree drawer, whose indicator rows these cases read. */

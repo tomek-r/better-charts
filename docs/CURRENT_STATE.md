@@ -375,6 +375,8 @@ chart (e.g. "SMA 9 close 1.08520"); oscillators write two decimals. An indicator
 its own shows the same row at the top-left of that pane instead. A hovered row offers Hide/Show,
 Settings and Remove buttons, and a double click on its title opens the settings. A hidden
 indicator's row is dimmed, and a chevron collapses the price-pane rows to their count ("˅ 2").
+The selected indicator's row keeps its buttons in sight and is framed the way a hovered row is,
+without the pointer resting on it.
 Each indicator pane draws its own top border, which stops at the price axis; the library's pane
 separator and its hover band, which would cross the axis, are transparent, and a band of the
 pane's width shows while the line between the panes is hovered or dragged.
@@ -388,7 +390,13 @@ price bars and, under them, the price-pane indicators by their legend names; the
 per indicator with a pane of its own (RSI, MACD, Volume), in the order those panes stand under the
 price pane, each holding that indicator's row. A row's buttons open the indicator's settings, hide
 or show it and remove it, and a double click or Delete on its name does the same as in a drawing
-row. The settings dialog is the drawing settings form with the indicator's Inputs and Style tabs;
+row. A click on a row selects that indicator: the row is highlighted like a selected drawing row,
+the chart frames its legend row with its buttons in sight, and every plot of it shows small handle
+dots in its colour, ringed with the pane background, on every 10th visible bar and at the last bar.
+Delete or Backspace removes the selected indicator while the focus is not in a text field, and
+Escape, a click on the chart itself or a drawing's own selection clears it; selecting one clears the
+other, so the chart holds one selection at a time.
+The settings dialog is the drawing settings form with the indicator's Inputs and Style tabs;
 OK stays disabled while a value is invalid and recomputes the indicator. Its Inputs and Style edits
 show on the chart as they are made, after a short pause, and are stored only on OK; Cancel, the
 close button, Escape and a backdrop click put the stored settings back. A plot or band switched off

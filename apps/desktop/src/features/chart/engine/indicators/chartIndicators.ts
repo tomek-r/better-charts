@@ -8,6 +8,7 @@ import { indicatorDisplayOf, withoutStatusLineInputs } from './indicatorDisplayS
 import { DEFAULT_STATUS_LINE_APPEARANCE, type ChartStatusLineAppearance } from '../legend/statusLineAppearance';
 import { IndicatorLayer, type IndicatorLegendValue } from './indicatorLayer';
 import { IndicatorRuntime } from './indicatorRuntime';
+import type { IndicatorSelection } from './indicatorSelection';
 import { PaneDragWatcher } from './paneDragWatcher';
 
 /** What the chart owning the indicators tells them about itself. */
@@ -22,6 +23,8 @@ export interface ChartIndicatorsOptions {
   readonly digits: () => number;
   /** The chart's price series, handed to an indicator that pushes frames. */
   readonly priceSeries: ISeriesApi<'Candlestick'>;
+  /** The chart's indicator selection: the layer draws its handles and the legend frames its row. */
+  readonly selection: IndicatorSelection;
 }
 
 /**
@@ -35,6 +38,9 @@ export class ChartIndicators {
   /** The app's row commands; null while none is mounted, and the legend's buttons then do nothing. */
   private commands: IndicatorLegendCommands | null = null;
   readonly runtime: IndicatorRuntime;
+  private readonly chart: IChartApi;
+  private readonly selection: IndicatorSelection;
+  private readonly stopFollowingSelection: () => void;
   private readonly legend: IndicatorLegend;
   private readonly legendTitle: ChartIndicatorsOptions['legendTitle'];
   /** The Status line tab's switches: which legend parts draw, and whether an indicator's inputs are named. */
@@ -42,6 +48,8 @@ export class ChartIndicators {
   private readonly paneDragWatcher: PaneDragWatcher;
 
   constructor(chart: IChartApi, host: HTMLElement, options: ChartIndicatorsOptions) {
+    this.chart = chart;
+    this.selection = options.selection;
     this.legendTitle = options.legendTitle;
     this.hoveredBar = new HoveredBar(chart, options.bars);
     this.layer = new IndicatorLayer(chart);
@@ -49,7 +57,7 @@ export class ChartIndicators {
       this.layer,
       options.definitions,
       options.bars,
-      () => this.legend.refresh(),
+      () => this.attachedStateChanged(),
       options.priceSeries,
     );
     this.legend = new IndicatorLegend(
@@ -60,6 +68,7 @@ export class ChartIndicators {
             instanceId: attached.instanceId,
             title: this.titleOf(attached.definitionId, attached.settings),
             hidden: attached.hidden,
+            selected: this.selection.selected() === attached.instanceId,
             digits: this.layer.precisionOf(attached.instanceId),
             values: this.legendValuesOf(attached.instanceId, attached.settings, hoveredIndex),
             paneHost: this.layer.paneLegendHost(attached.instanceId),
@@ -76,6 +85,8 @@ export class ChartIndicators {
       },
     );
     this.hoveredBar.subscribe(() => this.legend.refresh());
+    this.stopFollowingSelection = this.selection.subscribe(this.selectionChanged);
+    this.chart.subscribeClick(this.paneClicked);
     this.paneDragWatcher = new PaneDragWatcher(
       host,
       () => this.layer.paneHeights(),
@@ -96,12 +107,31 @@ export class ChartIndicators {
   }
 
   destroy(): void {
+    this.chart.unsubscribeClick(this.paneClicked);
+    this.stopFollowingSelection();
     this.paneDragWatcher.destroy();
     this.hoveredBar.destroy();
     this.legend.destroy();
     // The runtime before the layer it draws through, as the controller tore them down.
     this.runtime.destroy();
     this.layer.destroy();
+  }
+
+  /** A click on the pane itself belongs to the chart's own objects, so the indicator selection drops. */
+  private readonly paneClicked = (): void => {
+    this.selection.clear();
+  };
+
+  /** The selection moved: the layer's handles follow it and the legend frames its row. */
+  private readonly selectionChanged = (): void => {
+    this.layer.setSelected(this.selection.selected());
+    this.legend.refresh();
+  };
+
+  /** The attached indicators changed: a selection the chart no longer draws clears, and the rows follow. */
+  private attachedStateChanged(): void {
+    this.selection.dropUnattached(this.runtime.attachedState().map(({ instanceId }) => instanceId));
+    this.legend.refresh();
   }
 
   /** The legend's words for an attached indicator: empty while the status line shows no titles. */

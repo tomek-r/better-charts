@@ -7,6 +7,8 @@ export interface IndicatorLegendRow {
   readonly instanceId: string;
   readonly title: string;
   readonly hidden: boolean;
+  /** Whether the user selected this indicator, which keeps its row framed and its buttons in sight. */
+  readonly selected: boolean;
   /** Decimals its values are written with; null writes them with the chart's price precision. */
   readonly digits: number | null;
   readonly values: readonly IndicatorLegendValue[];
@@ -149,6 +151,15 @@ function placeInHost(element: HTMLDivElement, host: HTMLElement): void {
   }
 }
 
+/** Marks the row with a bare attribute the stylesheet selects on, and drops the attribute when it is off. */
+function applyRowFlag(element: HTMLDivElement, name: 'hidden' | 'selected', on: boolean): void {
+  if (on) {
+    element.dataset[name] = 'true';
+    return;
+  }
+  delete element.dataset[name];
+}
+
 /**
  * The indicator rows of the legend: one line per attached indicator, following the crosshair bar
  * (or the latest bar), each with buttons that hide it, open its settings or remove it, and a
@@ -265,11 +276,8 @@ export class IndicatorLegend {
   private applyRow(view: RowView, row: IndicatorLegendRow): void {
     view.hidden = row.hidden;
     view.title.textContent = row.title;
-    if (row.hidden) {
-      view.element.dataset.hidden = 'true';
-    } else {
-      delete view.element.dataset.hidden;
-    }
+    applyRowFlag(view.element, 'hidden', row.hidden);
+    applyRowFlag(view.element, 'selected', row.selected);
     this.applyVisibilityButton(view);
     this.applyValues(view, row);
   }
