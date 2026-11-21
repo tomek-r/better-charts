@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import type { BridgeStatus, BrokerSymbol, Candle, CommandUpdate } from '../../src/shared/bridge/types';
+import type { BridgeStatus, BrokerSymbol, Candle, CommandUpdate, IndicatorTick } from '../../src/shared/bridge/types';
 import { STUB_NOW } from './stubClock';
 
 /**
@@ -33,6 +33,9 @@ import { STUB_NOW } from './stubClock';
  *  - `request_indicator_series` → `indicator-series` event with the recorded candles of that
  *                              timeframe, or `indicator-series-unavailable` after
  *                              `setIndicatorSeriesUnavailable`
+ *  - `request_indicator_ticks`  → `indicator-ticks` event with the recorded ticks inside the
+ *                              requested range, or `indicator-ticks-unavailable` after
+ *                              `setIndicatorTicksUnavailable`
  *  - `search_symbols`        → `symbol-search-result` event, answered from `brokerSymbols`
  *
  * Tests push further bridge events (`execution-command-update`,
@@ -103,6 +106,12 @@ export interface TauriStubOptions {
    * snapshot, the market session symbol/clock and the quote.
    */
   recordedHistory?: RecordedHistory[];
+  /**
+   * Recorded raw ticks per symbol, ascending, which `request_indicator_ticks`
+   * answers from: the ticks inside the requested half-open range, oldest first,
+   * `complete: false` once the page bound cut them.
+   */
+  recordedTicks?: RecordedTicks[];
   /** Advertise the negotiated `partialClose` capability in the default bridge status. */
   partialClose?: boolean;
   /** Operating system reported in the default app settings (default `linux`). */
@@ -163,6 +172,13 @@ export interface RecordedHistory {
   candles: Candle[];
   /** Delivered as `symbol-info` with this symbol's history (price digits etc.). */
   symbolInfo?: BrokerSymbol;
+}
+
+/** Raw ticks of one symbol, as `request_indicator_ticks` answers them. */
+export interface RecordedTicks {
+  symbol: string;
+  /** Ascending by `timeMs`, the order the wire delivers them in. */
+  ticks: IndicatorTick[];
 }
 
 export interface RecordedInvoke {
@@ -566,6 +582,7 @@ export async function installTauriStub(
       request_history: 'reactive',
       request_history_page: 'reactive',
       request_indicator_series: 'reactive',
+      request_indicator_ticks: 'reactive',
       ...opts.responses,
     };
     if (primary && primaryLast) {
@@ -608,6 +625,8 @@ export async function installTauriStub(
     let nextCallbackId = 1;
     /** Switched by a test that wants the series route to answer `indicator-series-unavailable`. */
     let indicatorSeriesUnavailable = false;
+    /** Switched by a test that wants the tick route to answer `indicator-ticks-unavailable`. */
+    let indicatorTicksUnavailable = false;
 
     /** One stored JSON map of the page's own backend state, empty when nothing was written yet. */
     function storedBy(key: string): Record<string, unknown> {
@@ -862,6 +881,34 @@ export async function installTauriStub(
         }, opts.historyDelayMs ?? 0);
         return null;
       }
+      if (cmd === 'request_indicator_ticks') {
+        // The recorded ticks inside the requested half-open range, oldest first, as the bridge pages them.
+        const fromMs = Number(args.fromMs ?? 0);
+        const toMs = Number(args.toMs ?? 0);
+        const maxTicks = Math.max(1, Math.floor(Number(args.maxTicks)) || 1);
+        const recordedTicks = opts.recordedTicks?.find((record) => record.symbol === args.symbol)?.ticks ?? [];
+        const insideRange = recordedTicks.filter((tick) => tick.timeMs >= fromMs && tick.timeMs < toMs);
+        // Async emit, like the other history answers: the request resolves before its page lands.
+        setTimeout(() => {
+          if (indicatorTicksUnavailable) {
+            emit('indicator-ticks-unavailable', {
+              key: args.key,
+              symbol: args.symbol,
+              message: 'tick history synchronization timed out',
+            });
+            return;
+          }
+          emit('indicator-ticks', {
+            key: args.key,
+            symbol: args.symbol,
+            fromMs,
+            toMs,
+            complete: insideRange.length <= maxTicks,
+            ticks: insideRange.slice(0, maxTicks),
+          });
+        }, opts.historyDelayMs ?? 0);
+        return null;
+      }
       if (cmd === 'search_symbols') {
         // The broker answers by query; the app listens on the event, as with the real bridge.
         const query = String(args.query ?? '')
@@ -1047,6 +1094,9 @@ export async function installTauriStub(
       },
       setIndicatorSeriesUnavailable: (unavailable: boolean) => {
         indicatorSeriesUnavailable = unavailable;
+      },
+      setIndicatorTicksUnavailable: (unavailable: boolean) => {
+        indicatorTicksUnavailable = unavailable;
       },
       listenerCount: (event: string) => (listeners.get(event) ?? []).filter((id) => callbacks.has(id)).length,
     };
@@ -1254,5 +1304,20 @@ export async function setIndicatorSeriesUnavailable(page: Page, unavailable: boo
   await page.evaluate((mode) => {
     const stub = (window as unknown as SeriesAvailabilityProbe).__E2E_TAURI_STUB__;
     stub.setIndicatorSeriesUnavailable(mode);
+  }, unavailable);
+}
+
+type TicksAvailabilityProbe = {
+  __E2E_TAURI_STUB__: { setIndicatorTicksUnavailable: (unavailable: boolean) => void };
+};
+
+/**
+ * Makes `request_indicator_ticks` answer `indicator-ticks-unavailable` (or serves its ticks again), so a spec can
+ * watch what an indicator does when the bridge cannot read the ticks of its range.
+ */
+export async function setIndicatorTicksUnavailable(page: Page, unavailable: boolean): Promise<void> {
+  await page.evaluate((mode) => {
+    const stub = (window as unknown as TicksAvailabilityProbe).__E2E_TAURI_STUB__;
+    stub.setIndicatorTicksUnavailable(mode);
   }, unavailable);
 }

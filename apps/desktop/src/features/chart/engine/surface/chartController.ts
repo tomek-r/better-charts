@@ -118,6 +118,7 @@ export class ChartController {
       indicatorDefinitions,
       indicatorLegendTitle,
       indicatorSeriesSource,
+      indicatorTickSource,
       ...hostOptions
     } = options;
     this.chartIndicators = new ChartIndicators(this.chart, host, {
@@ -128,6 +129,7 @@ export class ChartController {
       digits: () => this.data.pricePrecision,
       priceSeries: this.candles,
       seriesSource: indicatorSeriesSource,
+      tickSource: indicatorTickSource,
     });
     this.indicatorLayer = this.chartIndicators.layer;
     this.indicators = this.chartIndicators.runtime;

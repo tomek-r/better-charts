@@ -7,7 +7,7 @@ import type {
   IndicatorSeriesAnswer,
   IndicatorSeriesQuery,
 } from '../src/features/chart/engine/indicators/indicatorSeriesSource';
-import type { SettingInputEnumOption, SettingValues } from '../src/features/chart/engine/settings/settingInputs';
+import type { SettingValues } from '../src/features/chart/engine/settings/settingInputs';
 import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
 import { CalculationIndicator } from '../src/features/indicators/calculation/calculationIndicator';
 import {
@@ -40,6 +40,8 @@ import { CHART_INDICATOR_PLUGINS } from '../src/features/indicators/registry';
 import { smaPlugin } from '../src/features/indicators/sma/smaPlugin';
 import type { Candle } from '../src/shared/bridge/types';
 import { timeframeOptions } from '../src/shared/bridge/timeframes';
+import { averageOf } from './helpers/averageValues';
+import { drawnValues } from './helpers/indicatorFrames';
 import { SMA_DIALOG_NAME, indicatorRows, openObjectTree } from './helpers/indicatorObjectTree';
 import { attachedIndicators } from './helpers/indicatorsDialog';
 import { failOnPageNoise } from './helpers/pageNoise';
@@ -113,17 +115,6 @@ function m5Bar(offsetBars: number, close: number): RenderBar {
   return { time, open: close, high: close, low: close, close, volume: 1 };
 }
 
-/** The mean of every window of `length` values, with a null until the first window is full. */
-function averageOf(values: readonly number[], length: number): (number | null)[] {
-  return values.map((_, index) => {
-    if (index + 1 < length) {
-      return null;
-    }
-    const window = values.slice(index + 1 - length, index + 1);
-    return window.reduce((total, value) => total + value, 0) / length;
-  });
-}
-
 /** The SMA of the closes of a series the indicator read from the host, one value per candle. */
 function seriesSma(candles: readonly Candle[]): (number | null)[] {
   return averageOf(
@@ -136,11 +127,6 @@ function seriesSma(candles: readonly Candle[]): (number | null)[] {
 function chartSma(bars: readonly RenderBar[]): number[] {
   const closes = bars.map((bar) => bar.close);
   return averageOf(closes, SAVED_LENGTH).filter((value): value is number => value !== null);
-}
-
-/** The reason a choice is disabled, or undefined while a user can pick it. */
-function reasonOf(choices: readonly SettingInputEnumOption[], value: string): string | undefined {
-  return choices.find((choice) => choice.value === value)?.disabledReason;
 }
 
 /** The settings the registered SMA resolves for the calculation these cases ask of it. */
@@ -171,12 +157,12 @@ test.describe('the Calculation section', () => {
     expect(choices.slice(5).map((choice) => choice.value)).toEqual(timeframeOptions.map(({ wire }) => wire));
   });
 
-  test('the tick options are disabled with their reason, and every timeframe can be picked', () => {
+  test('every choice can be picked, the four tick options included', () => {
     const choices = calculationTimeframeChoices();
 
-    expect(reasonOf(choices, 'tick1')).toBe('Needs tick data — coming next');
+    expect(choices.filter((choice) => choice.disabledReason !== undefined)).toEqual([]);
     for (const { wire } of timeframeOptions) {
-      expect(reasonOf(choices, wire)).toBeUndefined();
+      expect(choices.some((choice) => choice.value === wire)).toBe(true);
     }
   });
 });
@@ -498,11 +484,6 @@ function calculationGroup(dialog: Locator): Locator {
   return dialog.getByRole('group', { name: 'Calculation', exact: true });
 }
 
-/** The values the layer draws for the first plot, in chart bar order. */
-async function drawnValues(page: Page): Promise<number[]> {
-  return page.evaluate(() => window.__chartTest!.indicators()[0]?.plots[0]?.points.map((point) => point.value) ?? []);
-}
-
 /** The bars the chart holds right now, oldest first. */
 async function drawnBars(page: Page): Promise<readonly RenderBar[]> {
   return page.evaluate(() => window.__chartTest!.data());
@@ -559,15 +540,12 @@ test('the Inputs tab carries the Calculation section with the Chart timeframe an
   await expect(page.locator('.drawing-settings-tooltip-bubble')).toHaveText(CALCULATION_TIMEFRAME_TOOLTIP);
 });
 
-test('the drop-down offers the tick options disabled and every timeframe pickable', async ({ page }) => {
+test('the drop-down offers the tick options and every timeframe pickable', async ({ page }) => {
   const group = calculationGroup(await openSmaSettings(page));
   await group.getByLabel('Timeframe', { exact: true }).click();
 
-  const tickChoice = page.getByRole('option', { name: '1 tick', exact: true });
-  await expect(tickChoice).toHaveAttribute('aria-disabled', 'true');
-  await expect(tickChoice).toHaveAttribute('title', 'Needs tick data — coming next');
-
-  for (const label of [CHART_CHOICE_LABEL, '1m', HIGHER_CHOICE_LABEL]) {
+  const choices = ['1 tick', '10 ticks', '100 ticks', '1000 ticks', CHART_CHOICE_LABEL, '1m', HIGHER_CHOICE_LABEL];
+  for (const label of choices) {
     await expect(page.getByRole('option', { name: label, exact: true })).not.toHaveAttribute('aria-disabled', 'true');
   }
 });

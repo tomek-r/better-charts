@@ -14,6 +14,12 @@ export const FRAME_BYTES = config.frameBytes;
 export const HISTORY_BARS = config.historyBars;
 
 /**
+ * Ticks per page: the negotiated `max_ticks_per_page` of a tick read, which the config default also caps for
+ * every peer that may advertise more.
+ */
+export const TICKS_PER_PAGE = config.ticksPerPage.default;
+
+/**
  * Bars the handshake requests before a pane is measured, and the fallback while
  * the pane width is unknown. Never above `HISTORY_BARS` (the backend rejects it).
  */

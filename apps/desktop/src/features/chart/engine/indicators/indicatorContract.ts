@@ -4,6 +4,7 @@ import type { SettingInputDefinition, SettingValues } from '../settings/settingI
 import type { SettingStyleDefinition } from '../settings/settingStyles';
 import type { IndicatorFrame } from './indicatorFrame';
 import type { IndicatorSeriesSource } from './indicatorSeriesSource';
+import type { IndicatorTickSource } from './indicatorTickSource';
 
 /** The pane an indicator's plots are drawn in: over the price pane, or in one of its own. */
 export type ChartIndicatorPane = 'overlay' | 'own';
@@ -21,6 +22,11 @@ export interface ChartIndicatorOutlet {
    * calculates from the bars it is given.
    */
   readonly seriesSource: IndicatorSeriesSource | undefined;
+  /**
+   * The chart symbol's raw ticks, read-only; undefined on a chart that cannot read them, and an indicator then
+   * calculates from the bars it is given.
+   */
+  readonly tickSource: IndicatorTickSource | undefined;
 }
 
 /**

@@ -3,9 +3,13 @@ import type { ChartIndicator } from '../../chart/engine/indicators/indicatorCont
 import type { IndicatorFrame } from '../../chart/engine/indicators/indicatorFrame';
 import type { SettingValues } from '../../chart/engine/settings/settingInputs';
 import { timeframeSeconds } from '../../../shared/bridge/timeframes';
+import { projectFrameBars } from '../indicatorFrameBars';
+import type { TickCalculationMode } from './calculationChoice';
 import { bucketBars, bucketIndexesOf, newestBucketIndex, withFormingBucket } from './higherTimeframeBars';
 import { projectHigherTimeframeFrame, type HigherTimeframeSource } from './higherTimeframeFrame';
-import { projectLowerTimeframeFrame, shownLowerBars, type LowerTimeframeSource } from './lowerTimeframeFrame';
+import { shownLowerBars, type LowerTimeframeSource } from './lowerTimeframeFrame';
+import type { TickBarSeries } from './tickBars';
+import { shownTickBars, type TickBarSource } from './tickFrame';
 
 /** What a calculation on another timeframe reads: the plugin, its settings, and the chart's own bars. */
 export interface CalculationInputs {
@@ -23,6 +27,23 @@ export interface TimeframeCalculation {
   readonly frame: IndicatorFrame;
   /** The first chart bar a live bar can change: the one that opens the newest calculation bar. */
   readonly liveFrom: number;
+}
+
+/**
+ * The plugin's indicator calculated on `bars`, its own timeframe's, and written onto the chart's bars: each
+ * chart bar carries the values of the bar `shownOf` names for it.
+ */
+function projectedCalculation(
+  { indicator, settings, chartBars }: CalculationInputs,
+  bars: readonly RenderBar[],
+  barTimeframe: string,
+  shownOf: readonly number[],
+): TimeframeCalculation {
+  const frame = indicator.load(bars, settings, barTimeframe);
+  return {
+    frame: { ...frame, bars: projectFrameBars(frame, chartBars, (index) => shownOf[index]) },
+    liveFrom: chartBars.length - 1,
+  };
 }
 
 /** The chart's bars grouped into `timeframe`, calculated, and written back onto the chart's bars. */
@@ -60,15 +81,25 @@ export function higherSeriesCalculation(
 
 /** The plugin's indicator calculated on `timeframe`'s own `bars`: every chart bar shows the bar it names. */
 export function lowerSeriesCalculation(
-  { indicator, settings, chartBars, chartTimeframe }: CalculationInputs,
+  inputs: CalculationInputs,
   timeframe: string,
   bars: readonly RenderBar[],
   source: LowerTimeframeSource,
 ): TimeframeCalculation {
-  const frame = indicator.load(bars, settings, timeframe);
-  const shownOf = shownLowerBars(bars, chartBars, timeframeSeconds(chartTimeframe), source);
-  return {
-    frame: { ...frame, bars: projectLowerTimeframeFrame(frame, chartBars, shownOf) },
-    liveFrom: chartBars.length - 1,
-  };
+  const shownOf = shownLowerBars(bars, inputs.chartBars, timeframeSeconds(inputs.chartTimeframe), source);
+  return projectedCalculation(inputs, bars, timeframe, shownOf);
+}
+
+/**
+ * The plugin's indicator calculated on the N-tick bars read so far: every chart bar shows the last tick bar that
+ * ended inside it, or, under the wait switch, the last one that has all its ticks.
+ */
+export function tickSeriesCalculation(
+  inputs: CalculationInputs,
+  series: TickBarSeries,
+  mode: TickCalculationMode,
+  source: TickBarSource,
+): TimeframeCalculation {
+  const shownOf = shownTickBars(series, inputs.chartBars, timeframeSeconds(inputs.chartTimeframe), source);
+  return projectedCalculation(inputs, series.bars, mode.label, shownOf);
 }

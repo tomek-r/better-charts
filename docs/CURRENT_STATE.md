@@ -344,18 +344,28 @@ Indicator values are display-only and never reach order, account or journal data
 
 Every indicator carries a Calculation section after its own inputs: the timeframe it is calculated
 on, and whether a chart bar waits for that timeframe to close. Chart, the default, calculates on the
-bars the chart draws; every MT5 timeframe can be chosen, above or below the chart's, while the tick
-timeframes stay disabled until tick data feeds them. Another timeframe's candles are read through the
+bars the chart draws; every MT5 timeframe can be chosen, above or below the chart's, and so can the
+four tick timeframes (1, 10, 100 and 1000 ticks). Another timeframe's candles are read through the
 read-only `request_indicator_series` route, keyed per indicator, so a lower timeframe is possible at
 all (an M5 chart reading M1) and a higher one gets the full depth a series grouped from the chart's
 own bars cannot reach. A higher timeframe's newest candles are projected onto the chart's bars as
 grouped bars were, its forming bar follows the chart's live bars, and the newest page is read again
 when a chart bar closes on that timeframe's boundary; a lower timeframe's candles are paged back over
-the chart's loaded range, and a chart bar shows the last lower bar inside it. Waiting for closes is on
-by default: a chart bar then keeps the last closed higher-timeframe value, and a lower timeframe's
-forming chart bar keeps the last closed lower bar's. A series the bridge cannot read leaves the last
-good values on screen, retries nothing and shows no notice of its own; until the first page arrives a
-higher timeframe still groups the chart's own bars, so nothing flickers empty.
+the chart's loaded range, and a chart bar shows the last lower bar inside it. A tick timeframe reads
+the chart symbol's raw ticks through the read-only `request_indicator_ticks` route, also keyed per
+indicator, and builds a bar out of every group of N ticks: the first open, the highest high, the
+lowest low, the last close and the number of ticks as its volume. The tick price is the tick's bid.
+Ticks cover only a recent window, as on TradingView: the read asks for its newest window of the chart's
+range and walks back, a window at a time, until it reaches the oldest loaded chart bar or spends its
+200,000-tick budget, so chart bars older than the fetched ticks show no value. Each chart bar shows the
+last N-tick bar whose final tick arrived inside it, and waiting for closes is on by default: a chart
+bar then keeps the last N-tick bar that has all its ticks and ignores the forming one. A closed chart
+bar reads the newest window again, and live ticks at most every two seconds. The wait switch keeps its
+meaning on every timeframe: a chart bar keeps the last closed higher-timeframe value, and a lower
+timeframe's forming chart bar keeps the last closed lower bar's. A series or a tick window the bridge
+cannot read leaves the last good values on screen, retries nothing and shows no notice of its own;
+until the first page arrives a higher timeframe still groups the chart's own bars, so nothing flickers
+empty.
 
 Volume's Style tab offers one Plot type icon button, on the Growing row beside its colour, which
 opens a menu holding the Current value line switch and the eleven ways to draw the plot. Columns, the

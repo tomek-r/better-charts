@@ -1,4 +1,5 @@
 import type { Candle } from '../../../../shared/bridge/types';
+import type { KeyedReadSource } from './keyedReadSource';
 
 /** One read of another timeframe's candles, keyed so that reads in flight never mix up their answers. */
 export interface IndicatorSeriesQuery {
@@ -23,12 +24,5 @@ export type IndicatorSeriesAnswer =
     }
   | { readonly kind: 'unavailable' };
 
-/**
- * Another timeframe's candles as an indicator reads them from its host: read-only, keyed, and closed over
- * whatever reaches a backend. An indicator never reaches a backend itself.
- */
-export interface IndicatorSeriesSource {
-  request(query: IndicatorSeriesQuery): void;
-  /** Hears every answer for `key` until the returned function runs. */
-  subscribe(key: string, listener: (answer: IndicatorSeriesAnswer) => void): () => void;
-}
+/** Another timeframe's candles as an indicator reads them from its host, read-only and keyed like every route. */
+export type IndicatorSeriesSource = KeyedReadSource<IndicatorSeriesQuery, IndicatorSeriesAnswer>;

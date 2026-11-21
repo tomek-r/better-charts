@@ -11,6 +11,7 @@ import { indicatorDisplayOf, indicatorSettingsSchema } from './indicatorDisplayS
 import type { IndicatorFrame } from './indicatorFrame';
 import type { IndicatorLayer } from './indicatorLayer';
 import type { IndicatorSeriesSource } from './indicatorSeriesSource';
+import type { IndicatorTickSource } from './indicatorTickSource';
 
 export interface AttachedIndicatorState {
   readonly instanceId: string;
@@ -42,6 +43,8 @@ export class IndicatorRuntime {
     private readonly priceSeries: ISeriesApi<'Candlestick'>,
     /** Another timeframe's candles, which an indicator reads through this chart; undefined without a bridge. */
     private readonly seriesSource?: IndicatorSeriesSource,
+    /** The chart symbol's raw ticks, which an indicator reads through this chart; undefined without a bridge. */
+    private readonly tickSource?: IndicatorTickSource,
   ) {}
 
   /**
@@ -176,6 +179,7 @@ export class IndicatorRuntime {
       },
       priceSeries: this.priceSeries,
       seriesSource: this.seriesSource,
+      tickSource: this.tickSource,
     };
   }
 

@@ -22,17 +22,22 @@ export const CHART_TIMEFRAME_CHOICE = 'chart';
 export const CALCULATION_TIMEFRAME_TOOLTIP =
   'The timeframe this indicator is calculated on. Another timeframe is read from the broker.';
 
-const TICKS_REASON = 'Needs tick data — coming next';
+/** One tick calculation timeframe: the choice's stored value, its label and the ticks one bar of it groups. */
+export interface TickChoice {
+  readonly value: string;
+  readonly label: string;
+  readonly ticksPerBar: number;
+}
 
 /** The choice that calculates on the chart's own bars, which the drop-down lists first. */
 const CHART_CHOICE: SettingInputEnumOption = { value: CHART_TIMEFRAME_CHOICE, title: 'Chart' };
 
-/** The tick timeframes the drop-down lists but cannot calculate yet. */
-const TICK_CHOICES: readonly SettingInputEnumOption[] = [
-  { value: 'tick1', title: '1 tick', disabledReason: TICKS_REASON },
-  { value: 'tick10', title: '10 ticks', disabledReason: TICKS_REASON },
-  { value: 'tick100', title: '100 ticks', disabledReason: TICKS_REASON },
-  { value: 'tick1000', title: '1000 ticks', disabledReason: TICKS_REASON },
+/** The tick timeframes the drop-down lists, which calculate on bars built from the chart's raw ticks. */
+const TICK_CHOICES: readonly TickChoice[] = [
+  { value: 'tick1', label: '1 tick', ticksPerBar: 1 },
+  { value: 'tick10', label: '10 ticks', ticksPerBar: 10 },
+  { value: 'tick100', label: '100 ticks', ticksPerBar: 100 },
+  { value: 'tick1000', label: '1000 ticks', ticksPerBar: 1000 },
 ];
 
 /** One choice per MT5 timeframe, in the order the platform lists them. */
@@ -41,9 +46,19 @@ const TIMEFRAME_CHOICES: readonly SettingInputEnumOption[] = timeframeOptions.ma
   title: label,
 }));
 
+/** The tick choice a stored value names, or undefined for the chart's own bars and every MT5 timeframe. */
+export function tickChoiceOf(value: unknown): TickChoice | undefined {
+  return TICK_CHOICES.find((choice) => choice.value === value);
+}
+
+/** The tick timeframes as the drop-down lists them. */
+function tickOptions(): readonly SettingInputEnumOption[] {
+  return TICK_CHOICES.map(({ value, label }) => ({ value, title: label }));
+}
+
 /** Every timeframe the drop-down lists: the chart's own bars, then the tick timeframes, then every MT5 timeframe. */
 export function calculationTimeframeChoices(): readonly SettingInputEnumOption[] {
-  return [CHART_CHOICE, ...TICK_CHOICES, ...TIMEFRAME_CHOICES];
+  return [CHART_CHOICE, ...tickOptions(), ...TIMEFRAME_CHOICES];
 }
 
 /** The timeframe input, whose choices are the same on every chart. */

@@ -1,22 +1,16 @@
 import type { Candle } from '../../../shared/bridge/types';
 import { toRenderBar, type RenderBar } from '../../chart/engine/bars/renderBar';
-import type { IndicatorSeriesAnswer, IndicatorSeriesSource } from '../../chart/engine/indicators/indicatorSeriesSource';
+import type {
+  IndicatorSeriesAnswer,
+  IndicatorSeriesQuery,
+  IndicatorSeriesSource,
+} from '../../chart/engine/indicators/indicatorSeriesSource';
+import { LiveKeyedRead } from './liveKeyedRead';
 import type { SeriesReadPlan } from './seriesPages';
 
-/** The shortest gap between two live requests of the newest page: as often as a tick may have moved it. */
-const LIVE_REFRESH_INTERVAL_MS = 2000;
 const MILLISECONDS_PER_SECOND = 1000;
 /** The bridge's key charset is `[A-Za-z0-9_:-]`, so a read's key needs no escaping. */
 const SERIES_KEY_PREFIX = 'calculation';
-
-let nextSeriesNumber = 1;
-
-/** A key no other read holds, so two reads of one timeframe never consume each other's answer. */
-function seriesKey(): string {
-  const key = `${SERIES_KEY_PREFIX}${nextSeriesNumber}`;
-  nextSeriesNumber += 1;
-  return key;
-}
 
 /** The candles of a page as bars; a candle the chart cannot draw is left out, as a history page does. */
 function pageBarsOf(candles: readonly Candle[]): readonly RenderBar[] {
@@ -46,20 +40,18 @@ function withOlderPage(bars: readonly RenderBar[], page: readonly RenderBar[]): 
  * while the candles it holds still end short of the chart's oldest one, and keeps the newest page current while
  * the chart draws. A read the bridge cannot answer keeps the candles it already holds and asks for nothing more.
  */
-export class IndicatorSeriesRead {
-  private readonly key = seriesKey();
+export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, IndicatorSeriesAnswer> {
   private plan: SeriesReadPlan | null = null;
   private heldBars: readonly RenderBar[] = [];
   private pagesLeft: readonly number[] = [];
-  private requestedAtMs = 0;
-  private listening = false;
-  private stopListening: () => void = () => undefined;
 
   constructor(
-    private readonly source: IndicatorSeriesSource,
+    source: IndicatorSeriesSource,
     /** Called once candles arrived, so the indicator draws them. */
     private readonly arrived: () => void,
-  ) {}
+  ) {
+    super(SERIES_KEY_PREFIX, source);
+  }
 
   /** The timeframe this read asks for; null before it started. */
   get timeframe(): string | null {
@@ -87,25 +79,15 @@ export class IndicatorSeriesRead {
     this.requestPage(this.plan?.pages[0], null);
   }
 
-  /** Asks for the newest page at most every two seconds, which is as often as live ticks have moved it. */
-  refreshLive(): void {
-    if (Date.now() - this.requestedAtMs < LIVE_REFRESH_INTERVAL_MS) {
-      return;
-    }
-    this.refresh();
-  }
-
-  dispose(): void {
-    this.stopListening();
-    this.listening = false;
-    this.stopListening = () => undefined;
+  /** Drops the plan and the candles it held, so a read started again asks for its pages afresh. */
+  protected dropHeld(): void {
     this.plan = null;
     this.heldBars = [];
     this.pagesLeft = [];
   }
 
   /** Writes the answered candles over the ones they replace, then walks back while the range is still short. */
-  private readAnswer(answer: IndicatorSeriesAnswer): void {
+  protected readAnswer(answer: IndicatorSeriesAnswer): void {
     if (answer.kind === 'unavailable') {
       // Nothing asked for this series again, so the candles held stay the last good ones it gave.
       this.pagesLeft = [];
@@ -140,15 +122,6 @@ export class IndicatorSeriesRead {
     if (bars === undefined || timeframe === undefined) {
       return;
     }
-    this.requestedAtMs = Date.now();
-    this.source.request({ key: this.key, timeframe, bars, beforeMs });
-  }
-
-  private listen(): void {
-    if (this.listening) {
-      return;
-    }
-    this.listening = true;
-    this.stopListening = this.source.subscribe(this.key, (answer) => this.readAnswer(answer));
+    this.requestHost({ key: this.key, timeframe, bars, beforeMs });
   }
 }
