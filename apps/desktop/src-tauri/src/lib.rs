@@ -20,8 +20,8 @@ use bridge::commands::{
     get_execution_queue_status, get_execution_recovery_snapshot, get_execution_safety_status,
     get_market_snapshot, get_mt5_backend_status, get_portfolio_snapshot, get_quote_snapshot,
     get_reconciliation_status, modify_order, project_risk_preview, request_history,
-    request_history_page, request_order_check, request_risk_preview, request_tick_profile,
-    search_symbols, start_mt5_backend, stop_mt5_backend, submit_order,
+    request_history_page, request_indicator_series, request_order_check, request_risk_preview,
+    request_tick_profile, search_symbols, start_mt5_backend, stop_mt5_backend, submit_order,
 };
 use bridge::connection::run_server;
 use bridge::endpoint::BridgeEndpointControl;
@@ -194,6 +194,7 @@ pub fn run() {
             request_order_check,
             request_history,
             request_history_page,
+            request_indicator_series,
             request_tick_profile,
             cancel_tick_profile,
             search_symbols,

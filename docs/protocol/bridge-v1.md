@@ -344,6 +344,67 @@ instead: the client sees nothing strictly older and stops paging.
 }
 ```
 
+##### Indicator series (desktop route, no wire change)
+
+An indicator may need candles of a timeframe the chart does not show (for a
+multi-timeframe reading) while the chart keeps showing its own. The desktop
+command `request_indicator_series(state, key, symbol, timeframe, bars,
+before_ms)` reads such a series with the page message above, so the EA needs no
+change: a page never resets the active feed and the desktop publishes it on its
+own event instead of `market-snapshot`.
+
+The command is read-only and refused unless the bridge is connected (`bridge is
+not connected`), `symbol` equals the session's active chart symbol (`symbol is
+not the chart's symbol`), `timeframe` is one the connected EA advertised
+(`timeframe is not supported by the connected EA`, as for `request_history_page`)
+and `bars` is inside the history page bound. `key` is the caller's routing id:
+1–64 characters of `[A-Za-z0-9_:-]`; anything else is `invalid indicator series
+key`. `before_ms` is the caller's anchor: candles strictly older than it. `null`
+(or an absent argument) asks for the newest bars, which is sent as a page
+anchored one year past the wall clock, comfortably past any bar a broker holds.
+
+Requests are kept in slots of their own — apart from the chart's window, its lazy
+pages and the profile bar pages — so a series read can neither displace lazy
+loading nor be consumed as a page, and it never touches the live feed, the tick
+profile or the profile-bars requests. At most 16 keys are kept (queued or
+awaited); a request for a new key beyond that drops the oldest one, and a newer
+request for a key replaces the older one together with the response it still
+awaited (latest per key wins). Each queued request is written as a
+`history_request` page under the id `rust-series-<n>`; the id it was given is
+recorded per key, so a response for a replaced or unknown id is ignored like a
+stale page. A new session or a change of the chart symbol drops every queued and
+awaited series.
+
+`indicator-series` event payload (camelCase, as emitted to the frontend):
+
+```json
+{
+  "key": "macd-h1", "symbol": "NAS100", "timeframe": "H1", "complete": true,
+  "beforeMs": null, "candles": [
+    {
+      "time_ms": 1769996400000, "open": "25000.1", "high": "25002.4", "low": "24999.8",
+      "close": "25001.7", "tick_volume": 183, "spread": 12, "real_volume": 0
+    }
+  ]
+}
+```
+
+`beforeMs` echoes the caller's own anchor and is `null` for the newest bars, so
+the frontend can tell a page from the initial read. `candles` uses the market
+candle schema above, and `complete` has the page meaning: fewer candles were
+available older than the anchor. A correlated `error` frame whose envelope `id`
+is one of these `rust-series-<n>` ids ends only that request and publishes
+`indicator-series-unavailable`:
+
+```json
+{"key": "macd-h1", "symbol": "NAS100", "timeframe": "H1", "message": "history page synchronization timed out"}
+```
+
+That event is non-fatal, like `history-unavailable`: the session, the
+reconciliation state and the dispatch gates stay as they were, and every other
+in-flight series keeps running. An error with an uncorrelated id still fails
+closed as before.
+
 `bar_update` contains `symbol`, `timeframe`, and one `candle` with the same
 schema. The EA publishes changes to the active candle without resending
 identical state. After history establishes the active feed, `quote_update`

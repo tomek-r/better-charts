@@ -38,6 +38,31 @@ pub(crate) struct HistoryUnavailableView {
     pub(crate) timeframe: String,
 }
 
+/// One indicator series answered by the EA. Routed by the caller's key, so
+/// several reads can be in flight and a replaced key's response is dropped.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndicatorSeriesView {
+    pub(crate) key: String,
+    pub(crate) symbol: String,
+    pub(crate) timeframe: String,
+    pub(crate) complete: bool,
+    /// The caller's own anchor; `null` when it asked for the newest bars.
+    pub(crate) before_ms: Option<i64>,
+    pub(crate) candles: Vec<MarketCandle>,
+}
+
+/// The EA could not synchronize the timeframe that series asked for. Non-fatal
+/// like [`HistoryUnavailableView`], but only that key ends.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndicatorSeriesUnavailableView {
+    pub(crate) key: String,
+    pub(crate) symbol: String,
+    pub(crate) timeframe: String,
+    pub(crate) message: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TickProfileBin {

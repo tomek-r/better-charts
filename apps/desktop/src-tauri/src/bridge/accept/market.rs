@@ -1,6 +1,7 @@
 use super::super::{
-    bridge_emit, clear_profile_bar_slots, invalidate_validated_order_check, AccountSnapshot,
-    AccountView, BarUpdate, BridgeEvents, BridgeState, MarketSnapshot, QuoteUpdate, QuoteView,
+    bridge_emit, clear_indicator_series, clear_profile_bar_slots, invalidate_validated_order_check,
+    AccountSnapshot, AccountView, BarUpdate, BridgeEvents, BridgeState, MarketSnapshot,
+    QuoteUpdate, QuoteView,
 };
 use std::sync::Arc;
 
@@ -51,6 +52,9 @@ pub(crate) fn publish_market_inner(
             .expected_history_page
             .lock()
             .expect("history page mutex poisoned") = None;
+        // A series read belongs to the symbol being replaced; its candles must
+        // not reach the new one under a key that is still in use.
+        clear_indicator_series(state);
         // A profile bar request for the old symbol must not paint the new one.
         let dropped = state
             .tick_controller

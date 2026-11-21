@@ -1,6 +1,6 @@
 use super::{
-    AccountView, ChartSelectionMemory, MarketCandle, PortfolioView, QuoteView, SymbolCacheState,
-    TickCacheController,
+    AccountView, ChartSelectionMemory, IndicatorSeriesState, MarketCandle, PortfolioView,
+    QuoteView, SymbolCacheState, TickCacheController,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -252,6 +252,10 @@ pub(crate) struct BridgeState {
     /// loading can never displace the in-flight window request (and vice versa).
     pub(crate) pending_history_page: Arc<Mutex<Option<HistoryRequest>>>,
     pub(crate) expected_history_page: Arc<Mutex<Option<(String, HistoryRequest)>>>,
+    /// The desktop's indicator series route: queued and awaited pages, one per
+    /// caller key, apart from every chart slot so a series read can neither
+    /// displace a page nor be consumed as one.
+    pub(crate) indicator_series: Arc<Mutex<IndicatorSeriesState>>,
     pub(crate) pending_tick_profile: Arc<Mutex<Option<TickProfileRequest>>>,
     pub(crate) expected_tick_profile: Arc<Mutex<Option<(u64, String, TickProfileRequest)>>>,
     pub(crate) tick_controller: Arc<Mutex<TickCacheController>>,
