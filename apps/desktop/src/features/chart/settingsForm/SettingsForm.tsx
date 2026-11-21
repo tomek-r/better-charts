@@ -27,6 +27,8 @@ export interface SettingsFormProps {
   readonly initialPoints?: readonly ChartDrawingPoint[];
   /** The timeframes the drawing paints on, read once when the dialog opened; it fills the Visibility tab. */
   readonly initialTimeframeVisibility?: DrawingTimeframeVisibility;
+  /** The tab the form opens on; the first tab while it is undefined or names no tab the tool built. */
+  readonly initialTabId?: string;
   /**
    * Called with the draft, as OK would save it, once the edits have rested for `PREVIEW_DELAY_MS` while every
    * value is valid; a form without it previews nothing.
@@ -55,12 +57,13 @@ export function SettingsForm({
   initialValues,
   initialPoints = NO_POINTS,
   initialTimeframeVisibility = DEFAULT_TIMEFRAME_VISIBILITY,
+  initialTabId,
   onPreview,
   onSave,
   onCancel,
 }: SettingsFormProps) {
   const [values, setValues] = useState(initialValues);
-  const [selectedTabId, setSelectedTabId] = useState<string | undefined>(undefined);
+  const [selectedTabId, setSelectedTabId] = useState<string | undefined>(initialTabId);
   const coordinates = useCoordinateDraft(initialPoints, settings.points);
   const timeframeVisibility = useTimeframeVisibilityDraft(initialTimeframeVisibility);
   useDebouncedPreview(values, initialValues, settings, onPreview);

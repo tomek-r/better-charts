@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react';
+import { useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import type { SavedIndicator } from '../chart/chartSettings/savedIndicators';
 import { resolveSettingValues } from '../chart/engine/settings/settingsSchema';
 import {
@@ -9,6 +9,8 @@ import {
 import { IndicatorLineIcon } from '../indicators/IndicatorLineIcon';
 import { indicatorLegendTitle } from '../indicators/indicatorLegendTitle';
 import { useOpenIndicatorSettings } from '../indicators/IndicatorSettingsProvider';
+import { actionsMenuAtPointer } from '../indicators/indicatorActionsMenu/indicatorActionsMenuRequest';
+import { useOpenIndicatorActionsMenu } from '../indicators/indicatorActionsMenu/IndicatorActionsMenuProvider';
 import type { RegisteredChartIndicatorPlugin } from '../indicators/registry';
 import { useIndicatorRowCommands } from '../indicators/useIndicatorCommands';
 import { useIndicatorSelection } from '../indicators/useIndicatorSelection';
@@ -37,13 +39,16 @@ export interface ObjectTreeIndicatorRowProps {
  * One indicator of the object tree, named as the chart's legend names it. A click on its name selects it,
  * which frames its legend row and draws its handles; a double click opens its settings and Delete or
  * Backspace on its name detaches it, while the three small buttons beside it open its settings, hide or
- * show it and remove it. A row of the price pane also drags, and moves with Alt+Arrow, among its pane's rows.
+ * show it and remove it. A right press on the row, like the legend row's More button, opens its actions
+ * menu. A row of the price pane also drags, and moves with Alt+Arrow, among its pane's rows.
  */
 export function ObjectTreeIndicatorRow({ saved, plugin, reorder }: ObjectTreeIndicatorRowProps) {
   const openIndicatorSettings = useOpenIndicatorSettings();
+  const openIndicatorActionsMenu = useOpenIndicatorActionsMenu();
   const commands = useIndicatorRowCommands();
   const selectIndicator = useSelectIndicator();
   const selectedInstanceId = useIndicatorSelection();
+  const nameRef = useRef<HTMLButtonElement>(null);
   const name = indicatorLegendTitle(saved.definitionId, resolveSettingValues(plugin, saved.settings));
   const hidden = saved.hidden === true;
   const selected = selectedInstanceId === saved.instanceId;
@@ -51,6 +56,13 @@ export function ObjectTreeIndicatorRow({ saved, plugin, reorder }: ObjectTreeInd
   const openSettings = () => openIndicatorSettings(saved.instanceId);
   const remove = () => commands.remove(saved.instanceId);
   const select = () => selectIndicator(saved.instanceId);
+  const openActionsMenu = (event: MouseEvent<HTMLLIElement>) => {
+    event.preventDefault();
+    if (nameRef.current === null) {
+      return;
+    }
+    openIndicatorActionsMenu(actionsMenuAtPointer(saved.instanceId, event, nameRef.current));
+  };
   const onNameKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'Delete' && event.key !== 'Backspace') {
       reorder?.onNameKeyDown(event);
@@ -68,9 +80,11 @@ export function ObjectTreeIndicatorRow({ saved, plugin, reorder }: ObjectTreeInd
       data-instance-id={saved.instanceId}
       data-selected={presentWhileTrue(selected)}
       data-hidden={presentWhileTrue(hidden)}
+      onContextMenu={openActionsMenu}
       {...reorder?.listItemProps}
     >
       <button
+        ref={nameRef}
         type="button"
         className={ROW_NAME_CLASS}
         aria-current={presentWhileTrue(selected)}

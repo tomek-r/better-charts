@@ -95,6 +95,7 @@ export class ChartIndicators {
         openSettings: (instanceId) => this.commands?.openSettings(instanceId),
         setHidden: (instanceId, hidden) => this.commands?.setHidden(instanceId, hidden),
         remove: (instanceId) => this.commands?.remove(instanceId),
+        openActionsMenu: (instanceId, anchor) => this.commands?.openActionsMenu(instanceId, anchor),
         setPaneHeights: (heights) => this.commands?.setPaneHeights(heights),
         setLegendCollapsed: (collapsed) => this.commands?.setLegendCollapsed(collapsed),
       },

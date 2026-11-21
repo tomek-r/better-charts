@@ -10,7 +10,8 @@ import { VisibilityTab, type TimeframeVisibilityEditing } from './visibility/Vis
 /** The id of the Coordinates tab, which the dialog opens when the tool refuses the saved anchors. */
 export const COORDINATES_TAB_ID = 'coordinates';
 
-const VISIBILITY_TAB_ID = 'visibility';
+/** The id of the Visibility tab, which an indicator's "Visibility on intervals" command opens. */
+export const VISIBILITY_TAB_ID = 'visibility';
 
 /**
  * What a tool declares for its dialog: its settings, the anchors each drawing holds, and whether it earns a

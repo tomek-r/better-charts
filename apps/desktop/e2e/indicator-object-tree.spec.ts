@@ -17,7 +17,9 @@ import {
 import { chartDrawings, clickChartPoint, selectedDrawing } from './helpers/drawingToolbarPage';
 import { CHART_HOST_SELECTOR } from './helpers/chartHost';
 import { rgbText } from './helpers/cssColor';
+import { indicatorActionsMenu } from './helpers/indicatorActionsMenu';
 import { drawnIndicators } from './helpers/indicatorFrames';
+import { expectPaintedOnTop, indicatorRowNames, paintsOver } from './helpers/indicatorOrder';
 import { attachedIndicators } from './helpers/indicatorsDialog';
 import { emptyPanePoint, plotLinePoint } from './helpers/indicatorPlotPage';
 import { openChart } from './helpers/openChart';
@@ -121,29 +123,6 @@ function indicatorRowName(page: Page, name: string): Locator {
 /** The name button of the single price-pane indicator row: what a click and the row keys land on. */
 function smaRowName(page: Page): Locator {
   return indicatorRowName(page, SMA_9_CLOSE);
-}
-
-/** The names of the price-pane indicator rows, top to bottom. */
-async function indicatorRowNames(page: Page): Promise<Array<string | null>> {
-  return indicatorRows(page)
-    .locator('.object-tree-row-label')
-    .evaluateAll((labels) => labels.map((label) => label.textContent));
-}
-
-/** The saved indicators' instance ids, in the order the chart settings store them. */
-async function savedIndicatorOrder(page: Page): Promise<string[]> {
-  return (readSavedIndicators(await latestSavedIndicators(page)) ?? []).map((indicator) => indicator.instanceId);
-}
-
-/** The index one indicator's plots hold among its pane's series: the greater it is, the higher it paints. */
-async function seriesOrderOf(page: Page, instanceId: string): Promise<number | null> {
-  return (await drawnIndicators(page)).find((indicator) => indicator.id === instanceId)?.seriesOrder ?? null;
-}
-
-/** Whether the chart paints `top` over `under`: the object tree's top row is the higher series order. */
-async function paintsOver(page: Page, top: string, under: string): Promise<boolean> {
-  const [topOrder, underOrder] = [await seriesOrderOf(page, top), await seriesOrderOf(page, under)];
-  return topOrder !== null && underOrder !== null && topOrder > underOrder;
 }
 
 /** The Remove button of the price-pane legend row, which a selected indicator keeps in sight. */
@@ -255,8 +234,7 @@ test('Alt+ArrowUp moves an indicator row over the one above it, saves the order 
 
   await expect.poll(() => indicatorRowNames(page)).toEqual([EMA_9_CLOSE, SMA_9_CLOSE]);
   await expect(emaName).toBeFocused();
-  await expect.poll(() => savedIndicatorOrder(page)).toEqual([EMA_INSTANCE_ID, SMA_INSTANCE_ID]);
-  await expect.poll(() => paintsOver(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID)).toBe(true);
+  await expectPaintedOnTop(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID);
 
   // The saved order is the rows' order, so the reload lists and paints them the same way.
   await page.reload();
@@ -264,7 +242,7 @@ test('Alt+ArrowUp moves an indicator row over the one above it, saves the order 
   await openObjectTree(page);
   await expect(indicatorRows(page)).toHaveCount(2);
   expect(await indicatorRowNames(page)).toEqual([EMA_9_CLOSE, SMA_9_CLOSE]);
-  await expect.poll(() => paintsOver(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID)).toBe(true);
+  await expectPaintedOnTop(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID);
 });
 
 test('dragging an indicator row over another moves it there, saves the order and paints it on top', async ({
@@ -277,8 +255,7 @@ test('dragging an indicator row over another moves it there, saves the order and
   await rows.nth(1).dragTo(rows.nth(0), { targetPosition: { x: 20, y: 2 } });
 
   await expect.poll(() => indicatorRowNames(page)).toEqual([EMA_9_CLOSE, SMA_9_CLOSE]);
-  await expect.poll(() => savedIndicatorOrder(page)).toEqual([EMA_INSTANCE_ID, SMA_INSTANCE_ID]);
-  await expect.poll(() => paintsOver(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID)).toBe(true);
+  await expectPaintedOnTop(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID);
 });
 
 test('an indicator with a pane of its own is listed in a group of its own', async ({ page }) => {
@@ -314,6 +291,41 @@ test('an own-pane indicator row hides and removes it', async ({ page }) => {
 
   await expect(paneGroup(page, SECOND_PANE_GROUP)).toHaveCount(0);
   await expect(indicatorRows(page)).toHaveCount(0);
+});
+
+test('a right-press on an indicator row opens the actions menu at the pointer', async ({ page }) => {
+  await openTreeWithSavedSma(page);
+  const row = indicatorRows(page);
+  const pressedAt = { x: 30, y: 2 };
+  const rowBox = await row.boundingBox();
+  if (rowBox === null) {
+    throw new Error('The indicator row is not laid out.');
+  }
+
+  await row.click({ button: 'right', position: pressedAt });
+
+  const menu = indicatorActionsMenu(page);
+  await expect(menu).toBeVisible();
+  const menuBox = await menu.boundingBox();
+  if (menuBox === null) {
+    throw new Error('The indicator actions menu is not laid out.');
+  }
+  const pointer = { x: rowBox.x + pressedAt.x, y: rowBox.y + pressedAt.y };
+  expect(menuBox.x).toBeCloseTo(pointer.x, 0);
+  // The menu hangs a small gap under the point, never under the row's own bottom edge.
+  expect(menuBox.y - pointer.y).toBeGreaterThanOrEqual(2);
+  expect(menuBox.y - pointer.y).toBeLessThanOrEqual(8);
+});
+
+test('Escape closes the row menu and gives the focus back to the row name', async ({ page }) => {
+  await openTreeWithSavedSma(page);
+  await indicatorRows(page).click({ button: 'right', position: { x: 30, y: 2 } });
+  await expect(indicatorActionsMenu(page)).toBeVisible();
+
+  await page.keyboard.press('Escape');
+
+  await expect(indicatorActionsMenu(page)).toBeHidden();
+  await expect(smaRowName(page)).toBeFocused();
 });
 
 test('clicking an indicator row selects it, frames its legend row and draws its handles', async ({ page }) => {

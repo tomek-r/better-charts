@@ -1,6 +1,11 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
 import { indicatorLegendTitle } from '../src/features/indicators/indicatorLegendTitle';
+import {
+  INDICATOR_ACTION_LABELS,
+  OWN_PANE_VISUAL_ORDER_TITLE,
+} from '../src/features/indicators/indicatorActionsMenu/indicatorActionsMenuLabels';
+import { visualOrderTargets } from '../src/features/indicators/indicatorActionsMenu/indicatorVisualOrder';
 import { rsiPlugin } from '../src/features/indicators/rsi/rsiPlugin';
 import { smaPlugin } from '../src/features/indicators/sma/smaPlugin';
 import { palette } from '../src/shared/theme/palette';
@@ -8,6 +13,15 @@ import { OBJECT_SETTINGS_ICON_PATHS } from '../src/shared/ui/icons/objectSetting
 import { CHART_HOST_SELECTOR, RESIZE_HANDLE_SELECTOR, paneSeparatorCenter } from './helpers/chartHost';
 import { openChartSettingsTab } from './helpers/chartSettingsDialog';
 import { rgbText } from './helpers/cssColor';
+import {
+  actionsMenuRow,
+  indicatorActionsMenu,
+  legendMoreButton,
+  openLegendActionsMenu,
+  pickVisualOrder,
+} from './helpers/indicatorActionsMenu';
+import { legendRowNamed, smaSettingsDialog } from './helpers/indicatorObjectTree';
+import { expectPaintedOnTop, savedIndicatorOrder } from './helpers/indicatorOrder';
 import { attachedIndicators, attachSma } from './helpers/indicatorsDialog';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { openChart } from './helpers/openChart';
@@ -53,6 +67,15 @@ const INDICATOR_LEGEND_COLLAPSED_LABEL = 'Indicator legend collapsed';
 const HIDDEN_SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {}, hidden: true };
 /** A saved SMA a collapsed legend counts. */
 const SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {} };
+/** A second price-pane indicator, so that one of them can move in front of or behind the other. */
+const EMA_ENTRY = { instanceId: 'ema-1', definitionId: 'ema', settings: {} };
+const SMA_INSTANCE_ID = 'sma-1';
+const EMA_INSTANCE_ID = 'ema-1';
+const EMA_9_CLOSE = 'EMA 9 close';
+/** A saved indicator with a pane of its own, which has no paint order among the price pane's plots. */
+const RSI_ENTRY = { instanceId: RSI_INSTANCE_ID, definitionId: RSI_DEFINITION_ID, settings: {} };
+/** The tab the indicator's Visibility settings live on. */
+const VISIBILITY_TAB = 'Visibility';
 
 /** The legend an indicator holding a pane of its own shows its row in. */
 function paneLegend(page: Page): Locator {
@@ -399,6 +422,120 @@ test.describe('saved collapsed indicator legend', () => {
   });
 });
 
+test.describe('indicator actions menu', () => {
+  failOnPageNoise();
+
+  test.beforeEach(async ({ page }) => {
+    await openWithSavedIndicators(page, [SMA_ENTRY, EMA_ENTRY]);
+  });
+
+  test('the More button opens a menu with the indicator commands, in order', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+
+    await expect(menu.getByRole('menuitem')).toHaveText([
+      INDICATOR_ACTION_LABELS.visualOrder,
+      INDICATOR_ACTION_LABELS.visibilityOnIntervals,
+      INDICATOR_ACTION_LABELS.hide,
+      INDICATOR_ACTION_LABELS.remove,
+      INDICATOR_ACTION_LABELS.settings,
+    ]);
+  });
+
+  test('Bring to front saves the order and paints the indicator over the other one', async ({ page }) => {
+    await expect.poll(() => savedIndicatorOrder(page)).toEqual([SMA_INSTANCE_ID, EMA_INSTANCE_ID]);
+
+    await pickVisualOrder(page, EMA_9_CLOSE, INDICATOR_ACTION_LABELS.bringToFront);
+    await expectPaintedOnTop(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID);
+  });
+
+  test('Send to back saves the order and paints the other indicator over it', async ({ page }) => {
+    await pickVisualOrder(page, SMA_ROW_TEXT, INDICATOR_ACTION_LABELS.sendToBack);
+    await expectPaintedOnTop(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID);
+  });
+
+  test('Visibility on intervals opens the settings dialog on its Visibility tab', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+
+    await actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visibilityOnIntervals).click();
+
+    const dialog = smaSettingsDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('tab', { name: VISIBILITY_TAB, exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  test('Hide hides the indicator from the menu, and the menu then offers Show', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    await actionsMenuRow(menu, INDICATOR_ACTION_LABELS.hide).click();
+
+    await expect.poll(async () => (await attachedIndicators(page))[0]?.hidden).toBe(true);
+    await expect(indicatorActionsMenu(page)).toBeHidden();
+
+    const reopened = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    await actionsMenuRow(reopened, INDICATOR_ACTION_LABELS.show).click();
+
+    await expect.poll(async () => (await attachedIndicators(page))[0]?.hidden).toBe(false);
+  });
+
+  test('Remove detaches the indicator from the menu', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    await actionsMenuRow(menu, INDICATOR_ACTION_LABELS.remove).click();
+
+    await expect.poll(async () => (await attachedIndicators(page)).length).toBe(1);
+    await expect(page.getByLabel(INDICATOR_LEGEND_LABEL, { exact: true })).not.toContainText(SMA_ROW_TEXT);
+  });
+
+  test('Escape closes the menu and gives the focus back to the More button', async ({ page }) => {
+    const row = legendRowNamed(page, SMA_ROW_TEXT);
+    const menu = await openLegendActionsMenu(row);
+
+    await page.keyboard.press('Escape');
+
+    await expect(menu).toBeHidden();
+    await expect(legendMoreButton(row)).toBeFocused();
+  });
+
+  test('a press outside the menu closes it', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+
+    await page.locator(CHART_HOST_SELECTOR).click({ position: { x: 600, y: 120 } });
+
+    await expect(menu).toBeHidden();
+  });
+
+  test('the arrow keys walk the menu rows', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    // The menu opens on its first row, and the keys move one row at a time, wrapping at the ends.
+    await expect(actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visualOrder)).toBeFocused();
+
+    await page.keyboard.press('ArrowDown');
+
+    await expect(actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visibilityOnIntervals)).toBeFocused();
+  });
+});
+
+test.describe('own-pane indicator actions menu', () => {
+  failOnPageNoise();
+
+  test.beforeEach(async ({ page }) => {
+    await openWithSavedIndicators(page, [RSI_ENTRY]);
+  });
+
+  test('Visual order is disabled and says why an own-pane indicator cannot move', async ({ page }) => {
+    const menu = await openLegendActionsMenu(paneLegend(page).locator(ROW_SELECTOR).first());
+
+    const visualOrder = actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visualOrder);
+    await expect(visualOrder).toHaveAttribute('aria-disabled', 'true');
+    await expect(visualOrder).toHaveAttribute('title', OWN_PANE_VISUAL_ORDER_TITLE);
+
+    // Playwright treats an aria-disabled row as unclickable, so the press is forced: it must still open nothing.
+    await visualOrder.click({ force: true });
+    await expect(page.getByRole('menu', { name: INDICATOR_ACTION_LABELS.visualOrder, exact: true })).toHaveCount(0);
+  });
+});
+
 test('indicatorLegendTitle words a known indicator with its input values', () => {
   const settings = resolveSettingValues(smaPlugin, { length: 20 });
 
@@ -407,4 +544,17 @@ test('indicatorLegendTitle words a known indicator with its input values', () =>
 
 test('indicatorLegendTitle reads an unregistered definition as its id', () => {
   expect(indicatorLegendTitle('unknown-indicator', {})).toBe('unknown-indicator');
+});
+
+test('visualOrderTargets finds the first and the last price-pane indicator of the saved order', () => {
+  const saved = [EMA_ENTRY, RSI_ENTRY, SMA_ENTRY];
+
+  expect(visualOrderTargets(saved, SMA_INSTANCE_ID)).toEqual({
+    frontInstanceId: EMA_INSTANCE_ID,
+    backInstanceId: SMA_INSTANCE_ID,
+  });
+});
+
+test('visualOrderTargets gives an indicator with a pane of its own no paint order', () => {
+  expect(visualOrderTargets([SMA_ENTRY, RSI_ENTRY], RSI_INSTANCE_ID)).toBeUndefined();
 });

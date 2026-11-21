@@ -13,6 +13,15 @@ const PRICE_PANE_LEGEND_LABEL = 'Indicator legend';
 /** One row of a legend, which the chart draws outside React. */
 const LEGEND_ROW_SELECTOR = '.chart-indicator-legend-row';
 
+/** The drawer the tree's rows sit in. */
+const OBJECT_TREE_DRAWER_SELECTOR = 'aside[aria-label="Object tree"]';
+
+/**
+ * The transform a drawer computes once it has stopped sliding in. It slides for 0.2 s, so a row measured
+ * before then still sits off its resting place.
+ */
+const SETTLED_DRAWER_TRANSFORM = 'matrix(1, 0, 0, 1, 0, 0)';
+
 /** Every pane group of the tree, named as the panes of the chart stack them. */
 const PANE_GROUP_NAME = /^(?:Price pane|Pane \d+)$/;
 
@@ -53,9 +62,19 @@ export function smaSettingsDialog(page: Page): Locator {
   return page.getByRole('dialog', { name: SMA_DIALOG_NAME });
 }
 
+/** Every row of the legend under the OHLC line, top to bottom. */
+function pricePaneLegendRows(page: Page): Locator {
+  return page.getByLabel(PRICE_PANE_LEGEND_LABEL, { exact: true }).locator(LEGEND_ROW_SELECTOR);
+}
+
 /** The row the legend under the OHLC line draws for the price-pane indicator these cases seed. */
 export function pricePaneLegendRow(page: Page): Locator {
-  return page.getByLabel(PRICE_PANE_LEGEND_LABEL, { exact: true }).locator(LEGEND_ROW_SELECTOR).first();
+  return pricePaneLegendRows(page).first();
+}
+
+/** The row the legend under the OHLC line draws for the indicator named `title`. */
+export function legendRowNamed(page: Page, title: string): Locator {
+  return pricePaneLegendRows(page).filter({ hasText: title });
 }
 
 /** The id the chart reports as its selected indicator, or null while nothing is selected. */
@@ -69,10 +88,15 @@ export async function expectNoSelectedIndicator(page: Page): Promise<void> {
   await expect(indicatorRows(page)).not.toHaveAttribute('data-selected', 'true');
 }
 
-/** Opens the object tree drawer, whose indicator rows these cases read. */
+/**
+ * Opens the object tree drawer, whose indicator rows these cases read, and waits for it to stop sliding so a
+ * row measured or pressed here is at the place it keeps.
+ */
 export async function openObjectTree(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Object tree', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Object tree' })).toBeVisible();
+  const drawer = page.locator(OBJECT_TREE_DRAWER_SELECTOR);
+  await expect(drawer.getByRole('heading', { name: 'Object tree' })).toBeVisible();
+  await expect(drawer).toHaveCSS('transform', SETTLED_DRAWER_TRANSFORM);
 }
 
 /** Opens the settings dialog of the seeded moving average by double clicking its row name. */

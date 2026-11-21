@@ -19,16 +19,17 @@ import { useIndicatorSettingsCommands } from './useIndicatorCommands';
 
 /** What the app shares about indicator settings: the one command that opens them. */
 interface IndicatorSettingsContextValue {
-  readonly openIndicatorSettings: (instanceId: string) => void;
+  /** Opens the settings of one indicator, on `tabId` when the caller names the tab to show. */
+  readonly openIndicatorSettings: (instanceId: string, tabId?: string) => void;
 }
 
 const IndicatorSettingsContext = createContext<IndicatorSettingsContextValue | null>(null);
 
 /**
- * Opens the settings of one saved indicator, from an object tree row. The answers function keeps its
- * identity while the provider does, so the rows that hold it do not re-render when a dialog opens.
+ * Opens the settings of one saved indicator, from an object tree row or its actions menu. The answers function
+ * keeps its identity while the provider does, so the rows that hold it do not re-render when a dialog opens.
  */
-export function useOpenIndicatorSettings(): (instanceId: string) => void {
+export function useOpenIndicatorSettings(): (instanceId: string, tabId?: string) => void {
   const { openIndicatorSettings } = useRequiredContext(
     IndicatorSettingsContext,
     'useOpenIndicatorSettings must be used within IndicatorSettingsProvider.',
@@ -36,8 +37,16 @@ export function useOpenIndicatorSettings(): (instanceId: string) => void {
   return openIndicatorSettings;
 }
 
+/** The indicator whose settings dialog is open, and the tab it was asked to open on. */
+interface OpenIndicatorSettings {
+  readonly instanceId: string;
+  readonly tabId: string | undefined;
+}
+
 interface IndicatorSettingsDialogProps {
   readonly instanceId: string;
+  /** The tab the dialog opens on, or undefined for the first one. */
+  readonly initialTabId: string | undefined;
   readonly onClose: () => void;
 }
 
@@ -51,7 +60,7 @@ type IndicatorSettingsSave = [points?: unknown, timeframeVisibility?: DrawingTim
  * indicator that detached, or whose definition left the registry, gives the dialog nothing to edit and no
  * dialog.
  */
-function IndicatorSettingsDialog({ instanceId, onClose }: IndicatorSettingsDialogProps) {
+function IndicatorSettingsDialog({ instanceId, initialTabId, onClose }: IndicatorSettingsDialogProps) {
   const { settings } = useChartSettings();
   const commands = useIndicatorSettingsCommands();
   const { backdropRef, closing, close } = useModalExit(onClose);
@@ -86,6 +95,7 @@ function IndicatorSettingsDialog({ instanceId, onClose }: IndicatorSettingsDialo
         plugin={plugin}
         saved={saved}
         closing={closing}
+        initialTabId={initialTabId}
         onPreview={previewDraft}
         onSave={saveSettings}
         onCancel={cancel}
@@ -99,6 +109,8 @@ interface IndicatorSettingsFieldsProps {
   readonly plugin: RegisteredChartIndicatorPlugin;
   readonly saved: SavedIndicator;
   readonly closing: boolean;
+  /** The tab the form opens on, or undefined for the first one. */
+  readonly initialTabId: string | undefined;
   readonly onPreview: (values: SettingValues) => void;
   readonly onSave: SettingsFormProps['onSave'];
   readonly onCancel: () => void;
@@ -113,6 +125,7 @@ function IndicatorSettingsFields({
   plugin,
   saved,
   closing,
+  initialTabId,
   onPreview,
   onSave,
   onCancel,
@@ -124,6 +137,7 @@ function IndicatorSettingsFields({
       settings={{ ...plugin, ...indicatorSettingsSchema(plugin), timeframeVisibility: 'editable' }}
       initialValues={initialValues}
       initialTimeframeVisibility={initialTimeframeVisibility}
+      initialTabId={initialTabId}
       // A draft still resting must not reach the chart once the dialog is leaving: OK kept it, Cancel reverted.
       onPreview={closing ? undefined : onPreview}
       onSave={onSave}
@@ -142,30 +156,36 @@ export interface IndicatorSettingsProviderProps {
  */
 export function IndicatorSettingsProvider({ children }: IndicatorSettingsProviderProps) {
   const { settings } = useChartSettings();
-  const [openInstanceId, setOpenInstanceId] = useState<string | null>(null);
+  const [openSettings, setOpenSettings] = useState<OpenIndicatorSettings>();
 
-  const openIndicatorSettings = useCallback((instanceId: string) => {
-    setOpenInstanceId(instanceId);
+  const openIndicatorSettings = useCallback((instanceId: string, tabId?: string) => {
+    setOpenSettings({ instanceId, tabId });
   }, []);
 
   const contextValue = useMemo(() => ({ openIndicatorSettings }), [openIndicatorSettings]);
 
   const closeSettings = () => {
-    setOpenInstanceId(null);
+    setOpenSettings(undefined);
   };
 
   // An indicator the user removed while its dialog was open leaves nothing to edit. Clearing the id here
   // rather than in the dialog keeps that dialog shut when an instance of the same id comes back.
   const openInstanceLeftSettings =
-    openInstanceId !== null && !settings.indicators.some((entry) => entry.instanceId === openInstanceId);
+    openSettings !== undefined && !settings.indicators.some((entry) => entry.instanceId === openSettings.instanceId);
   if (openInstanceLeftSettings) {
-    setOpenInstanceId(null);
+    setOpenSettings(undefined);
   }
 
   return (
     <IndicatorSettingsContext value={contextValue}>
       {children}
-      {openInstanceId === null ? null : <IndicatorSettingsDialog instanceId={openInstanceId} onClose={closeSettings} />}
+      {openSettings === undefined ? null : (
+        <IndicatorSettingsDialog
+          instanceId={openSettings.instanceId}
+          initialTabId={openSettings.tabId}
+          onClose={closeSettings}
+        />
+      )}
     </IndicatorSettingsContext>
   );
 }
