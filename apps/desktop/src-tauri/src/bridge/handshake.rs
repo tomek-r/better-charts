@@ -1,11 +1,11 @@
 use super::{
-    bridge_emit, clear_indicator_series, clear_profile_bar_slots, disconnect,
-    invalidate_validated_order_check, now_ms, protocol_error, protocol_error_component_outdated,
-    protocol_error_session, protocol_error_token_mismatch, publish, publish_market,
-    publish_reconciliation_status, read_one, reconciliation_request_status, reset_reconciliation,
-    send, send_error, BridgeConnectionState, BridgeEvents, BridgeState, ExecutionAdapterState,
-    FrameSource, MarketSnapshot, PendingReconciliation, ReconciliationStatus, TerminalIdentity,
-    HANDSHAKE_TIMEOUT,
+    bridge_emit, clear_indicator_series, clear_indicator_ticks, clear_profile_bar_slots,
+    disconnect, invalidate_validated_order_check, now_ms, protocol_error,
+    protocol_error_component_outdated, protocol_error_session, protocol_error_token_mismatch,
+    publish, publish_market, publish_reconciliation_status, read_one,
+    reconciliation_request_status, reset_reconciliation, send, send_error, BridgeConnectionState,
+    BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource, MarketSnapshot,
+    PendingReconciliation, ReconciliationStatus, TerminalIdentity, HANDSHAKE_TIMEOUT,
 };
 use crate::bridge::endpoint::BridgeEndpoint;
 use std::{sync::atomic::Ordering, sync::Arc};
@@ -272,8 +272,10 @@ pub(crate) async fn run_handshake(
         .expected_history_page
         .lock()
         .expect("history page mutex poisoned") = None;
-    // Indicator series reads belong to the session that asked for them too.
+    // Indicator series and ticks reads belong to the session that asked for them
+    // too.
     clear_indicator_series(state);
+    clear_indicator_ticks(state);
     *state
         .pending_tick_profile
         .lock()

@@ -1,4 +1,6 @@
-use super::{mark_order_check_sent, series_slots, BridgeState, ExpectedReconciliation};
+use super::{
+    mark_order_check_sent, series_slots, ticks_slots, BridgeState, ExpectedReconciliation,
+};
 use crate::execution_adapter::{ExecutionAdapterError, ExecutionAdapterState};
 use std::{
     collections::VecDeque,
@@ -222,6 +224,22 @@ pub(crate) async fn flush_outbound(
             series.request_id,
             Some(session_id.to_owned()),
             series.request.page,
+        )
+        .await?;
+    }
+
+    // The desktop's indicator ticks, one raw page each; they never ask for price
+    // counts and never touch the tick profile's own request.
+    let waiting_ticks = claim_for_session(state, session_id, || {
+        ticks_slots(state).claim_waiting(&state.next_request_id)
+    })?;
+    for ticks in waiting_ticks {
+        send(
+            stream,
+            MessageType::TickHistoryRequest,
+            ticks.request_id,
+            Some(session_id.to_owned()),
+            ticks.request.page,
         )
         .await?;
     }

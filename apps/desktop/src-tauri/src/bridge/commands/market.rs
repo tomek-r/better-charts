@@ -5,12 +5,12 @@
 use super::super::{
     build_streamed_tick_profile, build_tick_profile, cache_line, can_estimate,
     clear_profile_bar_slots, invalidate_validated_order_check, log_decision, log_info, now_ms,
-    series_slots, AccountView, BridgeState, BridgeStatus, HistoryRequest, IndicatorSeriesRequest,
-    MarketSnapshot, Mt5BackendState, Mt5BackendStatus, PortfolioView, ProfileSettings,
-    ProfileSource, QuoteView, ReconciliationStatus, SourceDecision, SourceReason, State,
-    SymbolInfoRequest, SymbolSearchRequest, SymbolSearchResultView, TickHistoryRequest,
-    TickPageResult, TickProfileCancelledView, TickProfileProgress, TickProfileRequest,
-    TickProfileResult,
+    series_slots, ticks_slots, AccountView, BridgeState, BridgeStatus, HistoryRequest,
+    IndicatorSeriesRequest, IndicatorTicksRequest, MarketSnapshot, Mt5BackendState,
+    Mt5BackendStatus, PortfolioView, ProfileSettings, ProfileSource, QuoteView,
+    ReconciliationStatus, SourceDecision, SourceReason, State, SymbolInfoRequest,
+    SymbolSearchRequest, SymbolSearchResultView, TickHistoryRequest, TickPageResult,
+    TickProfileCancelledView, TickProfileProgress, TickProfileRequest, TickProfileResult,
 };
 use tauri::Emitter;
 use trading_core::volume_profile::{value_area_fraction, RowLayout};
@@ -286,6 +286,66 @@ pub(crate) fn request_indicator_series_inner(
         return Err("timeframe is not supported by the connected EA".into());
     }
     series_slots(state).queue(request);
+    state.wake_outbound();
+    Ok(())
+}
+
+/// Read-only raw ticks for an indicator calculated on N-tick bars: a range of
+/// the chart symbol, published on `indicator-ticks` and routed by the caller's
+/// `key`, so several reads can be in flight at once. Kept apart from the tick
+/// profile because it must not displace its request, cache or events, and it
+/// never asks for price counts; it reuses the tick history message, so the wire
+/// is unchanged.
+#[tauri::command]
+pub(crate) fn request_indicator_ticks(
+    state: State<'_, BridgeState>,
+    key: String,
+    symbol: String,
+    from_ms: i64,
+    to_ms: i64,
+    max_ticks: u32,
+) -> Result<(), String> {
+    request_indicator_ticks_inner(&state, key, symbol, from_ms, to_ms, max_ticks)
+}
+
+pub(crate) fn request_indicator_ticks_inner(
+    state: &BridgeState,
+    key: String,
+    symbol: String,
+    from_ms: i64,
+    to_ms: i64,
+    max_ticks: u32,
+) -> Result<(), String> {
+    let page_ticks_limit = state
+        .transfer_limits
+        .lock()
+        .expect("transfer limits mutex poisoned")
+        .max_ticks_per_page;
+    let request =
+        IndicatorTicksRequest::build(key, symbol, from_ms, to_ms, max_ticks, page_ticks_limit)?;
+    let _session_work = state
+        .session_work
+        .lock()
+        .map_err(|_| "bridge session unavailable".to_string())?;
+    if state
+        .current_session
+        .lock()
+        .expect("session mutex poisoned")
+        .is_none()
+    {
+        return Err("bridge is not connected".into());
+    }
+    if state
+        .market
+        .lock()
+        .expect("market mutex poisoned")
+        .symbol
+        .as_deref()
+        != Some(request.page.symbol.as_str())
+    {
+        return Err("symbol is not the chart's symbol".into());
+    }
+    ticks_slots(state).queue(request);
     state.wake_outbound();
     Ok(())
 }

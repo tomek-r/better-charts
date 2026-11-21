@@ -1,6 +1,6 @@
 use super::{
-    AccountView, ChartSelectionMemory, IndicatorSeriesState, MarketCandle, PortfolioView,
-    QuoteView, SymbolCacheState, TickCacheController,
+    AccountView, ChartSelectionMemory, IndicatorSeriesState, IndicatorTicksState, MarketCandle,
+    PortfolioView, QuoteView, SymbolCacheState, TickCacheController,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -256,6 +256,11 @@ pub(crate) struct BridgeState {
     /// caller key, apart from every chart slot so a series read can neither
     /// displace a page nor be consumed as one.
     pub(crate) indicator_series: Arc<Mutex<IndicatorSeriesState>>,
+    /// The desktop's indicator ticks route: queued and awaited raw tick pages,
+    /// one per caller key, apart from the tick profile's own request, cache and
+    /// events, so a read can neither displace a profile page nor be consumed as
+    /// one.
+    pub(crate) indicator_ticks: Arc<Mutex<IndicatorTicksState>>,
     pub(crate) pending_tick_profile: Arc<Mutex<Option<TickProfileRequest>>>,
     pub(crate) expected_tick_profile: Arc<Mutex<Option<(u64, String, TickProfileRequest)>>>,
     pub(crate) tick_controller: Arc<Mutex<TickCacheController>>,

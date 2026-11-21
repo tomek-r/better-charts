@@ -1,6 +1,6 @@
 use super::{
     app_data_dir, BridgeState, BridgeStatus, ChartSelectionMemory, IndicatorSeriesState,
-    MarketSnapshot, ReconciliationStatus, TickCacheController,
+    IndicatorTicksState, MarketSnapshot, ReconciliationStatus, TickCacheController,
 };
 use std::{
     fs,
@@ -111,6 +111,7 @@ impl BridgeState {
             pending_history_page: Arc::new(Mutex::new(None)),
             expected_history_page: Arc::new(Mutex::new(None)),
             indicator_series: Arc::new(Mutex::new(IndicatorSeriesState::default())),
+            indicator_ticks: Arc::new(Mutex::new(IndicatorTicksState::default())),
             pending_tick_profile: Arc::new(Mutex::new(None)),
             expected_tick_profile: Arc::new(Mutex::new(None)),
             tick_controller: Arc::new(Mutex::new(TickCacheController::default())),

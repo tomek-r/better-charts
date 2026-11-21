@@ -11,6 +11,7 @@
 mod profile_bars;
 mod series;
 mod tick_profile;
+mod ticks;
 
 #[cfg(test)]
 pub(crate) use tick_profile::finish_tick_page;

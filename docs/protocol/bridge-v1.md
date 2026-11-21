@@ -1084,6 +1084,63 @@ symbol, `from_ms`, `max_ticks` and `to_ms` not beyond the origin. Any other requ
 cancel, failure, raw fallback or disconnect discards it; an unclaimed one is released
 after 30 s. Results match an on-demand read; `tick page delivered` logs `prefetch=hit|miss`.
 
+### Indicator ticks (desktop route, no wire change)
+
+An indicator calculated on N-tick bars ("1 tick", "10 ticks", "100 ticks",
+"1000 ticks" calculation timeframes) needs the raw ticks of a range of the chart
+symbol while the tick profile may be loading a range of its own. The desktop
+command `request_indicator_ticks(state, key, symbol, from_ms, to_ms, max_ticks)`
+reads such a range with the `tick_history_request` message above, so the EA needs
+no change; the answer is published on its own event instead of `tick-profile`.
+
+The command is read-only and refused unless the bridge is connected (`bridge is
+not connected`), `symbol` equals the session's active chart symbol (`symbol is
+not the chart's symbol`), `key` is 1–64 characters of `[A-Za-z0-9_:-]` (the
+indicator series key rule; anything else is `invalid indicator ticks key`) and the
+half-open range and page pass the message's own bounds (`from_ms < to_ms`,
+`max_ticks` in `1..=negotiated max_ticks_per_page`; anything else is `invalid
+tick history request`). `price_counts` is never requested, so the EA always
+answers with the raw `tick_history_snapshot` format.
+
+Requests are kept in slots of their own — apart from the tick profile's request,
+its tick and bar caches and its events — so an indicator read can neither
+displace a profile page nor be consumed as one, and vice versa. At most 8 keys
+are kept (queued or awaited); a request for a new key beyond that drops the
+oldest one, and a newer request for a key replaces the older one together with
+the response it still awaited (latest per key wins). Each queued request is
+written as one `tick_history_request` under the id `rust-indicator-ticks-<n>`;
+the id it was given is recorded per key, so a response for a replaced or unknown
+id is ignored like a stale page and the tick profile's own ids stay untouched. A
+new session or a change of the chart symbol drops every queued and awaited
+indicator ticks request.
+
+`indicator-ticks` event payload (camelCase, as emitted to the frontend):
+
+```json
+{
+  "key": "volume-bars-100", "symbol": "NAS100", "fromMs": 1769999400000,
+  "toMs": 1770000000000, "complete": true, "ticks": [
+    {"timeMs": 1769999400123, "bid": "25000.1", "ask": "25000.3", "last": "0", "volume": 0}
+  ]
+}
+```
+
+Prices and the last price stay the decimal strings the wire carries — the
+desktop never converts them to floats — and `volume` is the integer tick volume.
+`complete` has the page meaning above, and `ticks` is the oldest continuous
+prefix of the range, never a sample. A correlated `error` frame whose envelope
+`id` is one of these `rust-indicator-ticks-<n>` ids ends only that request and
+publishes `indicator-ticks-unavailable`:
+
+```json
+{"key": "volume-bars-100", "symbol": "NAS100", "message": "tick history synchronization timed out"}
+```
+
+That event is non-fatal, like `indicator-series-unavailable`: the session, the
+reconciliation state, the dispatch gates, the tick profile and every other
+in-flight read keep running. An error with an uncorrelated id still fails closed
+as before.
+
 ## Desktop tick-profile events
 
 These are camelCase Tauri events, not additional TCP message types. Sequential

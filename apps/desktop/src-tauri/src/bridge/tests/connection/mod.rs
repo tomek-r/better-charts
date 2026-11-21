@@ -24,6 +24,7 @@ mod heartbeat_outbound_tests;
 mod history_page_tests;
 mod history_window_error_tests;
 mod indicator_series_tests;
+mod indicator_ticks_tests;
 mod profile_bars_tests;
 mod reconciliation_execution_tests;
 mod restart_status_tests;
