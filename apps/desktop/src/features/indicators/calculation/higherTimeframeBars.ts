@@ -1,5 +1,6 @@
 import { timeframeBarTime, timeframeSeconds } from '../../../shared/bridge/timeframes';
 import type { RenderBar } from '../../chart/engine/bars/renderBar';
+import { NO_FRAME_BAR } from '../indicatorFrameBars';
 
 /** The chart's bars grouped into a higher timeframe's bars, and the bucket each chart bar falls in. */
 export interface HigherTimeframeBars {
@@ -79,4 +80,51 @@ export function bucketBars(bars: readonly RenderBar[], wire: string): HigherTime
     bucketOf.push(buckets.length - 1);
   }
   return { bars: buckets, bucketOf };
+}
+
+/** Where the newest higher-timeframe bar opens in `bars`: the first chart bar of its bucket. */
+export function newestBucketIndex(bars: readonly RenderBar[], wire: string): number {
+  const newest = bars.at(-1);
+  if (newest === undefined) {
+    return 0;
+  }
+  const start = higherTimeframeBarTime(wire, newest.time);
+  return bars.findIndex((bar) => higherTimeframeBarTime(wire, bar.time) === start);
+}
+
+/** The higher-timeframe bar the newest chart bars form so far: the one the chart is still drawing into. */
+export function formingBucketBar(bars: readonly RenderBar[], wire: string): RenderBar | undefined {
+  const from = newestBucketIndex(bars, wire);
+  const newestBucket = bucketBars(bars.slice(from), wire).bars;
+  return newestBucket.at(0);
+}
+
+/** For every chart bar, the index into `bars` of the bucket it falls in, `NO_FRAME_BAR` while there is none. */
+export function bucketIndexesOf(
+  bars: readonly RenderBar[],
+  wire: string,
+  chartBars: readonly RenderBar[],
+): readonly number[] {
+  const indexOfStart = new Map(bars.map((bar, index): [number, number] => [bar.time, index]));
+  return chartBars.map((bar) => indexOfStart.get(higherTimeframeBarTime(wire, bar.time)) ?? NO_FRAME_BAR);
+}
+
+/**
+ * `bars` with the newest bucket taken from the chart's own bars, so a live tick moves it as grouping does: the
+ * bucket is replaced when the series holds it, and appended when the chart has opened one the series has not.
+ */
+export function withFormingBucket(
+  bars: readonly RenderBar[],
+  chartBars: readonly RenderBar[],
+  wire: string,
+): readonly RenderBar[] {
+  const forming = formingBucketBar(chartBars, wire);
+  const newest = bars.at(-1);
+  if (forming === undefined) {
+    return bars;
+  }
+  if (newest === undefined || forming.time > newest.time) {
+    return [...bars, forming];
+  }
+  return newest.time === forming.time ? [...bars.slice(0, -1), forming] : bars;
 }

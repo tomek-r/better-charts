@@ -6,8 +6,8 @@ const TIMEFRAME_WIRES: ReadonlySet<string> = new Set(timeframeOptions.map(({ wir
 
 /**
  * The timeframe `settings` name for the calculation, or undefined while they calculate on the chart's own
- * bars: the chart choice and the tick choices name no bars to group, and neither does a value the drop-down
- * does not list.
+ * bars: the chart choice and the tick choices name no timeframe of their own, and neither does a value the
+ * drop-down does not list.
  */
 function chosenTimeframe(settings: SettingValues): string | undefined {
   const choice = settings[CALCULATION_TIMEFRAME_INPUT];
@@ -16,18 +16,23 @@ function chosenTimeframe(settings: SettingValues): string | undefined {
 
 /**
  * The timeframe an indicator must be calculated on for `settings` on a chart of `chartTimeframe`, or undefined
- * to calculate on the chart's own bars — which is all that is possible for the chart's own timeframe and for a
- * shorter one, until those are grouped from bars finer than the chart holds.
+ * to calculate on the chart's own bars: the chart choice, the tick choices, the chart's own timeframe and a
+ * value the drop-down does not list all name no other bars.
  */
-export function higherTimeframeFor(settings: SettingValues, chartTimeframe: string): string | undefined {
+export function calculationTimeframeFor(settings: SettingValues, chartTimeframe: string): string | undefined {
   const chosen = chosenTimeframe(settings);
-  if (chosen === undefined) {
+  if (chosen === undefined || chosen === chartTimeframe) {
     return undefined;
   }
-  return timeframeSeconds(chosen) > timeframeSeconds(chartTimeframe) ? chosen : undefined;
+  return chosen;
 }
 
-/** Whether a chart bar keeps the value of the last closed higher-timeframe bar: on unless switched off. */
+/** Whether `timeframe`'s bars are longer than `chartTimeframe`'s. */
+export function isHigherTimeframe(timeframe: string, chartTimeframe: string): boolean {
+  return timeframeSeconds(timeframe) > timeframeSeconds(chartTimeframe);
+}
+
+/** Whether a chart bar keeps the value of the last closed calculation bar: on unless switched off. */
 export function waitsForTimeframeCloses(settings: SettingValues): boolean {
   return settings[WAIT_FOR_CLOSES_INPUT] !== false;
 }

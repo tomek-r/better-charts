@@ -1,6 +1,6 @@
 import type { RenderBar } from '../../chart/engine/bars/renderBar';
 import type { IndicatorBar, IndicatorFrame } from '../../chart/engine/indicators/indicatorFrame';
-import { indicatorFrameBar } from '../indicatorFrameBars';
+import { projectFrameBars } from '../indicatorFrameBars';
 
 /** Which higher-timeframe bar a chart bar takes its values from. */
 export type HigherTimeframeSource =
@@ -30,10 +30,5 @@ export function projectHigherTimeframeFrame(
   chart: HigherTimeframeChartBars,
   source: HigherTimeframeSource,
 ): readonly IndicatorBar[] {
-  const missingValues: readonly null[] = frame.plots.map(() => null);
-  const formingIndex = chart.chartBars.length - 1;
-  return chart.chartBars.map((chartBar, index) => {
-    const bucketBar = frame.bars[sourceBucketOf(chart.bucketOf[index], source)];
-    return indicatorFrameBar(chartBar, bucketBar?.values ?? missingValues, index !== formingIndex, bucketBar?.colors);
-  });
+  return projectFrameBars(frame, chart.chartBars, (index) => sourceBucketOf(chart.bucketOf[index], source));
 }

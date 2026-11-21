@@ -337,11 +337,25 @@ The chart no longer draws volume by itself; volume shows through the Volume indi
 SMA, EMA and Bollinger Bands draw on the price pane; RSI, MACD and Volume each get a pane of their own under
 it, about a ninth of the height, which closes when the indicator is removed. A pane resized by
 dragging its separator keeps that height, relative to the price pane, with the saved indicator,
-and the chart restores it on load. Every value is
-computed in the frontend from the bars the chart draws, as Pine's `ta.sma`, `ta.stdev`,
-`ta.rsi` and `ta.ema` compute them; a live tick redraws only the forming bar and never moves
-an indicator's state. Indicator values are display-only and never reach order, account or
-journal data.
+and the chart restores it on load. Every value is computed in the frontend from the bars the chart
+draws, or from another timeframe read from the bridge, as Pine's `ta.sma`, `ta.stdev`, `ta.rsi` and
+`ta.ema` compute them; a live tick redraws only the forming bar and never moves an indicator's state.
+Indicator values are display-only and never reach order, account or journal data.
+
+Every indicator carries a Calculation section after its own inputs: the timeframe it is calculated
+on, and whether a chart bar waits for that timeframe to close. Chart, the default, calculates on the
+bars the chart draws; every MT5 timeframe can be chosen, above or below the chart's, while the tick
+timeframes stay disabled until tick data feeds them. Another timeframe's candles are read through the
+read-only `request_indicator_series` route, keyed per indicator, so a lower timeframe is possible at
+all (an M5 chart reading M1) and a higher one gets the full depth a series grouped from the chart's
+own bars cannot reach. A higher timeframe's newest candles are projected onto the chart's bars as
+grouped bars were, its forming bar follows the chart's live bars, and the newest page is read again
+when a chart bar closes on that timeframe's boundary; a lower timeframe's candles are paged back over
+the chart's loaded range, and a chart bar shows the last lower bar inside it. Waiting for closes is on
+by default: a chart bar then keeps the last closed higher-timeframe value, and a lower timeframe's
+forming chart bar keeps the last closed lower bar's. A series the bridge cannot read leaves the last
+good values on screen, retries nothing and shows no notice of its own; until the first page arrives a
+higher timeframe still groups the chart's own bars, so nothing flickers empty.
 
 Volume's Style tab offers one Plot type icon button, on the Growing row beside its colour, which
 opens a menu holding the Current value line switch and the eleven ways to draw the plot. Columns, the

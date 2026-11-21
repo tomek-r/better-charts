@@ -3,11 +3,12 @@ import type { RenderBar } from '../bars/renderBar';
 import type { SettingInputDefinition, SettingValues } from '../settings/settingInputs';
 import type { SettingStyleDefinition } from '../settings/settingStyles';
 import type { IndicatorFrame } from './indicatorFrame';
+import type { IndicatorSeriesSource } from './indicatorSeriesSource';
 
 /** The pane an indicator's plots are drawn in: over the price pane, or in one of its own. */
 export type ChartIndicatorPane = 'overlay' | 'own';
 
-/** Where an indicator whose frames arrive later hands them; a frame from a detached indicator is dropped. */
+/** What the chart offers an indicator beyond the bars it is fed; a frame from a detached indicator is dropped. */
 export interface ChartIndicatorOutlet {
   /** Draws a whole frame, as a `load` result is drawn. */
   showFrame(frame: IndicatorFrame): void;
@@ -15,6 +16,11 @@ export interface ChartIndicatorOutlet {
   updateFrame(frame: IndicatorFrame): void;
   /** The chart's price series, for an indicator that draws what a frame cannot describe. */
   readonly priceSeries: ISeriesApi<'Candlestick'>;
+  /**
+   * Another timeframe's candles, read-only; undefined on a chart that cannot read one, and an indicator then
+   * calculates from the bars it is given.
+   */
+  readonly seriesSource: IndicatorSeriesSource | undefined;
 }
 
 /**
@@ -39,7 +45,7 @@ export interface ChartIndicator {
    */
   update(bar: RenderBar, settings: SettingValues): IndicatorFrame;
   dispose?(): void;
-  /** Called once before the first `load`, for an indicator that also pushes frames. */
+  /** Called once before the first `load`, for an indicator that draws outside its frames or reads a series. */
   connect?(outlet: ChartIndicatorOutlet): void;
   /** Told when the user hides or shows it, for an indicator that draws outside its frames. */
   setHidden?(hidden: boolean): void;

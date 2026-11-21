@@ -10,6 +10,7 @@ import type { ChartIndicator, ChartIndicatorDefinition, ChartIndicatorOutlet } f
 import { indicatorDisplayOf, indicatorSettingsSchema } from './indicatorDisplaySettings';
 import type { IndicatorFrame } from './indicatorFrame';
 import type { IndicatorLayer } from './indicatorLayer';
+import type { IndicatorSeriesSource } from './indicatorSeriesSource';
 
 export interface AttachedIndicatorState {
   readonly instanceId: string;
@@ -39,6 +40,8 @@ export class IndicatorRuntime {
     /** Called after the attached indicators or the values they draw changed, so the legend follows. */
     private readonly changed: () => void,
     private readonly priceSeries: ISeriesApi<'Candlestick'>,
+    /** Another timeframe's candles, which an indicator reads through this chart; undefined without a bridge. */
+    private readonly seriesSource?: IndicatorSeriesSource,
   ) {}
 
   /**
@@ -172,6 +175,7 @@ export class IndicatorRuntime {
         this.drawWhileAttached(instanceId, entry, () => this.layer.update(instanceId, frame));
       },
       priceSeries: this.priceSeries,
+      seriesSource: this.seriesSource,
     };
   }
 

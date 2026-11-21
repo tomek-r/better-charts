@@ -8,6 +8,7 @@ import { indicatorDisplayOf, withoutStatusLineInputs } from './indicatorDisplayS
 import { DEFAULT_STATUS_LINE_APPEARANCE, type ChartStatusLineAppearance } from '../legend/statusLineAppearance';
 import { IndicatorLayer, type IndicatorLegendValue } from './indicatorLayer';
 import { IndicatorRuntime } from './indicatorRuntime';
+import type { IndicatorSeriesSource } from './indicatorSeriesSource';
 import { PaneDragWatcher } from './paneDragWatcher';
 
 /** What the chart owning the indicators tells them about itself. */
@@ -24,6 +25,8 @@ export interface ChartIndicatorsOptions {
   readonly digits: () => number;
   /** The chart's price series, handed to an indicator that pushes frames. */
   readonly priceSeries: ISeriesApi<'Candlestick'>;
+  /** Another timeframe's candles, which an indicator reads through this chart; omitted without a bridge. */
+  readonly seriesSource?: IndicatorSeriesSource;
 }
 
 /**
@@ -54,6 +57,7 @@ export class ChartIndicators {
       options.timeframe,
       () => this.legend.refresh(),
       options.priceSeries,
+      options.seriesSource,
     );
     this.legend = new IndicatorLegend(
       host,

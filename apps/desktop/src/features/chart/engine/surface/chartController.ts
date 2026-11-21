@@ -112,7 +112,14 @@ export class ChartController {
     this.candles = candles;
     this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
     this.data = new BarSeriesController(this.candles, this.chart);
-    const { toolDefinitions, defaultToolId, indicatorDefinitions, indicatorLegendTitle, ...hostOptions } = options;
+    const {
+      toolDefinitions,
+      defaultToolId,
+      indicatorDefinitions,
+      indicatorLegendTitle,
+      indicatorSeriesSource,
+      ...hostOptions
+    } = options;
     this.chartIndicators = new ChartIndicators(this.chart, host, {
       definitions: indicatorDefinitions,
       legendTitle: indicatorLegendTitle,
@@ -120,6 +127,7 @@ export class ChartController {
       timeframe: () => this.data.timeframe,
       digits: () => this.data.pricePrecision,
       priceSeries: this.candles,
+      seriesSource: indicatorSeriesSource,
     });
     this.indicatorLayer = this.chartIndicators.layer;
     this.indicators = this.chartIndicators.runtime;

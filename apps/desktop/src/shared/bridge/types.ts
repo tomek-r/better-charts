@@ -166,6 +166,31 @@ export interface HistoryUnavailable {
 }
 
 /**
+ * Payload of the `indicator-series` event: one page of another timeframe's candles, answered by
+ * `request_indicator_series` and routed by the caller's key. Kept apart from {@link HistoryPage}, so a read of
+ * another timeframe can never stand in for a page of the chart's own series.
+ */
+export interface IndicatorSeriesPage {
+  /** The caller's routing id, echoed so parallel reads keep their own answers. */
+  key: string;
+  symbol: string;
+  timeframe: string;
+  /** False when fewer candles were available older than `beforeMs` than were asked for. */
+  complete: boolean;
+  /** Echo of the caller's anchor; null for the newest candles. */
+  beforeMs: number | null;
+  candles: Candle[];
+}
+
+/** Payload of the `indicator-series-unavailable` event: the bridge could not read that series. */
+export interface IndicatorSeriesUnavailable {
+  key: string;
+  symbol: string;
+  timeframe: string;
+  message: string;
+}
+
+/**
  * A reconnect could not reopen the selection the user was viewing, so the
  * bridge requested `shownSymbol` (the EA's chart symbol) in its place.
  */
