@@ -311,12 +311,16 @@ hovering a row reveals Settings, Lock, Hide/Show and Remove buttons (the floatin
 toolbar's order), a double click or the Settings button opens the drawing's settings dialog, and Delete or Backspace removes the drawing of the focused row.
 Arrow keys walk the rows. The price bars have a row of their own (the chart's symbol and
 timeframe, e.g. "EURUSD, 1H", with a candlestick icon) at their place in the stacking order,
-and it has no action buttons. Any row, the bars row included, drags with the mouse or moves
-with Alt+ArrowUp / Alt+ArrowDown to change the order: the top row paints on top, and
-drawings listed below the bars row paint under the candles. The order and each drawing's
-side of the bars are saved. A locked or hidden drawing keeps its toggle in sight, and a
-hidden row's name is dimmed while the row stays listed and clickable. The dialog is the
-same one the floating toolbar opens, held by one provider above the chart and the tree.
+and a hover shows its one button, Hide/Show price bars. Hiding stops the chart drawing the
+bars of its main series — the candles, bars or line the bar type chooses, and the last price
+they label — while the drawings and indicators stay; the row then keeps its crossed eye in
+sight and its dimmed name. The choice is saved per chart, account and symbol among the chart's
+settings overrides, so the chart opens hidden again. Any row, the bars row included, drags
+with the mouse or moves with Alt+ArrowUp / Alt+ArrowDown to change the order: the top row
+paints on top, and drawings listed below the bars row paint under the candles. The order and
+each drawing's side of the bars are saved. A locked or hidden drawing keeps its toggle in
+sight, and a hidden row's name is dimmed while the row stays listed and clickable. The dialog
+is the same one the floating toolbar opens, held by one provider above the chart and the tree.
 The tree keeps no data window and no toolbar of its own (owner decision).
 
 ## Chart indicators

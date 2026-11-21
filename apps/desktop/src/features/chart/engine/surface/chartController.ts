@@ -312,6 +312,17 @@ export class ChartController {
     this.refreshOverlays();
   }
   /**
+   * Hides the price bars from the chart, or shows them again, as the object tree's bars row asks: the
+   * candles, or the series that draws another bar style, stop painting while the drawings and the
+   * indicators keep drawing.
+   */
+  setPriceBarsHidden(hidden: boolean): void {
+    if (this.removed) {
+      return;
+    }
+    this.data.setBarsHidden(hidden);
+  }
+  /**
    * Paints the chart itself with the Canvas tab's settings: background, both grids, scale text and
    * lines, price margins and the empty bars to the right of the last one.
    */
