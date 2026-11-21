@@ -21,14 +21,33 @@ const VIEWPORT_MARGIN_BARS = 1;
 /** A bar the band cannot cross: it has no coordinate, so both edges are null and its `x` is never read. */
 const BREAK_COLUMN: FillColumn = { x: 0, from: null, to: null };
 
-/** One filled band, ready to paint. */
+/** One filled run of per-bar columns, ready to paint. */
 interface ColoredPolygon {
   readonly color: string;
   readonly points: readonly FillPoint[];
 }
 
+/** One band between two levels, painted as a single rectangle from the pane's left edge across its width. */
+interface ColoredBand {
+  readonly color: string;
+  readonly top: number;
+  readonly bottom: number;
+  readonly width: number;
+}
+
+/** A fill with a level at both ends, whose band no bar can break. */
+interface LevelFill {
+  readonly from: { readonly kind: 'level'; readonly index: number };
+  readonly to: { readonly kind: 'level'; readonly index: number };
+  readonly color: string;
+}
+
 /**
  * Paints an indicator's fills: the bands between two plots, a plot and a level, or two levels.
+ *
+ * A fill between two levels is one rectangle from the pane's left edge to the price axis, as
+ * TradingView draws a Pine `fill` of two `hline`s: it covers the whole pane, wherever the
+ * indicator's bars begin and end. Every other fill follows the bars it can draw.
  *
  * Attached to the indicator's first plot series, so it is clipped to the same pane and drawn in
  * the same coordinate space as the plots. It reads the series' own data on every draw rather than
@@ -65,22 +84,64 @@ export class IndicatorFillPrimitive extends ChartSeriesPrimitive {
     if (range === null) {
       return;
     }
+    const bands = this.bandsInPane();
     const polygons = this.polygonsIn(range);
-    if (polygons.length === 0) {
+    if (bands.length === 0 && polygons.length === 0) {
       return;
     }
     target.useMediaCoordinateSpace(({ context }) => {
+      for (const band of bands) {
+        paintBand(context, band);
+      }
       for (const polygon of polygons) {
         paintPolygon(context, polygon);
       }
     });
   }
 
-  /** Every band of every fill, cut at the bars where its edges are missing. */
+  /** Every fill whose two edges are levels: one band across the pane, whatever bars the frame holds. */
+  private bandsInPane(): ColoredBand[] {
+    const width = this.chart === null ? 0 : this.chart.timeScale().width();
+    if (width <= 0) {
+      return [];
+    }
+    const bands: ColoredBand[] = [];
+    for (const fill of this.fills) {
+      if (!isLevelFill(fill)) {
+        continue;
+      }
+      const band = this.bandOf(fill, width);
+      if (band !== null) {
+        bands.push(band);
+      }
+    }
+    return bands;
+  }
+
+  /** One level fill's band in the pane's pixels; null while the pane's scale cannot place one of its levels. */
+  private bandOf({ from, to, color }: LevelFill, width: number): ColoredBand | null {
+    const fromY = this.levelYAt(from.index);
+    const toY = this.levelYAt(to.index);
+    if (fromY === null || toY === null) {
+      return null;
+    }
+    return { color, top: Math.min(fromY, toY), bottom: Math.max(fromY, toY), width };
+  }
+
+  /** The y one of the frame's levels sits at; null when the frame has no such level or the scale no coordinate. */
+  private levelYAt(levelIndex: number): number | null {
+    const price = this.levelPrice(levelIndex);
+    return price === null ? null : this.coordinateAt(price);
+  }
+
+  /** Every band of every fill that follows the bars, cut at the bars where its edges are missing. */
   private polygonsIn(range: LogicalRange): ColoredPolygon[] {
     const indices = this.logicalIndices(range);
     const polygons: ColoredPolygon[] = [];
     for (const fill of this.fills) {
+      if (isLevelFill(fill)) {
+        continue;
+      }
       polygons.push(...this.polygonsOf(fill, indices));
     }
     return polygons;
@@ -117,19 +178,26 @@ export class IndicatorFillPrimitive extends ChartSeriesPrimitive {
   /** The y of one end of a band at one bar, or null where that end has no price on the scale. */
   private edgeAt(edge: IndicatorFillEdge, index: number): number | null {
     const price = this.priceAt(edge, index);
+    return price === null ? null : this.coordinateAt(price);
+  }
+
+  /** The y of a price on the pane's scale; null when no plot series carries that scale. */
+  private coordinateAt(price: number): number | null {
     const scaleSeries = this.plotSeries[0];
-    if (price === null || scaleSeries === undefined) {
-      return null;
-    }
-    return scaleSeries.priceToCoordinate(price);
+    return scaleSeries === undefined ? null : scaleSeries.priceToCoordinate(price);
   }
 
   private priceAt(edge: IndicatorFillEdge, index: number): number | null {
     if (edge.kind === 'level') {
-      const level = this.levels[edge.index];
-      return level === undefined ? null : level.price;
+      return this.levelPrice(edge.index);
     }
     return this.plotValueAt(edge.index, index);
+  }
+
+  /** The price one of the frame's levels draws; null when the frame has no such level. */
+  private levelPrice(levelIndex: number): number | null {
+    const level = this.levels[levelIndex];
+    return level === undefined ? null : level.price;
   }
 
   /** The plot's value at one bar; null where that bar has no value or that plot does not exist. */
@@ -141,6 +209,19 @@ export class IndicatorFillPrimitive extends ChartSeriesPrimitive {
     const point = numericPointAt(series, index);
     return point === null ? null : point.value;
   }
+}
+
+/** Whether levels end both edges of `fill`, which makes its band the same height at every bar. */
+function isLevelFill(fill: IndicatorFill): fill is LevelFill {
+  return fill.from.kind === 'level' && fill.to.kind === 'level';
+}
+
+/** Fills one band across the pane from its left edge, leaving the context as it was for the next renderer. */
+function paintBand(context: CanvasRenderingContext2D, band: ColoredBand): void {
+  context.save();
+  context.fillStyle = band.color;
+  context.fillRect(0, band.top, band.width, band.bottom - band.top);
+  context.restore();
 }
 
 /** Fills one band, leaving the context as it was for the next renderer. */

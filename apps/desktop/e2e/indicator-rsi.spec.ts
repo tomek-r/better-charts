@@ -1,4 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import type {
+  IndicatorFill,
+  IndicatorFrame,
+  IndicatorLevel,
+  IndicatorPlot,
+} from '../src/features/chart/engine/indicators/indicatorFrame';
 import type { SettingValues } from '../src/features/chart/engine/settings/settingInputs';
 import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
 import { settingStyleKey } from '../src/features/chart/engine/settings/settingStyles';
@@ -19,12 +25,17 @@ import {
   UPPER_BAND_STYLE,
 } from '../src/features/indicators/rsi/rsiIndicator';
 import { rsiPlugin } from '../src/features/indicators/rsi/rsiPlugin';
+import { waitTwoAnimationFrames } from './helpers/animationFrames';
+import { CHART_HOST_SELECTOR } from './helpers/chartHost';
 import {
   MILLISECONDS_PER_SECOND,
   barAt,
   barsFromCloses,
   expectNewerBarClosesTheFormingOne,
 } from './helpers/indicatorBars';
+import { DEMO_ID, frameOf, openChartTimes, showFrame } from './helpers/indicatorFrames';
+import { failOnPageNoise } from './helpers/pageNoise';
+import { decodePng, parseHexColor, pixelAt, type DecodedPng } from './helpers/pngPixels';
 
 type SettingOverrides = Readonly<Record<string, number | string | boolean>>;
 
@@ -44,6 +55,42 @@ const LIVE_LENGTH = 3;
 const LIVE_CLOSES = [1, 2, 3, 4, 5, 6];
 const UPPER_LEVEL_INDEX = 0;
 const LOWER_LEVEL_INDEX = 2;
+/** The width of a level or plot line, which the fill tests only have to look past. */
+const BAND_LINE_WIDTH = 1;
+/** The line the bands are measured against, drawn in the RSI's own plot colour. */
+const BAND_PLOT: IndicatorPlot = { title: 'band', style: 'line', color: DEFAULT_COLOR, lineWidth: BAND_LINE_WIDTH };
+/** How far the line rises per bar, so the pane's scale spans both level prices. */
+const BAND_VALUE_STEP = 10;
+/** Fill colours no band or line of the chart is drawn in, so a screenshot cannot mistake one for another. */
+const LEVEL_BAND_FILL_COLOR = '#123456';
+const PLOT_EDGE_FILL_COLOR = '#654321';
+/** How far a screenshot channel may stray from a fill colour and still be that colour. */
+const FILL_COLOR_TOLERANCE = 8;
+/** How close to the pane's left edge a level band has to reach, in CSS pixels. */
+const PANE_LEFT_EDGE_TOLERANCE_CSS_PX = 4;
+/** How far left of the first bar's column a per-bar band may blend, in CSS pixels. */
+const BAR_EDGE_TOLERANCE_CSS_PX = 2;
+/** The three bands the fill tests draw over the chart's bars. */
+const BAND_LEVELS: readonly IndicatorLevel[] = [
+  { title: 'Upper Band', price: UPPER_BAND, color: DEFAULT_BAND_COLOR, lineWidth: BAND_LINE_WIDTH },
+  { title: 'Middle Band', price: MIDDLE_BAND, color: DEFAULT_MIDDLE_BAND_COLOR, lineWidth: BAND_LINE_WIDTH },
+  { title: 'Lower Band', price: LOWER_BAND, color: DEFAULT_BAND_COLOR, lineWidth: BAND_LINE_WIDTH },
+];
+/** The band between the two outer levels, which no bar can break. */
+const LEVEL_BAND_FILL: IndicatorFill = {
+  from: { kind: 'level', index: UPPER_LEVEL_INDEX },
+  to: { kind: 'level', index: LOWER_LEVEL_INDEX },
+  color: LEVEL_BAND_FILL_COLOR,
+};
+/** The band between the lower level and the line, which starts at the line's first point. */
+const PLOT_EDGE_FILL: IndicatorFill = {
+  from: { kind: 'level', index: LOWER_LEVEL_INDEX },
+  to: { kind: 'plot', index: 0 },
+  color: PLOT_EDGE_FILL_COLOR,
+};
+/** Both fill colours as a screenshot decodes them. */
+const LEVEL_BAND_FILL_RGB = parseHexColor(LEVEL_BAND_FILL_COLOR);
+const PLOT_EDGE_FILL_RGB = parseHexColor(PLOT_EDGE_FILL_COLOR);
 
 function rsiSettings(length: number, overrides: SettingOverrides = {}): SettingValues {
   return resolveSettingValues(rsiPlugin, { [LENGTH_INPUT]: length, ...overrides });
@@ -126,6 +173,78 @@ function expectValuesCloseTo(actual: readonly (number | null)[], expected: reado
     }
     expect(actual[index] ?? null).toBeCloseTo(expectedValue);
   });
+}
+
+/** A rising line and the three bands over the chart's bars, with `fill` painted under them. */
+function bandFrame(times: readonly number[], fill: IndicatorFill): IndicatorFrame {
+  return {
+    ...frameOf([BAND_PLOT], times, (_plotIndex, barIndex) => barIndex * BAND_VALUE_STEP),
+    levels: BAND_LEVELS,
+    fills: [fill],
+  };
+}
+
+/** The pane's x of a bar, in CSS pixels from the pane's left edge. */
+async function barX(page: Page, timeSeconds: number): Promise<number> {
+  return page.evaluate((timeMs) => window.__chartTest!.timeToX(timeMs), timeSeconds * MILLISECONDS_PER_SECOND);
+}
+
+/** The pane's width in CSS pixels: the chart host less the price axis it draws on the right. */
+async function paneWidth(page: Page): Promise<number> {
+  return page.evaluate((selector) => {
+    const hostWidth = document.querySelector(selector)!.getBoundingClientRect().width;
+    return hostWidth - window.__chartTest!.priceScale().axisWidth;
+  }, CHART_HOST_SELECTOR);
+}
+
+/** How many screenshot pixels one CSS pixel of the page covers. */
+async function pagePixelRatio(page: Page): Promise<number> {
+  return page.evaluate(() => window.devicePixelRatio);
+}
+
+/** Whether a screenshot pixel is `color`, within the tolerance a blend may stray. */
+function isColor(
+  [red, green, blue]: readonly [number, number, number],
+  [colorRed, colorGreen, colorBlue]: readonly [number, number, number],
+): boolean {
+  return (
+    Math.abs(red - colorRed) <= FILL_COLOR_TOLERANCE &&
+    Math.abs(green - colorGreen) <= FILL_COLOR_TOLERANCE &&
+    Math.abs(blue - colorBlue) <= FILL_COLOR_TOLERANCE
+  );
+}
+
+/** Whether one column of a screenshot paints `color` anywhere down the pane. */
+function columnPaints(image: DecodedPng, x: number, color: readonly [number, number, number]): boolean {
+  for (let y = 0; y < image.height; y += 1) {
+    if (isColor(pixelAt(image, x, y), color)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** The columns of a screenshot that paint `color` somewhere down the pane. */
+function columnsPainting(image: DecodedPng, color: readonly [number, number, number]): number[] {
+  const columns: number[] = [];
+  for (let x = 0; x < image.width; x += 1) {
+    if (columnPaints(image, x, color)) {
+      columns.push(x);
+    }
+  }
+  return columns;
+}
+
+/** The chart host's columns that paint `color` right now. */
+async function paintedColumns(page: Page, color: readonly [number, number, number]): Promise<number[]> {
+  await waitTwoAnimationFrames(page);
+  return columnsPainting(decodePng(await page.locator(CHART_HOST_SELECTOR).screenshot()), color);
+}
+
+/** Waits for the pane to paint `color` somewhere, then reports the columns that paint it. */
+async function waitedPaintedColumns(page: Page, color: readonly [number, number, number]): Promise<number[]> {
+  await expect.poll(async () => (await paintedColumns(page, color)).length).toBeGreaterThan(0);
+  return paintedColumns(page, color);
 }
 
 test('the closes 1, 2, 3, 2, 1 read 100, 50 and 25 with a length of two', () => {
@@ -244,4 +363,35 @@ test('the registry names the RSI and draws it in a pane of its own', () => {
   expect(findChartIndicatorPlugin('rsi')).toBe(rsiPlugin);
   expect(findChartIndicatorPlugin('rsi')?.pane).toBe('own');
   expect(indicatorLegendTitle('rsi', resolveSettingValues(rsiPlugin, {}))).toBe('RSI 14 close');
+});
+
+test.describe('the band a fill paints', () => {
+  failOnPageNoise();
+
+  test('a fill between two levels paints the pane left of the first bar', async ({ page }) => {
+    const times = await openChartTimes(page);
+    await showFrame(page, DEMO_ID, bandFrame(times, LEVEL_BAND_FILL), 'own');
+    const pixelRatio = await pagePixelRatio(page);
+
+    const fillColumns = await waitedPaintedColumns(page, LEVEL_BAND_FILL_RGB);
+    const paneEdgeLimit = Math.ceil(PANE_LEFT_EDGE_TOLERANCE_CSS_PX * pixelRatio);
+    const paneColumns = Math.floor((await paneWidth(page)) * pixelRatio);
+    const firstBarColumn = Math.floor((await barX(page, times[0])) * pixelRatio);
+
+    // The chart opens with its first bar far right, so the fill left of it can only span the two levels.
+    expect(firstBarColumn).toBeGreaterThan(paneColumns / 2);
+    expect(Math.min(...fillColumns)).toBeLessThanOrEqual(paneEdgeLimit);
+  });
+
+  test('a fill with a plot edge starts at the line and no further left', async ({ page }) => {
+    const times = await openChartTimes(page);
+    await showFrame(page, DEMO_ID, bandFrame(times, PLOT_EDGE_FILL), 'own');
+    const pixelRatio = await pagePixelRatio(page);
+
+    const fillColumns = await waitedPaintedColumns(page, PLOT_EDGE_FILL_RGB);
+    const firstBarColumn = Math.floor((await barX(page, times[0])) * pixelRatio);
+    const blendTolerance = Math.ceil(BAR_EDGE_TOLERANCE_CSS_PX * pixelRatio);
+
+    expect(Math.min(...fillColumns)).toBeGreaterThanOrEqual(firstBarColumn - blendTolerance);
+  });
 });
