@@ -15,12 +15,12 @@ import {
   withIndicatorSettings,
   withoutIndicator,
 } from '../src/features/indicators/savedIndicatorEdits';
-import { objectTreeIndicators } from '../src/features/object-tree/objectTreeIndicatorEntries';
+import { objectTreeIndicatorPanes } from '../src/features/object-tree/objectTreeIndicatorEntries';
 
 /**
  * The edits the object tree makes to the chart's saved indicators, the timeframes an indicator is attached
- * on, and the question of which saved indicators earn a row. All of them are pure, so these cases run
- * without a browser.
+ * on, and the question of which saved indicators earn a row and in which pane group. All of them are pure,
+ * so these cases run without a browser.
  */
 
 /** Two saved indicators of the same plugin, so an edit can be checked against its untouched neighbour. */
@@ -30,7 +30,7 @@ const SAVED_SMA_21: SavedIndicator = { instanceId: 'sma-2', definitionId: 'sma',
 /** A saved indicator whose definition the registry does not know, so the tree cannot name it. */
 const SAVED_UNREGISTERED: SavedIndicator = { instanceId: 'ghost-1', definitionId: 'not-registered', settings: {} };
 
-/** A saved indicator that draws in a pane of its own, so the price-pane tree has no row for it. */
+/** A saved indicator that draws in a pane of its own, which the tree lists in a group of its own. */
 const SAVED_RSI: SavedIndicator = { instanceId: 'rsi-1', definitionId: 'rsi', settings: { length: 14 } };
 
 /** The minutes range the seeded chart opens on (M5), so an indicator limited away from it draws nowhere there. */
@@ -143,15 +143,17 @@ test('an indicator limited away from a timeframe is attached only on the other o
 });
 
 test('the tree lists a registered price-pane indicator and drops an unknown definition', () => {
-  const listed = objectTreeIndicators([SAVED_SMA_9, SAVED_UNREGISTERED]);
+  const { pricePane, ownPanes } = objectTreeIndicatorPanes([SAVED_SMA_9, SAVED_UNREGISTERED]);
 
-  expect(listed).toHaveLength(1);
-  expect(listed[0]?.saved.definitionId).toBe('sma');
-  expect(listed[0]?.plugin.pane).toBe('overlay');
+  expect(pricePane).toHaveLength(1);
+  expect(pricePane[0]?.saved.definitionId).toBe('sma');
+  expect(pricePane[0]?.plugin.pane).toBe('overlay');
+  expect(ownPanes).toEqual([]);
 });
 
-test('the tree drops a saved own-pane indicator and keeps the price-pane one', () => {
-  const listed = objectTreeIndicators([SAVED_RSI, SAVED_SMA_9]);
+test('the tree puts a saved own-pane indicator in a pane of its own and keeps the price-pane one', () => {
+  const { pricePane, ownPanes } = objectTreeIndicatorPanes([SAVED_RSI, SAVED_SMA_9]);
 
-  expect(listed.map((entry) => entry.saved.definitionId)).toEqual(['sma']);
+  expect(pricePane.map((entry) => entry.saved.definitionId)).toEqual(['sma']);
+  expect(ownPanes.map((entry) => entry.saved.definitionId)).toEqual(['rsi']);
 });

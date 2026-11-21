@@ -4,14 +4,42 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const SMA_9_CLOSE = 'SMA 9 close';
 export const SMA_DIALOG_NAME = 'Moving Average Simple settings';
 
-/** The indicator list, which sits under the drawings and leaves the tree once it holds no row. */
-export function indicatorList(page: Page): Locator {
-  return page.getByRole('list', { name: 'Indicators' });
+/** The group holding the price pane's rows: the drawings, the bars and the price-pane indicators. */
+export const PRICE_PANE_GROUP = 'Price pane';
+
+/** Every pane group of the tree, named as the panes of the chart stack them. */
+const PANE_GROUP_NAME = /^(?:Price pane|Pane \d+)$/;
+
+/** One pane group of the tree, by the label it carries. */
+export function paneGroup(page: Page, name: string): Locator {
+  return page.getByRole('group', { name, exact: true });
 }
 
-/** Every row of the indicator list. */
+/** The labels of the pane groups, top to bottom. */
+export function paneGroupNames(page: Page): Promise<Array<string | null>> {
+  return page
+    .getByRole('group', { name: PANE_GROUP_NAME })
+    .evaluateAll((groups) => groups.map((group) => group.getAttribute('aria-label')));
+}
+
+/** The indicator list of one pane group. */
+function paneIndicatorList(group: Locator): Locator {
+  return group.getByRole('list', { name: 'Indicators' });
+}
+
+/** Every indicator row of one pane group. */
+export function paneIndicatorRows(group: Locator): Locator {
+  return paneIndicatorList(group).getByRole('listitem');
+}
+
+/** The indicator list of the price pane, which sits under the drawings and leaves the tree once it holds no row. */
+export function indicatorList(page: Page): Locator {
+  return paneIndicatorList(paneGroup(page, PRICE_PANE_GROUP));
+}
+
+/** Every indicator row of the price pane. */
 export function indicatorRows(page: Page): Locator {
-  return indicatorList(page).getByRole('listitem');
+  return paneIndicatorRows(paneGroup(page, PRICE_PANE_GROUP));
 }
 
 /** The settings dialog of the seeded moving average. */

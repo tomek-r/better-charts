@@ -382,20 +382,23 @@ pane's width shows while the line between the panes is hovered or dragged.
 The Indicators dialog sits at a fixed offset from the top of the window, like the settings
 dialogs.
 
-The Object tree lists, under the drawings, every indicator drawn on the price pane by its legend
-name; indicators with a pane of their own get no row (owner decision). A row's buttons open the
-indicator's settings, hide or show it and remove it, and a double click or Delete on its name
-does the same as in a drawing row. The settings dialog is the drawing settings form with the
-indicator's Inputs and Style tabs; OK stays disabled while a value is invalid and recomputes the
-indicator. Its Inputs and Style edits show on the chart as they are made, after a short pause, and
-are stored only on OK; Cancel, the close button, Escape and a backdrop click put the stored
-settings back. A plot or band switched off in the Style tab hides only that line. Its Style tab ends
-with three display switches: Labels on price scale, off by default (each visible plot's last value on
-the price scale), Values in status line (the plot values in the legend row), and Inputs in status
-line (the inputs after the short title there; the Object tree name keeps them either way), with the
-last two on by default. The settings dialog also has the drawings' Visibility tab: an indicator
-limited to some timeframes is not attached on the others, so its line, legend row and pane leave and
-come back with the timeframe; the Object tree keeps listing it.
+The Object tree groups its rows by chart pane, as TradingView's object tree does: a divider
+separates the groups, which carry no visible heading. The first group holds the drawings, the
+price bars and, under them, the price-pane indicators by their legend names; then comes one group
+per indicator with a pane of its own (RSI, MACD, Volume), in the order those panes stand under the
+price pane, each holding that indicator's row. A row's buttons open the indicator's settings, hide
+or show it and remove it, and a double click or Delete on its name does the same as in a drawing
+row. The settings dialog is the drawing settings form with the indicator's Inputs and Style tabs;
+OK stays disabled while a value is invalid and recomputes the indicator. Its Inputs and Style edits
+show on the chart as they are made, after a short pause, and are stored only on OK; Cancel, the
+close button, Escape and a backdrop click put the stored settings back. A plot or band switched off
+in the Style tab hides only that line. Its Style tab ends with three display switches: Labels on
+price scale, off by default (each visible plot's last value on the price scale), Values in status
+line (the plot values in the legend row), and Inputs in status line (the inputs after the short
+title there; the Object tree name keeps them either way), with the last two on by default. The
+settings dialog also has the drawings' Visibility tab: an indicator limited to some timeframes is
+not attached on the others, so its line, legend row and pane leave and come back with the
+timeframe; the Object tree keeps listing it.
 
 ## Execution and configuration
 

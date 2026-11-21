@@ -167,11 +167,21 @@
   }
 }
 
-/* Indicator rows sit under the drawings; they do not drag, so they keep the default cursor. */
-.object-tree-indicator-list {
+/* A pane group under another opens with the divider TradingView draws between the panes of its tree: a rule
+   of its own, set apart from the rows above and below it by 4px so it never reads as a row separator. */
+.object-tree-pane-group + .object-tree-pane-group {
+  margin-top: 4px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 4px;
+}
+
+/* The price pane's indicators open with the rule that separates them from the drawings above them. An own
+   pane's group already carries that rule, so its list adds none. */
+.object-tree-pane-group > .object-tree-list + .object-tree-indicator-list {
   border-top: 1px solid var(--color-border);
 }
 
+/* Indicator rows sit under the drawings; they do not drag, so they keep the default cursor. */
 .object-tree-indicator-row {
   cursor: default;
 }
