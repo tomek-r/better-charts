@@ -63,6 +63,12 @@ export function selectedIndicatorId(page: Page): Promise<string | null> {
   return page.evaluate(() => window.__chartTest?.selectedIndicator() ?? null);
 }
 
+/** Waits for the chart to hold no selected indicator and to leave the indicator rows unframed. */
+export async function expectNoSelectedIndicator(page: Page): Promise<void> {
+  await expect.poll(() => selectedIndicatorId(page)).toBeNull();
+  await expect(indicatorRows(page)).not.toHaveAttribute('data-selected', 'true');
+}
+
 /** Opens the object tree drawer, whose indicator rows these cases read. */
 export async function openObjectTree(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Object tree', exact: true }).click();

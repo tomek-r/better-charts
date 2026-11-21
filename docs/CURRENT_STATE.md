@@ -394,11 +394,14 @@ price bars and, under them, the price-pane indicators by their legend names; the
 per indicator with a pane of its own (RSI, MACD, Volume), in the order those panes stand under the
 price pane, each holding that indicator's row. A row's buttons open the indicator's settings, hide
 or show it and remove it, and a double click or Delete on its name does the same as in a drawing
-row. A click on a row selects that indicator: the row is highlighted like a selected drawing row,
-the chart frames its legend row with its buttons in sight, and every plot of it shows small handle
-dots in its colour, ringed with the pane background, on every 10th visible bar and at the last bar.
+row. A click on a row selects that indicator, and so does a click on its plotted lines, markers or
+columns: within 4 CSS pixels of the ink a plot draws in the pane it draws in. Either way the row is
+highlighted like a selected drawing row, the chart frames its legend row with its buttons in sight,
+and every plot of it shows small handle dots in its colour, ringed with the pane background, on every
+10th visible bar and at the last bar. The pointer over a plotted line shows the pointer cursor; a
+click on a drawing picks the drawing even where a plot line crosses it.
 Delete or Backspace removes the selected indicator while the focus is not in a text field, and
-Escape, a click on the chart itself or a drawing's own selection clears it; selecting one clears the
+Escape, a click on empty chart space or a drawing's own selection clears it; selecting one clears the
 other, so the chart holds one selection at a time.
 The settings dialog is the drawing settings form with the indicator's Inputs and Style tabs;
 OK stays disabled while a value is invalid and recomputes the indicator. Its Inputs and Style edits

@@ -1,4 +1,4 @@
-import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, MouseEventParams, Time } from 'lightweight-charts';
 import type { RenderBar } from '../bars/renderBar';
 import { HoveredBar } from '../legend/hoveredBar';
 import { IndicatorLegend, type IndicatorLegendCommands } from '../legend/indicatorLegend';
@@ -7,6 +7,7 @@ import type { ChartIndicatorDefinition } from './indicatorContract';
 import { indicatorDisplayOf, withoutStatusLineInputs } from './indicatorDisplaySettings';
 import { DEFAULT_STATUS_LINE_APPEARANCE, type ChartStatusLineAppearance } from '../legend/statusLineAppearance';
 import { IndicatorLayer, type IndicatorLegendValue } from './indicatorLayer';
+import { panePointOf } from './indicatorPanePoint';
 import { IndicatorRuntime } from './indicatorRuntime';
 import type { IndicatorSelection } from './indicatorSelection';
 import { PaneDragWatcher } from './paneDragWatcher';
@@ -25,6 +26,10 @@ export interface ChartIndicatorsOptions {
   readonly priceSeries: ISeriesApi<'Candlestick'>;
   /** The chart's indicator selection: the layer draws its handles and the legend frames its row. */
   readonly selection: IndicatorSelection;
+  /** Whether a drawing is the chart's selection: a click that picked one keeps it, as drawings win. */
+  readonly drawingSelected: () => boolean;
+  /** Whether the pointer rests on a plotted line the user can click, which the pane cursor follows. */
+  readonly plotHoverChanged: (hovered: boolean) => void;
 }
 
 /**
@@ -40,16 +45,26 @@ export class ChartIndicators {
   readonly runtime: IndicatorRuntime;
   private readonly chart: IChartApi;
   private readonly selection: IndicatorSelection;
+  private readonly drawingSelected: ChartIndicatorsOptions['drawingSelected'];
+  private readonly plotHoverChanged: ChartIndicatorsOptions['plotHoverChanged'];
   private readonly stopFollowingSelection: () => void;
   private readonly legend: IndicatorLegend;
   private readonly legendTitle: ChartIndicatorsOptions['legendTitle'];
+  /** Whether the pointer rests on a plotted line the user can click, as the chart was last told. */
+  private overPlot = false;
   /** The Status line tab's switches: which legend parts draw, and whether an indicator's inputs are named. */
   private statusLine = DEFAULT_STATUS_LINE_APPEARANCE;
   private readonly paneDragWatcher: PaneDragWatcher;
 
-  constructor(chart: IChartApi, host: HTMLElement, options: ChartIndicatorsOptions) {
+  constructor(
+    chart: IChartApi,
+    private readonly host: HTMLElement,
+    options: ChartIndicatorsOptions,
+  ) {
     this.chart = chart;
     this.selection = options.selection;
+    this.drawingSelected = options.drawingSelected;
+    this.plotHoverChanged = options.plotHoverChanged;
     this.legendTitle = options.legendTitle;
     this.hoveredBar = new HoveredBar(chart, options.bars);
     this.layer = new IndicatorLayer(chart);
@@ -87,6 +102,9 @@ export class ChartIndicators {
     this.hoveredBar.subscribe(() => this.legend.refresh());
     this.stopFollowingSelection = this.selection.subscribe(this.selectionChanged);
     this.chart.subscribeClick(this.paneClicked);
+    // The chart reports where the pointer rests — its pane and the point in it — so a move measures no pane.
+    this.chart.subscribeCrosshairMove(this.pointerMoved);
+    host.addEventListener('pointerleave', this.pointerLeft);
     this.paneDragWatcher = new PaneDragWatcher(
       host,
       () => this.layer.paneHeights(),
@@ -108,6 +126,8 @@ export class ChartIndicators {
 
   destroy(): void {
     this.chart.unsubscribeClick(this.paneClicked);
+    this.chart.unsubscribeCrosshairMove(this.pointerMoved);
+    this.host.removeEventListener('pointerleave', this.pointerLeft);
     this.stopFollowingSelection();
     this.paneDragWatcher.destroy();
     this.hoveredBar.destroy();
@@ -117,10 +137,46 @@ export class ChartIndicators {
     this.layer.destroy();
   }
 
-  /** A click on the pane itself belongs to the chart's own objects, so the indicator selection drops. */
-  private readonly paneClicked = (): void => {
-    this.selection.clear();
+  /**
+   * A click on the pane picks the plot line under the pointer, the way a click on a drawing picks that
+   * drawing: one the tool set has just selected keeps the selection, and a click on nothing clears it.
+   */
+  private readonly paneClicked = (param: MouseEventParams<Time>): void => {
+    if (this.drawingSelected()) {
+      return;
+    }
+    const pickedInstanceId = this.plotUnderPointer(param);
+    if (pickedInstanceId === null) {
+      this.selection.clear();
+      return;
+    }
+    this.selection.select(pickedInstanceId);
   };
+
+  /** Points the cursor at the plot line the pointer rests on, and off it once it rests on none. */
+  private readonly pointerMoved = (param: MouseEventParams<Time>): void => {
+    this.setOverPlot(this.plotUnderPointer(param) !== null);
+  };
+
+  /** The pointer left the chart: the cursor comes back, whatever the library last reported. */
+  private readonly pointerLeft = (): void => {
+    this.setOverPlot(false);
+  };
+
+  /** Tells the chart the pointer belongs to a plot line; a move that changes nothing tells it nothing. */
+  private setOverPlot(overPlot: boolean): void {
+    if (this.overPlot === overPlot) {
+      return;
+    }
+    this.overPlot = overPlot;
+    this.plotHoverChanged(overPlot);
+  }
+
+  /** The indicator whose plotted line rests under the pointer the chart reported, or null when none does. */
+  private plotUnderPointer(param: MouseEventParams<Time>): string | null {
+    const point = panePointOf(param);
+    return point === null ? null : this.layer.indicatorAt(point);
+  }
 
   /** The selection moved: the layer's handles follow it and the legend frames its row. */
   private readonly selectionChanged = (): void => {

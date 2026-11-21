@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   PRICE_PANE_GROUP,
   SMA_9_CLOSE,
+  expectNoSelectedIndicator,
   indicatorList,
   indicatorRows,
   openObjectTree,
@@ -18,6 +19,7 @@ import { CHART_HOST_SELECTOR } from './helpers/chartHost';
 import { rgbText } from './helpers/cssColor';
 import { drawnIndicators } from './helpers/indicatorFrames';
 import { attachedIndicators } from './helpers/indicatorsDialog';
+import { emptyPanePoint, plotLinePoint } from './helpers/indicatorPlotPage';
 import { openChart } from './helpers/openChart';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { savedProfile } from './helpers/savedProfile';
@@ -32,8 +34,9 @@ failOnPageNoise();
  * The indicator rows of the object tree, grouped by chart pane: the price pane holds the drawings and the
  * price-pane indicators, then one group per indicator with a pane of its own, top to bottom, plus the hide,
  * show and remove buttons a hovered row offers, the settings dialog its name or its settings button opens,
- * and the one selection the chart holds: a click on a row selects that indicator, frames its legend row
- * and draws its handles, and Escape, Delete, a chart click or a drawing's own selection end it.
+ * and the one selection the chart holds: a click on a row or on an indicator's plotted line selects it,
+ * frames its legend row and draws its handles, and Escape, Delete, a chart click, a drawing's own selection
+ * or another object's click end it.
  */
 
 /** The instance and the definition of the one indicator these cases seed. */
@@ -49,6 +52,15 @@ const INVALID_LENGTH = '0';
 
 /** The saved indicator these cases start from: a moving average on default settings. */
 const SAVED_SMA_9 = { instanceId: SMA_INSTANCE_ID, definitionId: SMA_DEFINITION_ID, settings: {} };
+
+/** A moving average of a single close, so every bar of the stub's window draws a point of its line. */
+const SAVED_SMA_OF_ONE = { instanceId: SMA_INSTANCE_ID, definitionId: SMA_DEFINITION_ID, settings: { length: 1 } };
+
+/** The drawn point of the default moving average these clicks aim at: its first, past its nine warm-up bars. */
+const WARMED_PLOT_POINT = 0;
+
+/** The drawn point these clicks aim at where a seeded drawing covers the same bar: the stub's fifth slot. */
+const CLICKED_PLOT_POINT = 4;
 
 /** Saved indicators that draw in panes of their own, and the names their rows carry. */
 const SAVED_RSI_14 = { instanceId: 'rsi-1', definitionId: 'rsi', settings: {} };
@@ -84,10 +96,10 @@ async function openTreeWithSavedSma(page: Page): Promise<void> {
   await openTreeWith(page, [SAVED_SMA_9]);
 }
 
-/** Boots the app with the moving average and one saved drawing, for the one-selection cases. */
-async function openTreeWithSmaAndDrawing(page: Page): Promise<void> {
+/** Boots the app with one saved indicator and one saved drawing, for the one-selection cases. */
+async function openTreeWithSmaAndDrawing(page: Page, savedSma: unknown = SAVED_SMA_9): Promise<void> {
   await gotoWithStub(page, {
-    chartSettingOverrides: { [EURUSD_CHART]: { indicators: [SAVED_SMA_9] } },
+    chartSettingOverrides: { [EURUSD_CHART]: { indicators: [savedSma] } },
     chartDrawings: { [EURUSD_CHART]: [savedProfile(SELECTED_DRAWING_ID, EDITABLE_DRAWING)] },
   });
   await openChart(page);
@@ -283,8 +295,7 @@ test('the chart holds one selection: a drawing and an indicator clear each other
   await expect.poll(() => selectedDrawing(page)).toBeNull();
 
   await drawingName.click();
-  await expect.poll(() => selectedIndicatorId(page)).toBeNull();
-  await expect(indicatorRows(page)).not.toHaveAttribute('data-selected', 'true');
+  await expectNoSelectedIndicator(page);
   await expect.poll(async () => (await selectedDrawing(page))?.drawingId).toBe(SELECTED_DRAWING_ID);
 });
 
@@ -294,6 +305,43 @@ test('clicking the chart clears the selected indicator', async ({ page }) => {
 
   await clickChartPoint(page, CLICKED_BAR);
 
-  await expect.poll(() => selectedIndicatorId(page)).toBeNull();
+  await expectNoSelectedIndicator(page);
+});
+
+test('clicking a plotted line selects its indicator and points at it', async ({ page }) => {
+  await openTreeWithSavedSma(page);
+  const line = await plotLinePoint(page, SMA_INSTANCE_ID, WARMED_PLOT_POINT);
+
+  await page.mouse.move(line.x, line.y);
+  await expect(page.locator(CHART_HOST_SELECTOR)).toHaveCSS('cursor', 'pointer');
+
+  await page.mouse.click(line.x, line.y);
+
+  await expect.poll(() => selectedIndicatorId(page)).toBe(SMA_INSTANCE_ID);
+  await expect(indicatorRows(page)).toHaveAttribute('data-selected', 'true');
+  await expect.poll(async () => (await drawnIndicators(page))[0]?.selectionHandles).toBe(true);
+  // The click selected rather than cleared: the legend row keeps its buttons in sight, un-hovered.
+  await page.mouse.move(0, 0);
+  await expect(legendRemoveButton(page)).toBeVisible();
+});
+
+test('clicking away from every plotted line clears the selected indicator', async ({ page }) => {
+  await openTreeWithSavedSma(page);
+  await selectSmaRow(page);
+  const empty = await emptyPanePoint(page);
+
+  await page.mouse.click(empty.x, empty.y);
+
+  await expectNoSelectedIndicator(page);
+});
+
+test('clicking a drawing keeps the drawing selected, even where a plot line crosses it', async ({ page }) => {
+  await openTreeWithSmaAndDrawing(page, SAVED_SMA_OF_ONE);
+  const crossing = await plotLinePoint(page, SMA_INSTANCE_ID, CLICKED_PLOT_POINT);
+
+  await page.mouse.click(crossing.x, crossing.y);
+
+  await expect.poll(async () => (await selectedDrawing(page))?.drawingId).toBe(SELECTED_DRAWING_ID);
+  expect(await selectedIndicatorId(page)).toBeNull();
   await expect(indicatorRows(page)).not.toHaveAttribute('data-selected', 'true');
 });

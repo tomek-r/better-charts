@@ -7,13 +7,11 @@ import {
 } from 'lightweight-charts';
 import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
+import { MARKER_HALF_SIZE_CSS_PX } from './indicatorMarkerSize';
 import { numericPointAt } from './indicatorSeriesValue';
 
 /** Markers paint over their line, so a diamond stays readable where the line crosses it. */
 const MARKER_VIEW_Z_ORDER: PrimitivePaneViewZOrder = 'top';
-
-/** Width and height of a cross, circle or diamond, in CSS pixels. */
-const MARKER_SIZE_CSS_PX = 7;
 
 /** Outline width of every marker, in CSS pixels. */
 const MARKER_STROKE_CSS_PX = 1;
@@ -45,9 +43,9 @@ export interface MarkerCircle {
   readonly radius: number;
 }
 
-/** Half a marker's width in bitmap pixels, so a shape spans `MARKER_SIZE_CSS_PX` CSS pixels. */
+/** Half a marker's width in bitmap pixels, so a shape spans the marker size in CSS pixels. */
 export function markerHalfSize(pixelRatio: number): number {
-  return (MARKER_SIZE_CSS_PX / 2) * pixelRatio;
+  return MARKER_HALF_SIZE_CSS_PX * pixelRatio;
 }
 
 /** A marker's outline in bitmap pixels, so it stays `MARKER_STROKE_CSS_PX` CSS pixels wide. */
