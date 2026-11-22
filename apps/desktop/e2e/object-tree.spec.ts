@@ -7,18 +7,30 @@ import {
   TOOLBAR_ACCOUNT_KEY,
   TOOLBAR_SYMBOL,
 } from './helpers/drawingToolbarPage';
+import { openChart } from './helpers/openChart';
 import { savedProfile } from './helpers/savedProfile';
-import { chartScopeKey, gotoWithStub } from './helpers/tauriStub';
+import { chartScopeKey, gotoWithStub, stubChartSettingOverrides } from './helpers/tauriStub';
 
 /**
  * The object tree drawer: the drawings of the chart listed topmost first, the click that selects one,
  * the lock, hide and remove buttons a hovered row reveals, the settings dialog a double click opens,
- * and the keys a focused row answers. Every tree locator stays inside the 'Drawings' list, because a
- * selected drawing shows the same command labels on the floating toolbar.
+ * the keys a focused row answers, and the one button of the price bars row. Every tree locator stays
+ * inside the 'Drawings' list, because a selected drawing shows the same command labels on the floating
+ * toolbar.
  */
 
 /** The label of the only tool these cases seed, which is also the name of each row. */
 const PROFILE_ROW_NAME = 'Fixed range volume profile';
+
+/** The two faces of the bars row's only action, each naming the state it leads to. */
+const HIDE_BARS_LABEL = 'Hide price bars';
+const SHOW_BARS_LABEL = 'Show price bars';
+
+/** What the anchor candle series paints once the chart hides the price bars. */
+const NO_PAINT_COLOR = 'transparent';
+
+/** The settings key of the chart the stub draws: its one chart, on the account and symbol the tree lists. */
+const BARS_CHART_SCOPE = chartScopeKey(TOOLBAR_ACCOUNT_KEY, TOOLBAR_SYMBOL);
 
 /** The flags of a row that is neither locked nor hidden, which most cases start from. */
 const EDITABLE = { locked: false, visible: true };
@@ -46,6 +58,21 @@ function barsRow(page: Page): Locator {
   return page.getByRole('list', { name: 'Drawings' }).locator('[data-layer="bars"]');
 }
 
+/** The name button of the price bars row, which the arrow keys and the row keys land on. */
+function barsName(page: Page): Locator {
+  return barsRow(page).locator('.object-tree-row-name');
+}
+
+/** Whether the chart paints the price bars: the anchor's rising bars are drawn in the up colour unless they hide. */
+async function priceBarsPainted(page: Page): Promise<boolean> {
+  return page.evaluate((noPaintColor) => window.__chartTest!.candles().colors.upColor !== noPaintColor, NO_PAINT_COLOR);
+}
+
+/** Whether the series drawing a bar style other than candles is hidden. */
+async function barStyleSeriesHidden(page: Page): Promise<boolean> {
+  return page.evaluate(() => window.__chartTest!.barStyle().options.visible === false);
+}
+
 /** The name of every row, topmost first: a drawing by its seeded id, the price bars as 'bars'. */
 async function layerNames(page: Page): Promise<Array<string | null>> {
   return drawingRows(page).evaluateAll((rows) =>
@@ -56,6 +83,14 @@ async function layerNames(page: Page): Promise<Array<string | null>> {
 /** One action button of a row, by the label the floating toolbar shares with the tree. */
 function rowAction(row: Locator, name: string): Locator {
   return row.getByRole('button', { name, exact: true });
+}
+
+/** The labels of the action buttons a row reveals, in the order it shows them. */
+async function rowActionNames(row: Locator): Promise<Array<string | null>> {
+  return row
+    .locator('.object-tree-row-actions')
+    .getByRole('button')
+    .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
 }
 
 /** The settings dialog of the seeded profile drawing. */
@@ -93,13 +128,80 @@ test('two saved profiles list as rows, the topmost drawing first and the price b
   await expect(drawingRows(page)).toHaveCount(3);
   await expect(rowName(drawingRows(page).first())).toHaveText(PROFILE_ROW_NAME);
   expect(await layerNames(page)).toEqual(['second', 'first', 'bars']);
-  await expect(barsRow(page).getByRole('button')).toHaveAccessibleName(/^EURUSD/);
+  await expect(barsName(page)).toHaveAccessibleName(/^EURUSD/);
 });
 
 test('a drawing saved below the price bars lists under the bars row', async ({ page }) => {
   await gotoWithSavedProfiles(page, [savedProfile('first', { ...EDITABLE, belowBars: true })]);
 
   expect(await layerNames(page)).toEqual(['bars', 'first']);
+});
+
+test('the bars row offers one button, which hides the price bars', async ({ page }) => {
+  await gotoWithStub(page);
+  await openChart(page);
+  await openObjectTree(page);
+  await barsRow(page).hover();
+
+  expect(await rowActionNames(barsRow(page))).toEqual([HIDE_BARS_LABEL]);
+});
+
+test('hiding the price bars stops the chart drawing them, marks the row and saves the choice', async ({ page }) => {
+  await gotoWithStub(page);
+  await openChart(page);
+  await openObjectTree(page);
+  const row = barsRow(page);
+  await row.hover();
+
+  await rowAction(row, HIDE_BARS_LABEL).click();
+
+  await expect(row).toHaveAttribute('data-hidden', 'true');
+  await expect.poll(() => priceBarsPainted(page)).toBe(false);
+  await expect
+    .poll(async () => (await stubChartSettingOverrides(page))[BARS_CHART_SCOPE])
+    .toEqual({
+      priceBarsHidden: true,
+    });
+
+  // Pointer and focus leave the row, so only the pressed toggle can keep the crossed eye in sight.
+  await page.mouse.move(0, 0);
+  await page.locator('.chart-host').focus();
+  await expect(rowAction(row, SHOW_BARS_LABEL)).toHaveCSS('opacity', '1');
+});
+
+test('a chart saved with the price bars hidden opens hidden', async ({ page }) => {
+  await gotoWithStub(page, {
+    chartSettingOverrides: { [BARS_CHART_SCOPE]: { barStyle: 'line', priceBarsHidden: true } },
+  });
+  await openChart(page);
+  await openObjectTree(page);
+
+  await expect(barsRow(page)).toHaveAttribute('data-hidden', 'true');
+  await expect.poll(() => barStyleSeriesHidden(page)).toBe(true);
+});
+
+test('reloading a hidden chart keeps the price bars hidden, and Show draws them again', async ({ page }) => {
+  await gotoWithStub(page);
+  await openChart(page);
+  await openObjectTree(page);
+  await barsRow(page).hover();
+  await rowAction(barsRow(page), HIDE_BARS_LABEL).click();
+  await expect.poll(() => priceBarsPainted(page)).toBe(false);
+
+  await page.reload();
+  await openChart(page);
+  await openObjectTree(page);
+  const row = barsRow(page);
+
+  await expect(row).toHaveAttribute('data-hidden', 'true');
+  await expect.poll(() => priceBarsPainted(page)).toBe(false);
+
+  await row.hover();
+  await rowAction(row, SHOW_BARS_LABEL).click();
+
+  await expect(row).not.toHaveAttribute('data-hidden', 'true');
+  await expect.poll(() => priceBarsPainted(page)).toBe(true);
+  await expect.poll(async () => (await stubChartSettingOverrides(page))[BARS_CHART_SCOPE]).toBeUndefined();
 });
 
 test('dragging the price bars row above the top drawing puts every drawing under the bars', async ({ page }) => {
@@ -197,7 +299,7 @@ test('Delete on a focused row removes its drawing', async ({ page }) => {
   await expect(drawingRows(page)).toHaveCount(1);
   await expect(barsRow(page)).toBeVisible();
   await expect(page.getByText('No drawings yet')).toHaveCount(0);
-  await expect(barsRow(page).getByRole('button')).toBeFocused();
+  await expect(barsName(page)).toBeFocused();
   await expect.poll(async () => (await savedDrawings(page)).length).toBe(0);
 });
 
@@ -214,12 +316,7 @@ test('a hovered row offers settings, lock, hide and remove, in the floating tool
   const row = drawingRow(page, 'first');
   await row.hover();
 
-  const actionNames = await row
-    .locator('.object-tree-row-actions')
-    .getByRole('button')
-    .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
-
-  expect(actionNames).toEqual(['Drawing settings', 'Lock drawing', 'Hide drawing', 'Remove drawing']);
+  expect(await rowActionNames(row)).toEqual(['Drawing settings', 'Lock drawing', 'Hide drawing', 'Remove drawing']);
 });
 
 test('the row settings button opens the settings of its drawing', async ({ page }) => {
@@ -290,7 +387,7 @@ test('the arrow keys walk the rows and stop at both ends', async ({ page }) => {
   await gotoWithSavedProfiles(page, [savedProfile('first', EDITABLE), savedProfile('second', EDITABLE)]);
   const topRow = rowName(drawingRow(page, 'second'));
   const middleRow = rowName(drawingRow(page, 'first'));
-  const bottomRow = barsRow(page).getByRole('button');
+  const bottomRow = barsName(page);
 
   await topRow.focus();
   await page.keyboard.press('ArrowDown');

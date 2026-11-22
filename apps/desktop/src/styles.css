@@ -24,6 +24,7 @@
 @import './features/symbol-search/symbol-search.css';
 @import './features/side-drawers/side-drawers.css';
 @import './features/object-tree/object-tree.css';
+@import './features/indicators/indicatorActionsMenu/indicator-actions-menu.css';
 @import './shared/ui/button/action-button.css';
 @import './shared/ui/button/primary-button.css';
 @import './shared/ui/accessibility/visually-hidden.css';

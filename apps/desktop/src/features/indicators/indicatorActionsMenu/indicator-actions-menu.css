@@ -1,0 +1,55 @@
+/* The indicator actions menu (features/indicators/indicatorActionsMenu): the row popup menus' surface and rows,
+   with the right-click menu's separators. */
+
+/* The point the menu hangs from: a zero-size anchor that usePopupPlacement places the popup against, so a menu
+   opened by a press lands where the pointer is. */
+.indicator-actions-menu-anchor {
+  position: fixed;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.indicator-actions-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 4px;
+}
+
+/* A row keeps its words on one line: its icon's column, then its words, and the shortcut or the submenu's arrow
+   at its far end. */
+.indicator-actions-menu-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* The column every row opens with, so a row without a glyph keeps its words in line with the ones that have
+   one. */
+.indicator-actions-menu-icon {
+  display: flex;
+  flex: 0 0 16px;
+  align-items: center;
+  height: 16px;
+}
+
+/* A command's glyph, drawn at the size of the legend's row buttons, in the row's own colour. */
+.indicator-actions-menu-glyph {
+  width: 16px;
+  height: 16px;
+}
+
+/* A row that cannot act, such as a paint-order command with no row to move to: it stays readable and reachable
+   by the keys, and its title says why it does nothing. */
+.indicator-actions-menu-row[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.indicator-actions-menu-caret {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  transform: rotate(-90deg);
+}

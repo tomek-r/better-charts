@@ -50,6 +50,27 @@ export function withoutIndicator(indicators: readonly SavedIndicator[], instance
 }
 
 /**
+ * Moves one saved indicator to the place another one holds, leaving every other entry as it is. The list is
+ * the order of the object tree's rows, topmost first, so the moved indicator takes the target's row and the
+ * entries between them keep theirs; the chart paints the first of the list over the ones under it.
+ */
+export function withIndicatorMoved(
+  indicators: readonly SavedIndicator[],
+  movedInstanceId: string,
+  targetInstanceId: string,
+): SavedIndicator[] {
+  const movedIndex = indicators.findIndex((indicator) => indicator.instanceId === movedInstanceId);
+  const targetIndex = indicators.findIndex((indicator) => indicator.instanceId === targetInstanceId);
+  if (movedIndex === -1 || targetIndex === -1) {
+    return [...indicators];
+  }
+  const moved = [...indicators];
+  const [entry] = moved.splice(movedIndex, 1);
+  moved.splice(targetIndex, 0, entry);
+  return moved;
+}
+
+/**
  * Gives the named saved indicators the heights the user dragged their own panes to, leaving every other entry
  * untouched and the ones no height is named for as they are.
  */

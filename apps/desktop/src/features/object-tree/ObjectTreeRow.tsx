@@ -22,7 +22,7 @@ import {
 } from './objectTreeRowActions';
 import { presentWhileTrue } from './objectTreeRowAttributes';
 import { ROW_NAME_CLASS, rowNameButtons } from './objectTreeRowFocus';
-import type { LayerRowReorder } from './useLayerReorder';
+import type { RowReorder } from './useLayerReorder';
 
 /** The row glyph, sized like the floating toolbar's. */
 const ROW_ICON_SIZE_PX = 18;
@@ -32,7 +32,7 @@ export interface ObjectTreeRowProps {
   /** The registry entry that placed the drawing: the row names it and commands it through its id. */
   readonly plugin: RegisteredChartToolPlugin;
   readonly selected: boolean;
-  readonly reorder: LayerRowReorder;
+  readonly reorder: RowReorder;
 }
 
 /**

@@ -214,6 +214,10 @@ export class ChartToolSet implements ChartDrawingCommands, ChartToolInput {
     this.registry.selectDrawing(toolId, drawingId);
   }
 
+  clearSelection(): void {
+    this.registry.clearSelection();
+  }
+
   deleteDrawing(toolId: string, drawingId: string): boolean {
     return this.registry.deleteDrawing(toolId, drawingId);
   }

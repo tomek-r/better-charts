@@ -348,12 +348,16 @@ hovering a row reveals Settings, Lock, Hide/Show and Remove buttons (the floatin
 toolbar's order), a double click or the Settings button opens the drawing's settings dialog, and Delete or Backspace removes the drawing of the focused row.
 Arrow keys walk the rows. The price bars have a row of their own (the chart's symbol and
 timeframe, e.g. "EURUSD, 1H", with a candlestick icon) at their place in the stacking order,
-and it has no action buttons. Any row, the bars row included, drags with the mouse or moves
-with Alt+ArrowUp / Alt+ArrowDown to change the order: the top row paints on top, and
-drawings listed below the bars row paint under the candles. The order and each drawing's
-side of the bars are saved. A locked or hidden drawing keeps its toggle in sight, and a
-hidden row's name is dimmed while the row stays listed and clickable. The dialog is the
-same one the floating toolbar opens, held by one provider above the chart and the tree.
+and a hover shows its one button, Hide/Show price bars. Hiding stops the chart drawing the
+bars of its main series — the candles, bars or line the bar type chooses, and the last price
+they label — while the drawings and indicators stay; the row then keeps its crossed eye in
+sight and its dimmed name. The choice is saved per chart, account and symbol among the chart's
+settings overrides, so the chart opens hidden again. Any row, the bars row included, drags
+with the mouse or moves with Alt+ArrowUp / Alt+ArrowDown to change the order: the top row
+paints on top, and drawings listed below the bars row paint under the candles. The order and
+each drawing's side of the bars are saved. A locked or hidden drawing keeps its toggle in
+sight, and a hidden row's name is dimmed while the row stays listed and clickable. The dialog
+is the same one the floating toolbar opens, held by one provider above the chart and the tree.
 The tree keeps no data window and no toolbar of its own (owner decision).
 
 ## Chart indicators
@@ -437,8 +441,21 @@ Under the OHLC line the legend lists one row per price-pane indicator: its short
 values and each plot's value at the crosshair bar, or at the last bar while the pointer is off the
 chart (e.g. "SMA 9 close 1.08520"); oscillators write two decimals. An indicator with a pane of
 its own shows the same row at the top-left of that pane instead. A hovered row offers Hide/Show,
-Settings and Remove buttons, and a double click on its title opens the settings. A hidden
-indicator's row is dimmed, and a chevron collapses the price-pane rows to their count ("˅ 2").
+Settings, Remove and More ("…") buttons, and a double click on its title opens the settings. The
+More button, and a right press on the indicator's Object tree row, open one actions menu at that
+point: Visual order, whose submenu brings a price-pane indicator to the front, forwards it, sends it
+backward or to the back of its pane's paint order, the commands that would leave the order as it is
+greyed out (all four, with a title saying why, for an indicator with a pane of its own); Visibility
+on intervals, which opens the settings dialog on its Visibility tab; Hide or Show; Remove, which
+names the Del key that removes the selected indicator; then Object tree, which opens the tree's
+drawer, in a section of its own, offered by the legend's menu only; and Settings. Every row starts
+with the same icon column: Visual order, Hide or Show, Remove and Settings draw one there, and the
+rows without one keep their words in line. The menu answers the keyboard the way a menu does: its
+arrow keys, Home and End walk its rows, Left and Right move between it and its submenu,
+Enter runs a row, and Escape closes it and gives the focus back to the More button or the row name;
+a press outside it closes it. A hidden indicator's row is dimmed, and a chevron collapses the
+price-pane rows to their count ("˅ 2"). The selected indicator's row keeps its buttons in sight and
+is framed the way a hovered row is, without the pointer resting on it.
 Each indicator pane draws its own top border, which stops at the price axis; the library's pane
 separator and its hover band, which would cross the axis, are transparent, and a band of the
 pane's width shows while the line between the panes is hovered or dragged.
@@ -446,20 +463,42 @@ pane's width shows while the line between the panes is hovered or dragged.
 The Indicators dialog sits at a fixed offset from the top of the window, like the settings
 dialogs.
 
-The Object tree lists, under the drawings, every indicator drawn on the price pane by its legend
-name; indicators with a pane of their own get no row (owner decision). A row's buttons open the
-indicator's settings, hide or show it and remove it, and a double click or Delete on its name
-does the same as in a drawing row. The settings dialog is the drawing settings form with the
-indicator's Inputs and Style tabs; OK stays disabled while a value is invalid and recomputes the
-indicator. Its Inputs and Style edits show on the chart as they are made, after a short pause, and
-are stored only on OK; Cancel, the close button, Escape and a backdrop click put the stored
-settings back. A plot or band switched off in the Style tab hides only that line. Its Style tab ends
-with three display switches: Labels on price scale, off by default (each visible plot's last value on
-the price scale), Values in status line (the plot values in the legend row), and Inputs in status
-line (the inputs after the short title there; the Object tree name keeps them either way), with the
-last two on by default. The settings dialog also has the drawings' Visibility tab: an indicator
-limited to some timeframes is not attached on the others, so its line, legend row and pane leave and
-come back with the timeframe; the Object tree keeps listing it.
+The Object tree groups its rows by chart pane, as TradingView's object tree does: a divider
+separates the groups, which carry no visible heading. The first group holds the drawings, the
+price bars and, under them, the price-pane indicators by their legend names; then comes one group
+per indicator with a pane of its own (RSI, MACD, Volume), in the order those panes stand under the
+price pane, each holding that indicator's row. A row's buttons open the indicator's settings, hide
+or show it and remove it, and a double click or Delete on its name does the same as in a drawing
+row. A right press on a row opens the indicator's actions menu at the pointer, the menu the
+legend row's More button opens less its Object tree row, which would point back at the drawer the
+row is already in, and Escape closes it and gives the focus back to the row's name.
+The price-pane indicator rows keep the saved order, the top one painting over the ones under
+it: a drag, or Alt+ArrowUp / Alt+ArrowDown on a focused row, moves one indicator among its pane's
+rows, keeps the focus on it, saves the new order and repaints the chart in it, so a reload keeps
+the order. The actions menu's four paint-order commands move an indicator to the first, the last or
+the row beside it among those rows and save the same order. Own-pane groups keep their order, and
+indicator rows never move into the drawings list.
+A click on a row selects that indicator, and so does a click on its plotted lines, markers or
+columns: within 4 CSS pixels of the ink a plot draws in the pane it draws in. Either way the row is
+highlighted like a selected drawing row, the chart frames its legend row with its buttons in sight,
+and every plot of it shows a selection handle on every 10th visible bar and at the last bar: a
+hollow ring 9 CSS pixels across, stroked 1.5 CSS pixels in the selection blue and filled with the
+pane background, so the line it marks does not show through it. The pointer over a plotted line shows the pointer cursor; a
+click on a drawing picks the drawing even where a plot line crosses it.
+Delete or Backspace removes the selected indicator while the focus is not in a text field, and
+Escape, a click on empty chart space or a drawing's own selection clears it; selecting one clears the
+other, so the chart holds one selection at a time.
+The settings dialog is the drawing settings form with the indicator's Inputs and Style tabs;
+OK stays disabled while a value is invalid and recomputes the indicator. Its Inputs and Style edits
+show on the chart as they are made, after a short pause, and are stored only on OK; Cancel, the
+close button, Escape and a backdrop click put the stored settings back. A plot or band switched off
+in the Style tab hides only that line. Its Style tab ends with three display switches: Labels on
+price scale, off by default (each visible plot's last value on the price scale), Values in status
+line (the plot values in the legend row), and Inputs in status line (the inputs after the short
+title there; the Object tree name keeps them either way), with the last two on by default. The
+settings dialog also has the drawings' Visibility tab: an indicator limited to some timeframes is
+not attached on the others, so its line, legend row and pane leave and come back with the
+timeframe; the Object tree keeps listing it.
 
 ## Execution and configuration
 

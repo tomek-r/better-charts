@@ -4,6 +4,7 @@ import type { RenderBar } from '../bars/renderBar';
 import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayRenderer';
 import { createChartSurface } from './chartSurface';
+import { ChartPointer } from './chartPointer';
 import type { ChartAppearance, ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesAppearance, ChartScalesState } from './chartScalesAppearance';
 import { ChartScalesPresenter } from './chartScalesPresenter';
@@ -16,13 +17,12 @@ import { chartStatusLine, type ChartStatusLine } from '../legend/chartStatusLine
 import { OhlcReadout } from '../legend/ohlcReadout';
 import { MarketStatusIndicator } from '../legend/marketStatusIndicator';
 import type { MarketStatus } from '../legend/marketStatus';
-import { PointerReadoutPrimitive } from '../legend/pointerReadoutPrimitive';
 import { PriceAxisTagsPrimitive } from '../quotes/priceAxisTagsPrimitive';
 import { PriceScaleController, type PriceScaleState } from '../priceScale/priceScaleController';
 import { BarSeriesController } from '../bars/barSeriesController';
 import type { BarStyleAppearance } from '../barStyle/barStyleAppearance';
 import { PriceLineController } from '../quotes/priceLineController';
-import { isOutsidePane, ViewportController, type DiagnosticViewport } from '../viewport/viewportController';
+import { ViewportController, type DiagnosticViewport } from '../viewport/viewportController';
 import type {
   ChartDrawingPaintTarget,
   ChartDrawTarget,
@@ -35,11 +35,14 @@ import { WorkspacePrimitive } from './workspacePrimitive';
 import { installChartDevTestApi, removeDevTestApi } from './devTestApi';
 import type { ChartControllerOptions } from './chartControllerOptions';
 import { ChartHistory, type ReplaceHistoryOptions } from './chartHistory';
+import { createChartIndicators } from './chartIndicatorWiring';
 import type { IndicatorLayer } from '../indicators/indicatorLayer';
 import type { IndicatorRuntime } from '../indicators/indicatorRuntime';
 import { ChartIndicators } from '../indicators/chartIndicators';
+import { IndicatorSelection } from '../indicators/indicatorSelection';
 import type { IndicatorLegendCommands } from '../legend/indicatorLegend';
 import { LiveBarController } from './liveBarController';
+import { resetPaneToEnd, sizeChartToHost } from './chartPaneView';
 import { PointerCandleHold } from '../bars/pointerCandleHold';
 
 /**
@@ -62,12 +65,9 @@ export class ChartController {
   private readonly scaleControls: PriceScaleController;
   private readonly scales: ChartScalesPresenter;
   // Every tool shares the pointer's time/price labels, and the tools' above-trading-overlays layer
-  // is painted by it just before them. Attached for the chart's life, drawn only while
+  // is painted by it just before them. Its labels are attached for the chart's life, drawn only while
   // a pointer is over the pane.
-  private readonly pointerReadout = new PointerReadoutPrimitive(
-    () => this.view.viewport(),
-    (target) => this.tools.draw(target),
-  );
+  private readonly pointer: ChartPointer;
   // The Bid/Ask lines are native price lines; their tags are price-axis labels
   // positioned by this primitive, because the library's own label alignment
   // restacks them around the last price on every tick (see the chart options).
@@ -89,6 +89,8 @@ export class ChartController {
   private readonly history: ChartHistory;
   /** Selection, user commands and saved records of the chart's drawings. */
   readonly drawings: ChartDrawings;
+  /** The indicator the user has selected, if any: the chart selects one object at a time. */
+  readonly indicatorSelection: IndicatorSelection;
   /** The indicators drawn on the price pane, each from the frames its producer hands over. */
   readonly indicatorLayer: IndicatorLayer;
   /** The indicators attached to the chart: each loads on a new history and follows the live bar. */
@@ -110,27 +112,23 @@ export class ChartController {
     const { chart, candles, future } = createChartSurface(host);
     this.chart = chart;
     this.candles = candles;
-    this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
+    // The view and the tool set are built further down, so the pointer asks them only when it paints.
+    this.pointer = new ChartPointer(
+      host,
+      () => this.view,
+      () => this.tools,
+    );
+    this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointer.labels, this.brokerTime);
     this.data = new BarSeriesController(this.candles, this.chart);
-    const {
-      toolDefinitions,
-      defaultToolId,
-      indicatorDefinitions,
-      indicatorLegendTitle,
-      indicatorSeriesSource,
-      indicatorTickSource,
-      ...hostOptions
-    } = options;
-    this.chartIndicators = new ChartIndicators(this.chart, host, {
-      definitions: indicatorDefinitions,
-      legendTitle: indicatorLegendTitle,
-      bars: () => this.bars,
-      timeframe: () => this.data.timeframe,
-      digits: () => this.data.pricePrecision,
-      priceSeries: this.candles,
-      seriesSource: indicatorSeriesSource,
-      tickSource: indicatorTickSource,
+    // The drawings are built further down, so the selection reaches them when it clears them, not before.
+    const indicatorWiring = createChartIndicators(this.chart, host, this.data, this.candles, options, {
+      clearDrawingSelection: () => this.drawings.clearSelection(),
+      drawingSelected: () => this.drawings.selected() !== null,
+      plotHoverChanged: (overPlot) => this.pointer.setOverPlot(overPlot),
     });
+    const { toolDefinitions, defaultToolId, toolHost: toolHostOptions } = indicatorWiring;
+    this.indicatorSelection = indicatorWiring.selection;
+    this.chartIndicators = indicatorWiring.indicators;
     this.indicatorLayer = this.chartIndicators.layer;
     this.indicators = this.chartIndicators.runtime;
     this.priceLines = new PriceLineController(this.candles, state, this.priceTags);
@@ -149,7 +147,7 @@ export class ChartController {
       },
     });
     const toolHost: ChartToolHostBase = {
-      ...hostOptions,
+      ...toolHostOptions,
       barSeries: this.data,
       geometry: this.view,
       requestRepaint: () => this.refreshOverlays(),
@@ -160,10 +158,11 @@ export class ChartController {
       },
     };
     this.tools = new ChartToolSet(toolDefinitions, defaultToolId, toolHost, {
-      cursorChanged: (cursor) => {
-        this.host.style.cursor = cursor ?? '';
+      cursorChanged: (toolCursor) => this.pointer.setToolCursor(toolCursor),
+      selectionChanged: (selection) => {
+        this.drawings.selectionChanged(selection);
+        this.indicatorSelection.drawingSelected(selection);
       },
-      selectionChanged: (selection) => this.drawings.selectionChanged(selection),
       drawingsChanged: () => this.drawings.drawingsChanged(),
     });
     this.toolInput = this.tools;
@@ -182,7 +181,7 @@ export class ChartController {
     // controller's, because the time zone clock reads it too.
     this.candles.attachPrimitive(this.countdownPrimitive);
     this.candles.attachPrimitive(this.priceTags);
-    this.candles.attachPrimitive(this.pointerReadout);
+    this.candles.attachPrimitive(this.pointer.labels);
     this.ohlcReadout = new OhlcReadout(host, this.data, this.chartIndicators.hoveredBar, () => this.symbol);
     this.marketStatus = new MarketStatusIndicator(this.ohlcReadout.container());
     // The price scale is painted on the library's own canvas, so its toggles
@@ -216,7 +215,7 @@ export class ChartController {
     // primitives and controllers built above.
     this.tools.activateDefaultTool();
     if (import.meta.env.DEV) {
-      installChartDevTestApi(this.chart, this.candles, this.tools, this.pointerReadout, this.view, this, this.data);
+      installChartDevTestApi(this.chart, this.candles, this.tools, this.pointer.labels, this.view, this, this.data);
     }
   }
 
@@ -250,13 +249,7 @@ export class ChartController {
     if (!this.bars.length || this.removed) {
       return;
     }
-    this.view.resetToEnd();
-    this.view.clearRetainedPrices();
-    // The reset fits the scale to the data it now shows (see `resetToEnd`) but
-    // leaves the auto scale option where the user put it: this also runs on every
-    // selection change, and a scale that started following each tick there would
-    // rescale the pane under the pointer. `resetChartView` is the reset the user asks for.
-    this.scaleControls.sync();
+    resetPaneToEnd(this.view, this.scaleControls);
   }
 
   /**
@@ -312,6 +305,17 @@ export class ChartController {
     this.data.setBarStyle(appearance);
     this.ohlcReadout.refresh();
     this.refreshOverlays();
+  }
+  /**
+   * Hides the price bars from the chart, or shows them again, as the object tree's bars row asks: the
+   * candles, or the series that draws another bar style, stop painting while the drawings and the
+   * indicators keep drawing.
+   */
+  setPriceBarsHidden(hidden: boolean): void {
+    if (this.removed) {
+      return;
+    }
+    this.data.setBarsHidden(hidden);
   }
   /**
    * Paints the chart itself with the Canvas tab's settings: background, both grids, scale text and
@@ -391,15 +395,7 @@ export class ChartController {
     if (this.removed) {
       return;
     }
-    const spacing = this.chart.timeScale().options().barSpacing;
-    const { width, height } = this.host.getBoundingClientRect();
-    // The native resize retains bar spacing and right offset. Forcing a paint
-    // updates pane dimensions before extending the helper time series.
-    this.chart.resize(Math.max(1, Math.floor(width)), Math.max(1, Math.floor(height)), true);
-    // The crosshair tool rejects pointer positions outside the pane, so its bounds
-    // are re-measured here rather than waiting for the next overlay paint.
-    this.view.measurePane();
-    this.view.ensureFuture(spacing);
+    sizeChartToHost(this.chart, this.host, this.view);
     this.refreshOverlays();
   }
 
@@ -410,23 +406,12 @@ export class ChartController {
   timeToX(timeMs: number): number {
     return this.view.timeToX(timeMs);
   }
-  /**
-   * Every pointer shows axis labels (host CSS px), and the active tool hears the move.
-   * Outside the pane both hide rather than clamp, because a clamped readout would
-   * print a time or price the pointer is not over.
-   */
+  /** Every pointer shows axis labels (host CSS px), and the active tool hears the move. */
   movePointerReadout(x: number, y: number): void {
-    const { width, height } = this.view.paneSize();
-    if (isOutsidePane(x, y, width, height)) {
-      this.hidePointerReadout();
-      return;
-    }
-    this.pointerReadout.move(x, y);
-    this.tools.pointerHover(x, y);
+    this.pointer.move(x, y);
   }
   hidePointerReadout(): void {
-    this.pointerReadout.hide();
-    this.tools.pointerLeave();
+    this.pointer.hide();
   }
   drawTools(target: ChartDrawTarget): void {
     this.tools.draw(target);
@@ -463,7 +448,7 @@ export class ChartController {
     this.marketStatus.destroy();
     this.ohlcReadout.destroy();
     this.scaleControls.destroy();
-    this.candles.detachPrimitive(this.pointerReadout);
+    this.candles.detachPrimitive(this.pointer.labels);
     this.candles.detachPrimitive(this.countdownPrimitive);
     this.candles.detachPrimitive(this.priceTags);
     this.candles.detachPrimitive(this.primitive);

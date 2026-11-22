@@ -12,15 +12,18 @@ import {
   removeOwnPane,
   type OwnPane,
 } from './indicatorPanes';
+import { drawnPaneOf, pickIndicatorAt } from './indicatorPick';
 import {
   addPlotSeries,
   isHistogramPlotSeries,
   plotColorOf,
   removePlotSeries,
+  setPlotSeriesHandles,
   setPlotSeriesHidden,
 } from './indicatorPlotSeries';
 import { plotStateOf, type IndicatorPlotState } from './indicatorPlotState';
 import type { IndicatorPlotSeries } from './indicatorPlotStyles';
+import type { PanePoint } from './indicatorPanePoint';
 import { isValuePoint, lastTimeOf, pointColorOf, pointOf, pointsOf, timeOf } from './indicatorPoints';
 import { applyPlotScaleMargins } from './indicatorScaleFit';
 import { OPENING_OWN_PANE_SCALE, readOwnPaneScale, restoreOwnPaneScale } from './ownPaneScale';
@@ -53,6 +56,13 @@ export interface IndicatorLayerState {
   readonly paneHeight: number | null;
   /** Decimals its values are written with; null when the frame states none. */
   readonly precision: number | null;
+  /** Whether its plots paint the selection handles of the selected indicator. */
+  readonly selectionHandles: boolean;
+  /**
+   * The index its plots hold among the pane's series, which the library reports: the greater it is, the higher
+   * it paints. Null while it draws no series.
+   */
+  readonly seriesOrder: number | null;
 }
 
 /** How tall one indicator's own pane is: its stretch factor over the price pane's, so the price pane's stays 1. */
@@ -133,6 +143,12 @@ function hostSeriesOf(series: readonly IndicatorPlotSeries[]): IndicatorPlotSeri
 }
 
 /**
+ * The order that puts a series over every other one in its pane. The library clamps an order past the end of
+ * the pane's series, so a plot never has to know how many series its pane holds.
+ */
+const TOP_PAINT_ORDER = Number.MAX_SAFE_INTEGER;
+
+/**
  * The display layer for indicator frames: one series per plot, plus the levels and fills the frame
  * describes. Levels are price lines and fills are a primitive, both hung on the first line plot
  * series, so they share its pane, its price scale and its hide/show. An indicator shown in a pane of
@@ -141,6 +157,10 @@ function hostSeriesOf(series: readonly IndicatorPlotSeries[]): IndicatorPlotSeri
  */
 export class IndicatorLayer {
   private readonly shown = new Map<string, Shown>();
+  /** The indicator the chart has selected; its plots paint the selection handles. */
+  private selectedId: string | null = null;
+  /** The indicators the app lists topmost first, as its last caller set them: the first paints over the rest. */
+  private paintOrder: readonly string[] = [];
 
   constructor(private readonly chart: IChartApi) {}
 
@@ -211,10 +231,32 @@ export class IndicatorLayer {
     shown.fillPrimitive?.setHidden(hidden);
   }
 
+  /** Draws the selection handles on the plots of `id`, and off those of the indicator selected before it. */
+  setSelected(id: string | null): void {
+    if (this.selectedId === id) {
+      return;
+    }
+    this.showHandles(this.selectedId, false);
+    this.selectedId = id;
+    this.showHandles(id, true);
+  }
+
+  /**
+   * Paints the indicators in the given topmost-first order: the first of the list draws over the ones under
+   * it, and a frame drawn later keeps the place its indicator holds in it.
+   */
+  setPaintOrder(topFirst: readonly string[]): void {
+    this.paintOrder = topFirst;
+    this.applyPaintOrder();
+  }
+
   /** Removes everything `id` drew and gives back the pane it held, if any. */
   remove(id: string): void {
     const heldPane = this.shown.get(id)?.ownPane ?? null;
     this.clear(id);
+    if (this.selectedId === id) {
+      this.selectedId = null;
+    }
     removeOwnPane(this.chart, heldPane);
   }
 
@@ -232,9 +274,11 @@ export class IndicatorLayer {
       plots: shown.series.map((series, plotIndex) => plotStateOf(series, shown.titles[plotIndex])),
       levels: shown.levels.map(levelStateOf),
       fills: shown.fills.map(fillStateOf),
-      paneIndex: shown.series[0]?.getPane().paneIndex() ?? PRICE_PANE_INDEX,
+      paneIndex: drawnPaneOf(shown.series) ?? PRICE_PANE_INDEX,
       paneHeight: this.paneHeightOf(shown),
       precision: shown.precision,
+      selectionHandles: this.selectedId === id,
+      seriesOrder: shown.series[0]?.seriesOrder() ?? null,
     }));
   }
 
@@ -269,6 +313,11 @@ export class IndicatorLayer {
     return shown.series.map((series) => legendValueOf(series, logicalIndex));
   }
 
+  /** The indicator whose plot the pane point lands on, topmost first; null when it lands on none. */
+  indicatorAt(point: PanePoint): string | null {
+    return pickIndicatorAt(this.chart, this.shown, point);
+  }
+
   /** Draws `frame` for `id`, in its own pane or on the price pane when `ownPane` is null. */
   private draw(
     id: string,
@@ -291,7 +340,7 @@ export class IndicatorLayer {
     const levels = frame.levels ?? [];
     const fills = frame.fills ?? [];
     const hostSeries = hostSeriesOf(series);
-    this.shown.set(id, {
+    const drawn: Shown = {
       series,
       titles: frame.plots.map((plot) => plot.title),
       plotVisible: frame.plots.map((plot) => plot.visible !== false),
@@ -304,7 +353,26 @@ export class IndicatorLayer {
       ownPane,
       precision,
       lookKey,
-    });
+    };
+    this.shown.set(id, drawn);
+    // A frame drawn again appends fresh series, so the whole listed order goes back over the pane.
+    this.applyPaintOrder();
+    if (id === this.selectedId) {
+      this.showHandles(id, true);
+    }
+  }
+
+  /**
+   * Moves the listed indicators over the other series of their pane, bottom row first: each lift leaves the
+   * ones lifted before it under it, so the list ends topmost first. The plots of one indicator keep their own
+   * order, each moved over the pane's other series in turn.
+   */
+  private applyPaintOrder(): void {
+    for (const id of [...this.paintOrder].reverse()) {
+      for (const series of this.shown.get(id)?.series ?? []) {
+        series.setSeriesOrder(TOP_PAINT_ORDER);
+      }
+    }
   }
 
   /** Rewrites the bars of a shown indicator whose look is unchanged, leaving everything it draws alone. */
@@ -351,6 +419,14 @@ export class IndicatorLayer {
       return null;
     }
     return shown.ownPane.pane.getStretchFactor() / pricePaneStretchFactor(this.chart);
+  }
+
+  /** Shows or hides the selection handles of the plots of `id`; an unknown or absent id shows nothing. */
+  private showHandles(id: string | null, selected: boolean): void {
+    const shown = id === null ? undefined : this.shown.get(id);
+    for (const series of shown?.series ?? []) {
+      setPlotSeriesHandles(series, selected);
+    }
   }
 
   /** Attaches the fill primitive to the host series, which owns the pane the band is drawn in. */

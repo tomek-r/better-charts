@@ -12,7 +12,7 @@ import {
   type CandleAppearance,
 } from './candleAppearance';
 import { BarStyleSeries, type BarStyleSeriesState } from '../barStyle/barStyleSeries';
-import type { BarStyleAppearance } from '../barStyle/barStyleAppearance';
+import { DEFAULT_BAR_STYLE_APPEARANCE, type BarStyleAppearance } from '../barStyle/barStyleAppearance';
 
 /** One bar as the legend shows it, with the colour its body is drawn in; null while the style has none. */
 export interface LegendBar {
@@ -35,6 +35,10 @@ export class BarSeriesController {
   private priceDigits = 2;
   /** The anchor series' candles, which stay hidden while another series paints the bars. */
   private appearance = DEFAULT_CANDLE_APPEARANCE;
+  /** The style the chart draws the bars in, which hiding their own paint leaves untouched. */
+  private barStyleAppearance: BarStyleAppearance = DEFAULT_BAR_STYLE_APPEARANCE;
+  /** Whether the bars are hidden, which the object tree's bars row chooses. */
+  private barsHidden = false;
   /** Draws every bar style but candles; the anchor keeps the primitives, the price format and the fit. */
   private readonly barStyle: BarStyleSeries;
 
@@ -184,14 +188,26 @@ export class BarSeriesController {
   /**
    * Draws the chart's bar style. A style with a series of its own paints the bars there, and the anchor
    * hides every candle part: it is kept for the primitives, the price format and the price fit alone.
+   * The style is kept too, so showing hidden bars again paints the style the user chose.
    */
   setBarStyle(appearance: BarStyleAppearance): void {
+    this.barStyleAppearance = appearance;
     this.barStyle.apply(appearance, this.cache);
-    if (appearance.style === 'candles') {
-      this.applyCandleAppearance(appearance.candles);
+    this.applyCandleAppearance(this.anchorAppearance(appearance));
+  }
+
+  /**
+   * Hides the chart's bars, or shows them again: the candles, or the series drawing any other bar style.
+   * The anchor keeps its series either way, because every primitive — the drawings, the quote tags, the
+   * countdown and the pointer readout — rides on it.
+   */
+  setBarsHidden(hidden: boolean): void {
+    if (hidden === this.barsHidden) {
       return;
     }
-    this.applyCandleAppearance(HIDDEN_CANDLE_APPEARANCE);
+    this.barsHidden = hidden;
+    this.barStyle.setHidden(hidden);
+    this.applyCandleAppearance(this.anchorAppearance(this.barStyleAppearance));
   }
 
   /** The bar style series as the test hook shows it: a plain copy, never a chart-library object. */
@@ -202,6 +218,17 @@ export class BarSeriesController {
   /** Removes the bar style series; the surface removes the chart itself. */
   destroy(): void {
     this.barStyle.destroy();
+  }
+
+  /**
+   * The appearance the anchor draws: the chosen style's candles, or none of them while the bars are
+   * hidden or another series paints them.
+   */
+  private anchorAppearance(barStyle: BarStyleAppearance): CandleAppearance {
+    if (this.barsHidden || barStyle.style !== 'candles') {
+      return HIDDEN_CANDLE_APPEARANCE;
+    }
+    return barStyle.candles;
   }
 
   /**

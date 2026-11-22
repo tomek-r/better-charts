@@ -107,6 +107,14 @@ export class IndicatorRuntime {
     this.changed();
   }
 
+  /**
+   * Paints the attached indicators in the given topmost-first order, which is the order the saved settings
+   * list them in; an indicator reloaded later keeps the place the list gives it.
+   */
+  setPaintOrder(topFirst: readonly string[]): void {
+    this.layer.setPaintOrder(topFirst);
+  }
+
   /** A whole new history replaced the series: every attached indicator is told so, then loads again. */
   historyReplaced(): void {
     for (const entry of this.attached.values()) {

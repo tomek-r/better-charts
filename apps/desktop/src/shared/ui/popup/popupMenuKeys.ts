@@ -1,7 +1,7 @@
 import type { KeyboardEvent } from 'react';
 
-/** The rows of a menu the keys walk, in the order it draws them: its radio and checkbox items. */
-const ROW_SELECTOR = '[role="menuitemradio"], [role="menuitemcheckbox"]';
+/** The rows of a menu the keys walk, in the order it draws them: its commands, radio and checkbox items. */
+const ROW_SELECTOR = '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]';
 
 /** The row a menu opens on: the radio it has checked, never a switch row, which names no choice. */
 const CHECKED_ROW_SELECTOR = '[role="menuitemradio"][aria-checked="true"]';
@@ -40,6 +40,11 @@ function focusRow(menu: HTMLElement | null, target: RowTarget): void {
 /** Takes the focus as a menu opens, on the row it has chosen, so the keys walk on from there. */
 export function focusCheckedRow(menu: HTMLElement | null): void {
   menu?.querySelector<HTMLElement>(CHECKED_ROW_SELECTOR)?.focus();
+}
+
+/** Takes the focus as a menu of commands opens, on its first row, so the keys walk it straight away. */
+export function focusFirstRow(menu: HTMLElement | null): void {
+  focusRow(menu, 'first');
 }
 
 /** Runs the key the menu answers to; Enter and Space are the rows' own, and every other key is the page's. */
