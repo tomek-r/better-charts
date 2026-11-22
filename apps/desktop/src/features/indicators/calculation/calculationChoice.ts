@@ -1,4 +1,5 @@
 import { timeframeLabel, timeframeOptions, timeframeSeconds } from '../../../shared/bridge/timeframes';
+import { ticksPerBarOf } from '../../../shared/bridge/chartIntervals';
 import type { SettingValues } from '../../chart/engine/settings/settingInputs';
 import { CALCULATION_TIMEFRAME_INPUT, WAIT_FOR_CLOSES_INPUT, tickChoiceOf } from './calculationInputs';
 
@@ -44,6 +45,10 @@ export function calculationModeOf(settings: SettingValues, chartTimeframe: strin
 
 /** Whether `timeframe`'s bars are longer than `chartTimeframe`'s. */
 export function isHigherTimeframe(timeframe: string, chartTimeframe: string): boolean {
+  if (ticksPerBarOf(chartTimeframe) !== undefined) {
+    // A tick bar holds no span of time, so every timeframe is the longer one and reads as a series.
+    return ticksPerBarOf(timeframe) === undefined;
+  }
   return timeframeSeconds(timeframe) > timeframeSeconds(chartTimeframe);
 }
 

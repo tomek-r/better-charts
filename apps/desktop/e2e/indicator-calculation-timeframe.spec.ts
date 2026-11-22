@@ -42,7 +42,7 @@ import type { Candle } from '../src/shared/bridge/types';
 import { timeframeOptions } from '../src/shared/bridge/timeframes';
 import { averageOf } from './helpers/averageValues';
 import { drawnValues } from './helpers/indicatorFrames';
-import { SMA_DIALOG_NAME, indicatorRows, openObjectTree } from './helpers/indicatorObjectTree';
+import { openSmaSettingsFromRow } from './helpers/indicatorObjectTree';
 import { attachedIndicators } from './helpers/indicatorsDialog';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { EURUSD_CHART, latestSavedIndicators, openWithSavedIndicators } from './helpers/savedIndicators';
@@ -466,17 +466,11 @@ test.describe('an SMA calculated on a higher timeframe', () => {
   });
 });
 
-/** Opens the settings dialog of the saved moving average, through the object tree row that offers it. */
+/** Opens the settings dialog of the saved moving average, seeding it on the chart before it loads. */
 async function openSmaSettings(page: Page): Promise<Locator> {
   const saved = { instanceId: 'sma-1', definitionId: 'sma', settings: { length: SAVED_LENGTH } };
   await openWithSavedIndicators(page, [saved]);
-  await openObjectTree(page);
-  const row = indicatorRows(page);
-  await row.hover();
-  await row.getByRole('button', { name: 'Indicator settings', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: SMA_DIALOG_NAME });
-  await expect(dialog).toBeVisible();
-  return dialog;
+  return openSmaSettingsFromRow(page);
 }
 
 /** The Calculation section of an indicator's Inputs tab. */

@@ -19,6 +19,14 @@ export interface TickBarTimeline {
   readonly formingPrices: readonly number[];
 }
 
+/** The bars a chart's tick read draws, and the ticks an older page completes before they become a bar. */
+export interface TickBarHold {
+  /** The bars to draw, oldest first: each holds exactly the ticks its interval groups. */
+  readonly bars: readonly RenderBar[];
+  /** The ticks of the oldest bar the read left short, which the next older page completes. */
+  readonly oldestTicks: readonly IndicatorTick[];
+}
+
 /** The bar a tick opens: its own price is all of its open, high, low and close. */
 function openedBar(timeSeconds: number, price: number): RenderBar {
   return { time: timeSeconds, open: price, high: price, low: price, close: price, volume: 1 };
@@ -38,6 +46,11 @@ function extendedBar(bar: RenderBar, price: number): RenderBar {
 /** When a bar whose first tick arrived at `tickSeconds` is drawn: then, unless the bar before it has that second. */
 function barTimeAfter(previous: RenderBar | undefined, tickSeconds: number): number {
   return previous === undefined ? tickSeconds : Math.max(tickSeconds, previous.time + MINIMUM_BAR_GAP_SECONDS);
+}
+
+/** The ticks a bar can be built from, in the order they arrived: one carrying no price is no tick at all. */
+function pricedTicks(ticks: readonly IndicatorTick[]): readonly IndicatorTick[] {
+  return ticks.filter((tick) => tickPrice(tick) !== null);
 }
 
 /** The bars `ticks` build, in the order they arrived and timed so the chart accepts them. */
@@ -70,4 +83,44 @@ export function foldTick(timeline: TickBarTimeline, tick: IndicatorTick, ticksPe
   bars[newest] = extendedBar(bars[newest], price);
   const formingPrices = [...timeline.formingPrices, price];
   return { bars, formingPrices: formingPrices.length >= ticksPerBar ? [] : formingPrices };
+}
+
+/**
+ * The bars a read's ticks build for the chart, grouped from the newest tick back so every bar it draws holds the
+ * ticks its interval groups: a read starts mid-stream, so the ticks short of a bar are its oldest ones, which an
+ * older page completes.
+ */
+export function heldTickBars(ticks: readonly IndicatorTick[], ticksPerBar: number): TickBarHold {
+  const priced = pricedTicks(ticks);
+  if (ticksPerBar < 1) {
+    return { bars: [], oldestTicks: [] };
+  }
+  const shortOfBar = priced.length % ticksPerBar;
+  const { bars } = tickBarTimeline(priced.slice(shortOfBar), ticksPerBar);
+  return { bars, oldestTicks: priced.slice(0, shortOfBar) };
+}
+
+/** `bars` timed so the newest of them sits just before `nextTime`, the bar the chart already draws after them. */
+function timedBefore(bars: readonly RenderBar[], nextTime: number): readonly RenderBar[] {
+  const newest = bars[bars.length - 1];
+  if (newest === undefined || newest.time < nextTime) {
+    return bars;
+  }
+  const shift = newest.time - nextTime + MINIMUM_BAR_GAP_SECONDS;
+  return bars.map((bar) => ({ ...bar, time: bar.time - shift }));
+}
+
+/**
+ * The bars a page of older ticks puts in front of a chart's own: the newest of them complete the oldest bar the
+ * chart held short, so every bar added groups the interval's ticks and the chart's first bar joins them without a
+ * seam. The ticks still short of a bar after that wait for the next older page.
+ */
+export function joinedTickBars(
+  olderTicks: readonly IndicatorTick[],
+  heldOldestTicks: readonly IndicatorTick[],
+  ticksPerBar: number,
+  oldestDrawnTime: number,
+): TickBarHold {
+  const joined = heldTickBars([...olderTicks, ...heldOldestTicks], ticksPerBar);
+  return { bars: timedBefore(joined.bars, oldestDrawnTime), oldestTicks: joined.oldestTicks };
 }

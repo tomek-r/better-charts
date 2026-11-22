@@ -2,13 +2,18 @@ import { TICKS_PER_PAGE } from '../../../shared/bridge/config';
 import { ticksPerBarOf } from '../../../shared/bridge/chartIntervals';
 import type { Candle, IndicatorTick, MarketSnapshot } from '../../../shared/bridge/types';
 import type { RenderBar } from '../../chart/engine/bars/renderBar';
-import { foldTick, tickBarTimeline, type TickBarTimeline } from '../../chart/engine/bars/tickBarTimeline';
+import {
+  foldTick,
+  heldTickBars,
+  joinedTickBars,
+  tickBarTimeline,
+  type TickBarTimeline,
+} from '../../chart/engine/bars/tickBarTimeline';
 import type { IndicatorTicksAnswer, IndicatorTickSource } from '../../chart/engine/indicators/indicatorTickSource';
 import type { ChartController } from '../../chart/engine/surface/chartController';
 import {
   answersTickWindow,
   coveredTickWalk,
-  endedTickWalk,
   narrowedTickWalk,
   nextOlderTickWindow,
   startTickWalk,
@@ -42,6 +47,9 @@ const HALF_OPEN_END_OFFSET_MS = 1;
  * ticks at all cannot walk back through the years one window at a time.
  */
 const EMPTY_WINDOW_LIMIT = 8;
+
+/** Whether the read is filling the pane it opened with, or taking the page an older scroll asked for. */
+type ReadPhase = 'opening' | 'older';
 
 type TickBarsSession = Pick<
   BridgeSessionState,
@@ -92,18 +100,32 @@ function candleOf(bar: RenderBar): Candle {
  *
  * A read walks back one window at a time under `CHART_TICK_BUDGET` ticks until it
  * has `INITIAL_TICK_BARS` bars or the bridge stops answering, then replaces the
- * chart history the way an accepted MT5 snapshot does. Quotes are sampled, not
- * lossless (see docs/CURRENT_STATE.md), so a forming bar holds the ticks that
- * reached the app rather than every tick the broker saw.
+ * chart history the way an accepted MT5 snapshot does. Scrolling past the oldest
+ * bar reads one page of older ticks and prepends the bars they build through the
+ * chart's own older-history seam, rebuilt so that no bar but the newest is short
+ * of the ticks its interval groups; the read stops asking once the budget is
+ * spent.
+ *
+ * Quotes are sampled, not lossless (see docs/CURRENT_STATE.md), so a forming bar
+ * holds the ticks that reached the app rather than every tick the broker saw.
  */
 export class ChartTickBars {
   private walk: TickWalk | null = null;
   private pending: TickWindow | null = null;
   private heldTicks: readonly IndicatorTick[] = [];
+  /** The ticks of the oldest bar the read left short, which the next older page completes. */
+  private oldestTicks: readonly IndicatorTick[] = [];
+  /** Every tick the read has taken, the ones dropped after drawing included: the budget counts them. */
+  private heldTickCount = 0;
+  /** The instant of the oldest tick read so far; an older page reads the ticks before it. */
+  private oldestTickMs = 0;
   private timeline: TickBarTimeline | null = null;
   private drawing: { readonly symbol: string; readonly interval: string } | null = null;
   private emptyWindows = 0;
   private newestTickMs = 0;
+  private phase: ReadPhase = 'opening';
+  /** Set once nothing older will be asked for: the ticks ran out, or the budget is spent. */
+  private readEnded = false;
   private unsubscribe: (() => void) | undefined;
 
   constructor(private readonly deps: ChartTickBarsDeps) {}
@@ -113,13 +135,28 @@ export class ChartTickBars {
     if (!symbol || ticksPerBarOf(interval) === undefined) {
       return;
     }
-    this.walk = startTickWalk({ oldestMs: NO_OLDEST_INSTANT_MS, newestMs: this.readEndMs() });
-    this.pending = null;
-    this.heldTicks = [];
-    this.timeline = null;
-    this.emptyWindows = 0;
+    this.forgetRead();
     this.drawing = { symbol, interval };
+    this.walk = startTickWalk({ oldestMs: NO_OLDEST_INSTANT_MS, newestMs: this.readEndMs() });
     this.unsubscribe ??= this.deps.ticks.subscribe(CHART_TICKS_KEY, (answer) => this.readAnswer(answer));
+    this.requestOlderWindow();
+  }
+
+  /**
+   * Reads one page of ticks older than the ones the chart holds and puts the bars it builds in front of the
+   * chart's, which is what a scroll past the oldest bar asks for.
+   */
+  requestOlderTicks(): void {
+    if (this.drawing === null || this.timeline === null || this.pending !== null || this.readEnded) {
+      return;
+    }
+    this.phase = 'older';
+    if (this.budgetLeft() <= 0) {
+      this.endRead();
+      return;
+    }
+    this.emptyWindows = 0;
+    this.walk = startTickWalk({ oldestMs: NO_OLDEST_INSTANT_MS, newestMs: this.oldestTickMs });
     this.requestOlderWindow();
   }
 
@@ -142,17 +179,27 @@ export class ChartTickBars {
 
   /** Drops the read in flight and the bars it held, so the chart stops taking this interval's ticks. */
   stop(): void {
-    this.walk = null;
-    this.pending = null;
-    this.heldTicks = [];
-    this.timeline = null;
+    this.forgetRead();
     this.drawing = null;
-    this.emptyWindows = 0;
     this.unsubscribe?.();
     this.unsubscribe = undefined;
   }
 
-  /** Takes the answer to the window in flight and asks for the next older one. */
+  /** Forgets the ticks, bars and walk of the read, so the next page starts from nothing. */
+  private forgetRead(): void {
+    this.walk = null;
+    this.pending = null;
+    this.heldTicks = [];
+    this.oldestTicks = [];
+    this.heldTickCount = 0;
+    this.oldestTickMs = 0;
+    this.timeline = null;
+    this.emptyWindows = 0;
+    this.phase = 'opening';
+    this.readEnded = false;
+  }
+
+  /** Takes the answer to the window in flight and asks for the next older one while it can. */
   private readAnswer(answer: IndicatorTicksAnswer): void {
     const pending = this.pending;
     const walk = this.walk;
@@ -167,8 +214,7 @@ export class ChartTickBars {
     this.pending = null;
     if (answer.kind === 'unavailable') {
       // Nothing asks for these ticks again on its own: draw what the pages before it built.
-      this.walk = endedTickWalk(walk);
-      this.finish();
+      this.endRead();
       return;
     }
     if (!answer.complete) {
@@ -178,33 +224,87 @@ export class ChartTickBars {
       this.requestOlderWindow();
       return;
     }
-    if (answer.ticks.length === 0) {
-      this.emptyWindows += 1;
-      if (this.emptyWindows >= EMPTY_WINDOW_LIMIT) {
-        this.walk = endedTickWalk(walk);
-        this.finish();
-        return;
-      }
+    this.walk = coveredTickWalk(walk, pending);
+    this.heldTickCount += answer.ticks.length;
+    if (answer.ticks.length === 0 && this.spentEmptyWindows()) {
+      this.endRead();
+      return;
+    }
+    if (this.phase === 'older') {
+      this.takeOlderPage(answer.ticks, ticksPerBar);
+      return;
     }
     this.heldTicks = [...answer.ticks, ...this.heldTicks];
     this.timeline = tickBarTimeline(this.heldTicks, ticksPerBar);
-    this.walk = coveredTickWalk(walk, pending);
+    if (this.enoughBars()) {
+      this.drawOpeningBars();
+      return;
+    }
     this.requestOlderWindow();
   }
 
-  /** Asks for the walk's next older window, or draws the bars once the read has what it came for. */
+  /** Counts one more window that held no tick, and whether that is as many as a read walks through. */
+  private spentEmptyWindows(): boolean {
+    this.emptyWindows += 1;
+    return this.emptyWindows >= EMPTY_WINDOW_LIMIT;
+  }
+
+  /** Draws the bars the opening read built and keeps what an older page needs to join them. */
+  private drawOpeningBars(): void {
+    const drawing = this.drawing;
+    const ticksPerBar = ticksPerBarOf(drawing?.interval);
+    this.pending = null;
+    if (drawing === null || ticksPerBar === undefined) {
+      return;
+    }
+    const hold = heldTickBars(this.heldTicks, ticksPerBar);
+    this.oldestTicks = hold.oldestTicks;
+    this.oldestTickMs = this.heldTicks[0]?.timeMs ?? 0;
+    this.heldTicks = [];
+    if (hold.bars.length === 0) {
+      // A read that found no whole bar draws nothing and takes no live ticks either: the
+      // chart keeps showing the bars of the interval it showed before.
+      this.timeline = null;
+      return;
+    }
+    // Every bar holds the ticks its interval groups, so the next tick opens a bar of its own.
+    this.timeline = { bars: hold.bars, formingPrices: [] };
+    this.replaceHistory(drawing.symbol, drawing.interval, hold.bars);
+  }
+
+  /** Joins a page of older ticks to the chart's oldest bar and puts their bars in front of it. */
+  private takeOlderPage(olderTicks: readonly IndicatorTick[], ticksPerBar: number): void {
+    const timeline = this.timeline;
+    const chart = this.deps.chart.current;
+    if (timeline === null || chart === null) {
+      this.endRead();
+      return;
+    }
+    const hold = joinedTickBars(olderTicks, this.oldestTicks, ticksPerBar, timeline.bars[0].time);
+    this.oldestTicks = hold.oldestTicks;
+    this.oldestTickMs = olderTicks[0]?.timeMs ?? this.oldestTickMs;
+    if (hold.bars.length === 0) {
+      // The page holds fewer ticks than a bar groups: they wait for the next older window.
+      this.requestOlderWindow();
+      return;
+    }
+    this.timeline = { bars: [...hold.bars, ...timeline.bars], formingPrices: timeline.formingPrices };
+    chart.appendOlderHistory(hold.bars.map(candleOf), this.budgetLeft() > 0);
+    if (this.budgetLeft() <= 0) {
+      // The page in flight was the last one a chart may hold: nothing older is asked for again.
+      this.stopAsking();
+    }
+  }
+
+  /** Asks for the walk's next older window, or ends the read once there is none left to ask for. */
   private requestOlderWindow(): void {
     const walk = this.walk;
     if (walk === null) {
       return;
     }
-    if (this.enoughBars()) {
-      this.finish();
-      return;
-    }
-    const window = nextOlderTickWindow(walk, PAGE_TICKS, CHART_TICK_BUDGET - this.heldTicks.length);
+    const window = nextOlderTickWindow(walk, PAGE_TICKS, this.budgetLeft());
     if (window === null) {
-      this.finish();
+      this.endRead();
       return;
     }
     this.pending = window;
@@ -212,25 +312,32 @@ export class ChartTickBars {
     this.deps.ticks.request({ key: CHART_TICKS_KEY, fromMs, toMs, maxTicks });
   }
 
-  /** Whether the read holds what a chart opens with: a pane of bars, or its whole tick budget. */
+  /** Whether the read holds what a chart opens with: a pane of bars. */
   private enoughBars(): boolean {
-    return (this.timeline?.bars.length ?? 0) >= INITIAL_TICK_BARS || this.heldTicks.length >= CHART_TICK_BUDGET;
+    return (this.timeline?.bars.length ?? 0) >= INITIAL_TICK_BARS;
   }
 
-  /** Draws the bars the read built, then drops the raw ticks the timeline no longer needs. */
-  private finish(): void {
-    const drawing = this.drawing;
-    const timeline = this.timeline;
-    this.walk = null;
-    this.pending = null;
-    this.heldTicks = [];
-    if (drawing === null || timeline === null || timeline.bars.length === 0) {
-      // A read that found no ticks draws nothing and takes no live ticks either: the
-      // chart keeps showing the bars of the interval it showed before.
-      this.timeline = null;
+  /** The ticks the chart's read may still hold: the whole budget, less every page read so far. */
+  private budgetLeft(): number {
+    return CHART_TICK_BUDGET - this.heldTickCount;
+  }
+
+  /** Ends the read: what the opening found is drawn, and the chart's paging learns there is no more history. */
+  private endRead(): void {
+    const opening = this.phase === 'opening';
+    this.stopAsking();
+    if (opening) {
+      this.drawOpeningBars();
       return;
     }
-    this.replaceHistory(drawing.symbol, drawing.interval, timeline.bars);
+    this.deps.chart.current?.appendOlderHistory([], false);
+  }
+
+  /** Stops asking for ticks, so no page follows the one that ended the read. */
+  private stopAsking(): void {
+    this.walk = null;
+    this.pending = null;
+    this.readEnded = true;
   }
 
   /** Replaces the chart history with `bars`, exactly as an accepted MT5 snapshot replaces it. */

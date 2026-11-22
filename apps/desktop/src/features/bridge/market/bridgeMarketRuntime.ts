@@ -168,12 +168,16 @@ export function createBridgeMarketRuntime(
   const requestOlderHistory = (beforeMs: number) => {
     const symbol = currentSymbolRef.current;
     const timeframe = currentTimeframeRef.current;
-    const adapter = marketAdapterRef.current;
-    if (run.disposed || run.bridgeState !== 'connected' || !symbol || !timeframe || !adapter) {
+    if (run.disposed || run.bridgeState !== 'connected' || !symbol || !timeframe) {
       return;
     }
-    // A tick interval has no broker pages: its bars are read from ticks, never paged.
+    // A tick interval has no broker pages: its older bars are read from the symbol's older ticks.
     if (isTickInterval(timeframe)) {
+      tickBars.requestOlderTicks();
+      return;
+    }
+    const adapter = marketAdapterRef.current;
+    if (!adapter) {
       return;
     }
     const key = `${symbol}|${timeframe}`;

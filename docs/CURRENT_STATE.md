@@ -55,6 +55,22 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   the new symbol is requested on the last MT5 timeframe and its candles are dropped.
   A session that starts over (a disconnect, or another account) returns to the
   bridge's own window.
+- A tick interval reads time to the second: the time axis shows `HH:MM:SS` (the
+  library is asked to show seconds only while a tick interval is drawn, and in
+  broker time the axis writes its marks as the broker's own wall clock rather than
+  in the zone the library would read them in), and the crosshair's time label reads
+  the second the bar opened in, while every MT5 timeframe keeps the minute labels it
+  always had.
+- Scrolling left past the oldest tick bar reads older ticks through the same
+  `chart-ticks` route: one page of the negotiated bound for the range before the
+  oldest tick held, joined to the oldest bar the chart already draws so no bar but
+  the newest is short of the ticks its interval groups, then prepended through the
+  chart's own older-history seam (`appendOlderHistory`), which re-anchors the pane
+  as an MT5 page does. Ticks that do not yet fill a bar wait undrawn for the next
+  page. The read stops at the 1,000,000-tick budget, and asks for nothing more: it
+  hands the chart an empty, final page so the chart's paging latches the end of
+  history and a scroll cannot start a request loop. There is no history-limit
+  notice in the chart to reuse, so nothing is said on screen.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
 - Chart SL/TP clear chips remove the selected live level from positions or
@@ -365,8 +381,11 @@ Indicator values are display-only and never reach order, account or journal data
 
 Every indicator carries a Calculation section after its own inputs: the timeframe it is calculated
 on, and whether a chart bar waits for that timeframe to close. Chart, the default, calculates on the
-bars the chart draws; every MT5 timeframe can be chosen, above or below the chart's, and so can the
-four tick timeframes (1, 10, 100 and 1000 ticks). Another timeframe's candles are read through the
+bars the chart draws, a tick chart's N-tick bars included; every MT5 timeframe can be chosen, above or
+below the chart's, and so can the four tick timeframes (1, 10, 100 and 1000 ticks). A timeframe whose
+bars are shorter than a tick chart's own cannot be calculated on: every MT5 timeframe counts as longer
+than any tick interval, and the tick choices that group no more ticks than the chart's own bars are
+listed but disabled, with the reason. Another timeframe's candles are read through the
 read-only `request_indicator_series` route, keyed per indicator, so a lower timeframe is possible at
 all (an M5 chart reading M1) and a higher one gets the full depth a series grouped from the chart's
 own bars cannot reach. A higher timeframe's newest candles are projected onto the chart's bars as

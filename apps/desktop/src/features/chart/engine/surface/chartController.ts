@@ -477,6 +477,7 @@ export class ChartController {
 
   /** Brings everything that reads the bars up to date after they changed. */
   private afterBarsChanged(): void {
+    this.timeZoneDisplay.applyInterval(this.data.timeframe);
     this.ohlcReadout.refresh();
     this.refreshOverlays();
     this.scales.syncCountdown();
