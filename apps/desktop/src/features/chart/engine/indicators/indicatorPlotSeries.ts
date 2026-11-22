@@ -36,7 +36,7 @@ export function addPlotSeries(
   applyPriceFormat(series, precision);
   applyClosedBarsFloor(series, plot, rule, chart);
   attachMarkers(series, rule.markerShape, plot.color);
-  attachHandles(series, plot.color);
+  attachHandles(series);
   plotStyleRules.set(series, rule);
   return series;
 }
@@ -100,8 +100,8 @@ function attachMarkers(series: IndicatorPlotSeries, shape: IndicatorMarkerShape 
 }
 
 /** Gives `series` the handles its indicator shows while selected, recorded so removal can detach them. */
-function attachHandles(series: IndicatorPlotSeries, color: string): void {
-  const handles = new IndicatorPlotHandles(color);
+function attachHandles(series: IndicatorPlotSeries): void {
+  const handles = new IndicatorPlotHandles();
   series.attachPrimitive(handles);
   handlePrimitives.set(series, handles);
 }

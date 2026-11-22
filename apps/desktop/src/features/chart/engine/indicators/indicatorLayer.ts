@@ -56,7 +56,7 @@ export interface IndicatorLayerState {
   readonly paneHeight: number | null;
   /** Decimals its values are written with; null when the frame states none. */
   readonly precision: number | null;
-  /** Whether its plots paint the handle dots of the selected indicator. */
+  /** Whether its plots paint the selection handles of the selected indicator. */
   readonly selectionHandles: boolean;
   /**
    * The index its plots hold among the pane's series, which the library reports: the greater it is, the higher
@@ -157,7 +157,7 @@ const TOP_PAINT_ORDER = Number.MAX_SAFE_INTEGER;
  */
 export class IndicatorLayer {
   private readonly shown = new Map<string, Shown>();
-  /** The indicator the chart has selected; its plots paint the handle dots. */
+  /** The indicator the chart has selected; its plots paint the selection handles. */
   private selectedId: string | null = null;
   /** The indicators the app lists topmost first, as its last caller set them: the first paints over the rest. */
   private paintOrder: readonly string[] = [];
@@ -231,7 +231,7 @@ export class IndicatorLayer {
     shown.fillPrimitive?.setHidden(hidden);
   }
 
-  /** Draws the handle dots on the plots of `id`, and off those of the indicator selected before it. */
+  /** Draws the selection handles on the plots of `id`, and off those of the indicator selected before it. */
   setSelected(id: string | null): void {
     if (this.selectedId === id) {
       return;

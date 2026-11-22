@@ -7,17 +7,24 @@ import {
   type PrimitivePaneViewZOrder,
   type Time,
 } from 'lightweight-charts';
+import { palette } from '../../../../shared/theme/palette';
 import { ChartSeriesPrimitive } from '../surface/chartSeriesPrimitive';
 import type { RenderTarget } from '../surface/drawTarget';
 import { handleBarIndices } from './indicatorHandleIndices';
-import { handleRadius, handleRingWidth } from './indicatorHandles';
+import { handleRing } from './indicatorHandles';
 import { numericPointAt } from './indicatorSeriesValue';
 
-/** Handles paint over the line they mark, so a dot stays readable where the line crosses it. */
+/** Handles paint over the line they mark, so a ring stays readable where the line crosses it. */
 const HANDLE_VIEW_Z_ORDER: PrimitivePaneViewZOrder = 'top';
 
 /** The arc that traces a circle once round. */
 const FULL_CIRCLE_RADIANS = Math.PI * 2;
+
+/**
+ * How many times a handle's inside is filled with the pane background. The chart's background may
+ * carry an alpha, as the app's default one does; laid once, it would let the plot line tint the inside.
+ */
+const PANE_FILL_PASSES = 2;
 
 /** A position on the target: media (CSS) pixels until `bitmapPointOf` scales it. */
 interface HandlePosition {
@@ -25,10 +32,9 @@ interface HandlePosition {
   readonly y: number;
 }
 
-/** What every dot of one draw pass shares: the two colours and the ratios its positions scale by. */
+/** What every handle of one draw pass shares: the colour inside its ring and the ratios its position scales by. */
 interface HandlePaint {
-  readonly color: string;
-  readonly ringColor: string;
+  readonly paneColor: string;
   readonly horizontalPixelRatio: number;
   readonly verticalPixelRatio: number;
 }
@@ -39,10 +45,11 @@ function paneBackgroundColor(background: Background): string {
 }
 
 /**
- * Paints the handles of one selected plot: a filled dot in the plot's colour, ringed with the pane's
- * background, on every 10th visible bar and on the bar the plot's line ends on.
+ * Paints the handles of one selected plot: a hollow ring, 9 CSS pixels across and stroked in the
+ * selection blue, on every 10th visible bar and on the bar the plot's line ends on. The ring's inside
+ * is the pane background, so the line the handle marks does not show through it.
  *
- * Attached to the plot's own line series, so the dots share its scale and pane. It reads the series'
+ * Attached to the plot's own line series, so the rings share its scale and pane. It reads the series'
  * data on every draw, like the marker primitive, because the layer updates one series at a time and
  * the chart repaints after each.
  */
@@ -50,7 +57,7 @@ export class IndicatorPlotHandles extends ChartSeriesPrimitive {
   private readonly views: readonly IPrimitivePaneView[];
   private selected = false;
 
-  constructor(private readonly color: string) {
+  constructor() {
     super();
     // The view list is stable: the library caches views by array identity. An unselected plot hands
     // back no renderer, so its handles cost nothing until the indicator is selected.
@@ -71,7 +78,7 @@ export class IndicatorPlotHandles extends ChartSeriesPrimitive {
     return this.views;
   }
 
-  /** The dots of one draw pass; a hidden series paints none at all. */
+  /** The handles of one draw pass; a hidden series paints none at all. */
   private draw(target: RenderTarget): void {
     const chart = this.chart;
     const series = this.series;
@@ -82,25 +89,25 @@ export class IndicatorPlotHandles extends ChartSeriesPrimitive {
     if (range === null) {
       return;
     }
-    const dots = this.dotsIn(range);
-    if (dots.length === 0) {
+    const handles = this.handlesIn(range);
+    if (handles.length === 0) {
       return;
     }
-    const ringColor = paneBackgroundColor(chart.options().layout.background);
+    const paneColor = paneBackgroundColor(chart.options().layout.background);
     target.useBitmapCoordinateSpace(({ context, horizontalPixelRatio, verticalPixelRatio }) => {
-      paintDots(context, dots, { color: this.color, ringColor, horizontalPixelRatio, verticalPixelRatio });
+      paintHandles(context, handles, { paneColor, horizontalPixelRatio, verticalPixelRatio });
     });
   }
 
-  private dotsIn(range: LogicalRange): HandlePosition[] {
-    const dots: HandlePosition[] = [];
+  private handlesIn(range: LogicalRange): HandlePosition[] {
+    const handles: HandlePosition[] = [];
     for (const index of handleBarIndices(range, this.lastBarIndex())) {
-      const dot = this.dotAt(index);
-      if (dot !== null) {
-        dots.push(dot);
+      const handle = this.handleAt(index);
+      if (handle !== null) {
+        handles.push(handle);
       }
     }
-    return dots;
+    return handles;
   }
 
   /** The logical index of the bar the plot's last point sits on; null while the plot holds no point. */
@@ -120,8 +127,8 @@ export class IndicatorPlotHandles extends ChartSeriesPrimitive {
     return logical === null ? null : Math.round(logical);
   }
 
-  /** The dot of one bar: the point it plots, at the coordinate both axes give it; null where it has none. */
-  private dotAt(index: number): HandlePosition | null {
+  /** The handle of one bar: the point it plots, at the coordinate both axes give it; null where it has none. */
+  private handleAt(index: number): HandlePosition | null {
     const series = this.series;
     const x = this.chart?.timeScale().logicalToCoordinate(index as Logical) ?? null;
     const point = series === null ? null : numericPointAt(series, index);
@@ -130,15 +137,16 @@ export class IndicatorPlotHandles extends ChartSeriesPrimitive {
   }
 }
 
-/** Paints one ringed dot per handle: the background ring first, the plot's colour over it. */
-function paintDots(context: CanvasRenderingContext2D, dots: readonly HandlePosition[], paint: HandlePaint): void {
-  const radius = handleRadius(paint.horizontalPixelRatio);
-  const ringRadius = radius + handleRingWidth(paint.horizontalPixelRatio);
+/** Paints one ring per handle: the pane background inside it, then the selection blue round it. */
+function paintHandles(context: CanvasRenderingContext2D, handles: readonly HandlePosition[], paint: HandlePaint): void {
+  const ring = handleRing(paint.horizontalPixelRatio);
   context.save();
-  for (const dot of dots) {
-    const centre = bitmapPointOf(dot, paint);
-    fillCircle(context, centre, ringRadius, paint.ringColor);
-    fillCircle(context, centre, radius, paint.color);
+  context.strokeStyle = palette.selection;
+  context.lineWidth = ring.strokeWidth;
+  for (const handle of handles) {
+    const centre = bitmapPointOf(handle, paint);
+    fillDisc(context, centre, ring.fillRadius, paint.paneColor);
+    strokeCircle(context, centre, ring.strokeRadius);
   }
   context.restore();
 }
@@ -147,9 +155,21 @@ function bitmapPointOf(position: HandlePosition, paint: HandlePaint): HandlePosi
   return { x: position.x * paint.horizontalPixelRatio, y: position.y * paint.verticalPixelRatio };
 }
 
-function fillCircle(context: CanvasRenderingContext2D, centre: HandlePosition, radius: number, color: string): void {
+/** Fills a disc with the pane background, laid `PANE_FILL_PASSES` deep so an alpha in it shows no line. */
+function fillDisc(context: CanvasRenderingContext2D, centre: HandlePosition, radius: number, color: string): void {
   context.fillStyle = color;
+  traceCircle(context, centre, radius);
+  for (let pass = 0; pass < PANE_FILL_PASSES; pass += 1) {
+    context.fill();
+  }
+}
+
+function strokeCircle(context: CanvasRenderingContext2D, centre: HandlePosition, radius: number): void {
+  traceCircle(context, centre, radius);
+  context.stroke();
+}
+
+function traceCircle(context: CanvasRenderingContext2D, centre: HandlePosition, radius: number): void {
   context.beginPath();
   context.arc(centre.x, centre.y, radius, 0, FULL_CIRCLE_RADIANS);
-  context.fill();
 }
