@@ -6,11 +6,21 @@
 }
 
 .timeframe-favorites {
+  /* One width for every button of the row, 44px: a three-glyph MT5 label ('15m') fits inside it with the 8px side
+     paddings, and no label resizes its own button, so larger system text keeps the row's single width. */
+  --timeframe-button-width: 44px;
   display: flex;
   flex: 0 1 auto;
   flex-wrap: wrap;
   gap: 4px;
   min-width: 0;
+}
+
+/* A shown tick interval's label ('1000T', five glyphs and bold while it is the active one) needs more room: six
+   digit widths plus the button's 8px side paddings, in `ch` so it follows the text size the header is drawn with.
+   The whole row widens together and still wraps when the header is narrow. */
+.timeframe-favorites-tick {
+  --timeframe-button-width: calc(6ch + 16px);
 }
 
 /* Pre-handshake stand-in: same buttons, same wrapping, so the chart frame
@@ -32,12 +42,12 @@
   font-size: 12px;
 }
 
-/* One width for every button of the row: six digit widths, enough for the longest label ('1000T', five
-   glyphs and bold while it is the active one), plus the button's 8px side paddings. `ch` follows the text
-   size the header is drawn with, so no label resizes its own button and a narrow header still wraps the row. */
+/* A shared width, not a minimum: a button sized by its own label would be wider than its shorter neighbours. The
+   zero minimum stops a long label from widening its button, so all of them stay the same size. */
 .timeframe-favorites button {
   flex: 0 0 auto;
-  min-width: calc(6ch + 16px);
+  width: var(--timeframe-button-width);
+  min-width: 0;
 }
 
 .timeframe-chevron {

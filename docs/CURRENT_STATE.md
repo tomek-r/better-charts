@@ -229,8 +229,8 @@ Not implemented: break even or multiple charts.
   layer), not on the chart frame. The session, reconciliation and
   dispatch gates are untouched, and the app never retries on its own.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
-  avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths (a
-  tick interval's longer label, `1000T`, sets its own).
+  avoid overlap/axis-width shifts; timeframe buttons share one 44 px width, and
+  a shown tick interval's longer label (`1000T`) widens the whole row together.
 - Live P&L right-aligns within the widest amount observed per position, expanding
   only as needed and resetting on removal; units/RR stay in place. Overlapping
   trading rows spread vertically without connector brackets; close buttons follow

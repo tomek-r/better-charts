@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
-import { TICK_INTERVALS, intervalLabel } from '../../../shared/bridge/chartIntervals';
+import { TICK_INTERVALS, intervalLabel, isTickInterval } from '../../../shared/bridge/chartIntervals';
 import { CaretIcon } from '../../../shared/ui/icons/CaretIcon';
 import { useBridgeActions } from '../../bridge/BridgeSessionProvider';
 import { useBridgeChartState, useBridgeConnection } from '../../bridge/bridgeSelectors';
@@ -32,6 +32,12 @@ function useDismiss(open: boolean, anchor: React.RefObject<HTMLElement | null>, 
   }, [open, anchor, close]);
 }
 
+/** The row's buttons share one width; a shown tick interval's longer label ('1000T') widens all of them. */
+function favoritesRowClass(options: readonly { wire: string }[]): string {
+  const showsTickInterval = options.some((option) => isTickInterval(option.wire));
+  return showsTickInterval ? 'timeframe-favorites timeframe-favorites-tick' : 'timeframe-favorites';
+}
+
 export function ChartTimeframes() {
   const { symbol, timeframe, symbolLoading } = useBridgeChartState();
   const { status } = useBridgeConnection();
@@ -57,16 +63,15 @@ export function ChartTimeframes() {
     // supportedTimeframes arrives with the handshake. Reserve the exact rows the
     // buttons will occupy (they wrap with the viewport width) using the same
     // buttons and styles, so no breakpoint-specific height can drift.
+    const reserved = [...tickOptions, ...timeframeOptions].filter((option) => favorites.includes(option.wire));
     return (
       <div className="timeframe-tabs placeholder" aria-hidden="true">
-        <div className="timeframe-favorites">
-          {[...tickOptions, ...timeframeOptions]
-            .filter((option) => favorites.includes(option.wire))
-            .map((option) => (
-              <button key={option.wire} disabled tabIndex={-1}>
-                {intervalLabel(option.wire)}
-              </button>
-            ))}
+        <div className={favoritesRowClass(reserved)}>
+          {reserved.map((option) => (
+            <button key={option.wire} disabled tabIndex={-1}>
+              {intervalLabel(option.wire)}
+            </button>
+          ))}
         </div>
         <button className="timeframe-chevron" disabled tabIndex={-1}>
           <CaretIcon className="timeframe-caret" />
@@ -86,7 +91,7 @@ export function ChartTimeframes() {
 
   return (
     <div className="timeframe-tabs">
-      <div className="timeframe-favorites" role="group" aria-label="Chart timeframe">
+      <div className={favoritesRowClass(shown)} role="group" aria-label="Chart timeframe">
         {shown.map((option) => {
           const isActive = timeframe === option.wire;
           return (
