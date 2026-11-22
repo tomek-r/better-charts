@@ -1,12 +1,19 @@
 import { OBJECT_SETTINGS_ICON_PATHS } from '../../../../shared/ui/icons/objectSettingsIcon';
 import type { IndicatorLegendValue, IndicatorPaneHeight } from '../indicators/indicatorLayer';
-import { INDICATOR_SETTINGS_LABEL, INDICATOR_VISIBILITY_LABELS, REMOVE_INDICATOR_LABEL } from './indicatorLegendLabels';
+import {
+  INDICATOR_MORE_ACTIONS_LABEL,
+  INDICATOR_SETTINGS_LABEL,
+  INDICATOR_VISIBILITY_LABELS,
+  REMOVE_INDICATOR_LABEL,
+} from './indicatorLegendLabels';
 
 /** One attached indicator's legend line: its words for the settings, then its plot values. */
 export interface IndicatorLegendRow {
   readonly instanceId: string;
   readonly title: string;
   readonly hidden: boolean;
+  /** Whether the user selected this indicator, which keeps its row framed and its buttons in sight. */
+  readonly selected: boolean;
   /** Decimals its values are written with; null writes them with the chart's price precision. */
   readonly digits: number | null;
   readonly values: readonly IndicatorLegendValue[];
@@ -19,6 +26,11 @@ export interface IndicatorLegendCommands {
   openSettings(instanceId: string): void;
   setHidden(instanceId: string, hidden: boolean): void;
   remove(instanceId: string): void;
+  /**
+   * Opens the indicator's actions menu under the row `anchor` button, which gives the menu its place and takes
+   * the focus back as the menu closes.
+   */
+  openActionsMenu(instanceId: string, anchor: HTMLElement): void;
   /**
    * Saves the pane heights the user dragged the separators to, each relative to the price pane; the app
    * stores them with the indicators they belong to, so a chart opened again restores them.
@@ -85,6 +97,10 @@ const EYE_OFF_PATHS = [...EYE_PATHS, 'M2 10L10 2'];
 const GEAR_VIEW_BOX = '0 0 24 24';
 const GEAR_PATHS = OBJECT_SETTINGS_ICON_PATHS;
 const TRASH_PATHS = ['M2 3h8', 'M4.5 3V2h3v1', 'M3 3l.5 7.5h5L9 3', 'M5 5v4M7 5v4'];
+/** The three dots of the More button, which are filled rather than stroked like the row's other icons. */
+const MORE_DOT_XS = [3, 6, 9];
+const MORE_DOT_Y = 6;
+const MORE_DOT_RADIUS = 1;
 
 function createElementWithClass<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -112,15 +128,35 @@ function createIconPath(d: string): SVGPathElement {
   return path;
 }
 
-/** A row button: an icon whose label is spoken and shown on hover. */
-function createActionButton(label: string, icon: SVGSVGElement, clicked: () => void): HTMLButtonElement {
+function createMoreDot(x: number): SVGCircleElement {
+  const dot = document.createElementNS(SVG_NAMESPACE, 'circle');
+  dot.setAttribute('cx', String(x));
+  dot.setAttribute('cy', String(MORE_DOT_Y));
+  dot.setAttribute('r', String(MORE_DOT_RADIUS));
+  dot.setAttribute('fill', 'currentColor');
+  return dot;
+}
+
+/** The More icon: the row's icon box holding three filled dots. */
+function createMoreIcon(): SVGSVGElement {
+  const icon = createIcon(ACTION_ICON_CLASS, ICON_VIEW_BOX, []);
+  icon.append(...MORE_DOT_XS.map(createMoreDot));
+  return icon;
+}
+
+/** A row button: an icon whose label is spoken and shown on hover, which the button hands to the command. */
+function createActionButton(
+  label: string,
+  icon: SVGSVGElement,
+  clicked: (button: HTMLButtonElement) => void,
+): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = ACTION_CLASS;
   button.setAttribute('aria-label', label);
   button.title = label;
   button.append(icon);
-  button.addEventListener('click', clicked);
+  button.addEventListener('click', () => clicked(button));
   return button;
 }
 
@@ -147,6 +183,15 @@ function placeInHost(element: HTMLDivElement, host: HTMLElement): void {
   if (element.parentElement !== host) {
     host.append(element);
   }
+}
+
+/** Marks the row with a bare attribute the stylesheet selects on, and drops the attribute when it is off. */
+function applyRowFlag(element: HTMLDivElement, name: 'hidden' | 'selected', on: boolean): void {
+  if (on) {
+    element.dataset[name] = 'true';
+    return;
+  }
+  delete element.dataset[name];
 }
 
 /**
@@ -255,8 +300,12 @@ export class IndicatorLegend {
       createIcon(ACTION_ICON_CLASS, ICON_VIEW_BOX, TRASH_PATHS),
       () => this.commands.remove(instanceId),
     );
+    const more = createActionButton(INDICATOR_MORE_ACTIONS_LABEL, createMoreIcon(), (button) =>
+      this.commands.openActionsMenu(instanceId, button),
+    );
+    more.setAttribute('aria-haspopup', 'menu');
     const actions = createElementWithClass('span', ACTIONS_CLASS);
-    actions.append(visibility, settings, remove);
+    actions.append(visibility, settings, remove, more);
     const values = createElementWithClass('span', VALUES_CLASS);
     element.append(title, actions, values);
     return { element, title, visibilityIcon, visibility, values, hidden: false };
@@ -265,11 +314,8 @@ export class IndicatorLegend {
   private applyRow(view: RowView, row: IndicatorLegendRow): void {
     view.hidden = row.hidden;
     view.title.textContent = row.title;
-    if (row.hidden) {
-      view.element.dataset.hidden = 'true';
-    } else {
-      delete view.element.dataset.hidden;
-    }
+    applyRowFlag(view.element, 'hidden', row.hidden);
+    applyRowFlag(view.element, 'selected', row.selected);
     this.applyVisibilityButton(view);
     this.applyValues(view, row);
   }

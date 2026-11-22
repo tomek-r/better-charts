@@ -32,6 +32,8 @@ export class BarStyleSeries {
   /** The style the series in place draws, which decides whether it can be repainted or must be replaced. */
   private drawnStyle: DrawnBarStyleAppearance['style'] | null = null;
   private priceDigits = 2;
+  /** Whether the bars are hidden, which the series holds as its own `visible` option. */
+  private barsHidden = false;
   /** The Heikin Ashi bars written so far, which every bar of that style chains on. */
   private readonly heikinAshiChain = new HeikinAshiChain();
   /** The baseline's level, carried by the baseline series as its primitive. */
@@ -113,6 +115,18 @@ export class BarStyleSeries {
     this.drawSeries();
   }
 
+  /**
+   * Hides the bars this series draws, or shows them again. The series keeps its points, so showing it
+   * again paints the bars it already holds, and the baseline's level leaves and comes back with it.
+   */
+  setHidden(hidden: boolean): void {
+    if (hidden === this.barsHidden) {
+      return;
+    }
+    this.barsHidden = hidden;
+    this.applyBarsHidden();
+  }
+
   /** The series as the test hook shows it, every value a plain copy or a library scalar. */
   state(): BarStyleSeriesState {
     return {
@@ -150,6 +164,14 @@ export class BarStyleSeries {
     this.options = drawn.options;
     this.drawnStyle = appearance.style;
     this.syncBaselineLevel(drawn.series, appearance);
+    // A series added again for another style starts visible, so the bars' own state is applied to it.
+    this.applyBarsHidden();
+  }
+
+  /** Writes whether the bars are hidden into the series' options, and into the copy the test hook reads. */
+  private applyBarsHidden(): void {
+    this.options = { ...this.options, visible: !this.barsHidden };
+    this.series?.applyOptions({ visible: !this.barsHidden });
   }
 
   /** The series in place when it can repaint in the appearance's style, and none when it has to be replaced. */

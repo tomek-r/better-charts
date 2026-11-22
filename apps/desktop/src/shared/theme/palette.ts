@@ -16,7 +16,7 @@
  *   surface/border contrast.
  * - index.html's pre-paint background must match `root`.
  * - Values asserted by e2e (`#f7525f`, `#26a69a`, `#ffd200`, `#f2f5fa`,
- *   `#c4c9d0`, `#121923`) are canonical for their family and never drift.
+ *   `#c4c9d0`, `#121923`, `#2962ff`) are canonical for their family and never drift.
  */
 export const palette = {
   // Neutrals: page, wells, surfaces, raised fills
@@ -62,6 +62,8 @@ export const palette = {
   info: '#77a7ff',
   infoWash: '#77a7ff55',
   infoClear: '#77a7ff00',
+  // Selection: TradingView's blue, the stroke of a selected indicator's plot handles
+  selection: '#2962ff',
 
   // Sell / danger: red
   sell: '#f7525f',

@@ -1,16 +1,33 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
 import { indicatorLegendTitle } from '../src/features/indicators/indicatorLegendTitle';
+import {
+  INDICATOR_ACTION_LABELS,
+  OWN_PANE_VISUAL_ORDER_TITLE,
+  REMOVE_SHORTCUT_HINT,
+} from '../src/features/indicators/indicatorActionsMenu/indicatorActionsMenuLabels';
+import { visualOrderTargets } from '../src/features/indicators/indicatorActionsMenu/indicatorVisualOrder';
 import { rsiPlugin } from '../src/features/indicators/rsi/rsiPlugin';
 import { smaPlugin } from '../src/features/indicators/sma/smaPlugin';
 import { palette } from '../src/shared/theme/palette';
 import { OBJECT_SETTINGS_ICON_PATHS } from '../src/shared/ui/icons/objectSettingsIcon';
 import { CHART_HOST_SELECTOR, RESIZE_HANDLE_SELECTOR, paneSeparatorCenter } from './helpers/chartHost';
 import { openChartSettingsTab } from './helpers/chartSettingsDialog';
+import { rgbText } from './helpers/cssColor';
+import {
+  actionsMenuRow,
+  indicatorActionsMenu,
+  legendMoreButton,
+  openLegendActionsMenu,
+  openVisualOrderSubmenu,
+  pickVisualOrder,
+  removeRow,
+} from './helpers/indicatorActionsMenu';
+import { legendRowNamed, smaSettingsDialog } from './helpers/indicatorObjectTree';
+import { expectPaintedOnTop, savedIndicatorOrder } from './helpers/indicatorOrder';
 import { attachedIndicators, attachSma } from './helpers/indicatorsDialog';
 import { failOnPageNoise } from './helpers/pageNoise';
 import { openChart } from './helpers/openChart';
-import { parseHexColor } from './helpers/pngPixels';
 import { EURUSD_CHART, openWithSavedIndicators } from './helpers/savedIndicators';
 import { savedOverrides } from './helpers/savedOverrides';
 import { gotoWithStub } from './helpers/tauriStub';
@@ -44,7 +61,7 @@ const RSI_INSTANCE_ID = 'rsi-1';
 const PRICE_SCALE_MIN_WIDTH = 70;
 const TRANSPARENT_COLOR = 'rgba(0, 0, 0, 0)';
 /** The white a row's action icons are drawn in, whatever the row's text colour is. */
-const WHITE_ICON_COLOR = rgbOf(palette.textBright);
+const WHITE_ICON_COLOR = rgbText(palette.textBright);
 /** The app's own hover band on that separator, drawn over the pane's width instead. */
 const SEPARATOR_BAND_SELECTOR = '.chart-pane-separator-band';
 /** The label of the stored checkbox the Status line tab draws no row for. */
@@ -53,12 +70,33 @@ const INDICATOR_LEGEND_COLLAPSED_LABEL = 'Indicator legend collapsed';
 const HIDDEN_SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {}, hidden: true };
 /** A saved SMA a collapsed legend counts. */
 const SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {} };
-
-/** A palette hex colour written the way `toHaveCSS` reports a computed colour. */
-function rgbOf(hex: string): string {
-  const [red, green, blue] = parseHexColor(hex);
-  return `rgb(${red}, ${green}, ${blue})`;
-}
+/** A second price-pane indicator, so that one of them can move in front of or behind the other. */
+const EMA_ENTRY = { instanceId: 'ema-1', definitionId: 'ema', settings: {} };
+const SMA_INSTANCE_ID = 'sma-1';
+const EMA_INSTANCE_ID = 'ema-1';
+const EMA_9_CLOSE = 'EMA 9 close';
+/** A third price-pane indicator, so one of them has a plot on either side of it in the paint order. */
+const BOLLINGER_ENTRY = { instanceId: 'bb-1', definitionId: 'bb', settings: {} };
+const BOLLINGER_INSTANCE_ID = 'bb-1';
+/** A saved indicator with a pane of its own, which has no paint order among the price pane's plots. */
+const RSI_ENTRY = { instanceId: RSI_INSTANCE_ID, definitionId: RSI_DEFINITION_ID, settings: {} };
+/** The tab the indicator's Visibility settings live on. */
+const VISIBILITY_TAB = 'Visibility';
+/** The words of a menu row, which stand to the right of its icon's column. */
+const MENU_ROW_LABEL_SELECTOR = '.chart-context-menu-label';
+/** The column a menu row's command icon sits in, which a row without one leaves empty. */
+const MENU_ICON_SLOT_SELECTOR = '.indicator-actions-menu-icon';
+/** The shortcut a menu row names at its far end, in the muted colour of the menus' hints. */
+const MENU_SHORTCUT_SELECTOR = 'kbd';
+const MUTED_TEXT_COLOR = rgbText(palette.muted);
+const OBJECT_TREE_DRAWER_SELECTOR = 'aside[aria-label="Object tree"]';
+/** The paint-order commands, in the order the submenu offers them. */
+const VISUAL_ORDER_COMMAND_LABELS = [
+  INDICATOR_ACTION_LABELS.bringToFront,
+  INDICATOR_ACTION_LABELS.sendToBack,
+  INDICATOR_ACTION_LABELS.bringForward,
+  INDICATOR_ACTION_LABELS.sendBackward,
+];
 
 /** The legend an indicator holding a pane of its own shows its row in. */
 function paneLegend(page: Page): Locator {
@@ -106,6 +144,16 @@ async function openWithCollapsedLegend(page: Page): Promise<void> {
   const overrides = { statusLine: { indicatorLegendCollapsed: true }, indicators: [SMA_ENTRY] };
   await gotoWithStub(page, { chartSettingOverrides: { [EURUSD_CHART]: overrides } });
   await openChart(page);
+}
+
+/** Whether each of `rows` is greyed out, in the order the menu draws them; a row without the attribute reads null. */
+function disabledStates(rows: Locator): Promise<Array<string | null>> {
+  return rows.evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-disabled')));
+}
+
+/** Waits for the open paint-order submenu to offer the four commands, in the reference's order. */
+async function expectVisualOrderCommands(submenu: Locator): Promise<void> {
+  await expect(submenu.locator(MENU_ROW_LABEL_SELECTOR)).toHaveText(VISUAL_ORDER_COMMAND_LABELS);
 }
 
 test.describe('indicator legend', () => {
@@ -405,6 +453,184 @@ test.describe('saved collapsed indicator legend', () => {
   });
 });
 
+test.describe('indicator actions menu', () => {
+  failOnPageNoise();
+
+  test.beforeEach(async ({ page }) => {
+    await openWithSavedIndicators(page, [SMA_ENTRY, EMA_ENTRY]);
+  });
+
+  test('the More button opens a menu with the indicator commands, in order', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+
+    await expect(menu.getByRole('menuitem').locator(MENU_ROW_LABEL_SELECTOR)).toHaveText([
+      INDICATOR_ACTION_LABELS.visualOrder,
+      INDICATOR_ACTION_LABELS.visibilityOnIntervals,
+      INDICATOR_ACTION_LABELS.hide,
+      INDICATOR_ACTION_LABELS.remove,
+      INDICATOR_ACTION_LABELS.objectTree,
+      INDICATOR_ACTION_LABELS.settings,
+    ]);
+  });
+
+  test('the command rows draw their icons, and every row starts its words at the same place', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    const rowsWithIcon = [
+      actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visualOrder),
+      actionsMenuRow(menu, INDICATOR_ACTION_LABELS.hide),
+      removeRow(menu),
+      actionsMenuRow(menu, INDICATOR_ACTION_LABELS.settings),
+    ];
+    const rowsWithoutIcon = [
+      actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visibilityOnIntervals),
+      actionsMenuRow(menu, INDICATOR_ACTION_LABELS.objectTree),
+    ];
+
+    for (const row of rowsWithIcon) {
+      await expect(row.locator(`${MENU_ICON_SLOT_SELECTOR} svg`)).toHaveAttribute('aria-hidden', 'true');
+    }
+    for (const row of rowsWithoutIcon) {
+      await expect(row.locator(`${MENU_ICON_SLOT_SELECTOR} svg`)).toHaveCount(0);
+    }
+
+    const labelLefts = await menu
+      .locator(MENU_ROW_LABEL_SELECTOR)
+      .evaluateAll((labels) => labels.map((label) => label.getBoundingClientRect().left));
+    expect(new Set(labelLefts).size).toBe(1);
+  });
+
+  test('Remove names the key that removes the selected indicator', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    const shortcut = removeRow(menu).locator(MENU_SHORTCUT_SELECTOR);
+
+    await expect(shortcut).toHaveText(REMOVE_SHORTCUT_HINT);
+    await expect(shortcut).toHaveCSS('color', MUTED_TEXT_COLOR);
+  });
+
+  test('the Object tree row opens the Object tree drawer from its own section', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    const objectTreeRow = actionsMenuRow(menu, INDICATOR_ACTION_LABELS.objectTree);
+    const separatedFromTheRowsAroundIt = await objectTreeRow.evaluate(
+      (row) => row.previousElementSibling?.getAttribute('role') === 'separator',
+    );
+    expect(separatedFromTheRowsAroundIt).toBe(true);
+
+    await objectTreeRow.click();
+
+    const drawer = page.locator(OBJECT_TREE_DRAWER_SELECTOR);
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole('heading', { name: INDICATOR_ACTION_LABELS.objectTree })).toBeVisible();
+    await expect(menu).toBeHidden();
+  });
+
+  test('Visual order greys out the commands that would leave the order as it is', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, EMA_9_CLOSE));
+    const submenu = await openVisualOrderSubmenu(menu);
+    await expectVisualOrderCommands(submenu);
+
+    // The EMA is the last of the pane's two plots: it can move toward the front only.
+    expect(await disabledStates(submenu.getByRole('menuitem'))).toEqual(['false', 'true', 'false', 'true']);
+  });
+
+  test('Bring to front saves the order and paints the indicator over the other one', async ({ page }) => {
+    await expect.poll(() => savedIndicatorOrder(page)).toEqual([SMA_INSTANCE_ID, EMA_INSTANCE_ID]);
+
+    await pickVisualOrder(page, EMA_9_CLOSE, INDICATOR_ACTION_LABELS.bringToFront);
+    await expectPaintedOnTop(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID);
+  });
+
+  test('Send to back saves the order and paints the other indicator over it', async ({ page }) => {
+    await pickVisualOrder(page, SMA_ROW_TEXT, INDICATOR_ACTION_LABELS.sendToBack);
+    await expectPaintedOnTop(page, EMA_INSTANCE_ID, SMA_INSTANCE_ID);
+  });
+
+  test('Visibility on intervals opens the settings dialog on its Visibility tab', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+
+    await actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visibilityOnIntervals).click();
+
+    const dialog = smaSettingsDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('tab', { name: VISIBILITY_TAB, exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  test('Hide hides the indicator from the menu, and the menu then offers Show', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    await actionsMenuRow(menu, INDICATOR_ACTION_LABELS.hide).click();
+
+    await expect.poll(async () => (await attachedIndicators(page))[0]?.hidden).toBe(true);
+    await expect(indicatorActionsMenu(page)).toBeHidden();
+
+    const reopened = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    await actionsMenuRow(reopened, INDICATOR_ACTION_LABELS.show).click();
+
+    await expect.poll(async () => (await attachedIndicators(page))[0]?.hidden).toBe(false);
+  });
+
+  test('Remove detaches the indicator from the menu', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    await removeRow(menu).click();
+
+    await expect.poll(async () => (await attachedIndicators(page)).length).toBe(1);
+    await expect(page.getByLabel(INDICATOR_LEGEND_LABEL, { exact: true })).not.toContainText(SMA_ROW_TEXT);
+  });
+
+  test('Escape closes the menu and gives the focus back to the More button', async ({ page }) => {
+    const row = legendRowNamed(page, SMA_ROW_TEXT);
+    const menu = await openLegendActionsMenu(row);
+
+    await page.keyboard.press('Escape');
+
+    await expect(menu).toBeHidden();
+    await expect(legendMoreButton(row)).toBeFocused();
+  });
+
+  test('a press outside the menu closes it', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+
+    await page.locator(CHART_HOST_SELECTOR).click({ position: { x: 600, y: 120 } });
+
+    await expect(menu).toBeHidden();
+  });
+
+  test('the arrow keys walk the menu rows', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    // The menu opens on its first row, and the keys move one row at a time, wrapping at the ends.
+    await expect(actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visualOrder)).toBeFocused();
+
+    await page.keyboard.press('ArrowDown');
+
+    await expect(actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visibilityOnIntervals)).toBeFocused();
+  });
+});
+
+test.describe('own-pane indicator actions menu', () => {
+  failOnPageNoise();
+
+  test.beforeEach(async ({ page }) => {
+    await openWithSavedIndicators(page, [RSI_ENTRY]);
+  });
+
+  test('Visual order stays enabled while each of its commands is greyed out and says why', async ({ page }) => {
+    const menu = await openLegendActionsMenu(paneLegend(page).locator(ROW_SELECTOR).first());
+    const visualOrder = actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visualOrder);
+    await expect(visualOrder).not.toHaveAttribute('aria-disabled', 'true');
+
+    const submenu = await openVisualOrderSubmenu(menu);
+    const commands = submenu.getByRole('menuitem');
+    await expectVisualOrderCommands(submenu);
+    expect(await disabledStates(commands)).toEqual(['true', 'true', 'true', 'true']);
+    await expect(commands.first()).toHaveAttribute('title', OWN_PANE_VISUAL_ORDER_TITLE);
+
+    // Playwright treats an aria-disabled row as unclickable, so the press is forced: it must still move nothing.
+    await actionsMenuRow(submenu, INDICATOR_ACTION_LABELS.bringToFront).click({ force: true });
+    await expect.poll(async () => (await attachedIndicators(page)).length).toBe(1);
+  });
+});
+
 test('indicatorLegendTitle words a known indicator with its input values', () => {
   const settings = resolveSettingValues(smaPlugin, { length: 20 });
 
@@ -413,4 +639,28 @@ test('indicatorLegendTitle words a known indicator with its input values', () =>
 
 test('indicatorLegendTitle reads an unregistered definition as its id', () => {
   expect(indicatorLegendTitle('unknown-indicator', {})).toBe('unknown-indicator');
+});
+
+test('visualOrderTargets names the row each paint-order command moves to', () => {
+  const saved = [EMA_ENTRY, SMA_ENTRY, BOLLINGER_ENTRY];
+
+  expect(visualOrderTargets(saved, SMA_INSTANCE_ID)).toEqual({
+    frontInstanceId: EMA_INSTANCE_ID,
+    forwardInstanceId: EMA_INSTANCE_ID,
+    backwardInstanceId: BOLLINGER_INSTANCE_ID,
+    backInstanceId: BOLLINGER_INSTANCE_ID,
+  });
+});
+
+test('visualOrderTargets leaves the commands that would not change the order with no row', () => {
+  expect(visualOrderTargets([SMA_ENTRY, EMA_ENTRY], EMA_INSTANCE_ID)).toEqual({
+    frontInstanceId: SMA_INSTANCE_ID,
+    forwardInstanceId: SMA_INSTANCE_ID,
+    backwardInstanceId: undefined,
+    backInstanceId: undefined,
+  });
+});
+
+test('visualOrderTargets gives an indicator with a pane of its own no paint order', () => {
+  expect(visualOrderTargets([SMA_ENTRY, RSI_ENTRY], RSI_INSTANCE_ID)).toBeUndefined();
 });

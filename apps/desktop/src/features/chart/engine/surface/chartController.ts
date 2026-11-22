@@ -4,6 +4,7 @@ import type { RenderBar } from '../bars/renderBar';
 import type { ChartOverlayState } from './buildChartPlugins';
 import type { RenderViewport } from './overlayRenderer';
 import { createChartSurface } from './chartSurface';
+import { ChartCursor } from './chartCursor';
 import type { ChartAppearance, ChartSizedLineAppearance } from './chartAppearance';
 import type { ChartScalesAppearance, ChartScalesState } from './chartScalesAppearance';
 import { ChartScalesPresenter } from './chartScalesPresenter';
@@ -38,6 +39,7 @@ import { ChartHistory, type ReplaceHistoryOptions } from './chartHistory';
 import type { IndicatorLayer } from '../indicators/indicatorLayer';
 import type { IndicatorRuntime } from '../indicators/indicatorRuntime';
 import { ChartIndicators } from '../indicators/chartIndicators';
+import { IndicatorSelection } from '../indicators/indicatorSelection';
 import type { IndicatorLegendCommands } from '../legend/indicatorLegend';
 import { LiveBarController } from './liveBarController';
 import { PointerCandleHold } from '../bars/pointerCandleHold';
@@ -89,12 +91,16 @@ export class ChartController {
   private readonly history: ChartHistory;
   /** Selection, user commands and saved records of the chart's drawings. */
   readonly drawings: ChartDrawings;
+  /** The indicator the user has selected, if any: the chart selects one object at a time. */
+  readonly indicatorSelection: IndicatorSelection;
   /** The indicators drawn on the price pane, each from the frames its producer hands over. */
   readonly indicatorLayer: IndicatorLayer;
   /** The indicators attached to the chart: each loads on a new history and follows the live bar. */
   readonly indicators: IndicatorRuntime;
   /** The layer, the runtime and the legend above, owned and torn down as one unit. */
   private readonly chartIndicators: ChartIndicators;
+  /** The pane's cursor: the pointer over a plot line, or the active tool's own. */
+  private readonly cursor: ChartCursor;
   onToolRelease?: () => void;
 
   /** The app's commands for the legend's row buttons; null while none is mounted. */
@@ -110,15 +116,22 @@ export class ChartController {
     const { chart, candles, future } = createChartSurface(host);
     this.chart = chart;
     this.candles = candles;
+    // The tool set is built further down, so the cursor asks it for the active tool only when it paints.
+    this.cursor = new ChartCursor(host, () => this.tools.isPlacementToolActive());
     this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointerReadout, this.brokerTime);
     this.data = new BarSeriesController(this.candles, this.chart);
     const { toolDefinitions, defaultToolId, indicatorDefinitions, indicatorLegendTitle, ...hostOptions } = options;
+    // The drawings are built further down, so the selection reaches them when it clears them, not before.
+    this.indicatorSelection = new IndicatorSelection(() => this.drawings.clearSelection());
     this.chartIndicators = new ChartIndicators(this.chart, host, {
       definitions: indicatorDefinitions,
       legendTitle: indicatorLegendTitle,
       bars: () => this.bars,
       digits: () => this.data.pricePrecision,
       priceSeries: this.candles,
+      selection: this.indicatorSelection,
+      drawingSelected: () => this.drawings.selected() !== null,
+      plotHoverChanged: (overPlot) => this.cursor.setOverPlot(overPlot),
     });
     this.indicatorLayer = this.chartIndicators.layer;
     this.indicators = this.chartIndicators.runtime;
@@ -149,10 +162,11 @@ export class ChartController {
       },
     };
     this.tools = new ChartToolSet(toolDefinitions, defaultToolId, toolHost, {
-      cursorChanged: (cursor) => {
-        this.host.style.cursor = cursor ?? '';
+      cursorChanged: (toolCursor) => this.cursor.setToolCursor(toolCursor),
+      selectionChanged: (selection) => {
+        this.drawings.selectionChanged(selection);
+        this.indicatorSelection.drawingSelected(selection);
       },
-      selectionChanged: (selection) => this.drawings.selectionChanged(selection),
       drawingsChanged: () => this.drawings.drawingsChanged(),
     });
     this.toolInput = this.tools;
@@ -301,6 +315,17 @@ export class ChartController {
     this.data.setBarStyle(appearance);
     this.ohlcReadout.refresh();
     this.refreshOverlays();
+  }
+  /**
+   * Hides the price bars from the chart, or shows them again, as the object tree's bars row asks: the
+   * candles, or the series that draws another bar style, stop painting while the drawings and the
+   * indicators keep drawing.
+   */
+  setPriceBarsHidden(hidden: boolean): void {
+    if (this.removed) {
+      return;
+    }
+    this.data.setBarsHidden(hidden);
   }
   /**
    * Paints the chart itself with the Canvas tab's settings: background, both grids, scale text and

@@ -9,6 +9,7 @@ import { DrawingSettingsProvider } from '../tools/drawingSettings/DrawingSetting
 import { DrawingToolsView } from '../tools/DrawingToolsView';
 import { ExecutionProvider } from '../execution/ExecutionProvider';
 import { IndicatorSettingsProvider } from '../indicators/IndicatorSettingsProvider';
+import { IndicatorActionsMenuProvider } from '../indicators/indicatorActionsMenu/IndicatorActionsMenuProvider';
 import { ObjectTreeDrawer } from '../object-tree/ObjectTreeDrawer';
 import { OrderTicketPanel } from '../order-ticket/OrderTicketPanel';
 import { OrderTicketProvider } from '../order-ticket/OrderTicketProvider';
@@ -36,8 +37,10 @@ export function AppWorkspaceView() {
                 {/* One settings dialog each for the chart's drawings and its indicators, shared the same way. */}
                 <DrawingSettingsProvider>
                   <IndicatorSettingsProvider>
-                    <ChartWorkspaceView />
-                    <ObjectTreeDrawer />
+                    <IndicatorActionsMenuProvider>
+                      <ChartWorkspaceView />
+                      <ObjectTreeDrawer />
+                    </IndicatorActionsMenuProvider>
                   </IndicatorSettingsProvider>
                 </DrawingSettingsProvider>
                 <OrderTicketProvider>

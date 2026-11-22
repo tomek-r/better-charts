@@ -77,6 +77,9 @@ function commandsFor(answers: CommandAnswers, calls: CommandCall[]): ChartDrawin
     selectDrawing: (toolId, drawingId) => {
       calls.push({ name: 'selectDrawing', args: [toolId, drawingId] });
     },
+    clearSelection: () => {
+      calls.push({ name: 'clearSelection', args: [] });
+    },
     deleteDrawing: (toolId, drawingId) => {
       calls.push({ name: 'deleteDrawing', args: [toolId, drawingId] });
       return answers.removes;
@@ -218,6 +221,13 @@ test('selecting one drawing reaches the commands with the same arguments and rep
   drawings.select('trend-line', 'line-1');
   expect(calls).toEqual([{ name: 'selectDrawing', args: ['trend-line', 'line-1'] }]);
   expect(timeline).toEqual(['repaint']);
+});
+
+test('clearing the selection reaches the commands and repaints nothing by itself', () => {
+  const { drawings, calls, timeline } = buildHarness();
+  drawings.clearSelection();
+  expect(calls).toEqual([{ name: 'clearSelection', args: [] }]);
+  expect(timeline).toEqual([]);
 });
 
 test('deleting one drawing asks the commands to remove it and repaints only when it did', () => {
