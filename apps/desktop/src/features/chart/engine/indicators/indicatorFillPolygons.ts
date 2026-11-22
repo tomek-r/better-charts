@@ -1,9 +1,11 @@
 /**
  * Turns the per-bar edges of a fill into canvas polygons.
  *
- * A fill is a band between two edges (two plots, a plot and a level, or two
- * levels). Each bar where both edges have a value contributes one column; the
- * band is drawn as a polygon through the columns of an unbroken run.
+ * A fill is a band between two edges (two plots, or a plot and a level). Each bar
+ * where both edges have a value contributes one column; the band is drawn as a
+ * polygon through the columns of an unbroken run. A fill between two levels has the
+ * same band at every bar, so `IndicatorFillPrimitive` draws it as one rectangle
+ * across the pane and never asks for columns.
  */
 
 /** One bar of a fill: the pixel x of the bar and the pixel y of both edges. */
