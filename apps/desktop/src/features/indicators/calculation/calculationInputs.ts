@@ -41,10 +41,10 @@ const TICK_CHOICES: readonly TickChoice[] = [
   { value: 'tick1000', label: '1000 ticks', ticksPerBar: 1000 },
 ];
 
-/** One choice per MT5 timeframe, in the order the platform lists them. */
-const TIMEFRAME_CHOICES: readonly SettingInputEnumOption[] = timeframeOptions.map(({ wire, label }) => ({
+/** One choice per MT5 timeframe, in the order the platform lists them, named as the chart's interval menu is. */
+const TIMEFRAME_CHOICES: readonly SettingInputEnumOption[] = timeframeOptions.map(({ wire }) => ({
   value: wire,
-  title: label,
+  title: intervalLongLabel(wire),
 }));
 
 /** The tick choice a stored value names, or undefined for the chart's own bars and every MT5 timeframe. */

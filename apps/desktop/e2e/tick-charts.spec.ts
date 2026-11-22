@@ -571,7 +571,7 @@ test('the Calculation drop-down disables the tick choices the chart already grou
     'true',
   );
 
-  await page.getByRole('option', { name: '1H', exact: true }).click();
+  await page.getByRole('option', { name: '1 hour', exact: true }).click();
   await dialog.getByRole('button', { name: 'OK', exact: true }).click();
   await expect(dialog).toBeHidden();
 

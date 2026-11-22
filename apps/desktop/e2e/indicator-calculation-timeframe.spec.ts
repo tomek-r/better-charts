@@ -75,11 +75,15 @@ const MILLISECONDS_PER_HOUR = SECONDS_PER_HOUR * MILLISECONDS_PER_SECOND;
 /** Nine o'clock UTC, on a minute and a five-minute boundary, so every bucket of these cases starts there. */
 const FIRST_BAR_SECONDS = Date.UTC(2023, 10, 14, 9, 0) / MILLISECONDS_PER_SECOND;
 
-/** The stub chart's own timeframe, and the labels the choices these cases read are written with. */
+/**
+ * The stub chart's own timeframe, and the long words the drop-down rows these cases read are written with; the
+ * legend keeps the short code of the timeframe an indicator is calculated on.
+ */
 const CHART_TIMEFRAME = 'M5';
-const CHART_CHOICE_LABEL = '5m';
+const CHART_CHOICE_LABEL = '5 minutes';
 const HIGHER_CHOICE = 'M15';
-const HIGHER_CHOICE_LABEL = '15m';
+const HIGHER_CHOICE_LABEL = '15 minutes';
+const HIGHER_LEGEND_LABEL = '15m';
 /** A timeframe whose candles these cases record, so the values can only come from the bridge. */
 const RECORDED_HIGHER_TIMEFRAME = 'H1';
 const RECORDED_LOWER_TIMEFRAME = 'M1';
@@ -144,7 +148,7 @@ test.describe('the Calculation section', () => {
     }
   });
 
-  test('Chart comes first, then the four tick options, then every MT5 timeframe by its label', () => {
+  test('Chart comes first, then the four tick options, then every MT5 timeframe read the long way', () => {
     const choices = calculationTimeframeChoices();
 
     expect(choices.slice(0, 5).map((choice) => choice.title)).toEqual([
@@ -155,6 +159,12 @@ test.describe('the Calculation section', () => {
       '1000 ticks',
     ]);
     expect(choices.slice(5).map((choice) => choice.value)).toEqual(timeframeOptions.map(({ wire }) => wire));
+    expect(choices.slice(5, 9).map((choice) => choice.title)).toEqual([
+      '1 minute',
+      '2 minutes',
+      '3 minutes',
+      '4 minutes',
+    ]);
   });
 
   test('every choice can be picked, the four tick options included', () => {
@@ -538,10 +548,26 @@ test('the drop-down offers the tick options and every timeframe pickable', async
   const group = calculationGroup(await openSmaSettings(page));
   await group.getByLabel('Timeframe', { exact: true }).click();
 
-  const choices = ['1 tick', '10 ticks', '100 ticks', '1000 ticks', CHART_CHOICE_LABEL, '1m', HIGHER_CHOICE_LABEL];
+  const choices = [
+    '1 tick',
+    '10 ticks',
+    '100 ticks',
+    '1000 ticks',
+    CHART_CHOICE_LABEL,
+    '1 minute',
+    HIGHER_CHOICE_LABEL,
+  ];
   for (const label of choices) {
     await expect(page.getByRole('option', { name: label, exact: true })).not.toHaveAttribute('aria-disabled', 'true');
   }
+});
+
+test('the drop-down names its MT5 timeframes the long way, as the chart interval menu does', async ({ page }) => {
+  const group = calculationGroup(await openSmaSettings(page));
+  await group.getByLabel('Timeframe', { exact: true }).click();
+
+  const longRows = page.getByRole('option', { name: /^(1 minute|4 hours)$/ }).locator('span:not(.select-check)');
+  await expect(longRows).toHaveText(['1 minute', '4 hours']);
 });
 
 test('saving a higher timeframe renames the legend and draws the values of the grouped bars', async ({ page }) => {
@@ -558,7 +584,7 @@ test('saving a higher timeframe renames the legend and draws the values of the g
   expect(saved?.[0]?.settings[CALCULATION_TIMEFRAME_INPUT]).toBe(HIGHER_CHOICE);
 
   const legendRows = page.getByLabel('Indicator legend', { exact: true }).locator('.chart-indicator-legend-row');
-  await expect(legendRows.first()).toContainText(`${SAVED_NAME} ${HIGHER_CHOICE_LABEL}`);
+  await expect(legendRows.first()).toContainText(`${SAVED_NAME} ${HIGHER_LEGEND_LABEL}`);
 
   const chartBars = await drawnBars(page);
   const grouped = bucketBars(chartBars, HIGHER_CHOICE);
