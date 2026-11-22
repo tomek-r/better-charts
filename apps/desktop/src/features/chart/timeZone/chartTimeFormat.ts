@@ -7,6 +7,9 @@ export interface ChartTimeFormat {
   clockLabel(nowMs: number): string | null;
 }
 
+/** How much of a bar's time its labels write: the whole minute, or the second a tick bar opened in. */
+export type ChartTimePrecision = 'minute' | 'second';
+
 /** The ways a label writes a date: `30 Sep '26`, `30/09/26`, `09/30/26` and `2026-09-30`. */
 export const CHART_DATE_FORMATS = ['dayMonthYear', 'dayMonthNumeric', 'monthDayNumeric', 'iso'] as const;
 
@@ -171,11 +174,17 @@ const DATE_LABEL_WRITERS: Readonly<Record<ChartDateFormat, (formats: ZoneFormats
 };
 
 /** `Wed 30 Sep '26  08:03` — the pointer readout, with the reference's two spaces before the clock. */
-function formatPointerLabel(formats: ZoneFormats, labels: ChartTimeLabels, atMs: number): string {
+function formatPointerLabel(
+  formats: ZoneFormats,
+  labels: ChartTimeLabels,
+  precision: ChartTimePrecision,
+  atMs: number,
+): string {
   const at = new Date(atMs);
   const date = DATE_LABEL_WRITERS[labels.dateFormat](formats, at);
   const weekday = labels.dayOfWeek ? `${formats.weekday.format(at)} ` : '';
-  return `${weekday}${date}  ${formats.clocks[labels.hourFormat].format(at)}`;
+  const clocks = precision === 'second' ? formats.clocksWithSeconds : formats.clocks;
+  return `${weekday}${date}  ${clocks[labels.hourFormat].format(at)}`;
 }
 
 function tickDateLabel(formats: ZoneFormats, atMs: number, tickMarkType: TickMarkType): string {
@@ -231,25 +240,36 @@ function zoneClockLabel(formats: ZoneFormats, labels: ChartTimeLabels, zone: str
 }
 
 /**
- * Broker time: the bar seconds are already wall clock readings, so they are shown as they are,
- * and the axis keeps the library's own labels. The offset is only needed for the clock.
+ * Broker time: the bar seconds are already wall clock readings, so they are shown as they are, and
+ * while the axis shows minutes it keeps the library's own labels. A tick chart's marks are written
+ * here instead, because the library reads such a stamp as an instant of the browser's own zone.
  */
-function createBrokerTimeFormat(brokerUtcOffsetMinutes: number | null, labels: ChartTimeLabels): ChartTimeFormat {
+function createBrokerTimeFormat(
+  brokerUtcOffsetMinutes: number | null,
+  labels: ChartTimeLabels,
+  precision: ChartTimePrecision,
+): ChartTimeFormat {
   const formats = createZoneFormats(UTC_TIME_ZONE);
   return {
-    pointerLabel: (barSeconds) => formatPointerLabel(formats, labels, barSeconds * MS_PER_SECOND),
-    tickMarkLabel: () => null,
+    pointerLabel: (barSeconds) => formatPointerLabel(formats, labels, precision, barSeconds * MS_PER_SECOND),
+    tickMarkLabel: (barSeconds, tickMarkType) =>
+      precision === 'second' ? formatTickLabel(formats, labels, barSeconds * MS_PER_SECOND, tickMarkType) : null,
     clockLabel: (nowMs) => brokerClockLabel(formats, labels, nowMs, brokerUtcOffsetMinutes),
   };
 }
 
 /** A chosen zone: the current broker offset turns every bar into a real instant, which the zone formats. */
-function createZoneTimeFormat(zone: string, brokerUtcOffsetMinutes: number, labels: ChartTimeLabels): ChartTimeFormat {
+function createZoneTimeFormat(
+  zone: string,
+  brokerUtcOffsetMinutes: number,
+  labels: ChartTimeLabels,
+  precision: ChartTimePrecision,
+): ChartTimeFormat {
   const formats = createZoneFormats(zone);
   const brokerShiftMs = brokerUtcOffsetMinutes * MS_PER_MINUTE;
   const instantMs = (barSeconds: number) => barSeconds * MS_PER_SECOND - brokerShiftMs;
   return {
-    pointerLabel: (barSeconds) => formatPointerLabel(formats, labels, instantMs(barSeconds)),
+    pointerLabel: (barSeconds) => formatPointerLabel(formats, labels, precision, instantMs(barSeconds)),
     tickMarkLabel: (barSeconds, tickMarkType) => formatTickLabel(formats, labels, instantMs(barSeconds), tickMarkType),
     clockLabel: (nowMs) => zoneClockLabel(formats, labels, zone, nowMs),
   };
@@ -257,15 +277,17 @@ function createZoneTimeFormat(zone: string, brokerUtcOffsetMinutes: number, labe
 
 /**
  * Labels for the chosen zone, written the way `labels` asks; without a broker offset the bars can
- * only be read as broker time. The default labels are the ones the chart has always drawn.
+ * only be read as broker time. The default labels are the ones the chart has always drawn, and the
+ * default precision is every MT5 bar's: the whole minute. A tick bar's label reads its second.
  */
 export function createChartTimeFormat(
   zone: string,
   brokerUtcOffsetMinutes: number | null,
   labels: ChartTimeLabels = DEFAULT_CHART_TIME_LABELS,
+  precision: ChartTimePrecision = 'minute',
 ): ChartTimeFormat {
   if (zone === EXCHANGE_TIME_ZONE || brokerUtcOffsetMinutes === null) {
-    return createBrokerTimeFormat(brokerUtcOffsetMinutes, labels);
+    return createBrokerTimeFormat(brokerUtcOffsetMinutes, labels, precision);
   }
-  return createZoneTimeFormat(zone, brokerUtcOffsetMinutes, labels);
+  return createZoneTimeFormat(zone, brokerUtcOffsetMinutes, labels, precision);
 }

@@ -32,7 +32,7 @@ interface BridgeSessionHandlersDependencies {
   accountRefs: AccountRefs;
   marketRuntime: Pick<
     ReturnType<typeof createBridgeMarketRuntime>,
-    'cancelCandles' | 'cancelPrefetch' | 'resetPageState'
+    'cancelCandles' | 'cancelPrefetch' | 'resetPageState' | 'stopTickBars'
   >;
   restore: { restoreOnFirstConnection: () => Promise<void> };
   restoreState: SavedWindowRestoreState;
@@ -73,6 +73,7 @@ export function createBridgeSessionHandlers({
   const resetForNewSession = (nextState: BridgeStatus['state']) => {
     marketRuntime.cancelCandles();
     marketRuntime.cancelPrefetch();
+    marketRuntime.stopTickBars();
     resources.adapterRef.current?.resetRequests();
     marketRuntime.resetPageState();
     loadingTimeframeRef.current = undefined;

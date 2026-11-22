@@ -16,7 +16,9 @@ export async function startMarketDataForwarding() {
   // Forwarding only touches the publisher; the rest of the session is not read here.
   const session = { marketData: connection } as unknown as Parameters<typeof createBridgeMarketRuntime>[1];
   const resources: BridgeMarketResources = { chart: { current: null }, adapterRef: { current: null } };
-  const runtime = createBridgeMarketRuntime(run, session, resources);
+  // The runtime publishes its tick bar source into this slot; forwarding never reads it back.
+  const tickBarsRef = { current: null };
+  const runtime = createBridgeMarketRuntime(run, session, resources, tickBarsRef);
   const releases = await Promise.all(runtime.forwardMarketDataEvents());
   return {
     received,

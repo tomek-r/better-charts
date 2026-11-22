@@ -1,5 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
-import { assembleGlyphRows, observeFillText, type AxisPaint } from './helpers/canvasText';
+import {
+  assembleGlyphRows,
+  clearPriceAxisPaints,
+  priceAxisPaints,
+  recordPriceAxisText,
+  type AxisPaint,
+} from './helpers/canvasText';
 import { MS_PER_DAY } from './helpers/stubClock';
 import {
   eurusdFormingBar,
@@ -19,25 +25,12 @@ const COUNTDOWN_TEXT = /^\d{2}:\d{2}(:\d{2})?$/;
 
 /**
  * The countdown is painted by the library on the price axis canvas, so the tests
- * observe the canvas itself: every `fillText` on the price-axis column is
- * recorded with the frame's time. Tick labels are prices and the time axis is a
- * different canvas, so a `mm:ss` draw can only be the countdown.
+ * observe the canvas itself (see `recordPriceAxisText`): every `fillText` on the
+ * price-axis column is recorded with the frame's time. Tick labels are prices and
+ * the time axis is a different canvas, so a `mm:ss` draw can only be the countdown.
  */
-async function recordAxisText(page: Page) {
-  await observeFillText(page, () => {
-    const paints: Paint[] = [];
-    (window as unknown as { __axisText: Paint[] }).__axisText = paints;
-    return (context, text, x, y) => {
-      // The price axis is the narrow, tall column right of the pane.
-      if (context.canvas.width <= 100 && context.canvas.height > 100) {
-        paints.push({ text: String(text), at: performance.now(), x, y });
-      }
-    };
-  });
-}
-async function axisPaints(page: Page): Promise<Paint[]> {
-  return page.evaluate(() => (window as unknown as { __axisText: Paint[] }).__axisText);
-}
+const axisPaints = priceAxisPaints;
+const clearAxisPaints = clearPriceAxisPaints;
 /** The Bid and Ask tags are glyph rows too; only the `mm:ss` row is the countdown. */
 function assembleCountdowns(paints: Paint[]): Paint[] {
   return assembleGlyphRows(paints).filter((paint) => COUNTDOWN_TEXT.test(paint.text));
@@ -62,9 +55,6 @@ async function countdownText(page: Page): Promise<string> {
   const painted = assembleCountdowns(await axisFrame(page));
   return painted.length === 0 ? '' : painted[painted.length - 1].text;
 }
-async function clearAxisPaints(page: Page): Promise<void> {
-  await page.evaluate(() => ((window as unknown as { __axisText: Paint[] }).__axisText.length = 0));
-}
 /** Frames that painted no countdown: the tag was not on the axis in that frame. */
 async function framesWithoutTag(page: Page): Promise<number[]> {
   const paints = await axisPaints(page);
@@ -76,7 +66,7 @@ async function clockNow(page: Page): Promise<number> {
 }
 
 async function start(page: Page, historyDelayMs = 0) {
-  await recordAxisText(page);
+  await recordPriceAxisText(page);
   await pausePageClockAhead(page);
   const errors = await gotoWithStub(page, { historyDelayMs });
   await page.clock.runFor(historyDelayMs + 100);

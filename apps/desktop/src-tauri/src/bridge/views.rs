@@ -4,7 +4,7 @@ use trading_core::{
     execution::RecoveryEntry,
     margin_projection::MarginRisk,
     protocol::{
-        AccountSnapshot, BrokerSymbol, MarketCandle, OpenPosition, OrderCommandError,
+        AccountSnapshot, BrokerSymbol, MarketCandle, MarketTick, OpenPosition, OrderCommandError,
         OrderCommandUpdate, OrderKind, OrderSide, PendingOrder, PortfolioSnapshot, QuoteUpdate,
         TimeInForce,
     },
@@ -36,6 +36,79 @@ pub(crate) struct HistoryPageView {
 pub(crate) struct HistoryUnavailableView {
     pub(crate) symbol: String,
     pub(crate) timeframe: String,
+}
+
+/// One indicator series answered by the EA. Routed by the caller's key, so
+/// several reads can be in flight and a replaced key's response is dropped.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndicatorSeriesView {
+    pub(crate) key: String,
+    pub(crate) symbol: String,
+    pub(crate) timeframe: String,
+    pub(crate) complete: bool,
+    /// The caller's own anchor; `null` when it asked for the newest bars.
+    pub(crate) before_ms: Option<i64>,
+    pub(crate) candles: Vec<MarketCandle>,
+}
+
+/// The EA could not synchronize the timeframe that series asked for. Non-fatal
+/// like [`HistoryUnavailableView`], but only that key ends.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndicatorSeriesUnavailableView {
+    pub(crate) key: String,
+    pub(crate) symbol: String,
+    pub(crate) timeframe: String,
+    pub(crate) message: String,
+}
+
+/// One raw tick page of an indicator calculated on N-tick bars. Routed by the
+/// caller's key like [`IndicatorSeriesView`], and published on its own event so
+/// the tick profile's pages, cache and events stay untouched.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndicatorTicksView {
+    pub(crate) key: String,
+    pub(crate) symbol: String,
+    pub(crate) from_ms: i64,
+    pub(crate) to_ms: i64,
+    pub(crate) complete: bool,
+    pub(crate) ticks: Vec<IndicatorTickView>,
+}
+
+/// One tick as the wire carries it: prices stay the decimal strings the protocol
+/// sends, never floats.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndicatorTickView {
+    pub(crate) time_ms: i64,
+    pub(crate) bid: String,
+    pub(crate) ask: String,
+    pub(crate) last: String,
+    pub(crate) volume: u64,
+}
+
+impl From<&MarketTick> for IndicatorTickView {
+    fn from(tick: &MarketTick) -> Self {
+        Self {
+            time_ms: tick.time_ms,
+            bid: tick.bid.clone(),
+            ask: tick.ask.clone(),
+            last: tick.last.clone(),
+            volume: tick.volume,
+        }
+    }
+}
+
+/// The EA could not read the range these ticks asked for. Non-fatal like
+/// [`IndicatorSeriesUnavailableView`], but only that key ends.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndicatorTicksUnavailableView {
+    pub(crate) key: String,
+    pub(crate) symbol: String,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

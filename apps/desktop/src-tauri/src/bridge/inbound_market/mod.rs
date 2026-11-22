@@ -9,7 +9,9 @@
 //! if-chain.
 
 mod profile_bars;
+mod series;
 mod tick_profile;
+mod ticks;
 
 #[cfg(test)]
 pub(crate) use tick_profile::finish_tick_page;
@@ -91,6 +93,11 @@ pub(crate) async fn history_snapshot(inbound: &Inbound<'_>, message: Envelope) -
                 );
                 return InboundOutcome::Continue;
             }
+        }
+        // The desktop's indicator series answer under their own ids too, and
+        // never touch the market snapshot the chart shows.
+        if let Some(outcome) = series::series_snapshot(inbound, &snapshot) {
+            return outcome;
         }
         let expected = inbound
             .state

@@ -428,7 +428,7 @@ test('live updates end where a fresh load of the same bars ends', () => {
 });
 
 test('the registry names the RSI and draws it in a pane of its own', () => {
-  expect(findChartIndicatorPlugin('rsi')).toBe(rsiPlugin);
+  expect(findChartIndicatorPlugin('rsi')?.title).toBe(rsiPlugin.title);
   expect(findChartIndicatorPlugin('rsi')?.pane).toBe('own');
   expect(indicatorLegendTitle('rsi', resolveSettingValues(rsiPlugin, {}))).toBe('RSI 14 close');
 });

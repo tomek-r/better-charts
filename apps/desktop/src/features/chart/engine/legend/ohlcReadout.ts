@@ -21,17 +21,18 @@ interface DayChange {
 
 type StatusLineBars = Pick<
   BarSeriesController,
-  'legendBar' | 'pricePrecision' | 'bars' | 'intervalSeconds' | 'directionColor'
+  'legendBar' | 'pricePrecision' | 'bars' | 'intervalSeconds' | 'isTickBars' | 'directionColor'
 >;
 
 /**
  * The last day change compares the newest loaded bar with the newest bar of an earlier broker day, so it
  * never follows the hovered bar; it is computed when the bars change and kept for the moves between them.
+ * A tick interval has no bar length to measure a day in, so it shows none.
  */
 function lastDayChangeOf(bars: StatusLineBars, digits: number): DayChange | null {
   const series = bars.bars;
   const lastBar: RenderBar | undefined = series[series.length - 1];
-  const previousClose = previousDayClose(series, bars.intervalSeconds);
+  const previousClose = bars.isTickBars ? null : previousDayClose(series, bars.intervalSeconds);
   if (lastBar === undefined || previousClose === null) {
     return null;
   }

@@ -3,6 +3,7 @@ use super::super::{
     collect_timeframe, completion_line, log_info, log_warn, request_history_inner, safety_net_line,
     start_bar_collect, ChartSelection, HistoryUnavailableView, ProfileSource, TickPageResult,
     TickProfileError, TickProfileLimit, TickProfileProgress, TickProfileRequest,
+    INDICATOR_SERIES_ID_PREFIX, INDICATOR_TICKS_ID_PREFIX,
 };
 use super::{Inbound, InboundOutcome};
 use trading_core::protocol::{
@@ -35,6 +36,11 @@ pub(crate) async fn tick_history(inbound: &Inbound<'_>, message: Envelope) -> In
         != Some(inbound.session_id)
     {
         return InboundOutcome::Continue;
+    }
+    // The desktop's indicator ticks answer under ids of their own, so they never
+    // reach the profile's page stream, its cache or its events.
+    if let Some(outcome) = super::ticks::ticks_snapshot(inbound, &snapshot) {
+        return outcome;
     }
     let expected = {
         let mut expected = inbound
@@ -405,14 +411,21 @@ pub(crate) async fn tick_history_error(inbound: &Inbound<'_>, message: Envelope)
             )
         }
     };
-    // Recognize only IDs issued for tick pages and profile bar pages. Unrelated
-    // protocol errors retain the existing fail-closed handling; stale page
-    // failures are ignored.
+    // Recognize only IDs issued for tick pages, profile bar pages and the
+    // desktop's indicator series and ticks. Unrelated protocol errors retain the
+    // existing fail-closed handling; stale page and indicator failures are
+    // ignored.
     if message.id.starts_with("rust-profile-bars-") {
         return profile_bars_error(inbound, message.id, error.code, error.message);
     }
     if message.id.starts_with("rust-history-page-") {
         return history_page_error(inbound, &message.id, error.code);
+    }
+    if message.id.starts_with(INDICATOR_SERIES_ID_PREFIX) {
+        return super::series::series_error(inbound, &message.id, error.message);
+    }
+    if message.id.starts_with(INDICATOR_TICKS_ID_PREFIX) {
+        return super::ticks::ticks_error(inbound, &message.id, error.message);
     }
     // After the page prefix, which this one contains.
     if message.id.starts_with("rust-history-") {

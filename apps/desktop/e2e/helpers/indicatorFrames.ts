@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import type { ChartIndicatorPane } from '../../src/features/chart/engine/indicators/indicatorContract';
 import type { IndicatorFrame, IndicatorPlot } from '../../src/features/chart/engine/indicators/indicatorFrame';
 import type { IndicatorLayerState } from '../../src/features/chart/engine/indicators/indicatorLayer';
+import type { IndicatorPointState } from '../../src/features/chart/engine/indicators/indicatorPlotState';
 import { openChart } from './openChart';
 import { gotoWithStub } from './tauriStub';
 
@@ -69,6 +70,22 @@ export async function showFrame(
 /** Every indicator the display layer draws, in the order it was shown. */
 export async function drawnIndicators(page: Page): Promise<IndicatorLayerState[]> {
   return page.evaluate(() => window.__chartTest!.indicators());
+}
+
+/** The points the first plot of the first drawn indicator holds, in chart bar order. */
+async function firstPlotPoints(page: Page): Promise<readonly IndicatorPointState[]> {
+  const [drawn] = await drawnIndicators(page);
+  return drawn?.plots[0]?.points ?? [];
+}
+
+/** The value the first plot of the first drawn indicator carries on each point, in chart bar order. */
+export async function drawnValues(page: Page): Promise<number[]> {
+  return (await firstPlotPoints(page)).map((point) => point.value);
+}
+
+/** The chart bar time of each point the first plot of the first drawn indicator holds, in the same order. */
+export async function drawnTimes(page: Page): Promise<number[]> {
+  return (await firstPlotPoints(page)).map((point) => point.time);
 }
 
 /** Removes everything the layer drew for `id`, and the pane it held. */

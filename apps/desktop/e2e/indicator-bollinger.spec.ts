@@ -162,6 +162,6 @@ test('live updates end where a fresh load of the same bars ends', () => {
 });
 
 test('the registry and the legend name the Bollinger Bands', () => {
-  expect(findChartIndicatorPlugin('bb')).toBe(bollingerPlugin);
+  expect(findChartIndicatorPlugin('bb')).toMatchObject({ id: bollingerPlugin.id, title: bollingerPlugin.title });
   expect(indicatorLegendTitle('bb', resolveSettingValues(bollingerPlugin, {}))).toBe('BB 20 close 2');
 });

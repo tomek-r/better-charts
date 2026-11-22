@@ -90,7 +90,7 @@ test('the EMA line starts in the style defaults', () => {
 });
 
 test('the plugin registers on the price pane and titles itself EMA 9 close', () => {
-  expect(findChartIndicatorPlugin(INDICATOR_ID)).toBe(emaPlugin);
+  expect(findChartIndicatorPlugin(INDICATOR_ID)?.title).toBe(emaPlugin.title);
   expect(emaPlugin.pane).toBe('overlay');
   expect(indicatorLegendTitle(INDICATOR_ID, resolveSettingValues(emaPlugin, {}))).toBe('EMA 9 close');
 });

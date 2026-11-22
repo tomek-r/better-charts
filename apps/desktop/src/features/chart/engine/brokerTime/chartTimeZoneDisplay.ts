@@ -1,10 +1,12 @@
 import type { IChartApi, TickMarkFormatter } from 'lightweight-charts';
+import { isTickInterval } from '../../../../shared/bridge/chartIntervals';
 import {
   createChartTimeFormat,
   DEFAULT_CHART_TIME_LABELS,
   sameChartTimeLabels,
   type ChartTimeFormat,
   type ChartTimeLabels,
+  type ChartTimePrecision,
 } from '../../timeZone/chartTimeFormat';
 import { EXCHANGE_TIME_ZONE } from '../../timeZone/chartTimeZones';
 import type { BrokerTime } from './brokerTime';
@@ -24,6 +26,8 @@ export class ChartTimeZoneDisplay {
   private appliedTimeZone = EXCHANGE_TIME_ZONE;
   private appliedBrokerOffsetMinutes: number | null = null;
   private appliedLabels: ChartTimeLabels = DEFAULT_CHART_TIME_LABELS;
+  /** The bars' precision: an MT5 bar reads its minute until a tick interval asks for its second. */
+  private appliedPrecision: ChartTimePrecision = 'minute';
 
   constructor(
     private readonly chart: IChartApi,
@@ -55,6 +59,19 @@ export class ChartTimeZoneDisplay {
     this.publish();
   }
 
+  /**
+   * Reads the bars' time to what `interval` shows on screen: a tick bar closes after a number of ticks,
+   * so its own second is what tells one from the next, while every MT5 bar keeps its minute.
+   */
+  applyInterval(interval: string): void {
+    const precision: ChartTimePrecision = isTickInterval(interval) ? 'second' : 'minute';
+    if (precision === this.appliedPrecision) {
+      return;
+    }
+    this.appliedPrecision = precision;
+    this.publish();
+  }
+
   /** The label choices the axis and the pointer are drawn with, as a plain copy. */
   labels(): ChartTimeLabels {
     return { ...this.appliedLabels };
@@ -69,11 +86,18 @@ export class ChartTimeZoneDisplay {
 
   /** Hands the axis and the pointer the one format both of them draw their time text with. */
   private publish(): void {
-    const format = createChartTimeFormat(this.appliedTimeZone, this.appliedBrokerOffsetMinutes, this.appliedLabels);
+    const format = createChartTimeFormat(
+      this.appliedTimeZone,
+      this.appliedBrokerOffsetMinutes,
+      this.appliedLabels,
+      this.appliedPrecision,
+    );
     // A date or a business day has no instant to shift: those keep the library's own label.
     const tickMarkFormatter: TickMarkFormatter = (time, tickMarkType) =>
       typeof time === 'number' ? format.tickMarkLabel(time, tickMarkType) : null;
-    this.chart.applyOptions({ timeScale: { tickMarkFormatter } });
+    // The library places a mark per second only when it is asked to show them, which a tick chart needs.
+    const secondsVisible = this.appliedPrecision === 'second';
+    this.chart.applyOptions({ timeScale: { tickMarkFormatter, secondsVisible } });
     this.pointerReadout.setTimeFormat(format);
   }
 }

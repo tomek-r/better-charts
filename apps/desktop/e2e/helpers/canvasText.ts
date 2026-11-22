@@ -33,6 +33,71 @@ export interface AxisPaint {
   y: number;
 }
 
+/** Records every price-axis `fillText` from now on into `window.__axisText`; call before navigating. */
+export async function recordPriceAxisText(page: Page): Promise<void> {
+  await observeFillText(page, () => {
+    const paints: AxisPaint[] = [];
+    (window as unknown as { __axisText: AxisPaint[] }).__axisText = paints;
+    return (context, text, x, y) => {
+      // The price axis is the narrow, tall column right of the pane.
+      if (context.canvas.width <= 100 && context.canvas.height > 100) {
+        paints.push({ text: String(text), at: performance.now(), x, y });
+      }
+    };
+  });
+}
+
+/** Every price-axis paint recorded so far, oldest first. */
+export async function priceAxisPaints(page: Page): Promise<AxisPaint[]> {
+  return page.evaluate(() => (window as unknown as { __axisText: AxisPaint[] }).__axisText);
+}
+
+/** Forgets every price-axis paint recorded so far. */
+export async function clearPriceAxisPaints(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __axisText: AxisPaint[] }).__axisText.length = 0;
+  });
+}
+
+/** One `fillText` of any canvas, with the size of the canvas it painted on. */
+export interface CanvasPaint extends AxisPaint {
+  readonly canvasWidth: number;
+  readonly canvasHeight: number;
+}
+
+/**
+ * Records every `fillText` every canvas paints from now on into `window.__canvasText`; call before navigating.
+ * The chart draws each axis on a canvas of its own, so a spec picks the one it reads by the canvas' shape.
+ */
+export async function recordCanvasText(page: Page): Promise<void> {
+  await observeFillText(page, () => {
+    const paints: CanvasPaint[] = [];
+    (window as unknown as { __canvasText: CanvasPaint[] }).__canvasText = paints;
+    return (context, text, x, y) => {
+      paints.push({
+        text: String(text),
+        at: performance.now(),
+        x,
+        y,
+        canvasWidth: context.canvas.width,
+        canvasHeight: context.canvas.height,
+      });
+    };
+  });
+}
+
+/** Every canvas paint recorded so far, oldest first. */
+export async function canvasPaints(page: Page): Promise<CanvasPaint[]> {
+  return page.evaluate(() => (window as unknown as { __canvasText: CanvasPaint[] }).__canvasText);
+}
+
+/** Forgets every canvas paint recorded so far. */
+export async function clearCanvasPaints(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __canvasText: CanvasPaint[] }).__canvasText.length = 0;
+  });
+}
+
 /** A tag's text rebuilt from its glyph draws, with the x of its first glyph. */
 export interface GlyphRow extends AxisPaint {
   /** x of every glyph, left to right. */

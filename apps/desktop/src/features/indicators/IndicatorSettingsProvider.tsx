@@ -1,5 +1,6 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useBridgeChartState } from '../bridge/bridgeSelectors';
 import { useChartSettings } from '../chart/chartSettings/ChartSettingsProvider';
 import type { SavedIndicator } from '../chart/chartSettings/savedIndicators';
 import {
@@ -14,6 +15,7 @@ import { useRequiredContext } from '../../shared/context/useRequiredContext';
 import { ModalDialog, ModalDialogCloseButton } from '../../shared/ui/dialog/ModalDialog';
 import { useModalExit } from '../../shared/ui/dialog/useModalExit';
 import { useRevertUnlessSettled } from '../../shared/ui/dialog/useRevertUnlessSettled';
+import { inputsForChartTimeframe } from './calculation/calculationInputs';
 import { findChartIndicatorPlugin, type RegisteredChartIndicatorPlugin } from './registry';
 import { useIndicatorSettingsCommands } from './useIndicatorCommands';
 
@@ -130,11 +132,18 @@ function IndicatorSettingsFields({
   onSave,
   onCancel,
 }: IndicatorSettingsFieldsProps) {
+  const { timeframe } = useBridgeChartState();
   const [initialValues] = useState(() => resolveSettingValues(indicatorSettingsSchema(plugin), saved.settings));
   const [initialTimeframeVisibility] = useState(() => saved.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY);
+  const schema = indicatorSettingsSchema(plugin);
   return (
     <SettingsForm
-      settings={{ ...plugin, ...indicatorSettingsSchema(plugin), timeframeVisibility: 'editable' }}
+      settings={{
+        ...plugin,
+        ...schema,
+        inputs: inputsForChartTimeframe(schema.inputs ?? [], timeframe),
+        timeframeVisibility: 'editable',
+      }}
       initialValues={initialValues}
       initialTimeframeVisibility={initialTimeframeVisibility}
       initialTabId={initialTabId}

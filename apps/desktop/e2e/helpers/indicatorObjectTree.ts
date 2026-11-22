@@ -99,6 +99,17 @@ export async function openObjectTree(page: Page): Promise<void> {
   await expect(drawer).toHaveCSS('transform', SETTLED_DRAWER_TRANSFORM);
 }
 
+/** Opens the settings dialog of the chart's moving average, through the settings button its row offers on hover. */
+export async function openSmaSettingsFromRow(page: Page): Promise<Locator> {
+  await openObjectTree(page);
+  const row = indicatorRows(page);
+  await row.hover();
+  await row.getByRole('button', { name: 'Indicator settings', exact: true }).click();
+  const dialog = smaSettingsDialog(page);
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 /** Opens the settings dialog of the seeded moving average by double clicking its row name. */
 export async function openSmaSettingsDialog(page: Page): Promise<Locator> {
   await indicatorRows(page).getByRole('button', { name: SMA_9_CLOSE, exact: true }).dblclick();

@@ -8,6 +8,8 @@ mod common;
 mod connection;
 mod dispatch;
 mod frontend_views;
+mod indicator_series;
+mod indicator_ticks;
 mod market_data;
 mod order_check;
 mod partial_close;

@@ -1,27 +1,43 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { answerSymbolSearch, chooseSearchResult, openSymbolSearch } from './helpers/panel';
 import { brokerSymbolFixture, gotoWithStub, pushEvent } from './helpers/tauriStub';
+
+/** The width every timeframe button takes while no tick interval is shown. */
+const TIMEFRAME_BUTTON_WIDTH = 44;
+
+const timeframeGroup = (page: Page) => page.getByRole('group', { name: 'Chart timeframe' });
+
+const timeframeButtons = (page: Page) => timeframeGroup(page).getByRole('button');
+
+const buttonBounds = (page: Page) =>
+  timeframeButtons(page).evaluateAll((elements) =>
+    elements.map((element) => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x, y, width, height };
+    }),
+  );
 
 test('timeframe buttons have equal widths and selection preserves their layout', async ({ page }) => {
   await gotoWithStub(page);
   // Larger system text must not let the longer labels resize their buttons.
   await page.addStyleTag({ content: '.timeframe-tabs button { font-size: 14px; }' });
-  const tabs = page.getByRole('group', { name: 'Chart timeframe' });
-  const buttons = tabs.getByRole('button');
-  const bounds = () =>
-    buttons.evaluateAll((elements) =>
-      elements.map((element) => {
-        const { x, y, width, height } = element.getBoundingClientRect();
-        return { x, y, width, height };
-      }),
-    );
+  const tabs = timeframeGroup(page);
   await expect(tabs.getByRole('button', { name: '15m', exact: true })).toBeEnabled();
-  const initial = await bounds();
+  const initial = await buttonBounds(page);
   expect(new Set(initial.map((button) => button.width)).size).toBe(1);
   for (const label of ['15m', '1m']) {
     await tabs.getByRole('button', { name: label, exact: true }).click();
     await expect(tabs.locator('[aria-pressed="true"]')).toHaveText(label);
-    expect(await bounds()).toEqual(initial);
+    expect(await buttonBounds(page)).toEqual(initial);
+  }
+});
+
+test('timeframe buttons are 44px wide while only MT5 favourites are shown', async ({ page }) => {
+  await gotoWithStub(page);
+  // The default favourites are MT5 timeframes, whose three-glyph labels fit the row's 44px base width.
+  await expect(timeframeButtons(page)).toHaveText(['1m', '5m', '15m', '1H', '4H', '1D', '1M']);
+  for (const { width } of await buttonBounds(page)) {
+    expect(width).toBe(TIMEFRAME_BUTTON_WIDTH);
   }
 });
 

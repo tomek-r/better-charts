@@ -101,12 +101,14 @@ test('the selector follows the EA subset and updates its choices on reconnect', 
   const group = page.getByRole('group', { name: 'Chart timeframe' });
   const menu = page.getByRole('dialog', { name: 'Timeframes' });
   const rows = menu.locator('.timeframe-menu-select');
+  // The tick intervals are the app's own, so they come first whatever the EA advertises.
+  const tickRows = ['1 tick', '10 ticks', '100 ticks', '1000 ticks'];
   await expect(group.getByRole('button')).toHaveText(['1m', '1M']);
   await page.getByRole('button', { name: 'More timeframes' }).click();
-  await expect(rows).toHaveText(['1 minute', '2 minutes', '1 month']);
+  await expect(rows).toHaveText([...tickRows, '1 minute', '2 minutes', '1 month']);
   await pushEvent(page, 'bridge-status', { state: 'connected', supportedTimeframes: ['M1', 'H12', 'D1'] });
   await expect(group.getByRole('button')).toHaveText(['1m', '1D']);
-  await expect(rows).toHaveText(['1 minute', '12 hours', '1 day']);
+  await expect(rows).toHaveText([...tickRows, '1 minute', '12 hours', '1 day']);
 });
 
 test('every timeframe row shows its star without hovering, favorite or not', async ({ page }) => {
@@ -128,7 +130,8 @@ test('all periods fit a narrow chart without horizontal page overflow', async ({
   expect(await noOverflow()).toBe(true);
   await page.getByRole('button', { name: 'More timeframes' }).click();
   const menu = page.getByRole('dialog', { name: 'Timeframes' });
-  await expect(menu.locator('.timeframe-menu-select')).toHaveCount(21);
+  // Every MT5 period the stub advertises, plus the app's four tick intervals.
+  await expect(menu.locator('.timeframe-menu-select')).toHaveCount(25);
   expect(await noOverflow()).toBe(true);
   const box = (await menu.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);

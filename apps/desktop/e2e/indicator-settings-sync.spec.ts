@@ -4,6 +4,7 @@ import { indicatorSettingsSchema } from '../src/features/chart/engine/indicators
 import type { AttachedIndicatorState } from '../src/features/chart/engine/indicators/indicatorRuntime';
 import type { SettingValues } from '../src/features/chart/engine/settings/settingInputs';
 import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
+import { findChartIndicatorPlugin } from '../src/features/indicators/registry';
 import { rsiPlugin } from '../src/features/indicators/rsi/rsiPlugin';
 import { syncIndicators } from '../src/features/indicators/syncIndicators';
 import { drawnIndicators } from './helpers/indicatorFrames';
@@ -202,9 +203,12 @@ function fakeRuntime(attached: readonly AttachedIndicatorState[]): FakeRuntime {
   return { calls, storedPassed, runtime };
 }
 
+/** The RSI as the registry registers it, whose inputs the sync resolves a saved instance's settings with. */
+const REGISTERED_RSI = findChartIndicatorPlugin(RSI_DEFINITION_ID) ?? rsiPlugin;
+
 /** The RSI as the runtime reports it, with the settings the schema resolves `stored` to. */
 function attachedRsi(stored: SettingValues): AttachedIndicatorState {
-  const settings = resolveSettingValues(indicatorSettingsSchema(rsiPlugin), stored);
+  const settings = resolveSettingValues(indicatorSettingsSchema(REGISTERED_RSI), stored);
   return { instanceId: RSI_INSTANCE_ID, definitionId: RSI_DEFINITION_ID, settings, hidden: false };
 }
 

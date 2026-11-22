@@ -8,7 +8,8 @@ import { createMarketDataConnection } from './marketDataPort';
 import { useBridgeSession, type BridgeSessionState } from './useBridgeSession';
 
 export interface BridgeActions {
-  requestHistory: (wire: string) => Promise<void>;
+  /** Selects an MT5 timeframe (a history window) or a tick interval (its bars read from ticks). */
+  requestInterval: (code: string) => Promise<void>;
   chooseSymbol: (item: BrokerSymbol) => Promise<void>;
   /** Select a symbol by its NAME (portfolio rows carry no BrokerSymbol). */
   chooseSymbolByName: (symbol: string) => Promise<void>;
@@ -27,6 +28,9 @@ type BridgeRuntimeInjection = Pick<
   | 'mounted'
   | 'requestGeneration'
   | 'currentTimeframe'
+  | 'requestedTickIntervalRef'
+  | 'mt5TimeframeRef'
+  | 'tickBarsRef'
   | 'historyWaitSetters'
 > & { actions: BridgeActions };
 const RuntimeContext = createContext<BridgeRuntimeInjection | null>(null);
@@ -43,11 +47,11 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
   });
   const actions = useMemo<BridgeActions>(
     () => ({
-      requestHistory: session.requestHistory,
+      requestInterval: session.requestInterval,
       chooseSymbol: session.chooseSymbol,
       chooseSymbolByName: session.chooseSymbolByName,
     }),
-    [session.requestHistory, session.chooseSymbol, session.chooseSymbolByName],
+    [session.requestInterval, session.chooseSymbol, session.chooseSymbolByName],
   );
   const runtime = useMemo<BridgeRuntimeInjection>(
     () => ({
@@ -62,6 +66,9 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
       mounted: session.mounted,
       requestGeneration: session.requestGeneration,
       currentTimeframe: session.currentTimeframe,
+      requestedTickIntervalRef: session.requestedTickIntervalRef,
+      mt5TimeframeRef: session.mt5TimeframeRef,
+      tickBarsRef: session.tickBarsRef,
       historyWaitSetters: session.historyWaitSetters,
       actions,
     }),
@@ -76,6 +83,9 @@ export function BridgeSessionProvider({ children }: { children: ReactNode }) {
       session.mounted,
       session.requestGeneration,
       session.currentTimeframe,
+      session.requestedTickIntervalRef,
+      session.mt5TimeframeRef,
+      session.tickBarsRef,
       session.historyWaitSetters,
       stores,
       marketData,

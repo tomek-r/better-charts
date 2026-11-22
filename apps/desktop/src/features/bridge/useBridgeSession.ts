@@ -4,9 +4,11 @@ import { useCallback, useMemo, useRef } from 'react';
 import type { Candle, BrokerSymbol } from '../../shared/bridge/types';
 import { initialHistoryBarsFor } from '../chart/engine/bars/initialHistoryWindow';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
+import { isTickInterval } from '../../shared/bridge/chartIntervals';
 import { useFieldSetterSelector } from '../../shared/store/fieldStore';
 import type { BridgeSessionStores } from './bridgeSessionStores';
 import type { BridgeMarketResources } from './market/bridgeMarketRuntime';
+import type { ChartTickBars } from './market/chartTickBars';
 import { beginHistoryWait, endHistoryWait } from './market/historyWait';
 import type { MarketDataConnection } from './marketDataPort';
 
@@ -24,6 +26,12 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
   const loadingTimeframeRef = useRef<string | undefined>(undefined);
   const mounted = useRef(false);
   const targetSymbol = useRef<string | undefined>(undefined);
+  /** The tick interval shown or owed; null while the chart draws MT5 bars. */
+  const requestedTickIntervalRef = useRef<string | null>(null);
+  /** The MT5 timeframe shown last: what a symbol switch requests while a tick interval is shown. */
+  const mt5TimeframeRef = useRef<string>(DEFAULT_TIMEFRAME);
+  /** The bridge run's tick bar source, installed while its listeners are alive. */
+  const tickBarsRef = useRef<ChartTickBars | null>(null);
   const { setStatus, setTauriAvailable } = useFieldSetterSelector(stores.connection, (setters) => setters);
   const {
     setSnapshot,
@@ -55,12 +63,21 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
     },
     [adapterRef, chart],
   );
-  const requestHistory = useCallback(
+  const requestInterval = useCallback(
     async (wire: string) => {
       const symbol = targetSymbol.current ?? stores.market.getState().snapshot.symbol;
       if (!symbol || stores.connection.getState().status.state !== 'connected') {
         return;
       }
+      if (isTickInterval(wire)) {
+        // A tick interval has no series to request: its bars are read from the chart symbol's own ticks.
+        requestedTickIntervalRef.current = wire;
+        tickBarsRef.current?.show(symbol, wire);
+        return;
+      }
+      // An MT5 timeframe draws candles: a tick read still in flight must not replace them.
+      requestedTickIntervalRef.current = null;
+      tickBarsRef.current?.stop();
       const generation = ++requestGeneration.current;
       loadingTimeframeRef.current = wire;
       setLoadingTimeframe(wire);
@@ -91,11 +108,12 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
       setChartError(undefined);
       beginHistoryWait(historyWaitSetters);
       const generation = ++requestGeneration.current;
+      // A tick interval shows no MT5 series, so the window that moves the bridge to the
+      // new symbol is requested on the last MT5 timeframe and its candles are dropped.
+      const shown = loadingTimeframeRef.current ?? stores.market.getState().snapshot.timeframe;
+      const timeframe = isTickInterval(shown) ? mt5TimeframeRef.current : (shown ?? DEFAULT_TIMEFRAME);
       try {
-        await sendInitialHistory(
-          symbol,
-          loadingTimeframeRef.current ?? stores.market.getState().snapshot.timeframe ?? DEFAULT_TIMEFRAME,
-        );
+        await sendInitialHistory(symbol, timeframe);
       } catch {
         if (generation !== requestGeneration.current) {
           return;
@@ -159,7 +177,10 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
     mounted,
     requestGeneration,
     currentTimeframe,
-    requestHistory,
+    requestedTickIntervalRef,
+    mt5TimeframeRef,
+    tickBarsRef,
+    requestInterval,
     chooseSymbol,
     chooseSymbolByName,
   };
@@ -175,7 +196,7 @@ type StoreState<Store extends { getState: () => unknown }> = ReturnType<Store['g
  */
 export type BridgeSessionState = Omit<
   ReturnType<typeof useBridgeSession>,
-  'requestHistory' | 'chooseSymbol' | 'chooseSymbolByName'
+  'requestInterval' | 'chooseSymbol' | 'chooseSymbolByName'
 > &
   StoreState<BridgeSessionStores['connection']> &
   StoreState<BridgeSessionStores['market']> &

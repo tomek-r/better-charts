@@ -10,6 +10,8 @@ import { quoteDigits } from '../../../shared/format';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
 import { popupOwnsKeyboard, toolFlyoutOpen } from '../../../shared/ui/popup/popupKeyboardOwnership';
 import { mt5HistoryTransport } from '../../bridge/market/mt5HistoryTransport';
+import { createIndicatorSeriesSource } from '../../bridge/market/indicatorSeriesTransport';
+import { createIndicatorTickSource } from '../../bridge/market/indicatorTicksTransport';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { BridgeSessionLifecycleState } from '../../bridge/BridgeSessionProvider';
 import type { QuoteSnapshot } from '../../../shared/bridge/types';
@@ -49,6 +51,8 @@ export function useChartWorkspaceInitEffects(
           toolDefinitions: CHART_TOOL_PLUGINS,
           indicatorDefinitions: CHART_INDICATOR_PLUGINS,
           indicatorLegendTitle: indicatorStatusLineTitle,
+          indicatorSeriesSource: createIndicatorSeriesSource(() => currentSymbol.current),
+          indicatorTickSource: createIndicatorTickSource(() => currentSymbol.current),
           defaultToolId: DEFAULT_CHART_TOOL_ID,
         },
       );

@@ -166,6 +166,65 @@ export interface HistoryUnavailable {
 }
 
 /**
+ * Payload of the `indicator-series` event: one page of another timeframe's candles, answered by
+ * `request_indicator_series` and routed by the caller's key. Kept apart from {@link HistoryPage}, so a read of
+ * another timeframe can never stand in for a page of the chart's own series.
+ */
+export interface IndicatorSeriesPage {
+  /** The caller's routing id, echoed so parallel reads keep their own answers. */
+  key: string;
+  symbol: string;
+  timeframe: string;
+  /** False when fewer candles were available older than `beforeMs` than were asked for. */
+  complete: boolean;
+  /** Echo of the caller's anchor; null for the newest candles. */
+  beforeMs: number | null;
+  candles: Candle[];
+}
+
+/** Payload of the `indicator-series-unavailable` event: the bridge could not read that series. */
+export interface IndicatorSeriesUnavailable {
+  key: string;
+  symbol: string;
+  timeframe: string;
+  message: string;
+}
+
+/**
+ * One raw tick of an {@link IndicatorTicksPage}: the prices stay the decimal strings the wire carries, because
+ * only the calculation turns them into numbers.
+ */
+export interface IndicatorTick {
+  timeMs: number;
+  bid: string;
+  ask: string;
+  last: string;
+  volume: number;
+}
+
+/**
+ * Payload of the `indicator-ticks` event: one page of the chart symbol's raw ticks, answered by
+ * `request_indicator_ticks` and routed by the caller's key.
+ */
+export interface IndicatorTicksPage {
+  /** The caller's routing id, echoed so parallel reads keep their own answers. */
+  key: string;
+  symbol: string;
+  fromMs: number;
+  toMs: number;
+  /** False when the page bound truncated the range: `ticks` is then its oldest continuous prefix only. */
+  complete: boolean;
+  ticks: IndicatorTick[];
+}
+
+/** Payload of the `indicator-ticks-unavailable` event: the bridge could not read that range's ticks. */
+export interface IndicatorTicksUnavailable {
+  key: string;
+  symbol: string;
+  message: string;
+}
+
+/**
  * A reconnect could not reopen the selection the user was viewing, so the
  * bridge requested `shownSymbol` (the EA's chart symbol) in its place.
  */

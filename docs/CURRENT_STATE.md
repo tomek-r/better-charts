@@ -35,6 +35,42 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   A style's colour (and a line's thickness and line style) is edited in one colour picker
   popover; colours are stored as `#rrggbb`, or `#rrggbbaa` when not fully opaque.
 - The last chart window survives an app restart: on connect the app reopens the symbol and timeframe saved for the same login and broker server, and only when the broker still lists that symbol and serves that timeframe; another account, or a symbol the broker no longer lists, keeps the session default.
+- Tick intervals: the interval selector offers `1T`, `10T`, `100T` and `1000T`
+  before the MT5 timeframes (a "Ticks" section, listed first in the menu as
+  TradingView lists them), and a tick interval can be starred and is restored like
+  any other interval. The codes are frontend-only and never reach the EA. The
+  chart's bars for one are built in the frontend from the chart symbol's raw ticks:
+  they are read backwards from the newest instant the bridge reported through the
+  read-only `request_indicator_ticks` route under the key `chart-ticks`, one page of
+  the negotiated tick bound at a time, until 500 bars are built or the
+  1,000,000-tick budget is spent, then drawn exactly as an accepted MT5 window is.
+  Every quote for the chart symbol adds a tick (bid, else last) to the forming bar,
+  and the tick after a bar's N-th opens the next one. Quote updates are sampled, not
+  lossless: a forming bar holds the ticks that reached the app, not every tick the
+  broker saw. A tick bar has no fixed length, so the bar countdown and the legend's
+  previous-day close are off on tick intervals, and windows, live bars and pages of
+  MT5 timeframes never replace the tick bars while one is shown. Switching back to
+  an MT5 timeframe requests its history as before, and a symbol switch while a tick
+  interval is shown reads the new symbol's ticks: the window that moves the bridge to
+  the new symbol is requested on the last MT5 timeframe and its candles are dropped.
+  A session that starts over (a disconnect, or another account) returns to the
+  bridge's own window.
+- A tick interval reads time to the second: the time axis shows `HH:MM:SS` (the
+  library is asked to show seconds only while a tick interval is drawn, and in
+  broker time the axis writes its marks as the broker's own wall clock rather than
+  in the zone the library would read them in), and the crosshair's time label reads
+  the second the bar opened in, while every MT5 timeframe keeps the minute labels it
+  always had.
+- Scrolling left past the oldest tick bar reads older ticks through the same
+  `chart-ticks` route: one page of the negotiated bound for the range before the
+  oldest tick held, joined to the oldest bar the chart already draws so no bar but
+  the newest is short of the ticks its interval groups, then prepended through the
+  chart's own older-history seam (`appendOlderHistory`), which re-anchors the pane
+  as an MT5 page does. Ticks that do not yet fill a bar wait undrawn for the next
+  page. The read stops at the 1,000,000-tick budget, and asks for nothing more: it
+  hands the chart an empty, final page so the chart's paging latches the end of
+  history and a scroll cannot start a request loop. There is no history-limit
+  notice in the chart to reuse, so nothing is said on screen.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
 - Chart SL/TP clear chips remove the selected live level from positions or
@@ -193,7 +229,8 @@ Not implemented: break even or multiple charts.
   layer), not on the chart frame. The session, reconciliation and
   dispatch gates are untouched, and the app never retries on its own.
 - Countdown uses broker quote time and hides on stale quotes. Bid/Ask labels
-  avoid overlap/axis-width shifts; timeframe buttons have equal fixed widths.
+  avoid overlap/axis-width shifts; timeframe buttons share one 44 px width, and
+  a shown tick interval's longer label (`1000T`) widens the whole row together.
 - Live P&L right-aligns within the widest amount observed per position, expanding
   only as needed and resetting on removal; units/RR stay in place. Overlapping
   trading rows spread vertically without connector brackets; close buttons follow
@@ -341,11 +378,38 @@ The chart no longer draws volume by itself; volume shows through the Volume indi
 SMA, EMA and Bollinger Bands draw on the price pane; RSI, MACD and Volume each get a pane of their own under
 it, about a ninth of the height, which closes when the indicator is removed. A pane resized by
 dragging its separator keeps that height, relative to the price pane, with the saved indicator,
-and the chart restores it on load. Every value is
-computed in the frontend from the bars the chart draws, as Pine's `ta.sma`, `ta.stdev`,
-`ta.rsi` and `ta.ema` compute them; a live tick redraws only the forming bar and never moves
-an indicator's state. Indicator values are display-only and never reach order, account or
-journal data.
+and the chart restores it on load. Every value is computed in the frontend from the bars the chart
+draws, or from another timeframe read from the bridge, as Pine's `ta.sma`, `ta.stdev`, `ta.rsi` and
+`ta.ema` compute them; a live tick redraws only the forming bar and never moves an indicator's state.
+Indicator values are display-only and never reach order, account or journal data.
+
+Every indicator carries a Calculation section after its own inputs: the timeframe it is calculated
+on, and whether a chart bar waits for that timeframe to close. Chart, the default, calculates on the
+bars the chart draws, a tick chart's N-tick bars included; every MT5 timeframe can be chosen, above or
+below the chart's, and so can the four tick timeframes (1, 10, 100 and 1000 ticks). A timeframe whose
+bars are shorter than a tick chart's own cannot be calculated on: every MT5 timeframe counts as longer
+than any tick interval, and the tick choices that group no more ticks than the chart's own bars are
+listed but disabled, with the reason. Another timeframe's candles are read through the
+read-only `request_indicator_series` route, keyed per indicator, so a lower timeframe is possible at
+all (an M5 chart reading M1) and a higher one gets the full depth a series grouped from the chart's
+own bars cannot reach. A higher timeframe's newest candles are projected onto the chart's bars as
+grouped bars were, its forming bar follows the chart's live bars, and the newest page is read again
+when a chart bar closes on that timeframe's boundary; a lower timeframe's candles are paged back over
+the chart's loaded range, and a chart bar shows the last lower bar inside it. A tick timeframe reads
+the chart symbol's raw ticks through the read-only `request_indicator_ticks` route, also keyed per
+indicator, and builds a bar out of every group of N ticks: the first open, the highest high, the
+lowest low, the last close and the number of ticks as its volume. The tick price is the tick's bid.
+Ticks cover only a recent window, as on TradingView: the read asks for its newest window of the chart's
+range and walks back, a window at a time, until it reaches the oldest loaded chart bar or spends its
+200,000-tick budget, so chart bars older than the fetched ticks show no value. Each chart bar shows the
+last N-tick bar whose final tick arrived inside it, and waiting for closes is on by default: a chart
+bar then keeps the last N-tick bar that has all its ticks and ignores the forming one. A closed chart
+bar reads the newest window again, and live ticks at most every two seconds. The wait switch keeps its
+meaning on every timeframe: a chart bar keeps the last closed higher-timeframe value, and a lower
+timeframe's forming chart bar keeps the last closed lower bar's. A series or a tick window the bridge
+cannot read leaves the last good values on screen, retries nothing and shows no notice of its own;
+until the first page arrives a higher timeframe still groups the chart's own bars, so nothing flickers
+empty.
 
 Volume's Style tab offers one Plot type icon button, on the Growing row beside its colour, which
 opens a menu holding the Current value line switch and the eleven ways to draw the plot. Columns, the

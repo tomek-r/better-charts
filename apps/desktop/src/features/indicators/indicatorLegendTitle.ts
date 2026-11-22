@@ -1,5 +1,7 @@
 import { indicatorDisplayOf } from '../chart/engine/indicators/indicatorDisplaySettings';
 import type { SettingValues } from '../chart/engine/settings/settingInputs';
+import { calculationTimeframeWord } from './calculation/calculationChoice';
+import { CALCULATION_GROUP } from './calculation/calculationInputs';
 import type { ChartIndicatorPlugin } from './chartIndicatorPlugin';
 import { findChartIndicatorPlugin } from './registry';
 
@@ -7,7 +9,8 @@ const WORD_SEPARATOR = ' ';
 
 /**
  * The legend's words for an attached indicator before its values: the plugin's short title, then the
- * inputs it names in order, e.g. "SMA 9 close"; an unregistered definition reads as its id.
+ * inputs it names in order, e.g. "SMA 9 close", then the timeframe it is calculated on when that is not
+ * the chart's own, e.g. "SMA 9 close 1H"; an unregistered definition reads as its id.
  */
 export function indicatorLegendTitle(definitionId: string, settings: SettingValues): string {
   const plugin: ChartIndicatorPlugin | undefined = findChartIndicatorPlugin(definitionId);
@@ -17,6 +20,10 @@ export function indicatorLegendTitle(definitionId: string, settings: SettingValu
   const named = plugin.legendInputIds?.(settings);
   const words = [plugin.shortTitle];
   for (const input of plugin.inputs ?? []) {
+    // The calculation inputs name no value of their own: the timeframe is one word after the others.
+    if (input.group === CALCULATION_GROUP) {
+      continue;
+    }
     if (named !== undefined && !named.includes(input.id)) {
       continue;
     }
@@ -25,6 +32,10 @@ export function indicatorLegendTitle(definitionId: string, settings: SettingValu
     if (value !== undefined) {
       words.push(String(value));
     }
+  }
+  const timeframeWord = calculationTimeframeWord(settings);
+  if (timeframeWord !== undefined) {
+    words.push(timeframeWord);
   }
   return words.join(WORD_SEPARATOR);
 }
