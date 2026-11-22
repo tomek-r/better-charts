@@ -1,7 +1,7 @@
 import type { IChartApi, ISeriesApi, MouseEventParams, Time } from 'lightweight-charts';
 import type { RenderBar } from '../bars/renderBar';
 import { HoveredBar } from '../legend/hoveredBar';
-import { IndicatorLegend, type IndicatorLegendCommands } from '../legend/indicatorLegend';
+import { IndicatorLegend, type IndicatorLegendCommands, type IndicatorLegendWords } from '../legend/indicatorLegend';
 import type { SettingValues } from '../settings/settingInputs';
 import type { ChartIndicatorDefinition } from './indicatorContract';
 import { indicatorDisplayOf, withoutStatusLineInputs } from './indicatorDisplaySettings';
@@ -14,12 +14,14 @@ import type { IndicatorSeriesSource } from './indicatorSeriesSource';
 import type { IndicatorTickSource } from './indicatorTickSource';
 import { PaneDragWatcher } from './paneDragWatcher';
 
+const NO_WORDS: IndicatorLegendWords = { shortTitle: '', inputs: '' };
+
 /** What the chart owning the indicators tells them about itself. */
 export interface ChartIndicatorsOptions {
   /** Every indicator a user can attach to this chart. */
   readonly definitions: readonly ChartIndicatorDefinition[];
-  /** The legend's words for an attached indicator before its values, e.g. "SMA 9 close". */
-  readonly legendTitle: (definitionId: string, settings: SettingValues) => string;
+  /** The legend's words for an attached indicator, e.g. "SMA" then "9 close". */
+  readonly legendWords: (definitionId: string, settings: SettingValues) => IndicatorLegendWords;
   /** The bars the indicators are computed over. */
   readonly bars: () => readonly RenderBar[];
   /** The chart's own timeframe, which its indicators are told the bars are of. */
@@ -57,7 +59,7 @@ export class ChartIndicators {
   private readonly plotHoverChanged: ChartIndicatorsOptions['plotHoverChanged'];
   private readonly stopFollowingSelection: () => void;
   private readonly legend: IndicatorLegend;
-  private readonly legendTitle: ChartIndicatorsOptions['legendTitle'];
+  private readonly legendWords: ChartIndicatorsOptions['legendWords'];
   /** Whether the pointer rests on a plotted line the user can click, as the chart was last told. */
   private overPlot = false;
   /** The Status line tab's switches: which legend parts draw, and whether an indicator's inputs are named. */
@@ -73,7 +75,7 @@ export class ChartIndicators {
     this.selection = options.selection;
     this.drawingSelected = options.drawingSelected;
     this.plotHoverChanged = options.plotHoverChanged;
-    this.legendTitle = options.legendTitle;
+    this.legendWords = options.legendWords;
     this.hoveredBar = new HoveredBar(chart, options.bars);
     this.layer = new IndicatorLayer(chart);
     this.runtime = new IndicatorRuntime(
@@ -92,7 +94,7 @@ export class ChartIndicators {
         rows: (hoveredIndex) =>
           this.runtime.attachedState().map((attached) => ({
             instanceId: attached.instanceId,
-            title: this.titleOf(attached.definitionId, attached.settings),
+            words: this.wordsOf(attached.definitionId, attached.settings),
             hidden: attached.hidden,
             selected: this.selection.selected() === attached.instanceId,
             digits: this.layer.precisionOf(attached.instanceId),
@@ -203,12 +205,12 @@ export class ChartIndicators {
   }
 
   /** The legend's words for an attached indicator: empty while the status line shows no titles. */
-  private titleOf(definitionId: string, settings: SettingValues): string {
+  private wordsOf(definitionId: string, settings: SettingValues): IndicatorLegendWords {
     if (!this.statusLine.indicatorTitles) {
-      return '';
+      return NO_WORDS;
     }
     const namedSettings = this.statusLine.indicatorInputs ? settings : withoutStatusLineInputs(settings);
-    return this.legendTitle(definitionId, namedSettings);
+    return this.legendWords(definitionId, namedSettings);
   }
 
   /** The values the legend writes after `instanceId`'s words: none while the status line shows no values. */

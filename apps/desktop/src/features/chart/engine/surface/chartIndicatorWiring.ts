@@ -49,7 +49,7 @@ export function createChartIndicators(
     toolDefinitions,
     defaultToolId,
     indicatorDefinitions,
-    indicatorLegendTitle,
+    indicatorLegendWords,
     indicatorSeriesSource,
     indicatorTickSource,
     ...toolHost
@@ -57,7 +57,7 @@ export function createChartIndicators(
   const selection = new IndicatorSelection(seams.clearDrawingSelection);
   const indicators = new ChartIndicators(chart, host, {
     definitions: indicatorDefinitions,
-    legendTitle: indicatorLegendTitle,
+    legendWords: indicatorLegendWords,
     bars: () => data.bars,
     timeframe: () => data.timeframe,
     digits: () => data.pricePrecision,
