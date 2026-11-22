@@ -16,6 +16,19 @@ export function actionsMenuRow(menu: Locator, label: string): Locator {
   return menu.getByRole('menuitem', { name: label, exact: true });
 }
 
+/**
+ * The Remove row, whose accessible name goes on with the shortcut it names at its far end: it starts with the
+ * row's words, as the Scales and lines menu's shortcut rows do.
+ */
+export function removeRow(menu: Locator): Locator {
+  return menu.getByRole('menuitem', { name: new RegExp(`^${INDICATOR_ACTION_LABELS.remove}\\b`) });
+}
+
+/** The paint-order submenu of an open menu, by the words of the row that opens it. */
+function visualOrderSubmenu(page: Page): Locator {
+  return page.getByRole('menu', { name: INDICATOR_ACTION_LABELS.visualOrder, exact: true });
+}
+
 /** The More button a legend row offers while it is hovered, selected or holds the focus. */
 export function legendMoreButton(row: Locator): Locator {
   return row.getByRole('button', { name: INDICATOR_MORE_ACTIONS_LABEL, exact: true });
@@ -33,7 +46,7 @@ export async function openLegendActionsMenu(row: Locator): Promise<Locator> {
 /** Opens the paint-order submenu from the row of an open menu that carries it. */
 export async function openVisualOrderSubmenu(menu: Locator): Promise<Locator> {
   await actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visualOrder).click();
-  const submenu = menu.page().getByRole('menu', { name: INDICATOR_ACTION_LABELS.visualOrder, exact: true });
+  const submenu = visualOrderSubmenu(menu.page());
   await expect(submenu).toBeVisible();
   return submenu;
 }

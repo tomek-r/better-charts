@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { VISIBILITY_TAB_ID } from '../../chart/settingsForm/settingsTabModel';
 import { useChartSettings } from '../../chart/chartSettings/ChartSettingsProvider';
+import { useSideDrawerActions } from '../../side-drawers/SideDrawerProvider';
 import { useOutsidePointerDismissal } from '../../../shared/ui/popup/useDismissal';
 import { usePopupPlacement } from '../../../shared/ui/popup/usePopupPlacement';
 import { useOpenIndicatorSettings } from '../IndicatorSettingsProvider';
@@ -26,6 +27,7 @@ export function IndicatorActionsMenuPopup({ request, onClose }: IndicatorActions
   const { settings } = useChartSettings();
   const commands = useIndicatorRowCommands();
   const openIndicatorSettings = useOpenIndicatorSettings();
+  const { openDrawer } = useSideDrawerActions();
   usePopupPlacement(anchorRef, menuRef);
   useOutsidePointerDismissal(menuRef, onClose);
 
@@ -56,10 +58,11 @@ export function IndicatorActionsMenuPopup({ request, onClose }: IndicatorActions
     onClose();
     openIndicatorSettings(request.instanceId);
   };
-  const moveTo = (targetInstanceId: string | undefined) => {
-    if (targetInstanceId === undefined) {
-      return;
-    }
+  const openObjectTree = () => {
+    onClose();
+    openDrawer('objectTree');
+  };
+  const moveInVisualOrder = (targetInstanceId: string) => {
     commands.moveIndicatorRow(request.instanceId, targetInstanceId);
     closeToOpener();
   };
@@ -72,11 +75,11 @@ export function IndicatorActionsMenuPopup({ request, onClose }: IndicatorActions
         menuRef={menuRef}
         hidden={saved.hidden === true}
         visualOrder={visualOrder}
-        onBringToFront={() => moveTo(visualOrder?.frontInstanceId)}
-        onSendToBack={() => moveTo(visualOrder?.backInstanceId)}
+        onMoveInVisualOrder={moveInVisualOrder}
         onOpenVisibility={openVisibility}
         onSetHidden={setHidden}
         onRemove={remove}
+        onOpenObjectTree={request.origin === 'legend' ? openObjectTree : undefined}
         onOpenSettings={openSettings}
         onClose={closeToOpener}
       />

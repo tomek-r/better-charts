@@ -17,7 +17,7 @@ import {
 import { chartDrawings, clickChartPoint, selectedDrawing } from './helpers/drawingToolbarPage';
 import { CHART_HOST_SELECTOR } from './helpers/chartHost';
 import { rgbText } from './helpers/cssColor';
-import { indicatorActionsMenu } from './helpers/indicatorActionsMenu';
+import { actionsMenuRow, indicatorActionsMenu } from './helpers/indicatorActionsMenu';
 import { drawnIndicators } from './helpers/indicatorFrames';
 import { expectPaintedOnTop, indicatorRowNames, paintsOver } from './helpers/indicatorOrder';
 import { attachedIndicators } from './helpers/indicatorsDialog';
@@ -28,6 +28,7 @@ import { savedProfile } from './helpers/savedProfile';
 import { EURUSD_CHART, latestSavedIndicators, openWithSavedIndicators } from './helpers/savedIndicators';
 import { gotoWithStub } from './helpers/tauriStub';
 import { readSavedIndicators } from '../src/features/chart/chartSettings/savedIndicators';
+import { INDICATOR_ACTION_LABELS } from '../src/features/indicators/indicatorActionsMenu/indicatorActionsMenuLabels';
 import { palette } from '../src/shared/theme/palette';
 
 failOnPageNoise();
@@ -306,6 +307,8 @@ test('a right-press on an indicator row opens the actions menu at the pointer', 
 
   const menu = indicatorActionsMenu(page);
   await expect(menu).toBeVisible();
+  // The tree's own menu leaves out the way to the tree, whose rows already hold the indicator.
+  await expect(actionsMenuRow(menu, INDICATOR_ACTION_LABELS.objectTree)).toHaveCount(0);
   const menuBox = await menu.boundingBox();
   if (menuBox === null) {
     throw new Error('The indicator actions menu is not laid out.');

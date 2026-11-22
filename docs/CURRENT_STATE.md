@@ -379,11 +379,15 @@ chart (e.g. "SMA 9 close 1.08520"); oscillators write two decimals. An indicator
 its own shows the same row at the top-left of that pane instead. A hovered row offers Hide/Show,
 Settings, Remove and More ("…") buttons, and a double click on its title opens the settings. The
 More button, and a right press on the indicator's Object tree row, open one actions menu at that
-point: Visual order, a submenu whose Bring to front and Send to back move a price-pane indicator to
-the top or the bottom of its pane's paint order (disabled, with a title saying why, for an
-indicator with a pane of its own), Visibility on intervals, which opens the settings dialog on its
-Visibility tab, Hide or Show, Remove, and Settings. The menu answers the keyboard the way a menu
-does: its arrow keys, Home and End walk its rows, Left and Right move between it and its submenu,
+point: Visual order, whose submenu brings a price-pane indicator to the front, forwards it, sends it
+backward or to the back of its pane's paint order, the commands that would leave the order as it is
+greyed out (all four, with a title saying why, for an indicator with a pane of its own); Visibility
+on intervals, which opens the settings dialog on its Visibility tab; Hide or Show; Remove, which
+names the Del key that removes the selected indicator; then Object tree, which opens the tree's
+drawer, in a section of its own, offered by the legend's menu only; and Settings. Every row starts
+with the same icon column: Visual order, Hide or Show, Remove and Settings draw one there, and the
+rows without one keep their words in line. The menu answers the keyboard the way a menu does: its
+arrow keys, Home and End walk its rows, Left and Right move between it and its submenu,
 Enter runs a row, and Escape closes it and gives the focus back to the More button or the row name;
 a press outside it closes it. A hidden indicator's row is dimmed, and a chevron collapses the
 price-pane rows to their count ("˅ 2"). The selected indicator's row keeps its buttons in sight and
@@ -401,14 +405,15 @@ price bars and, under them, the price-pane indicators by their legend names; the
 per indicator with a pane of its own (RSI, MACD, Volume), in the order those panes stand under the
 price pane, each holding that indicator's row. A row's buttons open the indicator's settings, hide
 or show it and remove it, and a double click or Delete on its name does the same as in a drawing
-row. A right press on a row opens the indicator's actions menu at the pointer, the same menu the
-legend row's More button opens, and Escape closes it and gives the focus back to the row's name.
+row. A right press on a row opens the indicator's actions menu at the pointer, the menu the
+legend row's More button opens less its Object tree row, which would point back at the drawer the
+row is already in, and Escape closes it and gives the focus back to the row's name.
 The price-pane indicator rows keep the saved order, the top one painting over the ones under
 it: a drag, or Alt+ArrowUp / Alt+ArrowDown on a focused row, moves one indicator among its pane's
 rows, keeps the focus on it, saves the new order and repaints the chart in it, so a reload keeps
-the order. The actions menu's Bring to front and Send to back move an indicator to the first or the
-last of those rows and save the same order. Own-pane groups keep their order, and indicator rows
-never move into the drawings list.
+the order. The actions menu's four paint-order commands move an indicator to the first, the last or
+the row beside it among those rows and save the same order. Own-pane groups keep their order, and
+indicator rows never move into the drawings list.
 A click on a row selects that indicator, and so does a click on its plotted lines, markers or
 columns: within 4 CSS pixels of the ink a plot draws in the pane it draws in. Either way the row is
 highlighted like a selected drawing row, the chart frames its legend row with its buttons in sight,

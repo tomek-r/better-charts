@@ -17,16 +17,32 @@
   padding: 4px;
 }
 
-/* A row keeps its words on one line and holds the arrow of a submenu at its far end. */
+/* A row keeps its words on one line: its icon's column, then its words, and the shortcut or the submenu's arrow
+   at its far end. */
 .indicator-actions-menu-row {
   display: flex;
-  gap: 16px;
+  gap: 8px;
   align-items: center;
   white-space: nowrap;
 }
 
-/* A row that cannot act, such as the paint order of an indicator with a pane of its own: it stays readable and
-   reachable by the keys, and its title says why it does nothing. */
+/* The column every row opens with, so a row without a glyph keeps its words in line with the ones that have
+   one. */
+.indicator-actions-menu-icon {
+  display: flex;
+  flex: 0 0 16px;
+  align-items: center;
+  height: 16px;
+}
+
+/* A command's glyph, drawn at the size of the legend's row buttons, in the row's own colour. */
+.indicator-actions-menu-glyph {
+  width: 16px;
+  height: 16px;
+}
+
+/* A row that cannot act, such as a paint-order command with no row to move to: it stays readable and reachable
+   by the keys, and its title says why it does nothing. */
 .indicator-actions-menu-row[aria-disabled='true'] {
   cursor: not-allowed;
   opacity: 0.42;
