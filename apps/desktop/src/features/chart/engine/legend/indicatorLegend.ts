@@ -7,10 +7,19 @@ import {
   REMOVE_INDICATOR_LABEL,
 } from './indicatorLegendLabels';
 
+/**
+ * The words naming an attached indicator: the plugin's short title, then the inputs it names after it,
+ * e.g. "SMA" and "9 close 1H". The two runs are written in different colours, so they are kept apart.
+ */
+export interface IndicatorLegendWords {
+  readonly shortTitle: string;
+  readonly inputs: string;
+}
+
 /** One attached indicator's legend line: its words for the settings, then its plot values. */
 export interface IndicatorLegendRow {
   readonly instanceId: string;
-  readonly title: string;
+  readonly words: IndicatorLegendWords;
   readonly hidden: boolean;
   /** Whether the user selected this indicator, which keeps its row framed and its buttons in sight. */
   readonly selected: boolean;
@@ -54,6 +63,7 @@ export interface IndicatorLegendSource {
 interface RowView {
   readonly element: HTMLDivElement;
   readonly title: HTMLSpanElement;
+  readonly inputs: HTMLSpanElement;
   readonly visibilityIcon: SVGSVGElement;
   readonly visibility: HTMLButtonElement;
   readonly values: HTMLSpanElement;
@@ -70,11 +80,12 @@ const LEGEND_LABEL = 'Indicator legend';
 const COLLAPSE_LABEL = 'Collapse indicator legend';
 const EXPAND_LABEL = 'Expand indicator legend';
 const NO_VALUE_TEXT = '∅';
-const VALUE_SEPARATOR = ' ';
+const WORD_SEPARATOR = ' ';
 const CONTAINER_CLASS = 'chart-indicator-legend';
 const ROWS_CLASS = 'chart-indicator-legend-rows';
 const ROW_CLASS = 'chart-indicator-legend-row';
 const TITLE_CLASS = 'chart-indicator-legend-title';
+const INPUTS_CLASS = 'chart-indicator-legend-inputs';
 const VALUE_CLASS = 'chart-indicator-legend-value';
 const VALUES_CLASS = 'chart-indicator-legend-values';
 const ACTIONS_CLASS = 'chart-indicator-legend-actions';
@@ -170,6 +181,11 @@ function createValueElement(value: IndicatorLegendValue, decimals: number): HTML
   element.textContent = formatValue(value.value, decimals);
   element.style.color = value.color;
   return element;
+}
+
+/** The inputs as the row writes them after the title: the word between the two runs stays in the text. */
+function inputsTextOf(inputs: string): string {
+  return inputs === '' ? '' : `${WORD_SEPARATOR}${inputs}`;
 }
 
 function hasSameChildren(parent: HTMLElement, wanted: readonly HTMLDivElement[]): boolean {
@@ -281,8 +297,11 @@ export class IndicatorLegend {
   private createRow(instanceId: string): RowView {
     const element = createElementWithClass('div', ROW_CLASS);
     element.dataset.instanceId = instanceId;
+    const openSettings = (): void => this.commands.openSettings(instanceId);
     const title = createElementWithClass('span', TITLE_CLASS);
-    title.addEventListener('dblclick', () => this.commands.openSettings(instanceId));
+    title.addEventListener('dblclick', openSettings);
+    const inputs = createElementWithClass('span', INPUTS_CLASS);
+    inputs.addEventListener('dblclick', openSettings);
     const visibilityIcon = createIcon(ACTION_ICON_CLASS, ICON_VIEW_BOX, EYE_PATHS);
     const visibility = createActionButton(INDICATOR_VISIBILITY_LABELS.off, visibilityIcon, () => {
       const view = this.views.get(instanceId);
@@ -293,7 +312,7 @@ export class IndicatorLegend {
     const settings = createActionButton(
       INDICATOR_SETTINGS_LABEL,
       createIcon(GEAR_ICON_CLASS, GEAR_VIEW_BOX, GEAR_PATHS),
-      () => this.commands.openSettings(instanceId),
+      openSettings,
     );
     const remove = createActionButton(
       REMOVE_INDICATOR_LABEL,
@@ -307,17 +326,25 @@ export class IndicatorLegend {
     const actions = createElementWithClass('span', ACTIONS_CLASS);
     actions.append(visibility, settings, remove, more);
     const values = createElementWithClass('span', VALUES_CLASS);
-    element.append(title, actions, values);
-    return { element, title, visibilityIcon, visibility, values, hidden: false };
+    element.append(title, inputs, actions, values);
+    return { element, title, inputs, visibilityIcon, visibility, values, hidden: false };
   }
 
   private applyRow(view: RowView, row: IndicatorLegendRow): void {
     view.hidden = row.hidden;
-    view.title.textContent = row.title;
+    view.title.textContent = row.words.shortTitle;
+    this.applyInputs(view, row.words.inputs);
     applyRowFlag(view.element, 'hidden', row.hidden);
     applyRowFlag(view.element, 'selected', row.selected);
     this.applyVisibilityButton(view);
     this.applyValues(view, row);
+  }
+
+  /** Writes the inputs after the title; an indicator that names none leaves the run out of the row. */
+  private applyInputs(view: RowView, inputs: string): void {
+    const text = inputsTextOf(inputs);
+    view.inputs.textContent = text;
+    view.inputs.hidden = text === '';
   }
 
   private applyVisibilityButton(view: RowView): void {
@@ -336,7 +363,7 @@ export class IndicatorLegend {
       return;
     }
     const decimals = row.digits ?? this.source.digits();
-    view.values.replaceChildren(VALUE_SEPARATOR, ...row.values.map((value) => createValueElement(value, decimals)));
+    view.values.replaceChildren(WORD_SEPARATOR, ...row.values.map((value) => createValueElement(value, decimals)));
   }
 
   /** Forgets the views of the indicators whose row is gone, and takes their element off the chart. */

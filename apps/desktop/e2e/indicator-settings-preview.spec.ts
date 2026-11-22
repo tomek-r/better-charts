@@ -18,23 +18,22 @@ import { gotoWithStub } from './helpers/tauriStub';
  * settings back on the chart.
  */
 
-const TITLE_SELECTOR = '.chart-indicator-legend-title';
 const OK_BUTTON_LABEL = 'OK';
 const CANCEL_BUTTON_LABEL = 'Cancel';
 const CLOSE_BUTTON_LABEL = 'Close indicator settings';
 const DEFAULT_LENGTH = 9;
 const EDITED_LENGTH = 20;
 const EMPTY_LENGTH = '';
-const DEFAULT_TITLE = 'SMA 9 close';
-const EDITED_TITLE = 'SMA 20 close';
+const DEFAULT_WORDS = 'SMA 9 close';
+const EDITED_WORDS = 'SMA 20 close';
 /** The pause the settings form waits after an edit before it previews the draft (see useDebouncedPreview). */
 const PREVIEW_DELAY_MS = 250;
 /** Two pauses: long enough for a preview an untouched dialog should never send to have landed. */
 const SETTLE_MS = 2 * PREVIEW_DELAY_MS;
 
-/** The words of the legend row the attached moving average writes. */
-function legendTitle(page: Page): Locator {
-  return indicatorLegendRow(page).locator(TITLE_SELECTOR);
+/** The legend row the attached moving average writes, whose words a previewed Length changes. */
+function legendWords(page: Page): Locator {
+  return indicatorLegendRow(page);
 }
 
 test.describe('indicator settings preview', () => {
@@ -50,7 +49,7 @@ test.describe('indicator settings preview', () => {
 
     await previewLength(page, dialog, EDITED_LENGTH);
 
-    await expect(legendTitle(page)).toHaveText(EDITED_TITLE);
+    await expect(legendWords(page)).toContainText(EDITED_WORDS);
   });
 
   test('Cancel puts the stored Length back on the chart', async ({ page }) => {
@@ -61,7 +60,7 @@ test.describe('indicator settings preview', () => {
 
     await expect(dialog).toBeHidden();
     await expect.poll(() => attachedLength(page)).toBe(DEFAULT_LENGTH);
-    await expect(legendTitle(page)).toHaveText(DEFAULT_TITLE);
+    await expect(legendWords(page)).toContainText(DEFAULT_WORDS);
   });
 
   test('Escape closes the dialog and puts the stored Length back on the chart', async ({ page }) => {

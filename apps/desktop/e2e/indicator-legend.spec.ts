@@ -1,6 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { indicatorSettingsSchema } from '../src/features/chart/engine/indicators/indicatorDisplaySettings';
 import { resolveSettingValues } from '../src/features/chart/engine/settings/settingsSchema';
-import { indicatorLegendTitle } from '../src/features/indicators/indicatorLegendTitle';
+import { withCalculation } from '../src/features/indicators/calculation/withCalculation';
+import { indicatorLegendTitle, indicatorLegendWords } from '../src/features/indicators/indicatorLegendTitle';
 import {
   INDICATOR_ACTION_LABELS,
   OWN_PANE_VISUAL_ORDER_TITLE,
@@ -37,7 +39,9 @@ const CANDLE_LEGEND_LABEL = 'Candle OHLC';
 const COLLAPSE_BUTTON = 'Collapse indicator legend';
 const EXPAND_BUTTON = 'Expand indicator legend';
 const ROW_SELECTOR = '.chart-indicator-legend-row';
-const SMA_ROW_TEXT = 'SMA 9 close';
+const SMA_SHORT_TITLE = 'SMA';
+const SMA_INPUTS = '9 close';
+const SMA_ROW_TEXT = `${SMA_SHORT_TITLE} ${SMA_INPUTS}`;
 const NO_VALUE_TEXT = '∅';
 const SMA_ROW_COUNT = '1';
 const SECONDS_TO_MS = 1000;
@@ -47,6 +51,7 @@ const SHOW_BUTTON_LABEL = 'Show indicator';
 const SETTINGS_BUTTON_LABEL = 'Indicator settings';
 const REMOVE_BUTTON_LABEL = 'Remove indicator';
 const TITLE_SELECTOR = '.chart-indicator-legend-title';
+const INPUTS_SELECTOR = '.chart-indicator-legend-inputs';
 const ACTIONS_SELECTOR = '.chart-indicator-legend-actions';
 const HIDDEN_ATTRIBUTE = 'data-hidden';
 const ACTION_ICON_SIZE = '16x16';
@@ -58,10 +63,17 @@ const SMA_SETTINGS_DIALOG = 'Moving Average Simple settings';
 const RSI_SETTINGS_DIALOG = 'Relative Strength Index settings';
 const RSI_DEFINITION_ID = 'rsi';
 const RSI_INSTANCE_ID = 'rsi-1';
+const RSI_SHORT_TITLE = 'RSI';
+const RSI_INPUTS = '14 close';
+/** A calculation timeframe the SMA can be calculated on, and the word the legend writes it with. */
+const HIGHER_TIMEFRAME = 'H1';
+const HIGHER_TIMEFRAME_LABEL = '1H';
 const PRICE_SCALE_MIN_WIDTH = 70;
 const TRANSPARENT_COLOR = 'rgba(0, 0, 0, 0)';
 /** The white a row's action icons are drawn in, whatever the row's text colour is. */
 const WHITE_ICON_COLOR = rgbText(palette.textBright);
+/** A row's short title takes the legend's text colour, and the inputs after it the muted one. */
+const TITLE_COLOR = rgbText(palette.textLabel);
 /** The app's own hover band on that separator, drawn over the pane's width instead. */
 const SEPARATOR_BAND_SELECTOR = '.chart-pane-separator-band';
 /** The label of the stored checkbox the Status line tab draws no row for. */
@@ -101,6 +113,16 @@ const VISUAL_ORDER_COMMAND_LABELS = [
 /** The legend an indicator holding a pane of its own shows its row in. */
 function paneLegend(page: Page): Locator {
   return page.getByLabel(PANE_LEGEND_LABEL, { exact: true });
+}
+
+/** Asserts the row writes its words as runs: the short title in the legend's colour, its inputs muted. */
+async function expectWordsSplit(row: Locator, shortTitle: string, inputs: string): Promise<void> {
+  const title = row.locator(TITLE_SELECTOR);
+  const inputsRun = row.locator(INPUTS_SELECTOR);
+  await expect(title).toHaveText(shortTitle);
+  await expect(inputsRun).toHaveText(inputs);
+  await expect(title).toHaveCSS('color', TITLE_COLOR);
+  await expect(inputsRun).toHaveCSS('color', MUTED_TEXT_COLOR);
 }
 
 /** The price decimals the chart prints, read from the OHLC legend's own close price. */
@@ -187,6 +209,17 @@ test.describe('indicator legend', () => {
     const value = await attachedSmaValue(page);
 
     await expect(rows.first()).toHaveText(`${SMA_ROW_TEXT} ${value.toFixed(digits)}`);
+  });
+
+  test('the row writes its short title in the text colour and its inputs muted', async ({ page }) => {
+    await attachSma(page);
+    // The dialog closes under the pointer; off the chart, the row reads the last bar.
+    await page.mouse.move(0, 0);
+
+    const row = rows.first();
+    await expectWordsSplit(row, SMA_SHORT_TITLE, SMA_INPUTS);
+    // The two runs read as one phrase, so the row still names the indicator the way the Object tree does.
+    await expect(row).toContainText(SMA_ROW_TEXT);
   });
 
   test('the OHLC line is written at 13 px and the indicator rows at 12 px', async ({ page }) => {
@@ -382,6 +415,10 @@ test.describe('own-pane indicator legend', () => {
     await expect(rows.first()).toContainText(
       indicatorLegendTitle(RSI_DEFINITION_ID, resolveSettingValues(rsiPlugin, {})),
     );
+  });
+
+  test("the RSI row's words are split the way the price pane's are", async ({ page }) => {
+    await expectWordsSplit(paneLegend(page).locator(ROW_SELECTOR).first(), RSI_SHORT_TITLE, RSI_INPUTS);
   });
 
   test("the pane's top border stops at the price axis", async ({ page }) => {
@@ -639,6 +676,27 @@ test('indicatorLegendTitle words a known indicator with its input values', () =>
 
 test('indicatorLegendTitle reads an unregistered definition as its id', () => {
   expect(indicatorLegendTitle('unknown-indicator', {})).toBe('unknown-indicator');
+});
+
+test('indicatorLegendWords parts a known indicator into its short title and inputs', () => {
+  const settings = resolveSettingValues(smaPlugin, { length: 20 });
+
+  expect(indicatorLegendWords('sma', settings)).toEqual({ shortTitle: 'SMA', inputs: '20 close' });
+});
+
+test('indicatorLegendWords keeps the calculation timeframe with the inputs', () => {
+  const settings = resolveSettingValues(indicatorSettingsSchema(withCalculation(smaPlugin)), {
+    calculationTimeframe: HIGHER_TIMEFRAME,
+  });
+
+  expect(indicatorLegendWords('sma', settings)).toEqual({
+    shortTitle: SMA_SHORT_TITLE,
+    inputs: `${SMA_INPUTS} ${HIGHER_TIMEFRAME_LABEL}`,
+  });
+});
+
+test('indicatorLegendWords gives an unregistered definition no inputs', () => {
+  expect(indicatorLegendWords('unknown-indicator', {})).toEqual({ shortTitle: 'unknown-indicator', inputs: '' });
 });
 
 test('visualOrderTargets names the row each paint-order command moves to', () => {

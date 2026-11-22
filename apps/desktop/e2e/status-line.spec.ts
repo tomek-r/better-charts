@@ -68,6 +68,10 @@ function indicatorTitle(page: Page): Locator {
   return page.locator('.chart-indicator-legend-title');
 }
 
+function indicatorInputs(page: Page): Locator {
+  return page.locator('.chart-indicator-legend-inputs');
+}
+
 function indicatorValues(page: Page): Locator {
   return page.locator('.chart-indicator-legend-value');
 }
@@ -292,7 +296,7 @@ test('the last day change appears once an older page brings in the previous brok
   expectNoErrors(collected);
 });
 
-test('the title and every indicator value sit the same gap apart', async ({ page }) => {
+test('the title, the inputs and every indicator value sit the same gap apart', async ({ page }) => {
   const collected = await gotoWithStub(page);
   await openChart(page);
   const search = await openIndicators(page);
@@ -301,6 +305,7 @@ test('the title and every indicator value sit the same gap apart', async ({ page
   await expect(indicatorsDialog(page)).toBeHidden();
   const values = indicatorValues(page);
   await expect(values).toHaveCount(3);
-  expectEqualGaps(await valueBoxes([indicatorTitle(page), values.nth(0), values.nth(1), values.nth(2)]));
+  const pieces = [indicatorTitle(page), indicatorInputs(page), values.nth(0), values.nth(1), values.nth(2)];
+  expectEqualGaps(await valueBoxes(pieces));
   expectNoErrors(collected);
 });
