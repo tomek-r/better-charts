@@ -4,7 +4,7 @@ import type { DragEvent } from 'react';
 export type DropEdge = 'before' | 'after';
 
 /** The row the pointer is over while dragging, and the side the dragged row would land on. */
-export interface LayerDropIndicator {
+export interface DropIndicator {
   readonly index: number;
   readonly edge: DropEdge;
 }

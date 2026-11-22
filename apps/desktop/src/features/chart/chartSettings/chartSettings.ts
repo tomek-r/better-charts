@@ -29,6 +29,8 @@ type SettingsGroupKey = 'canvas' | 'scales' | 'statusLine';
 export interface ChartSettings {
   readonly barStyle: BarStyle;
   readonly timeZone: string;
+  /** Whether the object tree's bars row hides the price bars, which leaves the drawings and indicators drawn. */
+  readonly priceBarsHidden: boolean;
   readonly barStyles: Readonly<Record<BarStyle, BarStyleSettingValues>>;
   readonly canvas: CanvasSettingValues;
   readonly scales: ScalesSettingValues;
@@ -40,6 +42,7 @@ export interface ChartSettings {
 export interface ChartSettingsLayer {
   readonly barStyle?: BarStyle;
   readonly timeZone?: string;
+  readonly priceBarsHidden?: boolean;
   readonly barStyles?: Readonly<Partial<Record<BarStyle, BarStyleSettingValues>>>;
   readonly canvas?: CanvasSettingValues;
   readonly scales?: ScalesSettingValues;
@@ -142,6 +145,14 @@ function readTimeZoneName(raw: unknown): string | undefined {
   return raw;
 }
 
+/** Whether the price bars are hidden; a value stored as anything but a boolean says nothing. */
+function readPriceBarsHidden(raw: unknown): boolean | undefined {
+  if (typeof raw !== 'boolean') {
+    return undefined;
+  }
+  return raw;
+}
+
 /** What read nothing is left out of its layer, so an empty entry never travels. */
 function undefinedWhenEmpty<Fields extends object>(fields: Fields): Fields | undefined {
   return Object.keys(fields).length === 0 ? undefined : fields;
@@ -213,6 +224,9 @@ function chartSettingsLayer(parts: ChartSettingsLayer, groups: SparseGroupValues
   if (parts.timeZone !== undefined) {
     layer.timeZone = parts.timeZone;
   }
+  if (parts.priceBarsHidden !== undefined) {
+    layer.priceBarsHidden = parts.priceBarsHidden;
+  }
   if (parts.barStyles !== undefined) {
     layer.barStyles = parts.barStyles;
   }
@@ -235,6 +249,7 @@ function withLayer(settings: ChartSettings, layer: ChartSettingsLayer): ChartSet
   return {
     barStyle: layer.barStyle ?? settings.barStyle,
     timeZone: layer.timeZone ?? settings.timeZone,
+    priceBarsHidden: layer.priceBarsHidden ?? settings.priceBarsHidden,
     barStyles: everyBarStyle((style) => mergedValues(settings.barStyles[style], layer.barStyles?.[style])),
     ...mergedGroups(settings, layer),
     indicators: layer.indicators ?? settings.indicators,
@@ -273,6 +288,7 @@ function changedGroups(base: ChartSettings, edited: ChartSettings): SparseGroupV
 export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   barStyle: DEFAULT_BAR_STYLE,
   timeZone: EXCHANGE_TIME_ZONE,
+  priceBarsHidden: false,
   barStyles: everyBarStyle((style) => defaultValues(BAR_STYLE_SETTINGS[style].fields)),
   ...GROUP_DEFAULTS,
   indicators: [],
@@ -287,6 +303,7 @@ export function readChartSettingsLayer(raw: unknown): ChartSettingsLayer {
     {
       barStyle: readBarStyleName(raw.barStyle),
       timeZone: readTimeZoneName(raw.timeZone),
+      priceBarsHidden: readPriceBarsHidden(raw.priceBarsHidden),
       barStyles: readSparseBarStyles(raw.barStyles),
       indicators: readSavedIndicators(raw.indicators),
     },
@@ -305,6 +322,7 @@ export function chartSettingsOverrides(base: ChartSettings, edited: ChartSetting
     {
       barStyle: base.barStyle === edited.barStyle ? undefined : edited.barStyle,
       timeZone: base.timeZone === edited.timeZone ? undefined : edited.timeZone,
+      priceBarsHidden: base.priceBarsHidden === edited.priceBarsHidden ? undefined : edited.priceBarsHidden,
       barStyles: changedBarStyles(base.barStyles, edited.barStyles),
       indicators: sameSavedIndicators(base.indicators, edited.indicators) ? undefined : edited.indicators,
     },
@@ -343,6 +361,11 @@ export function withBarStyle(settings: ChartSettings, barStyle: BarStyle): Chart
 
 export function withTimeZone(settings: ChartSettings, timeZone: string): ChartSettings {
   return { ...settings, timeZone };
+}
+
+/** The settings with the price bars hidden or shown, which the object tree's bars row chooses. */
+export function withPriceBarsHidden(settings: ChartSettings, hidden: boolean): ChartSettings {
+  return { ...settings, priceBarsHidden: hidden };
 }
 
 export function withIndicators(settings: ChartSettings, indicators: readonly SavedIndicator[]): ChartSettings {

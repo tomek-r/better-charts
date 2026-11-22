@@ -7,6 +7,7 @@ import type { IndicatorPaneHeight } from '../chart/engine/indicators/indicatorLa
 import type { SettingValues } from '../chart/engine/settings/settingInputs';
 import {
   withIndicatorHidden,
+  withIndicatorMoved,
   withIndicatorPaneHeights,
   withIndicatorSettings,
   withoutIndicator,
@@ -41,6 +42,11 @@ export interface IndicatorRowCommands {
   readonly setPaneHeights: (heights: readonly IndicatorPaneHeight[]) => void;
   /** Saves whether the legend's rows are collapsed to their count, which the legend's chevron edits. */
   readonly setLegendCollapsed: (collapsed: boolean) => void;
+  /**
+   * Moves one price-pane indicator to the row another one holds, which saves the order of the tree's rows:
+   * the chart paints the first of them over the ones under it.
+   */
+  readonly moveIndicatorRow: (movedInstanceId: string, targetInstanceId: string) => void;
 }
 
 /** What the settings dialog does to one saved indicator: OK saves its settings, while a preview only shows them. */
@@ -56,9 +62,9 @@ export interface IndicatorSettingsCommands {
 }
 
 /**
- * The commands of an indicator's row: hide or show one saved indicator, detach it, save the heights of the
- * panes the user resized, and save the legend's collapsed state. Every one saves the settings through the
- * chart settings, which the chart's sync follows.
+ * The commands of an indicator's row: hide or show one saved indicator, detach it, move it among its pane's
+ * rows, save the heights of the panes the user resized, and save the legend's collapsed state. Every one saves
+ * the settings through the chart settings, which the chart's sync follows.
  */
 export function useIndicatorRowCommands(): IndicatorRowCommands {
   const { keep } = useChartSettings();
@@ -76,6 +82,12 @@ export function useIndicatorRowCommands(): IndicatorRowCommands {
         keep(withEditedIndicators(latestSettings.current, (saved) => withIndicatorPaneHeights(saved, heights))),
       setLegendCollapsed: (collapsed) =>
         keep(withStatusLineValue(latestSettings.current, 'indicatorLegendCollapsed', collapsed)),
+      moveIndicatorRow: (movedInstanceId, targetInstanceId) =>
+        keep(
+          withEditedIndicators(latestSettings.current, (saved) =>
+            withIndicatorMoved(saved, movedInstanceId, targetInstanceId),
+          ),
+        ),
     }),
     [keep, latestSettings],
   );

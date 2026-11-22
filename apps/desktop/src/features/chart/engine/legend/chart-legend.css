@@ -88,7 +88,8 @@
 }
 
 .chart-indicator-legend-row:hover,
-.chart-indicator-legend-row:focus-within {
+.chart-indicator-legend-row:focus-within,
+.chart-indicator-legend-row[data-selected='true'] {
   border-color: var(--color-border);
   background: var(--color-root);
 }
@@ -145,7 +146,7 @@
   display: none;
 }
 
-/* A row offers its buttons on hover or while one of them has the focus. */
+/* A row offers its buttons on hover, while one of them has the focus, or while its indicator is selected. */
 .chart-indicator-legend-actions {
   display: none;
   align-items: center;
@@ -153,7 +154,8 @@
 }
 
 .chart-indicator-legend-row:hover .chart-indicator-legend-actions,
-.chart-indicator-legend-row:focus-within .chart-indicator-legend-actions {
+.chart-indicator-legend-row:focus-within .chart-indicator-legend-actions,
+.chart-indicator-legend-row[data-selected='true'] .chart-indicator-legend-actions {
   display: inline-flex;
 }
 

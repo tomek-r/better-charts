@@ -14,9 +14,9 @@ export function rowNameButtons(list: HTMLElement | null): HTMLButtonElement[] {
   return list === null ? [] : [...list.querySelectorAll<HTMLButtonElement>(ROW_NAME_SELECTOR)];
 }
 
-/** Focuses the name button of the row that holds the given layer index, when the list has that row. */
-export function focusLayerNameAt(list: HTMLElement, layerIndex: number): void {
-  list.querySelector<HTMLButtonElement>(`[data-layer-index="${layerIndex}"] ${ROW_NAME_SELECTOR}`)?.focus();
+/** Focuses the name button of the row that holds the given index, when the list has that row. */
+export function focusRowNameAt(list: HTMLElement, rowIndex: number): void {
+  list.querySelector<HTMLButtonElement>(`[data-row-index="${rowIndex}"] ${ROW_NAME_SELECTOR}`)?.focus();
 }
 
 /** Moves focus one row down or up the list the pressed button lives in; the ends hold focus. */

@@ -13,6 +13,7 @@ import { ChartDrawingToolbar } from '../tools/drawingToolbar/ChartDrawingToolbar
 import { ChartSettingsDialogHost } from './chartSettings/dialog/ChartSettingsDialogHost';
 
 import { ChartIndicatorLegendCommands } from '../indicators/ChartIndicatorLegendCommands';
+import { ChartIndicatorSelectionKeys } from '../indicators/ChartIndicatorSelectionKeys';
 import { ChartIndicatorSync } from '../indicators/ChartIndicatorSync';
 
 export function ChartWorkspaceView() {
@@ -35,6 +36,7 @@ export function ChartWorkspaceView() {
             <ChartDrawingPersistence />
             <ChartIndicatorSync />
             <ChartIndicatorLegendCommands />
+            <ChartIndicatorSelectionKeys />
             <ChartPartialClose />
             <ChartDrawingToolbar />
           </ChartCanvas>

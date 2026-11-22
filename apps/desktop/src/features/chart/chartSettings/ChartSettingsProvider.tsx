@@ -207,6 +207,13 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
     chart.current?.setBarStyle(barStyleAppearanceOf(barStyle, barStyleValues));
   }, [barStyle, barStyleValues, chart]);
 
+  // The engine draws the price bars while the object tree's bars row shows them. Hiding stops the bars
+  // and the last price they label; the drawings and indicators keep drawing on the chart.
+  const priceBarsHidden = settings.priceBarsHidden;
+  useEffect(() => {
+    chart.current?.setPriceBarsHidden(priceBarsHidden);
+  }, [chart, priceBarsHidden]);
+
   // The engine paints the chart itself with the Canvas tab's settings. The canvas values object is
   // the dependency, so every preview and every keep reaches the chart, and a change to another tab's
   // settings leaves the chart's own paint alone.

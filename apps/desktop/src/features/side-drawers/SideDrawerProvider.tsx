@@ -12,6 +12,8 @@ type SideDrawerStore = FieldStore<SideDrawerState>;
 
 interface SideDrawerActions {
   toggleDrawer: (drawer: SideDrawerId) => void;
+  /** Opens `drawer`, leaving the other one closed and the open one as it is. */
+  openDrawer: (drawer: SideDrawerId) => void;
 }
 
 const SideDrawerStoreContext = createContext<SideDrawerStore | null>(null);
@@ -45,6 +47,7 @@ export function useSideDrawerActions(): SideDrawerActions {
     () => ({
       toggleDrawer: (drawer: SideDrawerId) =>
         store.setters.setOpenDrawer((openDrawer) => toggledDrawer(openDrawer, drawer)),
+      openDrawer: (drawer: SideDrawerId) => store.setters.setOpenDrawer(drawer),
     }),
     [store],
   );

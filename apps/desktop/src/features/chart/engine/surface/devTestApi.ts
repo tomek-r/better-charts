@@ -27,6 +27,7 @@ import type { ChartIndicatorPane } from '../indicators/indicatorContract';
 import type { IndicatorFrame } from '../indicators/indicatorFrame';
 import type { IndicatorLayer, IndicatorLayerState } from '../indicators/indicatorLayer';
 import type { AttachedIndicatorState, IndicatorRuntime } from '../indicators/indicatorRuntime';
+import type { IndicatorSelection } from '../indicators/indicatorSelection';
 import { clearViewportChangeLog, viewportChangeLog, type ViewportChangeRecord } from '../viewport/viewportDiagnostics';
 
 /** One candle's time with the colours it overrides the series with, as a plain copy. */
@@ -109,6 +110,8 @@ export interface DevTestApi {
   shownDrawingSettings(): ShownDrawingSettings[];
   /** The drawing the user has selected and whether it is locked; null when none. */
   selectedDrawing(): ChartDrawingSelection | null;
+  /** The indicator the user has selected, which the object tree and the legend mark; null when none. */
+  selectedIndicator(): string | null;
   /** The pointer's time/price labels, shown for every tool; null while no pointer is over the pane. */
   pointerReadout(): PointerReadout | null;
   /** What the Canvas tab sets: the chart's own paint, its margins and the crosshair. */
@@ -212,16 +215,20 @@ interface DevTestApiSources {
   drawings: ChartDrawings;
   indicatorLayer: IndicatorLayer;
   indicatorRuntime: IndicatorRuntime;
+  indicatorSelection: IndicatorSelection;
   pointerReadout(): PointerReadout | null;
   rightMarginBars(): number;
   crosshairStyle(): ChartSizedLineAppearance;
   scalesState(): ChartScalesState;
 }
 
-/** The live readings the surface already publishes; the hook reads them through these. */
+/**
+ * The live readings the surface already publishes; the hook reads them through these.
+ */
 interface DevTestReadings {
   readonly drawings: ChartDrawings;
   readonly indicatorLayer: IndicatorLayer;
+  readonly indicatorSelection: IndicatorSelection;
   readonly indicators: IndicatorRuntime;
   getData(): readonly RenderBar[];
   visibleRange(): { from: number; to: number } | null;
@@ -298,6 +305,7 @@ function buildDevTestApi({
   drawings,
   indicatorLayer,
   indicatorRuntime,
+  indicatorSelection,
   pointerReadout,
   rightMarginBars,
   crosshairStyle,
@@ -316,6 +324,7 @@ function buildDevTestApi({
     drawings: () => drawings.exportRecords(),
     shownDrawingSettings: () => drawings.shownDrawingSettings(),
     selectedDrawing: () => drawings.selected(),
+    selectedIndicator: () => indicatorSelection.selected(),
     pointerReadout,
     appearance: () => appearanceState({ chart, rightMarginBars, crosshairStyle }),
     scales: scalesState,
@@ -373,6 +382,7 @@ export function installChartDevTestApi(
     drawings: readings.drawings,
     indicatorLayer: readings.indicatorLayer,
     indicatorRuntime: readings.indicators,
+    indicatorSelection: readings.indicatorSelection,
     pointerReadout: () => pointerReadout.readout(),
     rightMarginBars: () => pane.rightMarginBars(),
     crosshairStyle: () => readings.crosshairStyle(),
