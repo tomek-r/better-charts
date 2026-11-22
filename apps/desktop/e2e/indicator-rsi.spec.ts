@@ -57,8 +57,12 @@ const UPPER_LEVEL_INDEX = 0;
 const LOWER_LEVEL_INDEX = 2;
 /** The width of a level or plot line, which the fill tests only have to look past. */
 const BAND_LINE_WIDTH = 1;
+/** A line wide enough to keep solid pixels inside a fill, so a screenshot can tell it from the fill. */
+const PLOT_OVER_FILL_WIDTH = 4;
 /** The line the bands are measured against, drawn in the RSI's own plot colour. */
 const BAND_PLOT: IndicatorPlot = { title: 'band', style: 'line', color: DEFAULT_COLOR, lineWidth: BAND_LINE_WIDTH };
+/** The same line, wide enough for the pixel test that reads it inside the fill. */
+const WIDE_BAND_PLOT: IndicatorPlot = { ...BAND_PLOT, lineWidth: PLOT_OVER_FILL_WIDTH };
 /** How far the line rises per bar, so the pane's scale spans both level prices. */
 const BAND_VALUE_STEP = 10;
 /** Fill colours no band or line of the chart is drawn in, so a screenshot cannot mistake one for another. */
@@ -70,6 +74,10 @@ const FILL_COLOR_TOLERANCE = 8;
 const PANE_LEFT_EDGE_TOLERANCE_CSS_PX = 4;
 /** How far left of the first bar's column a per-bar band may blend, in CSS pixels. */
 const BAR_EDGE_TOLERANCE_CSS_PX = 2;
+/** How much of the pane's width a row paints a fill across to count as one of its band's rows. */
+const BAND_ROW_WIDTH_SHARE = 0.5;
+/** Rows left out at each end of a band, where the fill's edge and the level line over it blend. */
+const BAND_EDGE_ROWS = 2;
 /** The three bands the fill tests draw over the chart's bars. */
 const BAND_LEVELS: readonly IndicatorLevel[] = [
   { title: 'Upper Band', price: UPPER_BAND, color: DEFAULT_BAND_COLOR, lineWidth: BAND_LINE_WIDTH },
@@ -91,6 +99,8 @@ const PLOT_EDGE_FILL: IndicatorFill = {
 /** Both fill colours as a screenshot decodes them. */
 const LEVEL_BAND_FILL_RGB = parseHexColor(LEVEL_BAND_FILL_COLOR);
 const PLOT_EDGE_FILL_RGB = parseHexColor(PLOT_EDGE_FILL_COLOR);
+/** The band plot's colour as a screenshot decodes it. */
+const BAND_PLOT_RGB = parseHexColor(DEFAULT_COLOR);
 
 function rsiSettings(length: number, overrides: SettingOverrides = {}): SettingValues {
   return resolveSettingValues(rsiPlugin, { [LENGTH_INPUT]: length, ...overrides });
@@ -175,10 +185,10 @@ function expectValuesCloseTo(actual: readonly (number | null)[], expected: reado
   });
 }
 
-/** A rising line and the three bands over the chart's bars, with `fill` painted under them. */
-function bandFrame(times: readonly number[], fill: IndicatorFill): IndicatorFrame {
+/** A rising `plot` and the three bands over the chart's bars, with `fill` painted under them. */
+function bandFrame(times: readonly number[], fill: IndicatorFill, plot: IndicatorPlot = BAND_PLOT): IndicatorFrame {
   return {
-    ...frameOf([BAND_PLOT], times, (_plotIndex, barIndex) => barIndex * BAND_VALUE_STEP),
+    ...frameOf([plot], times, (_plotIndex, barIndex) => barIndex * BAND_VALUE_STEP),
     levels: BAND_LEVELS,
     fills: [fill],
   };
@@ -245,6 +255,64 @@ async function paintedColumns(page: Page, color: readonly [number, number, numbe
 async function waitedPaintedColumns(page: Page, color: readonly [number, number, number]): Promise<number[]> {
   await expect.poll(async () => (await paintedColumns(page, color)).length).toBeGreaterThan(0);
   return paintedColumns(page, color);
+}
+
+/** One pixel of a screenshot, by its column and row. */
+interface PixelSite {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** The part of a screenshot a test reads: rows `top` to `bottom`, left of column `right`. */
+interface PixelRegion {
+  readonly top: number;
+  readonly bottom: number;
+  readonly right: number;
+}
+
+/** How many pixels of row `y`, left of `right`, paint `color`. */
+function paintedPixelsInRow(
+  image: DecodedPng,
+  y: number,
+  color: readonly [number, number, number],
+  right: number,
+): number {
+  let painted = 0;
+  for (let x = 0; x < right; x += 1) {
+    if (isColor(pixelAt(image, x, y), color)) {
+      painted += 1;
+    }
+  }
+  return painted;
+}
+
+/** The screenshot's rows that a band of `color` covers: those painting it across most of the pane. */
+function bandRowsOf(image: DecodedPng, color: readonly [number, number, number], right: number): number[] {
+  const rows: number[] = [];
+  for (let y = 0; y < image.height; y += 1) {
+    if (paintedPixelsInRow(image, y, color, right) >= right * BAND_ROW_WIDTH_SHARE) {
+      rows.push(y);
+    }
+  }
+  return rows;
+}
+
+/** Every pixel of `region` that paints `color`. */
+function pixelsPainting(image: DecodedPng, color: readonly [number, number, number], region: PixelRegion): PixelSite[] {
+  const sites: PixelSite[] = [];
+  for (let y = region.top; y <= region.bottom; y += 1) {
+    for (let x = 0; x < region.right; x += 1) {
+      if (isColor(pixelAt(image, x, y), color)) {
+        sites.push({ x, y });
+      }
+    }
+  }
+  return sites;
+}
+
+/** Whether the screenshot pixel at `site` paints `color`. */
+function pixelPaints(image: DecodedPng, site: PixelSite, color: readonly [number, number, number]): boolean {
+  return isColor(pixelAt(image, site.x, site.y), color);
 }
 
 test('the closes 1, 2, 3, 2, 1 read 100, 50 and 25 with a length of two', () => {
@@ -393,5 +461,40 @@ test.describe('the band a fill paints', () => {
     const blendTolerance = Math.ceil(BAR_EDGE_TOLERANCE_CSS_PX * pixelRatio);
 
     expect(Math.min(...fillColumns)).toBeGreaterThanOrEqual(firstBarColumn - blendTolerance);
+  });
+
+  test('grid lines stay under an opaque level fill and the plot line paints over it', async ({ page }) => {
+    const times = await openChartTimes(page);
+    const filledFrame = bandFrame(times, LEVEL_BAND_FILL, WIDE_BAND_PLOT);
+    const pixelRatio = await pagePixelRatio(page);
+    const paneColumns = Math.floor((await paneWidth(page)) * pixelRatio);
+    const grid = await page.evaluate(() => window.__chartTest!.appearance().grid);
+    expect([grid.vertLines.visible, grid.horzLines.visible]).toEqual([true, true]);
+    const gridRgb = parseHexColor(grid.vertLines.color);
+
+    // The same frame without its fill, so the grid lines the band covers can be found where they show.
+    await showFrame(page, DEMO_ID, { ...filledFrame, fills: [] }, 'own');
+    await waitTwoAnimationFrames(page);
+    const withoutFill = decodePng(await page.locator(CHART_HOST_SELECTOR).screenshot());
+
+    await showFrame(page, DEMO_ID, filledFrame, 'own');
+    await waitedPaintedColumns(page, LEVEL_BAND_FILL_RGB);
+    const withFill = decodePng(await page.locator(CHART_HOST_SELECTOR).screenshot());
+
+    const band = bandRowsOf(withFill, LEVEL_BAND_FILL_RGB, paneColumns);
+    expect(band.length).toBeGreaterThan(BAND_EDGE_ROWS * 2);
+    // The band's own edges blend with the level lines drawn over them, so only its inside is read.
+    const bandInside: PixelRegion = {
+      top: band[0] + BAND_EDGE_ROWS,
+      bottom: band[band.length - 1] - BAND_EDGE_ROWS,
+      right: paneColumns,
+    };
+
+    const gridSites = pixelsPainting(withoutFill, gridRgb, bandInside);
+    expect(gridSites.length).toBeGreaterThan(0);
+    const coveredGridSites = gridSites.filter((site) => pixelPaints(withFill, site, LEVEL_BAND_FILL_RGB));
+    expect(coveredGridSites.length).toBeGreaterThan(0);
+    expect(pixelsPainting(withFill, gridRgb, bandInside)).toEqual([]);
+    expect(pixelsPainting(withFill, BAND_PLOT_RGB, bandInside).length).toBeGreaterThan(0);
   });
 });

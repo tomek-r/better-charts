@@ -12,8 +12,12 @@ import type { IndicatorFill, IndicatorFillEdge, IndicatorLevel } from './indicat
 import type { IndicatorPlotSeries } from './indicatorPlotStyles';
 import { numericPointAt } from './indicatorSeriesValue';
 
-/** A fill sits under the lines it belongs to, above nothing but the background. */
-const FILL_VIEW_Z_ORDER: PrimitivePaneViewZOrder = 'bottom';
+/**
+ * A `normal` view paints its background once the pane's grid is down and before every series foreground,
+ * so the fill covers the grid lines the way TradingView's does, while the plots, their markers and the
+ * price lines still paint over it. A `bottom` view sits under the grid, which shows through a solid fill.
+ */
+const FILL_VIEW_Z_ORDER: PrimitivePaneViewZOrder = 'normal';
 
 /** One bar past each edge of the viewport, so a band leaves the pane instead of stopping at its edge. */
 const VIEWPORT_MARGIN_BARS = 1;
@@ -65,7 +69,11 @@ export class IndicatorFillPrimitive extends ChartSeriesPrimitive {
     super();
     // The view list is stable: the library caches views by array identity. A hidden fill
     // returns no renderer, so hiding costs no painting.
-    const renderer: IPrimitivePaneRenderer = { draw: (target) => this.draw(target) };
+    const renderer: IPrimitivePaneRenderer = {
+      drawBackground: (target) => this.paintFills(target),
+      // The background pass paints the whole fill, which leaves the foreground pass nothing to draw.
+      draw() {},
+    };
     this.views = [{ zOrder: () => FILL_VIEW_Z_ORDER, renderer: () => (this.hidden ? null : renderer) }];
   }
 
@@ -79,7 +87,8 @@ export class IndicatorFillPrimitive extends ChartSeriesPrimitive {
     return this.views;
   }
 
-  private draw(target: RenderTarget): void {
+  /** Every band and polygon of the frame, in the pane's background pass. */
+  private paintFills(target: RenderTarget): void {
     const range = this.chart === null ? null : this.chart.timeScale().getVisibleLogicalRange();
     if (range === null) {
       return;
