@@ -174,6 +174,25 @@ function expectRowAtPaneFoot(row: PaneRow, paneBottom: number): void {
   expect(row.bottom).toBeLessThanOrEqual(paneBottom + PLACEMENT_SLACK);
 }
 
+/**
+ * The RSI pane's row once it stands at its pane's foot. Rows are re-placed a frame after the panes lay themselves
+ * out, and a row made before its pane's DOM existed waits at the stylesheet default until then, so an earlier read
+ * can see a stale place; a row that never followed its pane fails every try.
+ */
+async function settledIndicatorRow(page: Page): Promise<PaneRow> {
+  let settled: PaneRow | undefined;
+  await expect(async () => {
+    const layout = await chartLayout(page);
+    const row = rowAt(layout, INDICATOR_ROW);
+    expectRowAtPaneFoot(row, layout.indicatorBottom);
+    settled = row;
+  }).toPass();
+  if (settled === undefined) {
+    throw new Error('the indicator row never settled at its pane foot');
+  }
+  return settled;
+}
+
 async function paneScaleAt(page: Page, paneIndex: number): Promise<PaneScale> {
   const scale = await page.evaluate((index) => window.__chartTest!.paneScale(index), paneIndex);
   if (scale === null) {
@@ -397,27 +416,32 @@ test('a column plot that grows during its bar stands on its pane foot with no ne
 
 test('an indicator pane adds its own row under the price pane row', async ({ page }) => {
   await openWithIndicatorPane(page, 'rsi');
-  const layout = await chartLayout(page);
-  // The price pane's row stays first in the DOM.
-  expect(layout.rows.map((row) => row.label)).toEqual([PRICE_ROW, INDICATOR_ROW]);
-  const priceRow = rowAt(layout, PRICE_ROW);
-  const indicatorRow = rowAt(layout, INDICATOR_ROW);
-  // At the foot of the price pane, and at or above the top of the RSI pane's own row.
-  expectRowAtPaneFoot(priceRow, layout.priceBottom);
-  expect(priceRow.bottom).toBeLessThanOrEqual(indicatorRow.top);
-  // Inside the RSI pane, at the foot of its own axis.
-  expect(indicatorRow.top).toBeGreaterThanOrEqual(layout.priceBottom - PLACEMENT_SLACK);
-  expectRowAtPaneFoot(indicatorRow, layout.indicatorBottom);
-  // Its foot stands clear of the pane's bottom line, and its fill leaves the axis's left border showing.
-  expect(layout.indicatorBottom - indicatorRow.bottom).toBeGreaterThanOrEqual(ROW_FOOT_CLEARANCE);
-  expect(indicatorRow.left).toBeGreaterThanOrEqual(
-    layout.host.right - layout.axisWidth + ROW_AXIS_INSET - SUBPIXEL_SLACK,
-  );
-  // Both rows sit in the axis column, never over the plot area.
-  for (const row of layout.rows) {
-    expect(row.right).toBeLessThanOrEqual(layout.host.right + PLACEMENT_SLACK);
-    expect(row.left).toBeGreaterThanOrEqual(layout.host.right - layout.axisWidth - PLACEMENT_SLACK);
-  }
+  // The rows are re-placed a frame after the new pane lays itself out, so a read taken between the two can
+  // still see the price row at its single-pane foot. Read again until it settles; a row that never followed its
+  // pane would fail every try.
+  await expect(async () => {
+    const layout = await chartLayout(page);
+    // The price pane's row stays first in the DOM.
+    expect(layout.rows.map((row) => row.label)).toEqual([PRICE_ROW, INDICATOR_ROW]);
+    const priceRow = rowAt(layout, PRICE_ROW);
+    const indicatorRow = rowAt(layout, INDICATOR_ROW);
+    // At the foot of the price pane, and at or above the top of the RSI pane's own row.
+    expectRowAtPaneFoot(priceRow, layout.priceBottom);
+    expect(priceRow.bottom).toBeLessThanOrEqual(indicatorRow.top);
+    // Inside the RSI pane, at the foot of its own axis.
+    expect(indicatorRow.top).toBeGreaterThanOrEqual(layout.priceBottom - PLACEMENT_SLACK);
+    expectRowAtPaneFoot(indicatorRow, layout.indicatorBottom);
+    // Its foot stands clear of the pane's bottom line, and its fill leaves the axis's left border showing.
+    expect(layout.indicatorBottom - indicatorRow.bottom).toBeGreaterThanOrEqual(ROW_FOOT_CLEARANCE);
+    expect(indicatorRow.left).toBeGreaterThanOrEqual(
+      layout.host.right - layout.axisWidth + ROW_AXIS_INSET - SUBPIXEL_SLACK,
+    );
+    // Both rows sit in the axis column, never over the plot area.
+    for (const row of layout.rows) {
+      expect(row.right).toBeLessThanOrEqual(layout.host.right + PLACEMENT_SLACK);
+      expect(row.left).toBeGreaterThanOrEqual(layout.host.right - layout.axisWidth - PLACEMENT_SLACK);
+    }
+  }).toPass();
 });
 
 test('hovering one pane axis reveals only that pane row', async ({ page }) => {
@@ -524,11 +548,10 @@ test('a pointer move over the plot area measures no pane and writes no row', asy
 
 test('a row follows its pane when the viewport shrinks', async ({ page }) => {
   await openWithIndicatorPane(page, 'rsi');
-  const openedRow = rowAt(await chartLayout(page), INDICATOR_ROW);
+  const openedRow = await settledIndicatorRow(page);
   const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
   await page.setViewportSize({ width: viewport.width, height: viewport.height - VIEWPORT_HEIGHT_STEP });
   // The layout watcher re-places every row from its pane's new geometry, with no drag of the user's.
   await expect.poll(async () => rowAt(await chartLayout(page), INDICATOR_ROW).bottom).toBeLessThan(openedRow.bottom);
-  const resized = await chartLayout(page);
-  expectRowAtPaneFoot(rowAt(resized, INDICATOR_ROW), resized.indicatorBottom);
+  await settledIndicatorRow(page);
 });
