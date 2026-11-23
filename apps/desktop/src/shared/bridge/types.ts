@@ -26,6 +26,8 @@ export interface BridgeStatus {
   supportedTimeframes?: string[];
   /** Negotiated `partial_close` capability; absent or false = partial close is never offered. */
   partialClose?: boolean;
+  /** Negotiated `other_symbol_series` capability; absent or false = an indicator series reads only the chart's symbol. */
+  otherSymbolSeries?: boolean;
   /** Algo-trading permission the EA advertised for this session (display only); absent or false = disabled in MT5. */
   tradingEnabled?: boolean;
   /**

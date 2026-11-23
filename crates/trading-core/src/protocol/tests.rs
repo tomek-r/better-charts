@@ -2277,3 +2277,45 @@ fn partial_close_capability_defaults_to_false_and_round_trips() {
     let capable: HelloPayload = serde_json::from_value(capable).unwrap();
     assert!(capable.partial_close);
 }
+
+#[test]
+fn other_symbol_series_capability_defaults_to_false_and_round_trips() {
+    let ack: HelloAckPayload = serde_json::from_value(serde_json::json!({
+        "heartbeat_interval_ms": 2000,
+        "heartbeat_timeout_ms": 6000,
+        "trading_enabled": true,
+    }))
+    .unwrap();
+    assert!(!ack.other_symbol_series);
+    let ack: HelloAckPayload = serde_json::from_value(serde_json::json!({
+        "heartbeat_interval_ms": 2000,
+        "heartbeat_timeout_ms": 6000,
+        "trading_enabled": true,
+        "other_symbol_series": true,
+    }))
+    .unwrap();
+    assert!(ack.other_symbol_series);
+    let hello = serde_json::json!({
+        "token": "t", "terminal_id": "x", "terminal_build": 1,
+        "account_login": "1", "broker_server": "s", "chart_symbol": "A",
+        "expert_version": "1", "trading_enabled": true,
+        "supported_timeframes": ["M1"],
+    });
+    let legacy: HelloPayload = serde_json::from_value(hello.clone()).unwrap();
+    assert!(!legacy.other_symbol_series);
+    let mut capable = hello;
+    capable["other_symbol_series"] = true.into();
+    let capable: HelloPayload = serde_json::from_value(capable).unwrap();
+    assert!(capable.other_symbol_series);
+    let echoed = serde_json::to_value(HelloAckPayload {
+        heartbeat_interval_ms: 2000,
+        heartbeat_timeout_ms: 6000,
+        trading_enabled: true,
+        transfer_limits: Default::default(),
+        tick_price_counts: false,
+        partial_close: false,
+        other_symbol_series: true,
+    })
+    .unwrap();
+    assert_eq!(echoed["other_symbol_series"], true);
+}

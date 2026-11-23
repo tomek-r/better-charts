@@ -137,6 +137,11 @@ pub(crate) struct BridgeStatus {
     /// the single source the close gate reads. False whenever no session is live.
     #[serde(rename = "partialClose", default)]
     pub partial_close: bool,
+    /// Whether the connected EA negotiated serving older-history pages for a
+    /// symbol other than the chart's; the indicator series route reads another
+    /// symbol only when it is true. False whenever no session is live.
+    #[serde(rename = "otherSymbolSeries", default)]
+    pub other_symbol_series: bool,
     /// Algo-trading permission the EA advertised in this session's hello.
     /// Display only: the dispatch gate keeps its own copy. False whenever no
     /// session is live.
@@ -187,6 +192,7 @@ impl Default for BridgeStatus {
             broker_utc_offset_minutes: None,
             supported_timeframes: Vec::new(),
             partial_close: false,
+            other_symbol_series: false,
             trading_enabled: false,
             component_outdated: false,
             token_mismatch: false,

@@ -57,7 +57,7 @@ token is required outside development builds.
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
   "expert_version": "1.012", "tick_reader_version": "1.001", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
-  "tick_price_counts": true, "partial_close": true,
+  "tick_price_counts": true, "partial_close": true, "other_symbol_series": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
     "H1", "H2", "H3", "H4", "H6", "H8", "H12", "D1", "W1", "MN1"]
 }
@@ -69,7 +69,7 @@ token is required outside development builds.
 {
   "heartbeat_interval_ms": 2000, "heartbeat_timeout_ms": 6000, "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
-  "tick_price_counts": true, "partial_close": true
+  "tick_price_counts": true, "partial_close": true, "other_symbol_series": true
 }
 ```
 
@@ -127,6 +127,7 @@ also clears a refusal that belonged to the terminal it just stopped and reports
 | Valid limits | Rust frame bytes: `1024..=2147483643`; EA frame MiB: `1..=2047`; ticks: `1..=262144` (`u32`; a peer advertising more is rejected). Invalid limits reject the handshake. The frame bounds, the 8 MiB default and the `1..=1000` history page and the `initialHistoryBars` handshake window (`1..=historyBars`, currently 300) and the `ticksPerPage` default/max (262,144; the EA input keeps its own literal) live once in `config/bridge.json`, as does the desktop-only `tickProfile.maxEstimatedTicks` budget (30,000,000; the EA never reads it), embedded by `crates/trading-core/src/protocol/limits.rs` and imported by `apps/desktop/src/shared/bridge/config.ts`. |
 | `tick_price_counts` | Defaults to `false`; exact price summaries require support from both peers. Raw tick pages remain supported. |
 | `partial_close` | Defaults to `false` when absent from `hello`. Rust echoes the negotiated value in `hello_ack`, publishes it as `partialClose` on the bridge status and resets it when the session ends. An EA without it ignores `order_close_request.volume` and would close the whole position, so Rust rejects every partial close unless it is `true`. |
+| `other_symbol_series` | Defaults to `false` when absent from `hello`. Rust echoes the negotiated value in `hello_ack`, publishes it as `otherSymbolSeries` on the bridge status and resets it when the session ends. An EA without it serves older-history pages for the chart symbol only, so the desktop's `request_indicator_series` rejects every other symbol unless it is `true`. |
 | `hello.supported_timeframes` | Required list of the EA's supported MT5 period codes. Must be a nonempty, unique subset of the standard periods and include `M1`. Missing, `null` or invalid advertisements reject the handshake. Published as `supportedTimeframes` on the Tauri bridge status; history commands reject periods the connected EA did not advertise. |
 
 Rust frame configuration uses Settings or the `MT5_BRIDGE_MAX_FRAME_BYTES`
@@ -294,7 +295,11 @@ snapshot.
 A page may target **any supported timeframe of the active symbol**, not only
 the timeframe of the current window: the hybrid volume profile reads an
 estimate page and M1 pages while the chart shows another timeframe. A page for
-any other symbol is refused with an empty page, `complete=false`.
+any other symbol is refused with an empty page, `complete=false`, unless the
+session negotiated `other_symbol_series` (EA 1.012+): then a page of any symbol
+the terminal has is served the same way (the EA selects it into Market Watch as
+it does the chart's symbol), and a pending page of another symbol does not
+depend on, and is not dropped by a change of, the active symbol.
 
 A timeframe no chart has open is built by MT5 on demand, so its series may still
 be synchronizing when the page arrives. The EA then keeps the page pending and
@@ -357,7 +362,13 @@ The command is read-only and refused unless the bridge is connected (`bridge is
 not connected`), `symbol` equals the session's active chart symbol (`symbol is
 not the chart's symbol`), `timeframe` is one the connected EA advertised
 (`timeframe is not supported by the connected EA`, as for `request_history_page`)
-and `bars` is inside the history page bound. `key` is the caller's routing id:
+and `bars` is inside the history page bound. Once the connected EA negotiated
+`other_symbol_series`, any non-empty `symbol` the request validation accepts is
+read the same way — same slots, keys, timeouts and events — so an indicator can
+use a second symbol's candles; the EA side of that extension ships with EA
+1.012. Without the capability, the EA still answers a page for another symbol
+empty (`complete=false`) and the command keeps refusing it with `symbol is not
+the chart's symbol`. `key` is the caller's routing id:
 1–64 characters of `[A-Za-z0-9_:-]`; anything else is `invalid indicator series
 key`. `before_ms` is the caller's anchor: candles strictly older than it. `null`
 (or an absent argument) asks for the newest bars, which is sent as a page

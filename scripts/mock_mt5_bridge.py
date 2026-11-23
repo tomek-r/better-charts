@@ -136,8 +136,9 @@ def tick_price_summary(message: dict) -> dict:
 # filled reports complete=False, which is how a client learns it reached the end.
 HISTORY_FLOOR_MS = MOCK_DATA_START_MS - 7_200_000
 HISTORY_INTERVAL_MS = 60_000
-# Mirrors the EA: older pages are served for any supported timeframe of the
-# active symbol only (the symbol of the last window snapshot).
+# Mirrors the EA: older pages are served for any supported timeframe of any
+# symbol (the mock advertises `other_symbol_series`); this is the symbol the
+# last window snapshot selected.
 ACTIVE_FEED = {"symbol": "TEST.INIT"}
 # The EA waits at most this long for a series that is still synchronizing
 # (BRIDGE_HISTORY_PAGE_DEADLINE_MS), then answers a correlated INTERNAL_ERROR.
@@ -146,16 +147,15 @@ PAGE_SYNC_TIMEOUT_MESSAGE = "history page synchronization timed out"
 
 
 def synthetic_history_page(request: dict, session_id: str, max_frame: int) -> dict:
-    """One page of candles strictly older than the client's `before_ms` anchor."""
+    """One page of candles strictly older than the client's `before_ms` anchor.
+    The mock advertises `other_symbol_series`, so another symbol's page is
+    served exactly like the chart's own."""
     before_ms = request.get("before_ms")
     assert isinstance(before_ms, int) and before_ms > 0, request
     bars = request.get("bars")
     assert isinstance(bars, int) and 1 <= bars <= 1000, request
     candles = []
     time_ms = before_ms - HISTORY_INTERVAL_MS
-    # Another symbol is refused like the EA does: an empty, incomplete page.
-    if request["symbol"] != ACTIVE_FEED["symbol"]:
-        time_ms = HISTORY_FLOOR_MS - HISTORY_INTERVAL_MS
     while len(candles) < bars and time_ms >= HISTORY_FLOOR_MS:
         candles.append({"time_ms": time_ms, "open": "99.0", "high": "100.0", "low": "98.0", "close": "99.5",
                         "tick_volume": 5, "spread": 2, "real_volume": 0})
@@ -311,10 +311,11 @@ def self_test_history_page() -> int:
         other = synthetic_history_page({**request, "timeframe": timeframe}, "synthetic-session",
                                        TRANSFER_LIMITS["max_frame_bytes"])["payload"]
         assert other["timeframe"] == timeframe and other["candles"], timeframe
-    # Another symbol is refused with an empty, incomplete page.
-    refused = synthetic_history_page({**request, "symbol": "OTHER"}, "synthetic-session",
-                                     TRANSFER_LIMITS["max_frame_bytes"])["payload"]
-    assert refused["candles"] == [] and refused["complete"] is False
+    # Another symbol is served like the active feed's own (the mock advertises other_symbol_series).
+    for symbol in (ACTIVE_FEED["symbol"], "OTHER.INIT"):
+        other = synthetic_history_page({**request, "symbol": symbol}, "synthetic-session",
+                                       TRANSFER_LIMITS["max_frame_bytes"])["payload"]
+        assert other["symbol"] == symbol and other["candles"] == payload["candles"], symbol
     # A series that synchronizes in time is answered after the delay.
     wait, frame = history_page_reply(request, "synthetic-session", TRANSFER_LIMITS["max_frame_bytes"], 0.25)
     assert wait == 0.25 and frame["type"] == "history_snapshot" and frame["payload"]["candles"]
@@ -324,7 +325,7 @@ def self_test_history_page() -> int:
     assert wait == PAGE_SYNC_DEADLINE_SECONDS and frame["type"] == "error"
     assert frame["id"] == request["_request_id"]
     assert frame["payload"] == {"code": "INTERNAL_ERROR", "message": PAGE_SYNC_TIMEOUT_MESSAGE, "retryable": False}
-    print("mock older-history page self-test passed: strictly-older pages, any timeframe, other symbol refused, sync delay and correlated timeout error")
+    print("mock older-history page self-test passed: strictly-older pages, any timeframe and symbol, sync delay and correlated timeout error")
     return 0
 
 
@@ -716,7 +717,7 @@ def main() -> int:
             "tick_reader_version": MQ5_VERSIONS["tickReaderVersion"], "trading_enabled": False,
             "supported_timeframes": SUPPORTED_TIMEFRAMES,
             "transfer_limits": TRANSFER_LIMITS,
-            "tick_price_counts": True, "partial_close": True,
+            "tick_price_counts": True, "partial_close": True, "other_symbol_series": True,
         }))
         hello_ack = next_non_reconcile(reader, conn, None, deadline)
         hello_payload = expect_type(hello_ack, "hello_ack")

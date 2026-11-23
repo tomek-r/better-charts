@@ -393,8 +393,11 @@ listed but disabled, with the reason. Another timeframe's candles are read throu
 read-only `request_indicator_series` route, keyed per indicator, so a lower timeframe is possible at
 all (an M5 chart reading M1) and a higher one gets the full depth a series grouped from the chart's
 own bars cannot reach. Indicators of one chart that read the same timeframe share one read and its
-candles, kept in memory until the chart's symbol or timeframe changes. A higher timeframe's newest candles
-are projected onto the chart's bars as grouped bars were; after that first read nothing more is asked: its
+candles, kept in memory until the chart's symbol or timeframe changes. A read can name another symbol
+than the chart's when the connected EA negotiates `other_symbol_series`, and such a read asks for that
+symbol's newest two candles once per closed bar of its timeframe, never on a tick. A higher timeframe's
+newest candles are projected onto the chart's bars as grouped bars were; after that first read nothing
+more is asked: its
 forming bar and every bar that closes are grouped from the chart's own bars, which are the broker's. A
 lower timeframe's candles are paged back over the chart's loaded range, and a chart bar shows the last lower
 bar inside it; the forming lower bar is built from the chart's live bars, and a lower bar that closes asks

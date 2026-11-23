@@ -228,7 +228,8 @@ pub(crate) fn request_history_page(
 }
 
 /// Read-only candles for an indicator: any supported timeframe of the chart
-/// symbol, published on `indicator-series` and routed by the caller's `key`, so
+/// symbol — or of another symbol once the EA negotiated `other_symbol_series` —
+/// published on `indicator-series` and routed by the caller's `key`, so
 /// several reads can be in flight at once. Kept apart from [`request_history`]
 /// and [`request_history_page`] because it must not displace the chart's window
 /// or its lazy pages, reset the live feed or cancel the tick profile; it reuses
@@ -266,14 +267,18 @@ pub(crate) fn request_indicator_series_inner(
     {
         return Err("bridge is not connected".into());
     }
-    if state
-        .market
+    let chart_symbol_is_requested = {
+        let market = state.market.lock().expect("market mutex poisoned");
+        market.symbol.as_deref() == Some(request.page.symbol.as_str())
+    };
+    // Another symbol is read only when the EA negotiated `other_symbol_series`
+    // for this session; without it the chart symbol is the only one served.
+    let other_symbol_negotiated = state
+        .status
         .lock()
-        .expect("market mutex poisoned")
-        .symbol
-        .as_deref()
-        != Some(request.page.symbol.as_str())
-    {
+        .expect("bridge status mutex poisoned")
+        .other_symbol_series;
+    if !chart_symbol_is_requested && !other_symbol_negotiated {
         return Err("symbol is not the chart's symbol".into());
     }
     if !state

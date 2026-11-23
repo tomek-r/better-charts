@@ -34,6 +34,10 @@ pub struct HelloPayload {
     /// The EA honors `order_close_request.volume` as a partial close.
     #[serde(default)]
     pub partial_close: bool,
+    /// The EA serves older-history pages for a symbol other than the chart's,
+    /// which the desktop's indicator series route needs to read another symbol.
+    #[serde(default)]
+    pub other_symbol_series: bool,
     /// Standard MT5 periods supported by this EA.
     pub supported_timeframes: Vec<String>,
 }
@@ -49,6 +53,8 @@ pub struct HelloAckPayload {
     pub tick_price_counts: bool,
     #[serde(default)]
     pub partial_close: bool,
+    #[serde(default)]
+    pub other_symbol_series: bool,
 }
 
 /// One EA observation of the **active symbol's** trading session, carried on
