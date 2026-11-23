@@ -8,7 +8,7 @@ import {
   coveredTickWalk,
   endedTickWalk,
   narrowedTickWalk,
-  newestTickWindow,
+  newerTickWindow,
   nextOlderTickWindow,
   startTickWalk,
   tickReadRange,
@@ -207,14 +207,17 @@ test.describe('planning the windows of a tick read', () => {
     expect(nextOlderTickWindow(endedTickWalk(walk), 200_000, TICK_BUDGET)).toBeNull();
   });
 
-  test('a refresh asks for the newest window again, narrowed with the walk', () => {
-    const walk = narrowedTickWalk(startTickWalk(RANGE));
+  test('a closed chart bar asks only for the ticks after the newest one held, up to the new range end', () => {
+    const walk = startTickWalk(RANGE);
+    const newestHeldMs = STUB_NOW - 20 * MILLISECONDS_PER_SECOND;
 
-    expect(newestTickWindow(walk, 200_000)).toEqual({
-      fromMs: STUB_NOW - 30_000,
+    expect(newerTickWindow(walk, newestHeldMs, 200_000, TICK_BUDGET)).toEqual({
+      fromMs: newestHeldMs + 1,
       toMs: STUB_NOW,
       maxTicks: 200_000,
     });
+    expect(newerTickWindow(walk, STUB_NOW, 200_000, TICK_BUDGET)).toBeNull();
+    expect(newerTickWindow(walk, newestHeldMs, 200_000, 0)).toBeNull();
   });
 
   test('a chart’s loaded bars ask for ticks from the oldest bar to the end of the newest one', () => {
