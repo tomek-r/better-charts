@@ -295,7 +295,11 @@ snapshot.
 A page may target **any supported timeframe of the active symbol**, not only
 the timeframe of the current window: the hybrid volume profile reads an
 estimate page and M1 pages while the chart shows another timeframe. A page for
-any other symbol is refused with an empty page, `complete=false`.
+any other symbol is refused with an empty page, `complete=false`, unless the
+session negotiated `other_symbol_series` (EA 1.012+): then a page of any symbol
+the terminal has is served the same way (the EA selects it into Market Watch as
+it does the chart's symbol), and a pending page of another symbol does not
+depend on, and is not dropped by a change of, the active symbol.
 
 A timeframe no chart has open is built by MT5 on demand, so its series may still
 be synchronizing when the page arrives. The EA then keeps the page pending and

@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.011"
+#define BRIDGE_EXPERT_VERSION "1.012"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -78,6 +78,8 @@ bool g_tick_complete=false;
 bool g_price_counts_enabled=false,g_tick_aggregate=false;
 // Negotiated per session in hello_ack; a partial close is refused unless true.
 bool g_partial_close_enabled=false;
+// Negotiated per session in hello_ack; a history page of another symbol is refused unless true.
+bool g_other_symbol_series_enabled=false;
 struct TickPriceCounter { double price; uint total,bid,ask; bool bid_seen; };
 CHashMap<long,int> g_price_index;
 TickPriceCounter g_prices[];
@@ -499,7 +501,7 @@ bool SendHello()
    g_identity_server=AccountInfoString(ACCOUNT_SERVER);
    // Rust reads this once per session; remembered so a later change reconnects.
    g_hello_trading_enabled=TradingEnabled();
-   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_reader_version\":%s,\"tick_price_counts\":true,\"partial_close\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,(g_reader_version=="" ? "null" : "\""+g_reader_version+"\""),SupportedTimeframesJson(),(g_hello_trading_enabled ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
+   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_reader_version\":%s,\"tick_price_counts\":true,\"partial_close\":true,\"other_symbol_series\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,(g_reader_version=="" ? "null" : "\""+g_reader_version+"\""),SupportedTimeframesJson(),(g_hello_trading_enabled ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
    return SendFrame(hello);
   }
 
@@ -1563,6 +1565,7 @@ struct PendingHistoryPage
    long            bars;
    long            before_ms;
    ulong           deadline_ms;
+   bool            follows_active;  // a page of the active symbol, dropped when that symbol changes
   };
 
 PendingHistoryPage g_pending_pages[BRIDGE_HISTORY_PAGE_PENDING_MAX];
@@ -1635,7 +1638,9 @@ bool SendHistoryPageFrame(const string request_id,const string symbol,const stri
 /**
  * One page of candles strictly older than `before_ms`, for lazy loading, for
  * any supported timeframe of the active symbol (the hybrid volume profile
- * reads timeframes no chart has open).
+ * reads timeframes no chart has open); when the session negotiated
+ * `other_symbol_series` (EA 1.012+), for any symbol the terminal has, served
+ * the same way as the indicator series route.
  *
  * This deliberately never writes the live-feed state SendHistorySnapshot
  * establishes (`g_last_bar`, `g_have_last_bar`, `g_history_ready`,
@@ -1644,12 +1649,13 @@ bool SendHistoryPageFrame(const string request_id,const string symbol,const stri
  * countdown, the quote feed and the bar_update staleness check at an old
  * candle.
  *
- * A request that cannot be served (other symbol, bad arguments) answers an
- * empty, incomplete page. A series that is still synchronizing waits in the
- * pending list (see PollPendingHistoryPages) rather than answering "no older
- * candles". The only error frame allowed here carries the page's own request
- * id as its envelope id: the bridge recognizes correlated ids and fails just
- * that request, while any other error id tears the session down.
+ * A request that cannot be served (another symbol without
+ * `other_symbol_series`, bad arguments) answers an empty, incomplete page. A
+ * series that is still synchronizing waits in the pending list (see
+ * PollPendingHistoryPages) rather than answering "no older candles". The only
+ * error frame allowed here carries the page's own request id as its envelope
+ * id: the bridge recognizes correlated ids and fails just that request, while
+ * any other error id tears the session down.
  */
 void HandleHistoryPageRequest(const string request_id,const string symbol,const string timeframe_name,const ENUM_TIMEFRAMES timeframe,const long bars,const long before_ms)
   {
@@ -1660,7 +1666,7 @@ void HandleHistoryPageRequest(const string request_id,const string symbol,const 
    // with the others; answering now would report a false "no older candles".
    const bool initial_history_waiting=(g_pending_initial.active && symbol==g_pending_initial.symbol);
    if(EnsureSymbol(symbol) && timeframe!=PERIOD_CURRENT && bars>=1 && bars<=1000 && before_ms>0 &&
-      (initial_history_waiting || (g_history_ready && symbol==g_active_symbol)))
+      (initial_history_waiting || (g_history_ready && (symbol==g_active_symbol || g_other_symbol_series_enabled))))
      {
       if(initial_history_waiting || !ReadHistoryPage(symbol,timeframe,bars,before_ms,rates,copied))
         {
@@ -1677,6 +1683,7 @@ void HandleHistoryPageRequest(const string request_id,const string symbol,const 
          page.bars=bars;
          page.before_ms=before_ms;
          page.deadline_ms=GetTickCount64()+BRIDGE_HISTORY_PAGE_DEADLINE_MS;
+         page.follows_active=(initial_history_waiting || symbol==g_active_symbol);
          g_pending_pages[g_pending_page_count]=page;
          g_pending_page_count++;
          return;
@@ -1705,7 +1712,7 @@ void PollPendingHistoryPages()
    while(index<g_pending_page_count && g_state==BRIDGE_READY)
      {
       const PendingHistoryPage page=g_pending_pages[index];
-      if(g_active_symbol!="" && page.symbol!=g_active_symbol)
+      if(page.follows_active && g_active_symbol!="" && page.symbol!=g_active_symbol)
         {
          PrintFormat("BetterChartsBridge history page dropped: id=%s symbol changed",page.request_id);
          RemovePendingHistoryPage(index);
@@ -3196,6 +3203,7 @@ void HandleFrame(const string json)
       g_max_ticks_per_page=(uint)page_ticks;
       g_price_counts_enabled=JsonBooleanIsTrue(json,"tick_price_counts");
       g_partial_close_enabled=JsonBooleanIsTrue(json,"partial_close");
+      g_other_symbol_series_enabled=JsonBooleanIsTrue(json,"other_symbol_series");
       g_session_id=session_id;
       g_state=BRIDGE_READY;
       g_backoff_index=0;
@@ -3355,6 +3363,7 @@ void TryConnect()
    g_max_ticks_per_page=5000;
    g_session_id="";
    g_partial_close_enabled=false;
+   g_other_symbol_series_enabled=false;
    ClearPendingHistoryPages();
    ClearPendingInitialHistory();
    g_history_ready=false;
