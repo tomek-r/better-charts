@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { VISIBILITY_TAB_ID } from '../../chart/settingsForm/settingsTabModel';
 import { useChartSettings } from '../../chart/chartSettings/ChartSettingsProvider';
@@ -10,6 +10,21 @@ import { useIndicatorRowCommands } from '../useIndicatorCommands';
 import { IndicatorActionsMenu } from './IndicatorActionsMenu';
 import type { IndicatorActionsMenuRequest } from './indicatorActionsMenuRequest';
 import { visualOrderTargets } from './indicatorVisualOrder';
+
+/**
+ * Marks a menu button that opened the menu as expanded for as long as the menu is open. A legend row reads the mark
+ * to keep its buttons in sight while the pointer and the focus are in the menu; an object tree row name, which is
+ * no menu button, is left alone.
+ */
+function useOpenerExpanded(opener: HTMLElement): void {
+  useEffect(() => {
+    if (opener.getAttribute('aria-haspopup') !== 'menu') {
+      return undefined;
+    }
+    opener.setAttribute('aria-expanded', 'true');
+    return () => opener.setAttribute('aria-expanded', 'false');
+  }, [opener]);
+}
 
 interface IndicatorActionsMenuPopupProps {
   readonly request: IndicatorActionsMenuRequest;
@@ -30,6 +45,7 @@ export function IndicatorActionsMenuPopup({ request, onClose }: IndicatorActions
   const { openDrawer } = useSideDrawerActions();
   usePopupPlacement(anchorRef, menuRef);
   useOutsidePointerDismissal(menuRef, onClose);
+  useOpenerExpanded(request.returnFocus);
 
   const saved = settings.indicators.find((indicator) => indicator.instanceId === request.instanceId);
   if (saved === undefined) {

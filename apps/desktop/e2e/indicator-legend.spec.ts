@@ -625,6 +625,25 @@ test.describe('indicator actions menu', () => {
     await expect(legendMoreButton(row)).toBeFocused();
   });
 
+  test('the row keeps its buttons while its menu is open, even with the pointer on the submenu', async ({ page }) => {
+    const row = legendRowNamed(page, SMA_ROW_TEXT);
+    const menu = await openLegendActionsMenu(row);
+    const submenu = await openVisualOrderSubmenu(menu);
+
+    // The menu is portalled to the page body, so the pointer and the focus both leave the row.
+    await submenu.getByRole('menuitem').first().hover();
+
+    await expect(legendMoreButton(row)).toHaveAttribute('aria-expanded', 'true');
+    await expect(row.locator(ACTIONS_SELECTOR)).toBeVisible();
+
+    await page.locator(CHART_HOST_SELECTOR).click({ position: { x: 600, y: 120 } });
+
+    await expect(menu).toBeHidden();
+    // The buttons are hidden again, so the More button is read by its place rather than by its role.
+    await expect(row.locator(`${ACTIONS_SELECTOR} [aria-haspopup='menu']`)).toHaveAttribute('aria-expanded', 'false');
+    await expect(row.locator(ACTIONS_SELECTOR)).toBeHidden();
+  });
+
   test('a press outside the menu closes it', async ({ page }) => {
     const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
 

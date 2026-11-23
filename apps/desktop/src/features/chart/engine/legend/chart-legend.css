@@ -89,7 +89,8 @@
 
 .chart-indicator-legend-row:hover,
 .chart-indicator-legend-row:focus-within,
-.chart-indicator-legend-row[data-selected='true'] {
+.chart-indicator-legend-row[data-selected='true'],
+.chart-indicator-legend-row:has([aria-expanded='true']) {
   border-color: var(--color-border);
   background: var(--color-root);
 }
@@ -156,7 +157,8 @@
   display: none;
 }
 
-/* A row offers its buttons on hover, while one of them has the focus, or while its indicator is selected. */
+/* A row offers its buttons on hover, while one of them has the focus, while its indicator is selected, or while its
+   actions menu is open (the menu sits outside the row, so neither the hover nor the focus stays on it). */
 .chart-indicator-legend-actions {
   display: none;
   align-items: center;
@@ -165,7 +167,8 @@
 
 .chart-indicator-legend-row:hover .chart-indicator-legend-actions,
 .chart-indicator-legend-row:focus-within .chart-indicator-legend-actions,
-.chart-indicator-legend-row[data-selected='true'] .chart-indicator-legend-actions {
+.chart-indicator-legend-row[data-selected='true'] .chart-indicator-legend-actions,
+.chart-indicator-legend-row:has([aria-expanded='true']) .chart-indicator-legend-actions {
   display: inline-flex;
 }
 
