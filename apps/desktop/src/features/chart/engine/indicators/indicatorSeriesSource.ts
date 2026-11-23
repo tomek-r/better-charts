@@ -5,6 +5,8 @@ import type { KeyedReadSource } from './keyedReadSource';
 export interface IndicatorSeriesQuery {
   /** 1–64 characters of `[A-Za-z0-9_:-]`: the key the host routes this read's answer by. */
   readonly key: string;
+  /** The symbol whose candles this read asks for; absent reads the chart's own symbol. */
+  readonly symbol?: string;
   readonly timeframe: string;
   /** The candles to ask for, one history page's worth at most. */
   readonly bars: number;

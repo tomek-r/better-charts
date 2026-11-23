@@ -3,23 +3,37 @@ import type { IndicatorSeriesSource } from '../../chart/engine/indicators/indica
 import { IndicatorSeriesRead } from './indicatorSeriesRead';
 import type { SeriesReadPlan } from './seriesPages';
 
-/** The reads every chart holds, by the source it reads through and by the timeframe it reads. */
+/** The reads every chart holds, by the source it reads through and by the key of the read it holds. */
 const seriesReadsBySource = new WeakMap<IndicatorSeriesSource, Map<string, SharedSeriesRead>>();
 
+/** Separates a read's symbol from its timeframe: neither a symbol nor a timeframe carries it. */
+const READ_KEY_SEPARATOR = '\u0000';
+
 /**
- * One chart's read of a timeframe, shared by every indicator that draws it: they see the same candles and only
- * the one read asks the host. The last indicator to give it up drops it.
+ * The place of one read in a chart's set. The chart's own candles and another symbol's never share one, even
+ * when they read the same timeframe.
+ */
+function seriesReadKey(symbol: string | undefined, timeframe: string): string {
+  return `${symbol ?? ''}${READ_KEY_SEPARATOR}${timeframe}`;
+}
+
+/**
+ * One chart's read of a timeframe, or of another symbol's candles on it, shared by every indicator that draws
+ * it: they see the same candles and only the one read asks the host. The last indicator to give it up drops it.
  */
 export class SharedSeriesRead {
   private readonly arrivals = new Set<() => void>();
   private readonly read: IndicatorSeriesRead;
+  private readonly key: string;
 
   constructor(
     private readonly source: IndicatorSeriesSource,
     readonly timeframe: string,
     plan: SeriesReadPlan,
+    symbol?: string,
   ) {
-    this.read = new IndicatorSeriesRead(source, () => this.announce());
+    this.key = seriesReadKey(symbol, timeframe);
+    this.read = new IndicatorSeriesRead(source, () => this.announce(), symbol);
     this.read.start(plan);
   }
 
@@ -38,6 +52,14 @@ export class SharedSeriesRead {
     this.read.followLowerBars(chartBars, previous);
   }
 
+  /**
+   * The chart's newest bar entered a bar of this read's timeframe, so a read of another symbol asks once for
+   * that symbol's newest two candles; a tick inside the bar it already read asks for nothing.
+   */
+  followOtherSymbolClose(chartBarTimeSeconds: number): void {
+    this.read.followOtherSymbolClose(chartBarTimeSeconds);
+  }
+
   /** Draws again once candles arrived, until this indicator gives the read up. */
   listen(arrival: () => void): void {
     this.arrivals.add(arrival);
@@ -50,8 +72,8 @@ export class SharedSeriesRead {
       return;
     }
     const reads = seriesReadsBySource.get(this.source);
-    if (reads?.get(this.timeframe) === this) {
-      reads.delete(this.timeframe);
+    if (reads?.get(this.key) === this) {
+      reads.delete(this.key);
     }
     this.read.dispose();
   }
@@ -81,24 +103,27 @@ function readsOf(source: IndicatorSeriesSource): Map<string, SharedSeriesRead> {
 }
 
 /**
- * The chart's read of `timeframe`, started on `plan` only when this is the first indicator to read it: every
- * later indicator of that timeframe is handed the candles already read and sends no request of its own.
+ * The chart's read of `timeframe` — or, when `symbol` is given, its read of that symbol's candles on it —
+ * started on `plan` only when this is the first indicator to read it: every later indicator of that read is
+ * handed the candles already read and sends no request of its own.
  */
 export function acquireSeriesRead(
   source: IndicatorSeriesSource,
   timeframe: string,
   plan: SeriesReadPlan,
   arrival: () => void,
+  symbol?: string,
 ): SharedSeriesRead {
   const reads = readsOf(source);
-  const known = reads.get(timeframe);
+  const key = seriesReadKey(symbol, timeframe);
+  const known = reads.get(key);
   if (known !== undefined) {
     known.listen(arrival);
     return known;
   }
-  const started = new SharedSeriesRead(source, timeframe, plan);
+  const started = new SharedSeriesRead(source, timeframe, plan, symbol);
   started.listen(arrival);
-  reads.set(timeframe, started);
+  reads.set(key, started);
   return started;
 }
 

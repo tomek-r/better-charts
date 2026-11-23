@@ -8,14 +8,18 @@ import { createKeyedReadSource, type KeyedReadRoute } from './keyedReadRoute';
 
 const UNAVAILABLE: IndicatorSeriesAnswer = { kind: 'unavailable' };
 
-/** The bridge's series route: any timeframe the connected EA advertises, of the symbol the chart shows. */
-const SERIES_ROUTE: KeyedReadRoute<IndicatorSeriesQuery, IndicatorSeriesPage, IndicatorSeriesAnswer> = {
+/**
+ * The bridge's series route: any timeframe the connected EA advertises, of the chart's symbol or of the one a
+ * read names, which the EA answers only when the session negotiated other-symbol series.
+ */
+export const SERIES_ROUTE: KeyedReadRoute<IndicatorSeriesQuery, IndicatorSeriesPage, IndicatorSeriesAnswer> = {
   command: 'request_indicator_series',
   pageEvent: 'indicator-series',
   refusalEvent: 'indicator-series-unavailable',
+  namedSymbol: (query) => query.symbol,
   wireArgs: (query, symbol) => ({
     key: query.key,
-    symbol,
+    symbol: query.symbol ?? symbol,
     timeframe: query.timeframe,
     bars: query.bars,
     beforeMs: query.beforeMs,

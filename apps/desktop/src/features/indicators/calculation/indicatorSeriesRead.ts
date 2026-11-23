@@ -12,8 +12,8 @@ import type { SeriesReadPlan } from './seriesPages';
 const MILLISECONDS_PER_SECOND = 1000;
 /** The bridge's key charset is `[A-Za-z0-9_:-]`, so a read's key needs no escaping. */
 const SERIES_KEY_PREFIX = 'calculation';
-/** The candles a closed lower bar asks for: the one built here from the chart's bars, and the one after it. */
-const CLOSED_LOWER_BAR_CANDLES = 2;
+/** The candles one closed bar asks for: the bar that just closed, and the one forming after it. */
+const CLOSED_BAR_CANDLES = 2;
 
 /** The candles of a page as bars; a candle the chart cannot draw is left out, as a history page does. */
 function pageBarsOf(candles: readonly Candle[]): readonly RenderBar[] {
@@ -73,8 +73,10 @@ function volumeGrowthOf(chartBar: RenderBar, folded: RenderBar | null): number {
  * chart's own bars: a higher timeframe's forming bucket is grouped from them, so a live tick and a bucket close
  * both ask the host for nothing. A lower timeframe's forming bar takes the chart's newest price, so a live tick
  * asks for nothing either, and the bar it closes asks once for the two newest candles, which replace the one
- * built here with the broker's own. A read the bridge cannot answer keeps the candles it already holds and asks
- * for nothing more.
+ * built here with the broker's own. A read that names another symbol builds no bar from the chart's own, which
+ * belong to another instrument: it holds the candles it read and asks for the newest two once the chart opens a
+ * bar of its timeframe. A read the bridge cannot answer keeps the candles it already holds and asks for nothing
+ * more.
  */
 export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, IndicatorSeriesAnswer> {
   private plan: SeriesReadPlan | null = null;
@@ -83,11 +85,15 @@ export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, Ind
   /** The lower bar built from the chart's live bars, and the chart bar its volume was last counted on. */
   private formingLowerBar: RenderBar | null = null;
   private foldedChartBar: RenderBar | null = null;
+  /** The bar of this read's timeframe the newest candle read belongs to, for a read of another symbol. */
+  private requestedBarStart: number | null = null;
 
   constructor(
     source: IndicatorSeriesSource,
     /** Called once candles arrived, so the indicator draws them. */
     private readonly arrived: () => void,
+    /** The symbol this read asks for; absent reads the chart's own symbol. */
+    private readonly symbol?: string,
   ) {
     super(SERIES_KEY_PREFIX, source);
   }
@@ -115,6 +121,7 @@ export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, Ind
     this.listen();
     this.plan = plan;
     this.pagesLeft = plan.pages.slice(1);
+    this.requestedBarStart = null;
     this.requestPage(plan.pages[0], null);
   }
 
@@ -123,6 +130,10 @@ export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, Ind
    * the closed one stays as they left it, so neither a tick nor a bucket close asks the host for anything.
    */
   followHigherBars(chartBars: readonly RenderBar[]): void {
+    // The chart's bars are its own symbol's, so they never group another symbol's candles.
+    if (this.symbol !== undefined) {
+      return;
+    }
     const timeframe = this.timeframe;
     if (timeframe === null || this.heldBars.length === 0) {
       return;
@@ -136,6 +147,10 @@ export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, Ind
    * closed, and only the broker's own candles can say what the ticks this read never saw did inside it.
    */
   followLowerBars(chartBars: readonly RenderBar[], previous: RenderBar): void {
+    // The chart's bars are its own symbol's, so they never build another symbol's lower bar.
+    if (this.symbol !== undefined) {
+      return;
+    }
     const timeframe = this.timeframe;
     const chartBar = chartBars.at(-1);
     if (timeframe === null || chartBar === undefined) {
@@ -145,7 +160,7 @@ export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, Ind
     if (start > higherTimeframeBarTime(timeframe, previous.time)) {
       this.formingLowerBar = null;
       this.foldedChartBar = null;
-      this.requestPage(CLOSED_LOWER_BAR_CANDLES, null);
+      this.requestPage(CLOSED_BAR_CANDLES, null);
     }
     const forming = this.formingLowerBar;
     const volumeGrowth = volumeGrowthOf(chartBar, this.foldedChartBar);
@@ -156,6 +171,25 @@ export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, Ind
     this.foldedChartBar = chartBar;
   }
 
+  /**
+   * Follows the chart's bars for another symbol: the bar the newest page read already holds is never asked for
+   * again, so once the chart's newest bar opens a bar of this read's timeframe, the read asks once for that
+   * symbol's newest two candles; a tick inside the same bar asks for nothing.
+   */
+  followOtherSymbolClose(chartBarTimeSeconds: number): void {
+    const timeframe = this.timeframe;
+    if (this.symbol === undefined || timeframe === null) {
+      return;
+    }
+    const start = higherTimeframeBarTime(timeframe, chartBarTimeSeconds);
+    const previousStart = this.requestedBarStart;
+    this.requestedBarStart = start;
+    if (previousStart === null || previousStart === start) {
+      return;
+    }
+    this.requestPage(CLOSED_BAR_CANDLES, null);
+  }
+
   /** Drops the plan, the candles it held and the lower bar built here, so a read started again asks afresh. */
   protected dropHeld(): void {
     this.plan = null;
@@ -163,6 +197,7 @@ export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, Ind
     this.pagesLeft = [];
     this.formingLowerBar = null;
     this.foldedChartBar = null;
+    this.requestedBarStart = null;
   }
 
   /** Writes the answered candles over the ones they replace, then walks back while the range is still short. */
@@ -176,9 +211,23 @@ export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, Ind
     if (page.length === 0) {
       return;
     }
-    this.heldBars = answer.beforeMs === null ? withNewestPage(this.heldBars, page) : withOlderPage(this.heldBars, page);
+    const isNewestPage = answer.beforeMs === null;
+    this.heldBars = isNewestPage ? withNewestPage(this.heldBars, page) : withOlderPage(this.heldBars, page);
+    if (isNewestPage) {
+      this.markNewestBar(page);
+    }
     this.arrived();
     this.walkBack();
+  }
+
+  /** Records the bar the newest candle read belongs to, so only a bar after it asks the host for candles again. */
+  private markNewestBar(page: readonly RenderBar[]): void {
+    const newest = page.at(-1);
+    const timeframe = this.timeframe;
+    if (this.symbol === undefined || newest === undefined || timeframe === null) {
+      return;
+    }
+    this.requestedBarStart = higherTimeframeBarTime(timeframe, newest.time);
   }
 
   /** Asks for the next older page while the plan holds one and the oldest chart candle is not reached yet. */
@@ -201,6 +250,7 @@ export class IndicatorSeriesRead extends LiveKeyedRead<IndicatorSeriesQuery, Ind
     if (bars === undefined || timeframe === undefined) {
       return;
     }
-    this.requestHost({ key: this.key, timeframe, bars, beforeMs });
+    const query: IndicatorSeriesQuery = { key: this.key, timeframe, bars, beforeMs };
+    this.requestHost(this.symbol === undefined ? query : { ...query, symbol: this.symbol });
   }
 }
