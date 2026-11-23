@@ -1,7 +1,6 @@
 import type { RenderBar } from '../../chart/engine/bars/renderBar';
 import type { ChartIndicator, ChartIndicatorOutlet } from '../../chart/engine/indicators/indicatorContract';
 import type { IndicatorFrame, IndicatorPlot } from '../../chart/engine/indicators/indicatorFrame';
-import type { IndicatorSeriesSource } from '../../chart/engine/indicators/indicatorSeriesSource';
 import type { IndicatorTickSource } from '../../chart/engine/indicators/indicatorTickSource';
 import type { SettingValues } from '../../chart/engine/settings/settingInputs';
 import {
@@ -11,12 +10,11 @@ import {
   type OffChartCalculation,
   type TickCalculationMode,
 } from './calculationChoice';
-import { higherTimeframeBarTime } from './higherTimeframeBars';
 import type { HigherTimeframeSource } from './higherTimeframeFrame';
-import { IndicatorSeriesRead } from './indicatorSeriesRead';
 import { IndicatorTicksRead } from './indicatorTicksRead';
 import type { LowerTimeframeSource } from './lowerTimeframeFrame';
 import { seriesReadPlan } from './seriesPages';
+import { acquireSeriesRead, dropSeriesReads, type SharedSeriesRead } from './seriesReadCache';
 import { buildTickBars, type TickBarSeries } from './tickBars';
 import type { TickBarSource } from './tickFrame';
 import { tickReadRange } from './tickPages';
@@ -59,15 +57,17 @@ function withLiveBar(bars: readonly RenderBar[], bar: RenderBar): readonly Rende
  * and each chart bar shows the last one inside it; N-tick bars are built from the ticks read back from now, and
  * each chart bar shows the last one that ended inside it. Until the first page arrives a higher timeframe is
  * grouped from the chart's own bars, so nothing flickers empty, and a lower one or a tick calculation has no
- * value yet.
+ * value yet. Every indicator of a chart that draws the same timeframe shares that chart's one read of it.
  *
  * Settings that name no other timeframe calculate on the chart's own bars, as the plugin does alone.
  */
 export class CalculationIndicator implements ChartIndicator {
   private readonly indicator: ChartIndicator;
   private outlet: ChartIndicatorOutlet | null = null;
-  private seriesRead: IndicatorSeriesRead | null = null;
+  private seriesRead: SharedSeriesRead | null = null;
   private ticksRead: IndicatorTicksRead | null = null;
+  /** Draws the whole frame again, as the chart's shared read of a timeframe answers this indicator. */
+  private readonly drawRead: () => void = () => this.drawReadFrame();
   /** The chart's bars with the live one in it: every calculation is written onto these. */
   private chartBars: readonly RenderBar[] = [];
   private chartTimeframe = '';
@@ -110,6 +110,7 @@ export class CalculationIndicator implements ChartIndicator {
   historyReplaced(): void {
     this.chartBars = [];
     this.plots = [];
+    this.dropChartSeriesReads();
     this.stopReads();
     this.indicator.historyReplaced?.();
   }
@@ -146,14 +147,18 @@ export class CalculationIndicator implements ChartIndicator {
     if (mode.kind === 'ticks') {
       return tickSeriesCalculation(inputs, this.tickBarsOf(mode), mode, tickBarSourceOf(settings));
     }
-    const bars = this.seriesRead?.timeframe === mode.timeframe ? this.seriesRead.bars : [];
+    const read = this.seriesRead?.timeframe === mode.timeframe ? this.seriesRead : null;
     if (isHigherTimeframe(mode.timeframe, this.chartTimeframe)) {
+      // The bucket the chart still draws is grouped from its bars before every frame, the one a finished read
+      // hands over included, so the bucket keeps the chart's own value once the chart opens the next one.
+      read?.followHigherBars(this.chartBars);
       const source = higherSourceOf(settings);
+      const bars = read?.bars ?? [];
       return bars.length === 0
         ? groupedCalculation(inputs, mode.timeframe, source)
         : higherSeriesCalculation(inputs, mode.timeframe, bars, source);
     }
-    return lowerSeriesCalculation(inputs, mode.timeframe, bars, lowerSourceOf(settings));
+    return lowerSeriesCalculation(inputs, mode.timeframe, read?.bars ?? [], lowerSourceOf(settings));
   }
 
   /** The N-tick bars of the ticks read so far, which a live chart tick does not change until an answer arrives. */
@@ -175,7 +180,10 @@ export class CalculationIndicator implements ChartIndicator {
     this.stopReads();
   }
 
-  /** Starts the read of the calculation timeframe's candles, or drops the ticks the settings no longer read. */
+  /**
+   * Reads the calculation timeframe's candles through the chart's shared read of it, or drops the ticks the
+   * settings no longer read. A read of that timeframe another indicator already started is left as it is.
+   */
   private startSeriesRead(timeframe: string): void {
     const source = this.outlet?.seriesSource;
     if (source === undefined) {
@@ -183,7 +191,12 @@ export class CalculationIndicator implements ChartIndicator {
       return;
     }
     this.stopTicksRead();
-    this.seriesReadOf(source, timeframe).start(seriesReadPlan(this.chartBars, this.chartTimeframe, timeframe));
+    if (this.seriesRead?.timeframe === timeframe) {
+      return;
+    }
+    this.stopSeriesRead();
+    const plan = seriesReadPlan(this.chartBars, this.chartTimeframe, timeframe);
+    this.seriesRead = acquireSeriesRead(source, timeframe, plan, this.drawRead);
   }
 
   /** Starts the read of the chart's raw ticks, or drops the series the settings no longer read. */
@@ -196,16 +209,6 @@ export class CalculationIndicator implements ChartIndicator {
     }
     this.stopSeriesRead();
     this.ticksReadOf(source).start(range);
-  }
-
-  /** The series read serving `timeframe`, kept while it already reads it: a new history asks it again. */
-  private seriesReadOf(source: IndicatorSeriesSource, timeframe: string): IndicatorSeriesRead {
-    if (this.seriesRead?.timeframe === timeframe) {
-      return this.seriesRead;
-    }
-    this.stopSeriesRead();
-    this.seriesRead = new IndicatorSeriesRead(source, () => this.drawReadFrame());
-    return this.seriesRead;
   }
 
   /** The ticks read, kept while the settings read ticks: a new history walks the chart's range again. */
@@ -223,8 +226,16 @@ export class CalculationIndicator implements ChartIndicator {
   }
 
   private stopSeriesRead(): void {
-    this.seriesRead?.dispose();
+    this.seriesRead?.release(this.drawRead);
     this.seriesRead = null;
+  }
+
+  /** Drops the chart's shared reads, whose candles belong to the history it just replaced. */
+  private dropChartSeriesReads(): void {
+    const source = this.outlet?.seriesSource;
+    if (source !== undefined) {
+      dropSeriesReads(source);
+    }
   }
 
   private stopTicksRead(): void {
@@ -233,35 +244,30 @@ export class CalculationIndicator implements ChartIndicator {
   }
 
   /**
-   * Asks the read for what the live bar changed: a calculation bar that closed, or, on a live tick, the newest
-   * window at most every two seconds. N-tick bars close with the ticks a page brings, so any closed chart bar
-   * reads the newest ticks at once.
+   * Follows the live bar: a closed chart bar reads the ticks it added, and a lower timeframe's read takes its
+   * forming bar from the chart's own bars, so a live tick asks the host for nothing. A higher timeframe's read
+   * follows the chart's bars where the values written onto them are calculated from.
    */
   private followLiveBar(mode: OffChartCalculation, previous: RenderBar, bar: RenderBar): void {
     if (mode.kind === 'ticks') {
-      if (this.ticksRead === null) {
-        return;
-      }
       if (bar.time > previous.time) {
-        this.ticksRead.refresh();
-        return;
+        this.extendTicksRead();
       }
-      this.ticksRead.refreshLive();
       return;
     }
     const read = this.seriesRead;
-    if (read === null) {
+    if (read === null || isHigherTimeframe(mode.timeframe, this.chartTimeframe)) {
       return;
     }
-    const closedCalculationBar =
-      higherTimeframeBarTime(mode.timeframe, bar.time) !== higherTimeframeBarTime(mode.timeframe, previous.time);
-    if (closedCalculationBar) {
-      read.refresh();
+    read.followLowerBars(this.chartBars, previous);
+  }
+
+  /** Reads the ticks a closed chart bar added, from the newest one held up to now. */
+  private extendTicksRead(): void {
+    const range = tickReadRange(this.chartBars, this.chartTimeframe);
+    if (this.ticksRead === null || range === null) {
       return;
     }
-    if (!isHigherTimeframe(mode.timeframe, this.chartTimeframe)) {
-      // A higher timeframe's forming bar follows the chart's own bars, so a tick asks for nothing.
-      read.refreshLive();
-    }
+    this.ticksRead.extend(range);
   }
 }

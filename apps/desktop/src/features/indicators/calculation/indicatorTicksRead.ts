@@ -12,7 +12,7 @@ import {
   coveredTickWalk,
   endedTickWalk,
   narrowedTickWalk,
-  newestTickWindow,
+  newerTickWindow,
   nextOlderTickWindow,
   startTickWalk,
   type TickReadRange,
@@ -25,10 +25,10 @@ const TICKS_KEY_PREFIX = 'ticks';
 /** The ticks one page may ask for: the negotiated page size, never more than the read's whole budget. */
 const PAGE_TICKS = Math.min(TICKS_PER_PAGE, TICK_BUDGET);
 
-/** Whether the one request in flight walks back or reads the newest window again. */
-type TicksWindowKind = 'older' | 'newest';
+/** Whether the one request in flight walks back over older ticks or reads the ones after those held. */
+type TicksWindowKind = 'older' | 'newer';
 
-/** The one request in flight, and whether it walks back or reads the newest window again. */
+/** The one request in flight, and the kind of window it reads. */
 interface PendingWindow {
   readonly window: TickWindow;
   readonly kind: TicksWindowKind;
@@ -43,26 +43,18 @@ function withOlderTicks(
   return [...page, ...held.filter((tick) => tick.timeMs >= window.toMs)];
 }
 
-/** The ticks held with the newest window's page written over the ones it replaces. */
-function withNewestTicks(
-  held: readonly IndicatorTick[],
-  window: TickWindow,
-  page: readonly IndicatorTick[],
-): readonly IndicatorTick[] {
-  return [...held.filter((tick) => tick.timeMs < window.fromMs), ...page];
-}
-
 /**
  * One indicator's read of the chart's raw ticks. It asks for the newest window first and walks back a window at a
  * time until the chart's oldest bar is reached or the tick budget is spent, holding the ticks contiguous so they
- * group into N-tick bars; the newest window is read again while the chart draws on. A window the bridge cannot
- * read keeps the ticks held and ends the walk back.
+ * group into N-tick bars. A closed chart bar asks only for the ticks after the newest one held, up to the range's
+ * new end, and a live tick asks for nothing. A window the bridge cannot read keeps the ticks held and ends the
+ * walk back.
  */
 export class IndicatorTicksRead extends LiveKeyedRead<IndicatorTicksQuery, IndicatorTicksAnswer> {
   private walk: TickWalk | null = null;
   private pending: PendingWindow | null = null;
   private ticks: readonly IndicatorTick[] = [];
-  /** A closed chart bar asked for the newest window while another request was still in flight. */
+  /** A closed chart bar asked for the ticks after the ones held while another request was still in flight. */
   private refreshOwed = false;
 
   constructor(
@@ -88,17 +80,19 @@ export class IndicatorTicksRead extends LiveKeyedRead<IndicatorTicksQuery, Indic
     this.requestOlderWindow();
   }
 
-  /** Asks for the newest window again, which a closed chart bar moved on. */
-  refresh(): void {
-    if (this.walk === null) {
+  /** Reads the ticks a closed chart bar added: `range` is the chart's range, which that bar moved on. */
+  extend(range: TickReadRange): void {
+    const walk = this.walk;
+    if (walk === null) {
       return;
     }
+    this.walk = { ...walk, newestMs: range.newestMs };
     if (this.pending !== null) {
-      // One request at a time: the newest window is read once the page in flight has landed.
+      // One request at a time: the ticks are read once the page in flight has landed.
       this.refreshOwed = true;
       return;
     }
-    this.requestNewestWindow();
+    this.requestNewerWindow();
   }
 
   /** Drops the walk and the ticks it held, so a read started again walks its range afresh. */
@@ -127,7 +121,7 @@ export class IndicatorTicksRead extends LiveKeyedRead<IndicatorTicksQuery, Indic
       this.readOwedRefresh();
       return;
     }
-    if (!answer.complete) {
+    if (!answer.complete && pending.kind === 'older') {
       // A truncated page would leave a hole between it and the ticks held: ask a narrower window instead.
       this.walk = narrowedTickWalk(walk);
       this.requestOlderWindow();
@@ -137,7 +131,7 @@ export class IndicatorTicksRead extends LiveKeyedRead<IndicatorTicksQuery, Indic
     this.ticks =
       pending.kind === 'older'
         ? withOlderTicks(this.ticks, pending.window, answer.ticks)
-        : withNewestTicks(this.ticks, pending.window, answer.ticks);
+        : [...this.ticks, ...answer.ticks];
     if (pending.kind === 'older') {
       this.walk = coveredTickWalk(walk, pending.window);
     }
@@ -148,22 +142,27 @@ export class IndicatorTicksRead extends LiveKeyedRead<IndicatorTicksQuery, Indic
     this.readOwedRefresh();
   }
 
-  /** Reads the newest window again once the walk has nothing older to ask for, as a closed chart bar asked. */
+  /** Reads the ticks after the newest one held once the walk has nothing older to ask for, as a closed bar asked. */
   private readOwedRefresh(): void {
     if (!this.refreshOwed || this.pending !== null) {
       return;
     }
     this.refreshOwed = false;
-    this.requestNewestWindow();
+    this.requestNewerWindow();
   }
 
-  /** Reads the newest window again: the ticks near now, which a closed chart bar or a live tick moved on. */
-  private requestNewestWindow(): void {
+  /** Asks for the ticks after the newest one held: the tick a closed chart bar brought in since. */
+  private requestNewerWindow(): void {
     const walk = this.walk;
     if (walk === null) {
       return;
     }
-    this.request(newestTickWindow(walk, PAGE_TICKS), 'newest');
+    const newestHeldMs = this.ticks.at(-1)?.timeMs ?? null;
+    const window = newerTickWindow(walk, newestHeldMs, PAGE_TICKS, TICK_BUDGET - this.ticks.length);
+    if (window === null) {
+      return;
+    }
+    this.request(window, 'newer');
   }
 
   /** Asks for the walk's next older window, or stops once it reached the range start or spent its budget. */

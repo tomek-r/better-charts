@@ -392,10 +392,13 @@ than any tick interval, and the tick choices that group no more ticks than the c
 listed but disabled, with the reason. Another timeframe's candles are read through the
 read-only `request_indicator_series` route, keyed per indicator, so a lower timeframe is possible at
 all (an M5 chart reading M1) and a higher one gets the full depth a series grouped from the chart's
-own bars cannot reach. A higher timeframe's newest candles are projected onto the chart's bars as
-grouped bars were, its forming bar follows the chart's live bars, and the newest page is read again
-when a chart bar closes on that timeframe's boundary; a lower timeframe's candles are paged back over
-the chart's loaded range, and a chart bar shows the last lower bar inside it. A tick timeframe reads
+own bars cannot reach. Indicators of one chart that read the same timeframe share one read and its
+candles, kept in memory until the chart's symbol or timeframe changes. A higher timeframe's newest candles
+are projected onto the chart's bars as grouped bars were; after that first read nothing more is asked: its
+forming bar and every bar that closes are grouped from the chart's own bars, which are the broker's. A
+lower timeframe's candles are paged back over the chart's loaded range, and a chart bar shows the last lower
+bar inside it; the forming lower bar is built from the chart's live bars, and a lower bar that closes asks
+once for the newest two candles, so the broker's own candle replaces the one built from quotes. A tick timeframe reads
 the chart symbol's raw ticks through the read-only `request_indicator_ticks` route, also keyed per
 indicator, and builds a bar out of every group of N ticks: the first open, the highest high, the
 lowest low, the last close and the number of ticks as its volume. The tick price is the tick's bid.
@@ -404,7 +407,7 @@ range and walks back, a window at a time, until it reaches the oldest loaded cha
 200,000-tick budget, so chart bars older than the fetched ticks show no value. Each chart bar shows the
 last N-tick bar whose final tick arrived inside it, and waiting for closes is on by default: a chart
 bar then keeps the last N-tick bar that has all its ticks and ignores the forming one. A closed chart
-bar reads the newest window again, and live ticks at most every two seconds. The wait switch keeps its
+bar reads only the ticks after the newest one held, and a live tick reads nothing. The wait switch keeps its
 meaning on every timeframe: a chart bar keeps the last closed higher-timeframe value, and a lower
 timeframe's forming chart bar keeps the last closed lower bar's. A series or a tick window the bridge
 cannot read leaves the last good values on screen, retries nothing and shows no notice of its own;

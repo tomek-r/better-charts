@@ -38,7 +38,7 @@ import {
 import { withCalculation } from '../src/features/indicators/calculation/withCalculation';
 import { CHART_INDICATOR_PLUGINS } from '../src/features/indicators/registry';
 import { smaPlugin } from '../src/features/indicators/sma/smaPlugin';
-import type { Candle } from '../src/shared/bridge/types';
+import type { Candle, IndicatorTick } from '../src/shared/bridge/types';
 import { timeframeOptions } from '../src/shared/bridge/timeframes';
 import { averageOf } from './helpers/averageValues';
 import { drawnValues } from './helpers/indicatorFrames';
@@ -100,6 +100,28 @@ const TICK_OFFSET = 10;
 
 /** The stub's fixed clock sits on a five-minute boundary, so the chart's newest M5 bar opens there. */
 const NEWEST_M5_OPEN_MS = Math.floor(STUB_NOW / MILLISECONDS_PER_M5) * MILLISECONDS_PER_M5;
+/** The hour that clock sits in: where the higher-timeframe cases' forming H1 bucket starts. */
+const NEWEST_HOUR_OPEN_MS = Math.floor(STUB_NOW / MILLISECONDS_PER_HOUR) * MILLISECONDS_PER_HOUR;
+/** The last M5 bar of that hour: the chart bar a case opens to close the hour it forms. */
+const LAST_M5_OF_HOUR_MS = NEWEST_HOUR_OPEN_MS + MILLISECONDS_PER_HOUR - MILLISECONDS_PER_M5;
+/** The M5 bars the recorded chart of a lower-timeframe case holds. */
+const CHART_BAR_COUNT = 5;
+/** The first M5 bar the higher-timeframe cases record: it opens the oldest hour their H1 series covers. */
+const FIRST_M5_OF_HOUR_SERIES_MS = NEWEST_HOUR_OPEN_MS - 3 * MILLISECONDS_PER_HOUR;
+
+/** How many live updates of one chart bar a live-tick case pushes. */
+const LIVE_TICKS = 3;
+/** The price the live ticks of a case move the forming bar to, well above every recorded close. */
+const LIVE_TICK_CLOSE = 200;
+/** The close of the bar a case opens after the newest one, well above every recorded close. */
+const NEW_BAR_CLOSE = 400;
+
+/** The tick choice the tick-mode case calculates with, and the ticks one of its bars groups. */
+const TICK_CHOICE = 'tick10';
+/** The ticks the tick-mode case records: one a second, ending a second before the newest M5 bar closes. */
+const TICK_FEED_SIZE = 30;
+/** How many indicators a shared-read case saves on one timeframe. */
+const SHARED_READERS = 2;
 
 /** The SMA as the registry registers it: its own inputs plus the Calculation section. */
 const REGISTERED_SMA = withCalculation(smaPlugin);
@@ -132,6 +154,22 @@ function chartSma(bars: readonly RenderBar[]): number[] {
   const closes = bars.map((bar) => bar.close);
   return averageOf(closes, SAVED_LENGTH).filter((value): value is number => value !== null);
 }
+
+/** The values a higher-timeframe frame draws onto `bucketOf`: each bucket shows its predecessor's value. */
+function waitedBucketValues(bucketOf: readonly number[], bucketSma: readonly (number | null)[]): number[] {
+  return bucketOf
+    .map((bucketIndex) => bucketSma[bucketIndex - 1] ?? null)
+    .filter((value): value is number => value !== null);
+}
+
+/** The values the recorded M1 series draws, read off the M1 bars the lower-timeframe cases show. */
+function minuteValues(minuteSeries: readonly Candle[], shownIndexes: readonly number[]): number[] {
+  const minuteSma = seriesSma(minuteSeries);
+  return shownIndexes.map((index) => minuteSma[index]).filter((value): value is number => value !== null);
+}
+
+/** The M1 bars the loaded case shows: the last closed one inside each M5 bar, the forming one left out. */
+const SHOWN_MINUTE_BARS = [3, 8, 13, 17];
 
 /** The settings the registered SMA resolves for the calculation these cases ask of it. */
 function calculationSettings(stored: SettingValues): SettingValues {
@@ -504,21 +542,62 @@ async function waitForChartBars(page: Page, count: number): Promise<void> {
   await expect.poll(() => page.evaluate(() => window.__chartTest?.data().length ?? 0)).toBe(count);
 }
 
-/** Opens the app on `series` (the chart's own first) with the saved SMA calculating on `timeframe`. */
-async function openWithSeriesCalculation(page: Page, series: RecordedHistory[], timeframe: string): Promise<void> {
+/** Pushes `LIVE_TICKS` live updates of the bar opening at `barOpenMs`, each moving its close and volume up. */
+async function pushLiveTicks(page: Page, barOpenMs: number): Promise<void> {
+  for (let tick = 1; tick <= LIVE_TICKS; tick += 1) {
+    const candle: Candle = {
+      ...candleAt(barOpenMs, LIVE_TICK_CLOSE + tick),
+      tickVolume: tick,
+      realVolume: tick,
+    };
+    await pushEvent(page, 'bar-update', { symbol: 'EURUSD', timeframe: CHART_TIMEFRAME, candle });
+  }
+}
+
+/** Pushes the chart bar that opens at `barOpenMs`, closing the one the chart was drawing. */
+async function pushNewChartBar(page: Page, barOpenMs: number): Promise<void> {
+  await pushEvent(page, 'bar-update', {
+    symbol: 'EURUSD',
+    timeframe: CHART_TIMEFRAME,
+    candle: candleAt(barOpenMs, NEW_BAR_CLOSE),
+  });
+}
+
+/** Pushes live ticks into the chart's newest bar and asserts the host is asked for no series again. */
+async function expectNoSeriesRequestOnLiveTicks(page: Page, barOpenMs: number): Promise<void> {
+  const requestCountBefore = (await seriesRequests(page)).length;
+  await pushLiveTicks(page, barOpenMs);
+  expect((await seriesRequests(page)).length).toBe(requestCountBefore);
+}
+
+/** The value the first plot carries on the chart's newest drawn bar. */
+async function lastDrawnValue(page: Page): Promise<number | undefined> {
+  return (await drawnValues(page)).at(-1);
+}
+
+/** Opens the app on `series` (the chart's own first) with `readers` saved SMAs calculating on `timeframe`. */
+async function openWithSeriesCalculation(
+  page: Page,
+  series: RecordedHistory[],
+  timeframe: string,
+  readers = 1,
+): Promise<void> {
   const settings = { length: SAVED_LENGTH, [CALCULATION_TIMEFRAME_INPUT]: timeframe };
+  const indicators = Array.from({ length: readers }, (_, index) => ({
+    instanceId: `sma-${index + 1}`,
+    definitionId: 'sma',
+    settings,
+  }));
   await gotoWithStub(page, {
     recordedHistory: series,
-    chartSettingOverrides: {
-      [EURUSD_CHART]: { indicators: [{ instanceId: 'sma-1', definitionId: 'sma', settings }] },
-    },
+    chartSettingOverrides: { [EURUSD_CHART]: { indicators } },
   });
   await waitForChartBars(page, series[0].candles.length);
 }
 
 /** Opens the app on five M5 chart bars with the recorded M1 series these lower-timeframe cases read. */
-async function openWithRecordedMinutes(page: Page): Promise<Candle[]> {
-  const chartCandles = risingSeries(5, MILLISECONDS_PER_M5, NEWEST_M5_OPEN_MS, 100);
+async function openWithRecordedMinutes(page: Page, readers = 1): Promise<Candle[]> {
+  const chartCandles = risingSeries(CHART_BAR_COUNT, MILLISECONDS_PER_M5, NEWEST_M5_OPEN_MS, 100);
   const minuteCandles = risingSeries(19, MILLISECONDS_PER_MINUTE, NEWEST_M5_OPEN_MS - MILLISECONDS_PER_MINUTE, 1000);
   await openWithSeriesCalculation(
     page,
@@ -527,8 +606,67 @@ async function openWithRecordedMinutes(page: Page): Promise<Candle[]> {
       { symbol: 'EURUSD', timeframe: RECORDED_LOWER_TIMEFRAME, candles: minuteCandles },
     ],
     RECORDED_LOWER_TIMEFRAME,
+    readers,
   );
   return minuteCandles;
+}
+
+/** The recorded M5 bars from `FIRST_M5_OF_HOUR_SERIES_MS` to `newestM5OpenMs`, whole hours on both ends. */
+function m5BarsTo(newestM5OpenMs: number): Candle[] {
+  const count = (newestM5OpenMs - FIRST_M5_OF_HOUR_SERIES_MS) / MILLISECONDS_PER_M5 + 1;
+  return risingSeries(count, MILLISECONDS_PER_M5, newestM5OpenMs, 100);
+}
+
+/**
+ * Opens the app on M5 bars from the oldest hour of the recorded H1 series to `newestM5OpenMs`, so the chart's
+ * first bucket is the series' first candle.
+ */
+async function openWithRecordedHours(page: Page, newestM5OpenMs = NEWEST_M5_OPEN_MS): Promise<Candle[]> {
+  const chartCandles = m5BarsTo(newestM5OpenMs);
+  const hourlyCandles = risingSeries(4, MILLISECONDS_PER_HOUR, NEWEST_HOUR_OPEN_MS, 500);
+  await openWithSeriesCalculation(
+    page,
+    [
+      { symbol: 'EURUSD', timeframe: CHART_TIMEFRAME, candles: chartCandles },
+      { symbol: 'EURUSD', timeframe: RECORDED_HIGHER_TIMEFRAME, candles: hourlyCandles },
+    ],
+    RECORDED_HIGHER_TIMEFRAME,
+  );
+  return hourlyCandles;
+}
+
+/** A tick of `timeMs` quoting `price` on both sides, as the bridge's tick pages carry it. */
+function tickQuote(timeMs: number, price: number): IndicatorTick {
+  const quote = price.toFixed(2);
+  return { timeMs, bid: quote, ask: quote, last: quote, volume: 1 };
+}
+
+/** The ticks the tick-mode case reads: one a second, each a point higher, ending before the newest M5 bar does. */
+function ticksBeforeNewestBarEnd(): IndicatorTick[] {
+  const rangeEndMs = NEWEST_M5_OPEN_MS + MILLISECONDS_PER_M5;
+  return Array.from({ length: TICK_FEED_SIZE }, (_, index) =>
+    tickQuote(rangeEndMs - (TICK_FEED_SIZE - index) * MILLISECONDS_PER_SECOND, 100 + index),
+  );
+}
+
+/** Opens the app on five M5 chart bars with the saved SMA calculating on the ten-tick choice over `ticks`. */
+async function openWithRecordedTicks(page: Page, ticks: readonly IndicatorTick[]): Promise<void> {
+  const settings = { length: SAVED_LENGTH, [CALCULATION_TIMEFRAME_INPUT]: TICK_CHOICE };
+  const chartCandles = risingSeries(CHART_BAR_COUNT, MILLISECONDS_PER_M5, NEWEST_M5_OPEN_MS, 100);
+  await gotoWithStub(page, {
+    recordedHistory: [{ symbol: 'EURUSD', timeframe: CHART_TIMEFRAME, candles: chartCandles }],
+    recordedTicks: [{ symbol: 'EURUSD', ticks: [...ticks] }],
+    chartSettingOverrides: {
+      [EURUSD_CHART]: { indicators: [{ instanceId: 'sma-1', definitionId: 'sma', settings }] },
+    },
+  });
+  await waitForChartBars(page, CHART_BAR_COUNT);
+}
+
+/** The tick reads the app sent for a window ending after `endMs`: the ones a closed chart bar asks for. */
+async function tickReadsEndingAfter(page: Page, endMs: number): Promise<RecordedInvoke[]> {
+  const invocations = await stubInvocations(page);
+  return invocations.filter((entry) => entry.cmd === 'request_indicator_ticks' && Number(entry.args.toMs) > endMs);
 }
 
 test('the Inputs tab carries the Calculation section with the Chart timeframe and the wait switch', async ({
@@ -594,8 +732,7 @@ test('saving a higher timeframe renames the legend and draws the values of the g
   );
   // The wait switch is on, so every chart bar shows the last M15 bar that closed before it. No M15 series is
   // recorded for this case, so the read finds no candles and the grouped bars stand in for them.
-  const waitedValues = grouped.bucketOf.map((bucketIndex) => groupedSma[bucketIndex - 1] ?? null);
-  await expect.poll(() => drawnValues(page)).toEqual(waitedValues.filter((value) => value !== null));
+  await expect.poll(() => drawnValues(page)).toEqual(waitedBucketValues(grouped.bucketOf, groupedSma));
   expect(await drawnValues(page)).not.toEqual(chartSma(chartBars));
 });
 
@@ -604,11 +741,9 @@ test('a lower timeframe is read from the bridge and each chart bar shows the las
 }) => {
   const minuteSeries = await openWithRecordedMinutes(page);
 
-  const minuteSma = seriesSma(minuteSeries);
-  // The last closed M1 bar inside each M5 bar: 21:04, 21:09, 21:14 and, in the forming 21:15 bar, 21:18 — the
-  // newest M1 bar, 21:19, is still forming, and the chart's last bar (21:20) holds no M1 bar yet.
-  const expectedValues = [minuteSma[3], minuteSma[8], minuteSma[13], minuteSma[17]];
-  await expect.poll(() => drawnValues(page)).toEqual(expectedValues);
+  // The wait switch is on, so the M1 bar the read holds last — 21:19 — counts as the forming one, and the chart's
+  // last bar (21:20) holds no M1 bar at all.
+  await expect.poll(() => drawnValues(page)).toEqual(minuteValues(minuteSeries, SHOWN_MINUTE_BARS));
 
   const [request] = await seriesRequests(page);
   expect(request.args).toMatchObject({ symbol: 'EURUSD', timeframe: RECORDED_LOWER_TIMEFRAME, beforeMs: null });
@@ -620,26 +755,11 @@ test('a lower timeframe is read from the bridge and each chart bar shows the las
 test('a higher timeframe is read from the bridge and its closed bars give the chart bars their values', async ({
   page,
 }) => {
-  const chartSeries = risingSeries(36, MILLISECONDS_PER_M5, NEWEST_M5_OPEN_MS, 100);
-  const newestHourOpenMs = Math.floor(STUB_NOW / MILLISECONDS_PER_HOUR) * MILLISECONDS_PER_HOUR;
-  const hourlySeries = risingSeries(4, MILLISECONDS_PER_HOUR, newestHourOpenMs, 500);
-  await openWithSeriesCalculation(
-    page,
-    [
-      { symbol: 'EURUSD', timeframe: CHART_TIMEFRAME, candles: chartSeries },
-      { symbol: 'EURUSD', timeframe: RECORDED_HIGHER_TIMEFRAME, candles: hourlySeries },
-    ],
-    RECORDED_HIGHER_TIMEFRAME,
-  );
+  const hourlySeries = await openWithRecordedHours(page);
 
-  const hourlySma = seriesSma(hourlySeries);
   const chartBars = await drawnBars(page);
   const buckets = bucketBars(chartBars, RECORDED_HIGHER_TIMEFRAME);
-  // The wait switch is on, so every chart bar shows the hourly bar that closed before the one it falls in.
-  const expectedValues = buckets.bucketOf
-    .map((bucketIndex) => hourlySma[bucketIndex - 1] ?? null)
-    .filter((value) => value !== null);
-  await expect.poll(() => drawnValues(page)).toEqual(expectedValues);
+  await expect.poll(() => drawnValues(page)).toEqual(waitedBucketValues(buckets.bucketOf, seriesSma(hourlySeries)));
 
   const [request] = await seriesRequests(page);
   expect(request.args).toMatchObject({ symbol: 'EURUSD', timeframe: RECORDED_HIGHER_TIMEFRAME, beforeMs: null });
@@ -647,19 +767,104 @@ test('a higher timeframe is read from the bridge and its closed bars give the ch
 });
 
 test('an unavailable series keeps the values already drawn and asks for nothing more', async ({ page }) => {
-  await openWithRecordedMinutes(page);
-  await expect.poll(() => drawnValues(page)).not.toEqual([]);
+  const minuteSeries = await openWithRecordedMinutes(page);
+  await expect.poll(() => drawnValues(page)).toEqual(minuteValues(minuteSeries, SHOWN_MINUTE_BARS));
+  // A live tick starts the lower bar the chart's own bars build, so the close below only moves that one on.
+  await pushLiveTicks(page, NEWEST_M5_OPEN_MS);
   const drawnBefore = await drawnValues(page);
-  const requestsBefore = (await seriesRequests(page)).length;
+  const requestCountBefore = (await seriesRequests(page)).length;
   await setIndicatorSeriesUnavailable(page, true);
 
-  // The forming chart bar closes, so the indicator asks for the newest page and the bridge cannot read it.
-  const nextBar = candleAt(NEWEST_M5_OPEN_MS + MILLISECONDS_PER_M5, 400);
-  await pushEvent(page, 'bar-update', { symbol: 'EURUSD', timeframe: CHART_TIMEFRAME, candle: nextBar });
-  await expect.poll(async () => (await seriesRequests(page)).length).toBeGreaterThan(requestsBefore);
-  const requestsAfterClose = (await seriesRequests(page)).length;
+  // The forming chart bar closes, so the lower bar inside it closes with it and the indicator asks the bridge
+  // for the two newest candles, which it cannot read.
+  await pushNewChartBar(page, NEWEST_M5_OPEN_MS + MILLISECONDS_PER_M5);
+  await expect.poll(async () => (await seriesRequests(page)).length).toBe(requestCountBefore + 1);
+  const requestCountAfterClose = (await seriesRequests(page)).length;
 
   expect(await drawnValues(page)).toEqual(drawnBefore);
   // The refused answer starts no retry: nothing is asked for the series again on its own.
-  expect((await seriesRequests(page)).length).toBe(requestsAfterClose);
+  expect((await seriesRequests(page)).length).toBe(requestCountAfterClose);
+});
+
+test('live ticks inside one lower-timeframe bar ask the bridge for no series again', async ({ page }) => {
+  const minuteSeries = await openWithRecordedMinutes(page);
+  await expect.poll(() => drawnValues(page)).toEqual(minuteValues(minuteSeries, SHOWN_MINUTE_BARS));
+
+  await expectNoSeriesRequestOnLiveTicks(page, NEWEST_M5_OPEN_MS);
+});
+
+test('live ticks inside one higher-timeframe bucket ask the bridge for no series again', async ({ page }) => {
+  const hourlySeries = await openWithRecordedHours(page);
+  const bucketOf = bucketBars(await drawnBars(page), RECORDED_HIGHER_TIMEFRAME).bucketOf;
+  await expect.poll(() => drawnValues(page)).toEqual(waitedBucketValues(bucketOf, seriesSma(hourlySeries)));
+
+  await expectNoSeriesRequestOnLiveTicks(page, NEWEST_M5_OPEN_MS);
+});
+
+test('a closed higher bucket sends no request and the chart bars take its value', async ({ page }) => {
+  const hourlySeries = await openWithRecordedHours(page, LAST_M5_OF_HOUR_MS);
+  const closedBars = await drawnBars(page);
+  const buckets = bucketBars(closedBars, RECORDED_HIGHER_TIMEFRAME);
+  await expect.poll(() => drawnValues(page)).toEqual(waitedBucketValues(buckets.bucketOf, seriesSma(hourlySeries)));
+  const requestCountBefore = (await seriesRequests(page)).length;
+
+  await pushNewChartBar(page, LAST_M5_OF_HOUR_MS + MILLISECONDS_PER_M5);
+
+  // The hour the chart closed is the one its own bars form, so the newest chart bar shows that bucket's value,
+  // built from the bridge candle before it and from the bucket the chart's bars just completed.
+  const closedHour = buckets.bars[buckets.bars.length - 1];
+  const bridgeHourBefore = hourlySeries[hourlySeries.length - 2];
+  await expect.poll(() => lastDrawnValue(page)).toBe((Number(bridgeHourBefore.close) + closedHour.close) / 2);
+  expect((await seriesRequests(page)).length).toBe(requestCountBefore);
+});
+
+test('a closed lower bar asks the bridge once for its two newest candles', async ({ page }) => {
+  const minuteSeries = await openWithRecordedMinutes(page);
+  await expect.poll(() => drawnValues(page)).toEqual(minuteValues(minuteSeries, SHOWN_MINUTE_BARS));
+  const requestCountBefore = (await seriesRequests(page)).length;
+
+  await pushNewChartBar(page, NEWEST_M5_OPEN_MS + MILLISECONDS_PER_M5);
+
+  await expect.poll(async () => (await seriesRequests(page)).length).toBe(requestCountBefore + 1);
+  const requests = await seriesRequests(page);
+  expect(requests[requests.length - 1].args).toMatchObject({
+    symbol: 'EURUSD',
+    timeframe: RECORDED_LOWER_TIMEFRAME,
+    beforeMs: null,
+  });
+  expect(Number(requests[requests.length - 1].args.bars)).toBe(2);
+
+  // One request per closed lower bar: the ticks of the bar it just opened ask for nothing.
+  await expectNoSeriesRequestOnLiveTicks(page, NEWEST_M5_OPEN_MS + MILLISECONDS_PER_M5);
+});
+
+test('two indicators of the same timeframe share one read and send one request', async ({ page }) => {
+  // The chart's history is loaded once over the stub's, and each history its read holds is asked for once; a
+  // second indicator of that timeframe joins the read the chart already holds instead of asking again.
+  const aloneSeries = await openWithRecordedMinutes(page);
+  await expect.poll(() => drawnValues(page)).toEqual(minuteValues(aloneSeries, SHOWN_MINUTE_BARS));
+  const aloneRequests = (await seriesRequests(page)).length;
+
+  const sharedSeries = await openWithRecordedMinutes(page, SHARED_READERS);
+  await expect.poll(() => drawnValues(page)).toEqual(minuteValues(sharedSeries, SHOWN_MINUTE_BARS));
+  expect(await seriesRequests(page)).toHaveLength(aloneRequests);
+});
+
+test('a closed chart bar asks the ticks read only for the ticks after the newest one held', async ({ page }) => {
+  const ticks = ticksBeforeNewestBarEnd();
+  await openWithRecordedTicks(page, ticks);
+  await expect.poll(() => drawnValues(page)).not.toEqual([]);
+  const rangeEndMs = NEWEST_M5_OPEN_MS + MILLISECONDS_PER_M5;
+
+  await pushNewChartBar(page, rangeEndMs);
+
+  await expect.poll(async () => (await tickReadsEndingAfter(page, rangeEndMs)).length).toBe(1);
+  const [closedBarRead] = await tickReadsEndingAfter(page, rangeEndMs);
+  // The feed's last tick is the newest one held, so the read asks for what arrived after it, up to the range end.
+  expect(Number(closedBarRead.args.fromMs)).toBe(ticks[ticks.length - 1].timeMs + 1);
+  expect(Number(closedBarRead.args.toMs)).toBe(rangeEndMs + MILLISECONDS_PER_M5);
+
+  // A live tick moves no tick bar, so it asks for nothing either.
+  await pushLiveTicks(page, rangeEndMs);
+  expect(await tickReadsEndingAfter(page, rangeEndMs)).toHaveLength(1);
 });

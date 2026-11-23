@@ -36,6 +36,7 @@ export function answersTickWindow(
 /** How far back a read has walked, and where the window of its next older page ends. */
 export interface TickWalk {
   readonly oldestMs: number;
+  /** The instant the ticks held must reach: the end of the chart's range, which a closed chart bar moves on. */
   readonly newestMs: number;
   /** Every tick at or after this instant is already held; a walk that reached `oldestMs` has nothing left. */
   readonly anchorMs: number;
@@ -80,9 +81,21 @@ export function nextOlderTickWindow(walk: TickWalk, pageTicks: number, budgetLef
   };
 }
 
-/** The window a refresh asks for: the newest window again, over the ticks the walk already holds there. */
-export function newestTickWindow(walk: TickWalk, pageTicks: number): TickWindow {
-  return { fromMs: walk.newestMs - walk.windowMs, toMs: walk.newestMs, maxTicks: pageTicks };
+/**
+ * The window a closed chart bar asks for: the ticks after `newestHeldMs` up to the walk's newest instant, or the
+ * newest window again while the read holds no tick yet. Null when nothing arrived, or the budget is spent.
+ */
+export function newerTickWindow(
+  walk: TickWalk,
+  newestHeldMs: number | null,
+  pageTicks: number,
+  budgetLeft: number,
+): TickWindow | null {
+  const fromMs = newestHeldMs === null ? Math.max(walk.oldestMs, walk.newestMs - walk.windowMs) : newestHeldMs + 1;
+  if (budgetLeft <= 0 || fromMs >= walk.newestMs) {
+    return null;
+  }
+  return { fromMs, toMs: walk.newestMs, maxTicks: Math.min(pageTicks, budgetLeft) };
 }
 
 /** The walk after a page that covered its whole window: the anchor moves to its start and the window widens. */
