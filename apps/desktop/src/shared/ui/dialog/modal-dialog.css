@@ -8,11 +8,14 @@
   place-items: center;
   padding: 12px;
   background: #0009;
+  /* A panel dragged towards an edge is clipped by the window rather than growing the page behind it. */
+  overflow: hidden;
   animation: settings-fade-in 180ms ease-out;
 }
 
 .modal-dialog {
   --modal-width-compact: 440px;
+  --modal-width-medium: 600px;
   --modal-width-wide: 860px;
   --modal-height-wide: 860px;
   width: min(var(--modal-width), 100%);
@@ -27,6 +30,10 @@
 
 .modal-dialog[data-size='compact'] {
   --modal-width: var(--modal-width-compact);
+}
+
+.modal-dialog[data-size='medium'] {
+  --modal-width: var(--modal-width-medium);
 }
 
 .modal-dialog[data-size='wide'] {

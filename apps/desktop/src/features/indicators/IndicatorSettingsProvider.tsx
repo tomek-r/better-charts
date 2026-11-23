@@ -87,6 +87,7 @@ function IndicatorSettingsDialog({ instanceId, initialTabId, onClose }: Indicato
   return createPortal(
     <ModalDialog
       title={`${plugin.title} settings`}
+      size="medium"
       backdropClassName="drawing-settings-backdrop"
       backdropRef={backdropRef}
       closing={closing}

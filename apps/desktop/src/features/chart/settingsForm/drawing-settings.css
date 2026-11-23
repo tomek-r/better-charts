@@ -6,7 +6,9 @@
  */
 /* Two classes, to outrank the backdrop's own `place-items: center` whatever the stylesheet order. */
 .modal-dialog-backdrop.drawing-settings-backdrop {
-  --drawing-settings-top-offset: 8%;
+  /* Viewport height, not a percentage: a padding percentage is taken from the width, while the panel's
+     max-height below subtracts this from the height, so a wide window pushed the panel past the bottom. */
+  --drawing-settings-top-offset: 8dvh;
   align-items: start;
   padding-top: var(--drawing-settings-top-offset);
 }
