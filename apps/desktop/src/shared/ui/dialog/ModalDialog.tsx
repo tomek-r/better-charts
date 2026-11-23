@@ -17,8 +17,11 @@ const FOCUSABLE_SELECTOR =
 
 const OWNS_KEYBOARD_SELECTOR = '[role="dialog"], [aria-haspopup][aria-expanded="true"]';
 
-/** `compact` for short confirmations, `wide` for a tall multi-section dialog. */
-export type ModalDialogSize = 'compact' | 'wide';
+/**
+ * `compact` for short confirmations, `medium` for a settings form whose labels and controls share a line, `wide`
+ * for a tall multi-section dialog.
+ */
+export type ModalDialogSize = 'compact' | 'medium' | 'wide';
 
 function focusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));

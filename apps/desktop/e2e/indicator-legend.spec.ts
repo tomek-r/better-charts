@@ -24,6 +24,7 @@ import {
   openVisualOrderSubmenu,
   pickVisualOrder,
   removeRow,
+  visualOrderSubmenu,
 } from './helpers/indicatorActionsMenu';
 import { legendRowNamed, smaSettingsDialog } from './helpers/indicatorObjectTree';
 import { expectPaintedOnTop, savedIndicatorOrder } from './helpers/indicatorOrder';
@@ -58,6 +59,7 @@ const ACTION_ICON_SIZE = '16x16';
 const OHLC_FONT_SIZE = '13px';
 const INDICATOR_FONT_SIZE = '12px';
 const HIDDEN_WORDS_OPACITY = '0.5';
+const TRANSPARENT_BACKGROUND = 'rgba(0, 0, 0, 0)';
 const PANE_LEGEND_LABEL = 'Indicator pane legend';
 const SMA_SETTINGS_DIALOG = 'Moving Average Simple settings';
 const RSI_SETTINGS_DIALOG = 'Relative Strength Index settings';
@@ -623,6 +625,67 @@ test.describe('indicator actions menu', () => {
 
     await expect(menu).toBeHidden();
     await expect(legendMoreButton(row)).toBeFocused();
+  });
+
+  test('the row keeps its buttons while its menu is open, even with the pointer on the submenu', async ({ page }) => {
+    const row = legendRowNamed(page, SMA_ROW_TEXT);
+    const menu = await openLegendActionsMenu(row);
+    const submenu = await openVisualOrderSubmenu(menu);
+
+    // The menu is portalled to the page body, so the pointer and the focus both leave the row.
+    await submenu.getByRole('menuitem').first().hover();
+
+    await expect(legendMoreButton(row)).toHaveAttribute('aria-expanded', 'true');
+    await expect(row.locator(ACTIONS_SELECTOR)).toBeVisible();
+
+    // A press low on the chart, clear of the menu and of the submenu beside it.
+    const chartHost = page.locator(CHART_HOST_SELECTOR);
+    const hostBox = (await chartHost.boundingBox())!;
+    await chartHost.click({ position: { x: 600, y: hostBox.height - 60 } });
+
+    await expect(menu).toBeHidden();
+    // The buttons are hidden again, so the More button is read by its place rather than by its role.
+    await expect(row.locator(`${ACTIONS_SELECTOR} [aria-haspopup='menu']`)).toHaveAttribute('aria-expanded', 'false');
+    await expect(row.locator(ACTIONS_SELECTOR)).toBeHidden();
+  });
+
+  test('pointing at Visual order opens its submenu to the right of the menu, clear of it', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    const visualOrderRow = actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visualOrder);
+
+    await visualOrderRow.hover();
+
+    const submenu = visualOrderSubmenu(page);
+    await expect(submenu).toBeVisible();
+    const menuBox = (await menu.boundingBox())!;
+    const submenuBox = (await submenu.boundingBox())!;
+    const rowBox = (await visualOrderRow.boundingBox())!;
+    expect(submenuBox.x).toBeGreaterThanOrEqual(menuBox.x + menuBox.width);
+    // The submenu's first row lines up with the row that opened it.
+    const firstCommandBox = (await submenu.getByRole('menuitem').first().boundingBox())!;
+    expect(Math.abs(firstCommandBox.y - rowBox.y)).toBeLessThanOrEqual(1);
+    // A hover opens the submenu without taking the focus off the menu.
+    await expect(visualOrderRow).toBeFocused();
+  });
+
+  test('pointing at another row of the menu closes the submenu', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    await actionsMenuRow(menu, INDICATOR_ACTION_LABELS.visualOrder).hover();
+    await expect(visualOrderSubmenu(page)).toBeVisible();
+
+    await actionsMenuRow(menu, INDICATOR_ACTION_LABELS.hide).hover();
+
+    await expect(visualOrderSubmenu(page)).toBeHidden();
+  });
+
+  test('a menu row lights up under the pointer', async ({ page }) => {
+    const menu = await openLegendActionsMenu(legendRowNamed(page, SMA_ROW_TEXT));
+    const hideRow = actionsMenuRow(menu, INDICATOR_ACTION_LABELS.hide);
+    await expect(hideRow).toHaveCSS('background-color', TRANSPARENT_BACKGROUND);
+
+    await hideRow.hover();
+
+    await expect(hideRow).not.toHaveCSS('background-color', TRANSPARENT_BACKGROUND);
   });
 
   test('a press outside the menu closes it', async ({ page }) => {

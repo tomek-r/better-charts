@@ -8,6 +8,11 @@ interface PopupPlacementOptions {
   readonly alignment?: PopupAlignment;
   /** Makes the popup at least as wide as its anchor, as a drop-down list is. */
   readonly matchAnchorWidth?: boolean;
+  /**
+   * Hangs the popup beside this element instead of under the anchor, as a submenu hangs beside its menu: clear of
+   * the element's side, with its first row level with the anchor row.
+   */
+  readonly besideRef?: RefObject<HTMLElement | null>;
 }
 
 const ANCHOR_GAP_PX = 4;
@@ -55,6 +60,26 @@ function placePopup(
 }
 
 /**
+ * Puts the popup to the right of `beside`, or to its left when the right has no room and the left has more, with
+ * its first row level with `anchor`, and keeps it inside the window with `WINDOW_MARGIN_PX` to spare.
+ */
+function placePopupBeside(anchor: HTMLElement, beside: HTMLElement, popup: HTMLElement): void {
+  const anchorRect = anchor.getBoundingClientRect();
+  const besideRect = beside.getBoundingClientRect();
+  const { offsetWidth: width, offsetHeight: height } = popup;
+  const roomRight = window.innerWidth - besideRect.right - ANCHOR_GAP_PX - WINDOW_MARGIN_PX;
+  const roomLeft = besideRect.left - ANCHOR_GAP_PX - WINDOW_MARGIN_PX;
+  const opensLeft = width > roomRight && roomLeft > roomRight;
+  const left = opensLeft ? besideRect.left - ANCHOR_GAP_PX - width : besideRect.right + ANCHOR_GAP_PX;
+  // The popup's own padding and border sit above its first row, so the popup rises by them to line the rows up.
+  const firstRow = popup.firstElementChild;
+  const rowInset = firstRow === null ? 0 : firstRow.getBoundingClientRect().top - popup.getBoundingClientRect().top;
+  popup.dataset.placement = opensLeft ? 'left' : 'right';
+  popup.style.top = `${clamp(anchorRect.top - rowInset, WINDOW_MARGIN_PX, window.innerHeight - height - WINDOW_MARGIN_PX)}px`;
+  popup.style.left = `${clamp(left, WINDOW_MARGIN_PX, window.innerWidth - width - WINDOW_MARGIN_PX)}px`;
+}
+
+/**
  * Keeps a `position: fixed` popup next to its anchor and inside the window for as long as the calling
  * component is mounted. The position is written to the element before paint, so the popup never shows at a
  * stale spot, and it is re-placed when the window is resized, when any ancestor scrolls, and when the popup
@@ -65,14 +90,18 @@ export function usePopupPlacement(
   popupRef: RefObject<HTMLElement | null>,
   options: PopupPlacementOptions = {},
 ): void {
-  const { alignment, matchAnchorWidth } = options;
+  const { alignment, matchAnchorWidth, besideRef } = options;
   useLayoutEffect(() => {
     const anchor = anchorRef.current;
     const popup = popupRef.current;
     if (anchor === null || popup === null) {
       return undefined;
     }
-    const place = () => placePopup(anchor, popup, { alignment, matchAnchorWidth });
+    const beside = besideRef?.current ?? null;
+    const place =
+      beside === null
+        ? () => placePopup(anchor, popup, { alignment, matchAnchorWidth })
+        : () => placePopupBeside(anchor, beside, popup);
     place();
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
@@ -91,5 +120,5 @@ export function usePopupPlacement(
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
-  }, [anchorRef, popupRef, alignment, matchAnchorWidth]);
+  }, [anchorRef, popupRef, alignment, matchAnchorWidth, besideRef]);
 }

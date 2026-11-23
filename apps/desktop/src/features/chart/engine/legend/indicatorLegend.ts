@@ -323,6 +323,8 @@ export class IndicatorLegend {
       this.commands.openActionsMenu(instanceId, button),
     );
     more.setAttribute('aria-haspopup', 'menu');
+    // The menu marks the button expanded while it is open, which keeps the row's buttons in sight.
+    more.setAttribute('aria-expanded', 'false');
     const actions = createElementWithClass('span', ACTIONS_CLASS);
     actions.append(visibility, settings, remove, more);
     const values = createElementWithClass('span', VALUES_CLASS);

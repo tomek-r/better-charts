@@ -41,6 +41,12 @@
   height: 16px;
 }
 
+/* The row under the pointer, and the row whose submenu is open, light up as the other popup menus' rows do. */
+.indicator-actions-menu-row:hover:not([aria-disabled='true']),
+.indicator-actions-menu-row[aria-expanded='true'] {
+  background: var(--color-border-subtle);
+}
+
 /* A row that cannot act, such as a paint-order command with no row to move to: it stays readable and reachable
    by the keys, and its title says why it does nothing. */
 .indicator-actions-menu-row[aria-disabled='true'] {

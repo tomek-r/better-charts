@@ -25,7 +25,7 @@ export function removeRow(menu: Locator): Locator {
 }
 
 /** The paint-order submenu of an open menu, by the words of the row that opens it. */
-function visualOrderSubmenu(page: Page): Locator {
+export function visualOrderSubmenu(page: Page): Locator {
   return page.getByRole('menu', { name: INDICATOR_ACTION_LABELS.visualOrder, exact: true });
 }
 

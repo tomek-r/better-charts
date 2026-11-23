@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { CaretIcon } from '../../../shared/ui/icons/CaretIcon';
 import { EyeCrossedIcon, EyeIcon, TrashIcon } from '../../../shared/ui/icons/drawingActionIcons';
 import { SettingsIcon } from '../../../shared/ui/icons/SettingsIcon';
@@ -138,23 +146,35 @@ const VISUAL_ORDER_COMMANDS: readonly VisualOrderCommandSpec[] = [
   { label: INDICATOR_ACTION_LABELS.sendBackward, targetKey: 'backwardInstanceId' },
 ];
 
+/**
+ * How the paint-order submenu is open: not at all, under the pointer (which leaves the focus on the menu), or by a
+ * press or the keys (which hand the focus to its first row).
+ */
+type VisualOrderOpening = 'closed' | 'pointer' | 'focus';
+
 interface VisualOrderSubmenuProps {
-  /** The row that opened the submenu: the submenu is placed against it and gives it the focus back. */
+  /** The row that opened the submenu: the submenu's first row lines up with it, and it takes the focus back. */
   readonly anchorRow: RefObject<HTMLButtonElement | null>;
+  /** The menu the submenu hangs beside, clear of its right edge. */
+  readonly menu: RefObject<HTMLDivElement | null>;
+  /** Whether the submenu takes the focus as it opens, as a press or the keys ask and a hover does not. */
+  readonly takeFocus: boolean;
   /** Where the commands move the indicator; undefined for one the price pane's paint order does not hold. */
   readonly targets: VisualOrderTargets | undefined;
   readonly onMove: (targetInstanceId: string) => void;
   readonly onClose: () => void;
 }
 
-/** The paint-order commands, as their own menu hung under the row that opens them. */
-function VisualOrderSubmenu({ anchorRow, targets, onMove, onClose }: VisualOrderSubmenuProps) {
+/** The paint-order commands, as their own menu hung beside the menu, level with the row that opens them. */
+function VisualOrderSubmenu({ anchorRow, menu, takeFocus, targets, onMove, onClose }: VisualOrderSubmenuProps) {
   const submenuRef = useRef<HTMLDivElement>(null);
-  usePopupPlacement(anchorRow, submenuRef);
+  usePopupPlacement(anchorRow, submenuRef, { besideRef: menu });
 
   useEffect(() => {
-    focusFirstRow(submenuRef.current);
-  }, []);
+    if (takeFocus) {
+      focusFirstRow(submenuRef.current);
+    }
+  }, [takeFocus]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape' || event.key === 'ArrowLeft') {
@@ -231,7 +251,7 @@ export function IndicatorActionsMenu(props: IndicatorActionsMenuProps) {
     onClose,
   } = props;
   const visualOrderRowRef = useRef<HTMLButtonElement>(null);
-  const [visualOrderOpen, setVisualOrderOpen] = useState(false);
+  const [visualOrderOpening, setVisualOrderOpening] = useState<VisualOrderOpening>('closed');
 
   // The first row takes the focus as the menu opens, so the arrow keys walk it straight away.
   useEffect(() => {
@@ -239,15 +259,29 @@ export function IndicatorActionsMenu(props: IndicatorActionsMenuProps) {
   }, [menuRef]);
 
   const closeVisualOrder = () => {
-    setVisualOrderOpen(false);
+    setVisualOrderOpening('closed');
     visualOrderRowRef.current?.focus();
+  };
+
+  // The pointer opens the submenu on its row and closes it on any other row of this menu; the submenu's own rows
+  // sit inside another menu, so moving over them keeps it open.
+  const onPointerOver = (event: PointerEvent<HTMLDivElement>) => {
+    const row = event.target instanceof Element ? event.target.closest('[role="menuitem"]') : null;
+    if (row === null || row.closest('[role="menu"]') !== menuRef.current) {
+      return;
+    }
+    if (row === visualOrderRowRef.current) {
+      setVisualOrderOpening((current) => (current === 'closed' ? 'pointer' : current));
+      return;
+    }
+    setVisualOrderOpening('closed');
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const visualOrderRowFocused = document.activeElement === visualOrderRowRef.current;
     if (event.key === 'ArrowRight' && visualOrderRowFocused) {
       event.preventDefault();
-      setVisualOrderOpen(true);
+      setVisualOrderOpening('focus');
       return;
     }
     handleMenuKey(event, menuRef.current, onClose);
@@ -260,8 +294,13 @@ export function IndicatorActionsMenu(props: IndicatorActionsMenuProps) {
       role="menu"
       aria-label={INDICATOR_ACTIONS_MENU_LABEL}
       onKeyDown={onKeyDown}
+      onPointerOver={onPointerOver}
     >
-      <VisualOrderRow rowRef={visualOrderRowRef} expanded={visualOrderOpen} onOpen={() => setVisualOrderOpen(true)} />
+      <VisualOrderRow
+        rowRef={visualOrderRowRef}
+        expanded={visualOrderOpening !== 'closed'}
+        onOpen={() => setVisualOrderOpening('focus')}
+      />
       {SEPARATOR}
       <MenuRow label={INDICATOR_ACTION_LABELS.visibilityOnIntervals} onSelect={onOpenVisibility} />
       <HideMenuRow hidden={hidden} onToggle={onSetHidden} />
@@ -283,9 +322,11 @@ export function IndicatorActionsMenu(props: IndicatorActionsMenuProps) {
         icon={<SettingsIcon className={GLYPH_CLASS} />}
         onSelect={onOpenSettings}
       />
-      {visualOrderOpen && (
+      {visualOrderOpening !== 'closed' && (
         <VisualOrderSubmenu
           anchorRow={visualOrderRowRef}
+          menu={menuRef}
+          takeFocus={visualOrderOpening === 'focus'}
           targets={visualOrder}
           onMove={onMoveInVisualOrder}
           onClose={closeVisualOrder}
