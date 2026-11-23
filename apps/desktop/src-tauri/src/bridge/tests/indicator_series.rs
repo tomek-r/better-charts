@@ -200,3 +200,53 @@ fn command_refuses_an_invalid_key_pages_beyond_the_bound_and_other_series() {
         .claim_waiting(&state.next_request_id)
         .is_empty());
 }
+
+#[test]
+fn command_refuses_another_symbol_without_the_capability() {
+    let state = connected_state();
+    assert_eq!(
+        request_indicator_series_inner(
+            &state,
+            "ema:5".into(),
+            "EURUSD".into(),
+            "H1".into(),
+            200,
+            None,
+        ),
+        Err("symbol is not the chart's symbol".to_owned())
+    );
+    assert!(series_slots(&state)
+        .claim_waiting(&state.next_request_id)
+        .is_empty());
+}
+
+#[test]
+fn command_queues_another_symbol_once_the_capability_is_negotiated() {
+    let state = connected_state();
+    state.status.lock().unwrap().other_symbol_series = true;
+    request_indicator_series_inner(
+        &state,
+        "ema:5".into(),
+        "EURUSD".into(),
+        "H1".into(),
+        200,
+        Some(1_000),
+    )
+    .expect("a negotiated EA serves another symbol");
+
+    let waiting = series_slots(&state).claim_waiting(&state.next_request_id);
+    assert_eq!(waiting.len(), 1);
+    assert_eq!(waiting[0].request.key, "ema:5");
+    assert_eq!(waiting[0].request.page.symbol, "EURUSD");
+    assert_eq!(waiting[0].request.page.timeframe, "H1");
+    assert_eq!(waiting[0].request.page.bars, 200);
+    assert_eq!(waiting[0].request.before_ms, Some(1_000));
+    assert!(waiting[0].request.page.is_page());
+    assert!(state.pending_history_page.lock().unwrap().is_none());
+    assert!(state.pending_history.lock().unwrap().is_none());
+    assert_eq!(
+        state.market.lock().unwrap().symbol.as_deref(),
+        Some("NAS100"),
+        "another symbol's series leaves the chart's own selection alone"
+    );
+}

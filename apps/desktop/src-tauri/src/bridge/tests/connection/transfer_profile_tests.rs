@@ -614,3 +614,36 @@ async fn partial_close_capability_is_negotiated_echoed_and_reset_on_disconnect()
         }
     }
 }
+
+#[tokio::test]
+async fn other_symbol_series_capability_is_negotiated_echoed_and_reset_on_disconnect() {
+    for offered in [Some(true), Some(false), None] {
+        let harness = default_harness().await;
+        let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+        let mut hello = valid_hello(None);
+        if let Some(offered) = offered {
+            hello.payload["other_symbol_series"] = offered.into();
+        }
+        client.send(hello).await.unwrap();
+        let ack = client.recv(Duration::from_secs(2)).await.unwrap();
+        assert_eq!(ack.message_type, MessageType::HelloAck);
+        let expected = offered.unwrap_or(false);
+        assert_eq!(ack.payload["other_symbol_series"], expected);
+        let status = harness.state.status.lock().unwrap().clone();
+        assert_eq!(status.other_symbol_series, expected);
+        assert_eq!(
+            serde_json::to_value(status).unwrap()["otherSymbolSeries"],
+            expected
+        );
+        if expected {
+            drop(client);
+            assert!(
+                wait_until(Duration::from_secs(2), || {
+                    !harness.state.status.lock().unwrap().other_symbol_series
+                })
+                .await,
+                "the capability must not outlive its session"
+            );
+        }
+    }
+}

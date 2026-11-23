@@ -353,6 +353,7 @@ fn report_protocol_error(
         status.market_session = None;
         status.broker_utc_offset_minutes = None;
         status.partial_close = false;
+        status.other_symbol_series = false;
         status.trading_enabled = false;
     });
     reset_reconciliation(
@@ -473,6 +474,7 @@ pub(crate) fn disconnect(
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;
+            status.other_symbol_series = false;
             status.trading_enabled = false;
         });
         *state
@@ -575,6 +577,7 @@ pub(crate) fn protocol_error_session(
             status.market_session = None;
             status.broker_utc_offset_minutes = None;
             status.partial_close = false;
+            status.other_symbol_series = false;
             status.trading_enabled = false;
         });
         *state

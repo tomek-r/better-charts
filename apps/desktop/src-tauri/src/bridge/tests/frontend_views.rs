@@ -196,6 +196,7 @@ fn account_view_uses_frontend_camel_case_shape_and_identity_is_checked() {
         broker_utc_offset_minutes: None,
         supported_timeframes: vec!["M1".into(), "M5".into()],
         partial_close: false,
+        other_symbol_series: false,
         trading_enabled: false,
         component_outdated: false,
         token_mismatch: false,

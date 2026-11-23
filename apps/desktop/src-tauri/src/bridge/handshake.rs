@@ -332,6 +332,7 @@ pub(crate) async fn run_handshake(
         status.market_session = None;
         status.broker_utc_offset_minutes = None;
         status.partial_close = hello_payload.partial_close;
+        status.other_symbol_series = hello_payload.other_symbol_series;
         status.trading_enabled = hello_payload.trading_enabled;
     });
     drop(session_work);
@@ -351,6 +352,7 @@ pub(crate) async fn run_handshake(
             transfer_limits,
             tick_price_counts: hello_payload.tick_price_counts,
             partial_close: hello_payload.partial_close,
+            other_symbol_series: hello_payload.other_symbol_series,
         },
     )
     .await
