@@ -9,7 +9,10 @@
 //! once; the latest request per key wins. Price counts are never asked for: the
 //! indicator nests its own bars from the raw ticks.
 
-use super::{indicator_series::is_valid_series_key, BridgeState, KeyedRoute, LatestPerKeySlots};
+use super::{
+    drop_footprint_feed, indicator_series::is_valid_series_key, BridgeState, KeyedRoute,
+    LatestPerKeySlots,
+};
 use std::sync::MutexGuard;
 use trading_core::protocol::TickHistoryRequest;
 
@@ -82,8 +85,17 @@ pub(crate) fn ticks_slots(state: &BridgeState) -> MutexGuard<'_, IndicatorTicksS
         .expect("indicator ticks mutex poisoned")
 }
 
+/// Queues `request` for the outbound flush. The caller holds `session_work` and has already refused
+/// anything the route does not serve; the host's own footprint reads queue through here too.
+pub(crate) fn queue_indicator_ticks(state: &BridgeState, request: IndicatorTicksRequest) {
+    ticks_slots(state).queue(request);
+    state.wake_outbound();
+}
+
 /// Forgets every queued and awaited tick request of `state`: a new session or
-/// another chart symbol makes all of them stale.
+/// another chart symbol makes all of them stale. The chart's footprint reads travel through these
+/// requests, so their feed goes with them.
 pub(crate) fn clear_indicator_ticks(state: &BridgeState) {
     ticks_slots(state).clear();
+    drop_footprint_feed(state);
 }

@@ -2,11 +2,12 @@ use super::{
     app_data_dir, BridgeState, BridgeStatus, ChartSelectionMemory, IndicatorSeriesState,
     IndicatorTicksState, MarketSnapshot, ReconciliationStatus, TickCacheController,
 };
+use crate::footprint_feed::FootprintFeed;
 use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::{atomic::AtomicU64, Arc, Mutex},
+    sync::{atomic::AtomicU64, Arc, Mutex, OnceLock},
 };
 use tokio::sync::watch;
 use trading_core::{
@@ -105,6 +106,11 @@ impl BridgeState {
             transfer_limits: Arc::new(Mutex::new(Default::default())),
             tick_price_counts: Arc::new(Mutex::new(false)),
             market: Arc::new(Mutex::new(MarketSnapshot::default())),
+            footprint_feed: Arc::new(Mutex::new(FootprintFeed::default())),
+            chart_footprint: Arc::new(Mutex::new(
+                crate::chart_footprint::ChartFootprintState::default(),
+            )),
+            footprint_observer: Arc::new(OnceLock::new()),
             chart_selection: Arc::new(Mutex::new(ChartSelectionMemory::default())),
             pending_history: Arc::new(Mutex::new(None)),
             expected_history: Arc::new(Mutex::new(None)),

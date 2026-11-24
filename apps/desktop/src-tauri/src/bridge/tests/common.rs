@@ -108,3 +108,31 @@ pub(super) fn ready_state_with_result(result: OrderCheckResult) -> BridgeState {
     });
     state
 }
+
+/// Records every event the bridge would emit to the frontend, in emission order.
+#[derive(Default)]
+pub(super) struct RecordedEvents {
+    emitted: Mutex<Vec<(String, serde_json::Value)>>,
+}
+
+impl RecordedEvents {
+    /// Every payload published under `name`, in emission order.
+    pub(super) fn named(&self, name: &str) -> Vec<serde_json::Value> {
+        self.emitted
+            .lock()
+            .expect("events mutex poisoned")
+            .iter()
+            .filter(|(event, _)| event == name)
+            .map(|(_, payload)| payload.clone())
+            .collect()
+    }
+}
+
+impl BridgeEvents for RecordedEvents {
+    fn emit_value(&self, event: &str, payload: &serde_json::Value) {
+        self.emitted
+            .lock()
+            .expect("events mutex poisoned")
+            .push((event.to_owned(), payload.clone()));
+    }
+}

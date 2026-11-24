@@ -1,8 +1,10 @@
 use super::super::{
     bridge_emit, clear_indicator_series, clear_indicator_ticks, clear_profile_bar_slots,
-    invalidate_validated_order_check, AccountSnapshot, AccountView, BarUpdate, BridgeEvents,
-    BridgeState, MarketSnapshot, QuoteUpdate, QuoteView,
+    follow_footprint_quote, footprint_needed, invalidate_validated_order_check,
+    start_footprint_read, AccountSnapshot, AccountView, BarUpdate, BridgeEvents, BridgeState,
+    MarketSnapshot, QuoteUpdate, QuoteView,
 };
+use crate::chart_footprint;
 use std::sync::Arc;
 
 pub(crate) fn publish_market(
@@ -77,6 +79,10 @@ pub(crate) fn publish_market_inner(
             .expect("order check mutex poisoned") = None;
     }
     drop(current);
+    // The chart footprint computes over the window the bridge just accepted for this session. A
+    // snapshot without a symbol or timeframe (the handshake's empty reset) has no chart to compute
+    // over, so it reads nothing.
+    read_footprint(state, &snapshot);
     bridge_emit(events, "market-snapshot", snapshot);
 }
 
@@ -115,6 +121,10 @@ pub(crate) fn accept_bar_update(
         return BarUpdateAcceptance::Invalid;
     }
 
+    // Set when the accepted bar lands before the newest one: it changed the
+    // history the reads already hold, so the window's ticks are read again
+    // instead of keeping the spans of the old window.
+    let mut rewrote_history = false;
     if let Some(last) = market.candles.last_mut() {
         if last.time_ms == update.candle.time_ms {
             *last = update.candle.clone();
@@ -133,6 +143,7 @@ pub(crate) fn accept_bar_update(
         } else {
             market.candles.push(update.candle.clone());
             market.candles.sort_by_key(|candle| candle.time_ms);
+            rewrote_history = true;
         }
     } else {
         market.candles.push(update.candle.clone());
@@ -140,10 +151,51 @@ pub(crate) fn accept_bar_update(
     if market.candles.len() > 1000 {
         market.candles.remove(0);
     }
+    drop(market);
+    if rewrote_history {
+        // After the trim, so the read covers the window the chart keeps.
+        read_stored_window(state);
+    }
     BarUpdateAcceptance::Applied
 }
 
+/// Reads the stored window's ticks for the chart footprint and any observer of them: a chart that
+/// turned its footprint on after the window loaded asks for them the moment it does.
+pub(crate) fn read_footprint_ticks(state: &BridgeState) {
+    let _session_work = state
+        .session_work
+        .lock()
+        .expect("session work mutex poisoned");
+    read_stored_window(state);
+}
+
+/// Reads the stored window's ticks; the caller already holds `session_work`.
+fn read_stored_window(state: &BridgeState) {
+    let market = state.market.lock().expect("market mutex poisoned").clone();
+    read_footprint(state, &market);
+}
+
+/// Resolves the chart footprint's row width from `market`'s window and starts the read of that
+/// window's ticks when the chart asked for a footprint or an observer needs them. A chart that needs
+/// neither costs no tick, and the row width comes from the window just accepted, never from a live
+/// tick, so the rows do not move while the chart reads them. The caller holds `session_work`.
+fn read_footprint(state: &BridgeState, market: &MarketSnapshot) {
+    let Some(symbol) = market.symbol.as_deref() else {
+        return;
+    };
+    // A snapshot without a timeframe is the handshake's empty reset: no chart to publish rows for.
+    if market.timeframe.is_none() {
+        return;
+    }
+    let mintick = chart_footprint::mintick_of(state, symbol);
+    chart_footprint::resolve_row_size(state, &market.candles, mintick);
+    if footprint_needed(state) {
+        start_footprint_read(state, symbol, &market.candles);
+    }
+}
+
 pub(crate) fn accept_quote(
+    events: &Arc<dyn BridgeEvents>,
     state: &BridgeState,
     session_id: &str,
     quote: QuoteUpdate,
@@ -164,6 +216,10 @@ pub(crate) fn accept_quote(
     if quote.validate(symbol).is_err() {
         return None;
     }
+    drop(market);
+    // The quote only says the chart symbol traded: the forming bar's footprint comes from MT5's tick
+    // history, which the quote makes the host read again.
+    follow_footprint_quote(state, events);
     let view = QuoteView::from(quote);
     *state.quote.lock().expect("quote mutex poisoned") = Some(view.clone());
     Some(view)

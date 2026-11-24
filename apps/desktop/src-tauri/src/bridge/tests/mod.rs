@@ -4,6 +4,7 @@
 //! (this file re-imports them privately) and shared fixtures through
 //! `use super::common::*`.
 
+mod chart_footprint;
 mod common;
 mod connection;
 mod dispatch;
