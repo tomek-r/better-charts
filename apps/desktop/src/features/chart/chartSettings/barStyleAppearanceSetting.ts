@@ -14,12 +14,15 @@ import {
   type KagiAppearance,
   type LineBreakAppearance,
   type LineStyleAppearance,
+  type PointFigureAppearance,
   type RenkoAppearance,
   type ToggledColor,
   type VolumeCandlesAppearance,
 } from '../engine/barStyle/barStyleAppearance';
 import { isBoxMethod, type BoxMethod } from '../engine/barStyle/boxMethod';
 import { KAGI_DEFAULT_OPTIONS } from '../engine/barStyle/kagi/kagiOptions';
+import { POINT_FIGURE_DEFAULT_OPTIONS } from '../engine/barStyle/pointFigure/pointFigureOptions';
+import { isPointFigureSource, type PointFigureSource } from '../engine/barStyle/pointFigureSource';
 import { isPriceSource, type PriceSource } from '../engine/barStyle/priceSource';
 import { BAR_STYLE_SETTINGS, WIDTH_SENSITIVITY_FIELD } from './barStyleSettings';
 import { candleAppearanceOf } from './candleAppearanceSetting';
@@ -57,6 +60,9 @@ const YANG_COLOR_KEY = 'yangColor';
 const YANG_WIDTH_KEY = 'yangLineWidth';
 const YIN_COLOR_KEY = 'yinColor';
 const YIN_WIDTH_KEY = 'yinLineWidth';
+const SOURCE_KEY = 'source';
+const UP_COLOR_KEY = 'upColor';
+const DOWN_COLOR_KEY = 'downColor';
 
 /**
  * What a style draws when its own settings hold nothing its fields can explain — the values the
@@ -125,6 +131,17 @@ const KAGI_DEFAULTS: Omit<KagiAppearance, 'style'> = {
   yinColor: KAGI_DEFAULT_OPTIONS.yinColor,
   yinLineWidth: KAGI_DEFAULT_OPTIONS.yinLineWidth,
 };
+/** The columns until the Point & figure settings say otherwise, its marks at the series' own colours. */
+const POINT_FIGURE_DEFAULTS: Omit<PointFigureAppearance, 'style'> = {
+  source: 'highLow',
+  boxMethod: 'atr',
+  atrLength: 14,
+  boxSize: 1,
+  percentage: 1,
+  reversal: 3,
+  upColor: POINT_FIGURE_DEFAULT_OPTIONS.upColor,
+  downColor: POINT_FIGURE_DEFAULT_OPTIONS.downColor,
+};
 
 /** The settings field a style declares under `key`; a style declares only the keys its own section holds. */
 function fieldOf(style: BarStyle, key: string) {
@@ -176,6 +193,11 @@ function readToggledColor(style: BarStyle, key: string, values: BarStyleSettingV
 function readPriceSource(style: BarStyle, values: BarStyleSettingValues): PriceSource | undefined {
   const value = fieldValue(style, PRICE_SOURCE_KEY, values);
   return isPriceSource(value) ? value : undefined;
+}
+
+function readPointFigureSource(style: BarStyle, values: BarStyleSettingValues): PointFigureSource | undefined {
+  const value = fieldValue(style, SOURCE_KEY, values);
+  return isPointFigureSource(value) ? value : undefined;
 }
 
 function readLineWidth(style: BarStyle, key: string, values: BarStyleSettingValues): BarStyleLineWidth | undefined {
@@ -300,6 +322,20 @@ function kagiAppearance(values: BarStyleSettingValues): KagiAppearance {
   };
 }
 
+function pointFigureAppearance(values: BarStyleSettingValues): PointFigureAppearance {
+  return {
+    style: 'pointFigure',
+    source: readPointFigureSource('pointFigure', values) ?? POINT_FIGURE_DEFAULTS.source,
+    boxMethod: readBoxMethod('pointFigure', BOX_METHOD_KEY, values) ?? POINT_FIGURE_DEFAULTS.boxMethod,
+    atrLength: readNumber('pointFigure', ATR_LENGTH_KEY, values) ?? POINT_FIGURE_DEFAULTS.atrLength,
+    boxSize: readNumber('pointFigure', BOX_SIZE_KEY, values) ?? POINT_FIGURE_DEFAULTS.boxSize,
+    percentage: readNumber('pointFigure', PERCENTAGE_KEY, values) ?? POINT_FIGURE_DEFAULTS.percentage,
+    reversal: readNumber('pointFigure', REVERSAL_KEY, values) ?? POINT_FIGURE_DEFAULTS.reversal,
+    upColor: readColor('pointFigure', UP_COLOR_KEY, values) ?? POINT_FIGURE_DEFAULTS.upColor,
+    downColor: readColor('pointFigure', DOWN_COLOR_KEY, values) ?? POINT_FIGURE_DEFAULTS.downColor,
+  };
+}
+
 /**
  * The chart's bar style as the engine draws it. Every value is read through the settings field of its
  * own key, so a store holding nothing readable leaves the chart on the defaults the dialog shows.
@@ -338,6 +374,8 @@ export function barStyleAppearanceOf(style: BarStyle, values: BarStyleSettingVal
       return lineBreakAppearance(values);
     case 'kagi':
       return kagiAppearance(values);
+    case 'pointFigure':
+      return pointFigureAppearance(values);
     case 'baseline':
       return baselineAppearance(values);
     case 'highLow':

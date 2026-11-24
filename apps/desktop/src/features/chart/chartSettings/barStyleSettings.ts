@@ -1,5 +1,6 @@
 import { palette } from '../../../shared/theme/palette';
 import { KAGI_DEFAULT_OPTIONS } from '../engine/barStyle/kagi/kagiOptions';
+import { POINT_FIGURE_DEFAULT_OPTIONS } from '../engine/barStyle/pointFigure/pointFigureOptions';
 import { barStyleLabel, type BarStyle } from '../engine/barStyle/barStyles';
 import type {
   ChartSettingField,
@@ -178,10 +179,10 @@ function moveSizeMethodField(key: string, label: string): ChoiceSettingField {
   };
 }
 
-/** Which setting sizes a Renko brick, in TradingView's order and wording. */
+/** Which setting sizes a Renko brick or a Point & figure box, in TradingView's order and wording. */
 const BOX_METHOD_FIELD: ChoiceSettingField = moveSizeMethodField('boxMethod', 'Box size assignment method');
 
-/** Bars of the average true range a brick spans: TradingView's own default length. */
+/** Bars of the average true range one box spans: TradingView's own default length. */
 const ATR_LENGTH_FIELD: DecimalSettingField = {
   kind: 'decimal',
   key: 'atrLength',
@@ -190,7 +191,7 @@ const ATR_LENGTH_FIELD: DecimalSettingField = {
   range: { min: 1, max: 1000, step: 1 },
 };
 
-/** The price distance a brick spans, which only the traditional method reads. */
+/** The price distance a Renko brick spans, which only the traditional method reads. */
 const BOX_SIZE_FIELD: DecimalSettingField = {
   kind: 'decimal',
   key: 'boxSize',
@@ -199,7 +200,7 @@ const BOX_SIZE_FIELD: DecimalSettingField = {
   range: { min: 0.00001, max: 1_000_000, step: 0.00001 },
 };
 
-/** The share of the last close a brick spans, which only the percentage method reads. */
+/** The share of the last close one box spans, which only the percentage method reads. */
 const PERCENTAGE_OF_CLOSE_FIELD: DecimalSettingField = {
   kind: 'decimal',
   key: 'percentage',
@@ -299,6 +300,64 @@ const KAGI_FIELDS: readonly ChartSettingField[] = [
   YIN_WIDTH_FIELD,
 ];
 
+/** Which prices a Point & figure column reads, in TradingView's order and wording. */
+const POINT_FIGURE_SOURCE_FIELD: ChoiceSettingField = {
+  kind: 'choice',
+  key: 'source',
+  label: 'Source',
+  defaultValue: 'highLow',
+  options: [
+    { value: 'highLow', label: 'High/Low' },
+    { value: 'close', label: 'Close' },
+  ],
+};
+
+/** The price distance one Point & figure box spans, which only the traditional method reads. */
+const POINT_FIGURE_BOX_SIZE_FIELD: DecimalSettingField = {
+  kind: 'decimal',
+  key: 'boxSize',
+  label: 'Box size',
+  defaultValue: 1,
+  range: { min: 0.00001, max: 1_000_000, step: 0.00001 },
+};
+
+/** How many boxes against a column the price has to travel before the opposite column is drawn. */
+const POINT_FIGURE_REVERSAL_FIELD: DecimalSettingField = {
+  kind: 'decimal',
+  key: 'reversal',
+  label: 'Reversal amount',
+  defaultValue: 3,
+  range: { min: 1, max: 1000, step: 1 },
+};
+
+/** The colour a rising Point & figure column's X marks are drawn in. */
+const POINT_FIGURE_UP_COLOR_FIELD: ColorSettingField = {
+  kind: 'color',
+  key: 'upColor',
+  label: 'Up color',
+  defaultValue: POINT_FIGURE_DEFAULT_OPTIONS.upColor,
+};
+
+/** The colour a falling Point & figure column's O marks are drawn in. */
+const POINT_FIGURE_DOWN_COLOR_FIELD: ColorSettingField = {
+  kind: 'color',
+  key: 'downColor',
+  label: 'Down color',
+  defaultValue: POINT_FIGURE_DEFAULT_OPTIONS.downColor,
+};
+
+/** Point & figure prints its own marks rather than the chart's candles, so its section offers its two colours. */
+const POINT_FIGURE_FIELDS: readonly ChartSettingField[] = [
+  POINT_FIGURE_SOURCE_FIELD,
+  BOX_METHOD_FIELD,
+  ATR_LENGTH_FIELD,
+  POINT_FIGURE_BOX_SIZE_FIELD,
+  PERCENTAGE_OF_CLOSE_FIELD,
+  POINT_FIGURE_REVERSAL_FIELD,
+  POINT_FIGURE_UP_COLOR_FIELD,
+  POINT_FIGURE_DOWN_COLOR_FIELD,
+];
+
 function settingsSection(style: BarStyle, fields: readonly ChartSettingField[]): BarStyleSettingsSection {
   return { title: barStyleLabel(style), fields };
 }
@@ -320,4 +379,5 @@ export const BAR_STYLE_SETTINGS: Readonly<Record<BarStyle, BarStyleSettingsSecti
   renko: settingsSection('renko', RENKO_FIELDS),
   lineBreak: settingsSection('lineBreak', LINE_BREAK_FIELDS),
   kagi: settingsSection('kagi', KAGI_FIELDS),
+  pointFigure: settingsSection('pointFigure', POINT_FIGURE_FIELDS),
 };

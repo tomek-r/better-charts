@@ -37,5 +37,15 @@ export function chartTypeSpecOf(appearance: ChartTypeAppearance): ChartTypeSpec 
         reversal: decimalSetting(appearance.reversal),
         percentage: decimalSetting(appearance.percentage),
       };
+    case 'pointFigure':
+      return {
+        type: 'pointFigure',
+        source: appearance.source,
+        boxMethod: appearance.boxMethod,
+        atrLength: Math.round(appearance.atrLength),
+        boxSize: decimalSetting(appearance.boxSize),
+        percentage: decimalSetting(appearance.percentage),
+        reversal: Math.round(appearance.reversal),
+      };
   }
 }

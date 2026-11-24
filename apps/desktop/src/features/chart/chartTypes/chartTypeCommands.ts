@@ -1,12 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { BoxMethod } from '../engine/barStyle/boxMethod';
+import type { PointFigureSource } from '../engine/barStyle/pointFigureSource';
 import type { Candle } from '../../../shared/bridge/types';
 
 /** How a box-sized chart type sizes the move that draws its next bar, which the settings declare. */
 export type { BoxMethod };
 
-/** Which prices a point & figure column reads. */
-export type PointFigureSource = 'highLow' | 'close';
+/** Which prices a point & figure column reads, which the settings declare. */
+export type { PointFigureSource };
 
 /** The parameters every box-sized chart type carries; its method names the one that applies. */
 export interface BoxParameters {

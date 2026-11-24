@@ -1,5 +1,6 @@
 import { DEFAULT_CANDLE_APPEARANCE, sameCandleAppearance, type CandleAppearance } from '../bars/candleAppearance';
 import type { BoxMethod } from './boxMethod';
+import type { PointFigureSource } from './pointFigureSource';
 import type { PriceSource } from './priceSource';
 
 /** The widths a bar style's line is drawn with, which is the range the settings offer. */
@@ -154,6 +155,29 @@ export interface HighLowAppearance {
   readonly labels: ToggledColor;
 }
 
+/**
+ * Point & figure columns: the backend turns the chart's candles into columns of X and O marks, which a custom
+ * series prints on the box grid it reads back off the columns themselves.
+ */
+export interface PointFigureAppearance {
+  readonly style: 'pointFigure';
+  /** Which prices a column reads: the bar's high and low, or its close for both. */
+  readonly source: PointFigureSource;
+  /** Which setting sizes a box: the ATR, a fixed price distance, or a share of the last close. */
+  readonly boxMethod: BoxMethod;
+  /** Bars of the average true range a box spans, read by the `atr` method. */
+  readonly atrLength: number;
+  /** The fixed price distance a box spans, read by the `traditional` method. */
+  readonly boxSize: number;
+  /** The percent of the last close a box spans, read by the `percentageLtp` method. */
+  readonly percentage: number;
+  /** How many boxes against a column the move must travel before it draws the opposite column. */
+  readonly reversal: number;
+  /** The colour a rising column's X marks are drawn in, and a falling column's O marks. */
+  readonly upColor: string;
+  readonly downColor: string;
+}
+
 /** How the chart draws its bars, which is the one thing the bar style setting decides. */
 export type BarStyleAppearance =
   | CandleStyleAppearance
@@ -163,6 +187,7 @@ export type BarStyleAppearance =
   | RenkoAppearance
   | LineBreakAppearance
   | KagiAppearance
+  | PointFigureAppearance
   | BarsAppearance
   | LineStyleAppearance
   | AreaAppearance
@@ -179,7 +204,7 @@ export type DrawnBarStyleAppearance = Exclude<BarStyleAppearance, { style: 'cand
 /** The appearances a custom series draws, each with a pane view of its own that no other style can swap into. */
 export type CustomBarStyleAppearance = Extract<
   DrawnBarStyleAppearance,
-  { style: 'highLow' | 'volumeCandles' | 'kagi' }
+  { style: 'highLow' | 'volumeCandles' | 'kagi' | 'pointFigure' }
 >;
 
 /** The appearances a library series type of its own draws. */
@@ -187,7 +212,7 @@ export type LibraryBarStyleAppearance = Exclude<DrawnBarStyleAppearance, CustomB
 
 /** Whether a custom series draws the style, which is the one thing a library series type cannot paint. */
 export function isCustomBarStyle(style: DrawnBarStyleAppearance['style']): style is CustomBarStyleAppearance['style'] {
-  return style === 'highLow' || style === 'volumeCandles' || style === 'kagi';
+  return style === 'highLow' || style === 'volumeCandles' || style === 'kagi' || style === 'pointFigure';
 }
 
 /** What the chart draws before any bar style setting arrives: the candles it has always drawn. */
@@ -302,6 +327,26 @@ function sameKagiAppearance(first: KagiAppearance, second: KagiAppearance): bool
   );
 }
 
+/**
+ * Whether two Point & figure settings ask the backend for the same columns, whatever colours the chart prints
+ * them in: the prices a column reads, the method that sizes its boxes and how far a reversal runs.
+ */
+export function samePointFigureParameters(first: PointFigureAppearance, second: PointFigureAppearance): boolean {
+  return (
+    first.source === second.source &&
+    first.boxMethod === second.boxMethod &&
+    first.atrLength === second.atrLength &&
+    first.boxSize === second.boxSize &&
+    first.percentage === second.percentage &&
+    first.reversal === second.reversal
+  );
+}
+
+function samePointFigureAppearance(first: PointFigureAppearance, second: PointFigureAppearance): boolean {
+  const colors = first.upColor === second.upColor && first.downColor === second.downColor;
+  return samePointFigureParameters(first, second) && colors;
+}
+
 /** Whether two appearances draw the same bars, so a setting that did not change costs no repaint. */
 export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarStyleAppearance): boolean {
   switch (first.style) {
@@ -315,6 +360,8 @@ export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarSty
       return second.style === 'lineBreak' && sameLineBreakAppearance(first, second);
     case 'kagi':
       return second.style === 'kagi' && sameKagiAppearance(first, second);
+    case 'pointFigure':
+      return second.style === 'pointFigure' && samePointFigureAppearance(first, second);
     case 'volumeCandles':
       return second.style === 'volumeCandles' && sameVolumeCandlesAppearance(first, second);
     case 'bars':

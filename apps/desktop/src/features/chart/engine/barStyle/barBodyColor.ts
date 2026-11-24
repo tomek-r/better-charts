@@ -17,6 +17,8 @@ export function barDirectionColors(appearance: BarStyleAppearance): BarDirection
       return appearance.colors;
     case 'kagi':
       return { up: appearance.yangColor, down: appearance.yinColor };
+    case 'pointFigure':
+      return { up: appearance.upColor, down: appearance.downColor };
     case 'line':
     case 'lineWithMarkers':
     case 'stepLine':
@@ -45,7 +47,8 @@ function bodyRose(appearance: BarStyleAppearance, bar: RenderBar, previous: Rend
     case 'columns':
       return appearance.colorByPreviousClose ? roseAgainstPreviousClose(bar, previous) : roseTo(bar, bar.open);
     case 'kagi':
-      // A Kagi stroke's own direction is what the line's yang and yin styles follow.
+    case 'pointFigure':
+      // Both follow the bar's own direction: a stroke's yang against its yin, a column's X against its O.
       return roseTo(bar, bar.open);
     case 'line':
     case 'lineWithMarkers':

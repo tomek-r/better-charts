@@ -1,23 +1,26 @@
 import {
   sameKagiParameters,
+  samePointFigureParameters,
   sameRenkoParameters,
   type BarStyleAppearance,
   type KagiAppearance,
   type LineBreakAppearance,
+  type PointFigureAppearance,
   type RenkoAppearance,
 } from './barStyleAppearance';
 
 /** The bar styles whose bars the backend draws from the chart's candles. */
-export const CHART_TYPE_STYLES = ['renko', 'lineBreak', 'kagi'] as const;
+export const CHART_TYPE_STYLES = ['renko', 'lineBreak', 'kagi', 'pointFigure'] as const;
 
 export type ChartTypeStyle = (typeof CHART_TYPE_STYLES)[number];
 
 /** The appearance of a chart type's bars, as the settings ask for them. */
-export type ChartTypeAppearance = RenkoAppearance | LineBreakAppearance | KagiAppearance;
+export type ChartTypeAppearance = RenkoAppearance | LineBreakAppearance | KagiAppearance | PointFigureAppearance;
 
 /**
  * The chart types whose bars the chart draws as candles: a Renko brick and a Line Break line. Kagi draws a
- * stepped line through a custom series of its own, so its appearance holds no candles to paint.
+ * stepped line and Point & figure a grid of marks through a custom series of their own, so their appearances
+ * hold no candles to paint.
  */
 export type CandleChartTypeAppearance = RenkoAppearance | LineBreakAppearance;
 
@@ -47,10 +50,13 @@ export function sameChartTypeParameters(first: ChartTypeAppearance, second: Char
   if (first.style === 'kagi' && second.style === 'kagi') {
     return sameKagiParameters(first, second);
   }
+  if (first.style === 'pointFigure' && second.style === 'pointFigure') {
+    return samePointFigureParameters(first, second);
+  }
   return false;
 }
 
-/** Whether a chart type's bars show a wick: Line Break never, Kagi never, and a Renko brick only when asked. */
+/** Whether a chart type's bars show a wick: only a Renko brick, and only when its Wicks setting asks for one. */
 export function chartTypeDrawsWicks(appearance: ChartTypeAppearance): boolean {
   return appearance.style === 'renko' && appearance.wicks;
 }

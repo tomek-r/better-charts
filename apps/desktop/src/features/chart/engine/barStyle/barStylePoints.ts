@@ -13,6 +13,7 @@ import type {
 import { chartTypeDrawsWicks, type CandleChartTypeAppearance } from './chartTypeAppearance';
 import type { HighLowPoint } from './highLow/highLowPoint';
 import type { KagiPoint } from './kagi/kagiPoint';
+import type { PointFigurePoint } from './pointFigure/pointFigurePoint';
 import { priceAt, type PriceSource } from './priceSource';
 import type { VolumeCandlePoint } from './volumeCandles/volumeCandlePoint';
 
@@ -26,6 +27,7 @@ export type BarStylePoint =
   | HistogramData<Time>
   | KagiPoint
   | LineData<Time>
+  | PointFigurePoint
   | VolumeCandlePoint
   | HighLowPoint;
 
@@ -170,6 +172,11 @@ function kagiPoint(bar: RenderBar): KagiPoint {
   return { time: bar.time as UTCTimestamp, open: bar.open, high: bar.high, low: bar.low, close: bar.close };
 }
 
+/** One Point & figure column: the boxes it runs between, which the custom series prints as its marks there. */
+function pointFigurePoint(bar: RenderBar): PointFigurePoint {
+  return { time: bar.time as UTCTimestamp, open: bar.open, high: bar.high, low: bar.low, close: bar.close };
+}
+
 /** A column stands for the bar's close, coloured by the direction its style was saved with. */
 function columnsPoint(
   appearance: ColumnsAppearance,
@@ -197,6 +204,8 @@ export function barStylePoint(
       return volumeCandlePoint(appearance, bar, previous);
     case 'kagi':
       return kagiPoint(bar);
+    case 'pointFigure':
+      return pointFigurePoint(bar);
     case 'highLow':
       return highLowPoint(bar);
     case 'bars':

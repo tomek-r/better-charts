@@ -163,6 +163,17 @@ function KagiGlyph() {
   );
 }
 
+/** Point & figure: a column of X marks stepping up beside a column of O marks stepping down. */
+function PointFigureGlyph() {
+  return (
+    <>
+      <path d="M5.5 20.5 9.5 16.5M9.5 20.5 5.5 16.5M5.5 16.5 9.5 12.5M9.5 16.5 5.5 12.5" />
+      <circle cx="20.5" cy="9.5" r="3" />
+      <circle cx="20.5" cy="16.5" r="3" />
+    </>
+  );
+}
+
 /** What each bar type draws, keyed by the style it stands for: a style without a drawing does not compile. */
 const BAR_STYLE_GLYPHS: Readonly<Record<BarStyle, () => ReactNode>> = {
   bars: BarsGlyph,
@@ -180,6 +191,7 @@ const BAR_STYLE_GLYPHS: Readonly<Record<BarStyle, () => ReactNode>> = {
   renko: RenkoGlyph,
   lineBreak: LineBreakGlyph,
   kagi: KagiGlyph,
+  pointFigure: PointFigureGlyph,
 };
 
 /** The icon of one bar type: the shape it draws, in the colour of the button or row that shows it. */

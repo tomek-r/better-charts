@@ -54,6 +54,16 @@ const DEFAULT_RENKO_SPEC = {
 const DEFAULT_LINE_BREAK_SPEC = { type: 'lineBreak', lines: 3 };
 /** The defaults the Kagi settings map onto, which is TradingView's own set. */
 const DEFAULT_KAGI_SPEC = { type: 'kagi', reversalMethod: 'atr', atrLength: 14, reversal: '1', percentage: '1' };
+/** The defaults the Point & figure settings map onto, which is TradingView's own set. */
+const DEFAULT_POINT_FIGURE_SPEC = {
+  type: 'pointFigure',
+  source: 'highLow',
+  boxMethod: 'atr',
+  atrLength: 14,
+  boxSize: '1',
+  percentage: '1',
+  reversal: 3,
+};
 
 /** One bar the backend reports for a chart type: its prices are the decimal strings the chart parses. */
 function chartTypeBarAt(timeMs: number, prices: [string, string, string, string], volume: string): ChartTypeBar {
@@ -82,6 +92,12 @@ const KAGI_STROKES: readonly ChartTypeBar[] = [
   chartTypeBarAt(NEWEST_BASE_MS, ['1.0850', '1.0860', '1.0850', '1.0860'], '120'),
   chartTypeBarAt(NEWEST_BASE_MS + 1, ['1.0860', '1.0860', '1.0852', '1.0852'], '240'),
   chartTypeBarAt(NEWEST_BASE_MS + STUB_M5_INTERVAL_MS, ['1.0852', '1.0872', '1.0852', '1.0872'], '360'),
+];
+/** Three Point & figure columns on a 10-point grid: a rise, a reversal one box back, then a rise again. */
+const POINT_FIGURE_COLUMNS: readonly ChartTypeBar[] = [
+  chartTypeBarAt(NEWEST_BASE_MS, ['1.0850', '1.0880', '1.0850', '1.0880'], '120'),
+  chartTypeBarAt(NEWEST_BASE_MS + 1, ['1.0870', '1.0870', '1.0850', '1.0850'], '240'),
+  chartTypeBarAt(NEWEST_BASE_MS + STUB_M5_INTERVAL_MS, ['1.0860', '1.0890', '1.0860', '1.0890'], '360'),
 ];
 
 /** One candle as the chart draws it: the bar the library plots, with its prices read off the decimal text. */
@@ -157,7 +173,7 @@ type CollectedErrors = Awaited<ReturnType<typeof gotoWithStub>>;
  */
 async function openOnChartType(
   page: Page,
-  style: 'Renko' | 'Line break' | 'Kagi',
+  style: 'Renko' | 'Line break' | 'Kagi' | 'Point & figure',
   bars: readonly ChartTypeBar[],
 ): Promise<CollectedErrors> {
   const collected = await gotoWithStub(page, {
@@ -351,6 +367,41 @@ test('the Kagi settings show their defaults, and a traditional reversal asks for
   await chooseOption(dialog.getByLabel('Reversal amount assignment method', { exact: true }), 'Traditional');
 
   await expect.poll(async () => (await lastChartTypeSpec(page))?.reversalMethod).toBe('traditional');
+  expect(await chartTypeRequests(page)).toHaveLength(requestsBefore + 1);
+  expectNoErrors(collected);
+});
+
+test('picking Point & figure asks for its columns from the base candles and draws them', async ({ page }) => {
+  const collected = await openOnChartType(page, 'Point & figure', POINT_FIGURE_COLUMNS);
+
+  const [request] = await chartTypeRequests(page);
+  expect(request.args.candles).toEqual(BASE_CANDLES);
+  expect(request.args.chart).toEqual(DEFAULT_POINT_FIGURE_SPEC);
+  // The columns are the chart's own bars, which the legend, the pointer and the axis read; a custom series
+  // prints the X and O marks on the box grid it reads back off those columns.
+  expect(await chartBars(page)).toEqual(drawnBars(POINT_FIGURE_COLUMNS));
+  await expect.poll(async () => (await barStyleState(page)).seriesType).toBe('Custom');
+  expect((await barStyleState(page)).options).toMatchObject({ upColor: '#26a69a', downColor: '#ef5350' });
+  expectNoErrors(collected);
+});
+
+test('the Point & figure settings show their defaults, and a close source asks again', async ({ page }) => {
+  const collected = await openOnChartType(page, 'Point & figure', POINT_FIGURE_COLUMNS);
+  const requestsBefore = (await chartTypeRequests(page)).length;
+
+  const dialog = await openChartSettingsDialog(page);
+
+  await expect(dialog.getByLabel('Source', { exact: true })).toHaveText('High/Low');
+  await expect(dialog.getByLabel('Box size assignment method', { exact: true })).toHaveText('ATR');
+  await expect(dialog.getByLabel('ATR length', { exact: true })).toHaveValue('14');
+  await expect(dialog.getByLabel('Box size', { exact: true })).toHaveValue('1');
+  await expect(dialog.getByLabel('Percentage', { exact: true })).toHaveValue('1');
+  await expect(dialog.getByLabel('Reversal amount', { exact: true })).toHaveValue('3');
+  await expect(dialog.getByLabel('Up color', { exact: true })).toBeVisible();
+
+  await chooseOption(dialog.getByLabel('Source', { exact: true }), 'Close');
+
+  await expect.poll(async () => (await lastChartTypeSpec(page))?.source).toBe('close');
   expect(await chartTypeRequests(page)).toHaveLength(requestsBefore + 1);
   expectNoErrors(collected);
 });
