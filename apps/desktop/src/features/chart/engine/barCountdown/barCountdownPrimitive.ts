@@ -34,6 +34,7 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
     timeframe: DEFAULT_TIMEFRAME,
     connected: false,
     suspended: false,
+    chartTypeBars: false,
   };
   /** Text the last chart update put on the axis; drives the repaint decision. */
   private shownText = '';
@@ -62,6 +63,7 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
     next.askPrice = state.askPrice;
     next.connected = state.connected;
     next.suspended = state.suspended;
+    next.chartTypeBars = state.chartTypeBars;
     // Quotes arrive far more often than the label changes; compare before
     // asking the chart for a frame.
     if (this.painted() !== this.shownText) {
@@ -128,12 +130,12 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
   }
 
   /**
-   * Whether the tag counts anything at all: a tick interval's bar closes after
-   * a number of ticks rather than at a time, so it has nothing to count down to.
+   * Whether the tag counts anything at all: a tick interval's bar closes after a number of ticks and a chart
+   * type's bar when the move that draws it happens, so neither has a moment on the clock to count down to.
    */
   private countsDown(): boolean {
-    const { connected, suspended, timeframe } = this.state;
-    return connected && !suspended && !isTickInterval(timeframe);
+    const { connected, suspended, timeframe, chartTypeBars } = this.state;
+    return connected && !suspended && !chartTypeBars && !isTickInterval(timeframe);
   }
 
   /** Countdown text for the current broker second, ignoring visibility. */

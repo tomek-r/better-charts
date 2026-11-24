@@ -9,10 +9,16 @@ export function barDirectionColors(appearance: BarStyleAppearance): BarDirection
     case 'heikinAshi':
     case 'volumeCandles':
     case 'hollowCandles':
+    case 'renko':
+    case 'lineBreak':
       return appearance.candles.body;
     case 'bars':
     case 'columns':
       return appearance.colors;
+    case 'kagi':
+      return { up: appearance.yangColor, down: appearance.yinColor };
+    case 'pointFigure':
+      return { up: appearance.upColor, down: appearance.downColor };
     case 'line':
     case 'lineWithMarkers':
     case 'stepLine':
@@ -34,10 +40,16 @@ function bodyRose(appearance: BarStyleAppearance, bar: RenderBar, previous: Rend
     case 'candles':
     case 'heikinAshi':
     case 'volumeCandles':
+    case 'renko':
+    case 'lineBreak':
       return appearance.candles.colorByPreviousClose ? roseAgainstPreviousClose(bar, previous) : roseTo(bar, bar.open);
     case 'bars':
     case 'columns':
       return appearance.colorByPreviousClose ? roseAgainstPreviousClose(bar, previous) : roseTo(bar, bar.open);
+    case 'kagi':
+    case 'pointFigure':
+      // Both follow the bar's own direction: a stroke's yang against its yin, a column's X against its O.
+      return roseTo(bar, bar.open);
     case 'line':
     case 'lineWithMarkers':
     case 'stepLine':

@@ -575,6 +575,9 @@ export async function installTauriStub(
       modify_order: null,
       // The saved chart layout: its first entry is the one chart the app draws.
       load_chart_layout: opts.chartLayout ?? defaultChartLayout,
+      // Chart type bars: a page that never picks a chart type asks for none, and a test that needs
+      // bricks or lines scripts its own through `responses`.
+      compute_chart_type_bars: [],
       // Event-result commands: resolve the invoke AND push the matching event.
       project_risk_preview: null,
       request_risk_preview: 'reactive',

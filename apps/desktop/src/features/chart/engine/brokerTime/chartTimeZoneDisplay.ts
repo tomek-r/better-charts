@@ -60,11 +60,12 @@ export class ChartTimeZoneDisplay {
   }
 
   /**
-   * Reads the bars' time to what `interval` shows on screen: a tick bar closes after a number of ticks,
-   * so its own second is what tells one from the next, while every MT5 bar keeps its minute.
+   * Reads the bars' time to what `interval` shows on screen: a tick bar closes after a number of ticks and a
+   * chart type's bar when its move happens, so each one's own second is what tells one from the next, while
+   * every MT5 bar keeps its minute.
    */
-  applyInterval(interval: string): void {
-    const precision: ChartTimePrecision = isTickInterval(interval) ? 'second' : 'minute';
+  applyInterval(interval: string, secondPrecision = false): void {
+    const precision: ChartTimePrecision = secondPrecision || isTickInterval(interval) ? 'second' : 'minute';
     if (precision === this.appliedPrecision) {
       return;
     }

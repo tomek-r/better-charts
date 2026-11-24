@@ -4,6 +4,7 @@ import type { IndicatorLegendWords } from '../legend/indicatorLegend';
 import type { IndicatorSeriesSource } from '../indicators/indicatorSeriesSource';
 import type { IndicatorTickSource } from '../indicators/indicatorTickSource';
 import type { SettingValues } from '../settings/settingInputs';
+import type { ChartTypeBarsPort } from '../bars/chartTypeBars';
 
 /** What the app gives the chart for its tools; a tool sees it only through its `ChartToolHost`. */
 export type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'marketDataPort' | 'notifyError'> & {
@@ -22,6 +23,11 @@ export type ChartControllerOptions = Pick<ChartToolHost, 'currentMarket' | 'mark
    * serve, whose indicators then calculate from the bars they are given.
    */
   indicatorTickSource?: IndicatorTickSource;
+  /**
+   * The bars a chart type draws from the chart's own candles, read through the app; omitted on a chart the
+   * backend cannot serve, which then keeps drawing the candles the bar style was chosen over.
+   */
+  chartTypeBars?: ChartTypeBarsPort;
   /** The tool active at start and made active again after a placement; one of `toolDefinitions`. */
   defaultToolId: string;
 };

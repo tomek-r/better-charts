@@ -18,11 +18,18 @@ import {
   isCustomBarStyle,
   type DrawnBarStyleAppearance,
   type HighLowAppearance,
+  type KagiAppearance,
   type LibraryBarStyleAppearance,
+  type PointFigureAppearance,
   type VolumeCandlesAppearance,
 } from './barStyleAppearance';
+import { chartTypeDrawsWicks } from './chartTypeAppearance';
 import { HIGH_LOW_DEFAULT_OPTIONS, type HighLowOptions } from './highLow/highLowOptions';
 import { HighLowPaneView } from './highLow/highLowPaneView';
+import { KAGI_DEFAULT_OPTIONS, type KagiOptions } from './kagi/kagiOptions';
+import { KagiPaneView } from './kagi/kagiPaneView';
+import { POINT_FIGURE_DEFAULT_OPTIONS, type PointFigureOptions } from './pointFigure/pointFigureOptions';
+import { PointFigurePaneView } from './pointFigure/pointFigurePaneView';
 import { VOLUME_CANDLES_DEFAULT_OPTIONS, type VolumeCandlesOptions } from './volumeCandles/volumeCandlesOptions';
 import { VolumeCandlesPaneView } from './volumeCandles/volumeCandlesPaneView';
 
@@ -47,6 +54,8 @@ const SERIES_DEFINITION_BY_STYLE: Readonly<Record<LibraryBarStyle, SeriesDefinit
   heikinAshi: CandlestickSeries,
   line: LineSeries,
   lineWithMarkers: LineSeries,
+  lineBreak: CandlestickSeries,
+  renko: CandlestickSeries,
   stepLine: LineSeries,
   area: AreaSeries,
 };
@@ -81,6 +90,10 @@ function definitionOptionsOf(appearance: LibraryBarStyleAppearance, digits: numb
     case 'heikinAshi':
       // The Heikin Ashi bars take the body, border and wick colours the candles are saved with.
       return { ...common, ...candleSeriesColors(appearance.candles) };
+    case 'renko':
+    case 'lineBreak':
+      // Bricks and lines are candles too, without the wick a Line Break line never draws.
+      return { ...common, ...candleSeriesColors(appearance.candles), wickVisible: chartTypeDrawsWicks(appearance) };
     case 'bars':
       return {
         ...common,
@@ -149,6 +162,28 @@ function highLowOptionsOf(appearance: HighLowAppearance, digits: number): HighLo
   };
 }
 
+/** The options a Kagi series draws `appearance` with: the colour and thickness of each of the line's styles. */
+function kagiOptionsOf(appearance: KagiAppearance, digits: number): KagiOptions {
+  return {
+    ...KAGI_DEFAULT_OPTIONS,
+    ...barStyleCommonOptions(digits),
+    yangColor: appearance.yangColor,
+    yangLineWidth: appearance.yangLineWidth,
+    yinColor: appearance.yinColor,
+    yinLineWidth: appearance.yinLineWidth,
+  };
+}
+
+/** The options a Point & figure series draws `appearance` with: the colour of each of the two marks. */
+function pointFigureOptionsOf(appearance: PointFigureAppearance, digits: number): PointFigureOptions {
+  return {
+    ...POINT_FIGURE_DEFAULT_OPTIONS,
+    ...barStyleCommonOptions(digits),
+    upColor: appearance.upColor,
+    downColor: appearance.downColor,
+  };
+}
+
 /**
  * Paints the appearance's series: repaints `series` in `options` when one is given, and adds the series
  * `addSeries` creates otherwise. The options are reported back as the test hook shows them.
@@ -193,6 +228,14 @@ export function drawBarStyleSeries(
   if (appearance.style === 'volumeCandles') {
     const options = volumeCandlesOptionsOf(appearance, digits);
     return paintBarStyleSeries(series, options, () => chart.addCustomSeries(new VolumeCandlesPaneView(), options));
+  }
+  if (appearance.style === 'kagi') {
+    const options = kagiOptionsOf(appearance, digits);
+    return paintBarStyleSeries(series, options, () => chart.addCustomSeries(new KagiPaneView(), options));
+  }
+  if (appearance.style === 'pointFigure') {
+    const options = pointFigureOptionsOf(appearance, digits);
+    return paintBarStyleSeries(series, options, () => chart.addCustomSeries(new PointFigurePaneView(), options));
   }
   const definition = SERIES_DEFINITION_BY_STYLE[appearance.style];
   const options = definitionOptionsOf(appearance, digits);

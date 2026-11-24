@@ -21,6 +21,7 @@ import { PriceAxisTagsPrimitive } from '../quotes/priceAxisTagsPrimitive';
 import { PriceScaleController, type PriceScaleState } from '../priceScale/priceScaleController';
 import { BarSeriesController } from '../bars/barSeriesController';
 import type { BarStyleAppearance } from '../barStyle/barStyleAppearance';
+import { HistoryViewportMode } from '../bars/historyViewportMode';
 import { PriceLineController } from '../quotes/priceLineController';
 import { ViewportController, type DiagnosticViewport } from '../viewport/viewportController';
 import type {
@@ -44,6 +45,8 @@ import type { IndicatorLegendCommands } from '../legend/indicatorLegend';
 import { LiveBarController } from './liveBarController';
 import { resetPaneToEnd, sizeChartToHost } from './chartPaneView';
 import { PointerCandleHold } from '../bars/pointerCandleHold';
+import type { ChartTypeBarSource } from '../bars/chartTypeBars';
+import { createChartTypeBars } from './chartTypeWiring';
 
 /**
  * One class owns the chart surface's lifecycle: the handles chartFactory builds,
@@ -75,6 +78,8 @@ export class ChartController {
   // The bar cache, its interval and the price precision are owned by
   // BarSeriesController; the `bars` accessor below is the read-only seam onto it.
   private readonly data: BarSeriesController;
+  /** The candles the broker sent, and the bars a chart type draws from them while one is the bar style. */
+  private readonly chartTypeBars: ChartTypeBarSource;
   private readonly countdown: CountdownController;
   private symbol = '';
   private removed = false;
@@ -120,6 +125,13 @@ export class ChartController {
     );
     this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointer.labels, this.brokerTime);
     this.data = new BarSeriesController(this.candles, this.chart);
+    // Built before the history and the live bar it writes through: the wiring reads both on every seam.
+    this.chartTypeBars = createChartTypeBars({
+      port: options.chartTypeBars,
+      history: () => this.history,
+      liveBar: () => this.liveBar,
+      resetView: () => this.resetView(),
+    });
     // The drawings are built further down, so the selection reaches them when it clears them, not before.
     const indicatorWiring = createChartIndicators(this.chart, host, this.data, this.candles, options, {
       clearDrawingSelection: () => this.drawings.clearSelection(),
@@ -139,6 +151,7 @@ export class ChartController {
       data: this.data,
       indicators: this.indicators,
       isDestroyed: () => this.removed,
+      oldestBarTimeSeconds: () => this.chartTypeBars.oldestBarTimeSeconds() ?? this.data.bars[0]?.time,
       discardHeldCandles: () => this.liveCandleHold.discard(),
       barsChanged: () => this.afterBarsChanged(),
       olderBarsAdded: () => {
@@ -173,6 +186,7 @@ export class ChartController {
       barTimeSeconds: () => this.data.lastBar()?.time,
       bid: () => this.state.priceLines.bid,
       ask: () => this.state.priceLines.ask,
+      chartTypeBars: () => this.chartTypeBars.drawsOwnBars,
     });
     this.primitive = new WorkspacePrimitive(this, state);
     this.candles.attachPrimitive(this.primitive);
@@ -236,12 +250,22 @@ export class ChartController {
    * over; the caller resets to the default end anchor when it was not, so the
    * pane never keeps a range from a series of a different shape. Timeframe
    * changes can retain the bars-from-end position; other replacements reset.
+   *
+   * While a chart type is the bar style, the candles are kept and the bars the
+   * chart draws are the ones the chart type makes of them, which arrive later.
    */
   replaceHistory(candles: readonly Candle[], options: ReplaceHistoryOptions = {}): boolean {
+    const viewportMode = options.viewportMode ?? HistoryViewportMode.Reset;
+    if (this.chartTypeBars.replace(candles, { timeframe: options.timeframe, viewportMode })) {
+      return false;
+    }
     return this.history.replace(candles, options);
   }
 
   updateCandle(candle: Candle): void {
+    if (this.chartTypeBars.update(candle)) {
+      return;
+    }
     this.liveBar.apply(candle);
   }
 
@@ -274,8 +298,14 @@ export class ChartController {
   /**
    * Prepends a page of older bars and re-anchors the pane so the visible bars do
    * not move. `complete` is the broker's own end-of-history signal.
+   *
+   * While a chart type is the bar style the page holds base candles, which the
+   * chart type asks for the bars of instead of prepending them itself.
    */
   appendOlderHistory(candles: readonly Candle[], complete: boolean): void {
+    if (this.chartTypeBars.prepend(candles, complete)) {
+      return;
+    }
     this.history.appendOlder(candles, complete);
   }
 
@@ -297,14 +327,18 @@ export class ChartController {
   setTimeZone(zone: string, brokerUtcOffsetMinutes: number | null): void {
     this.timeZoneDisplay.apply(zone, brokerUtcOffsetMinutes);
   }
-  /** Draws the chart's bar style: the candles on the anchor, or a series of its own for every other style. */
+  /**
+   * Draws the chart's bar style: the candles on the anchor, or a series of its own for every other style. A
+   * chart type also asks for the bars it draws from the candles the chart holds, or brings them back when a
+   * standard style replaces it.
+   */
   setBarStyle(appearance: BarStyleAppearance): void {
     if (this.removed) {
       return;
     }
     this.data.setBarStyle(appearance);
-    this.ohlcReadout.refresh();
-    this.refreshOverlays();
+    this.chartTypeBars.setAppearance(appearance);
+    this.afterBarsChanged();
   }
   /**
    * Hides the price bars from the chart, or shows them again, as the object tree's bars row asks: the
@@ -453,6 +487,7 @@ export class ChartController {
     this.candles.detachPrimitive(this.priceTags);
     this.candles.detachPrimitive(this.primitive);
     this.chartIndicators.destroy();
+    this.chartTypeBars.destroy();
     this.data.destroy();
     this.chart.remove();
     if (import.meta.env.DEV) {
@@ -462,7 +497,7 @@ export class ChartController {
 
   /** Brings everything that reads the bars up to date after they changed. */
   private afterBarsChanged(): void {
-    this.timeZoneDisplay.applyInterval(this.data.timeframe);
+    this.timeZoneDisplay.applyInterval(this.data.timeframe, this.chartTypeBars.drawsOwnBars);
     this.ohlcReadout.refresh();
     this.refreshOverlays();
     this.scales.syncCountdown();

@@ -34,4 +34,9 @@ export interface BarCountdownState {
   connected: boolean;
   /** History or timeframe load in flight: hide rather than show stale time. */
   suspended: boolean;
+  /**
+   * Whether the bars are a chart type's own bricks or lines. They close when the move that draws them happens,
+   * not at a time on the clock, so there is nothing to count down to.
+   */
+  chartTypeBars: boolean;
 }

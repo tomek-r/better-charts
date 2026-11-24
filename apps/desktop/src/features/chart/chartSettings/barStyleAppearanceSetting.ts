@@ -11,10 +11,18 @@ import {
   type ColumnsAppearance,
   type DrawnBarStyleAppearance,
   type HighLowAppearance,
+  type KagiAppearance,
+  type LineBreakAppearance,
   type LineStyleAppearance,
+  type PointFigureAppearance,
+  type RenkoAppearance,
   type ToggledColor,
   type VolumeCandlesAppearance,
 } from '../engine/barStyle/barStyleAppearance';
+import { isBoxMethod, type BoxMethod } from '../engine/barStyle/boxMethod';
+import { KAGI_DEFAULT_OPTIONS } from '../engine/barStyle/kagi/kagiOptions';
+import { POINT_FIGURE_DEFAULT_OPTIONS } from '../engine/barStyle/pointFigure/pointFigureOptions';
+import { isPointFigureSource, type PointFigureSource } from '../engine/barStyle/pointFigureSource';
 import { isPriceSource, type PriceSource } from '../engine/barStyle/priceSource';
 import { BAR_STYLE_SETTINGS, WIDTH_SENSITIVITY_FIELD } from './barStyleSettings';
 import { candleAppearanceOf } from './candleAppearanceSetting';
@@ -40,6 +48,21 @@ const BODY_KEY = 'body';
 const BORDERS_KEY = 'borders';
 const LABELS_KEY = 'labels';
 const WIDTH_SENSITIVITY_KEY = 'widthSensitivity';
+const BOX_METHOD_KEY = 'boxMethod';
+const ATR_LENGTH_KEY = 'atrLength';
+const BOX_SIZE_KEY = 'boxSize';
+const PERCENTAGE_KEY = 'percentage';
+const WICKS_KEY = 'wicks';
+const LINES_KEY = 'lines';
+const REVERSAL_METHOD_KEY = 'reversalMethod';
+const REVERSAL_KEY = 'reversal';
+const YANG_COLOR_KEY = 'yangColor';
+const YANG_WIDTH_KEY = 'yangLineWidth';
+const YIN_COLOR_KEY = 'yinColor';
+const YIN_WIDTH_KEY = 'yinLineWidth';
+const SOURCE_KEY = 'source';
+const UP_COLOR_KEY = 'upColor';
+const DOWN_COLOR_KEY = 'downColor';
 
 /**
  * What a style draws when its own settings hold nothing its fields can explain — the values the
@@ -88,6 +111,38 @@ const WHOLE_PERCENT = 100;
  */
 const DEFAULT_WIDTH_SENSITIVITY = WIDTH_SENSITIVITY_FIELD.defaultValue / WHOLE_PERCENT;
 
+/** How a chart type sizes its bars until its own settings say otherwise: TradingView's own defaults. */
+const RENKO_DEFAULTS: Omit<RenkoAppearance, 'style' | 'candles'> = {
+  boxMethod: 'atr',
+  atrLength: 14,
+  boxSize: 10,
+  percentage: 1,
+  wicks: true,
+};
+const LINE_BREAK_DEFAULTS: Omit<LineBreakAppearance, 'style' | 'candles'> = { lines: 3 };
+/** The Kagi line until its own settings say otherwise, its styles at the colours the series itself starts on. */
+const KAGI_DEFAULTS: Omit<KagiAppearance, 'style'> = {
+  reversalMethod: 'atr',
+  atrLength: 14,
+  reversal: 1,
+  percentage: 1,
+  yangColor: KAGI_DEFAULT_OPTIONS.yangColor,
+  yangLineWidth: KAGI_DEFAULT_OPTIONS.yangLineWidth,
+  yinColor: KAGI_DEFAULT_OPTIONS.yinColor,
+  yinLineWidth: KAGI_DEFAULT_OPTIONS.yinLineWidth,
+};
+/** The columns until the Point & figure settings say otherwise, its marks at the series' own colours. */
+const POINT_FIGURE_DEFAULTS: Omit<PointFigureAppearance, 'style'> = {
+  source: 'highLow',
+  boxMethod: 'atr',
+  atrLength: 14,
+  boxSize: 1,
+  percentage: 1,
+  reversal: 3,
+  upColor: POINT_FIGURE_DEFAULT_OPTIONS.upColor,
+  downColor: POINT_FIGURE_DEFAULT_OPTIONS.downColor,
+};
+
 /** The settings field a style declares under `key`; a style declares only the keys its own section holds. */
 function fieldOf(style: BarStyle, key: string) {
   return BAR_STYLE_SETTINGS[style].fields.find((field) => field.key === key);
@@ -102,6 +157,16 @@ function fieldValue(style: BarStyle, key: string, values: BarStyleSettingValues)
 function readBoolean(style: BarStyle, key: string, values: BarStyleSettingValues): boolean | undefined {
   const value = fieldValue(style, key, values);
   return typeof value === 'boolean' ? value : undefined;
+}
+
+function readNumber(style: BarStyle, key: string, values: BarStyleSettingValues): number | undefined {
+  const value = fieldValue(style, key, values);
+  return typeof value === 'number' ? value : undefined;
+}
+
+function readBoxMethod(style: BarStyle, key: string, values: BarStyleSettingValues): BoxMethod | undefined {
+  const value = fieldValue(style, key, values);
+  return isBoxMethod(value) ? value : undefined;
 }
 
 function readColor(style: BarStyle, key: string, values: BarStyleSettingValues): string | undefined {
@@ -130,8 +195,13 @@ function readPriceSource(style: BarStyle, values: BarStyleSettingValues): PriceS
   return isPriceSource(value) ? value : undefined;
 }
 
-function readLineWidth(style: BarStyle, values: BarStyleSettingValues): BarStyleLineWidth | undefined {
-  const value = fieldValue(style, LINE_WIDTH_KEY, values);
+function readPointFigureSource(style: BarStyle, values: BarStyleSettingValues): PointFigureSource | undefined {
+  const value = fieldValue(style, SOURCE_KEY, values);
+  return isPointFigureSource(value) ? value : undefined;
+}
+
+function readLineWidth(style: BarStyle, key: string, values: BarStyleSettingValues): BarStyleLineWidth | undefined {
+  const value = fieldValue(style, key, values);
   return isBarStyleLineWidth(value) ? value : undefined;
 }
 
@@ -164,7 +234,7 @@ function lineAppearance(
     style,
     priceSource: readPriceSource(style, values) ?? LINE_DEFAULTS.priceSource,
     color: readColor(style, LINE_COLOR_KEY, values) ?? LINE_DEFAULTS.color,
-    lineWidth: readLineWidth(style, values) ?? LINE_DEFAULTS.lineWidth,
+    lineWidth: readLineWidth(style, LINE_WIDTH_KEY, values) ?? LINE_DEFAULTS.lineWidth,
   };
 }
 
@@ -173,7 +243,7 @@ function areaAppearance(values: BarStyleSettingValues): AreaAppearance {
     style: 'area',
     priceSource: readPriceSource('area', values) ?? AREA_DEFAULTS.priceSource,
     lineColor: readColor('area', LINE_COLOR_KEY, values) ?? AREA_DEFAULTS.lineColor,
-    lineWidth: readLineWidth('area', values) ?? AREA_DEFAULTS.lineWidth,
+    lineWidth: readLineWidth('area', LINE_WIDTH_KEY, values) ?? AREA_DEFAULTS.lineWidth,
     fillTop: readColor('area', FILL_TOP_KEY, values) ?? AREA_DEFAULTS.fillTop,
     fillBottom: readColor('area', FILL_BOTTOM_KEY, values) ?? AREA_DEFAULTS.fillBottom,
   };
@@ -197,7 +267,7 @@ function baselineAppearance(values: BarStyleSettingValues): BaselineAppearance {
     topFill: readColor('baseline', TOP_FILL_KEY, values) ?? BASELINE_DEFAULTS.topFill,
     bottomLine: readColor('baseline', BOTTOM_LINE_KEY, values) ?? BASELINE_DEFAULTS.bottomLine,
     bottomFill: readColor('baseline', BOTTOM_FILL_KEY, values) ?? BASELINE_DEFAULTS.bottomFill,
-    lineWidth: readLineWidth('baseline', values) ?? BASELINE_DEFAULTS.lineWidth,
+    lineWidth: readLineWidth('baseline', LINE_WIDTH_KEY, values) ?? BASELINE_DEFAULTS.lineWidth,
   };
 }
 
@@ -215,6 +285,54 @@ function volumeCandlesAppearance(values: BarStyleSettingValues): VolumeCandlesAp
     style: 'volumeCandles',
     candles: candleAppearanceOf(values),
     widthSensitivity: readWidthSensitivity(values) ?? DEFAULT_WIDTH_SENSITIVITY,
+  };
+}
+
+function renkoAppearance(values: BarStyleSettingValues): RenkoAppearance {
+  return {
+    style: 'renko',
+    candles: candleAppearanceOf(values),
+    boxMethod: readBoxMethod('renko', BOX_METHOD_KEY, values) ?? RENKO_DEFAULTS.boxMethod,
+    atrLength: readNumber('renko', ATR_LENGTH_KEY, values) ?? RENKO_DEFAULTS.atrLength,
+    boxSize: readNumber('renko', BOX_SIZE_KEY, values) ?? RENKO_DEFAULTS.boxSize,
+    percentage: readNumber('renko', PERCENTAGE_KEY, values) ?? RENKO_DEFAULTS.percentage,
+    wicks: readBoolean('renko', WICKS_KEY, values) ?? RENKO_DEFAULTS.wicks,
+  };
+}
+
+function lineBreakAppearance(values: BarStyleSettingValues): LineBreakAppearance {
+  return {
+    style: 'lineBreak',
+    candles: candleAppearanceOf(values),
+    lines: readNumber('lineBreak', LINES_KEY, values) ?? LINE_BREAK_DEFAULTS.lines,
+  };
+}
+
+function kagiAppearance(values: BarStyleSettingValues): KagiAppearance {
+  return {
+    style: 'kagi',
+    reversalMethod: readBoxMethod('kagi', REVERSAL_METHOD_KEY, values) ?? KAGI_DEFAULTS.reversalMethod,
+    atrLength: readNumber('kagi', ATR_LENGTH_KEY, values) ?? KAGI_DEFAULTS.atrLength,
+    reversal: readNumber('kagi', REVERSAL_KEY, values) ?? KAGI_DEFAULTS.reversal,
+    percentage: readNumber('kagi', PERCENTAGE_KEY, values) ?? KAGI_DEFAULTS.percentage,
+    yangColor: readColor('kagi', YANG_COLOR_KEY, values) ?? KAGI_DEFAULTS.yangColor,
+    yangLineWidth: readLineWidth('kagi', YANG_WIDTH_KEY, values) ?? KAGI_DEFAULTS.yangLineWidth,
+    yinColor: readColor('kagi', YIN_COLOR_KEY, values) ?? KAGI_DEFAULTS.yinColor,
+    yinLineWidth: readLineWidth('kagi', YIN_WIDTH_KEY, values) ?? KAGI_DEFAULTS.yinLineWidth,
+  };
+}
+
+function pointFigureAppearance(values: BarStyleSettingValues): PointFigureAppearance {
+  return {
+    style: 'pointFigure',
+    source: readPointFigureSource('pointFigure', values) ?? POINT_FIGURE_DEFAULTS.source,
+    boxMethod: readBoxMethod('pointFigure', BOX_METHOD_KEY, values) ?? POINT_FIGURE_DEFAULTS.boxMethod,
+    atrLength: readNumber('pointFigure', ATR_LENGTH_KEY, values) ?? POINT_FIGURE_DEFAULTS.atrLength,
+    boxSize: readNumber('pointFigure', BOX_SIZE_KEY, values) ?? POINT_FIGURE_DEFAULTS.boxSize,
+    percentage: readNumber('pointFigure', PERCENTAGE_KEY, values) ?? POINT_FIGURE_DEFAULTS.percentage,
+    reversal: readNumber('pointFigure', REVERSAL_KEY, values) ?? POINT_FIGURE_DEFAULTS.reversal,
+    upColor: readColor('pointFigure', UP_COLOR_KEY, values) ?? POINT_FIGURE_DEFAULTS.upColor,
+    downColor: readColor('pointFigure', DOWN_COLOR_KEY, values) ?? POINT_FIGURE_DEFAULTS.downColor,
   };
 }
 
@@ -250,6 +368,14 @@ export function barStyleAppearanceOf(style: BarStyle, values: BarStyleSettingVal
       return volumeCandlesAppearance(values);
     case 'heikinAshi':
       return { style, candles: candleAppearanceOf(values) };
+    case 'renko':
+      return renkoAppearance(values);
+    case 'lineBreak':
+      return lineBreakAppearance(values);
+    case 'kagi':
+      return kagiAppearance(values);
+    case 'pointFigure':
+      return pointFigureAppearance(values);
     case 'baseline':
       return baselineAppearance(values);
     case 'highLow':
