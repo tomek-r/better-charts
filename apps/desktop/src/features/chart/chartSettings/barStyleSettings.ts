@@ -6,6 +6,7 @@ import type {
   ChoiceSettingField,
   ColorPairSettingField,
   ColorSettingField,
+  DecimalSettingField,
   LineWidthSettingField,
   PercentSettingField,
   SettingsSectionFields,
@@ -158,6 +159,80 @@ const HIGH_LOW_FIELDS: readonly ChartSettingField[] = [
   HIGH_LOW_LABELS_FIELD,
 ];
 
+/** Which setting sizes a Renko brick, in TradingView's order and wording. */
+const BOX_METHOD_FIELD: ChoiceSettingField = {
+  kind: 'choice',
+  key: 'boxMethod',
+  label: 'Box size assignment method',
+  defaultValue: 'atr',
+  options: [
+    { value: 'atr', label: 'ATR' },
+    { value: 'traditional', label: 'Traditional' },
+    { value: 'percentageLtp', label: 'Percentage LTP' },
+  ],
+};
+
+/** Bars of the average true range a brick spans: TradingView's own default length. */
+const ATR_LENGTH_FIELD: DecimalSettingField = {
+  kind: 'decimal',
+  key: 'atrLength',
+  label: 'ATR length',
+  defaultValue: 14,
+  range: { min: 1, max: 1000, step: 1 },
+};
+
+/** The price distance a brick spans, which only the traditional method reads. */
+const BOX_SIZE_FIELD: DecimalSettingField = {
+  kind: 'decimal',
+  key: 'boxSize',
+  label: 'Box size',
+  defaultValue: 10,
+  range: { min: 0.00001, max: 1_000_000, step: 0.00001 },
+};
+
+/** The share of the last close a brick spans, which only the percentage method reads. */
+const PERCENTAGE_OF_CLOSE_FIELD: DecimalSettingField = {
+  kind: 'decimal',
+  key: 'percentage',
+  label: 'Percentage',
+  defaultValue: 1,
+  unit: '%',
+  range: { min: 0.001, max: 100, step: 0.001 },
+};
+
+const WICKS_FIELD: CheckboxSettingField = {
+  kind: 'checkbox',
+  key: 'wicks',
+  label: 'Wicks',
+  defaultValue: true,
+};
+
+/** How many lines the close turns against before a Line Break line is drawn. */
+const LINE_BREAK_LINES_FIELD: DecimalSettingField = {
+  kind: 'decimal',
+  key: 'lines',
+  label: 'Number of lines',
+  defaultValue: 3,
+  range: { min: 1, max: 100, step: 1 },
+};
+
+const RENKO_FIELDS: readonly ChartSettingField[] = [
+  BOX_METHOD_FIELD,
+  ATR_LENGTH_FIELD,
+  BOX_SIZE_FIELD,
+  PERCENTAGE_OF_CLOSE_FIELD,
+  WICKS_FIELD,
+  ...CANDLE_FIELDS,
+];
+
+/** A line has no wick to draw, so its section offers the body and border colours alone. */
+const LINE_BREAK_FIELDS: readonly ChartSettingField[] = [
+  LINE_BREAK_LINES_FIELD,
+  COLOR_BY_PREVIOUS_CLOSE_FIELD,
+  BODY_FIELD,
+  BORDERS_FIELD,
+];
+
 function settingsSection(style: BarStyle, fields: readonly ChartSettingField[]): BarStyleSettingsSection {
   return { title: barStyleLabel(style), fields };
 }
@@ -176,4 +251,6 @@ export const BAR_STYLE_SETTINGS: Readonly<Record<BarStyle, BarStyleSettingsSecti
   columns: settingsSection('columns', COLUMNS_FIELDS),
   highLow: settingsSection('highLow', HIGH_LOW_FIELDS),
   heikinAshi: settingsSection('heikinAshi', CANDLE_FIELDS),
+  renko: settingsSection('renko', RENKO_FIELDS),
+  lineBreak: settingsSection('lineBreak', LINE_BREAK_FIELDS),
 };

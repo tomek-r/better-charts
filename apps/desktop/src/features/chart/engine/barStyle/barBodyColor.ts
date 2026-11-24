@@ -9,6 +9,8 @@ export function barDirectionColors(appearance: BarStyleAppearance): BarDirection
     case 'heikinAshi':
     case 'volumeCandles':
     case 'hollowCandles':
+    case 'renko':
+    case 'lineBreak':
       return appearance.candles.body;
     case 'bars':
     case 'columns':
@@ -34,6 +36,8 @@ function bodyRose(appearance: BarStyleAppearance, bar: RenderBar, previous: Rend
     case 'candles':
     case 'heikinAshi':
     case 'volumeCandles':
+    case 'renko':
+    case 'lineBreak':
       return appearance.candles.colorByPreviousClose ? roseAgainstPreviousClose(bar, previous) : roseTo(bar, bar.open);
     case 'bars':
     case 'columns':

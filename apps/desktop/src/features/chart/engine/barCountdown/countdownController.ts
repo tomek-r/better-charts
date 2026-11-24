@@ -13,6 +13,8 @@ export interface CountdownInputs {
   barTimeSeconds(): number | undefined;
   bid(): number | undefined;
   ask(): number | undefined;
+  /** Whether the chart draws a chart type's bars, which close on a price move rather than at a time. */
+  chartTypeBars(): boolean;
 }
 
 /**
@@ -38,6 +40,7 @@ export class CountdownController {
     timeframe: DEFAULT_TIMEFRAME,
     connected: false,
     suspended: false,
+    chartTypeBars: false,
   };
 
   constructor(
@@ -74,6 +77,7 @@ export class CountdownController {
     state.barTimeSeconds = this.inputs.barTimeSeconds();
     state.anchorPrice = this.inputs.bid();
     state.askPrice = this.inputs.ask();
+    state.chartTypeBars = this.inputs.chartTypeBars();
     this.primitive.update(state);
   }
 }

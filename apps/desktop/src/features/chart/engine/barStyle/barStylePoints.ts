@@ -1,5 +1,5 @@
 import type { BarData, CandlestickData, HistogramData, LineData, Time, UTCTimestamp } from 'lightweight-charts';
-import { candlePointColors, paintedColor } from '../bars/candleAppearance';
+import { candlePointColors, paintedColor, type CandleAppearance } from '../bars/candleAppearance';
 import type { RenderBar } from '../bars/renderBar';
 import type {
   BarDirectionColors,
@@ -10,6 +10,7 @@ import type {
   HollowCandlesAppearance,
   VolumeCandlesAppearance,
 } from './barStyleAppearance';
+import { chartTypeDrawsWicks, type ChartTypeAppearance } from './chartTypeAppearance';
 import type { HighLowPoint } from './highLow/highLowPoint';
 import { priceAt, type PriceSource } from './priceSource';
 import type { VolumeCandlePoint } from './volumeCandles/volumeCandlePoint';
@@ -82,12 +83,9 @@ function hollowCandlePoint(
   };
 }
 
-/**
- * One Heikin Ashi candle. `bar` is the Heikin Ashi bar, which heikinAshiBars and nextHeikinAshiBar chain
- * before the points are written; the candle colours read it like any other bar.
- */
-function heikinAshiCandlePoint(
-  appearance: HeikinAshiAppearance,
+/** One candle of a bar: its prices, at the second the library plots it, painted by the candle appearance. */
+function candlePoint(
+  candles: CandleAppearance,
   bar: RenderBar,
   previous: RenderBar | undefined,
 ): CandlestickData<Time> {
@@ -97,8 +95,33 @@ function heikinAshiCandlePoint(
     high: bar.high,
     low: bar.low,
     close: bar.close,
-    ...candlePointColors(appearance.candles, bar, previous),
+    ...candlePointColors(candles, bar, previous),
   };
+}
+
+/**
+ * One Heikin Ashi candle. `bar` is the Heikin Ashi bar, which heikinAshiBars and nextHeikinAshiBar chain
+ * before the points are written; the candle colours read it like any other bar.
+ */
+function heikinAshiCandlePoint(
+  appearance: HeikinAshiAppearance,
+  bar: RenderBar,
+  previous: RenderBar | undefined,
+): CandlestickData<Time> {
+  return candlePoint(appearance.candles, bar, previous);
+}
+
+/**
+ * One brick or line, drawn as a candle. A Line Break line never shows a wick, and a Renko brick shows one only
+ * while its Wicks setting asks for it.
+ */
+function chartTypeCandlePoint(
+  appearance: ChartTypeAppearance,
+  bar: RenderBar,
+  previous: RenderBar | undefined,
+): CandlestickData<Time> {
+  const point = candlePoint(appearance.candles, bar, previous);
+  return chartTypeDrawsWicks(appearance) ? point : { ...point, wickColor: TRANSPARENT };
 }
 
 function barsPoint(appearance: BarsAppearance, bar: RenderBar, previous: RenderBar | undefined): BarData<Time> {
@@ -154,6 +177,9 @@ export function barStylePoint(
       return hollowCandlePoint(appearance, bar, previous);
     case 'heikinAshi':
       return heikinAshiCandlePoint(appearance, bar, previous);
+    case 'renko':
+    case 'lineBreak':
+      return chartTypeCandlePoint(appearance, bar, previous);
     case 'volumeCandles':
       return volumeCandlePoint(appearance, bar, previous);
     case 'highLow':

@@ -131,6 +131,28 @@ function HeikinAshiGlyph() {
   );
 }
 
+/** Renko: bricks stacked one box apart, a step up across the glyph. */
+function RenkoGlyph() {
+  return (
+    <>
+      <rect x="5.5" y="16.5" width="6" height="6" fill="currentColor" />
+      <rect x="11.5" y="10.5" width="6" height="6" fill="currentColor" />
+      <rect x="17.5" y="4.5" width="6" height="6" fill="currentColor" />
+    </>
+  );
+}
+
+/** Line break: consecutive lines, each starting where the one before it ended. */
+function LineBreakGlyph() {
+  return (
+    <>
+      <path d="M5.5 21.5 12.5 14.5" />
+      <path d="M12.5 14.5 18.5 8.5" />
+      <path d="M18.5 8.5 23.5 13.5" />
+    </>
+  );
+}
+
 /** What each bar type draws, keyed by the style it stands for: a style without a drawing does not compile. */
 const BAR_STYLE_GLYPHS: Readonly<Record<BarStyle, () => ReactNode>> = {
   bars: BarsGlyph,
@@ -145,6 +167,8 @@ const BAR_STYLE_GLYPHS: Readonly<Record<BarStyle, () => ReactNode>> = {
   columns: ColumnsGlyph,
   highLow: HighLowGlyph,
   heikinAshi: HeikinAshiGlyph,
+  renko: RenkoGlyph,
+  lineBreak: LineBreakGlyph,
 };
 
 /** The icon of one bar type: the shape it draws, in the colour of the button or row that shows it. */

@@ -1,4 +1,5 @@
 import { DEFAULT_CANDLE_APPEARANCE, sameCandleAppearance, type CandleAppearance } from '../bars/candleAppearance';
+import type { BoxMethod } from './boxMethod';
 import type { PriceSource } from './priceSource';
 
 /** The widths a bar style's line is drawn with, which is the range the settings offer. */
@@ -96,6 +97,33 @@ export interface VolumeCandlesAppearance {
   readonly widthSensitivity: number;
 }
 
+/**
+ * Renko bricks, which the backend draws from the chart's candles and the chart then draws as candles: the
+ * boxes stack on the close alone, so the times on screen order the bricks rather than place them on a clock.
+ */
+export interface RenkoAppearance {
+  readonly style: 'renko';
+  readonly candles: CandleAppearance;
+  /** Which setting sizes a brick: the ATR, a fixed price distance, or a share of the last close. */
+  readonly boxMethod: BoxMethod;
+  /** Bars of the average true range a brick spans, read by the `atr` method. */
+  readonly atrLength: number;
+  /** The fixed price distance a brick spans, read by the `traditional` method. */
+  readonly boxSize: number;
+  /** The percent of the last close a brick spans, read by the `percentageLtp` method. */
+  readonly percentage: number;
+  /** Whether a brick shows the wick it inherited from the bar that drew it. */
+  readonly wicks: boolean;
+}
+
+/** Line break lines: a new line only when the close turns against the last ones, drawn as candles without wicks. */
+export interface LineBreakAppearance {
+  readonly style: 'lineBreak';
+  readonly candles: CandleAppearance;
+  /** How many lines the close has to turn against before a reversal draws one. */
+  readonly lines: number;
+}
+
 /** The range as a box from the low to the high, labelled at both prices, which a custom series draws. */
 export interface HighLowAppearance {
   readonly style: 'highLow';
@@ -110,6 +138,8 @@ export type BarStyleAppearance =
   | HollowCandlesAppearance
   | VolumeCandlesAppearance
   | HeikinAshiAppearance
+  | RenkoAppearance
+  | LineBreakAppearance
   | BarsAppearance
   | LineStyleAppearance
   | AreaAppearance
@@ -201,6 +231,28 @@ function sameBaselineAppearance(first: BaselineAppearance, second: BaselineAppea
   );
 }
 
+/**
+ * Whether two Renko settings ask the backend for the same bricks, whatever colours the chart paints them with:
+ * the box method and the length, distance or percentage it sizes a brick with.
+ */
+export function sameRenkoParameters(first: RenkoAppearance, second: RenkoAppearance): boolean {
+  return (
+    first.boxMethod === second.boxMethod &&
+    first.atrLength === second.atrLength &&
+    first.boxSize === second.boxSize &&
+    first.percentage === second.percentage &&
+    first.wicks === second.wicks
+  );
+}
+
+function sameRenkoAppearance(first: RenkoAppearance, second: RenkoAppearance): boolean {
+  return sameCandleAppearance(first.candles, second.candles) && sameRenkoParameters(first, second);
+}
+
+function sameLineBreakAppearance(first: LineBreakAppearance, second: LineBreakAppearance): boolean {
+  return sameCandleAppearance(first.candles, second.candles) && first.lines === second.lines;
+}
+
 /** Whether two appearances draw the same bars, so a setting that did not change costs no repaint. */
 export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarStyleAppearance): boolean {
   switch (first.style) {
@@ -208,6 +260,10 @@ export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarSty
     case 'hollowCandles':
     case 'heikinAshi':
       return second.style === first.style && sameCandleAppearance(first.candles, second.candles);
+    case 'renko':
+      return second.style === 'renko' && sameRenkoAppearance(first, second);
+    case 'lineBreak':
+      return second.style === 'lineBreak' && sameLineBreakAppearance(first, second);
     case 'volumeCandles':
       return second.style === 'volumeCandles' && sameVolumeCandlesAppearance(first, second);
     case 'bars':

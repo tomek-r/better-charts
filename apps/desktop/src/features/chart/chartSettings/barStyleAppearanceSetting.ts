@@ -11,10 +11,13 @@ import {
   type ColumnsAppearance,
   type DrawnBarStyleAppearance,
   type HighLowAppearance,
+  type LineBreakAppearance,
   type LineStyleAppearance,
+  type RenkoAppearance,
   type ToggledColor,
   type VolumeCandlesAppearance,
 } from '../engine/barStyle/barStyleAppearance';
+import { isBoxMethod, type BoxMethod } from '../engine/barStyle/boxMethod';
 import { isPriceSource, type PriceSource } from '../engine/barStyle/priceSource';
 import { BAR_STYLE_SETTINGS, WIDTH_SENSITIVITY_FIELD } from './barStyleSettings';
 import { candleAppearanceOf } from './candleAppearanceSetting';
@@ -40,6 +43,12 @@ const BODY_KEY = 'body';
 const BORDERS_KEY = 'borders';
 const LABELS_KEY = 'labels';
 const WIDTH_SENSITIVITY_KEY = 'widthSensitivity';
+const BOX_METHOD_KEY = 'boxMethod';
+const ATR_LENGTH_KEY = 'atrLength';
+const BOX_SIZE_KEY = 'boxSize';
+const PERCENTAGE_KEY = 'percentage';
+const WICKS_KEY = 'wicks';
+const LINES_KEY = 'lines';
 
 /**
  * What a style draws when its own settings hold nothing its fields can explain — the values the
@@ -88,6 +97,16 @@ const WHOLE_PERCENT = 100;
  */
 const DEFAULT_WIDTH_SENSITIVITY = WIDTH_SENSITIVITY_FIELD.defaultValue / WHOLE_PERCENT;
 
+/** How a chart type sizes its bars until its own settings say otherwise: TradingView's own defaults. */
+const RENKO_DEFAULTS: Omit<RenkoAppearance, 'style' | 'candles'> = {
+  boxMethod: 'atr',
+  atrLength: 14,
+  boxSize: 10,
+  percentage: 1,
+  wicks: true,
+};
+const LINE_BREAK_DEFAULTS: Omit<LineBreakAppearance, 'style' | 'candles'> = { lines: 3 };
+
 /** The settings field a style declares under `key`; a style declares only the keys its own section holds. */
 function fieldOf(style: BarStyle, key: string) {
   return BAR_STYLE_SETTINGS[style].fields.find((field) => field.key === key);
@@ -102,6 +121,16 @@ function fieldValue(style: BarStyle, key: string, values: BarStyleSettingValues)
 function readBoolean(style: BarStyle, key: string, values: BarStyleSettingValues): boolean | undefined {
   const value = fieldValue(style, key, values);
   return typeof value === 'boolean' ? value : undefined;
+}
+
+function readNumber(style: BarStyle, key: string, values: BarStyleSettingValues): number | undefined {
+  const value = fieldValue(style, key, values);
+  return typeof value === 'number' ? value : undefined;
+}
+
+function readBoxMethod(style: BarStyle, values: BarStyleSettingValues): BoxMethod | undefined {
+  const value = fieldValue(style, BOX_METHOD_KEY, values);
+  return isBoxMethod(value) ? value : undefined;
 }
 
 function readColor(style: BarStyle, key: string, values: BarStyleSettingValues): string | undefined {
@@ -218,6 +247,26 @@ function volumeCandlesAppearance(values: BarStyleSettingValues): VolumeCandlesAp
   };
 }
 
+function renkoAppearance(values: BarStyleSettingValues): RenkoAppearance {
+  return {
+    style: 'renko',
+    candles: candleAppearanceOf(values),
+    boxMethod: readBoxMethod('renko', values) ?? RENKO_DEFAULTS.boxMethod,
+    atrLength: readNumber('renko', ATR_LENGTH_KEY, values) ?? RENKO_DEFAULTS.atrLength,
+    boxSize: readNumber('renko', BOX_SIZE_KEY, values) ?? RENKO_DEFAULTS.boxSize,
+    percentage: readNumber('renko', PERCENTAGE_KEY, values) ?? RENKO_DEFAULTS.percentage,
+    wicks: readBoolean('renko', WICKS_KEY, values) ?? RENKO_DEFAULTS.wicks,
+  };
+}
+
+function lineBreakAppearance(values: BarStyleSettingValues): LineBreakAppearance {
+  return {
+    style: 'lineBreak',
+    candles: candleAppearanceOf(values),
+    lines: readNumber('lineBreak', LINES_KEY, values) ?? LINE_BREAK_DEFAULTS.lines,
+  };
+}
+
 /**
  * The chart's bar style as the engine draws it. Every value is read through the settings field of its
  * own key, so a store holding nothing readable leaves the chart on the defaults the dialog shows.
@@ -250,6 +299,10 @@ export function barStyleAppearanceOf(style: BarStyle, values: BarStyleSettingVal
       return volumeCandlesAppearance(values);
     case 'heikinAshi':
       return { style, candles: candleAppearanceOf(values) };
+    case 'renko':
+      return renkoAppearance(values);
+    case 'lineBreak':
+      return lineBreakAppearance(values);
     case 'baseline':
       return baselineAppearance(values);
     case 'highLow':

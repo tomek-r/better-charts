@@ -1,10 +1,11 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { barStyleMenu, barStyleRow, barTypeTrigger, openBarStyleMenu } from './helpers/barStyleMenu';
 import { openChart } from './helpers/openChart';
 import { savedOverrides } from './helpers/savedOverrides';
 import { chartScopeKey, expectNoErrors, gotoWithStub } from './helpers/tauriStub';
 
 /**
- * The bar type picker in the chart header: the button beside the timeframes, the twelve bar types it lists in
+ * The bar type picker in the chart header: the button beside the timeframes, the fourteen bar types it lists in
  * their groups, and the choice it saves with the chart's settings. The chart is read back through the DEV test
  * hook and through what the backend stored.
  */
@@ -29,26 +30,11 @@ const BAR_TYPE_LABELS = [
   'Columns',
   'High-low',
   'Heikin Ashi',
+  'Renko',
+  'Line break',
 ];
 /** The separator between two of the menu's five groups. */
 const GROUP_SEPARATOR_COUNT = 4;
-
-/** The button beside the timeframes that names and opens the bar type menu. */
-const barTypeTrigger = (page: Page) => page.getByRole('button', { name: 'Bar type', exact: true });
-
-/** The menu the trigger opens. */
-const barTypeMenu = (page: Page) => page.getByRole('menu', { name: 'Bar type' });
-
-/** One row of the menu, found by the name it shows. */
-const barTypeRow = (menu: Locator, label: string) => menu.getByRole('menuitemradio', { name: label, exact: true });
-
-/** Opens the bar type menu and returns it. */
-async function openBarTypeMenu(page: Page): Promise<Locator> {
-  await barTypeTrigger(page).click();
-  const menu = barTypeMenu(page);
-  await expect(menu).toBeVisible();
-  return menu;
-}
 
 /** The series the chart draws right now, as the engine reports it. */
 async function drawnSeriesType(page: Page): Promise<string | null> {
@@ -61,29 +47,29 @@ async function pressOnChart(page: Page): Promise<void> {
   await page.mouse.click(host.x + host.width / 4, host.y + host.height / 2);
 }
 
-test('the trigger names the bar type, and the menu lists the twelve in their groups', async ({ page }) => {
+test('the trigger names the bar type, and the menu lists the fourteen in their groups', async ({ page }) => {
   const collected = await gotoWithStub(page);
   await openChart(page);
   const trigger = barTypeTrigger(page);
   await expect(trigger).toHaveAttribute('title', DEFAULT_LABEL);
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
-  const menu = await openBarTypeMenu(page);
+  const menu = await openBarStyleMenu(page);
 
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
   await expect(menu.getByRole('menuitemradio')).toHaveText(BAR_TYPE_LABELS);
   await expect(menu.getByRole('separator')).toHaveCount(GROUP_SEPARATOR_COUNT);
-  await expect(barTypeRow(menu, DEFAULT_LABEL)).toHaveAttribute('aria-checked', 'true');
-  await expect(barTypeRow(menu, 'Line')).toHaveAttribute('aria-checked', 'false');
+  await expect(barStyleRow(menu, DEFAULT_LABEL)).toHaveAttribute('aria-checked', 'true');
+  await expect(barStyleRow(menu, 'Line')).toHaveAttribute('aria-checked', 'false');
   expectNoErrors(collected);
 });
 
 test('choosing a bar type saves it, draws it, and closes the menu', async ({ page }) => {
   const collected = await gotoWithStub(page);
   await openChart(page);
-  const menu = await openBarTypeMenu(page);
+  const menu = await openBarStyleMenu(page);
 
-  await barTypeRow(menu, 'Line').click();
+  await barStyleRow(menu, 'Line').click();
 
   await expect(menu).toHaveCount(0);
   await expect(barTypeTrigger(page)).toHaveAttribute('title', 'Line');
@@ -97,10 +83,10 @@ test('a chart saved on Area opens with Area checked', async ({ page }) => {
   await openChart(page);
   await expect(barTypeTrigger(page)).toHaveAttribute('title', 'Area');
 
-  const menu = await openBarTypeMenu(page);
+  const menu = await openBarStyleMenu(page);
 
-  await expect(barTypeRow(menu, 'Area')).toHaveAttribute('aria-checked', 'true');
-  await expect(barTypeRow(menu, DEFAULT_LABEL)).toHaveAttribute('aria-checked', 'false');
+  await expect(barStyleRow(menu, 'Area')).toHaveAttribute('aria-checked', 'true');
+  await expect(barStyleRow(menu, DEFAULT_LABEL)).toHaveAttribute('aria-checked', 'false');
   expectNoErrors(collected);
 });
 
@@ -111,12 +97,12 @@ test('the keys walk the menu and Escape closes back to the trigger', async ({ pa
   await trigger.focus();
 
   await page.keyboard.press('Enter');
-  const menu = barTypeMenu(page);
+  const menu = barStyleMenu(page);
   await expect(menu).toBeVisible();
   // The menu opens on the bar type the chart draws, so the keys start from there.
-  await expect(barTypeRow(menu, DEFAULT_LABEL)).toBeFocused();
+  await expect(barStyleRow(menu, DEFAULT_LABEL)).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(barTypeRow(menu, 'Hollow candles')).toBeFocused();
+  await expect(barStyleRow(menu, 'Hollow candles')).toBeFocused();
 
   await page.keyboard.press('Escape');
 
@@ -128,7 +114,7 @@ test('the keys walk the menu and Escape closes back to the trigger', async ({ pa
 test('a press outside closes the menu', async ({ page }) => {
   const collected = await gotoWithStub(page);
   await openChart(page);
-  const menu = await openBarTypeMenu(page);
+  const menu = await openBarStyleMenu(page);
 
   await pressOnChart(page);
 

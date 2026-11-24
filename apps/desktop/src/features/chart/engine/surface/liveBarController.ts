@@ -45,6 +45,22 @@ export class LiveBarController {
     if (this.heldCandles.hold(candle)) {
       return;
     }
+    this.write(candle);
+  }
+
+  /**
+   * Writes a bar the chart computed itself, such as a chart type's newest brick. It never waits for a pointer
+   * release: the hold replays what it took through the live-candle funnel, where a computed bar would be filed
+   * among the chart's own candles.
+   */
+  applyComputed(candle: Candle): void {
+    if (this.hooks.isDisposed()) {
+      return;
+    }
+    this.write(candle);
+  }
+
+  private write(candle: Candle): void {
     const bar = toRenderBar(candle);
     if (!bar) {
       return;

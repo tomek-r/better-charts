@@ -85,6 +85,11 @@ export type NumberRange = {
   readonly max: number;
 };
 
+/** The numbers a decimal field holds, bounds included, and the step each edit moves by. */
+export type DecimalRange = NumberRange & {
+  readonly step: number;
+};
+
 /** The whole percents a percent field holds. */
 export const PERCENT_RANGE: NumberRange = { min: 0, max: 100 };
 
@@ -192,6 +197,13 @@ export interface BarCountSettingField extends SettingFieldIdentity, NumberFieldU
   readonly defaultValue: number;
 }
 
+/** A number a chart type's own rule reads, such as a brick's box size: any value its range allows. */
+export interface DecimalSettingField extends SettingFieldIdentity, NumberFieldUnit {
+  readonly kind: 'decimal';
+  readonly defaultValue: number;
+  readonly range: DecimalRange;
+}
+
 /** One row of a settings dialog, declaring the value it holds. */
 export type ChartSettingField =
   | CheckboxSettingField
@@ -207,7 +219,8 @@ export type ChartSettingField =
   | TextStyleSettingField
   | ChoiceSettingField
   | PercentSettingField
-  | BarCountSettingField;
+  | BarCountSettingField
+  | DecimalSettingField;
 
 /** A titled group of fields, which a settings panel draws as one caption above their rows. */
 export interface SettingsSectionFields {
@@ -254,6 +267,13 @@ function readLineWidth(raw: unknown): number | undefined {
 
 function readPercent(raw: unknown): number | undefined {
   return readIntegerInRange(raw, PERCENT_RANGE);
+}
+
+function readDecimal(raw: unknown, range: DecimalRange): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < range.min || raw > range.max) {
+    return undefined;
+  }
+  return raw;
 }
 
 function readBarCount(raw: unknown): number | undefined {
@@ -423,8 +443,8 @@ export function isBackgroundFillValue(value: unknown): value is BackgroundFillVa
   return readFillMode(value.mode) !== undefined;
 }
 
-/** One reader per kind; `choice` is read separately because it needs the field's options. */
-const SETTING_VALUE_READERS: Readonly<Record<Exclude<SettingKind, 'choice'>, SettingValueReader>> = {
+/** One reader per kind; `choice` and `decimal` need the field's own declaration. */
+const SETTING_VALUE_READERS: Readonly<Record<Exclude<SettingKind, 'choice' | 'decimal'>, SettingValueReader>> = {
   checkbox: readBoolean,
   toggledColorPair: readToggledColorPair,
   toggledColor: readToggledColor,
@@ -444,6 +464,9 @@ const SETTING_VALUE_READERS: Readonly<Record<Exclude<SettingKind, 'choice'>, Set
 export function readSettingValue(field: ChartSettingField, raw: unknown): ChartSettingValue | undefined {
   if (field.kind === 'choice') {
     return readChoice(raw, field.options);
+  }
+  if (field.kind === 'decimal') {
+    return readDecimal(raw, field.range);
   }
   return SETTING_VALUE_READERS[field.kind](raw);
 }

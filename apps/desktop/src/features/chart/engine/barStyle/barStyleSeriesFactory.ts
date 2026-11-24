@@ -21,6 +21,7 @@ import {
   type LibraryBarStyleAppearance,
   type VolumeCandlesAppearance,
 } from './barStyleAppearance';
+import { chartTypeDrawsWicks } from './chartTypeAppearance';
 import { HIGH_LOW_DEFAULT_OPTIONS, type HighLowOptions } from './highLow/highLowOptions';
 import { HighLowPaneView } from './highLow/highLowPaneView';
 import { VOLUME_CANDLES_DEFAULT_OPTIONS, type VolumeCandlesOptions } from './volumeCandles/volumeCandlesOptions';
@@ -47,6 +48,8 @@ const SERIES_DEFINITION_BY_STYLE: Readonly<Record<LibraryBarStyle, SeriesDefinit
   heikinAshi: CandlestickSeries,
   line: LineSeries,
   lineWithMarkers: LineSeries,
+  lineBreak: CandlestickSeries,
+  renko: CandlestickSeries,
   stepLine: LineSeries,
   area: AreaSeries,
 };
@@ -81,6 +84,10 @@ function definitionOptionsOf(appearance: LibraryBarStyleAppearance, digits: numb
     case 'heikinAshi':
       // The Heikin Ashi bars take the body, border and wick colours the candles are saved with.
       return { ...common, ...candleSeriesColors(appearance.candles) };
+    case 'renko':
+    case 'lineBreak':
+      // Bricks and lines are candles too, without the wick a Line Break line never draws.
+      return { ...common, ...candleSeriesColors(appearance.candles), wickVisible: chartTypeDrawsWicks(appearance) };
     case 'bars':
       return {
         ...common,
