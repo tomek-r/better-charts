@@ -22,6 +22,11 @@ export interface ChartHistoryOptions {
   readonly indicators: IndicatorRuntime;
   /** Read on every replacement: the controller builds this collaborator before it can report teardown. */
   readonly isDestroyed: () => boolean;
+  /**
+   * The oldest bar the next page is asked before, in epoch seconds. A chart type draws bars of its own, so the
+   * base candles behind them are the ones a page continues; omitted reads the chart's own oldest bar.
+   */
+  readonly oldestBarTimeSeconds?: () => number | undefined;
   /** Candles held for the live bar belong to the replaced series; read on call, as the hold is built later. */
   readonly discardHeldCandles: () => void;
   /** Told once the bars changed, so the readouts, overlays and tools catch up. */
@@ -43,7 +48,7 @@ export class ChartHistory {
     this.pager = new OlderHistoryPager({
       isDestroyed: options.isDestroyed,
       isBeforeHistory: () => view.isBeforeHistory(),
-      oldestBarTimeSeconds: () => data.bars[0]?.time,
+      oldestBarTimeSeconds: () => options.oldestBarTimeSeconds?.() ?? data.bars[0]?.time,
       visibleRange: () => view.visibleRange(),
       prependBars: (candles) => indicators.olderBarsAdded(data.prepend(candles)),
       anchorAfterPrepend: (previous, added) => view.anchorAfterPrepend(previous, added),

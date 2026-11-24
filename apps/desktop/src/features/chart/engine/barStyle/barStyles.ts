@@ -11,6 +11,10 @@ export const BAR_STYLES = [
   'columns',
   'highLow',
   'heikinAshi',
+  'renko',
+  'lineBreak',
+  'kagi',
+  'pointFigure',
 ] as const;
 
 export type BarStyle = (typeof BAR_STYLES)[number];
@@ -30,6 +34,10 @@ const BAR_STYLE_LABELS: Readonly<Record<BarStyle, string>> = {
   columns: 'Columns',
   highLow: 'High-low',
   heikinAshi: 'Heikin Ashi',
+  renko: 'Renko',
+  lineBreak: 'Line break',
+  kagi: 'Kagi',
+  pointFigure: 'Point & figure',
 };
 
 export interface BarStyleOption {
@@ -41,12 +49,19 @@ function barStyleOption(style: BarStyle): BarStyleOption {
   return { style, label: BAR_STYLE_LABELS[style] };
 }
 
+/** The menu's groups, in order; the last one holds the chart types, which the backend draws from the candles. */
 export const BAR_STYLE_GROUPS: readonly (readonly BarStyleOption[])[] = [
   [barStyleOption('bars'), barStyleOption('candles'), barStyleOption('hollowCandles'), barStyleOption('volumeCandles')],
   [barStyleOption('line'), barStyleOption('lineWithMarkers'), barStyleOption('stepLine')],
   [barStyleOption('area'), barStyleOption('baseline')],
   [barStyleOption('columns'), barStyleOption('highLow')],
-  [barStyleOption('heikinAshi')],
+  [
+    barStyleOption('heikinAshi'),
+    barStyleOption('renko'),
+    barStyleOption('lineBreak'),
+    barStyleOption('kagi'),
+    barStyleOption('pointFigure'),
+  ],
 ];
 
 export function isBarStyle(value: unknown): value is BarStyle {

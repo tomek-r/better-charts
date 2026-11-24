@@ -6,6 +6,7 @@ mod chart_database;
 mod chart_drawings;
 mod chart_footprint;
 mod chart_settings;
+mod chart_types;
 mod download_resources;
 mod execution_adapter;
 mod execution_journal;
@@ -35,6 +36,7 @@ use chart_footprint::set_chart_footprint;
 use chart_settings::{
     load_chart_layout, load_chart_settings, save_chart_setting_overrides, ChartSettingsState,
 };
+use chart_types::compute_chart_type_bars;
 use download_resources::save_bundled_resource;
 use execution_adapter::ExecutionAdapterState;
 use execution_journal::{app_data_dir, ExecutionSafetyState};
@@ -181,6 +183,7 @@ pub fn run() {
             load_chart_settings,
             save_chart_setting_overrides,
             set_chart_footprint,
+            compute_chart_type_bars,
             get_execution_safety_status,
             get_execution_recovery_snapshot,
             get_execution_queue_status,

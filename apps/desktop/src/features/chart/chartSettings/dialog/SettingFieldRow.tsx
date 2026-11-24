@@ -9,7 +9,7 @@ import {
   ToggledColorSettingRow,
 } from './settingRows/colorRows';
 import { SizedLineSettingRow, ToggledLineSettingRow } from './settingRows/lineRows';
-import { BarCountSettingRow, PercentSettingRow } from './settingRows/numberRows';
+import { BarCountSettingRow, DecimalSettingRow, PercentSettingRow } from './settingRows/numberRows';
 import { QuoteLinesSettingRow } from './settingRows/quoteRows';
 import { ChoiceSettingRow, LineWidthSettingRow } from './settingRows/selectRows';
 import type { SettingRowProps } from './settingRows/settingRowProps';
@@ -27,6 +27,7 @@ const SETTING_ROWS: {
   choice: ChoiceSettingRow,
   percent: PercentSettingRow,
   barCount: BarCountSettingRow,
+  decimal: DecimalSettingRow,
   toggledLine: ToggledLineSettingRow,
   sizedLine: SizedLineSettingRow,
   backgroundFill: BackgroundFillSettingRow,

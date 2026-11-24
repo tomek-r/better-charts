@@ -12,6 +12,7 @@ import { popupOwnsKeyboard, toolFlyoutOpen } from '../../../shared/ui/popup/popu
 import { mt5HistoryTransport } from '../../bridge/market/mt5HistoryTransport';
 import { createIndicatorSeriesSource } from '../../bridge/market/indicatorSeriesTransport';
 import { createIndicatorTickSource } from '../../bridge/market/indicatorTicksTransport';
+import { createChartTypeBarsPort } from '../chartTypes/chartTypeBarPort';
 import type { BridgeSessionState } from '../../bridge/useBridgeSession';
 import type { BridgeSessionLifecycleState } from '../../bridge/BridgeSessionProvider';
 import type { QuoteSnapshot } from '../../../shared/bridge/types';
@@ -53,6 +54,7 @@ export function useChartWorkspaceInitEffects(
           indicatorLegendWords: indicatorStatusLineWords,
           indicatorSeriesSource: createIndicatorSeriesSource(() => currentSymbol.current),
           indicatorTickSource: createIndicatorTickSource(() => currentSymbol.current),
+          chartTypeBars: createChartTypeBarsPort(),
           defaultToolId: DEFAULT_CHART_TOOL_ID,
         },
       );

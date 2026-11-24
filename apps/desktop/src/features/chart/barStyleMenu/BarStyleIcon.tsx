@@ -131,6 +131,49 @@ function HeikinAshiGlyph() {
   );
 }
 
+/** Renko: bricks stacked one box apart, a step up across the glyph. */
+function RenkoGlyph() {
+  return (
+    <>
+      <rect x="5.5" y="16.5" width="6" height="6" fill="currentColor" />
+      <rect x="11.5" y="10.5" width="6" height="6" fill="currentColor" />
+      <rect x="17.5" y="4.5" width="6" height="6" fill="currentColor" />
+    </>
+  );
+}
+
+/** Line break: consecutive lines, each starting where the one before it ended. */
+function LineBreakGlyph() {
+  return (
+    <>
+      <path d="M5.5 21.5 12.5 14.5" />
+      <path d="M12.5 14.5 18.5 8.5" />
+      <path d="M18.5 8.5 23.5 13.5" />
+    </>
+  );
+}
+
+/** Kagi: a stepped line, thin where it falls and thick where it rises past the shoulder before it. */
+function KagiGlyph() {
+  return (
+    <>
+      <path d="M4.5 20.5h5M9.5 20.5V12.5h5M14.5 12.5V17.5h5M19.5 17.5V6.5h4" />
+      <path d="M19.5 12.5V6.5h4" strokeWidth="3" />
+    </>
+  );
+}
+
+/** Point & figure: a column of X marks stepping up beside a column of O marks stepping down. */
+function PointFigureGlyph() {
+  return (
+    <>
+      <path d="M5.5 20.5 9.5 16.5M9.5 20.5 5.5 16.5M5.5 16.5 9.5 12.5M9.5 16.5 5.5 12.5" />
+      <circle cx="20.5" cy="9.5" r="3" />
+      <circle cx="20.5" cy="16.5" r="3" />
+    </>
+  );
+}
+
 /** What each bar type draws, keyed by the style it stands for: a style without a drawing does not compile. */
 const BAR_STYLE_GLYPHS: Readonly<Record<BarStyle, () => ReactNode>> = {
   bars: BarsGlyph,
@@ -145,6 +188,10 @@ const BAR_STYLE_GLYPHS: Readonly<Record<BarStyle, () => ReactNode>> = {
   columns: ColumnsGlyph,
   highLow: HighLowGlyph,
   heikinAshi: HeikinAshiGlyph,
+  renko: RenkoGlyph,
+  lineBreak: LineBreakGlyph,
+  kagi: KagiGlyph,
+  pointFigure: PointFigureGlyph,
 };
 
 /** The icon of one bar type: the shape it draws, in the colour of the button or row that shows it. */

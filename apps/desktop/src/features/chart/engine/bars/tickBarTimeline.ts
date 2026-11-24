@@ -43,9 +43,9 @@ function extendedBar(bar: RenderBar, price: number): RenderBar {
   };
 }
 
-/** When a bar whose first tick arrived at `tickSeconds` is drawn: then, unless the bar before it has that second. */
-function barTimeAfter(previous: RenderBar | undefined, tickSeconds: number): number {
-  return previous === undefined ? tickSeconds : Math.max(tickSeconds, previous.time + MINIMUM_BAR_GAP_SECONDS);
+/** When a bar whose own second is `timeSeconds` is drawn: then, unless the bar before it already has that second. */
+export function barTimeAfter(previousTime: number | undefined, timeSeconds: number): number {
+  return previousTime === undefined ? timeSeconds : Math.max(timeSeconds, previousTime + MINIMUM_BAR_GAP_SECONDS);
 }
 
 /** The ticks a bar can be built from, in the order they arrived: one carrying no price is no tick at all. */
@@ -58,7 +58,7 @@ export function tickBarTimeline(ticks: readonly IndicatorTick[], ticksPerBar: nu
   const series = buildTickBars(ticks, ticksPerBar);
   const bars: RenderBar[] = [];
   for (const bar of series.bars) {
-    bars.push({ ...bar, time: barTimeAfter(bars[bars.length - 1], bar.time) });
+    bars.push({ ...bar, time: barTimeAfter(bars[bars.length - 1]?.time, bar.time) });
   }
   return { bars, formingPrices: series.formingPrices };
 }
@@ -75,7 +75,7 @@ export function foldTick(timeline: TickBarTimeline, tick: IndicatorTick, ticksPe
   }
   if (timeline.formingPrices.length === 0) {
     const tickSeconds = Math.floor(tick.timeMs / MILLISECONDS_PER_SECOND);
-    const time = barTimeAfter(timeline.bars[timeline.bars.length - 1], tickSeconds);
+    const time = barTimeAfter(timeline.bars[timeline.bars.length - 1]?.time, tickSeconds);
     return { bars: [...timeline.bars, openedBar(time, price)], formingPrices: [price] };
   }
   const bars = [...timeline.bars];

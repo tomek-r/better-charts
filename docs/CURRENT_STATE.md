@@ -297,7 +297,19 @@ Columns, High-low and Heikin Ashi. The candle series stays the anchor the price 
 countdown, the pointer readout and the drawings use, while a second series draws every
 other type; Heikin Ashi is computed from the MT5 bars, and Baseline's base level is a
 share of the visible price range. The legend and the price tags keep showing the real MT5
-prices.
+prices. These twelve are the standard types; the bar style menu offers four chart types
+beside them: Renko, Line break, Kagi and Point & figure. While one of them is chosen the
+chart's bars are the bricks, lines or columns computed in Rust from the broker's bars
+(the `trading-core` `chart_types` module and Tauri command `compute_chart_type_bars`),
+so the time axis, the legend, the drawings and the indicators run on them, with
+synthetic times at least a second apart, second-precision time labels and no bar
+countdown, as on tick charts, and a live update is asked for again at most every 250 ms.
+Their settings and defaults are Renko's box by ATR 14, fixed or percentage of the last
+price with wicks on, Line break's 3 lines, Kagi's reversal by ATR 14, fixed or percentage
+with the yang and yin colours and widths, and Point & figure's high/low or close source,
+box by ATR 14, fixed or percentage, and reversal 3. An ATR amount is the Wilder ATR at
+the last bar and a percentage amount that share of the last close, each rounded to one
+significant figure.
 
 The time zone is one of these settings: the footer clock and the dialog edit the same
 value. The old per-symbol saved time zones were not carried over.
