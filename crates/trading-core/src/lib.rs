@@ -1,8 +1,9 @@
 //! Domain logic shared by application clients.
 //!
-//! Includes protocol validation, risk calculations, volume analysis, and the
-//! domain foundation for recording execution commands.
+//! Includes protocol validation, risk calculations, volume analysis, chart
+//! types, and the domain foundation for recording execution commands.
 
+pub mod chart_types;
 pub mod execution;
 pub mod footprint;
 pub mod margin_projection;
