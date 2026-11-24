@@ -3,7 +3,7 @@
 
 use rust_decimal::Decimal;
 
-use super::{check_increasing_times, ChartBar, ChartTypeError, PriceBar};
+use super::{bar_between, check_increasing_times, ChartBar, ChartTypeError, PriceBar};
 
 /// Reported in [`ChartTypeError::NonPositiveParameter`] for a zero window.
 const PARAMETER_NUMBER_OF_LINES: &str = "number_of_lines";
@@ -87,12 +87,8 @@ fn reverses(last: &ChartBar, recent: &[ChartBar], close: Decimal) -> bool {
 
 fn line_from(open: Decimal, bar: &PriceBar) -> ChartBar {
     ChartBar {
-        time_ms: bar.time_ms,
-        open,
-        high: open.max(bar.close),
-        low: open.min(bar.close),
-        close: bar.close,
         volume: bar.volume,
+        ..bar_between(bar.time_ms, open, bar.close)
     }
 }
 
