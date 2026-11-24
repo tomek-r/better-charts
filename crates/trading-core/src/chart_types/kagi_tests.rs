@@ -221,16 +221,31 @@ fn a_line_covers_the_volume_of_the_bars_that_draw_or_extend_it() {
 #[test]
 fn an_atr_sizing_turns_the_line_by_wilders_average_true_range() {
     // True ranges 0, 2 and 2 with a length of two: the mean of the first two is
-    // 1, and the last bar smooths to (1 * 1 + 2) / 2 = 1.5. The close of 10.4
-    // falls 1.6 below the line's high of 12 and turns it.
+    // 1, and the last bar smooths to (1 * 1 + 2) / 2 = 1.5, one significant
+    // figure of which is 2. The close of 10 is exactly 2 below the line's high
+    // of 12 and turns it.
+    let bars = [
+        weekly(0, "10", "10", "10", "10"),
+        weekly(1, "12", "12", "10", "12"),
+        weekly(2, "10", "12", "10", "10"),
+    ];
+    let lines = kagi(&bars, BoxSizing::Atr(2)).unwrap();
+    let expected = vec![line(0, "10", "12"), line(2, "12", "10")];
+    assert_eq!(summaries(&lines), expected);
+}
+
+#[test]
+fn an_atr_sizing_rounds_its_reversal_to_one_significant_figure() {
+    // The same true ranges give an average of 1.5, which is a reversal of 2, so
+    // the close of 10.4, only 1.6 below the line's high of 12, is short of the
+    // turn the unrounded average would have taken.
     let bars = [
         weekly(0, "10", "10", "10", "10"),
         weekly(1, "12", "12", "10", "12"),
         weekly(2, "10.4", "12", "10", "10.4"),
     ];
     let lines = kagi(&bars, BoxSizing::Atr(2)).unwrap();
-    let expected = vec![line(0, "10", "12"), line(2, "12", "10.4")];
-    assert_eq!(summaries(&lines), expected);
+    assert_eq!(summaries(&lines), vec![line(0, "10", "12")]);
 }
 
 #[test]

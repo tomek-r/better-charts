@@ -7,8 +7,9 @@
 //! once a close travels far enough back, [`renko`] stacks one box per move and
 //! [`point_figure`] prints columns on a price box grid. All read [`PriceBar`]s
 //! and emit [`ChartBar`]s, so one implementation serves every client. Prices stay
-//! [`Decimal`] throughout; nothing here rounds or converts them to a float. A
-//! rule a TradingView capture confirms is matched value for value, and the few no
+//! [`Decimal`] throughout; nothing here converts them to a float, and the only
+//! rounding is the one significant figure a computed [`BoxSizing`] takes. A rule
+//! a TradingView capture confirms is matched value for value, and the few no
 //! capture reaches are marked UNVERIFIED where they live.
 //!
 //! Chart bars come in the order they formed and their `time_ms` strictly
@@ -18,7 +19,7 @@
 //! `time_ms` and each further brick of that bar one millisecond more, as
 //! TradingView times them.
 
-use rust_decimal::Decimal;
+use rust_decimal::{Decimal, RoundingStrategy};
 use thiserror::Error;
 
 use crate::protocol::MarketCandle;
@@ -83,17 +84,23 @@ pub struct ChartBar {
 /// chart settings offer it. TradingView's two-argument
 /// `ticker.kagi(symbol, reversal)` overload is [`BoxSizing::Traditional`], and
 /// `ticker.pointfigure` takes the same three styles as a box of its own.
+///
+/// A size a chart has to compute — [`BoxSizing::Atr`] and
+/// [`BoxSizing::PercentageLtp`] — is rounded to one significant figure, half
+/// away from zero, and that one amount is both the box a brick chart draws and
+/// the distance a Kagi line turns by. One figure keeps the box short enough to
+/// read and steady between history loads whose last bars differ in their last
+/// digits, instead of handing the chart a long decimal it would only print.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoxSizing {
-    /// A fixed price distance, the only style a capture has confirmed.
+    /// A fixed price distance, the only style a capture has confirmed, used
+    /// exactly as given.
     Traditional(Decimal),
-    /// Wilder's average true range of `length` bars, read at the last bar.
-    /// UNVERIFIED: TradingView sizes ATR boxes its own way — its ATR 14 box on
-    /// the weekly BTCUSDT capture is 10000 where these bars give about 7000 — so
-    /// an ATR chart cannot be compared with a capture value for value.
+    /// Wilder's average true range of `length` bars, read at the last bar and
+    /// rounded to one significant figure.
     Atr(u32),
-    /// This share of the last close, in percent, TradingView's LTP. UNVERIFIED:
-    /// no capture has confirmed that the last close is the price it follows.
+    /// This share of the last close, in percent, rounded to one significant
+    /// figure.
     PercentageLtp(Decimal),
 }
 
@@ -101,36 +108,41 @@ impl BoxSizing {
     /// The distance a Kagi close has to travel back from the line's extreme to
     /// turn it, sized on the last bar of `bars`.
     ///
-    /// `Traditional` matches TradingView value for value. `Atr` and
-    /// `PercentageLtp` do what the settings promise — Wilder's average true
-    /// range of `length` bars read at the last bar, and `percent` percent of the
-    /// last close. A series without bars has no close to take a share of, so it
-    /// sizes to zero and draws nothing.
+    /// `Traditional` is used exactly as given. `Atr` and `PercentageLtp` do what
+    /// the settings promise — Wilder's average true range of `length` bars read
+    /// at the last bar, and `percent` percent of the last close — rounded to one
+    /// significant figure. A series without bars has no close to take a share
+    /// of, so it sizes to zero and draws nothing.
     fn amount(&self, bars: &[PriceBar]) -> Result<Decimal, ChartTypeError> {
-        match *self {
-            Self::Traditional(distance) => require_positive(distance, PARAMETER_REVERSAL),
-            Self::Atr(length) => wilder_atr(bars, length, TrueRanges::EveryBar),
+        let distance = match *self {
+            Self::Traditional(distance) => return require_positive(distance, PARAMETER_REVERSAL),
+            Self::Atr(length) => wilder_atr(bars, length, TrueRanges::EveryBar)?,
             Self::PercentageLtp(percent) => {
                 let percent = require_positive(percent, PARAMETER_PERCENTAGE)?;
-                Ok(percent_of_close(percent, bars))
+                percent_of_close(percent, bars)
             }
-        }
+        };
+        Ok(round_to_one_significant_figure(distance))
     }
 
     /// The price box the same settings give `bars`: the grid a chart that draws
-    /// boxes rounds every price to, which has to be positive. A box chart whose
-    /// bars cannot fill an ATR window is told so instead.
+    /// boxes rounds every price to, which has to be positive. `Atr` and
+    /// `PercentageLtp` are rounded to one significant figure, the same amount
+    /// Kagi turns a line by. A box chart whose bars cannot fill an ATR window is
+    /// told so instead.
     fn box_size(&self, bars: &[PriceBar]) -> Result<Decimal, ChartTypeError> {
         let size = match *self {
             Self::Traditional(size) => size,
-            Self::Atr(length) => wilder_atr(bars, length, TrueRanges::BetweenBars)?,
+            Self::Atr(length) => {
+                round_to_one_significant_figure(wilder_atr(bars, length, TrueRanges::BetweenBars)?)
+            }
             Self::PercentageLtp(percent) => {
                 let close = newest_close(bars).ok_or(ChartTypeError::NotEnoughBars {
                     name: PARAMETER_PERCENTAGE_LTP,
                     required: 1,
                     available: 0,
                 })?;
-                share_of_close(percent, close)
+                round_to_one_significant_figure(share_of_close(percent, close))
             }
         };
         if size <= Decimal::ZERO {
@@ -238,8 +250,8 @@ fn newest_close(bars: &[PriceBar]) -> Option<Decimal> {
 }
 
 /// `percent` percent of the newest close, the distance a
-/// [`BoxSizing::PercentageLtp`] asks for. A series without bars has no close, so
-/// the distance is zero.
+/// [`BoxSizing::PercentageLtp`] asks for before it is rounded. A series without
+/// bars has no close, so the distance is zero.
 fn percent_of_close(percent: Decimal, bars: &[PriceBar]) -> Decimal {
     match newest_close(bars) {
         Some(close) => share_of_close(percent, close),
@@ -250,6 +262,44 @@ fn percent_of_close(percent: Decimal, bars: &[PriceBar]) -> Decimal {
 /// `percent` percent of `close`, the share a [`BoxSizing::PercentageLtp`] takes.
 fn share_of_close(percent: Decimal, close: Decimal) -> Decimal {
     percent * close / Decimal::from(PERCENT_DIVISOR)
+}
+
+/// `amount` rounded to one significant figure, half away from zero: the one
+/// figure a [`BoxSizing::Atr`] or [`BoxSizing::PercentageLtp`] sizes a chart
+/// with (6999.27 -> 7000, 8194.97 -> 8000, 0.00095 -> 0.001). A zero stays
+/// zero, and a positive amount never rounds down to it, because the figure
+/// keeps the place it stood in.
+fn round_to_one_significant_figure(amount: Decimal) -> Decimal {
+    if amount.is_zero() {
+        return amount;
+    }
+    // Move the leading digit into the units place, where rounding to a whole
+    // number rounds the whole amount down to that one figure.
+    let mut scaled = amount;
+    // The number of places the leading digit moved, and so the power of ten the
+    // figure has to be shifted back by; how far it can move is bounded by a
+    // decimal's scale, well inside an `i32`.
+    let mut places: i32 = 0;
+    while scaled.abs() >= Decimal::TEN {
+        scaled /= Decimal::TEN;
+        places += 1;
+    }
+    while scaled.abs() < Decimal::ONE {
+        scaled *= Decimal::TEN;
+        places -= 1;
+    }
+    // A nine that rounds up to ten carries into the place above, as 950 does
+    // into 1000.
+    let mut figure = scaled.round_dp_with_strategy(0, RoundingStrategy::MidpointAwayFromZero);
+    // Put the figure back where it came from.
+    for _ in 0..places.unsigned_abs() {
+        figure = if places > 0 {
+            figure * Decimal::TEN
+        } else {
+            figure / Decimal::TEN
+        };
+    }
+    figure
 }
 
 /// Which bars a Wilder average reads a true range from.
@@ -335,6 +385,10 @@ fn wilder_average(ranges: &[Decimal], length: u32) -> Decimal {
     }
     average
 }
+
+#[cfg(test)]
+#[path = "box_sizing_tests.rs"]
+mod box_sizing_tests;
 
 #[cfg(test)]
 #[path = "price_bar_tests.rs"]
