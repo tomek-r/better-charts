@@ -192,6 +192,21 @@ fn a_percentage_box_is_a_share_of_the_last_close() {
 }
 
 #[test]
+fn a_percentage_box_rounds_to_one_significant_figure() {
+    let bars = [
+        close_bar(0, "1000", "1000", "1000"),
+        close_bar(1, "2050", "2050", "2050"),
+    ];
+    let sizing = BoxSizing::PercentageLtp(price("10"));
+    let columns = point_figure(&bars, Close, sizing, REVERSAL).unwrap();
+    assert_eq!(
+        columns,
+        vec![drawn(0, "1000", "2000", "1000", "2000", 20)],
+        "10% of the last close 2050 is a 205 box, which one figure makes 200"
+    );
+}
+
+#[test]
 fn a_true_range_box_averages_the_last_true_ranges() {
     let bars = [
         bar(0, "1100", "1000", 10),
