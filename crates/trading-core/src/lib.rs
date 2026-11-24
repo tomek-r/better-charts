@@ -5,6 +5,7 @@
 
 pub mod chart_types;
 pub mod execution;
+pub mod footprint;
 pub mod margin_projection;
 pub mod models;
 pub mod partial_close;
