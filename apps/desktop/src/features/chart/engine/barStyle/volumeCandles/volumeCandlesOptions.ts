@@ -1,8 +1,5 @@
 import { customSeriesDefaultOptions, type CustomSeriesOptions } from 'lightweight-charts';
-import { candleSeriesColors, DEFAULT_CANDLE_APPEARANCE } from '../../bars/candleAppearance';
-
-/** The candle colours the chart's candle settings put on the series as a whole, as the built-in candles take them. */
-type CandleSeriesColors = ReturnType<typeof candleSeriesColors>;
+import { candleSeriesColors, DEFAULT_CANDLE_APPEARANCE, type CandleSeriesColors } from '../../bars/candleAppearance';
 
 /**
  * What the volume candle series is drawn with: the library's custom series options, its candle colours and how
