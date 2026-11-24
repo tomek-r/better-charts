@@ -29,5 +29,13 @@ export function chartTypeSpecOf(appearance: ChartTypeAppearance): ChartTypeSpec 
       };
     case 'lineBreak':
       return { type: 'lineBreak', lines: Math.round(appearance.lines) };
+    case 'kagi':
+      return {
+        type: 'kagi',
+        reversalMethod: appearance.reversalMethod,
+        atrLength: Math.round(appearance.atrLength),
+        reversal: decimalSetting(appearance.reversal),
+        percentage: decimalSetting(appearance.percentage),
+      };
   }
 }

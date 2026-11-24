@@ -1,17 +1,25 @@
 import {
+  sameKagiParameters,
   sameRenkoParameters,
   type BarStyleAppearance,
+  type KagiAppearance,
   type LineBreakAppearance,
   type RenkoAppearance,
 } from './barStyleAppearance';
 
 /** The bar styles whose bars the backend draws from the chart's candles. */
-export const CHART_TYPE_STYLES = ['renko', 'lineBreak'] as const;
+export const CHART_TYPE_STYLES = ['renko', 'lineBreak', 'kagi'] as const;
 
 export type ChartTypeStyle = (typeof CHART_TYPE_STYLES)[number];
 
 /** The appearance of a chart type's bars, as the settings ask for them. */
-export type ChartTypeAppearance = RenkoAppearance | LineBreakAppearance;
+export type ChartTypeAppearance = RenkoAppearance | LineBreakAppearance | KagiAppearance;
+
+/**
+ * The chart types whose bars the chart draws as candles: a Renko brick and a Line Break line. Kagi draws a
+ * stepped line through a custom series of its own, so its appearance holds no candles to paint.
+ */
+export type CandleChartTypeAppearance = RenkoAppearance | LineBreakAppearance;
 
 /** Whether a bar style draws its own bars, which the chart asks for instead of drawing the candles. */
 export function isChartTypeStyle(style: BarStyleAppearance['style']): style is ChartTypeStyle {
@@ -20,7 +28,7 @@ export function isChartTypeStyle(style: BarStyleAppearance['style']): style is C
 
 /** Whether an appearance is a chart type's, whose bars the chart asks for instead of drawing the candles. */
 export function isChartTypeAppearance(appearance: BarStyleAppearance): appearance is ChartTypeAppearance {
-  return appearance.style === 'renko' || appearance.style === 'lineBreak';
+  return isChartTypeStyle(appearance.style);
 }
 
 /** The chart type `appearance` draws, or null for a style that draws the chart's own candles. */
@@ -36,10 +44,13 @@ export function sameChartTypeParameters(first: ChartTypeAppearance, second: Char
   if (first.style === 'lineBreak' && second.style === 'lineBreak') {
     return first.lines === second.lines;
   }
+  if (first.style === 'kagi' && second.style === 'kagi') {
+    return sameKagiParameters(first, second);
+  }
   return false;
 }
 
-/** Whether a chart type's bars show a wick: Line Break never, and a Renko brick only when its setting asks. */
+/** Whether a chart type's bars show a wick: Line Break never, Kagi never, and a Renko brick only when asked. */
 export function chartTypeDrawsWicks(appearance: ChartTypeAppearance): boolean {
   return appearance.style === 'renko' && appearance.wicks;
 }

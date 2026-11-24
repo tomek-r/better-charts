@@ -135,7 +135,7 @@ test('the dialog groups list every bar style exactly once', () => {
   expect(isBarStyle('candles')).toBe(true);
   expect(isBarStyle('renko')).toBe(true);
   expect(isBarStyle('lineBreak')).toBe(true);
-  expect(isBarStyle('kagi')).toBe(false);
+  expect(isBarStyle('kagi')).toBe(true);
 });
 
 /** How the chart looks today, which is what every canvas field defaults to. */

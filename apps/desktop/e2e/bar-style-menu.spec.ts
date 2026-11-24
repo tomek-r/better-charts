@@ -5,7 +5,7 @@ import { savedOverrides } from './helpers/savedOverrides';
 import { chartScopeKey, expectNoErrors, gotoWithStub } from './helpers/tauriStub';
 
 /**
- * The bar type picker in the chart header: the button beside the timeframes, the fourteen bar types it lists in
+ * The bar type picker in the chart header: the button beside the timeframes, the fifteen bar types it lists in
  * their groups, and the choice it saves with the chart's settings. The chart is read back through the DEV test
  * hook and through what the backend stored.
  */
@@ -32,6 +32,7 @@ const BAR_TYPE_LABELS = [
   'Heikin Ashi',
   'Renko',
   'Line break',
+  'Kagi',
 ];
 /** The separator between two of the menu's five groups. */
 const GROUP_SEPARATOR_COUNT = 4;
@@ -47,7 +48,7 @@ async function pressOnChart(page: Page): Promise<void> {
   await page.mouse.click(host.x + host.width / 4, host.y + host.height / 2);
 }
 
-test('the trigger names the bar type, and the menu lists the fourteen in their groups', async ({ page }) => {
+test('the trigger names the bar type, and the menu lists the fifteen in their groups', async ({ page }) => {
   const collected = await gotoWithStub(page);
   await openChart(page);
   const trigger = barTypeTrigger(page);

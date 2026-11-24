@@ -124,6 +124,28 @@ export interface LineBreakAppearance {
   readonly lines: number;
 }
 
+/**
+ * Kagi bars: a continuous stepped line the backend draws from the chart's candles, which a custom series paints
+ * thick yang where it broke a shoulder and thin yin where it broke a waist.
+ */
+export interface KagiAppearance {
+  readonly style: 'kagi';
+  /** Which setting sizes the move that turns the line: the ATR, a fixed price distance, or a share of the close. */
+  readonly reversalMethod: BoxMethod;
+  /** Bars of the average true range the line has to travel to turn, read by the `atr` method. */
+  readonly atrLength: number;
+  /** The fixed price distance the line has to travel to turn, read by the `traditional` method. */
+  readonly reversal: number;
+  /** The percent of the last close the line has to travel to turn, read by the `percentageLtp` method. */
+  readonly percentage: number;
+  /** The colour and thickness of the thick style the line takes once it rises above the previous shoulder. */
+  readonly yangColor: string;
+  readonly yangLineWidth: BarStyleLineWidth;
+  /** The colour and thickness of the thin style the line takes once it falls below the previous waist. */
+  readonly yinColor: string;
+  readonly yinLineWidth: BarStyleLineWidth;
+}
+
 /** The range as a box from the low to the high, labelled at both prices, which a custom series draws. */
 export interface HighLowAppearance {
   readonly style: 'highLow';
@@ -140,6 +162,7 @@ export type BarStyleAppearance =
   | HeikinAshiAppearance
   | RenkoAppearance
   | LineBreakAppearance
+  | KagiAppearance
   | BarsAppearance
   | LineStyleAppearance
   | AreaAppearance
@@ -154,14 +177,17 @@ export type BarStyleAppearance =
 export type DrawnBarStyleAppearance = Exclude<BarStyleAppearance, { style: 'candles' }>;
 
 /** The appearances a custom series draws, each with a pane view of its own that no other style can swap into. */
-export type CustomBarStyleAppearance = Extract<DrawnBarStyleAppearance, { style: 'highLow' | 'volumeCandles' }>;
+export type CustomBarStyleAppearance = Extract<
+  DrawnBarStyleAppearance,
+  { style: 'highLow' | 'volumeCandles' | 'kagi' }
+>;
 
 /** The appearances a library series type of its own draws. */
 export type LibraryBarStyleAppearance = Exclude<DrawnBarStyleAppearance, CustomBarStyleAppearance>;
 
 /** Whether a custom series draws the style, which is the one thing a library series type cannot paint. */
 export function isCustomBarStyle(style: DrawnBarStyleAppearance['style']): style is CustomBarStyleAppearance['style'] {
-  return style === 'highLow' || style === 'volumeCandles';
+  return style === 'highLow' || style === 'volumeCandles' || style === 'kagi';
 }
 
 /** What the chart draws before any bar style setting arrives: the candles it has always drawn. */
@@ -253,6 +279,29 @@ function sameLineBreakAppearance(first: LineBreakAppearance, second: LineBreakAp
   return sameCandleAppearance(first.candles, second.candles) && first.lines === second.lines;
 }
 
+/**
+ * Whether two Kagi settings ask the backend for the same line, whatever colours the chart paints it with: the
+ * reversal method and the length, distance or percentage it sizes a stroke with.
+ */
+export function sameKagiParameters(first: KagiAppearance, second: KagiAppearance): boolean {
+  return (
+    first.reversalMethod === second.reversalMethod &&
+    first.atrLength === second.atrLength &&
+    first.reversal === second.reversal &&
+    first.percentage === second.percentage
+  );
+}
+
+function sameKagiAppearance(first: KagiAppearance, second: KagiAppearance): boolean {
+  return (
+    sameKagiParameters(first, second) &&
+    first.yangColor === second.yangColor &&
+    first.yangLineWidth === second.yangLineWidth &&
+    first.yinColor === second.yinColor &&
+    first.yinLineWidth === second.yinLineWidth
+  );
+}
+
 /** Whether two appearances draw the same bars, so a setting that did not change costs no repaint. */
 export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarStyleAppearance): boolean {
   switch (first.style) {
@@ -264,6 +313,8 @@ export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarSty
       return second.style === 'renko' && sameRenkoAppearance(first, second);
     case 'lineBreak':
       return second.style === 'lineBreak' && sameLineBreakAppearance(first, second);
+    case 'kagi':
+      return second.style === 'kagi' && sameKagiAppearance(first, second);
     case 'volumeCandles':
       return second.style === 'volumeCandles' && sameVolumeCandlesAppearance(first, second);
     case 'bars':

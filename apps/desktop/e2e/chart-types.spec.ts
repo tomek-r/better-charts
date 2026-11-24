@@ -25,9 +25,9 @@ import {
 } from './helpers/tauriStub';
 
 /**
- * The chart types the backend draws from the chart's own candles: the bars Renko bricks and Line Break lines are
- * computed into, the specs the settings map onto, and the chart's history replaced by those bars — beside the
- * candles the chart keeps for the next request.
+ * The chart types the backend draws from the chart's own candles: the bars Renko bricks, Line Break lines and the
+ * Kagi line are computed into, the specs the settings map onto, and the chart's history replaced by those bars —
+ * beside the candles the chart keeps for the next request.
  */
 
 /** The account the stub's bridge status and account snapshot both report. */
@@ -52,6 +52,8 @@ const DEFAULT_RENKO_SPEC = {
 };
 /** How many lines the close has to turn against before a Line Break line is drawn, which the default is. */
 const DEFAULT_LINE_BREAK_SPEC = { type: 'lineBreak', lines: 3 };
+/** The defaults the Kagi settings map onto, which is TradingView's own set. */
+const DEFAULT_KAGI_SPEC = { type: 'kagi', reversalMethod: 'atr', atrLength: 14, reversal: '1', percentage: '1' };
 
 /** One bar the backend reports for a chart type: its prices are the decimal strings the chart parses. */
 function chartTypeBarAt(timeMs: number, prices: [string, string, string, string], volume: string): ChartTypeBar {
@@ -75,6 +77,12 @@ const LINES: readonly ChartTypeBar[] = [
   chartTypeBarAt(NEWEST_BASE_MS, ['1.0850', '1.0860', '1.0845', '1.0860'], '120'),
   chartTypeBarAt(NEWEST_BASE_MS + STUB_M5_INTERVAL_MS, ['1.0860', '1.0875', '1.0855', '1.0875'], '240'),
 ];
+/** Three Kagi strokes: up to a first shoulder, down above its low, then up past that shoulder. */
+const KAGI_STROKES: readonly ChartTypeBar[] = [
+  chartTypeBarAt(NEWEST_BASE_MS, ['1.0850', '1.0860', '1.0850', '1.0860'], '120'),
+  chartTypeBarAt(NEWEST_BASE_MS + 1, ['1.0860', '1.0860', '1.0852', '1.0852'], '240'),
+  chartTypeBarAt(NEWEST_BASE_MS + STUB_M5_INTERVAL_MS, ['1.0852', '1.0872', '1.0852', '1.0872'], '360'),
+];
 
 /** One candle as the chart draws it: the bar the library plots, with its prices read off the decimal text. */
 function renderBarOf(candle: Candle): RenderBar {
@@ -97,7 +105,7 @@ function drawnBars(bars: readonly ChartTypeBar[]): RenderBar[] {
 const BASE_BARS: readonly RenderBar[] = BASE_CANDLES.map((candle) => renderBarOf(candle));
 
 /** The spec the settings ask the command for, for a chart type drawn from `values`. */
-function specOf(style: 'renko' | 'lineBreak', values: BarStyleSettingValues = {}) {
+function specOf(style: 'renko' | 'lineBreak' | 'kagi', values: BarStyleSettingValues = {}) {
   const appearance = chartTypeAppearanceOf(barStyleAppearanceOf(style, values));
   if (appearance === null) {
     throw new Error(`${style} is not a chart type`);
@@ -149,7 +157,7 @@ type CollectedErrors = Awaited<ReturnType<typeof gotoWithStub>>;
  */
 async function openOnChartType(
   page: Page,
-  style: 'Renko' | 'Line break',
+  style: 'Renko' | 'Line break' | 'Kagi',
   bars: readonly ChartTypeBar[],
 ): Promise<CollectedErrors> {
   const collected = await gotoWithStub(page, {
@@ -207,6 +215,23 @@ test('the Renko and Line break defaults map onto the specs the command reads', (
   // The counts the command reads as whole numbers travel rounded, whatever the dialog let through.
   expect(specOf('renko', { atrLength: 14.5 })).toMatchObject({ atrLength: 15 });
   expect(specOf('lineBreak', { lines: 2.5 })).toMatchObject({ lines: 3 });
+});
+
+test('the Kagi defaults map onto the spec the command reads, its styles at TradingView own', () => {
+  expect(specOf('kagi')).toEqual(DEFAULT_KAGI_SPEC);
+  // The line keeps TradingView's pair and thicknesses until the settings change them.
+  expect(barStyleAppearanceOf('kagi', {})).toMatchObject({
+    yangColor: '#26a69a',
+    yangLineWidth: 3,
+    yinColor: '#ef5350',
+    yinLineWidth: 1,
+  });
+  // A saved method and its own reversal distance travel as the decimal text the command parses.
+  expect(specOf('kagi', { reversalMethod: 'traditional', reversal: 0.0005, atrLength: 9.5 })).toMatchObject({
+    reversalMethod: 'traditional',
+    reversal: '0.0005',
+    atrLength: 10,
+  });
 });
 
 test('picking Renko asks for bricks from the base candles and draws them', async ({ page }) => {
@@ -290,6 +315,42 @@ test('the Renko settings show their defaults, and a traditional box asks for the
   await chooseOption(dialog.getByLabel('Box size assignment method', { exact: true }), 'Traditional');
 
   await expect.poll(async () => (await lastChartTypeSpec(page))?.boxMethod).toBe('traditional');
+  expect(await chartTypeRequests(page)).toHaveLength(requestsBefore + 1);
+  expectNoErrors(collected);
+});
+
+test('picking Kagi asks for its line from the base candles and draws the strokes it draws', async ({ page }) => {
+  const collected = await openOnChartType(page, 'Kagi', KAGI_STROKES);
+
+  const [request] = await chartTypeRequests(page);
+  expect(request.args.candles).toEqual(BASE_CANDLES);
+  expect(request.args.chart).toEqual(DEFAULT_KAGI_SPEC);
+  // The strokes are the chart's own bars, which everything reading them — the legend, the pointer, the axis —
+  // sees, and a custom series draws the stepped line that no candle series could.
+  expect(await chartBars(page)).toEqual(drawnBars(KAGI_STROKES));
+  await expect.poll(async () => (await barStyleState(page)).seriesType).toBe('Custom');
+  expect((await barStyleState(page)).options).toMatchObject({ yangLineWidth: 3, yinLineWidth: 1 });
+  expectNoErrors(collected);
+});
+
+test('the Kagi settings show their defaults, and a traditional reversal asks for the line again', async ({ page }) => {
+  const collected = await openOnChartType(page, 'Kagi', KAGI_STROKES);
+  const requestsBefore = (await chartTypeRequests(page)).length;
+
+  const dialog = await openChartSettingsDialog(page);
+
+  await expect(dialog.getByLabel('Reversal amount assignment method', { exact: true })).toHaveText('ATR');
+  await expect(dialog.getByLabel('ATR length', { exact: true })).toHaveValue('14');
+  await expect(dialog.getByLabel('Reversal amount', { exact: true })).toHaveValue('1');
+  await expect(dialog.getByLabel('Percentage', { exact: true })).toHaveValue('1');
+  await expect(dialog.getByLabel('Yang', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Yang line width', { exact: true })).toHaveText('3px');
+  await expect(dialog.getByLabel('Yin', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Yin line width', { exact: true })).toHaveText('1px');
+
+  await chooseOption(dialog.getByLabel('Reversal amount assignment method', { exact: true }), 'Traditional');
+
+  await expect.poll(async () => (await lastChartTypeSpec(page))?.reversalMethod).toBe('traditional');
   expect(await chartTypeRequests(page)).toHaveLength(requestsBefore + 1);
   expectNoErrors(collected);
 });

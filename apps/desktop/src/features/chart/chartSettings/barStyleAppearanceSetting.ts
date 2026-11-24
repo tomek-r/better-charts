@@ -11,6 +11,7 @@ import {
   type ColumnsAppearance,
   type DrawnBarStyleAppearance,
   type HighLowAppearance,
+  type KagiAppearance,
   type LineBreakAppearance,
   type LineStyleAppearance,
   type RenkoAppearance,
@@ -18,6 +19,7 @@ import {
   type VolumeCandlesAppearance,
 } from '../engine/barStyle/barStyleAppearance';
 import { isBoxMethod, type BoxMethod } from '../engine/barStyle/boxMethod';
+import { KAGI_DEFAULT_OPTIONS } from '../engine/barStyle/kagi/kagiOptions';
 import { isPriceSource, type PriceSource } from '../engine/barStyle/priceSource';
 import { BAR_STYLE_SETTINGS, WIDTH_SENSITIVITY_FIELD } from './barStyleSettings';
 import { candleAppearanceOf } from './candleAppearanceSetting';
@@ -49,6 +51,12 @@ const BOX_SIZE_KEY = 'boxSize';
 const PERCENTAGE_KEY = 'percentage';
 const WICKS_KEY = 'wicks';
 const LINES_KEY = 'lines';
+const REVERSAL_METHOD_KEY = 'reversalMethod';
+const REVERSAL_KEY = 'reversal';
+const YANG_COLOR_KEY = 'yangColor';
+const YANG_WIDTH_KEY = 'yangLineWidth';
+const YIN_COLOR_KEY = 'yinColor';
+const YIN_WIDTH_KEY = 'yinLineWidth';
 
 /**
  * What a style draws when its own settings hold nothing its fields can explain — the values the
@@ -106,6 +114,17 @@ const RENKO_DEFAULTS: Omit<RenkoAppearance, 'style' | 'candles'> = {
   wicks: true,
 };
 const LINE_BREAK_DEFAULTS: Omit<LineBreakAppearance, 'style' | 'candles'> = { lines: 3 };
+/** The Kagi line until its own settings say otherwise, its styles at the colours the series itself starts on. */
+const KAGI_DEFAULTS: Omit<KagiAppearance, 'style'> = {
+  reversalMethod: 'atr',
+  atrLength: 14,
+  reversal: 1,
+  percentage: 1,
+  yangColor: KAGI_DEFAULT_OPTIONS.yangColor,
+  yangLineWidth: KAGI_DEFAULT_OPTIONS.yangLineWidth,
+  yinColor: KAGI_DEFAULT_OPTIONS.yinColor,
+  yinLineWidth: KAGI_DEFAULT_OPTIONS.yinLineWidth,
+};
 
 /** The settings field a style declares under `key`; a style declares only the keys its own section holds. */
 function fieldOf(style: BarStyle, key: string) {
@@ -128,8 +147,8 @@ function readNumber(style: BarStyle, key: string, values: BarStyleSettingValues)
   return typeof value === 'number' ? value : undefined;
 }
 
-function readBoxMethod(style: BarStyle, values: BarStyleSettingValues): BoxMethod | undefined {
-  const value = fieldValue(style, BOX_METHOD_KEY, values);
+function readBoxMethod(style: BarStyle, key: string, values: BarStyleSettingValues): BoxMethod | undefined {
+  const value = fieldValue(style, key, values);
   return isBoxMethod(value) ? value : undefined;
 }
 
@@ -159,8 +178,8 @@ function readPriceSource(style: BarStyle, values: BarStyleSettingValues): PriceS
   return isPriceSource(value) ? value : undefined;
 }
 
-function readLineWidth(style: BarStyle, values: BarStyleSettingValues): BarStyleLineWidth | undefined {
-  const value = fieldValue(style, LINE_WIDTH_KEY, values);
+function readLineWidth(style: BarStyle, key: string, values: BarStyleSettingValues): BarStyleLineWidth | undefined {
+  const value = fieldValue(style, key, values);
   return isBarStyleLineWidth(value) ? value : undefined;
 }
 
@@ -193,7 +212,7 @@ function lineAppearance(
     style,
     priceSource: readPriceSource(style, values) ?? LINE_DEFAULTS.priceSource,
     color: readColor(style, LINE_COLOR_KEY, values) ?? LINE_DEFAULTS.color,
-    lineWidth: readLineWidth(style, values) ?? LINE_DEFAULTS.lineWidth,
+    lineWidth: readLineWidth(style, LINE_WIDTH_KEY, values) ?? LINE_DEFAULTS.lineWidth,
   };
 }
 
@@ -202,7 +221,7 @@ function areaAppearance(values: BarStyleSettingValues): AreaAppearance {
     style: 'area',
     priceSource: readPriceSource('area', values) ?? AREA_DEFAULTS.priceSource,
     lineColor: readColor('area', LINE_COLOR_KEY, values) ?? AREA_DEFAULTS.lineColor,
-    lineWidth: readLineWidth('area', values) ?? AREA_DEFAULTS.lineWidth,
+    lineWidth: readLineWidth('area', LINE_WIDTH_KEY, values) ?? AREA_DEFAULTS.lineWidth,
     fillTop: readColor('area', FILL_TOP_KEY, values) ?? AREA_DEFAULTS.fillTop,
     fillBottom: readColor('area', FILL_BOTTOM_KEY, values) ?? AREA_DEFAULTS.fillBottom,
   };
@@ -226,7 +245,7 @@ function baselineAppearance(values: BarStyleSettingValues): BaselineAppearance {
     topFill: readColor('baseline', TOP_FILL_KEY, values) ?? BASELINE_DEFAULTS.topFill,
     bottomLine: readColor('baseline', BOTTOM_LINE_KEY, values) ?? BASELINE_DEFAULTS.bottomLine,
     bottomFill: readColor('baseline', BOTTOM_FILL_KEY, values) ?? BASELINE_DEFAULTS.bottomFill,
-    lineWidth: readLineWidth('baseline', values) ?? BASELINE_DEFAULTS.lineWidth,
+    lineWidth: readLineWidth('baseline', LINE_WIDTH_KEY, values) ?? BASELINE_DEFAULTS.lineWidth,
   };
 }
 
@@ -251,7 +270,7 @@ function renkoAppearance(values: BarStyleSettingValues): RenkoAppearance {
   return {
     style: 'renko',
     candles: candleAppearanceOf(values),
-    boxMethod: readBoxMethod('renko', values) ?? RENKO_DEFAULTS.boxMethod,
+    boxMethod: readBoxMethod('renko', BOX_METHOD_KEY, values) ?? RENKO_DEFAULTS.boxMethod,
     atrLength: readNumber('renko', ATR_LENGTH_KEY, values) ?? RENKO_DEFAULTS.atrLength,
     boxSize: readNumber('renko', BOX_SIZE_KEY, values) ?? RENKO_DEFAULTS.boxSize,
     percentage: readNumber('renko', PERCENTAGE_KEY, values) ?? RENKO_DEFAULTS.percentage,
@@ -264,6 +283,20 @@ function lineBreakAppearance(values: BarStyleSettingValues): LineBreakAppearance
     style: 'lineBreak',
     candles: candleAppearanceOf(values),
     lines: readNumber('lineBreak', LINES_KEY, values) ?? LINE_BREAK_DEFAULTS.lines,
+  };
+}
+
+function kagiAppearance(values: BarStyleSettingValues): KagiAppearance {
+  return {
+    style: 'kagi',
+    reversalMethod: readBoxMethod('kagi', REVERSAL_METHOD_KEY, values) ?? KAGI_DEFAULTS.reversalMethod,
+    atrLength: readNumber('kagi', ATR_LENGTH_KEY, values) ?? KAGI_DEFAULTS.atrLength,
+    reversal: readNumber('kagi', REVERSAL_KEY, values) ?? KAGI_DEFAULTS.reversal,
+    percentage: readNumber('kagi', PERCENTAGE_KEY, values) ?? KAGI_DEFAULTS.percentage,
+    yangColor: readColor('kagi', YANG_COLOR_KEY, values) ?? KAGI_DEFAULTS.yangColor,
+    yangLineWidth: readLineWidth('kagi', YANG_WIDTH_KEY, values) ?? KAGI_DEFAULTS.yangLineWidth,
+    yinColor: readColor('kagi', YIN_COLOR_KEY, values) ?? KAGI_DEFAULTS.yinColor,
+    yinLineWidth: readLineWidth('kagi', YIN_WIDTH_KEY, values) ?? KAGI_DEFAULTS.yinLineWidth,
   };
 }
 
@@ -303,6 +336,8 @@ export function barStyleAppearanceOf(style: BarStyle, values: BarStyleSettingVal
       return renkoAppearance(values);
     case 'lineBreak':
       return lineBreakAppearance(values);
+    case 'kagi':
+      return kagiAppearance(values);
     case 'baseline':
       return baselineAppearance(values);
     case 'highLow':

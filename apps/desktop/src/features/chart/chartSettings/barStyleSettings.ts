@@ -1,4 +1,5 @@
 import { palette } from '../../../shared/theme/palette';
+import { KAGI_DEFAULT_OPTIONS } from '../engine/barStyle/kagi/kagiOptions';
 import { barStyleLabel, type BarStyle } from '../engine/barStyle/barStyles';
 import type {
   ChartSettingField,
@@ -159,18 +160,26 @@ const HIGH_LOW_FIELDS: readonly ChartSettingField[] = [
   HIGH_LOW_LABELS_FIELD,
 ];
 
+/**
+ * How a chart type sizes the move it measures, in TradingView's order and wording: by the ATR until told
+ * otherwise, by a fixed amount, or by a share of the last close.
+ */
+function moveSizeMethodField(key: string, label: string): ChoiceSettingField {
+  return {
+    kind: 'choice',
+    key,
+    label,
+    defaultValue: 'atr',
+    options: [
+      { value: 'atr', label: 'ATR' },
+      { value: 'traditional', label: 'Traditional' },
+      { value: 'percentageLtp', label: 'Percentage LTP' },
+    ],
+  };
+}
+
 /** Which setting sizes a Renko brick, in TradingView's order and wording. */
-const BOX_METHOD_FIELD: ChoiceSettingField = {
-  kind: 'choice',
-  key: 'boxMethod',
-  label: 'Box size assignment method',
-  defaultValue: 'atr',
-  options: [
-    { value: 'atr', label: 'ATR' },
-    { value: 'traditional', label: 'Traditional' },
-    { value: 'percentageLtp', label: 'Percentage LTP' },
-  ],
-};
+const BOX_METHOD_FIELD: ChoiceSettingField = moveSizeMethodField('boxMethod', 'Box size assignment method');
 
 /** Bars of the average true range a brick spans: TradingView's own default length. */
 const ATR_LENGTH_FIELD: DecimalSettingField = {
@@ -216,6 +225,51 @@ const LINE_BREAK_LINES_FIELD: DecimalSettingField = {
   range: { min: 1, max: 100, step: 1 },
 };
 
+/** How a Kagi line sizes the move that turns it, in TradingView's order and wording. */
+const REVERSAL_METHOD_FIELD: ChoiceSettingField = moveSizeMethodField(
+  'reversalMethod',
+  'Reversal amount assignment method',
+);
+
+/** The price distance a Kagi line turns by, which only the traditional method reads. */
+const REVERSAL_AMOUNT_FIELD: DecimalSettingField = {
+  kind: 'decimal',
+  key: 'reversal',
+  label: 'Reversal amount',
+  defaultValue: 1,
+  range: { min: 0.00001, max: 1_000_000, step: 0.00001 },
+};
+
+/** The thick style a Kagi line takes once it rises above the previous shoulder. */
+const YANG_COLOR_FIELD: ColorSettingField = {
+  kind: 'color',
+  key: 'yangColor',
+  label: 'Yang',
+  defaultValue: KAGI_DEFAULT_OPTIONS.yangColor,
+};
+
+const YANG_WIDTH_FIELD: LineWidthSettingField = {
+  kind: 'lineWidth',
+  key: 'yangLineWidth',
+  label: 'Yang line width',
+  defaultValue: KAGI_DEFAULT_OPTIONS.yangLineWidth,
+};
+
+/** The thin style a Kagi line takes once it falls below the previous waist. */
+const YIN_COLOR_FIELD: ColorSettingField = {
+  kind: 'color',
+  key: 'yinColor',
+  label: 'Yin',
+  defaultValue: KAGI_DEFAULT_OPTIONS.yinColor,
+};
+
+const YIN_WIDTH_FIELD: LineWidthSettingField = {
+  kind: 'lineWidth',
+  key: 'yinLineWidth',
+  label: 'Yin line width',
+  defaultValue: KAGI_DEFAULT_OPTIONS.yinLineWidth,
+};
+
 const RENKO_FIELDS: readonly ChartSettingField[] = [
   BOX_METHOD_FIELD,
   ATR_LENGTH_FIELD,
@@ -231,6 +285,18 @@ const LINE_BREAK_FIELDS: readonly ChartSettingField[] = [
   COLOR_BY_PREVIOUS_CLOSE_FIELD,
   BODY_FIELD,
   BORDERS_FIELD,
+];
+
+/** A Kagi line is drawn in its own two styles rather than in the chart's candle colours. */
+const KAGI_FIELDS: readonly ChartSettingField[] = [
+  REVERSAL_METHOD_FIELD,
+  ATR_LENGTH_FIELD,
+  REVERSAL_AMOUNT_FIELD,
+  PERCENTAGE_OF_CLOSE_FIELD,
+  YANG_COLOR_FIELD,
+  YANG_WIDTH_FIELD,
+  YIN_COLOR_FIELD,
+  YIN_WIDTH_FIELD,
 ];
 
 function settingsSection(style: BarStyle, fields: readonly ChartSettingField[]): BarStyleSettingsSection {
@@ -253,4 +319,5 @@ export const BAR_STYLE_SETTINGS: Readonly<Record<BarStyle, BarStyleSettingsSecti
   heikinAshi: settingsSection('heikinAshi', CANDLE_FIELDS),
   renko: settingsSection('renko', RENKO_FIELDS),
   lineBreak: settingsSection('lineBreak', LINE_BREAK_FIELDS),
+  kagi: settingsSection('kagi', KAGI_FIELDS),
 };

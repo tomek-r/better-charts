@@ -153,6 +153,16 @@ function LineBreakGlyph() {
   );
 }
 
+/** Kagi: a stepped line, thin where it falls and thick where it rises past the shoulder before it. */
+function KagiGlyph() {
+  return (
+    <>
+      <path d="M4.5 20.5h5M9.5 20.5V12.5h5M14.5 12.5V17.5h5M19.5 17.5V6.5h4" />
+      <path d="M19.5 12.5V6.5h4" strokeWidth="3" />
+    </>
+  );
+}
+
 /** What each bar type draws, keyed by the style it stands for: a style without a drawing does not compile. */
 const BAR_STYLE_GLYPHS: Readonly<Record<BarStyle, () => ReactNode>> = {
   bars: BarsGlyph,
@@ -169,6 +179,7 @@ const BAR_STYLE_GLYPHS: Readonly<Record<BarStyle, () => ReactNode>> = {
   heikinAshi: HeikinAshiGlyph,
   renko: RenkoGlyph,
   lineBreak: LineBreakGlyph,
+  kagi: KagiGlyph,
 };
 
 /** The icon of one bar type: the shape it draws, in the colour of the button or row that shows it. */
