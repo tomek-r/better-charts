@@ -2,10 +2,11 @@ import { createContext, useCallback, useEffect, useMemo, useState, type ReactNod
 import { useRequiredContext } from '../../../shared/context/useRequiredContext';
 import { errorText } from '../../../shared/errorText';
 import { useNotifyError } from '../../../shared/ui/notification/ErrorNotifications';
-import { useBridgeConnectionSelector } from '../../bridge/bridgeSelectors';
+import { useBridgeChartState, useBridgeConnectionSelector } from '../../bridge/bridgeSelectors';
+import { useChartFootprint } from '../../footprint/useChartFootprint';
 import { useChartResources } from '../ChartWorkspaceProvider';
 import { chartScopeKey, useChartScope } from '../useChartScope';
-import { barStyleAppearanceOf } from './barStyleAppearanceSetting';
+import { barStyleAppearanceOf, volumeFootprintAppearance } from './barStyleAppearanceSetting';
 import { chartAppearanceOf } from './canvasAppearanceSetting';
 import {
   chartSettingsOverrides,
@@ -112,6 +113,7 @@ function useStoredChartId(store: ChartSettingsStore): string | undefined {
 function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice {
   const { chart } = useChartResources();
   const brokerUtcOffsetMinutes = useBridgeConnectionSelector(({ status }) => status.brokerUtcOffsetMinutes) ?? null;
+  const { symbol, timeframe } = useBridgeChartState();
   const scope = useChartScope();
   const scopeKey = chartScopeKey(scope);
   const notifyError = useNotifyError();
@@ -206,6 +208,14 @@ function useChartSettingsChoice(store: ChartSettingsStore): ChartSettingsChoice 
   useEffect(() => {
     chart.current?.setBarStyle(barStyleAppearanceOf(barStyle, barStyleValues));
   }, [barStyle, barStyleValues, chart]);
+
+  // The footprint style draws rows the host computes from the bars' ticks, so the host's chart footprint
+  // follows the style: on with the settings of its appearance while it draws, off while another style does.
+  const footprintAppearance = useMemo(
+    () => (barStyle === 'volumeFootprint' ? volumeFootprintAppearance(barStyleValues) : null),
+    [barStyle, barStyleValues],
+  );
+  useChartFootprint({ chart, appearance: footprintAppearance, symbol, timeframe });
 
   // The engine draws the price bars while the object tree's bars row shows them. Hiding stops the bars
   // and the last price they label; the drawings and indicators keep drawing on the chart.

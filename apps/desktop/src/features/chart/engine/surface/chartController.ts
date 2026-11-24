@@ -9,13 +9,7 @@ import type { ChartAppearance, ChartSizedLineAppearance } from './chartAppearanc
 import type { ChartScalesAppearance, ChartScalesState } from './chartScalesAppearance';
 import { ChartScalesPresenter } from './chartScalesPresenter';
 import { ChartAppearanceController } from './chartAppearanceController';
-import { BrokerTime } from '../brokerTime/brokerTime';
-import { ChartTimeZoneDisplay } from '../brokerTime/chartTimeZoneDisplay';
-import { BarCountdownPrimitive } from '../barCountdown/barCountdownPrimitive';
-import { CountdownController } from '../barCountdown/countdownController';
-import { chartStatusLine, type ChartStatusLine } from '../legend/chartStatusLine';
-import { OhlcReadout } from '../legend/ohlcReadout';
-import { MarketStatusIndicator } from '../legend/marketStatusIndicator';
+import type { ChartStatusLine } from '../legend/chartStatusLine';
 import type { MarketStatus } from '../legend/marketStatus';
 import { PriceAxisTagsPrimitive } from '../quotes/priceAxisTagsPrimitive';
 import { PriceScaleController, type PriceScaleState } from '../priceScale/priceScaleController';
@@ -36,6 +30,8 @@ import { WorkspacePrimitive } from './workspacePrimitive';
 import { installChartDevTestApi, removeDevTestApi } from './devTestApi';
 import type { ChartControllerOptions } from './chartControllerOptions';
 import { ChartHistory, type ReplaceHistoryOptions } from './chartHistory';
+import type { ChartFootprintView } from './chartFootprintView';
+import { ChartReadouts } from './chartReadouts';
 import { createChartIndicators } from './chartIndicatorWiring';
 import type { IndicatorLayer } from '../indicators/indicatorLayer';
 import type { IndicatorRuntime } from '../indicators/indicatorRuntime';
@@ -60,11 +56,11 @@ export class ChartController {
   private readonly priceLines: PriceLineController;
   private readonly primitive: WorkspacePrimitive;
   private readonly observer: ResizeObserver;
-  private readonly ohlcReadout: OhlcReadout;
-  private readonly marketStatus: MarketStatusIndicator;
-  // Broker time from the live ticks; the countdown and the time zone clock both read it.
-  private readonly brokerTime = new BrokerTime();
-  private readonly countdownPrimitive = new BarCountdownPrimitive(this.brokerTime);
+  readonly footprints: ChartFootprintView; // the style's columns and the legend notice of what its ticks miss
+  // The legend it sits in and the broker clock its dates are read in, with the countdown tag that counts the
+  // same clock and the room the footprint style's columns need: one unit, because each of them reports the
+  // broker's current state and writes its times with the one format the chart applies.
+  private readonly readouts: ChartReadouts;
   private readonly scaleControls: PriceScaleController;
   private readonly scales: ChartScalesPresenter;
   // Every tool shares the pointer's time/price labels, and the tools' above-trading-overlays layer
@@ -80,11 +76,9 @@ export class ChartController {
   private readonly data: BarSeriesController;
   /** The candles the broker sent, and the bars a chart type draws from them while one is the bar style. */
   private readonly chartTypeBars: ChartTypeBarSource;
-  private readonly countdown: CountdownController;
   private symbol = '';
   private removed = false;
   private readonly appearance: ChartAppearanceController;
-  private readonly timeZoneDisplay: ChartTimeZoneDisplay;
   private readonly liveCandleHold: PointerCandleHold;
   private readonly liveBar: LiveBarController;
   private readonly view: ViewportController;
@@ -123,7 +117,6 @@ export class ChartController {
       () => this.view,
       () => this.tools,
     );
-    this.timeZoneDisplay = new ChartTimeZoneDisplay(this.chart, this.pointer.labels, this.brokerTime);
     this.data = new BarSeriesController(this.candles, this.chart);
     // Built before the history and the live bar it writes through: the wiring reads both on every seam.
     this.chartTypeBars = createChartTypeBars({
@@ -155,7 +148,7 @@ export class ChartController {
       discardHeldCandles: () => this.liveCandleHold.discard(),
       barsChanged: () => this.afterBarsChanged(),
       olderBarsAdded: () => {
-        this.ohlcReadout.refresh();
+        this.readouts.refresh();
         this.refreshOverlays();
       },
     });
@@ -180,34 +173,37 @@ export class ChartController {
     });
     this.toolInput = this.tools;
     this.drawings = new ChartDrawings(this.tools, () => this.refreshOverlays());
-    this.countdown = new CountdownController(this.countdownPrimitive, {
-      symbol: () => this.symbol,
-      timeframe: () => this.data.timeframe,
-      barTimeSeconds: () => this.data.lastBar()?.time,
-      bid: () => this.state.priceLines.bid,
-      ask: () => this.state.priceLines.ask,
-      chartTypeBars: () => this.chartTypeBars.drawsOwnBars,
-    });
     this.primitive = new WorkspacePrimitive(this, state);
     this.candles.attachPrimitive(this.primitive);
-    // The countdown tag is its own primitive: it paints on the axis canvas and
-    // owns the timer that repaints it. The broker time it counts on is the
-    // controller's, because the time zone clock reads it too.
-    this.candles.attachPrimitive(this.countdownPrimitive);
+    // The legend's lines, the footprint notice and the countdown tag, which is the chart's second primitive:
+    // it paints on the axis canvas and owns the timer that repaints it, counting on the same broker time the
+    // clock's format is read against. Built here, before the Bid/Ask tags and the pointer's labels.
+    this.readouts = new ChartReadouts({
+      host,
+      chart: this.chart,
+      candles: this.candles,
+      labels: this.pointer.labels,
+      data: this.data,
+      indicators: this.chartIndicators,
+      symbol: () => this.symbol,
+      overlayState: this.state,
+      chartTypeBars: () => this.chartTypeBars,
+      pane: this.view,
+      isRemoved: () => this.removed,
+    });
+    this.footprints = this.readouts.footprints;
     this.candles.attachPrimitive(this.priceTags);
     this.candles.attachPrimitive(this.pointer.labels);
-    this.ohlcReadout = new OhlcReadout(host, this.data, this.chartIndicators.hoveredBar, () => this.symbol);
-    this.marketStatus = new MarketStatusIndicator(this.ohlcReadout.container());
     // The price scale is painted on the library's own canvas, so its toggles
     // (A = auto scale, L = the price scale mode) are DOM buttons in the axis column, as
     // is the gear in its corner; the gear asks for the settings with an event.
     this.scaleControls = new PriceScaleController(host, this.chart, this.candles);
     this.scales = new ChartScalesPresenter({
       priceScale: this.scaleControls,
-      countdown: this.countdown,
+      countdown: this.readouts.countdown,
       quotes: this.priceLines,
       tags: this.priceTags,
-      timeLabels: this.timeZoneDisplay,
+      timeLabels: this.readouts.timeLabels,
       isDisposed: () => this.removed,
     });
     this.appearance = new ChartAppearanceController(this.chart, this.view, this.scaleControls);
@@ -274,6 +270,8 @@ export class ChartController {
       return;
     }
     resetPaneToEnd(this.view, this.scaleControls);
+    // A reset returns the default zoom, which leaves the footprint style's columns too narrow to read.
+    this.readouts.ensureFootprintRoom();
   }
 
   /**
@@ -314,18 +312,18 @@ export class ChartController {
       this.scales.changeSymbolTag(symbol);
     }
     this.symbol = symbol;
-    this.ohlcReadout.refresh();
+    this.readouts.refresh();
     this.scales.syncCountdown();
   }
   setPricePrecision(digits: number): void {
     if (!this.data.setPrecision(digits)) {
       return;
     }
-    this.ohlcReadout.refresh();
+    this.readouts.refresh();
   }
   /** Shows every bar in `zone`'s wall clock; broker time until the broker offset is known. */
   setTimeZone(zone: string, brokerUtcOffsetMinutes: number | null): void {
-    this.timeZoneDisplay.apply(zone, brokerUtcOffsetMinutes);
+    this.readouts.setTimeZone(zone, brokerUtcOffsetMinutes);
   }
   /**
    * Draws the chart's bar style: the candles on the anchor, or a series of its own for every other style. A
@@ -337,6 +335,8 @@ export class ChartController {
       return;
     }
     this.data.setBarStyle(appearance);
+    // The footprint style zooms the pane in for the room its columns need, and back out when it is left.
+    this.readouts.followBarStyle(appearance.style);
     this.chartTypeBars.setAppearance(appearance);
     this.afterBarsChanged();
   }
@@ -377,7 +377,7 @@ export class ChartController {
   }
   /** The OHLC line and the indicator rows that the settings dialog's Status line tab controls. */
   statusLine(): ChartStatusLine {
-    return chartStatusLine(this.ohlcReadout, this.chartIndicators);
+    return this.readouts.statusLine();
   }
   /** The price scale as it is drawn now: whether it fits the data itself, its spacing and its direction. */
   priceScaleState(): PriceScaleState {
@@ -393,7 +393,7 @@ export class ChartController {
   }
   /** UTC now as the broker's ticks tell it; the desktop clock until a live tick and the broker's offset are known. */
   clockNowMs(): number {
-    return this.timeZoneDisplay.clockNowMs();
+    return this.readouts.clockNowMs();
   }
   getData(): readonly RenderBar[] {
     return this.bars;
@@ -411,13 +411,11 @@ export class ChartController {
     this.scales.syncCountdown();
   }
   setQuoteClock(quote?: QuoteSnapshot): void {
-    if (quote) {
-      this.brokerTime.acceptQuote(quote);
-    }
+    this.readouts.setQuoteClock(quote);
     this.scales.syncCountdown();
   }
   setCountdownPending(pending: boolean): void {
-    this.countdown.setPending(pending);
+    this.readouts.setCountdownPending(pending);
   }
   visibleRange(): { from: number; to: number } | null {
     return this.view.visibleRange();
@@ -462,12 +460,11 @@ export class ChartController {
 
   /** Whether the shown symbol's market is open, as the legend's dot reports it. */
   setMarketStatus(status: MarketStatus, label: string): void {
-    this.marketStatus.set(status, label);
+    this.readouts.setMarketStatus(status, label);
   }
 
   setConnectionStatus(state: BridgeState, identity = ''): void {
-    this.brokerTime.setConnection(state, identity);
-    this.countdown.setConnection(state);
+    this.readouts.setConnection(state, identity);
     this.scales.syncCountdown();
   }
   destroy(): void {
@@ -479,11 +476,9 @@ export class ChartController {
     this.view.destroy();
     this.observer.disconnect();
     this.liveCandleHold.destroy();
-    this.marketStatus.destroy();
-    this.ohlcReadout.destroy();
+    this.readouts.destroy();
     this.scaleControls.destroy();
     this.candles.detachPrimitive(this.pointer.labels);
-    this.candles.detachPrimitive(this.countdownPrimitive);
     this.candles.detachPrimitive(this.priceTags);
     this.candles.detachPrimitive(this.primitive);
     this.chartIndicators.destroy();
@@ -497,8 +492,7 @@ export class ChartController {
 
   /** Brings everything that reads the bars up to date after they changed. */
   private afterBarsChanged(): void {
-    this.timeZoneDisplay.applyInterval(this.data.timeframe, this.chartTypeBars.drawsOwnBars);
-    this.ohlcReadout.refresh();
+    this.readouts.barsChanged();
     this.refreshOverlays();
     this.scales.syncCountdown();
     this.tools.barsChanged();

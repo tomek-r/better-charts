@@ -12,6 +12,8 @@ import {
   type CandleAppearance,
 } from './candleAppearance';
 import { BarStyleSeries, type BarStyleSeriesState } from '../barStyle/barStyleSeries';
+import type { BarFootprints } from '../barStyle/barStylePoints';
+import type { BarFootprint } from '../barStyle/volumeFootprint/footprintData';
 import { DEFAULT_BAR_STYLE_APPEARANCE, type BarStyleAppearance } from '../barStyle/barStyleAppearance';
 
 /** One bar as the legend shows it, with the colour its body is drawn in; null while the style has none. */
@@ -19,6 +21,15 @@ export interface LegendBar {
   readonly bar: RenderBar;
   readonly bodyColor: string | null;
   readonly previous: RenderBar | undefined;
+}
+
+/** The footprints keyed the way the bars are timed: the UTC seconds of the bar each one opened. */
+function footprintsByBar(footprints: readonly BarFootprint[]): BarFootprints {
+  const byBar = new Map<number, BarFootprint>();
+  for (const footprint of footprints) {
+    byBar.set(Math.floor(footprint.openMs / 1000), footprint);
+  }
+  return byBar;
 }
 
 /**
@@ -213,6 +224,14 @@ export class BarSeriesController {
   /** The bar style series as the test hook shows it: a plain copy, never a chart-library object. */
   barStyleState(): BarStyleSeriesState {
     return this.barStyle.state();
+  }
+
+  /**
+   * Draws the footprints the host published for the bars it read whole, keyed by the bar each one belongs
+   * to. A bar the host holds no footprint for keeps drawing as a plain candle.
+   */
+  setFootprints(footprints: readonly BarFootprint[]): void {
+    this.barStyle.applyFootprints(footprintsByBar(footprints), this.cache);
   }
 
   /** Removes the bar style series; the surface removes the chart itself. */

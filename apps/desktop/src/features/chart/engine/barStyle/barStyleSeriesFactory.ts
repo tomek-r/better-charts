@@ -22,6 +22,7 @@ import {
   type LibraryBarStyleAppearance,
   type PointFigureAppearance,
   type VolumeCandlesAppearance,
+  type VolumeFootprintAppearance,
 } from './barStyleAppearance';
 import { chartTypeDrawsWicks } from './chartTypeAppearance';
 import { HIGH_LOW_DEFAULT_OPTIONS, type HighLowOptions } from './highLow/highLowOptions';
@@ -32,6 +33,11 @@ import { POINT_FIGURE_DEFAULT_OPTIONS, type PointFigureOptions } from './pointFi
 import { PointFigurePaneView } from './pointFigure/pointFigurePaneView';
 import { VOLUME_CANDLES_DEFAULT_OPTIONS, type VolumeCandlesOptions } from './volumeCandles/volumeCandlesOptions';
 import { VolumeCandlesPaneView } from './volumeCandles/volumeCandlesPaneView';
+import {
+  VOLUME_FOOTPRINT_DEFAULT_OPTIONS,
+  type VolumeFootprintOptions,
+} from './volumeFootprint/volumeFootprintOptions';
+import { VolumeFootprintPaneView } from './volumeFootprint/volumeFootprintPaneView';
 
 /** What a bar style series is created and updated with, as the library types it for a series type. */
 type BarStyleSeriesOptions = SeriesPartialOptionsMap[SeriesType];
@@ -150,6 +156,26 @@ function volumeCandlesOptionsOf(appearance: VolumeCandlesAppearance, digits: num
   };
 }
 
+/** The options a volume footprint series draws `appearance` with: its candle colours and what its cells say. */
+function volumeFootprintOptionsOf(appearance: VolumeFootprintAppearance, digits: number): VolumeFootprintOptions {
+  return {
+    ...VOLUME_FOOTPRINT_DEFAULT_OPTIONS,
+    ...barStyleCommonOptions(digits),
+    ...candleSeriesColors(appearance.candles),
+    gradient: appearance.gradient,
+    display: appearance.display,
+    type: appearance.type,
+    values: appearance.values,
+    sellShades: appearance.sellShades,
+    buyShades: appearance.buyShades,
+    showSummary: appearance.showSummary,
+    showValueArea: appearance.showValueArea,
+    imbalanceHighlight: appearance.imbalanceHighlight,
+    stackedImbalance: appearance.stackedImbalance,
+    poc: appearance.poc,
+  };
+}
+
 /** The options a high-low series draws `appearance` with, labelling prices at the anchor's precision. */
 function highLowOptionsOf(appearance: HighLowAppearance, digits: number): HighLowOptions {
   return {
@@ -228,6 +254,10 @@ export function drawBarStyleSeries(
   if (appearance.style === 'volumeCandles') {
     const options = volumeCandlesOptionsOf(appearance, digits);
     return paintBarStyleSeries(series, options, () => chart.addCustomSeries(new VolumeCandlesPaneView(), options));
+  }
+  if (appearance.style === 'volumeFootprint') {
+    const options = volumeFootprintOptionsOf(appearance, digits);
+    return paintBarStyleSeries(series, options, () => chart.addCustomSeries(new VolumeFootprintPaneView(), options));
   }
   if (appearance.style === 'kagi') {
     const options = kagiOptionsOf(appearance, digits);

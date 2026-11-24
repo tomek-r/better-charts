@@ -9,6 +9,7 @@ import type {
   HeikinAshiAppearance,
   HollowCandlesAppearance,
   VolumeCandlesAppearance,
+  VolumeFootprintAppearance,
 } from './barStyleAppearance';
 import { chartTypeDrawsWicks, type CandleChartTypeAppearance } from './chartTypeAppearance';
 import type { HighLowPoint } from './highLow/highLowPoint';
@@ -16,6 +17,8 @@ import type { KagiPoint } from './kagi/kagiPoint';
 import type { PointFigurePoint } from './pointFigure/pointFigurePoint';
 import { priceAt, type PriceSource } from './priceSource';
 import type { VolumeCandlePoint } from './volumeCandles/volumeCandlePoint';
+import type { BarFootprint } from './volumeFootprint/footprintData';
+import type { VolumeFootprintPoint } from './volumeFootprint/volumeFootprintPoint';
 
 /**
  * The point a bar style series holds: the library's own shape for the series type that draws the style, or
@@ -29,7 +32,14 @@ export type BarStylePoint =
   | LineData<Time>
   | PointFigurePoint
   | VolumeCandlePoint
+  | VolumeFootprintPoint
   | HighLowPoint;
+
+/** The footprints the chart holds, keyed by the UTC seconds of the bar each one belongs to. */
+export type BarFootprints = ReadonlyMap<number, BarFootprint>;
+
+/** A chart that holds no footprint, which is every window the host has not read ticks for. */
+const NO_FOOTPRINTS: BarFootprints = new Map();
 
 /** A hollow candle paints its body as a hole, so a part that is off writes no colour at all. */
 const TRANSPARENT = 'transparent';
@@ -97,7 +107,7 @@ function candlePoint(
   candles: CandleAppearance,
   bar: RenderBar,
   previous: RenderBar | undefined,
-): CandlestickData<Time> {
+): CandlestickData<UTCTimestamp> {
   return {
     time: bar.time as UTCTimestamp,
     open: bar.open,
@@ -167,6 +177,19 @@ function highLowPoint(bar: RenderBar): HighLowPoint {
   return { time: bar.time as UTCTimestamp, high: bar.high, low: bar.low };
 }
 
+/** One footprint bar: the bar's prices, the candle colours and the footprint its columns are drawn from. */
+function volumeFootprintPoint(
+  appearance: VolumeFootprintAppearance,
+  bar: RenderBar,
+  previous: RenderBar | undefined,
+  footprint: BarFootprint | undefined,
+): VolumeFootprintPoint {
+  return {
+    ...candlePoint(appearance.candles, bar, previous),
+    ...(footprint === undefined ? {} : { footprint }),
+  };
+}
+
 /** One Kagi bar: the prices the line runs between, which the custom series draws as its stroke at that slot. */
 function kagiPoint(bar: RenderBar): KagiPoint {
   return { time: bar.time as UTCTimestamp, open: bar.open, high: bar.high, low: bar.low, close: bar.close };
@@ -191,6 +214,7 @@ export function barStylePoint(
   appearance: DrawnBarStyleAppearance,
   bar: RenderBar,
   previous: RenderBar | undefined,
+  footprint?: BarFootprint,
 ): BarStylePoint {
   switch (appearance.style) {
     case 'hollowCandles':
@@ -202,6 +226,8 @@ export function barStylePoint(
       return chartTypeCandlePoint(appearance, bar, previous);
     case 'volumeCandles':
       return volumeCandlePoint(appearance, bar, previous);
+    case 'volumeFootprint':
+      return volumeFootprintPoint(appearance, bar, previous, footprint);
     case 'kagi':
       return kagiPoint(bar);
     case 'pointFigure':
@@ -222,6 +248,10 @@ export function barStylePoint(
 }
 
 /** Every bar's point in `appearance`'s style; the bar before each one decides the colours it takes. */
-export function barStylePoints(appearance: DrawnBarStyleAppearance, bars: readonly RenderBar[]): BarStylePoint[] {
-  return bars.map((bar, index) => barStylePoint(appearance, bar, bars[index - 1]));
+export function barStylePoints(
+  appearance: DrawnBarStyleAppearance,
+  bars: readonly RenderBar[],
+  footprints: BarFootprints = NO_FOOTPRINTS,
+): BarStylePoint[] {
+  return bars.map((bar, index) => barStylePoint(appearance, bar, bars[index - 1], footprints.get(bar.time)));
 }

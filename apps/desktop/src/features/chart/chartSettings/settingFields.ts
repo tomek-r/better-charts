@@ -101,6 +101,7 @@ export type ChartSettingValue =
   | boolean
   | number
   | string
+  | readonly string[]
   | ColorPairValue
   | ToggledColorPairValue
   | ToggledColorValue
@@ -116,9 +117,22 @@ interface ChoiceOption {
   readonly label: string;
 }
 
+/** The switch another field is drawn by: a row is shown only while that field holds one of the values named. */
+interface SettingFieldVisibility {
+  readonly key: string;
+  readonly values: readonly ChartSettingValue[];
+}
+
+/** The names a colour pair's two pickers take, where "up" and "down" would not say which side is which. */
+export interface ColorPairNames {
+  readonly up: string;
+  readonly down: string;
+}
+
 interface SettingFieldIdentity {
   readonly key: string;
   readonly label: string;
+  readonly visibleWhen?: SettingFieldVisibility;
 }
 
 /** What a row that holds a whole number shows after it, e.g. "%" or "bars". */
@@ -134,6 +148,8 @@ export interface CheckboxSettingField extends SettingFieldIdentity {
 export interface ToggledColorPairSettingField extends SettingFieldIdentity {
   readonly kind: 'toggledColorPair';
   readonly defaultValue: ToggledColorPairValue;
+  /** The two pickers' names, for a pair whose sides are not "up" and "down", such as a buy and a sell colour. */
+  readonly colorNames?: ColorPairNames;
 }
 
 export interface ToggledColorSettingField extends SettingFieldIdentity {
@@ -204,6 +220,21 @@ export interface DecimalSettingField extends SettingFieldIdentity, NumberFieldUn
   readonly range: DecimalRange;
 }
 
+/** A whole number a field counts, such as the bars an average spans: a fraction is refused. */
+export interface WholeNumberSettingField extends SettingFieldIdentity, NumberFieldUnit {
+  readonly kind: 'wholeNumber';
+  readonly defaultValue: number;
+  readonly range: NumberRange;
+}
+
+/** A short list of colours one row edits, such as the four shades a footprint side's cells are graded through. */
+export interface ColorListSettingField extends SettingFieldIdentity {
+  readonly kind: 'colorList';
+  readonly defaultValue: readonly string[];
+  /** How many colours the row holds, which a stored list must name exactly. */
+  readonly length: number;
+}
+
 /** One row of a settings dialog, declaring the value it holds. */
 export type ChartSettingField =
   | CheckboxSettingField
@@ -220,7 +251,9 @@ export type ChartSettingField =
   | ChoiceSettingField
   | PercentSettingField
   | BarCountSettingField
-  | DecimalSettingField;
+  | DecimalSettingField
+  | WholeNumberSettingField
+  | ColorListSettingField;
 
 /** A titled group of fields, which a settings panel draws as one caption above their rows. */
 export interface SettingsSectionFields {
@@ -274,6 +307,21 @@ function readDecimal(raw: unknown, range: DecimalRange): number | undefined {
     return undefined;
   }
   return raw;
+}
+
+/** A stored list of colours, kept only when it holds exactly `length` readable ones. */
+function readColorList(raw: unknown, length: number): readonly string[] | undefined {
+  if (!Array.isArray(raw) || raw.length !== length) {
+    return undefined;
+  }
+  const colors: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'string' || parseHexColor(entry) === undefined) {
+      return undefined;
+    }
+    colors.push(entry);
+  }
+  return colors;
 }
 
 function readBarCount(raw: unknown): number | undefined {
@@ -443,8 +491,10 @@ export function isBackgroundFillValue(value: unknown): value is BackgroundFillVa
   return readFillMode(value.mode) !== undefined;
 }
 
-/** One reader per kind; `choice` and `decimal` need the field's own declaration. */
-const SETTING_VALUE_READERS: Readonly<Record<Exclude<SettingKind, 'choice' | 'decimal'>, SettingValueReader>> = {
+/** One reader per kind; the kinds whose bounds live in the field's own declaration read it there. */
+const SETTING_VALUE_READERS: Readonly<
+  Record<Exclude<SettingKind, 'choice' | 'decimal' | 'wholeNumber' | 'colorList'>, SettingValueReader>
+> = {
   checkbox: readBoolean,
   toggledColorPair: readToggledColorPair,
   toggledColor: readToggledColor,
@@ -468,20 +518,48 @@ export function readSettingValue(field: ChartSettingField, raw: unknown): ChartS
   if (field.kind === 'decimal') {
     return readDecimal(raw, field.range);
   }
+  if (field.kind === 'wholeNumber') {
+    return readIntegerInRange(raw, field.range);
+  }
+  if (field.kind === 'colorList') {
+    return readColorList(raw, field.length);
+  }
   return SETTING_VALUE_READERS[field.kind](raw);
 }
 
-/** Equality of two object values, field by field. */
-function sameObjectValue(first: Readonly<Record<string, unknown>>, second: Readonly<Record<string, unknown>>): boolean {
+/**
+ * Equality of two object values, field by field: the keys they name, and the value each key holds. A colour list
+ * is compared entry by entry before this, so the pair here need only be read by key.
+ */
+function sameObjectValue(first: object, second: object): boolean {
   const keys = Object.keys(first);
   if (keys.length !== Object.keys(second).length) {
     return false;
   }
-  return keys.every((key) => first[key] === second[key]);
+  return keys.every((key) => Reflect.get(first, key) === Reflect.get(second, key));
+}
+
+/** Whether a stored value is a colour list, which no object comparison reaches. */
+export function isColorList(value: ChartSettingValue): value is readonly string[] {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  const entries: readonly unknown[] = value;
+  return entries.every((entry) => typeof entry === 'string');
+}
+
+/** Whether two colour lists hold the same colours in the same order. */
+function sameColorList(first: readonly string[], second: readonly string[]): boolean {
+  return first.length === second.length && first.every((color, index) => color === second[index]);
 }
 
 /** Equality that looks inside the object kinds, so a reloaded copy matches the value it came from. */
 export function sameSettingValue(first: ChartSettingValue, second: ChartSettingValue): boolean {
+  const firstList = isColorList(first) ? first : null;
+  const secondList = isColorList(second) ? second : null;
+  if (firstList !== null || secondList !== null) {
+    return firstList !== null && secondList !== null && sameColorList(firstList, secondList);
+  }
   if (typeof first !== 'object' || typeof second !== 'object') {
     return first === second;
   }

@@ -6,7 +6,12 @@ import {
   type BarStyleAppearance,
   type DrawnBarStyleAppearance,
 } from './barStyleAppearance';
-import { barStylePoint, barStylePoints, directionColor as colorOfDirection } from './barStylePoints';
+import {
+  barStylePoint,
+  barStylePoints,
+  directionColor as colorOfDirection,
+  type BarFootprints,
+} from './barStylePoints';
 import { barBodyColor, barDirectionColors } from './barBodyColor';
 import { canRepaintBarStyleSeries, drawBarStyleSeries } from './barStyleSeriesFactory';
 import { BaselineLevel, priceBaseValue } from './baselineLevel';
@@ -38,6 +43,8 @@ export class BarStyleSeries {
   private readonly heikinAshiChain = new HeikinAshiChain();
   /** The baseline's level, carried by the baseline series as its primitive. */
   private baselineLevel: BaselineLevel | null = null;
+  /** The footprints the host published, keyed by bar time; a bar it holds none for draws as a plain candle. */
+  private footprints: BarFootprints = new Map();
 
   constructor(private readonly chart: IChartApi) {}
 
@@ -64,7 +71,7 @@ export class BarStyleSeries {
     // Heikin Ashi rewrites every bar onto the ones before it; every other style plots the bars it got.
     const plotted = appearance.style === 'heikinAshi' ? this.heikinAshiChain.rebuild(bars) : bars;
     this.baselineLevel?.setLastBar(plotted[plotted.length - 1]);
-    series.setData(barStylePoints(appearance, plotted));
+    series.setData(barStylePoints(appearance, plotted, this.footprints));
   }
 
   /** Writes one bar; `previous` is the bar before it, which the colour rules read. */
@@ -77,7 +84,16 @@ export class BarStyleSeries {
     // A Heikin Ashi bar chains on the Heikin Ashi bar before it; every other style writes the bar given.
     const plotted = appearance.style === 'heikinAshi' ? this.heikinAshiChain.advance(bar) : { bar, previous };
     this.baselineLevel?.setLastBar(plotted.bar);
-    series.update(barStylePoint(appearance, plotted.bar, plotted.previous));
+    series.update(barStylePoint(appearance, plotted.bar, plotted.previous, this.footprints.get(plotted.bar.time)));
+  }
+
+  /**
+   * Replaces the footprints the host published and rewrites the points, so the footprint style draws the rows of
+   * every bar it holds one for. Every other style plots the bars alone, so its points are unchanged.
+   */
+  applyFootprints(footprints: BarFootprints, bars: readonly RenderBar[]): void {
+    this.footprints = footprints;
+    this.replaceBars(bars);
   }
 
   /**

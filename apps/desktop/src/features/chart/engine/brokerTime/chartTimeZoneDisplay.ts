@@ -16,6 +16,9 @@ interface TimeFormatTarget {
   setTimeFormat(format: ChartTimeFormat): void;
 }
 
+/** How many milliseconds one bar second stands for, which is what a bar time is given in. */
+const MS_PER_SECOND = 1000;
+
 /**
  * The chart's time-zone display: the format the axis' tick labels and the pointer's
  * time label are drawn with, and the broker clock that format is read against. It
@@ -28,6 +31,8 @@ export class ChartTimeZoneDisplay {
   private appliedLabels: ChartTimeLabels = DEFAULT_CHART_TIME_LABELS;
   /** The bars' precision: an MT5 bar reads its minute until a tick interval asks for its second. */
   private appliedPrecision: ChartTimePrecision = 'minute';
+  /** The format the applied zone, labels and precision make, which every label this class writes reads. */
+  private format: ChartTimeFormat = createChartTimeFormat(EXCHANGE_TIME_ZONE, null);
 
   constructor(
     private readonly chart: IChartApi,
@@ -78,6 +83,14 @@ export class ChartTimeZoneDisplay {
     return { ...this.appliedLabels };
   }
 
+  /**
+   * The label a single instant is written with, in the chart's own format: the notice of the ticks a footprint
+   * read only part way writes its bar time with it, so it reads like the axis and the pointer.
+   */
+  timeLabel(atMs: number): string {
+    return this.format.pointerLabel(Math.floor(atMs / MS_PER_SECOND));
+  }
+
   /** UTC now as the broker's ticks tell it; the desktop clock until a live tick and the broker's offset are known. */
   clockNowMs(): number {
     const brokerOffsetMinutes = this.appliedBrokerOffsetMinutes;
@@ -93,6 +106,7 @@ export class ChartTimeZoneDisplay {
       this.appliedLabels,
       this.appliedPrecision,
     );
+    this.format = format;
     // A date or a business day has no instant to shift: those keep the library's own label.
     const tickMarkFormatter: TickMarkFormatter = (time, tickMarkType) =>
       typeof time === 'number' ? format.tickMarkLabel(time, tickMarkType) : null;
