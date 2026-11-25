@@ -1209,7 +1209,13 @@ a page used to start at one bar and grow. A bar whose candle reports a count of
 page fits and halving when one holds too many ticks. A wrong estimate costs
 pages, never data: a page that held more ticks than its estimate planned is
 re-read with fewer bars, and a bar that still does not fit is paged through one
-millisecond at a time, exactly as before.
+millisecond at a time, exactly as before. A page the EA's own frame budget ends
+before its `max_ticks` brought fewer ticks than it was sized for, which says
+nothing about the candles' counts: it teaches the read how many ticks one frame
+carries, and the pages after it in that read are planned to fit that count
+while still asking their own `max_ticks`. The learned count only shrinks, so a
+page that comes up short again lowers it further and the plans narrow until one
+fits, and a page planned from bars keeps its own halving.
 
 Every answered window page and every finished window read prints one timing line
 to the desktop's stderr with the bars and ticks it covered and its milliseconds —
@@ -1307,6 +1313,12 @@ behind its volumes, not the volumes themselves. A bar's own `buyTrades` and
 `sellTrades` are the sums of its rows' counts, and a row no trade reached counts
 `0` on both sides. The four fields are additive: a consumer that writes volumes
 ignores them.
+
+The read keeps a tick that carries no volume only when it moved the bid (MT5's
+Bid flag): a quote that changed only the ask or the last price is no trade of
+the bar, while a tick of real volume is a trade whatever its flags. MT5's Tick
+Volume counts the ticks that changed the bid, so a quote-only bar's trades — and
+its volume, which counts one trade per tick — match it.
 
 A tick trades at its last price; a tick without one (a CFD or forex quote) trades at
 the mid of its bid and ask, or at its bid when it has no ask. Some CFD feeds set

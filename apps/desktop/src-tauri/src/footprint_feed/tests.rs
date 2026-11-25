@@ -6,6 +6,7 @@ use rust_decimal::Decimal;
 use std::time::{Duration, Instant};
 use trading_core::footprint::{FootprintTick, TickSide, TICK_FLAG_BUY, TICK_FLAG_SELL};
 use trading_core::protocol::{MarketCandle, MarketTick};
+use trading_core::volume_profile::{TICK_FLAG_ASK, TICK_FLAG_BID};
 
 const MINUTE_MS: i64 = 60_000;
 /// Ticks the read budget of these tests allows, so a handful of pages reach it.
@@ -18,6 +19,14 @@ const PAGE_TICKS: u32 = 25;
 const TEN_TICKS: u64 = 10;
 /// A budget no test read can spend.
 const WIDE_BUDGET: usize = 100;
+/// MT5's `TICK_FLAG_LAST`: the tick moved the last price.
+const TICK_FLAG_LAST: u32 = 8;
+/// The ticks a frame of a page-sizing test carries back, fewer than the page's own bound.
+const FRAME_TICKS: u32 = 25;
+/// The ticks each bar of a page-sizing test reports to its candle.
+const COUNTED_TICKS: u64 = 8;
+/// A page bound wide enough that the EA's frame, not the bound, ends a page.
+const WIDE_PAGE: u32 = 100;
 
 /// The decimal `value` names.
 fn dec(value: &str) -> Decimal {
@@ -55,6 +64,22 @@ fn wire_tick(time_ms: i64, price: &str, volume_real: &str, flags: u32) -> Market
         volume_real: volume_real.to_string(),
         flags,
     }
+}
+
+/// One wire tick that carries no volume at all, as a quote-only feed reports its ticks.
+fn volume_less_tick(time_ms: i64, flags: u32) -> MarketTick {
+    MarketTick {
+        volume: 0,
+        ..wire_tick(time_ms, "100", "0", flags)
+    }
+}
+
+/// The `count` wire ticks an answer of these tests carries, a millisecond apart from `from_ms`.
+fn answer_ticks(from_ms: i64, count: u32) -> Vec<MarketTick> {
+    (from_ms..)
+        .take(usize::try_from(count).expect("a test's tick count fits usize"))
+        .map(|time_ms| wire_tick(time_ms, "100", "1", TICK_FLAG_BID))
+        .collect()
 }
 
 /// The bid of the ticks the quote-rule tests trade between, and its ask: a mid of 100.5.
@@ -274,6 +299,49 @@ fn the_real_volume_is_the_traded_volume_and_the_tick_count_stands_in_for_it() {
         to_trade_tick(&tick).map(|trade| trade.volume),
         Some(dec("7")),
         "a symbol without real volume trades one tick at a time"
+    );
+}
+
+#[test]
+fn a_tick_that_moved_no_volume_counts_only_when_it_moved_the_bid() {
+    assert!(
+        to_trade_tick(&volume_less_tick(1_000, TICK_FLAG_ASK)).is_none(),
+        "an ask-only quote is no trade: MT5's Tick Volume does not count it"
+    );
+    assert!(
+        to_trade_tick(&volume_less_tick(1_000, TICK_FLAG_LAST)).is_none(),
+        "nor is a quote that only moved the last price"
+    );
+    assert_eq!(
+        to_trade_tick(&volume_less_tick(1_000, TICK_FLAG_BID)).map(|trade| trade.volume),
+        Some(dec("0")),
+        "a bid change is a trade even without a volume, as Tick Volume counts it"
+    );
+}
+
+#[test]
+fn a_tick_that_moved_a_volume_is_a_trade_whatever_its_flags() {
+    assert_eq!(
+        to_trade_tick(&wire_tick(1_000, "100", "2.5", TICK_FLAG_ASK)).map(|trade| trade.volume),
+        Some(dec("2.5")),
+        "a tick of real volume is a trade without a bid change"
+    );
+}
+
+#[test]
+fn a_bar_without_volumes_counts_only_the_ticks_that_moved_the_bid() {
+    let ticks = [
+        volume_less_tick(1, TICK_FLAG_BID),
+        volume_less_tick(2, TICK_FLAG_ASK),
+        volume_less_tick(3, TICK_FLAG_BID | TICK_FLAG_ASK),
+    ];
+
+    let by_bar = group_ticks(&ticks, &one_minute(0));
+
+    assert_eq!(
+        by_bar[&0].len(),
+        2,
+        "the ticks that moved the bid are the quote-only bar's trades"
     );
 }
 
@@ -640,6 +708,124 @@ fn bars_whose_candles_counted_no_tick_keep_the_widening_page() {
         (older.first_bar, older.bars),
         (0, 2),
         "a bar whose candle reported no tick count leaves the page sizing from bars"
+    );
+}
+
+#[test]
+fn a_page_the_frame_cut_short_caps_the_pages_after_it_without_widening_the_estimate() {
+    // Four bars of eight counted ticks each: a hundred-tick page fits all four (4 × 8 × 1.25 = 40).
+    // The EA's frame carries twenty-five ticks back, so the page ends short of its own bound.
+    let bars = footprint_window(
+        &[
+            candle_with_ticks(0, "100", COUNTED_TICKS),
+            candle_with_ticks(MINUTE_MS, "100", COUNTED_TICKS),
+            candle_with_ticks(2 * MINUTE_MS, "100", COUNTED_TICKS),
+            candle_with_ticks(3 * MINUTE_MS, "100", COUNTED_TICKS),
+        ],
+        4 * MINUTE_MS,
+    );
+    let mut read = FootprintTicks::new(bars, WIDE_BUDGET).expect("four bars are a window");
+
+    let first = read.next_page(WIDE_PAGE).expect("the newest bars first");
+    assert_eq!(
+        (first.first_bar, first.bars, first.max_ticks),
+        (0, 4, WIDE_PAGE),
+        "the four counted bars fit the page"
+    );
+    read.accept(answered(&answer_ticks(0, FRAME_TICKS), false));
+
+    let capped = read
+        .next_page(WIDE_PAGE)
+        .expect("the bars under the cut page");
+    assert_eq!(
+        (capped.first_bar, capped.bars),
+        (2, 2),
+        "the frame's ticks fit two of the counted bars, not the four the bound planned"
+    );
+    assert_eq!(
+        capped.max_ticks, WIDE_PAGE,
+        "the page still asks the read's own bound for its ticks"
+    );
+
+    read.accept(answered(
+        &[
+            wire_tick(2 * MINUTE_MS + 1, "100", "1", TICK_FLAG_BID),
+            wire_tick(3 * MINUTE_MS + 1, "100", "1", TICK_FLAG_BID),
+        ],
+        true,
+    ));
+
+    let rest = read.next_page(WIDE_PAGE).expect("the bars under them");
+    assert_eq!(
+        (rest.first_bar, rest.bars),
+        (0, 2),
+        "the estimate was not widened: two counted bars still fit the capped page"
+    );
+}
+
+#[test]
+fn a_page_that_held_all_of_its_bound_still_widens_the_estimate() {
+    // Two bars of ten counted ticks each and a twenty-five-tick page: the page covers both, and the
+    // frame answers with every tick it was allowed, so the page, not the frame, was the short one.
+    let bars = footprint_window(
+        &[
+            candle_with_ticks(0, "100", TEN_TICKS),
+            candle_with_ticks(MINUTE_MS, "100", TEN_TICKS),
+        ],
+        2 * MINUTE_MS,
+    );
+    let mut read = FootprintTicks::new(bars, WIDE_BUDGET).expect("two bars are a window");
+
+    let first = read.next_page(PAGE_TICKS).expect("the newest bars first");
+    assert_eq!(
+        (first.first_bar, first.bars, first.max_ticks),
+        (0, 2, PAGE_TICKS)
+    );
+    read.accept(answered(&answer_ticks(0, PAGE_TICKS), false));
+
+    let widened = read
+        .next_page(PAGE_TICKS)
+        .expect("the newest bar alone, after the overflow");
+    assert_eq!(
+        (widened.first_bar, widened.bars),
+        (1, 1),
+        "a page that held all of its bound widens the estimate and narrows the page"
+    );
+}
+
+#[test]
+fn a_page_under_the_learned_cap_that_comes_up_short_again_drops_the_cap() {
+    let bars = footprint_window(
+        &[
+            candle_with_ticks(0, "100", COUNTED_TICKS),
+            candle_with_ticks(MINUTE_MS, "100", COUNTED_TICKS),
+            candle_with_ticks(2 * MINUTE_MS, "100", COUNTED_TICKS),
+            candle_with_ticks(3 * MINUTE_MS, "100", COUNTED_TICKS),
+        ],
+        4 * MINUTE_MS,
+    );
+    let mut read = FootprintTicks::new(bars, WIDE_BUDGET).expect("four bars are a window");
+
+    read.next_page(WIDE_PAGE).expect("the newest bars first");
+    read.accept(answered(&answer_ticks(0, FRAME_TICKS), false));
+
+    let capped = read
+        .next_page(WIDE_PAGE)
+        .expect("the bars under the cut page");
+    assert_eq!(
+        (capped.first_bar, capped.bars),
+        (2, 2),
+        "the frame's first answer planned two counted bars"
+    );
+    read.accept(answered(&answer_ticks(0, 12), false));
+
+    let narrower = read
+        .next_page(WIDE_PAGE)
+        .expect("the bars under the second cut");
+    assert_eq!(
+        (narrower.first_bar, narrower.bars),
+        (3, 1),
+        "a frame that carried fewer ticks than the plan drops the cap to its count"
     );
 }
 

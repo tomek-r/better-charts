@@ -26,6 +26,7 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 use trading_core::footprint::{FootprintTick, TickSide};
 use trading_core::protocol::{MarketCandle, MarketTick};
+use trading_core::volume_profile::TICK_FLAG_BID;
 
 /// Most ticks one footprint read keeps. A deeper read costs the EA's reader one page at a time, and a
 /// footprint's history is limited to the recent bars too; the bars beyond the budget read `na`.
@@ -127,14 +128,26 @@ fn bar_of(bars: &[BarSpan], time_ms: i64) -> Option<usize> {
 /// own prices: with a last price and a bid and an ask, a last above their mid bought and one below it
 /// sold, and a last at the mid names no side, which the tick rule then decides. A tick without a last
 /// price is a quote priced at its mid already and keeps no side of its own either. `None` when the wire
-/// names no positive price to trade at.
+/// names no positive price to trade at, or when a tick that moved no volume and no bid is no trade.
 pub(crate) fn to_trade_tick(tick: &MarketTick) -> Option<FootprintTick> {
+    let volume = traded_volume(tick);
+    if !counts_as_trade(tick, volume) {
+        return None;
+    }
     Some(FootprintTick {
         time_ms: tick.time_ms,
         price: traded_price(tick)?,
-        volume: traded_volume(tick),
+        volume,
         side: trade_side(tick),
     })
+}
+
+/// Whether the tick is one of its bar's trades: a tick that moved a volume always is, and a tick that
+/// moved none — a quote update — only when it moved the bid. MT5's Tick Volume counts the ticks that
+/// changed the bid, so leaving a quote-only tick that moved only the ask or the last price out is what
+/// makes a bar's footprint volume equal it.
+fn counts_as_trade(tick: &MarketTick, volume: Decimal) -> bool {
+    volume > Decimal::ZERO || tick.flags & TICK_FLAG_BID != 0
 }
 
 /// The side the tick trades on: the side its flags name, or — when they name none, neither or both —
@@ -245,6 +258,9 @@ pub(crate) struct FootprintTicks {
     /// ticks than they were sized for: one doubling per such page, so a wrong estimate still reads
     /// every bar.
     estimate_shrink: u64,
+    /// The most ticks a page has brought back in this read, once a page the EA's frame ended instead
+    /// of the page's own bound taught it: the pages planned after it are sized to fit it.
+    learned_page_ticks: Option<u32>,
     read_ticks: usize,
     tick_budget: usize,
     /// The page the read waits for, once it asked for one.
@@ -266,6 +282,7 @@ impl FootprintTicks {
             stopped_in: None,
             page_bars: FIRST_PAGE_BARS,
             estimate_shrink: 1,
+            learned_page_ticks: None,
             read_ticks: 0,
             tick_budget,
             awaiting: None,
@@ -298,11 +315,8 @@ impl FootprintTicks {
         }
         if page.first_bar + 1 != self.unread_from {
             // The range held more ticks than a page, so the answer covers only its oldest bars and
-            // none of them borders the bars already read. Ask for fewer bars instead: the widening
-            // page halves, and the candles' tick estimate is widened by the same factor, so a run the
-            // estimate over-counted shrinks too.
-            self.page_bars = self.halved_page_bars();
-            self.estimate_shrink = self.widened_estimate_shrink();
+            // none of them borders the bars already read. The pages after it are planned narrower.
+            self.narrow_after_short_page(page, ticks.len());
             return;
         }
         match resumed_after(ticks, page.from_ms) {
@@ -316,6 +330,39 @@ impl FootprintTicks {
             // this bar: it is not read whole.
             None => self.stop_in_paging_bar(),
         }
+    }
+
+    /// Narrows the pages that follow a page that did not hold its whole range. A page the EA's frame
+    /// ended brought fewer ticks than it was sized for: the candles' counts were right and only a
+    /// page's capacity was smaller, so the read remembers what a frame carries and plans the pages
+    /// after it to fit. A page that filled what it was sized for held more ticks than it planned: the
+    /// page halves and the tick estimate widens by the same factor, so a run the estimate over-counted
+    /// shrinks too.
+    fn narrow_after_short_page(&mut self, page: TickPage, returned_ticks: usize) {
+        let sized_for = self.page_sizing_bound(page.max_ticks);
+        if self.learn_frame_capacity(returned_ticks, sized_for) {
+            return;
+        }
+        self.page_bars = self.halved_page_bars();
+        self.estimate_shrink = self.widened_estimate_shrink();
+    }
+
+    /// Remembers the ticks the EA's frame carried back, when the frame is what ended the page: the
+    /// page brought fewer ticks than it was sized for, so its bars, not its tick estimate, were too
+    /// many, and every page planned after it is sized to fit the frame. Answers whether the page
+    /// taught the read that, which only a page planned from the candles' counts can: a page sized
+    /// from bars narrows by halving already, and every page the read plans drops the cap to the
+    /// count of the page that came up short, so the plans shrink until one fits.
+    fn learn_frame_capacity(&mut self, returned_ticks: usize, sized_for: u32) -> bool {
+        let Ok(returned) = u32::try_from(returned_ticks) else {
+            return false;
+        };
+        if returned >= sized_for || !self.planned_from_estimates() {
+            return false;
+        }
+        let known = self.learned_page_ticks.unwrap_or(returned);
+        self.learned_page_ticks = Some(known.min(returned));
+        true
     }
 
     /// Ends the read here and answers what it kept: a bar it was paging through when a page could not
@@ -346,7 +393,7 @@ impl FootprintTicks {
         let (first_bar, from_ms) = match self.within_from_ms {
             Some(from_ms) => (self.unread_from - 1, from_ms),
             None => {
-                let first_bar = self.first_bar_of_page(max_ticks);
+                let first_bar = self.first_bar_of_page(self.page_sizing_bound(max_ticks));
                 (first_bar, self.bars.get(first_bar)?.open_ms)
             }
         };
@@ -359,29 +406,49 @@ impl FootprintTicks {
         })
     }
 
-    /// The oldest bar a page of `max_ticks` ticks covers: the run of newest unread bars whose candles'
-    /// tick counts, widened by [`TICK_ESTIMATE_MARGIN_NUMERATOR`], fit the page, and at least the
-    /// newest unread bar alone. A bar whose candle reported no count leaves the page sized from bars,
-    /// which a page that fitted widens and one that held too many halves.
-    fn first_bar_of_page(&self, max_ticks: u32) -> usize {
+    /// The ticks a page is sized from: the page's own bound, or the fewer ticks a frame has carried
+    /// back in this read, whichever is smaller. The page still asks its own bound for its ticks.
+    fn page_sizing_bound(&self, max_ticks: u32) -> u32 {
+        self.learned_page_ticks
+            .map_or(max_ticks, |learned| max_ticks.min(learned))
+    }
+
+    /// Whether a page planned now is sized from the candles' tick counts: the newest unread bar's
+    /// candle reported one and the estimate is still trusted.
+    fn planned_from_estimates(&self) -> bool {
+        if self.estimate_shrink >= MAX_TICK_ESTIMATE_SHRINK {
+            return false;
+        }
+        let Some(newest) = self.unread_from.checked_sub(1) else {
+            return false;
+        };
+        self.bars
+            .get(newest)
+            .is_some_and(|bar| counted_ticks(bar).is_some())
+    }
+
+    /// The oldest bar a page sized for `sizing_bound` ticks covers: the run of newest unread bars
+    /// whose candle counts, widened by [`TICK_ESTIMATE_MARGIN_NUMERATOR`], fit the bound, and at
+    /// least the newest unread bar alone. A bar whose candle reported no count, and a read whose
+    /// estimate is no longer trusted, leaves the page sized from bars instead, which a page that
+    /// fitted widens and one that held too many halves.
+    fn first_bar_of_page(&self, sizing_bound: u32) -> usize {
         let widened_page = self.unread_from.saturating_sub(self.page_bars);
         let Some(newest) = self.unread_from.checked_sub(1) else {
             return widened_page;
         };
-        if self.estimate_shrink >= MAX_TICK_ESTIMATE_SHRINK {
-            // The candles' counts fall short of the ticks their pages bring, however wide the estimate
-            // is taken: plan from bars instead, whose halving narrows every page until it fits.
+        if !self.planned_from_estimates() {
             return widened_page;
         }
-        self.estimated_first_bar(newest, max_ticks)
+        self.estimated_first_bar(newest, sizing_bound)
             .unwrap_or(widened_page)
     }
 
     /// The oldest bar of the run of unread bars ending at `newest` whose estimated ticks fit
-    /// `max_ticks`; `None` when the candle of `newest` reported no tick count to size a page from.
-    fn estimated_first_bar(&self, newest: usize, max_ticks: u32) -> Option<usize> {
+    /// `sizing_bound`; `None` when the candle of `newest` reported no tick count to size a page from.
+    fn estimated_first_bar(&self, newest: usize, sizing_bound: u32) -> Option<usize> {
         let mut counted = counted_ticks(self.bars.get(newest)?)?;
-        let bound = u64::from(max_ticks);
+        let bound = u64::from(sizing_bound);
         let mut first = newest;
         while let Some(older) = first.checked_sub(1) {
             let Some(bar) = self.bars.get(older) else {
