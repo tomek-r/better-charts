@@ -18,9 +18,10 @@
 //! the one after starts at the bar's open again.
 
 use rust_decimal::Decimal;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
-use trading_core::footprint::FootprintTick;
+use trading_core::footprint::{FootprintTick, TickSide};
 use trading_core::protocol::{MarketCandle, MarketTick};
 
 /// Most ticks one footprint read keeps. A deeper read costs the EA's reader one page at a time, and a
@@ -100,14 +101,46 @@ fn bar_of(bars: &[BarSpan], time_ms: i64) -> Option<usize> {
 }
 
 /// One wire tick as a footprint trade: the price it moved at, the volume it moved and the side its
-/// flags name. `None` when the wire names no positive price to trade at.
+/// flags name.
+///
+/// A tick whose flags name no side — neither, or both — takes the side the quote rule reads from its
+/// own prices: with a last price and a bid and an ask, a last above their mid bought and one below it
+/// sold, and a last at the mid names no side, which the tick rule then decides. A tick without a last
+/// price is a quote priced at its mid already and keeps no side of its own either. `None` when the wire
+/// names no positive price to trade at.
 pub(crate) fn to_trade_tick(tick: &MarketTick) -> Option<FootprintTick> {
-    Some(FootprintTick::from_flags(
-        tick.time_ms,
-        traded_price(tick)?,
-        traded_volume(tick),
-        tick.flags,
-    ))
+    Some(FootprintTick {
+        time_ms: tick.time_ms,
+        price: traded_price(tick)?,
+        volume: traded_volume(tick),
+        side: trade_side(tick),
+    })
+}
+
+/// The side the tick trades on: the side its flags name, or — when they name none, neither or both —
+/// the side its own last price gives against its own bid/ask mid.
+fn trade_side(tick: &MarketTick) -> TickSide {
+    match TickSide::from_flags(tick.flags) {
+        TickSide::Unknown => quote_rule_side(tick),
+        side => side,
+    }
+}
+
+/// The side the tick's own last price names against its own bid/ask mid, the quote rule of Lee and
+/// Ready: above the mid the trade took the ask, below it the bid, and at the mid it names no side,
+/// which leaves the tick rule to decide.
+///
+/// A tick without a last price is a quote priced at its mid already, and one without both quotes has
+/// no mid to compare with: both name no side here.
+fn quote_rule_side(tick: &MarketTick) -> TickSide {
+    let (Some(last), Some(mid)) = (positive_decimal(&tick.last), positive_mid(tick)) else {
+        return TickSide::Unknown;
+    };
+    match last.cmp(&mid) {
+        Ordering::Greater => TickSide::Buy,
+        Ordering::Less => TickSide::Sell,
+        Ordering::Equal => TickSide::Unknown,
+    }
 }
 
 /// The price the tick traded at: the last price when the broker reports one. A quote-only feed (CFDs,
@@ -119,10 +152,14 @@ fn traded_price(tick: &MarketTick) -> Option<Decimal> {
 
 /// The mid of the tick's bid and ask when both are positive, the bid alone when only it is.
 fn mid_price(tick: &MarketTick) -> Option<Decimal> {
+    positive_mid(tick).or_else(|| positive_decimal(&tick.bid))
+}
+
+/// The mid of the tick's bid and ask when both are positive: the price a quote trades at, and the
+/// price the quote rule compares a last price with.
+fn positive_mid(tick: &MarketTick) -> Option<Decimal> {
     let bid = positive_decimal(&tick.bid)?;
-    let Some(ask) = positive_decimal(&tick.ask) else {
-        return Some(bid);
-    };
+    let ask = positive_decimal(&tick.ask)?;
     Some((bid + ask) / Decimal::TWO)
 }
 

@@ -47,6 +47,25 @@ fn wire_tick(time_ms: i64, price: &str, volume_real: &str, flags: u32) -> Market
     }
 }
 
+/// The bid of the ticks the quote-rule tests trade between, and its ask: a mid of 100.5.
+const MID_BID: &str = "100.0";
+const MID_ASK: &str = "101.0";
+
+/// One wire tick trading `last` between [`MID_BID`] and [`MID_ASK`].
+fn quoted_tick(last: &str, flags: u32) -> MarketTick {
+    MarketTick {
+        last: last.to_string(),
+        bid: MID_BID.to_string(),
+        ask: MID_ASK.to_string(),
+        ..wire_tick(1_000, MID_BID, "1", flags)
+    }
+}
+
+/// The side `to_trade_tick` gives a tick trading `last` between [`MID_BID`] and [`MID_ASK`].
+fn side_between(last: &str, flags: u32) -> Option<TickSide> {
+    to_trade_tick(&quoted_tick(last, flags)).map(|trade| trade.side)
+}
+
 /// Three M1 bars opening every minute from 0; the newest reaches `read_end_ms`.
 fn three_minutes(read_end_ms: i64) -> Vec<BarSpan> {
     footprint_window(
@@ -279,6 +298,82 @@ fn an_unreadable_price_names_no_trade() {
         ..tick
     };
     assert!(to_trade_tick(&unreadable).is_none());
+}
+
+#[test]
+fn a_tick_flagged_both_ways_takes_the_side_its_last_price_gives_against_its_mid() {
+    let both = TICK_FLAG_BUY | TICK_FLAG_SELL;
+
+    assert_eq!(
+        to_trade_tick(&quoted_tick("100.6", both)),
+        Some(FootprintTick {
+            time_ms: 1_000,
+            price: dec("100.6"),
+            volume: dec("1"),
+            side: TickSide::Buy,
+        }),
+        "a last above the mid took the ask, and the trade keeps the tick's price and volume"
+    );
+    assert_eq!(
+        side_between("100.2", both),
+        Some(TickSide::Sell),
+        "a last below the mid took the bid"
+    );
+    assert_eq!(
+        side_between("100.5", both),
+        Some(TickSide::Unknown),
+        "a last at the mid names no side, so the tick rule decides it"
+    );
+}
+
+#[test]
+fn an_unflagged_tick_takes_the_side_its_last_price_gives_against_its_mid() {
+    assert_eq!(side_between("100.6", 0), Some(TickSide::Buy));
+    assert_eq!(side_between("100.2", 0), Some(TickSide::Sell));
+    assert_eq!(
+        side_between("100.5", 0),
+        Some(TickSide::Unknown),
+        "the tick rule decides a last at the mid"
+    );
+}
+
+#[test]
+fn a_single_tick_flag_wins_over_the_quote_rule() {
+    assert_eq!(
+        side_between("100.6", TICK_FLAG_SELL),
+        Some(TickSide::Sell),
+        "the flag names the side even when the last price sits above the mid"
+    );
+    assert_eq!(
+        side_between("100.2", TICK_FLAG_BUY),
+        Some(TickSide::Buy),
+        "and when it sits below the mid"
+    );
+}
+
+#[test]
+fn a_tick_without_a_last_price_keeps_no_side_of_its_own() {
+    let both = TICK_FLAG_BUY | TICK_FLAG_SELL;
+
+    assert_eq!(
+        side_between("0", both),
+        Some(TickSide::Unknown),
+        "a CFD quote trades at its mid already and names no side"
+    );
+    assert_eq!(
+        side_between("0", 0),
+        Some(TickSide::Unknown),
+        "a quote without flags names no side either"
+    );
+    let no_ask = MarketTick {
+        ask: "0".to_string(),
+        ..quoted_tick("100.6", both)
+    };
+    assert_eq!(
+        to_trade_tick(&no_ask).map(|trade| trade.side),
+        Some(TickSide::Unknown),
+        "without an ask there is no mid to compare a last price with"
+    );
 }
 
 #[test]
