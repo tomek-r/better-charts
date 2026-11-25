@@ -90,6 +90,7 @@ fn answer(
         trade_ticks: counted,
         carry,
         levels,
+        bars: Vec::new(),
     }
 }
 

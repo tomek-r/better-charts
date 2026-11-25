@@ -9,6 +9,7 @@
     "flags"
   ],
   "level_fields": ["price", "buy", "sell"],
+  "bar_fields": ["open_ms", "trade_ticks", "levels"],
   "cases": [
     {
       "name": "single buy flag counts one trade",
@@ -165,6 +166,60 @@
       "trade_ticks": 0,
       "carry_after": ["25001.75", "sell"],
       "levels": []
+    },
+    {
+      "name": "the first bar's carry does not cross its open into the next bar",
+      "real_volume": false,
+      "carry": null,
+      "first_open_ms": 1000,
+      "bar_opens": [2000],
+      "ticks": [
+        [1010, "100.0", "0", "100.0", 1, "0", 64],
+        [2000, "100.0", "0", "0", 1, "0", 4]
+      ],
+      "trade_ticks": 2,
+      "carry_after": ["100", "buy"],
+      "levels": [],
+      "bars": [
+        [1000, 1, [["100", "0", "1"]]],
+        [2000, 1, [["100", "1", "0"]]]
+      ]
+    },
+    {
+      "name": "a bar that counted no trade is left out of the bars",
+      "real_volume": false,
+      "carry": null,
+      "first_open_ms": 1000,
+      "bar_opens": [2000, 3000],
+      "ticks": [
+        [1010, "100.0", "100.2", "100.2", 1, "0", 32],
+        [3010, "100.0", "100.2", "100.0", 1, "0", 64]
+      ],
+      "trade_ticks": 2,
+      "carry_after": ["100", "sell"],
+      "levels": [],
+      "bars": [
+        [1000, 1, [["100.2", "1", "0"]]],
+        [3000, 1, [["100", "0", "1"]]]
+      ]
+    },
+    {
+      "name": "the request's carry decides only the first bar's first trade",
+      "real_volume": false,
+      "carry": ["101.0", "buy"],
+      "first_open_ms": 1000,
+      "bar_opens": [2000],
+      "ticks": [
+        [1500, "101.0", "0", "0", 1, "0", 4],
+        [2500, "99.0", "0", "0", 1, "0", 4]
+      ],
+      "trade_ticks": 2,
+      "carry_after": ["99", "buy"],
+      "levels": [],
+      "bars": [
+        [1000, 1, [["101", "1", "0"]]],
+        [2000, 1, [["99", "1", "0"]]]
+      ]
     }
   ]
 }

@@ -30,9 +30,9 @@ pub use limits::{
     max_estimated_profile_ticks, max_frame_bytes, max_ticks_per_page, min_frame_bytes,
 };
 pub use market::{
-    BarUpdate, BrokerSymbol, FootprintCarry, FootprintLevel, FootprintSide, HistoryRequest,
-    HistorySnapshot, MarketCandle, MarketTick, QuoteUpdate, SymbolInfoRequest, SymbolInfoResult,
-    SymbolSearchRequest, SymbolSearchResult, TickFootprintHistoryRequest,
+    BarUpdate, BrokerSymbol, FootprintBarCounts, FootprintCarry, FootprintLevel, FootprintSide,
+    HistoryRequest, HistorySnapshot, MarketCandle, MarketTick, QuoteUpdate, SymbolInfoRequest,
+    SymbolInfoResult, SymbolSearchRequest, SymbolSearchResult, TickFootprintHistoryRequest,
     TickFootprintHistorySnapshot, TickHistoryRequest, TickHistorySnapshot, TickPriceCount,
     TickPriceHistoryRequest, TickPriceHistorySnapshot,
 };

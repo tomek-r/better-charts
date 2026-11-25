@@ -1117,6 +1117,51 @@ answer's `through_ms`; the host passes the `carry` the previous page returned.
 A request for the next bar sends the carry it holds for the boundary, or none
 when the bar starts a fresh range.
 
+**Several bars in one request.** A request may also cover a run of bars:
+`bar_opens` lists the strictly ascending opens of the bars after the range's
+first one, each inside the range (`from_ms < open < to_ms`), and
+`first_open_ms`, required with `bar_opens`, names the open of the bar the range
+starts in — `from_ms` when the range starts at a bar open, otherwise the earlier
+open the range continues. Trades before the first listed open belong to that
+first bar, and at every listed open the tick rule starts fresh with no carry,
+exactly as a bar's first page does today. The answer then carries one entry per
+bar the page counted into in `bars`, ascending by `open_ms`, each open being
+`first_open_ms` or one of `bar_opens`; its top-level `levels` is empty, its
+top-level `trade_ticks` is the bars' sum, each bar's `levels` obey the level
+rules below, and `carry` is the tick-rule state after the last counted trade of
+the last bar. A bar that counted no trade may be omitted. Without `bar_opens`
+the answer keeps today's shape: `bars` is empty and the levels stay top-level.
+A request without any of these fields behaves exactly as before.
+
+A multi-bar request and its answer:
+
+```json
+{
+  "symbol": "NAS100", "from_ms": 1769999400000, "to_ms": 1769999580000, "max_ticks": 5000,
+  "footprint_counts": true, "real_volume": true,
+  "carry": {"price": "25001.7", "side": "buy"},
+  "first_open_ms": 1769999400000,
+  "bar_opens": [1769999460000, 1769999520000]
+}
+```
+
+```json
+{
+  "request_id": "rust-footprint-bars-1", "symbol": "NAS100", "from_ms": 1769999400000,
+  "to_ms": 1769999580000, "tick_size": "0.1", "complete": true,
+  "through_ms": 1769999580000, "loaded_ticks": 412, "trade_ticks": 208,
+  "carry": {"price": "25001.75", "side": "sell"}, "levels": [],
+  "bars": [
+    {"open_ms": 1769999400000, "trade_ticks": 90,
+     "levels": [{"price": "25001.7", "buy": "12.50", "sell": "9.00"}]},
+    {"open_ms": 1769999460000, "trade_ticks": 70,
+     "levels": [{"price": "25001.75", "buy": "3.00", "sell": "4.00"}]},
+    {"open_ms": 1769999520000, "trade_ticks": 48,
+     "levels": [{"price": "25001.8", "buy": "0", "sell": "2.00"}]}
+  ]
+}
+```
+
 **Counted trades.** With `real_volume:true` a tick is a trade when its
 `volume_real` is greater than zero, or else its `volume` is, and its weight is
 the first of the two that is. With `real_volume:false`
@@ -1144,9 +1189,13 @@ becomes the carry, which the answer returns.
 frame byte budget exactly like an exact price summary: `complete` pages end at
 `to_ms`, an incomplete page excludes its final millisecond (`through_ms`) and
 the next request re-reads it from there with the carry from before that
-millisecond. No certified progress means `through_ms == from_ms`, zero loaded
-ticks and no levels, so the range must be split. `loaded_ticks` counts the
-records read (trades and non-trades), `trade_ticks` the counted ones, and
+millisecond. An incomplete multi-bar page is continued the same way: its next
+request starts at `through_ms` with the returned carry, sets `first_open_ms` to
+the open of the bar `through_ms` falls in (or `through_ms` itself when a bar
+opens there), and lists in `bar_opens` only the opens after `through_ms`. No
+certified progress means `through_ms == from_ms`, zero loaded ticks and no
+levels, so the range must be split. `loaded_ticks` counts the records read
+(trades and non-trades), `trade_ticks` the counted ones, and
 `trade_ticks <= loaded_ticks`.
 
 `levels` are unique, positive prices, each with non-negative `buy` and `sell`

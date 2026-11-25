@@ -54,6 +54,8 @@ impl FootprintCountsOptions {
             footprint_counts: true,
             real_volume: self.real_volume,
             carry: self.carry.clone(),
+            bar_opens: Vec::new(),
+            first_open_ms: None,
         }
     }
 }
@@ -246,6 +248,8 @@ mod tests {
             footprint_counts: true,
             real_volume,
             carry,
+            bar_opens: Vec::new(),
+            first_open_ms: None,
         }
     }
 

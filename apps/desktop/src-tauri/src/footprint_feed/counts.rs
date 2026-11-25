@@ -72,6 +72,8 @@ impl CountsPage {
             footprint_counts: COUNTS_REQUESTED,
             real_volume: self.real_volume,
             carry: self.carry.clone(),
+            bar_opens: Vec::new(),
+            first_open_ms: None,
         }
     }
 }

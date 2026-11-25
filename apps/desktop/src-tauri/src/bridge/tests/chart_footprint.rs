@@ -605,6 +605,7 @@ fn counts_page(
         trade_ticks: counted,
         carry: None,
         levels,
+        bars: Vec::new(),
     }
 }
 
