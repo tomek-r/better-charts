@@ -65,6 +65,8 @@ interface FootprintPaint extends DevicePixelRatios {
   readonly options: VolumeFootprintOptions;
   readonly priceConverter: PriceToCoordinateConverter;
   readonly fullWidth: number;
+  /** The slot one bar stands in, in media px, which the box of its summary may grow into. */
+  readonly barSpacing: number;
   /** How wide a text is drawn, in css px, which decides whether a cell or a total has room for it. */
   readonly textWidth: FootprintTextWidth;
 }
@@ -321,8 +323,9 @@ function paintValueArea(
 /**
  * Writes what one bar says under its columns: each side's total, or both in one line in the single-column layout,
  * and the delta box below them while the summary is on. The lowest row's bottom is where both start, so neither
- * covers a cell, and the totals use the full columns rather than any profile cell's share. They are written at the
- * same size as the bar's cells, and a bar whose rows hold no line of text writes nothing under them.
+ * covers a cell, and the totals use the full columns rather than any profile cell's share. The box may grow past its
+ * column into the room the bar's slot leaves, which the bar spacing decides. Every text is written at the same size as
+ * the bar's cells, and a bar whose rows hold no line of text writes nothing under them.
  */
 function paintSummary(
   paint: FootprintPaint,
@@ -339,7 +342,7 @@ function paintSummary(
   if (lowestBottomY === null) {
     return;
   }
-  const summary = footprintSummaryLayout(footprint, columns, lowestBottomY, paint.options, style);
+  const summary = footprintSummaryLayout(footprint, columns, paint.barSpacing, lowestBottomY, paint.options, style);
   if (summary === null) {
     return;
   }
@@ -479,6 +482,7 @@ export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPo
         options: this.options,
         priceConverter: source.priceConverter,
         fullWidth: barBodyWidth(source.barSpacing, horizontalPixelRatio),
+        barSpacing: source.barSpacing,
         textWidth: (text) => context.measureText(text).width,
         horizontalPixelRatio,
         verticalPixelRatio,
