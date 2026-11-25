@@ -1,6 +1,5 @@
 import type { CustomBarItemData, PaneRendererCustomData, PriceToCoordinateConverter, Time } from 'lightweight-charts';
 import { withOpacityPercent } from '../../../../../shared/theme/hexColor';
-import { palette } from '../../../../../shared/theme/palette';
 import { barBodyWidth, type DevicePixelRatios } from '../barBodyWidth';
 import { candlePrices, paintCandle, type CandleGlyphStyle, type CandlePrices } from '../candleGlyph';
 import { CustomBarRenderer, type SeriesRenderingTarget, type VisibleBarIndices } from '../customBarRenderer';
@@ -14,6 +13,8 @@ import {
   footprintCellBox,
   footprintCellShowsText,
   footprintProfileBox,
+  footprintTextAlignOf,
+  footprintTextX,
   type FootprintBarColumns,
   type FootprintCellBox,
   type FootprintTextWidth,
@@ -23,22 +24,22 @@ import { footprintLayoutOf } from './footprintModes';
 import type { FootprintSide } from './footprintShades';
 import { footprintStackedZones, type FootprintStackedZone } from './footprintStackedZones';
 import { footprintSummaryLayout, paintFootprintSummaryBox, type FootprintTextMark } from './footprintSummary';
+import {
+  paintValueAreaLines,
+  paintValueAreaMarkers,
+  valueAreaMarkerX,
+  type FootprintValueAreaMark,
+  type FootprintValueAreaSpan,
+} from './footprintValueArea';
 import { VOLUME_FOOTPRINT_DEFAULT_OPTIONS, type VolumeFootprintOptions } from './volumeFootprintOptions';
 import type { VolumeFootprintPoint } from './volumeFootprintPoint';
 
 /** The family the cells' numbers and the value area marker are written in. */
 const FOOTPRINT_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
-/** The font the cells' numbers and the value area marker are written in, which the text fit is measured in. */
+/** The font the cells' numbers are written in, which the text fit is measured in. */
 const FOOTPRINT_FONT = `${FOOTPRINT_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
-/** The colour the value area's lines and marker are drawn in, neutral against the dark chart. */
-const VALUE_AREA_COLOR = palette.textTertiary;
-/** The dash pattern a value area line is drawn in, in device pixels. */
-const VALUE_AREA_DASH: readonly number[] = [1, 1];
-/** The thickness of a value area line, in device pixels. */
-const VALUE_AREA_LINE_WIDTH = 1;
-/** The glyph marking where a value area line starts, and how far left of the bar it sits, in media pixels. */
-const VALUE_AREA_MARKER = '▶';
-const VALUE_AREA_MARKER_GAP = 2;
+/** The font a summary line's value is written in, right after its label. */
+const FOOTPRINT_BOLD_FONT = `bold ${FOOTPRINT_FONT}`;
 /** The share of its side's colour a stacked zone's band is filled at, so what it covers stays readable through it. */
 const STACKED_ZONE_FILL_PERCENT = 20;
 /** The thickness of a stacked zone's top and bottom edge lines, in device pixels. */
@@ -61,16 +62,10 @@ interface FootprintBar {
   readonly prices: CandlePrices;
 }
 
-/** Where the media pass marks the left end of one value area line, in media pixels. */
-interface FootprintMarker {
-  readonly x: number;
-  readonly y: number;
-}
-
-/** What the bitmap pass hands the media pass: the text it found room for and the value area markers. */
+/** What the bitmap pass hands the media pass: the text it found room for and the value areas it marked. */
 interface FootprintMarks {
   readonly texts: FootprintTextMark[];
-  readonly markers: FootprintMarker[];
+  readonly valueAreas: FootprintValueAreaMark[];
 }
 
 /** One stacked zone placed on the pane: the media x it starts at and the one it ends at, null for the pane's edge. */
@@ -148,25 +143,6 @@ function placedStackedZones(
   }));
 }
 
-/** Writes one cell's number into the media pass, unless the cell has no room for that text. */
-function markCellText(
-  paint: FootprintPaint,
-  box: FootprintCellBox,
-  text: string,
-  color: string,
-  marks: FootprintMarks,
-): void {
-  if (!footprintCellShowsText(box, text, paint, paint.textWidth)) {
-    return;
-  }
-  marks.texts.push({
-    x: (box.left + box.width / 2) / paint.horizontalPixelRatio,
-    y: (box.top + box.height / 2) / paint.verticalPixelRatio,
-    text,
-    color,
-  });
-}
-
 /** Paints the imbalance mark standing on the edge of `side` of one cell, in its side's own colour. */
 function paintImbalanceMark(paint: FootprintPaint, box: FootprintCellBox, side: FootprintSide): void {
   const highlight = paint.options.imbalanceHighlight;
@@ -178,11 +154,20 @@ function paintImbalanceMark(paint: FootprintPaint, box: FootprintCellBox, side: 
   paint.context.fillRect(mark.left, mark.top, mark.width, mark.height);
 }
 
-/** Paints one cell: its fill, the numbers it writes and the imbalance marks on its edges. */
+/** Paints one cell: its fill, the number it writes against its column's inner edge and the marks on its edges. */
 function paintCell(paint: FootprintPaint, cell: FootprintCell, box: FootprintCellBox, marks: FootprintMarks): void {
   paint.context.fillStyle = cell.fill;
   paint.context.fillRect(box.left, box.top, box.width, box.height);
-  markCellText(paint, box, cell.text, cell.textColor, marks);
+  if (footprintCellShowsText(box, cell.text, paint, paint.textWidth)) {
+    const align = footprintTextAlignOf(cell.column);
+    marks.texts.push({
+      x: footprintTextX(box, align, paint.horizontalPixelRatio),
+      y: (box.top + box.height / 2) / paint.verticalPixelRatio,
+      text: cell.text,
+      color: cell.textColor,
+      align,
+    });
+  }
   for (const side of cell.marks) {
     paintImbalanceMark(paint, box, side);
   }
@@ -219,44 +204,39 @@ function cellBox(
   return footprintProfileBox(box, cell.widthShare, cell.column);
 }
 
-/** The device y of one value area line: the top of the VAH row, or the bottom of the VAL row. */
+/** The media y of one value area line: the top of the VAH row, or the bottom of the VAL row. */
 function valueAreaLineY(paint: FootprintPaint, row: ChartFootprintRow | undefined, top: boolean): number | null {
   if (row === undefined) {
     return null;
   }
-  const mediaY = paint.priceConverter(top ? row.upPrice : row.downPrice);
-  return mediaY === null ? null : mediaY * paint.verticalPixelRatio;
+  return paint.priceConverter(top ? row.upPrice : row.downPrice);
 }
 
-/** Paints the value area's dotted lines across the bar, and marks where each one starts. */
+/** The device-pixel span a value area line crosses: the whole bar, from its sell column out to its buy edge. */
+function valueAreaSpan(columns: FootprintBarColumns): FootprintValueAreaSpan {
+  return { left: columns.sell.left, right: columns.buy.left + columns.buy.width };
+}
+
+/** Paints the value area's dashed lines across the bar, and notes where the media pass marks their left ends. */
 function paintValueArea(
   paint: FootprintPaint,
   footprint: BarFootprint,
   columns: FootprintBarColumns,
-  markers: FootprintMarker[],
+  marks: FootprintMarks,
 ): void {
   if (!paint.options.showValueArea) {
     return;
   }
   const vahRow = footprint.rows.find((row) => row.row === footprint.vah);
   const valRow = footprint.rows.find((row) => row.row === footprint.val);
-  const left = columns.sell.left;
-  const right = columns.buy.left + columns.buy.width;
-  paint.context.save();
-  paint.context.strokeStyle = VALUE_AREA_COLOR;
-  paint.context.lineWidth = VALUE_AREA_LINE_WIDTH;
-  paint.context.setLineDash([...VALUE_AREA_DASH]);
-  for (const y of [valueAreaLineY(paint, vahRow, true), valueAreaLineY(paint, valRow, false)]) {
-    if (y === null) {
-      continue;
-    }
-    paint.context.beginPath();
-    paint.context.moveTo(left, y);
-    paint.context.lineTo(right, y);
-    paint.context.stroke();
-    markers.push({ x: left / paint.horizontalPixelRatio - VALUE_AREA_MARKER_GAP, y: y / paint.verticalPixelRatio });
+  const lineYs = [valueAreaLineY(paint, vahRow, true), valueAreaLineY(paint, valRow, false)];
+  const ys = lineYs.filter((y): y is number => y !== null);
+  if (ys.length === 0) {
+    return;
   }
-  paint.context.restore();
+  const span = valueAreaSpan(columns);
+  paintValueAreaLines(paint.context, span, ys, paint);
+  marks.valueAreas.push({ markerX: valueAreaMarkerX(span, paint.horizontalPixelRatio), ys });
 }
 
 /**
@@ -346,18 +326,18 @@ function paintFootprintBar(paint: FootprintPaint, bar: FootprintBar, marks: Foot
   );
   paintFootprintCells(paint, footprint, columns, marks);
   paintCandle(paint.context, candleCentreX(paint, columns), columns.candle.width, bar.prices, style, paint);
-  paintValueArea(paint, footprint, columns, marks.markers);
+  paintValueArea(paint, footprint, columns, marks);
   // The summary uses these full columns, never the profile-narrowed cell boxes painted inside them.
   paintSummary(paint, footprint, columns, marks);
 }
 
 /**
  * The custom series renderer of the volume footprint bars: each bar paints the cells the appearance's type and
- * display make of its rows — a sell column left of a thin candle and a buy column right of it, or one column beside
- * it — a mark on every imbalanced edge and its value area dotted. Under the columns it writes each side's total, or
- * both in one line in the single-column layout, and, while the summary is on, the bar's delta and total in a box.
- * The stacked imbalance zones are painted first, so every bar's own paint stands over them. The cells are device
- * pixels; only the text and the markers are written, in media pixels.
+ * display make of its rows — a sell column, a gap, a thin candle, another gap and a buy column, or one column beside
+ * the candle — a mark on every imbalanced edge and its value area dashed. Under the columns it writes each side's
+ * total against its own column, or both in one line in the single-column layout, and, while the summary is on, the
+ * bar's delta and total in a box. The stacked imbalance zones are painted first, so every bar's own paint stands
+ * over them. The cells are device pixels; only the text and the markers are written, in media pixels.
  */
 export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPoint, VolumeFootprintOptions> {
   protected override options: VolumeFootprintOptions = VOLUME_FOOTPRINT_DEFAULT_OPTIONS;
@@ -379,7 +359,7 @@ export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPo
 
   /** Paints the stack zones, then the bars' cells and candles over them, collecting what the media pass writes. */
   private paintBars(target: SeriesRenderingTarget, source: FootprintPaintSource): FootprintMarks {
-    const marks: FootprintMarks = { texts: [], markers: [] };
+    const marks: FootprintMarks = { texts: [], valueAreas: [] };
     target.useBitmapCoordinateSpace(({ context, horizontalPixelRatio, verticalPixelRatio, bitmapSize }) => {
       const paint: FootprintPaint = {
         context,
@@ -405,24 +385,23 @@ export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPo
     return marks;
   }
 
-  /** Writes the cells' numbers and the value area markers, in media pixels. */
+  /** Writes the cells' numbers, the box's values in bold, and the value area markers, in media pixels. */
   private paintMarks(target: SeriesRenderingTarget, marks: FootprintMarks): void {
-    if (marks.texts.length === 0 && marks.markers.length === 0) {
+    if (marks.texts.length === 0 && marks.valueAreas.length === 0) {
       return;
     }
     target.useMediaCoordinateSpace(({ context }) => {
       context.save();
-      context.font = FOOTPRINT_FONT;
       context.textBaseline = 'middle';
-      context.textAlign = 'center';
       for (const text of marks.texts) {
+        context.font = text.bold === true ? FOOTPRINT_BOLD_FONT : FOOTPRINT_FONT;
+        context.textAlign = text.align;
         context.fillStyle = text.color;
         context.fillText(text.text, text.x, text.y);
       }
-      context.textAlign = 'right';
-      context.fillStyle = VALUE_AREA_COLOR;
-      for (const marker of marks.markers) {
-        context.fillText(VALUE_AREA_MARKER, marker.x, marker.y);
+      context.font = FOOTPRINT_FONT;
+      for (const area of marks.valueAreas) {
+        paintValueAreaMarkers(context, area);
       }
       context.restore();
     });

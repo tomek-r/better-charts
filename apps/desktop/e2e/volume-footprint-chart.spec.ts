@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { barBodyWidth } from '../src/features/chart/engine/barStyle/barBodyWidth';
 import { FOOTPRINT_BAR_SPACING } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintZoom';
 import { FOOTPRINT_NEUTRAL_COLOR } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintShades';
 import type { ChartFootprintEvent, ChartFootprintRow, Candle } from '../src/shared/bridge/types';
@@ -50,8 +51,11 @@ const DEFAULT_FOOTPRINT_REQUEST = {
 const NEWEST_BAR_OPEN_MS = STUB_NOW - STUB_M5_INTERVAL_MS;
 /** The row width the fixture's host resolved, in the symbol's ticks. */
 const TICKS_PER_ROW = 20;
-/** The prices the fixture's rows span, lowest first: a band inside the newest bar of the window. */
-const ROW_PRICES = [1.0844, 1.0848, 1.0852];
+/**
+ * The prices the fixture's rows span, lowest first: the range the newest bar of the window opened and closed on, so
+ * that bar's own candle body paints across every row.
+ */
+const ROW_PRICES = [1.0852, 1.0853, 1.0854];
 /** The volume every fixture row traded, so all of a side's cells take the same shade. */
 const ROW_VOLUME = 480;
 /** The trades behind each side of a fixture row's volume, one trade per ten lots. */
@@ -69,6 +73,8 @@ const MIN_CELL_RUN = 6;
 const SELL_TOTAL = parseHexColor('#F23645');
 const BUY_TOTAL = parseHexColor('#089981');
 const DELTA_NEUTRAL = parseHexColor('#c4c9d0');
+/** The value area's dashed lines share the neutral delta's colour, palette.textTertiary, and so does their marker. */
+const VALUE_AREA_LINE = DELTA_NEUTRAL;
 /** The colour of the imbalance mark each side's cells are marked with. */
 const SELL_IMBALANCE = parseHexColor('#F23645');
 const BUY_IMBALANCE = parseHexColor('#089981');
@@ -89,6 +95,20 @@ const MIN_ZONE_FILL_SHARE = 0.15;
 const MIN_ZONE_EDGE_RUN = 20;
 /** How far past its rows a zone's top and bottom edges paint, in css px, which the suite's pixel ratio keeps. */
 const ZONE_EDGE_MARGIN = 2;
+/** The body one footprint bar is drawn at, in css px: four fifths of its spacing, at the suite's pixel ratio. */
+const BAR_BODY_WIDTH = barBodyWidth(FOOTPRINT_BAR_SPACING, 1);
+/** How few css px of background the reference leaves between the candle body and either column. */
+const MIN_CANDLE_GAP = 5;
+/** How far into a cell row the gap is read, in css px, clear of the number written in the middle of the cell. */
+const CELL_ROW_INSET = 4;
+/** The dash one value area line paints, in css px, which only a dashed line reaches as a run of its own. */
+const VALUE_AREA_DASH_RUN = 3;
+/** The dashes one bar's value area line paints, well under the sixteen its dashes count to across the bar. */
+const MIN_VALUE_AREA_DASHES = 6;
+/** A solid line would paint a run this long across the bar, which a dash pattern never reaches. */
+const SOLID_LINE_RUN = 16;
+/** The share of the bar the value area line's dashes have to reach across, past the candle it crosses. */
+const MIN_VALUE_AREA_SPREAD_SHARE = 0.8;
 /** The month and weekday names the chart's default time labels write. */
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -276,9 +296,19 @@ async function paneImage(page: Page): Promise<DecodedPng> {
   return decodePng(await page.locator('.chart-host').screenshot());
 }
 
-/** The lowest screenshot row the bar's cells paint in `colors`, which the summary under them starts below. */
-function cellsBottom(image: DecodedPng, colors: readonly PixelChannels[]): number {
-  const region = wholeImage(image);
+/**
+ * The lowest screenshot row the cells of the bar opening at `timeMs` paint in `colors`, which the summary under
+ * them starts below. Only the bar's own columns are read, so the price axis' last-value tag and any other bar can
+ * never count as a cell.
+ */
+async function cellsBottom(
+  page: Page,
+  image: DecodedPng,
+  timeMs: number,
+  colors: readonly PixelChannels[],
+): Promise<number> {
+  const barX = await barTimeX(page, timeMs);
+  const region = { ...barColumns(image, barX), top: 0, bottom: image.height - 1 };
   const rows = colors.flatMap((color) => sitesPainting(image, color, region).map((site) => site.y));
   if (rows.length === 0) {
     throw new Error('The bar painted none of its cells in the fixture colours.');
@@ -323,13 +353,54 @@ function rightOfBar(pane: PixelRegion, barX: number): PixelRegion {
   return { ...pane, left: Math.ceil(barX + FOOTPRINT_BAR_SPACING / 2) };
 }
 
+/** The screenshot row inside the fixture's lowest cell row, where the newest bar's candle body paints across it. */
+async function cellRowY(page: Page): Promise<number> {
+  return Math.floor(await panePriceY(page, ROW_PRICES[1])) + CELL_ROW_INSET;
+}
+
+/**
+ * The screenshot columns one bar's own paint covers: half a bar spacing either side of its x, clamped to the image,
+ * so that no other bar's paint can be read as this one's.
+ */
+function barColumns(image: DecodedPng, barX: number): Pick<PixelRegion, 'left' | 'right'> {
+  // Half a spacing holds the body, which the footprint zoom draws four fifths of a spacing wide around its x.
+  const half = Math.ceil(FOOTPRINT_BAR_SPACING / 2);
+  const left = Math.max(0, Math.floor(barX) - half);
+  return { left, right: Math.min(image.width, Math.floor(barX) + half) };
+}
+
+/** The screenshot columns one bar's own paint covers in row `y`: half a bar spacing either side of its x. */
+function barRowRegion(image: DecodedPng, barX: number, y: number): PixelRegion {
+  return { ...barColumns(image, barX), top: y, bottom: y };
+}
+
+/** How far one colour reaches across a screenshot row, in its screenshot columns. */
+interface ColourSpan {
+  readonly left: number;
+  readonly right: number;
+}
+
+/** The leftmost and rightmost column of `region` that paint `color`; null while none of them does. */
+function colourSpan(image: DecodedPng, color: PixelChannels, region: PixelRegion): ColourSpan | null {
+  const columns = sitesPainting(image, color, region).map((site) => site.x);
+  if (columns.length === 0) {
+    return null;
+  }
+  return { left: Math.min(...columns), right: Math.max(...columns) };
+}
+
+/** The media x of the bar opening at `timeMs`, in the pixels the pane's screenshot is taken in. */
+function barTimeX(page: Page, timeMs: number): Promise<number> {
+  return page.evaluate((time) => window.__chartTest!.timeToX(time), timeMs);
+}
+
 /** The media x of the bar the stacked footprint belongs to, in the pixels the pane's screenshot is taken in. */
 function stackedZoneBarX(page: Page): Promise<number> {
-  return page.evaluate((timeMs) => window.__chartTest!.timeToX(timeMs), zoneWindowOpenMs(ZONE_BAR_INDEX));
+  return barTimeX(page, zoneWindowOpenMs(ZONE_BAR_INDEX));
 }
 
 /** The media y of `price`, in the pixels the pane's screenshot is taken in. */
-function stackedZonePriceY(page: Page, price: number): Promise<number> {
+function panePriceY(page: Page, price: number): Promise<number> {
   return page.evaluate((value) => window.__chartTest!.priceToY(value), price);
 }
 
@@ -352,8 +423,8 @@ async function stackedZoneRegion(page: Page, image: DecodedPng): Promise<PixelRe
   return {
     ...rightOfBar(await paneColumns(page, image), await stackedZoneBarX(page)),
     ...stackedZoneRows(
-      await stackedZonePriceY(page, Number(rows.at(-1)!.upPrice)),
-      await stackedZonePriceY(page, Number(rows[0].downPrice)),
+      await panePriceY(page, Number(rows.at(-1)!.upPrice)),
+      await panePriceY(page, Number(rows[0].downPrice)),
     ),
   };
 }
@@ -409,19 +480,27 @@ test('choosing Volume footprint keeps the newest bar in view when the pane shows
   expectNoErrors(collected);
 });
 
-test('a bar writes each side total under its column and the delta box below them', async ({ page }) => {
-  const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
-
+/**
+ * Opens the chart on `event`'s footprint and screenshots the pane, with the lowest row its lightest cells paint: the
+ * row every test of what is written above or below the cells measures from.
+ */
+async function openFootprintCells(page: Page, event: ChartFootprintEvent) {
+  const collected = await openFootprintChart(page, event);
   const image = await paneImage(page);
-  const boundary = cellsBottom(image, [SELL_LIGHTEST, BUY_LIGHTEST]);
+  const boundary = await cellsBottom(page, image, NEWEST_BAR_OPEN_MS, [SELL_LIGHTEST, BUY_LIGHTEST]);
+  return { collected, image, boundary };
+}
+
+test('a bar writes each side total under its column and the delta box below them', async ({ page }) => {
+  const { collected, image, boundary } = await openFootprintCells(page, FOOTPRINT_EVENT);
   const above = aboveCells(image, boundary);
   const below = belowCells(image, boundary);
 
   // The appearance's defaults reach the series' own options, which the renderer paints from.
   expect((await barStyle(page)).options).toMatchObject(DEFAULT_FOOTPRINT_SETTINGS);
 
-  // The two totals and the box's two lines are written under the lowest row, and nowhere above it. Ten px text is
-  // anti-aliased onto the pane background, so only its cores reach the colour exactly: each is read as the pixels
+  // The two totals and the box's two lines are written under the lowest row, and nowhere above it. Twelve px text
+  // is anti-aliased onto the pane background, so only its cores reach the colour exactly: each is read as the pixels
   // lying on the blend from the pane background toward its colour.
   expect(sitesTintedToward(image, SELL_TOTAL, PANE_BACKGROUND, below).length).toBeGreaterThan(0);
   expect(sitesTintedToward(image, BUY_TOTAL, PANE_BACKGROUND, below).length).toBeGreaterThan(0);
@@ -432,11 +511,42 @@ test('a bar writes each side total under its column and the delta box below them
   expectNoErrors(collected);
 });
 
-test('an imbalanced cell is marked on its outer edge in its own side colour', async ({ page }) => {
-  const collected = await openFootprintChart(page, imbalancedFootprintEvent());
-
+test('the thin candle stands free, a gap of background either side of its body', async ({ page }) => {
+  const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
   const image = await paneImage(page);
-  const above = aboveCells(image, cellsBottom(image, [SELL_LIGHTEST, BUY_LIGHTEST]));
+  const row = barRowRegion(image, await barTimeX(page, NEWEST_BAR_OPEN_MS), await cellRowY(page));
+
+  const sell = colourSpan(image, SELL_LIGHTEST, row);
+  const candle = colourSpan(image, UP_CANDLE, row);
+  const buy = colourSpan(image, BUY_LIGHTEST, row);
+  expect(sell).not.toBeNull();
+  expect(candle).not.toBeNull();
+  expect(buy).not.toBeNull();
+  // The two columns stop a gap short of the candle body on either side, so it stands on the pane's own background.
+  expect(candle!.left - sell!.right - 1).toBeGreaterThanOrEqual(MIN_CANDLE_GAP);
+  expect(buy!.left - candle!.right - 1).toBeGreaterThanOrEqual(MIN_CANDLE_GAP);
+  expectNoErrors(collected);
+});
+
+test('the value area is marked by a dashed line across the whole bar', async ({ page }) => {
+  const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
+  const image = await paneImage(page);
+  const barX = await barTimeX(page, NEWEST_BAR_OPEN_MS);
+  const vahY = Math.round(await panePriceY(page, Number(FOOTPRINT_EVENT.bars[0].rows.at(-1)!.upPrice)));
+  const band = { ...barRowRegion(image, barX, vahY), top: vahY - 2, bottom: vahY + 2 };
+
+  const dashes = horizontalRunsPainting(image, VALUE_AREA_LINE, band, VALUE_AREA_DASH_RUN);
+  // The line is dashed rather than solid, and its dashes reach across the sell column, the gaps and the buy column.
+  expect(dashes.length).toBeGreaterThanOrEqual(MIN_VALUE_AREA_DASHES);
+  expect(horizontalRunsPainting(image, VALUE_AREA_LINE, band, SOLID_LINE_RUN)).toEqual([]);
+  const spread = Math.max(...dashes.map((dash) => dash.x)) - Math.min(...dashes.map((dash) => dash.x));
+  expect(spread).toBeGreaterThanOrEqual(BAR_BODY_WIDTH * MIN_VALUE_AREA_SPREAD_SHARE);
+  expectNoErrors(collected);
+});
+
+test('an imbalanced cell is marked on its outer edge in its own side colour', async ({ page }) => {
+  const { collected, image, boundary } = await openFootprintCells(page, imbalancedFootprintEvent());
+  const above = aboveCells(image, boundary);
 
   // Three css px wide, and the only paint of their colour inside the bar: the cells are the lightest shade.
   expect(horizontalRunsPainting(image, SELL_IMBALANCE, above, IMBALANCE_MARK_RUN).length).toBeGreaterThan(0);

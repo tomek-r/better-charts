@@ -28,68 +28,90 @@ export interface FootprintCellBox extends FootprintColumn {
 /** How wide a text is, in css px, in the font the footprint writes its numbers in. */
 export type FootprintTextWidth = (text: string) => number;
 
+/** How a text is aligned on the media x it is written at: a column's numbers stand on one of its two edges. */
+export type FootprintTextAlign = 'left' | 'right';
+
 /** How much of the bar's body width the thin candle takes, leaving the columns the rest. */
-const CANDLE_WIDTH_SHARE = 0.2;
+const CANDLE_WIDTH_SHARE = 0.15;
+/** The empty background left either side of the thin candle, in css px, so the candle stands free of its columns. */
+const CANDLE_GAP = 6;
 /** The narrowest a column is ever drawn, in device pixels. */
 const NARROWEST_COLUMN = 1;
 /** The narrowest a cell band is ever drawn, in device pixels, so a row of no price span still shows. */
 const NARROWEST_CELL = 1;
+/** The parts the room beside a candle is split into, so a gap never takes more than a quarter of it. */
+const ROOM_PARTS = 4;
 /** The layout of the types holding both sides, which a caller that names no layout gets. */
 const TWO_COLUMNS: FootprintLayout = 'two-columns';
 /** The size the footprint's numbers are written in, in css px, which the renderer builds its font from. */
-export const FOOTPRINT_FONT_SIZE = 10;
+export const FOOTPRINT_FONT_SIZE = 12;
 /** The height one line of those numbers takes, in css px: a line of the font at FOOTPRINT_FONT_SIZE. */
 export const TEXT_LINE_HEIGHT = FOOTPRINT_FONT_SIZE;
-/** The room a text needs around it, in css px in all — one css px each side — before a cell or a total writes it. */
-export const TEXT_PADDING = 2;
+/** The room a text keeps from the edge it stands against, in css px, on either side of the thin candle. */
+export const TEXT_PADDING = 4;
+/**
+ * The side whose column a single-column bar fills: the buy column, right of the thin candle. The two types that
+ * write one cell a row write it there, and it reads as that side's column.
+ */
+export const SINGLE_COLUMN_SIDE: FootprintSide = 'buy';
 
 /** The width of the thin candle of a body `fullWidth` device pixels wide. */
 function candleWidthOf(fullWidth: number): number {
   return Math.max(NARROWEST_COLUMN, Math.round(fullWidth * CANDLE_WIDTH_SHARE));
 }
 
-/** The width of one side column beside a candle `candleWidth` device pixels wide. */
-function sideWidthOf(fullWidth: number, candleWidth: number): number {
-  return Math.max(NARROWEST_COLUMN, Math.floor((fullWidth - candleWidth) / 2));
+/**
+ * The empty background either side of the candle, in device pixels: CANDLE_GAP css px at the screen's ratio, cut
+ * down while the body has no room for that gap and a column as wide as it on both sides of the candle.
+ */
+function candleGapOf(fullWidth: number, candleWidth: number, horizontalPixelRatio: number): number {
+  const room = Math.max(0, fullWidth - candleWidth);
+  return Math.max(0, Math.min(Math.round(CANDLE_GAP * horizontalPixelRatio), Math.floor(room / ROOM_PARTS)));
 }
 
-/** Where the thin candle of a two-column bar starts: centred on the bar's own x, in device pixels. */
-function centredCandleLeft(x: number, candleWidth: number, horizontalPixelRatio: number): number {
-  return Math.round(x * horizontalPixelRatio) - Math.floor(candleWidth / 2);
+/** The left edge of a bar's body `fullWidth` device pixels wide, which the chart centred on the bar's own x. */
+function bodyLeftOf(x: number, fullWidth: number, horizontalPixelRatio: number): number {
+  return Math.round(x * horizontalPixelRatio) - Math.floor(fullWidth / 2);
 }
 
 /**
- * The columns of a two-column bar: a sell column, the thin candle centred on the bar and a buy column, the two sides
- * as wide as each other.
+ * The columns of a two-column bar, left to right: the sell column, a gap, the thin candle between them, another gap
+ * and the buy column. The gaps and both columns fill the body's width.
  */
 function twoColumnColumns(x: number, fullWidth: number, horizontalPixelRatio: number): FootprintBarColumns {
+  const left = bodyLeftOf(x, fullWidth, horizontalPixelRatio);
   const candleWidth = candleWidthOf(fullWidth);
-  const sideWidth = sideWidthOf(fullWidth, candleWidth);
-  const candleLeft = centredCandleLeft(x, candleWidth, horizontalPixelRatio);
+  const gap = candleGapOf(fullWidth, candleWidth, horizontalPixelRatio);
+  const sellWidth = Math.max(NARROWEST_COLUMN, Math.floor((fullWidth - candleWidth - 2 * gap) / 2));
+  const candleLeft = left + sellWidth + gap;
+  const buyLeft = candleLeft + candleWidth + gap;
   return {
-    sell: { left: candleLeft - sideWidth, width: sideWidth },
+    sell: { left, width: sellWidth },
     candle: { left: candleLeft, width: candleWidth },
-    buy: { left: candleLeft + candleWidth, width: sideWidth },
+    buy: { left: buyLeft, width: Math.max(NARROWEST_COLUMN, left + fullWidth - buyLeft) },
   };
 }
 
 /**
- * The columns of a single-column bar: the thin candle on the body's left edge and the one column right of it, as wide
- * as the two side columns and the candle's old slot in the middle together, which is the body less the candle.
+ * The columns of a single-column bar: the thin candle on the body's left edge, a gap, and the one column the bar's
+ * cells and its totals are written in, filling the body up to its right edge.
  */
 function singleColumnColumns(x: number, fullWidth: number, horizontalPixelRatio: number): FootprintBarColumns {
+  const left = bodyLeftOf(x, fullWidth, horizontalPixelRatio);
   const candleWidth = candleWidthOf(fullWidth);
-  const bodyLeft = centredCandleLeft(x, candleWidth, horizontalPixelRatio) - sideWidthOf(fullWidth, candleWidth);
+  const gap = candleGapOf(fullWidth, candleWidth, horizontalPixelRatio);
+  const columnLeft = left + candleWidth + gap;
   return {
-    sell: { left: bodyLeft, width: 0 },
-    candle: { left: bodyLeft, width: candleWidth },
-    buy: { left: bodyLeft + candleWidth, width: Math.max(NARROWEST_COLUMN, fullWidth - candleWidth) },
+    sell: { left, width: 0 },
+    candle: { left, width: candleWidth },
+    buy: { left: columnLeft, width: Math.max(NARROWEST_COLUMN, left + fullWidth - columnLeft) },
   };
 }
 
 /**
  * The sell column, the thin candle and the buy column of one bar, spanning `fullWidth` device pixels: the two side
- * columns around a centred candle, or the candle on the body's left edge with the whole column right of it.
+ * columns with a gap either side of a candle between them, or the candle on the body's left edge with the one
+ * column right of it.
  */
 export function footprintBarColumns(
   x: number,
@@ -153,4 +175,21 @@ export function footprintProfileBox(box: FootprintCellBox, widthShare: number, s
     return { ...box, width };
   }
   return { ...box, left: box.left + box.width - width, width };
+}
+
+/** How a column writes its text: on the edge nearest the thin candle, the sell column's right and the buy's left. */
+export function footprintTextAlignOf(side: FootprintSide): FootprintTextAlign {
+  return side === 'sell' ? 'right' : 'left';
+}
+
+/** The media x a text of `align` is written at inside `column`, TEXT_PADDING css px in from the edge it stands on. */
+export function footprintTextX(
+  column: FootprintColumn,
+  align: FootprintTextAlign,
+  horizontalPixelRatio: number,
+): number {
+  if (align === 'right') {
+    return (column.left + column.width) / horizontalPixelRatio - TEXT_PADDING;
+  }
+  return column.left / horizontalPixelRatio + TEXT_PADDING;
 }

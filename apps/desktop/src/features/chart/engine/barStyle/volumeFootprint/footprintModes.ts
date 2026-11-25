@@ -13,11 +13,14 @@ export const FOOTPRINT_LAYOUTS = ['two-columns', 'single-column'] as const;
 
 export type FootprintLayout = (typeof FOOTPRINT_LAYOUTS)[number];
 
-/** The layout each type draws: the two types holding both sides, and the three that write one cell a row. */
+/**
+ * The layout each type draws: Buy and Sell, Bid × Ask and Ladder hold both sides, while Delta and Total write a
+ * single cell a row.
+ */
 const LAYOUT_BY_TYPE: Readonly<Record<FootprintType, FootprintLayout>> = {
   buySell: 'two-columns',
+  bidAsk: 'two-columns',
   ladder: 'two-columns',
-  bidAsk: 'single-column',
   delta: 'single-column',
   total: 'single-column',
 };

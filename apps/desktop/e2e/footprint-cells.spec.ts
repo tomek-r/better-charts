@@ -97,20 +97,26 @@ test('a cell carries only the imbalance mark of a side the host called imbalance
   ]);
 });
 
-test('Bid × Ask writes one cell per row, its larger side sharing the shade of the bar largest level', () => {
+test("Bid × Ask writes each row's bid left of the candle and its ask right of it, both in the row's one shade", () => {
   // The largest level is 600, the lowest row's buy side: that row is all of it, band 4; 100 of 600 is 0.17, band 1;
-  // 500 of 600 is 0.83, band 4. The sell shades take a level the sell side won, or one both sides shared.
+  // 500 of 600 is 0.83, band 4. The sell shades take a level the sell side won, or one both sides shared, and the buy
+  // shades the rest, so both cells of a row take the one shade of that row's larger side.
   expect(paintedCells(footprintCells(FOOTPRINT, settingsWith({ type: 'bidAsk' })))).toEqual([
-    ['buy 200 × 600 #004d40'],
-    ['buy 100 × 100 #ff99a0'],
-    ['buy 500 × 300 #801922'],
+    ['sell 200 #004d40', 'buy 600 #004d40'],
+    ['sell 100 #ff99a0', 'buy 100 #ff99a0'],
+    ['sell 500 #801922', 'buy 300 #801922'],
   ]);
 });
 
-test('Bid × Ask stands the sell mark on the cell left edge and the buy mark on its right one', () => {
-  const marked = footprintCells(FOOTPRINT, settingsWith({ type: 'bidAsk' })).map(({ cells }) => cells[0].marks);
+test("Bid × Ask stands each side's imbalance mark on its own cell", () => {
+  const rows = footprintCells(FOOTPRINT, settingsWith({ type: 'bidAsk' }));
+  const marked = rows.map(({ cells }) => cells.map((cell) => cell.marks));
 
-  expect(marked).toEqual([[], ['sell'], ['buy']]);
+  expect(marked).toEqual([
+    [[], []],
+    [['sell'], []],
+    [[], ['buy']],
+  ]);
 });
 
 test('Delta writes each row signed difference, shaded by its distance from zero', () => {
