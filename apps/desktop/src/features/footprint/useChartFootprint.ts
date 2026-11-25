@@ -44,7 +44,7 @@ export function useChartFootprint({ chart, appearance, symbol, timeframe }: Char
       }
       const footprints = [...byBar.values()];
       shown.footprints.setFootprints(footprints);
-      shown.footprints.setNotices(footprintNoticesOf(footprints, incompleteBeforeMs, appearance.values));
+      shown.footprints.setNotices(footprintNoticesOf(incompleteBeforeMs));
     };
     const acceptFootprint = (event: ChartFootprintEvent) => {
       if (event.symbol !== symbol || event.timeframe !== timeframe) {

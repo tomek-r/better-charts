@@ -8,7 +8,7 @@ import { FootprintNotice, type FootprintNotices } from '../legend/footprintNotic
  * footprints only partly cover. The controller owns one, so the style's two setters leave it.
  */
 export class ChartFootprintView {
-  // What the footprint ticks do not cover; hidden while the data is complete and counted in lots.
+  // What the footprint ticks do not cover; hidden while the host read every bar whole.
   private readonly notice: FootprintNotice;
 
   /**
@@ -36,7 +36,7 @@ export class ChartFootprintView {
     this.barSeries.setFootprints(footprints);
   }
 
-  /** The legend notice of ticks the footprints only partly cover and of volumes that are trade counts. */
+  /** The legend notice of the newest bar the host read only part way in, hidden once it reads one whole. */
   setNotices(notices: FootprintNotices): void {
     if (this.isRemoved()) {
       return;

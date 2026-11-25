@@ -232,8 +232,11 @@ function chartTimeLabelOf(timeMs: number): string {
 
 /** The bar time the host stopped reading inside, as the chart's own time format writes it. */
 const INCOMPLETE_BEFORE_LABEL = chartTimeLabelOf(NEWEST_BAR_OPEN_MS);
-/** The notice the legend shows while the host read the window only part way in and counts trades. */
-const EXPECTED_NOTICE = `Footprint: incomplete tick data before ${INCOMPLETE_BEFORE_LABEL} · volume = tick count`;
+/**
+ * The notice the legend shows while the host read the window only part way in. The fixture's bars count trades
+ * (`volume: 'ticks'`), and the notice says nothing about that.
+ */
+const EXPECTED_NOTICE = `Footprint: incomplete tick data before ${INCOMPLETE_BEFORE_LABEL}`;
 
 /** Picks `label` in the chart header's bar type menu. */
 async function chooseBarStyle(page: Page, label: string): Promise<void> {
@@ -381,6 +384,31 @@ test('choosing Volume footprint asks the host for the default rows and paints bo
   expectNoErrors(collected);
 });
 
+test('choosing Volume footprint keeps the newest bar in view when the pane shows empty space past it', async ({
+  page,
+}) => {
+  const collected = await gotoWithStub(page, { chartFootprintEvent: FOOTPRINT_EVENT });
+  await openChart(page);
+  // Most of the pane is the empty future space past the newest bar.
+  await page.evaluate(() => {
+    const newest = window.__chartTest!.data().length - 1;
+    window.__chartTest!.scrollToRange({ from: newest - 40, to: newest + 60 });
+  });
+  await waitTwoAnimationFrames(page);
+
+  await chooseBarStyle(page, 'Volume footprint');
+
+  await expect.poll(() => barSpacing(page)).toBe(FOOTPRINT_BAR_SPACING);
+  const view = await page.evaluate(() => ({
+    newest: window.__chartTest!.data().length - 1,
+    range: window.__chartTest!.visibleRange(),
+  }));
+  expect(view.range).not.toBeNull();
+  expect(view.newest).toBeGreaterThanOrEqual(view.range!.from);
+  expect(view.newest).toBeLessThanOrEqual(view.range!.to);
+  expectNoErrors(collected);
+});
+
 test('a bar writes each side total under its column and the delta box below them', async ({ page }) => {
   const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
 
@@ -416,9 +444,7 @@ test('an imbalanced cell is marked on its outer edge in its own side colour', as
   expectNoErrors(collected);
 });
 
-test('the legend says the data is incomplete and counted in ticks, and clears when the style leaves', async ({
-  page,
-}) => {
+test('the legend says the data is incomplete, and clears when the style leaves', async ({ page }) => {
   const collected = await gotoWithStub(page, { chartFootprintEvent: incompleteFootprintEvent() });
   await openChart(page);
   await chooseBarStyle(page, 'Volume footprint');

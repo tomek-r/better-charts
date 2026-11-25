@@ -337,8 +337,7 @@ come from the host's volume rows, even in Trade count mode. Entering the style z
 120 px per bar and leaving it restores the previous spacing. A cell writes its number only
 when the measured text fits. Stacked levels mark every run of at least N consecutive rows
 imbalanced on one side as a band reaching right until a later bar's range touches it. The
-legend warns about the bars before the first complete read and says when volume is a tick
-count.
+legend warns about the bars before the first complete read.
 
 The time zone is one of these settings: the footer clock and the dialog edit the same
 value. The old per-symbol saved time zones were not carried over.
