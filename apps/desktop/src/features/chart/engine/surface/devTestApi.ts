@@ -22,6 +22,7 @@ import {
   type PriceScaleReading,
 } from '../priceScale/priceScaleReadings';
 import type { ChartSizedLineAppearance } from './chartAppearance';
+import type { RenderViewport } from './overlayRenderer';
 import type { ChartScalesState } from './chartScalesAppearance';
 import type { ChartIndicatorPane } from '../indicators/indicatorContract';
 import type { IndicatorFrame } from '../indicators/indicatorFrame';
@@ -100,6 +101,8 @@ export interface DevTestApi {
   viewportChanges(): ViewportChangeRecord[];
   clearViewportChanges(): void;
   timeToX(timeMs: number): number;
+  /** The price's y in the price pane, in host CSS px; NaN while the price has no coordinate there. */
+  priceToY(price: number): number;
   tool(id: string): unknown;
   /** Every drawing the tools hold, in registry order, each stamped with its tool id. */
   drawings(): ChartDrawingRecord[];
@@ -211,6 +214,7 @@ interface DevTestApiSources {
   barStyle(): BarStyleSeriesState;
   visibleRange(): { from: number; to: number } | null;
   timeToX(timeMs: number): number;
+  priceToY(price: number): number;
   toolTestApi(id: string): unknown;
   drawings: ChartDrawings;
   indicatorLayer: IndicatorLayer;
@@ -233,6 +237,7 @@ interface DevTestReadings {
   getData(): readonly RenderBar[];
   visibleRange(): { from: number; to: number } | null;
   timeToX(timeMs: number): number;
+  viewport(): RenderViewport;
   crosshairStyle(): ChartSizedLineAppearance;
   scalesState(): ChartScalesState;
 }
@@ -301,6 +306,7 @@ function buildDevTestApi({
   barStyle,
   visibleRange,
   timeToX,
+  priceToY,
   toolTestApi,
   drawings,
   indicatorLayer,
@@ -320,6 +326,7 @@ function buildDevTestApi({
     viewportChanges: viewportChangeLog,
     clearViewportChanges: clearViewportChangeLog,
     timeToX,
+    priceToY,
     tool: toolTestApi,
     drawings: () => drawings.exportRecords(),
     shownDrawingSettings: () => drawings.shownDrawingSettings(),
@@ -378,6 +385,7 @@ export function installChartDevTestApi(
     barStyle: () => barStyle.barStyleState(),
     visibleRange: () => readings.visibleRange(),
     timeToX: (timeMs) => readings.timeToX(timeMs),
+    priceToY: (price) => readings.viewport().priceToY(price),
     toolTestApi: (id) => tools.toolTestApi(id),
     drawings: readings.drawings,
     indicatorLayer: readings.indicatorLayer,

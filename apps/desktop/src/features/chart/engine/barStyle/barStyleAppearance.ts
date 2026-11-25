@@ -1,7 +1,9 @@
+import type { ChartFootprintRequest } from '../../../../shared/bridge/types';
 import { DEFAULT_CANDLE_APPEARANCE, sameCandleAppearance, type CandleAppearance } from '../bars/candleAppearance';
 import type { BoxMethod } from './boxMethod';
 import type { PointFigureSource } from './pointFigureSource';
 import type { PriceSource } from './priceSource';
+import type { FootprintDisplay, FootprintType, FootprintValues } from './volumeFootprint/footprintModes';
 
 /** The widths a bar style's line is drawn with, which is the range the settings offer. */
 export type BarStyleLineWidth = 1 | 2 | 3 | 4;
@@ -156,6 +158,57 @@ export interface HighLowAppearance {
 }
 
 /**
+ * Each bar's exact footprint — a sell column, a buy column and a thin candle between them — which a custom series
+ * draws from the rows the host publishes for every bar it read whole. These settings are what the chart asks the
+ * host to compute its rows with, and what the bars' cells are drawn as.
+ */
+export interface VolumeFootprintAppearance {
+  readonly style: 'volumeFootprint';
+  readonly candles: CandleAppearance;
+  /** How wide one row is: the host's automatic ATR rows, or a count of the symbol's ticks. */
+  readonly rowSize: ChartFootprintRequest['rowSize'];
+  /** The share of a bar's volume its value area covers, in percent. */
+  readonly valueAreaPercent: number;
+  /** Whether the value area's rows are marked with a dotted line and a marker on each bar. */
+  readonly showValueArea: boolean;
+  /** The share of opposite volume a row needs to count as an imbalance, in percent. */
+  readonly imbalancePercent: number;
+  /** Whether each bar's cells are graded through its own range, instead of one shade per side. */
+  readonly gradient: boolean;
+  /** How the cells are placed: in two columns of their own, or in one they are scaled inside. */
+  readonly display: FootprintDisplay;
+  /** What the cells write: each side's own value, or what a level makes of both. */
+  readonly type: FootprintType;
+  /** The unit the cells count in: the volume each side traded, or the trades behind it. */
+  readonly values: FootprintValues;
+  /** The four shades the sell side's cells are graded through, lightest first. */
+  readonly sellShades: readonly string[];
+  /** The four shades the buy side's cells are graded through, lightest first. */
+  readonly buyShades: readonly string[];
+  /** Whether each bar writes the box under its columns holding its delta and the volume it traded. */
+  readonly showSummary: boolean;
+  /** Whether an imbalanced cell is marked on its outer edge, and the colours of the two sides' marks. */
+  readonly imbalanceHighlight: FootprintImbalanceHighlight;
+  /** Whether each bar's stacked imbalance zones are drawn, and how many consecutive imbalanced levels one collects. */
+  readonly stackedImbalance: FootprintStackedImbalance;
+  /** The colour the row a bar traded most at is drawn in, and whether it takes that colour. */
+  readonly poc: ToggledColor;
+}
+
+/** How many levels an imbalance needs to stack into a zone, and whether the zones are drawn. */
+export interface FootprintStackedImbalance {
+  readonly visible: boolean;
+  readonly count: number;
+}
+
+/** How an imbalanced footprint cell is marked: whether the marks are drawn, and each side's colour. */
+export interface FootprintImbalanceHighlight {
+  readonly visible: boolean;
+  readonly buyColor: string;
+  readonly sellColor: string;
+}
+
+/**
  * Point & figure columns: the backend turns the chart's candles into columns of X and O marks, which a custom
  * series prints on the box grid it reads back off the columns themselves.
  */
@@ -183,6 +236,7 @@ export type BarStyleAppearance =
   | CandleStyleAppearance
   | HollowCandlesAppearance
   | VolumeCandlesAppearance
+  | VolumeFootprintAppearance
   | HeikinAshiAppearance
   | RenkoAppearance
   | LineBreakAppearance
@@ -204,7 +258,7 @@ export type DrawnBarStyleAppearance = Exclude<BarStyleAppearance, { style: 'cand
 /** The appearances a custom series draws, each with a pane view of its own that no other style can swap into. */
 export type CustomBarStyleAppearance = Extract<
   DrawnBarStyleAppearance,
-  { style: 'highLow' | 'volumeCandles' | 'kagi' | 'pointFigure' }
+  { style: 'highLow' | 'volumeCandles' | 'volumeFootprint' | 'kagi' | 'pointFigure' }
 >;
 
 /** The appearances a library series type of its own draws. */
@@ -212,7 +266,13 @@ export type LibraryBarStyleAppearance = Exclude<DrawnBarStyleAppearance, CustomB
 
 /** Whether a custom series draws the style, which is the one thing a library series type cannot paint. */
 export function isCustomBarStyle(style: DrawnBarStyleAppearance['style']): style is CustomBarStyleAppearance['style'] {
-  return style === 'highLow' || style === 'volumeCandles' || style === 'kagi' || style === 'pointFigure';
+  return (
+    style === 'highLow' ||
+    style === 'volumeCandles' ||
+    style === 'volumeFootprint' ||
+    style === 'kagi' ||
+    style === 'pointFigure'
+  );
 }
 
 /** What the chart draws before any bar style setting arrives: the candles it has always drawn. */
@@ -260,6 +320,49 @@ function sameToggledColor(first: ToggledColor, second: ToggledColor): boolean {
 
 function sameVolumeCandlesAppearance(first: VolumeCandlesAppearance, second: VolumeCandlesAppearance): boolean {
   return sameCandleAppearance(first.candles, second.candles) && first.widthSensitivity === second.widthSensitivity;
+}
+
+/** Whether two row widths name the same rows: the same ATR length, or the same count of ticks. */
+function sameRowSize(
+  first: VolumeFootprintAppearance['rowSize'],
+  second: VolumeFootprintAppearance['rowSize'],
+): boolean {
+  if (first.kind === 'auto' && second.kind === 'auto') {
+    return first.atrLength === second.atrLength;
+  }
+  return first.kind === 'manual' && second.kind === 'manual' && first.ticksPerRow === second.ticksPerRow;
+}
+
+function sameImbalanceHighlight(first: FootprintImbalanceHighlight, second: FootprintImbalanceHighlight): boolean {
+  return first.visible === second.visible && first.buyColor === second.buyColor && first.sellColor === second.sellColor;
+}
+
+function sameStackedImbalance(first: FootprintStackedImbalance, second: FootprintStackedImbalance): boolean {
+  return first.visible === second.visible && first.count === second.count;
+}
+
+function sameShades(first: readonly string[], second: readonly string[]): boolean {
+  return first.length === second.length && first.every((shade, index) => shade === second[index]);
+}
+
+function sameVolumeFootprintAppearance(first: VolumeFootprintAppearance, second: VolumeFootprintAppearance): boolean {
+  return (
+    sameCandleAppearance(first.candles, second.candles) &&
+    sameRowSize(first.rowSize, second.rowSize) &&
+    first.valueAreaPercent === second.valueAreaPercent &&
+    first.showValueArea === second.showValueArea &&
+    first.imbalancePercent === second.imbalancePercent &&
+    first.gradient === second.gradient &&
+    first.display === second.display &&
+    first.type === second.type &&
+    first.values === second.values &&
+    sameShades(first.sellShades, second.sellShades) &&
+    sameShades(first.buyShades, second.buyShades) &&
+    first.showSummary === second.showSummary &&
+    sameImbalanceHighlight(first.imbalanceHighlight, second.imbalanceHighlight) &&
+    sameStackedImbalance(first.stackedImbalance, second.stackedImbalance) &&
+    sameToggledColor(first.poc, second.poc)
+  );
 }
 
 function sameHighLowAppearance(first: HighLowAppearance, second: HighLowAppearance): boolean {
@@ -364,6 +467,8 @@ export function sameBarStyleAppearance(first: BarStyleAppearance, second: BarSty
       return second.style === 'pointFigure' && samePointFigureAppearance(first, second);
     case 'volumeCandles':
       return second.style === 'volumeCandles' && sameVolumeCandlesAppearance(first, second);
+    case 'volumeFootprint':
+      return second.style === 'volumeFootprint' && sameVolumeFootprintAppearance(first, second);
     case 'bars':
       return second.style === 'bars' && sameBarsAppearance(first, second);
     case 'line':

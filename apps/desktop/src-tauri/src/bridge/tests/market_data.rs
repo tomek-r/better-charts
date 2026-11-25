@@ -1,4 +1,5 @@
 //! Quote acceptance and bar-update history mutation tests.
+use super::common::RecordedEvents;
 use super::*;
 
 #[test]
@@ -11,6 +12,7 @@ fn quote_acceptance_is_bound_to_current_session_and_market_symbol() {
         complete: true,
         candles: Vec::new(),
     };
+    let events: Arc<dyn BridgeEvents> = Arc::new(RecordedEvents::default());
     let quote = QuoteUpdate {
         symbol: "NAS100".into(),
         time_ms: 1,
@@ -21,9 +23,10 @@ fn quote_acceptance_is_bound_to_current_session_and_market_symbol() {
         volume_real: "0".into(),
         flags: 6,
     };
-    assert!(accept_quote(&state, "session-1", quote.clone()).is_some());
-    assert!(accept_quote(&state, "old-session", quote.clone()).is_none());
+    assert!(accept_quote(&events, &state, "session-1", quote.clone()).is_some());
+    assert!(accept_quote(&events, &state, "old-session", quote.clone()).is_none());
     assert!(accept_quote(
+        &events,
         &state,
         "session-1",
         QuoteUpdate {

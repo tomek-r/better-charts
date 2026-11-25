@@ -2,13 +2,16 @@ use super::{
     AccountView, ChartSelectionMemory, IndicatorSeriesState, IndicatorTicksState, MarketCandle,
     PortfolioView, QuoteView, SymbolCacheState, TickCacheController,
 };
+use crate::footprint_feed::FootprintFeed;
 use serde::{Deserialize, Serialize};
 use std::{
-    sync::{atomic::AtomicU64, Arc, Mutex},
+    collections::BTreeMap,
+    sync::{atomic::AtomicU64, Arc, Mutex, OnceLock},
     time::Duration,
 };
 use tauri::Emitter;
 use tokio::sync::watch;
+use trading_core::footprint::FootprintTick;
 use trading_core::protocol::{
     HistoryRequest, OrderCheckRequest, OrderCheckResult, RiskQuoteRequest, SymbolInfoRequest,
     SymbolSearchRequest, TickHistoryRequest, TickHistorySnapshot, PROTOCOL_VERSION,
@@ -226,6 +229,19 @@ pub(crate) fn tauri_events(app: &tauri::AppHandle) -> Arc<dyn BridgeEvents> {
     Arc::new(TauriBridgeEvents(app.clone()))
 }
 
+/// Seam over the trades the chart's bars hold. This build publishes the chart footprint itself; a
+/// build that adds another consumer of the same ticks — the host of a script engine, say — installs
+/// one in [`BridgeState::footprint_observer`], and the bridge then reads the chart's ticks for it and
+/// hands it every bar a read took whole. No observer is installed here.
+pub(crate) trait FootprintObserver: Send + Sync {
+    /// Whether the consumer needs the chart symbol's ticks at all: only then does the bridge read a
+    /// chart whose footprint is off.
+    fn needs_ticks(&self) -> bool;
+    /// The ticks read whole so far, keyed by the opening time of the bar they traded in. A bar no
+    /// read took whole is absent, so a consumer rows no footprint for it.
+    fn ticks_changed(&self, ticks: &BTreeMap<i64, Vec<FootprintTick>>);
+}
+
 /// Typed event emission that does not wait for delivery. Serialization or emit failures are
 /// ignored — exactly what the raw `AppHandle::emit` calls this replaces did.
 pub(crate) fn bridge_emit<T: serde::Serialize + Clone>(
@@ -250,6 +266,15 @@ pub(crate) struct BridgeState {
     pub(crate) transfer_limits: Arc<Mutex<trading_core::protocol::TransferLimits>>,
     pub(crate) tick_price_counts: Arc<Mutex<bool>>,
     pub(crate) market: Arc<Mutex<MarketSnapshot>>,
+    /// The trades the chart's bars hold: the chart symbol's raw ticks, read over the indicator ticks
+    /// route under reserved keys, plus the forming bar's live ticks.
+    pub(crate) footprint_feed: Arc<Mutex<FootprintFeed>>,
+    /// What the chart asked the host to publish a footprint for, with the row width resolved for it.
+    /// Off unless the chart turned it on.
+    pub(crate) chart_footprint: Arc<Mutex<crate::chart_footprint::ChartFootprintState>>,
+    /// Another build's consumer of the same ticks; unset here while the chart footprint publishes
+    /// them. See [`FootprintObserver`].
+    pub(crate) footprint_observer: Arc<OnceLock<Arc<dyn FootprintObserver>>>,
     /// Outlives every session: what a reconnect of the same account reopens.
     pub(crate) chart_selection: Arc<Mutex<ChartSelectionMemory>>,
     pub(crate) pending_history: Arc<Mutex<Option<HistoryRequest>>>,

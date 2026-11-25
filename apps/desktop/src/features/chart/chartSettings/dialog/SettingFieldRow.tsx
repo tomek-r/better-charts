@@ -3,13 +3,19 @@ import type { ChartSettingField, ChartSettingValue } from '../settingFields';
 import { BackgroundFillSettingRow, TextStyleSettingRow } from './settingRows/appearanceRows';
 import { CheckboxSettingRow } from './settingRows/checkboxRows';
 import {
+  ColorListSettingRow,
   ColorPairSettingRow,
   ColorSettingRow,
   ToggledColorPairSettingRow,
   ToggledColorSettingRow,
 } from './settingRows/colorRows';
 import { SizedLineSettingRow, ToggledLineSettingRow } from './settingRows/lineRows';
-import { BarCountSettingRow, DecimalSettingRow, PercentSettingRow } from './settingRows/numberRows';
+import {
+  BarCountSettingRow,
+  DecimalSettingRow,
+  PercentSettingRow,
+  WholeNumberSettingRow,
+} from './settingRows/numberRows';
 import { QuoteLinesSettingRow } from './settingRows/quoteRows';
 import { ChoiceSettingRow, LineWidthSettingRow } from './settingRows/selectRows';
 import type { SettingRowProps } from './settingRows/settingRowProps';
@@ -23,11 +29,13 @@ const SETTING_ROWS: {
   toggledColor: ToggledColorSettingRow,
   colorPair: ColorPairSettingRow,
   color: ColorSettingRow,
+  colorList: ColorListSettingRow,
   lineWidth: LineWidthSettingRow,
   choice: ChoiceSettingRow,
   percent: PercentSettingRow,
   barCount: BarCountSettingRow,
   decimal: DecimalSettingRow,
+  wholeNumber: WholeNumberSettingRow,
   toggledLine: ToggledLineSettingRow,
   sizedLine: SizedLineSettingRow,
   backgroundFill: BackgroundFillSettingRow,

@@ -2,10 +2,14 @@
 //! [`super::super::indicator_ticks`]): the raw tick pages and correlated errors
 //! of the requests it issued. They are matched by their `rust-indicator-ticks-`
 //! ids, so the tick profile's own stream, cache and events never see them.
+//!
+//! The host's own footprint reads travel the same route under their reserved keys: their answers
+//! fill the chart's feed and never reach the frontend.
 
 use super::super::{
-    bridge_emit, claim_for_session, log_warn, ticks_slots, Inbound, InboundOutcome,
-    IndicatorTickView, IndicatorTicksUnavailableView, IndicatorTicksView,
+    abandon_footprint_read, accept_footprint_page, bridge_emit, claim_for_session, log_warn,
+    ticks_slots, Inbound, InboundOutcome, IndicatorTickView, IndicatorTicksUnavailableView,
+    IndicatorTicksView,
 };
 use trading_core::protocol::{ErrorCode, TickHistorySnapshot};
 
@@ -22,6 +26,9 @@ pub(super) fn ticks_snapshot(
             ErrorCode::InvalidMessage,
             "invalid tick history snapshot",
         ));
+    }
+    if accept_footprint_page(inbound.state, inbound.events, &request.key, snapshot) {
+        return Some(InboundOutcome::Continue);
     }
     bridge_emit(
         inbound.events,
@@ -55,6 +62,11 @@ pub(super) fn ticks_error(
             "indicator ticks {} {} {}..{} failed: {message}",
             request.key, request.page.symbol, request.page.from_ms, request.page.to_ms
         ));
+        if abandon_footprint_read(inbound.state, inbound.events, &request.key) {
+            // No frontend waits for a reserved key: the bars each read took whole keep their
+            // footprints.
+            return;
+        }
         bridge_emit(
             inbound.events,
             "indicator-ticks-unavailable",

@@ -8,6 +8,7 @@ pub(crate) mod chart_selection;
 pub(crate) mod commands;
 pub(crate) mod connection;
 pub(crate) mod endpoint;
+pub(crate) mod footprint_ticks;
 pub(crate) mod handshake;
 pub(crate) mod inbound_control;
 pub(crate) mod inbound_execution;
@@ -32,6 +33,7 @@ use commands::*;
 #[cfg(test)]
 use connection::validate_bind_address;
 use connection::{Inbound, InboundOutcome};
+use footprint_ticks::*;
 use handshake::*;
 use inbound_control::*;
 use inbound_execution::*;

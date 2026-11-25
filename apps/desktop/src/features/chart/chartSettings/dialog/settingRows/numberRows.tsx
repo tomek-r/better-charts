@@ -66,3 +66,9 @@ export function DecimalSettingRow({ field, value, onChange }: SettingRowProps<'d
   const { range } = field;
   return <NumberRow field={field} range={range} step={range.step} whole={false} value={number} onChange={onChange} />;
 }
+
+/** A whole number a field counts, such as the bars an average spans: its own range, and no fraction. */
+export function WholeNumberSettingRow({ field, value, onChange }: SettingRowProps<'wholeNumber'>) {
+  const count = typeof value === 'number' ? value : field.defaultValue;
+  return <NumberRow field={field} range={field.range} value={count} onChange={onChange} />;
+}

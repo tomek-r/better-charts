@@ -1152,6 +1152,151 @@ reconciliation state, the dispatch gates, the tick profile and every other
 in-flight read keep running. An error with an uncorrelated id still fails closed
 as before.
 
+### Chart footprint (desktop route, no wire change)
+
+The chart can draw the footprint of its own bars. It asks the host for one
+with the read-only desktop command `set_chart_footprint(state, settings)`,
+where `settings` is `null` (off, the default) or:
+
+```json
+{"rowSize": {"kind": "auto", "atrLength": 14}, "vaPercent": 70, "imbalancePercent": 300}
+```
+
+`rowSize` is either `{"kind": "auto", "atrLength": n}` with `n` in `1..=500`,
+or `{"kind": "manual", "ticksPerRow": n}` with `n >= 1`; `vaPercent` is above 0
+and at most 100 and `imbalancePercent` is above 0. Both percentages read a JSON
+number or a decimal string, so the engine's exact decimals survive the
+boundary. Anything else is refused with its reason and changes nothing:
+`ticksPerRow must be at least 1`, `atrLength must be between 1 and 500`,
+`vaPercent must be greater than 0 and at most 100`, `imbalancePercent must be
+greater than 0`. No wire message is added — the command turns on the tick reads
+the indicator ticks route above serves, under reserved keys of its own, so a
+connected EA needs no change.
+
+**Reserved keys.** The reads are issued under two reserved keys of that route
+(no wire change): `chart-footprint` for the loaded window and
+`chart-footprint-live` for the chart's forming bar. Those requests are issued by
+the app itself, so their `tick_history_snapshot` answers are consumed by Rust
+and never published as `indicator-ticks`: they feed the chart footprint's own
+bars and forming bar instead. The keys obey the same rule, so a frontend key
+named `chart-footprint` or `chart-footprint-live` is not answered — the
+frontend's other keys are unaffected. The window read asks for the newest loaded
+bar's ticks first and works back to the oldest loaded bar, or until 500,000
+ticks are read, so a window deeper than that budget leaves its oldest bars
+without a footprint.
+
+A bar's footprint is computed from all of its ticks or not at all. A bar is kept
+only when every page covering it, from its open through its end, held its whole
+range; a bar the read stopped inside keeps no ticks and is left out, as a bar
+the read never reached is. The read stops inside a bar when one millisecond of
+it holds more ticks than a page, when the tick budget runs out inside it, or
+when a correlated error ends the read while it is paging through that bar.
+
+The forming bar also comes from MT5's tick history, never from the sampled
+quotes: each accepted `quote_update` of the chart symbol re-reads the forming
+bar's ticks to the broker's time (the latest heartbeat's
+`market_session.server_time_ms`, or the bar's own opening millisecond while none
+is known) under `chart-footprint-live`, at most once per 1,000 ms, and a whole
+re-read replaces the forming bar's ticks; the read starts at the bar's open, and
+once a whole one has covered the bar up to a millisecond M the next asks only
+from M — M included, because MT5 may still add ticks to it — and its whole
+answer replaces the bar's ticks from M on, while a re-read that does not come
+back whole (more ticks than one page, or a correlated error) drops the bar's
+ticks and the one after starts at the bar's open again. When the chart's forming
+bar changes, the bar that just closed is read once more to its own end — resuming
+from that same millisecond too — and then counts as complete. A new session or a
+change of the chart symbol drops both reads and the ticks they collected.
+
+Turning it on starts a read of the loaded window and re-reads the forming bar
+after each accepted quote of the chart symbol. A chart that asked for no
+footprint reads no ticks at all, and turning the chart footprint off starts no
+read and publishes nothing more.
+
+Two camelCase Tauri events carry the answer. `chart-footprint`:
+
+```json
+{
+  "symbol": "NAS100", "timeframe": "M1", "ticksPerRow": 12,
+  "bars": [
+    {
+      "openMs": 1769999940000, "volume": "real", "buyVolume": "12.5", "sellVolume": "9.0",
+      "buyTrades": 12, "sellTrades": 9,
+      "poc": 250001, "vah": 250004, "val": 249998,
+      "rows": [
+        {"row": 249998, "downPrice": "24999.8", "upPrice": "25000.0",
+         "buyVolume": "2.0", "sellVolume": "3.5", "buyTrades": 2,
+         "sellTrades": 3, "buyImbalance": false, "sellImbalance": false}
+      ]
+    }
+  ],
+  "incompleteBefore": 1769999880000, "incomplete": [1769999880000]
+}
+```
+
+`bars` holds one footprint per bar whose whole range a read covered, oldest
+first, and never a bar the read stopped inside: those are named, ascending, in
+`incomplete`, and `incompleteBefore` is the newest of them (`null` when the
+window was read whole), so the chart can say that ticks before that time are
+incomplete. Prices and volumes are decimal strings, as the wire carries them;
+`ticksPerRow`, `openMs`, the trade counts and `poc`, `vah` and `val` stay
+numbers. The event is published when the window read finishes — the window
+covered, the tick budget spent or the read stopped inside a bar, including a
+read a correlated error ended — and again whenever the bar the chart left
+behind lands complete. `rows` are the engine's own rows: contiguous price
+levels, each a whole number of `ticksPerRow` ticks of the symbol's mirrored
+tick size, with the volume each side traded, and `poc`, `vah` and `val` name
+rows by row number.
+
+Each row also carries `buyTrades` and `sellTrades`: the number of trades that
+side took in it. A trade is one tick the bar's trade-only rule counts — a bar
+where any tick reports a volume counts only the ticks that report one, and a bar
+where none does (forex) counts every tick — on the side its own tick flag names,
+or, for an unflagged tick, the side the tick rule gives it (above the previous
+price a buy, below it a sell, at the same price the previous trade's side), so a
+tick of two and a half lots is one trade and a row's trade counts are the ticks
+behind its volumes, not the volumes themselves. A bar's own `buyTrades` and
+`sellTrades` are the sums of its rows' counts, and a row no trade reached counts
+`0` on both sides. The four fields are additive: a consumer that writes volumes
+ignores them.
+
+`volume` is `real` when MT5 reports lots and `ticks` when no tick of the bar
+carries one and each tick counts as a trade. A bar the engine rows no level of
+— no trade it counts, every price beyond the tick grid — is left out, and a
+chart whose symbol the mirror has no tick size for publishes neither event.
+
+A manual row width is used as given. An automatic one is resolved by the host
+once when the chart footprint is turned on and again whenever the window is
+loaded (a symbol or timeframe change), never on a live tick:
+`ticksPerRow = max(1, round(0.2 × ATR(atrLength) / tickSize))`. The ATR is
+Wilder's average true range over the loaded window's candles — seeded with the
+mean of the first `atrLength` true ranges, then smoothed, and averaging the
+ranges the window has when it holds fewer — and `tickSize` is the mirrored tick
+size. That is the charting platform's documented automatic row size,
+`0.2 * NormalizedATR`, read as an ATR in the symbol's own ticks; how it
+normalizes is undocumented, so this is an approximation. A window without two
+readable bars, or a symbol the mirror has no tick size for, names one tick.
+
+`chart-footprint-forming`, published after each whole re-read of the forming
+bar:
+
+```json
+{
+  "symbol": "NAS100", "timeframe": "M1", "ticksPerRow": 12,
+  "bar": {"openMs": 1769999940000, "buyVolume": "2.0", "sellVolume": "3.5",
+          "buyTrades": 2, "sellTrades": 3, "poc": 249998, "vah": 249998,
+          "val": 249998, "volume": "real",
+          "rows": [{"row": 249998, "downPrice": "24999.8",
+                    "upPrice": "25000.0", "buyVolume": "2.0",
+                    "sellVolume": "3.5", "buyTrades": 2, "sellTrades": 3,
+                    "buyImbalance": false, "sellImbalance": false}]}
+}
+```
+
+`bar` is `null` while the host holds no whole ticks for the forming bar: after a
+re-read that did not come back whole, and at the moment the chart leaves the bar
+behind to read it to its end. Neither event is published while the chart
+footprint is off.
+
 ## Desktop tick-profile events
 
 These are camelCase Tauri events, not additional TCP message types. Sequential

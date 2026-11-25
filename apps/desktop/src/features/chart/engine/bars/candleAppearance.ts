@@ -85,6 +85,9 @@ export function candleSeriesColors(appearance: CandleAppearance) {
   };
 }
 
+/** The candle colours a series carries as its options, as the built-in candles take them. */
+export type CandleSeriesColors = ReturnType<typeof candleSeriesColors>;
+
 /**
  * The colours one bar overrides the series with. Its direction is read against the previous close,
  * and against its own open for the first bar, which has none.

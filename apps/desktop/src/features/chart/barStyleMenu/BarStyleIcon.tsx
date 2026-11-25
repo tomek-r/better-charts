@@ -54,6 +54,20 @@ function VolumeCandlesGlyph() {
   );
 }
 
+/** Volume footprint: a thin candle between two columns of volume cells, one row per price. */
+function VolumeFootprintGlyph() {
+  return (
+    <>
+      <path d="M13.5 4.5v2M13.5 17.5v2" />
+      <rect x="12.5" y="6.5" width="2" height="11" fill="currentColor" />
+      <rect x="5.5" y="7.5" width="6" height="4" />
+      <rect x="5.5" y="11.5" width="6" height="4" fill="currentColor" />
+      <rect x="16.5" y="7.5" width="6" height="4" fill="currentColor" />
+      <rect x="16.5" y="11.5" width="6" height="4" />
+    </>
+  );
+}
+
 /** Line: the closes joined by one line. */
 function LineGlyph() {
   return <path d={CLOSES_PATH} />;
@@ -180,6 +194,7 @@ const BAR_STYLE_GLYPHS: Readonly<Record<BarStyle, () => ReactNode>> = {
   candles: CandlesGlyph,
   hollowCandles: HollowCandlesGlyph,
   volumeCandles: VolumeCandlesGlyph,
+  volumeFootprint: VolumeFootprintGlyph,
   line: LineGlyph,
   lineWithMarkers: LineWithMarkersGlyph,
   stepLine: StepLineGlyph,

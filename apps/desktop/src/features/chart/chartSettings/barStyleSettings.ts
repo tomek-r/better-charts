@@ -15,6 +15,13 @@ import type {
   ToggledColorPairSettingField,
   ToggledColorSettingField,
 } from './settingFields';
+import {
+  FOOTPRINT_IMBALANCE_FIELDS,
+  FOOTPRINT_LABELS_FIELDS,
+  FOOTPRINT_SECTION_TITLES,
+  FOOTPRINT_VOLUME_FIELDS,
+  VOLUME_FOOTPRINT_FIELDS,
+} from './volumeFootprintSettings';
 
 type BarStyleSettingsSection = SettingsSectionFields;
 
@@ -125,6 +132,9 @@ const CANDLE_FIELDS: readonly ChartSettingField[] = [
 
 /** The candles' own fields, and how far the quietest body on screen narrows against the busiest one. */
 const VOLUME_CANDLES_FIELDS: readonly ChartSettingField[] = [...CANDLE_FIELDS, WIDTH_SENSITIVITY_FIELD];
+
+/** The volume footprint's own fields: the colours of the thin candle its bars draw, then every footprint row. */
+const VOLUME_FOOTPRINT_ALL_FIELDS: readonly ChartSettingField[] = [...CANDLE_FIELDS, ...VOLUME_FOOTPRINT_FIELDS];
 
 const BARS_FIELDS: readonly ChartSettingField[] = [
   COLOR_BY_PREVIOUS_CLOSE_FIELD,
@@ -368,6 +378,7 @@ export const BAR_STYLE_SETTINGS: Readonly<Record<BarStyle, BarStyleSettingsSecti
   candles: settingsSection('candles', CANDLE_FIELDS),
   hollowCandles: settingsSection('hollowCandles', CANDLE_FIELDS),
   volumeCandles: settingsSection('volumeCandles', VOLUME_CANDLES_FIELDS),
+  volumeFootprint: settingsSection('volumeFootprint', VOLUME_FOOTPRINT_ALL_FIELDS),
   line: settingsSection('line', LINE_FIELDS),
   lineWithMarkers: settingsSection('lineWithMarkers', LINE_FIELDS),
   stepLine: settingsSection('stepLine', LINE_FIELDS),
@@ -381,3 +392,15 @@ export const BAR_STYLE_SETTINGS: Readonly<Record<BarStyle, BarStyleSettingsSecti
   kagi: settingsSection('kagi', KAGI_FIELDS),
   pointFigure: settingsSection('pointFigure', POINT_FIGURE_FIELDS),
 };
+
+/** The footprint's three groups: the candle rows and its own settings, then its imbalance and label rows. */
+const VOLUME_FOOTPRINT_SECTIONS: readonly BarStyleSettingsSection[] = [
+  { title: FOOTPRINT_SECTION_TITLES[0], fields: [...CANDLE_FIELDS, ...FOOTPRINT_VOLUME_FIELDS] },
+  { title: FOOTPRINT_SECTION_TITLES[1], fields: FOOTPRINT_IMBALANCE_FIELDS },
+  { title: FOOTPRINT_SECTION_TITLES[2], fields: FOOTPRINT_LABELS_FIELDS },
+];
+
+/** The sections a style's settings dialog draws, in order: the footprint's three groups, or its one section. */
+export function barStyleSettingSections(style: BarStyle): readonly BarStyleSettingsSection[] {
+  return style === 'volumeFootprint' ? VOLUME_FOOTPRINT_SECTIONS : [BAR_STYLE_SETTINGS[style]];
+}

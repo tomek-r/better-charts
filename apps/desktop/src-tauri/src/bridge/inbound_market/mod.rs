@@ -221,7 +221,7 @@ pub(crate) async fn quote_update(inbound: &Inbound<'_>, message: Envelope) -> In
         Ok(value) => value,
         Err(_) => return InboundOutcome::Continue,
     };
-    if let Some(view) = accept_quote(inbound.state, inbound.session_id, quote) {
+    if let Some(view) = accept_quote(inbound.events, inbound.state, inbound.session_id, quote) {
         let _ = claim_for_session(inbound.state, inbound.session_id, || {
             bridge_emit(inbound.events, "quote-update", view);
         });

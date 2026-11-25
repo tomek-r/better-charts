@@ -4,11 +4,13 @@ mod app_settings;
 mod bridge;
 mod chart_database;
 mod chart_drawings;
+mod chart_footprint;
 mod chart_settings;
 mod chart_types;
 mod download_resources;
 mod execution_adapter;
 mod execution_journal;
+mod footprint_feed;
 mod mt5_backend;
 mod mt5_install;
 mod runtime_config;
@@ -30,6 +32,7 @@ use bridge::endpoint::BridgeEndpointControl;
 use bridge::state::BridgeState;
 use chart_database::open_chart_database;
 use chart_drawings::{load_chart_drawings, save_chart_drawings, ChartDrawingsState};
+use chart_footprint::set_chart_footprint;
 use chart_settings::{
     load_chart_layout, load_chart_settings, save_chart_setting_overrides, ChartSettingsState,
 };
@@ -179,6 +182,7 @@ pub fn run() {
             load_chart_layout,
             load_chart_settings,
             save_chart_setting_overrides,
+            set_chart_footprint,
             compute_chart_type_bars,
             get_execution_safety_status,
             get_execution_recovery_snapshot,

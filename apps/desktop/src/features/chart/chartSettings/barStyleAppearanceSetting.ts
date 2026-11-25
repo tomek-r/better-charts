@@ -29,6 +29,9 @@ import { candleAppearanceOf } from './candleAppearanceSetting';
 import type { BarStyleSettingValues } from './chartSettings';
 import { readSettingValue } from './settingFields';
 import { isSettingRecord } from './settingValueReaders';
+import { volumeFootprintAppearance } from './volumeFootprintAppearanceSetting';
+
+export { volumeFootprintAppearance };
 
 const COLOR_BY_PREVIOUS_CLOSE_KEY = 'colorByPreviousClose';
 const COLORS_KEY = 'colors';
@@ -366,6 +369,8 @@ export function barStyleAppearanceOf(style: BarStyle, values: BarStyleSettingVal
       return { style, candles: candleAppearanceOf(values) };
     case 'volumeCandles':
       return volumeCandlesAppearance(values);
+    case 'volumeFootprint':
+      return volumeFootprintAppearance(values);
     case 'heikinAshi':
       return { style, candles: candleAppearanceOf(values) };
     case 'renko':

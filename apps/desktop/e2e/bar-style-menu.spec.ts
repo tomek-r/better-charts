@@ -5,7 +5,7 @@ import { savedOverrides } from './helpers/savedOverrides';
 import { chartScopeKey, expectNoErrors, gotoWithStub } from './helpers/tauriStub';
 
 /**
- * The bar type picker in the chart header: the button beside the timeframes, the sixteen bar types it lists in
+ * The bar type picker in the chart header: the button beside the timeframes, the seventeen bar types it lists in
  * their groups, and the choice it saves with the chart's settings. The chart is read back through the DEV test
  * hook and through what the backend stored.
  */
@@ -22,6 +22,7 @@ const BAR_TYPE_LABELS = [
   'Candles',
   'Hollow candles',
   'Volume candles',
+  'Volume footprint',
   'Line',
   'Line with markers',
   'Step line',
@@ -49,7 +50,7 @@ async function pressOnChart(page: Page): Promise<void> {
   await page.mouse.click(host.x + host.width / 4, host.y + host.height / 2);
 }
 
-test('the trigger names the bar type, and the menu lists the sixteen in their groups', async ({ page }) => {
+test('the trigger names the bar type, and the menu lists the seventeen in their groups', async ({ page }) => {
   const collected = await gotoWithStub(page);
   await openChart(page);
   const trigger = barTypeTrigger(page);

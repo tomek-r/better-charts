@@ -1,5 +1,13 @@
 import { expect, type Page } from '@playwright/test';
-import type { BridgeStatus, BrokerSymbol, Candle, CommandUpdate, IndicatorTick } from '../../src/shared/bridge/types';
+import type {
+  BridgeStatus,
+  BrokerSymbol,
+  Candle,
+  ChartFootprintEvent,
+  ChartFootprintFormingEvent,
+  CommandUpdate,
+  IndicatorTick,
+} from '../../src/shared/bridge/types';
 import { STUB_NOW } from './stubClock';
 
 /**
@@ -36,6 +44,8 @@ import { STUB_NOW } from './stubClock';
  *  - `request_indicator_ticks`  → `indicator-ticks` event with the recorded ticks inside the
  *                              requested range, or `indicator-ticks-unavailable` after
  *                              `setIndicatorTicksUnavailable`
+ *  - `set_chart_footprint`   → answers null, records the call, and after an enable publishes the
+ *                              `chartFootprintEvent` / `chartFootprintFormingEvent` a spec recorded
  *  - `search_symbols`        → `symbol-search-result` event, answered from `brokerSymbols`
  *
  * Tests push further bridge events (`execution-command-update`,
@@ -148,6 +158,16 @@ export interface TauriStubOptions {
   chartSettingOverrides?: Record<string, object>;
   /** The settings of every chart's template; unset, the model's defaults, so the exchange time zone. */
   chartTemplateSettings?: object;
+  /**
+   * The window footprint `set_chart_footprint` publishes after the chart turns it on: the payload of
+   * `chart-footprint`, answered with the host's own bars as later renderer tests read them.
+   */
+  chartFootprintEvent?: ChartFootprintEvent;
+  /**
+   * The forming footprint `set_chart_footprint` publishes after the chart turns it on: the payload of
+   * `chart-footprint-forming`.
+   */
+  chartFootprintFormingEvent?: ChartFootprintFormingEvent;
 }
 
 /** One chart of the layout the backend answers with. */
@@ -584,6 +604,9 @@ export async function installTauriStub(
       request_order_check: 'reactive',
       request_history: 'reactive',
       request_history_page: 'reactive',
+      // The chart footprint: the host records the request and, once on, publishes what its tick read
+      // holds; the stub replays the payloads a spec recorded.
+      set_chart_footprint: 'reactive',
       request_indicator_series: 'reactive',
       request_indicator_ticks: 'reactive',
       ...opts.responses,
@@ -910,6 +933,22 @@ export async function installTauriStub(
             ticks: insideRange.slice(0, maxTicks),
           });
         }, opts.historyDelayMs ?? 0);
+        return null;
+      }
+      if (cmd === 'set_chart_footprint') {
+        // The call itself is in the invocation log; an enable answers with the payloads a spec
+        // recorded, asynchronously like the host's own reads, and a disable publishes nothing.
+        const enabled = args.settings !== null && args.settings !== undefined;
+        if (enabled) {
+          setTimeout(() => {
+            if (opts.chartFootprintEvent !== undefined) {
+              emit('chart-footprint', opts.chartFootprintEvent);
+            }
+            if (opts.chartFootprintFormingEvent !== undefined) {
+              emit('chart-footprint-forming', opts.chartFootprintFormingEvent);
+            }
+          }, 0);
+        }
         return null;
       }
       if (cmd === 'search_symbols') {

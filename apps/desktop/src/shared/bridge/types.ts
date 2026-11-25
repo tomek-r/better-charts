@@ -607,3 +607,89 @@ export interface Mt5RestartReport {
   /** True once MT5 was relaunched; the session itself arrives later as a bridge status. */
   restarted: boolean;
 }
+
+/** How wide one footprint row is: the chart's own count of the symbol's ticks, or the host's automatic one. */
+export type ChartFootprintRowSize = { kind: 'auto'; atrLength: number } | { kind: 'manual'; ticksPerRow: number };
+
+/**
+ * What the chart asks the host to publish a footprint of its own bars for, sent to `set_chart_footprint`. The two
+ * percentages travel as numbers, which the host's own request reader accepts.
+ */
+export interface ChartFootprintRequest {
+  rowSize: ChartFootprintRowSize;
+  /** The share of a bar's volume the value area covers, in percent: above 0, at most 100. */
+  vaPercent: number;
+  /** The percentage of opposite volume a row needs to count as an imbalance; above 0. */
+  imbalancePercent: number;
+}
+
+/**
+ * One price row of a bar's footprint: its row number, the price range it spans, the volume each side traded and the
+ * number of trades each side took. Prices and volumes are the decimal strings trading-core serializes; the
+ * chart-footprint adapter reads them into the numbers the renderer draws with.
+ */
+export interface ChartFootprintRow {
+  /** The row's number: the ticks `row * ticksPerRow` up to the next row's, negative below price zero. */
+  row: number;
+  downPrice: string;
+  upPrice: string;
+  buyVolume: string;
+  sellVolume: string;
+  /**
+   * The number of buy trades the row counted: one per tick of the bar the trade-only rule keeps, so a trade is a tick
+   * and not a lot of volume.
+   */
+  buyTrades: number;
+  /** The number of sell trades the row counted, by the same rule. */
+  sellTrades: number;
+  buyImbalance: boolean;
+  sellImbalance: boolean;
+}
+
+/** One bar's footprint, as the host computes it from all of the bar's ticks. */
+export interface BarFootprint {
+  /** The bar's opening time, epoch milliseconds. */
+  openMs: number;
+  /** The bar's rows, lowest price first, contiguous from the lowest price it reached to the highest. */
+  rows: ChartFootprintRow[];
+  buyVolume: string;
+  sellVolume: string;
+  /** The number of buy trades the bar counted, the sum of its rows' buy trades. */
+  buyTrades: number;
+  /** The number of sell trades the bar counted, the sum of its rows' sell trades. */
+  sellTrades: number;
+  /** The row with the largest total volume, as a row number; null when the bar traded nothing. */
+  poc: number | null;
+  /** The highest row of the value area, as a row number. */
+  vah: number | null;
+  /** The lowest row of the value area, as a row number. */
+  val: number | null;
+  /** Whether the volumes are the lots MT5 reports, or the trades it counts when it reports no volume. */
+  volume: 'real' | 'ticks';
+}
+
+/** Payload of `chart-footprint`: the loaded window's complete bars, oldest first. */
+export interface ChartFootprintEvent {
+  symbol: string;
+  timeframe: string;
+  /** The row width the host resolved, in the symbol's ticks. */
+  ticksPerRow: number;
+  /** One footprint per bar whose ticks the host read whole; a bar it did not is not listed. */
+  bars: BarFootprint[];
+  /**
+   * The opening time of the newest bar the host stopped reading inside, so the chart can say that
+   * ticks before it are incomplete; null when every bar of the window was read whole.
+   */
+  incompleteBefore: number | null;
+  /** The opening time of every bar the host stopped reading inside, ascending. */
+  incomplete: number[];
+}
+
+/** Payload of `chart-footprint-forming`: the forming bar after each whole re-read of its ticks. */
+export interface ChartFootprintFormingEvent {
+  symbol: string;
+  timeframe: string;
+  ticksPerRow: number;
+  /** The forming bar's footprint; null while the host holds no whole ticks for it. */
+  bar: BarFootprint | null;
+}

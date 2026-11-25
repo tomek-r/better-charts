@@ -311,6 +311,35 @@ box by ATR 14, fixed or percentage, and reversal 3. An ATR amount is the Wilder 
 the last bar and a percentage amount that share of the last close, each rounded to one
 significant figure.
 
+The host reads a footprint for the chart's own bars when the chart asks
+(`set_chart_footprint`, with a manual ticks-per-row or the automatic row size, value area
+and imbalance percentages validated at the boundary) and publishes `chart-footprint` for
+every bar whose whole range the tick read covered — complete bars only, oldest first, with
+the bars it stopped inside named apart in `incomplete` and `incompleteBefore` — and
+`chart-footprint-forming` after each whole re-read of the forming bar, `null` while it
+holds none. The automatic row size is `0.2 × ATR(atrLength) / tick size` in the symbol's
+ticks, resolved once per enable and per window load and documented as an approximation of
+the charting platform's undocumented normalization. Prices and volumes in both events are
+decimal strings, the way the wire carries them, and each row also carries its buy and sell
+trade counts, and each bar its totals. The reads reuse the indicator-ticks route under the
+reserved keys `chart-footprint` and `chart-footprint-live`, so a connected EA needs no
+change. Nothing is published while the footprint is off, and a chart that has not asked for
+one reads no tick.
+
+The `Volume footprint` bar style draws these rows. Its Symbol settings choose the row size
+(Auto with an ATR length, or Manual ticks per row), the display (Cluster, or Profile with
+cell widths proportional to their value), the type (Buy and Sell, Bid × Ask, Delta, Total
+or Ladder), the values (Volume or Trade count), the four-shade gradient of each side, the
+value area and its percentage, the imbalance percentage and highlight colours, stacked
+levels, POC and the summary. Changing the row size, value area or imbalance percentage
+sends a new request; the rest only redraws. The point of control and value area always
+come from the host's volume rows, even in Trade count mode. Entering the style zooms to
+120 px per bar and leaving it restores the previous spacing. A cell writes its number only
+when the measured text fits. Stacked levels mark every run of at least N consecutive rows
+imbalanced on one side as a band reaching right until a later bar's range touches it. The
+legend warns about the bars before the first complete read and says when volume is a tick
+count.
+
 The time zone is one of these settings: the footer clock and the dialog edit the same
 value. The old per-symbol saved time zones were not carried over.
 

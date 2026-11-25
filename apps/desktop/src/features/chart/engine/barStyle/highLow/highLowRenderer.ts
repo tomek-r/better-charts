@@ -1,6 +1,7 @@
 import type { CustomBarItemData, PaneRendererCustomData, PriceToCoordinateConverter, Time } from 'lightweight-charts';
 import { barBodyWidth, deviceBarBox, strokeBodyOutline } from '../barBodyWidth';
 import { CustomBarRenderer, type SeriesRenderingTarget, type VisibleBarIndices } from '../customBarRenderer';
+import { plottedVisibleBars } from '../customBarVisibleRange';
 import { HIGH_LOW_DEFAULT_OPTIONS, type HighLowOptions } from './highLowOptions';
 import type { HighLowPoint } from './highLowPoint';
 
@@ -33,21 +34,11 @@ function plottedHighLowBars(
   visibleBars: VisibleBarIndices,
   priceConverter: PriceToCoordinateConverter,
 ): HighLowGeometry[] {
-  const plotted: HighLowGeometry[] = [];
-  for (let index = visibleBars.from; index < visibleBars.to; index += 1) {
-    const bar = bars[index];
-    if (bar === undefined) {
-      continue;
-    }
-    const { high, low } = bar.originalData;
+  return plottedVisibleBars(bars, visibleBars, ({ high, low }, x) => {
     const highY = priceConverter(high);
     const lowY = priceConverter(low);
-    if (highY === null || lowY === null) {
-      continue;
-    }
-    plotted.push({ x: bar.x, high, low, highY, lowY });
-  }
-  return plotted;
+    return highY === null || lowY === null ? null : { x, high, low, highY, lowY };
+  });
 }
 
 /** Writes a price label, unless its bar is too narrow for the label not to reach its neighbours'. */

@@ -3,6 +3,7 @@ export const BAR_STYLES = [
   'candles',
   'hollowCandles',
   'volumeCandles',
+  'volumeFootprint',
   'line',
   'lineWithMarkers',
   'stepLine',
@@ -26,6 +27,7 @@ const BAR_STYLE_LABELS: Readonly<Record<BarStyle, string>> = {
   candles: 'Candles',
   hollowCandles: 'Hollow candles',
   volumeCandles: 'Volume candles',
+  volumeFootprint: 'Volume footprint',
   line: 'Line',
   lineWithMarkers: 'Line with markers',
   stepLine: 'Step line',
@@ -51,7 +53,13 @@ function barStyleOption(style: BarStyle): BarStyleOption {
 
 /** The menu's groups, in order; the last one holds the chart types, which the backend draws from the candles. */
 export const BAR_STYLE_GROUPS: readonly (readonly BarStyleOption[])[] = [
-  [barStyleOption('bars'), barStyleOption('candles'), barStyleOption('hollowCandles'), barStyleOption('volumeCandles')],
+  [
+    barStyleOption('bars'),
+    barStyleOption('candles'),
+    barStyleOption('hollowCandles'),
+    barStyleOption('volumeCandles'),
+    barStyleOption('volumeFootprint'),
+  ],
   [barStyleOption('line'), barStyleOption('lineWithMarkers'), barStyleOption('stepLine')],
   [barStyleOption('area'), barStyleOption('baseline')],
   [barStyleOption('columns'), barStyleOption('highLow')],

@@ -131,6 +131,16 @@ export class ViewportController {
   }
 
   /**
+   * The pane's zoom, in host CSS px per bar. While a write is queued the library
+   * has not applied it yet, so this answers with the spacing the write will
+   * produce, for the same reason as `visibleRange`: a caller in the same task (a
+   * footprint zoom after a reset) must not decide against the zoom being replaced.
+   */
+  barSpacing(): number {
+    return this.queuedWrite?.barSpacing ?? this.chart.timeScale().options().barSpacing;
+  }
+
+  /**
    * The library applies `applyOptions` and `setVisibleLogicalRange` at its next
    * paint, not when they are called. The paint callback was registered by that
    * write, so the frame registered here runs after it, once the write has landed.
@@ -204,7 +214,8 @@ export class ViewportController {
       range: this.visibleRange(),
       barCount: this.data.bars.length,
       futureCount: this.futureCount,
-      barSpacing: this.chart.timeScale().options().barSpacing,
+      // The queued write's spacing, as visibleRange() reads its range: the library applies it at its next paint.
+      barSpacing: this.barSpacing(),
       following: this.isFollowing(),
     };
   }
