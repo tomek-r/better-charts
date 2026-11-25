@@ -1251,13 +1251,18 @@ Each row also carries `buyTrades` and `sellTrades`: the number of trades that
 side took in it. A trade is one tick the bar's trade-only rule counts — a bar
 where any tick reports a volume counts only the ticks that report one, and a bar
 where none does (forex) counts every tick — on the side its own tick flag names,
-or, for an unflagged tick, the side the tick rule gives it (above the previous
+or, for a tick flagged neither or both ways, the side the tick rule gives it (above the previous
 price a buy, below it a sell, at the same price the previous trade's side), so a
 tick of two and a half lots is one trade and a row's trade counts are the ticks
 behind its volumes, not the volumes themselves. A bar's own `buyTrades` and
 `sellTrades` are the sums of its rows' counts, and a row no trade reached counts
 `0` on both sides. The four fields are additive: a consumer that writes volumes
 ignores them.
+
+A tick trades at its last price; a tick without one (a CFD or forex quote) trades at
+the mid of its bid and ask, or at its bid when it has no ask. Some CFD feeds set
+both MT5 side flags (`TICK_FLAG_BUY` and `TICK_FLAG_SELL`) on every quote, which
+names no side, so the tick rule decides those ticks too.
 
 `volume` is `real` when MT5 reports lots and `ticks` when no tick of the bar
 carries one and each tick counts as a trade. A bar the engine rows no level of

@@ -110,9 +110,20 @@ pub(crate) fn to_trade_tick(tick: &MarketTick) -> Option<FootprintTick> {
     ))
 }
 
-/// The price the tick traded at: the last price when the broker reports one, the bid otherwise.
+/// The price the tick traded at: the last price when the broker reports one. A quote-only feed (CFDs,
+/// forex) reports none, so its tick trades at the mid price, which moves whichever side re-quotes and
+/// so gives the tick rule a change to read; without an ask the bid stands in.
 fn traded_price(tick: &MarketTick) -> Option<Decimal> {
-    positive_decimal(&tick.last).or_else(|| positive_decimal(&tick.bid))
+    positive_decimal(&tick.last).or_else(|| mid_price(tick))
+}
+
+/// The mid of the tick's bid and ask when both are positive, the bid alone when only it is.
+fn mid_price(tick: &MarketTick) -> Option<Decimal> {
+    let bid = positive_decimal(&tick.bid)?;
+    let Some(ask) = positive_decimal(&tick.ask) else {
+        return Some(bid);
+    };
+    Some((bid + ask) / Decimal::TWO)
 }
 
 /// The volume the tick moved: the real volume when the symbol reports one, the tick count otherwise,

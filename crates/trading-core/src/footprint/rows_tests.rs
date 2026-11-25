@@ -403,3 +403,31 @@ fn the_flags_name_the_side_the_feed_reports() {
         }
     );
 }
+
+/// MT5's flags of a quote tick on a feed that marks both sides on every tick: BID | ASK | BUY | SELL.
+const BOTH_SIDES_QUOTE_FLAGS: u32 = 2 | 4 | TICK_FLAG_BUY | TICK_FLAG_SELL;
+
+#[test]
+fn a_tick_flagged_both_ways_names_no_side_and_the_tick_rule_decides_it() {
+    assert_eq!(
+        TickSide::from_flags(TICK_FLAG_BUY | TICK_FLAG_SELL),
+        TickSide::Unknown
+    );
+    assert_eq!(
+        TickSide::from_flags(BOTH_SIDES_QUOTE_FLAGS),
+        TickSide::Unknown
+    );
+    // A falling price after the first trade: the tick rule makes the second a sell.
+    let ticks = [
+        FootprintTick::from_flags(1, decimal("2.0"), decimal("0"), BOTH_SIDES_QUOTE_FLAGS),
+        FootprintTick::from_flags(2, decimal("1.0"), decimal("0"), BOTH_SIDES_QUOTE_FLAGS),
+    ];
+    let rows = footprint_rows(&ticks, ONE_TICK_ROW, half_tick());
+    let sold: Decimal = rows.iter().map(|row| row.sell_volume).sum();
+    let bought: Decimal = rows.iter().map(|row| row.buy_volume).sum();
+    assert_eq!(
+        (bought, sold),
+        (decimal("1"), decimal("1")),
+        "one uptick buy, one downtick sell"
+    );
+}

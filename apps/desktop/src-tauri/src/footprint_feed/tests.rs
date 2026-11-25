@@ -1050,3 +1050,36 @@ fn a_live_read_costs_one_page_while_it_fits() {
         "the live read is a one-bar window"
     );
 }
+
+#[test]
+fn a_quote_tick_trades_at_the_mid_price_and_the_bid_stands_in_without_an_ask() {
+    let quote = MarketTick {
+        bid: "25657.69".to_string(),
+        ask: "25658.99".to_string(),
+        last: "0".to_string(),
+        ..wire_tick(1, "0", "0", 0)
+    };
+    assert_eq!(
+        to_trade_tick(&quote).map(|trade| trade.price),
+        Some(dec("25658.34")),
+        "a tick without a last price trades between its bid and its ask"
+    );
+    let bid_only = MarketTick {
+        ask: "0".to_string(),
+        ..quote.clone()
+    };
+    assert_eq!(
+        to_trade_tick(&bid_only).map(|trade| trade.price),
+        Some(dec("25657.69")),
+        "without an ask the bid names the price"
+    );
+}
+
+#[test]
+fn a_tick_flagged_both_ways_converts_with_no_side_of_its_own() {
+    let tick = wire_tick(1, "1.5", "0", 2 | 4 | TICK_FLAG_BUY | TICK_FLAG_SELL);
+    assert_eq!(
+        to_trade_tick(&tick).map(|trade| trade.side),
+        Some(TickSide::Unknown)
+    );
+}
