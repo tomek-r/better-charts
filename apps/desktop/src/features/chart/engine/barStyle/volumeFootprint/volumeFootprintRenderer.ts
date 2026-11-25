@@ -10,9 +10,10 @@ import type { BarFootprint, ChartFootprintRow } from './footprintData';
 import {
   FOOTPRINT_FONT_SIZE,
   footprintBarColumns,
-  footprintCellBox,
   footprintCellShowsText,
   footprintProfileBox,
+  footprintRowBox,
+  footprintRowGapBox,
   footprintTextAlignOf,
   footprintTextX,
   type FootprintBarColumns,
@@ -66,6 +67,15 @@ interface FootprintBar {
 interface FootprintMarks {
   readonly texts: FootprintTextMark[];
   readonly valueAreas: FootprintValueAreaMark[];
+}
+
+/**
+ * The two boxes one cell covers: the one it is filled in and writes its number in, which stops a row gap above the
+ * row below, and the whole row, which its imbalance marks span.
+ */
+interface FootprintCellBoxes {
+  readonly cell: FootprintCellBox;
+  readonly row: FootprintCellBox;
 }
 
 /** One stacked zone placed on the pane: the media x it starts at and the one it ends at, null for the pane's edge. */
@@ -154,8 +164,12 @@ function paintImbalanceMark(paint: FootprintPaint, box: FootprintCellBox, side: 
   paint.context.fillRect(mark.left, mark.top, mark.width, mark.height);
 }
 
-/** Paints one cell: its fill, the number it writes against its column's inner edge and the marks on its edges. */
-function paintCell(paint: FootprintPaint, cell: FootprintCell, box: FootprintCellBox, marks: FootprintMarks): void {
+/**
+ * Paints one cell: its fill, the number it writes against its column's inner edge and the marks on its edges. The
+ * marks span the cell's whole row, so they stay on the row's prices rather than stopping at its box's lower edge.
+ */
+function paintCell(paint: FootprintPaint, cell: FootprintCell, boxes: FootprintCellBoxes, marks: FootprintMarks): void {
+  const box = boxes.cell;
   paint.context.fillStyle = cell.fill;
   paint.context.fillRect(box.left, box.top, box.width, box.height);
   if (footprintCellShowsText(box, cell.text, paint, paint.textWidth)) {
@@ -169,7 +183,7 @@ function paintCell(paint: FootprintPaint, cell: FootprintCell, box: FootprintCel
     });
   }
   for (const side of cell.marks) {
-    paintImbalanceMark(paint, box, side);
+    paintImbalanceMark(paint, boxes.row, side);
   }
 }
 
@@ -187,21 +201,28 @@ function paintFootprintCells(
       continue;
     }
     for (const cell of cells) {
-      paintCell(paint, cell, cellBox(paint, cell, columns, topY, bottomY), marks);
+      paintCell(paint, cell, cellBoxes(paint, cell, columns, topY, bottomY), marks);
     }
   }
 }
 
-/** The box one cell covers: its column between the row's two prices, narrowed to the share a profile cell takes. */
-function cellBox(
+/**
+ * The boxes one cell covers: its column between the row's two prices, narrowed to the share a profile cell takes —
+ * the whole row, and the cell's own box, which leaves the row gap under it.
+ */
+function cellBoxes(
   paint: FootprintPaint,
   cell: FootprintCell,
   columns: FootprintBarColumns,
   topY: number,
   bottomY: number,
-): FootprintCellBox {
-  const box = footprintCellBox(columns[cell.column], topY, bottomY, paint.verticalPixelRatio);
-  return footprintProfileBox(box, cell.widthShare, cell.column);
+): FootprintCellBoxes {
+  const row = footprintProfileBox(
+    footprintRowBox(columns[cell.column], topY, bottomY, paint.verticalPixelRatio),
+    cell.widthShare,
+    cell.column,
+  );
+  return { cell: footprintRowGapBox(row, paint.verticalPixelRatio), row };
 }
 
 /** The media y of one value area line: the top of the VAH row, or the bottom of the VAL row. */
@@ -265,30 +286,43 @@ function paintSummary(
   marks.texts.push(...summary.texts);
 }
 
+/**
+ * The columns of the bar at the media x `x`: the layout the appearance's type asks for, at the body's full width, so
+ * every caller reads the same columns — the capped ones, centred on the bar's own x.
+ */
+function barColumns(paint: FootprintPaint, x: number): FootprintBarColumns {
+  return footprintBarColumns(x, paint.fullWidth, paint.horizontalPixelRatio, footprintLayoutOf(paint.options.type));
+}
+
 /** The media x the thin candle is drawn on: the middle of its own column, which the layout has placed for it. */
 function candleCentreX(paint: FootprintPaint, columns: FootprintBarColumns): number {
   return (columns.candle.left + columns.candle.width / 2) / paint.horizontalPixelRatio;
 }
 
-/** The device x of the right edge of a bar's body centred on the media x `x`. */
-function bodyRightEdge(x: number, fullWidth: number, horizontalPixelRatio: number): number {
-  return Math.round(x * horizontalPixelRatio) - Math.floor(fullWidth / 2) + fullWidth;
+/**
+ * The device x of the right edge of the columns a bar at the media x `x` draws: the buy column's right edge, which a
+ * group narrower than its body, its columns capped, stops at rather than reaching the body's own right edge.
+ */
+function groupRightEdge(paint: FootprintPaint, x: number): number {
+  const columns = barColumns(paint, x);
+  return columns.buy.left + columns.buy.width;
 }
 
-/** The device box one zone's band covers: its price range, from its bar's right edge to the bar that ends it. */
+/** The device box one zone's band covers: its price range, from the right edge of its bar's columns to its end bar. */
 function stackedZoneBox(paint: FootprintPaint, zone: PlacedStackedZone, paneWidth: number): FootprintCellBox | null {
   const topY = paint.priceConverter(zone.upPrice);
   const bottomY = paint.priceConverter(zone.downPrice);
   if (topY === null || bottomY === null) {
     return null;
   }
-  const left = bodyRightEdge(zone.startX, paint.fullWidth, paint.horizontalPixelRatio);
+  const left = groupRightEdge(paint, zone.startX);
   const right = zone.endX === null ? paneWidth : Math.round(zone.endX * paint.horizontalPixelRatio);
   // A zone that ends before it starts, or left of the pane, paints nothing at all.
   if (right <= left || right <= 0) {
     return null;
   }
-  return footprintCellBox({ left, width: right - left }, topY, bottomY, paint.verticalPixelRatio);
+  // A zone spans whole rows rather than sitting in one, so it keeps the whole band and no row gap under it.
+  return footprintRowBox({ left, width: right - left }, topY, bottomY, paint.verticalPixelRatio);
 }
 
 /** Paints one zone: its side's colour a fifth strong, edged on its top and bottom by the full colour. */
@@ -318,12 +352,7 @@ function paintFootprintBar(paint: FootprintPaint, bar: FootprintBar, marks: Foot
     paintCandle(paint.context, bar.x, paint.fullWidth, bar.prices, style, paint);
     return;
   }
-  const columns = footprintBarColumns(
-    bar.x,
-    paint.fullWidth,
-    paint.horizontalPixelRatio,
-    footprintLayoutOf(paint.options.type),
-  );
+  const columns = barColumns(paint, bar.x);
   paintFootprintCells(paint, footprint, columns, marks);
   paintCandle(paint.context, candleCentreX(paint, columns), columns.candle.width, bar.prices, style, paint);
   paintValueArea(paint, footprint, columns, marks);

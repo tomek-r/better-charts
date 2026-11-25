@@ -5,7 +5,7 @@ import type { BarStyleAppearance } from '../barStyleAppearance';
  * the buy column share the bar's body width, so at the default spacing each of them is a couple of pixels
  * wide and nothing in them can be read; a bar this wide leaves every column room for its volume.
  */
-export const FOOTPRINT_BAR_SPACING = 120;
+export const FOOTPRINT_BAR_SPACING = 160;
 
 /** Two spacings this close are the same zoom: the library reports back the spacing it applied. */
 const SPACING_TOLERANCE = 0.5;
