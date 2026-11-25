@@ -10,6 +10,7 @@ import {
   withIndicatorMoved,
   withIndicatorPaneHeights,
   withIndicatorSettings,
+  withPricePaneOrder,
   withoutIndicator,
 } from './savedIndicatorEdits';
 
@@ -47,6 +48,11 @@ export interface IndicatorRowCommands {
    * the chart paints the first of them over the ones under it.
    */
   readonly moveIndicatorRow: (movedInstanceId: string, targetInstanceId: string) => void;
+  /**
+   * Puts the price-pane indicators in the given top-to-bottom order and names how many of them paint over the price
+   * bars, which is what the object tree's rows say once one of them crosses the bars row.
+   */
+  readonly setPricePaneOrder: (order: readonly string[], aboveBars: number) => void;
 }
 
 /** What the settings dialog does to one saved indicator: OK saves its settings, while a preview only shows them. */
@@ -88,6 +94,8 @@ export function useIndicatorRowCommands(): IndicatorRowCommands {
             withIndicatorMoved(saved, movedInstanceId, targetInstanceId),
           ),
         ),
+      setPricePaneOrder: (order, aboveBars) =>
+        keep(withEditedIndicators(latestSettings.current, (saved) => withPricePaneOrder(saved, order, aboveBars))),
     }),
     [keep, latestSettings],
   );

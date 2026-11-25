@@ -337,8 +337,7 @@ come from the host's volume rows, even in Trade count mode. Entering the style z
 120 px per bar and leaving it restores the previous spacing. A cell writes its number only
 when the measured text fits. Stacked levels mark every run of at least N consecutive rows
 imbalanced on one side as a band reaching right until a later bar's range touches it. The
-legend warns about the bars before the first complete read and says when volume is a tick
-count.
+legend warns about the bars before the first complete read.
 
 The time zone is one of these settings: the footer clock and the dialog edit the same
 value. The old per-symbol saved time zones were not carried over.
@@ -395,11 +394,12 @@ they label — while the drawings and indicators stay; the row then keeps its cr
 sight and its dimmed name. The choice is saved per chart, account and symbol among the chart's
 settings overrides, so the chart opens hidden again. Any row, the bars row included, drags
 with the mouse or moves with Alt+ArrowUp / Alt+ArrowDown to change the order: the top row
-paints on top, and drawings listed below the bars row paint under the candles. The order and
-each drawing's side of the bars are saved. A locked or hidden drawing keeps its toggle in
-sight, and a hidden row's name is dimmed while the row stays listed and clickable. The dialog
-is the same one the floating toolbar opens, held by one provider above the chart and the tree.
-The tree keeps no data window and no toolbar of its own (owner decision).
+paints on top, a drawing listed below the bars row paints under the candles, and a price-pane
+indicator listed above the bars row paints over the candles while one listed under it paints
+under them. The order and each drawing's side of the bars are saved. A locked or hidden drawing
+keeps its toggle in sight, and a hidden row's name is dimmed while the row stays listed and
+clickable. The dialog is the same one the floating toolbar opens, held by one provider above the
+chart and the tree. The tree keeps no data window and no toolbar of its own (owner decision).
 
 ## Chart indicators
 
@@ -469,8 +469,10 @@ scale, and the columns stand on the pane's foot.
 
 Attached indicators are saved per chart, account and symbol in the chart's settings overrides
 (id, indicator id, the settings the user changed, and `hidden: true` while hidden), so they
-come back when that chart opens. An entry that does not read is dropped, and one this build
-does not know stays saved and draws nothing.
+come back when that chart opens. A price-pane indicator also saves `belowBars: true` while the
+object tree lists it under the price bars, and every document saved without that field keeps it
+over the candles, where the chart has always painted it. An entry that does not read is dropped,
+and one this build does not know stays saved and draws nothing.
 
 The OHLC line writes the four values of the bar under the pointer, or of the last bar while the
 pointer is off the chart or over no bar, in that bar's body colour as it is drawn, following the
@@ -511,20 +513,24 @@ The Indicators dialog sits at a fixed offset from the top of the window, like th
 dialogs.
 
 The Object tree groups its rows by chart pane, as TradingView's object tree does: a divider
-separates the groups, which carry no visible heading. The first group holds the drawings, the
-price bars and, under them, the price-pane indicators by their legend names; then comes one group
-per indicator with a pane of its own (RSI, MACD, Volume), in the order those panes stand under the
+separates the groups, which carry no visible heading. The first group holds every row of the price
+pane in one list, topmost first: the drawings, the price-pane indicators by their legend names and
+the price bars among them, so the bars row marks where the candles stand; then comes one group per
+indicator with a pane of its own (RSI, MACD, Volume), in the order those panes stand under the
 price pane, each holding that indicator's row. A row's buttons open the indicator's settings, hide
 or show it and remove it, and a double click or Delete on its name does the same as in a drawing
 row. A right press on a row opens the indicator's actions menu at the pointer, the menu the
 legend row's More button opens less its Object tree row, which would point back at the drawer the
 row is already in, and Escape closes it and gives the focus back to the row's name.
-The price-pane indicator rows keep the saved order, the top one painting over the ones under
-it: a drag, or Alt+ArrowUp / Alt+ArrowDown on a focused row, moves one indicator among its pane's
-rows, keeps the focus on it, saves the new order and repaints the chart in it, so a reload keeps
-the order. The actions menu's four paint-order commands move an indicator to the first, the last or
-the row beside it among those rows and save the same order. Own-pane groups keep their order, and
-indicator rows never move into the drawings list.
+The price-pane rows keep the saved order, the top one painting over the ones under it: a drag, or
+Alt+ArrowUp / Alt+ArrowDown on a focused row, moves one row among its pane's rows, keeps the focus
+on it, saves the new order and repaints the chart in it, so a reload keeps the order. A row crossed
+over the bars row paints over the candles and one crossed under it paints under them: a drag of the
+bars row onto an indicator row, or Alt+Arrow on either of them, moves the two past each other, and
+the chart paints the price-pane indicators the rows list over the bars row over the candles and the
+rest under them. The actions menu's four paint-order commands move an indicator to the first, the
+last or the row beside it among those rows and save the same order. Own-pane groups keep their
+order, and a row of a pane of its own never crosses the price bars or leaves its group.
 A click on a row selects that indicator, and so does a click on its plotted lines, markers or
 columns: within 4 CSS pixels of the ink a plot draws in the pane it draws in. Either way the row is
 highlighted like a selected drawing row, the chart frames its legend row with its buttons in sight,

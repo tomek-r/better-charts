@@ -1,7 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
+import { barBodyWidth } from '../src/features/chart/engine/barStyle/barBodyWidth';
 import { FOOTPRINT_BAR_SPACING } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintZoom';
+import { footprintBarColumns } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintGeometry';
+import { IMBALANCE_MARK_SPACE } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintImbalance';
 import { FOOTPRINT_NEUTRAL_COLOR } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintShades';
-import type { ChartFootprintEvent, ChartFootprintRow, Candle } from '../src/shared/bridge/types';
+import { VALUE_AREA_OVERHANG } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintValueArea';
+import type {
+  ChartFootprintEvent,
+  ChartFootprintFormingEvent,
+  ChartFootprintRow,
+  Candle,
+} from '../src/shared/bridge/types';
 import { palette } from '../src/shared/theme/palette';
 import { waitTwoAnimationFrames } from './helpers/animationFrames';
 import { openChartSettingsTab } from './helpers/chartSettingsDialog';
@@ -23,6 +32,7 @@ import {
   chartScopeKey,
   expectNoErrors,
   gotoWithStub,
+  pushEvent,
   STUB_M5_INTERVAL_MS,
   STUB_NOW,
   stubInvocations,
@@ -31,9 +41,9 @@ import {
 
 /**
  * The volume footprint bar style on a live chart: the host's chart footprint follows the style, the bars'
- * footprints reach the custom series, a bar the host holds none for keeps drawing as a plain candle, and
- * the totals, delta box, imbalance marks and legend notice are painted. The Symbol tab edits what the cells
- * write, and a setting the host computes rows with reaches it at once.
+ * footprints reach the custom series, a bar the host holds none for draws the footprint bars' own thin candle on
+ * its column, and the totals, delta box, imbalance marks and legend notice are painted. The Symbol tab edits what
+ * the cells write, and a setting the host computes rows with reaches it at once.
  */
 
 /** The account the stub's bridge status and account snapshot both report. */
@@ -50,8 +60,11 @@ const DEFAULT_FOOTPRINT_REQUEST = {
 const NEWEST_BAR_OPEN_MS = STUB_NOW - STUB_M5_INTERVAL_MS;
 /** The row width the fixture's host resolved, in the symbol's ticks. */
 const TICKS_PER_ROW = 20;
-/** The prices the fixture's rows span, lowest first: a band inside the newest bar of the window. */
-const ROW_PRICES = [1.0844, 1.0848, 1.0852];
+/**
+ * The prices the fixture's rows span, lowest first: the range the newest bar of the window opened and closed on, so
+ * that bar's own candle body paints across every row.
+ */
+const ROW_PRICES = [1.0852, 1.0853, 1.0854];
 /** The volume every fixture row traded, so all of a side's cells take the same shade. */
 const ROW_VOLUME = 480;
 /** The trades behind each side of a fixture row's volume, one trade per ten lots. */
@@ -69,6 +82,8 @@ const MIN_CELL_RUN = 6;
 const SELL_TOTAL = parseHexColor('#F23645');
 const BUY_TOTAL = parseHexColor('#089981');
 const DELTA_NEUTRAL = parseHexColor('#c4c9d0');
+/** The value area's dotted lines share the neutral delta's colour, palette.textTertiary, and so does their marker. */
+const VALUE_AREA_LINE = DELTA_NEUTRAL;
 /** The colour of the imbalance mark each side's cells are marked with. */
 const SELL_IMBALANCE = parseHexColor('#F23645');
 const BUY_IMBALANCE = parseHexColor('#089981');
@@ -89,6 +104,30 @@ const MIN_ZONE_FILL_SHARE = 0.15;
 const MIN_ZONE_EDGE_RUN = 20;
 /** How far past its rows a zone's top and bottom edges paint, in css px, which the suite's pixel ratio keeps. */
 const ZONE_EDGE_MARGIN = 2;
+/** The body one footprint bar is drawn at, in css px: four fifths of its spacing, at the suite's pixel ratio. */
+const BAR_BODY_WIDTH = barBodyWidth(FOOTPRINT_BAR_SPACING, 1);
+/** How few css px of background the reference leaves between the candle body and either column. */
+const MIN_CANDLE_GAP = 5;
+/** The device pixels one css px of the suite's screenshots covers, which Playwright keeps at its default ratio. */
+const PANE_PIXEL_RATIO = 1;
+/** The milliseconds in a second, which turns a point's bar time into the ms the chart's time hook takes. */
+const MS_PER_SECOND = 1000;
+/** How many device px tall a candle body is read at least, so the row read across its middle lies inside it. */
+const MIN_BODY_HEIGHT = 3;
+/** How far into a cell row the gap is read, in css px, clear of the number written in the middle of the cell. */
+const CELL_ROW_INSET = 4;
+/** The one device px a dot of a value area line paints, in css px, which only a dotted line paints as a run. */
+const VALUE_AREA_DASH_RUN = 1;
+/** The pitch of the value area line's dot pattern, in css px: one dot drawn, two clear, then the next dot. */
+const VALUE_AREA_DOT_PITCH = 3;
+/** The dots one bar's value area line paints, a shade under the forty-six its 136 device px span counts. */
+const MIN_VALUE_AREA_DASHES = 40;
+/** The rows either side of the value area line's own that a read covers, in css px, so a rounding still lands in. */
+const VALUE_AREA_ROW_SLACK = 2;
+/** A solid line would paint a run this long across the bar, which a dot pattern never reaches. */
+const SOLID_LINE_RUN = 16;
+/** The share of the bar body the line's dots reach across, which the overhang past both columns carries it past. */
+const MIN_VALUE_AREA_SPREAD_SHARE = 1;
 /** The month and weekday names the chart's default time labels write. */
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -151,6 +190,60 @@ function incompleteFootprintEvent(): ChartFootprintEvent {
     incompleteBefore: NEWEST_BAR_OPEN_MS,
     incomplete: [NEWEST_BAR_OPEN_MS],
   };
+}
+
+/** The opening time of the bar before the newest one, which the write tests' window holds a footprint for too. */
+const PREVIOUS_BAR_OPEN_MS = NEWEST_BAR_OPEN_MS - STUB_M5_INTERVAL_MS;
+/** The volume both sides of every row traded once the host re-read the forming bar. */
+const FORMED_ROW_VOLUME = 960;
+/** The volume both sides of every row traded in the window the host republishes with other rows. */
+const REPUBLISHED_ROW_VOLUME = 1440;
+
+/** `rows` with both sides of each one trading `volume`, so a re-read differs from the fixture's own copy. */
+function rowsTrading(rows: readonly ChartFootprintRow[], volume: number): ChartFootprintRow[] {
+  return rows.map((row) => ({ ...row, buyVolume: volume.toFixed(2), sellVolume: volume.toFixed(2) }));
+}
+
+/** One footprint with both sides of every row trading `volume`, and its two totals summed over them. */
+function footprintTrading(bar: ChartFootprintEvent['bars'][number], volume: number) {
+  const traded = (volume * bar.rows.length).toFixed(2);
+  return { ...bar, rows: rowsTrading(bar.rows, volume), buyVolume: traded, sellVolume: traded };
+}
+
+/**
+ * The window the write tests drive: a footprint on the newest bar of the stub's window and one on the bar before
+ * it, so a write that touches the wrong bar is visible in the other footprint's point.
+ */
+const TWO_BAR_FOOTPRINT_EVENT: ChartFootprintEvent = {
+  ...FOOTPRINT_EVENT,
+  bars: [{ ...FOOTPRINT_EVENT.bars[0], openMs: PREVIOUS_BAR_OPEN_MS }, FOOTPRINT_EVENT.bars[0]],
+};
+
+/** The forming bar the host re-read, whose rows trade another volume than the window's copy of it. */
+function formingFootprintEvent(): ChartFootprintFormingEvent {
+  return {
+    symbol: 'EURUSD',
+    timeframe: 'M5',
+    ticksPerRow: TICKS_PER_ROW,
+    bar: footprintTrading(FOOTPRINT_EVENT.bars[0], FORMED_ROW_VOLUME),
+  };
+}
+
+/** The whole window again, with every row of both its footprints trading another volume. */
+function republishedFootprintEvent(): ChartFootprintEvent {
+  return {
+    ...TWO_BAR_FOOTPRINT_EVENT,
+    bars: TWO_BAR_FOOTPRINT_EVENT.bars.map((bar) => footprintTrading(bar, REPUBLISHED_ROW_VOLUME)),
+  };
+}
+
+/**
+ * The window again while the newest bar is still forming, so it lists only the bar before it: a window carries the
+ * complete bars alone, and its own rows for them.
+ */
+function completeBarsFootprintEvent(): ChartFootprintEvent {
+  const republished = republishedFootprintEvent();
+  return { ...republished, bars: republished.bars.slice(0, -1) };
 }
 
 /** The M5 window the stacked-zone fixture draws, and the place in it of the bar the footprint belongs to. */
@@ -232,8 +325,13 @@ function chartTimeLabelOf(timeMs: number): string {
 
 /** The bar time the host stopped reading inside, as the chart's own time format writes it. */
 const INCOMPLETE_BEFORE_LABEL = chartTimeLabelOf(NEWEST_BAR_OPEN_MS);
-/** The notice the legend shows while the host read the window only part way in and counts trades. */
-const EXPECTED_NOTICE = `Footprint: incomplete tick data before ${INCOMPLETE_BEFORE_LABEL} · volume = tick count`;
+/**
+ * The notice the legend shows while the host read the window only part way in. The fixture's bars count trades
+ * (`volume: 'ticks'`), and the notice says nothing about that.
+ */
+const EXPECTED_NOTICE = `Footprint: incomplete tick data before ${INCOMPLETE_BEFORE_LABEL}`;
+/** The notice the legend shows once the host's read stopped inside the bar before the newest instead. */
+const EARLIER_NOTICE = `Footprint: incomplete tick data before ${chartTimeLabelOf(PREVIOUS_BAR_OPEN_MS)}`;
 
 /** Picks `label` in the chart header's bar type menu. */
 async function chooseBarStyle(page: Page, label: string): Promise<void> {
@@ -251,6 +349,78 @@ async function footprintSettings(page: Page): Promise<unknown[]> {
 /** The bar style series as the dev hook shows it. */
 async function barStyle(page: Page) {
   return page.evaluate(() => window.__chartTest!.barStyle());
+}
+
+/** How many points of the bar style series carry a footprint, which is one per bar the host read whole. */
+async function footprintPointCount(page: Page): Promise<number> {
+  return (await barStyle(page)).points.filter((point) => 'footprint' in point).length;
+}
+
+/** The footprint a point of the bar style series carries, as the dev hook copies it out of the custom series. */
+interface FootprintPointState {
+  readonly rows: readonly { readonly buyVolume: number }[];
+}
+
+/** How many points back from the newest a read of the series looks: the newest bar itself, and the one before it. */
+const NEWEST_POINT = 0;
+const OLDER_POINT = 1;
+/** The frames the bars are watched for after a window read lands: the frame it lands in and the next three. */
+const WATCHED_FRAMES = 3;
+
+/** The footprint the `fromNewest`-th newest point of the bar style series carries; null while it carries none. */
+async function footprintOfPoint(page: Page, fromNewest: number): Promise<FootprintPointState | null> {
+  const points = (await barStyle(page)).points;
+  const footprint = points.at(-1 - fromNewest)?.footprint as FootprintPointState | undefined;
+  return footprint ?? null;
+}
+
+/** The volume the lowest row of the `fromNewest`-th newest point's footprint traded into the ask. */
+async function rowVolumeOfPoint(page: Page, fromNewest: number): Promise<number> {
+  return (await footprintOfPoint(page, fromNewest))?.rows[0]?.buyVolume ?? Number.NaN;
+}
+
+/** The volume the lowest row of the newest bar's drawn footprint traded into the ask. */
+async function newestRowVolume(page: Page): Promise<number> {
+  return rowVolumeOfPoint(page, NEWEST_POINT);
+}
+
+/**
+ * Opens the chart on the window the write tests drive and waits until every footprint of it is drawn, returning
+ * the bar style series as the dev hook first shows it.
+ */
+async function openFootprintWindow(page: Page) {
+  const collected = await gotoWithStub(page, {
+    chartFootprintEvent: TWO_BAR_FOOTPRINT_EVENT,
+    chartSettingOverrides: { [EURUSD_CHART]: { barStyle: 'volumeFootprint' } },
+  });
+  await openChart(page);
+  await expect.poll(() => footprintPointCount(page)).toBe(TWO_BAR_FOOTPRINT_EVENT.bars.length);
+  return { collected, drawn: await barStyle(page) };
+}
+
+/** The notice as the page watches it: the count of the DOM writes it took since `watchNotice`. */
+interface NoticeWatch {
+  __noticeMutations?: number;
+}
+
+/** Counts every DOM write the notice takes from now on, so a republish of what it says must add none. */
+async function watchNotice(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const notice = document.querySelector('.chart-footprint-notice');
+    const watch = window as unknown as NoticeWatch;
+    watch.__noticeMutations = 0;
+    if (notice === null) {
+      return;
+    }
+    new MutationObserver((records) => {
+      watch.__noticeMutations = (watch.__noticeMutations ?? 0) + records.length;
+    }).observe(notice, { childList: true, characterData: true, subtree: true });
+  });
+}
+
+/** How many DOM writes the notice took since `watchNotice`. */
+function noticeMutations(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as NoticeWatch).__noticeMutations ?? 0);
 }
 
 /** The bar spacing the dev hook's latest time-scale write left, in css px per bar. */
@@ -273,9 +443,19 @@ async function paneImage(page: Page): Promise<DecodedPng> {
   return decodePng(await page.locator('.chart-host').screenshot());
 }
 
-/** The lowest screenshot row the bar's cells paint in `colors`, which the summary under them starts below. */
-function cellsBottom(image: DecodedPng, colors: readonly PixelChannels[]): number {
-  const region = wholeImage(image);
+/**
+ * The lowest screenshot row the cells of the bar opening at `timeMs` paint in `colors`, which the summary under
+ * them starts below. Only the bar's own columns are read, so the price axis' last-value tag and any other bar can
+ * never count as a cell.
+ */
+async function cellsBottom(
+  page: Page,
+  image: DecodedPng,
+  timeMs: number,
+  colors: readonly PixelChannels[],
+): Promise<number> {
+  const barX = await barTimeX(page, timeMs);
+  const region = { ...barColumns(image, barX), top: 0, bottom: image.height - 1 };
   const rows = colors.flatMap((color) => sitesPainting(image, color, region).map((site) => site.y));
   if (rows.length === 0) {
     throw new Error('The bar painted none of its cells in the fixture colours.');
@@ -320,14 +500,116 @@ function rightOfBar(pane: PixelRegion, barX: number): PixelRegion {
   return { ...pane, left: Math.ceil(barX + FOOTPRINT_BAR_SPACING / 2) };
 }
 
+/** The screenshot row inside the fixture cell row whose top price is `topPrice`, clear of the number in its middle. */
+async function cellRowY(page: Page, topPrice: number): Promise<number> {
+  return Math.floor(await panePriceY(page, topPrice)) + CELL_ROW_INSET;
+}
+
+/**
+ * The screenshot columns one bar's own paint covers: half a bar spacing either side of its x, clamped to the image,
+ * so that no other bar's paint can be read as this one's.
+ */
+function barColumns(image: DecodedPng, barX: number): Pick<PixelRegion, 'left' | 'right'> {
+  // Half a spacing holds the body, which the footprint zoom draws four fifths of a spacing wide around its x.
+  const half = Math.ceil(FOOTPRINT_BAR_SPACING / 2);
+  const left = Math.max(0, Math.floor(barX) - half);
+  return { left, right: Math.min(image.width, Math.floor(barX) + half) };
+}
+
+/** The screenshot columns one bar's own paint covers in row `y`: half a bar spacing either side of its x. */
+function barRowRegion(image: DecodedPng, barX: number, y: number): PixelRegion {
+  return { ...barColumns(image, barX), top: y, bottom: y };
+}
+
+/** How far one colour reaches across a screenshot row, in its screenshot columns. */
+interface ColourSpan {
+  readonly left: number;
+  readonly right: number;
+}
+
+/** The leftmost and rightmost column of `region` that paint `color`; null while none of them does. */
+function colourSpan(image: DecodedPng, color: PixelChannels, region: PixelRegion): ColourSpan | null {
+  const columns = sitesPainting(image, color, region).map((site) => site.x);
+  if (columns.length === 0) {
+    return null;
+  }
+  return { left: Math.min(...columns), right: Math.max(...columns) };
+}
+
+/** The media x of the bar opening at `timeMs`, in the pixels the pane's screenshot is taken in. */
+function barTimeX(page: Page, timeMs: number): Promise<number> {
+  return page.evaluate((time) => window.__chartTest!.timeToX(time), timeMs);
+}
+
 /** The media x of the bar the stacked footprint belongs to, in the pixels the pane's screenshot is taken in. */
 function stackedZoneBarX(page: Page): Promise<number> {
-  return page.evaluate((timeMs) => window.__chartTest!.timeToX(timeMs), zoneWindowOpenMs(ZONE_BAR_INDEX));
+  return barTimeX(page, zoneWindowOpenMs(ZONE_BAR_INDEX));
 }
 
 /** The media y of `price`, in the pixels the pane's screenshot is taken in. */
-function stackedZonePriceY(page: Page, price: number): Promise<number> {
+function panePriceY(page: Page, price: number): Promise<number> {
   return page.evaluate((value) => window.__chartTest!.priceToY(value), price);
+}
+
+/** The bar prices one point of the bar style series carries, and the bar time they belong to. */
+interface BarPrices {
+  readonly time: number;
+  readonly open: number;
+  readonly close: number;
+}
+
+/** The prices and the bar time a point of the bar style series carries, or null while any of them is no number. */
+function barPricesOf(point: Record<string, unknown>): BarPrices | null {
+  const { time, open, close } = point;
+  if (typeof time !== 'number' || typeof open !== 'number' || typeof close !== 'number') {
+    return null;
+  }
+  return { time, open, close };
+}
+
+/**
+ * One bar the host holds no footprint for, read off the pane: the span its own body paints, the candle column a
+ * footprint bar keeps, and the bar's whole body width.
+ */
+interface PendingCandle {
+  readonly body: ColourSpan;
+  readonly columnWidth: number;
+  readonly fullWidth: number;
+}
+
+/**
+ * The newest up bar of the window whose whole body stands inside the pane, read as the candle a bar without a
+ * footprint draws: the span its body paints across the middle row of that body, and the candle column a footprint bar
+ * at the same bar spacing keeps. One bar alone is read, so no other bar's paint can be taken for its own.
+ */
+async function pendingCandle(page: Page, image: DecodedPng): Promise<PendingCandle> {
+  const pane = await paneColumns(page, image);
+  const fullWidth = barBodyWidth(await barSpacing(page), PANE_PIXEL_RATIO);
+  const columnWidth = footprintBarColumns(0, fullWidth, PANE_PIXEL_RATIO).candle.width;
+  // The newest bars are read first, since they stand past the legend the pane draws over its left side.
+  for (const point of [...(await barStyle(page)).points].reverse()) {
+    const bar = barPricesOf(point);
+    if (bar === null || bar.close <= bar.open) {
+      continue;
+    }
+    const barX = await barTimeX(page, bar.time * MS_PER_SECOND);
+    // A bar the pane cuts off would paint a body of its own, clipped by the pane's edge, rather than the whole column.
+    const standsInPane = barX - fullWidth / 2 >= pane.left && barX + fullWidth / 2 <= pane.right;
+    if (!standsInPane) {
+      continue;
+    }
+    const openY = await panePriceY(page, bar.open);
+    const closeY = await panePriceY(page, bar.close);
+    if (Math.abs(closeY - openY) < MIN_BODY_HEIGHT) {
+      continue;
+    }
+    const row = barRowRegion(image, barX, Math.floor((openY + closeY) / 2));
+    const body = colourSpan(image, UP_CANDLE, row);
+    if (body !== null) {
+      return { body, columnWidth, fullWidth };
+    }
+  }
+  throw new Error('The pane painted no up bar body standing inside it, so no pending candle was read.');
 }
 
 /**
@@ -349,8 +631,8 @@ async function stackedZoneRegion(page: Page, image: DecodedPng): Promise<PixelRe
   return {
     ...rightOfBar(await paneColumns(page, image), await stackedZoneBarX(page)),
     ...stackedZoneRows(
-      await stackedZonePriceY(page, Number(rows.at(-1)!.upPrice)),
-      await stackedZonePriceY(page, Number(rows[0].downPrice)),
+      await panePriceY(page, Number(rows.at(-1)!.upPrice)),
+      await panePriceY(page, Number(rows[0].downPrice)),
     ),
   };
 }
@@ -381,19 +663,52 @@ test('choosing Volume footprint asks the host for the default rows and paints bo
   expectNoErrors(collected);
 });
 
-test('a bar writes each side total under its column and the delta box below them', async ({ page }) => {
-  const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
+test('choosing Volume footprint keeps the newest bar in view when the pane shows empty space past it', async ({
+  page,
+}) => {
+  const collected = await gotoWithStub(page, { chartFootprintEvent: FOOTPRINT_EVENT });
+  await openChart(page);
+  // Most of the pane is the empty future space past the newest bar.
+  await page.evaluate(() => {
+    const newest = window.__chartTest!.data().length - 1;
+    window.__chartTest!.scrollToRange({ from: newest - 40, to: newest + 60 });
+  });
+  await waitTwoAnimationFrames(page);
 
+  await chooseBarStyle(page, 'Volume footprint');
+
+  await expect.poll(() => barSpacing(page)).toBe(FOOTPRINT_BAR_SPACING);
+  const view = await page.evaluate(() => ({
+    newest: window.__chartTest!.data().length - 1,
+    range: window.__chartTest!.visibleRange(),
+  }));
+  expect(view.range).not.toBeNull();
+  expect(view.newest).toBeGreaterThanOrEqual(view.range!.from);
+  expect(view.newest).toBeLessThanOrEqual(view.range!.to);
+  expectNoErrors(collected);
+});
+
+/**
+ * Opens the chart on `event`'s footprint and screenshots the pane, with the lowest row its lightest cells paint: the
+ * row every test of what is written above or below the cells measures from.
+ */
+async function openFootprintCells(page: Page, event: ChartFootprintEvent) {
+  const collected = await openFootprintChart(page, event);
   const image = await paneImage(page);
-  const boundary = cellsBottom(image, [SELL_LIGHTEST, BUY_LIGHTEST]);
+  const boundary = await cellsBottom(page, image, NEWEST_BAR_OPEN_MS, [SELL_LIGHTEST, BUY_LIGHTEST]);
+  return { collected, image, boundary };
+}
+
+test('a bar writes each side total under its column and the delta box below them', async ({ page }) => {
+  const { collected, image, boundary } = await openFootprintCells(page, FOOTPRINT_EVENT);
   const above = aboveCells(image, boundary);
   const below = belowCells(image, boundary);
 
   // The appearance's defaults reach the series' own options, which the renderer paints from.
   expect((await barStyle(page)).options).toMatchObject(DEFAULT_FOOTPRINT_SETTINGS);
 
-  // The two totals and the box's two lines are written under the lowest row, and nowhere above it. Ten px text is
-  // anti-aliased onto the pane background, so only its cores reach the colour exactly: each is read as the pixels
+  // The two totals and the box's two lines are written under the lowest row, and nowhere above it. Twelve px text
+  // is anti-aliased onto the pane background, so only its cores reach the colour exactly: each is read as the pixels
   // lying on the blend from the pane background toward its colour.
   expect(sitesTintedToward(image, SELL_TOTAL, PANE_BACKGROUND, below).length).toBeGreaterThan(0);
   expect(sitesTintedToward(image, BUY_TOTAL, PANE_BACKGROUND, below).length).toBeGreaterThan(0);
@@ -404,21 +719,120 @@ test('a bar writes each side total under its column and the delta box below them
   expectNoErrors(collected);
 });
 
-test('an imbalanced cell is marked on its outer edge in its own side colour', async ({ page }) => {
-  const collected = await openFootprintChart(page, imbalancedFootprintEvent());
-
+test('the thin candle stands free, a gap of background either side of its body', async ({ page }) => {
+  const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
   const image = await paneImage(page);
-  const above = aboveCells(image, cellsBottom(image, [SELL_LIGHTEST, BUY_LIGHTEST]));
+  const row = barRowRegion(image, await barTimeX(page, NEWEST_BAR_OPEN_MS), await cellRowY(page, ROW_PRICES[1]));
 
-  // Three css px wide, and the only paint of their colour inside the bar: the cells are the lightest shade.
-  expect(horizontalRunsPainting(image, SELL_IMBALANCE, above, IMBALANCE_MARK_RUN).length).toBeGreaterThan(0);
-  expect(horizontalRunsPainting(image, BUY_IMBALANCE, above, IMBALANCE_MARK_RUN).length).toBeGreaterThan(0);
+  const sell = colourSpan(image, SELL_LIGHTEST, row);
+  const candle = colourSpan(image, UP_CANDLE, row);
+  const buy = colourSpan(image, BUY_LIGHTEST, row);
+  expect(sell).not.toBeNull();
+  expect(candle).not.toBeNull();
+  expect(buy).not.toBeNull();
+  // The two columns stop a gap short of the candle body on either side, so it stands on the pane's own background.
+  expect(candle!.left - sell!.right - 1).toBeGreaterThanOrEqual(MIN_CANDLE_GAP);
+  expect(buy!.left - candle!.right - 1).toBeGreaterThanOrEqual(MIN_CANDLE_GAP);
   expectNoErrors(collected);
 });
 
-test('the legend says the data is incomplete and counted in ticks, and clears when the style leaves', async ({
-  page,
-}) => {
+/** The row most of `sites` stand on: the one a line's dots share. */
+function mostCommonRow(sites: readonly PixelSite[]): number {
+  const counts = new Map<number, number>();
+  for (const site of sites) {
+    counts.set(site.y, (counts.get(site.y) ?? 0) + 1);
+  }
+  let best = sites[0]?.y ?? 0;
+  for (const [y, count] of counts) {
+    if (count > (counts.get(best) ?? 0)) {
+      best = y;
+    }
+  }
+  return best;
+}
+
+/** `region` narrowed to the one screenshot row `y`. */
+function rowBand(region: PixelRegion, y: number): PixelRegion {
+  return { ...region, top: y, bottom: y };
+}
+
+test('the value area is marked by a dotted line across the bar and past both of its columns', async ({ page }) => {
+  const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
+  // The footprint zoom settles after the style's first paint, so the columns and the line are read only once the pane
+  // draws at the spacing the renderer lays them out with.
+  await expect.poll(() => barSpacing(page)).toBe(FOOTPRINT_BAR_SPACING);
+  const image = await paneImage(page);
+  const barX = Math.round(await barTimeX(page, NEWEST_BAR_OPEN_MS));
+  const vahY = Math.round(await panePriceY(page, Number(FOOTPRINT_EVENT.bars[0].rows.at(-1)!.upPrice)));
+  // The bar's columns at the pane's own zoom, and the line they carry: the overhang past the sell column's left edge
+  // and the same past the buy column's right one.
+  const columns = footprintBarColumns(barX, BAR_BODY_WIDTH, PANE_PIXEL_RATIO);
+  const overhang = VALUE_AREA_OVERHANG * PANE_PIXEL_RATIO;
+  const lineLeft = columns.sell.left - overhang;
+  const lineRight = columns.buy.left + columns.buy.width + overhang;
+  // Only the line's own columns are read, so the marker standing left of it is never counted as one of its dots.
+  const band = {
+    left: Math.max(0, lineLeft),
+    right: Math.min(image.width, lineRight),
+    top: vahY - VALUE_AREA_ROW_SLACK,
+    bottom: vahY + VALUE_AREA_ROW_SLACK,
+  };
+
+  // The band leaves the line's row room to round either way; the row it actually stands on is the one most of its
+  // dots share, so a pixel of a number or a cell edge the band also holds is never read as one of its dots.
+  const row = rowBand(band, mostCommonRow(horizontalRunsPainting(image, VALUE_AREA_LINE, band, VALUE_AREA_DASH_RUN)));
+  const dashes = horizontalRunsPainting(image, VALUE_AREA_LINE, row, VALUE_AREA_DASH_RUN);
+  // The line is dotted rather than dashed or solid: one device px on, two off, across the bar and both overhangs.
+  // Every run it paints is that one px, so the runs and the painted pixels are as many as each other.
+  expect(dashes.length).toBeGreaterThanOrEqual(MIN_VALUE_AREA_DASHES);
+  expect(sitesPainting(image, VALUE_AREA_LINE, row)).toHaveLength(dashes.length);
+  expect(horizontalRunsPainting(image, VALUE_AREA_LINE, row, SOLID_LINE_RUN)).toEqual([]);
+  const dots = dashes.map((dash) => dash.x);
+  expect(dots.slice(1).every((x, index) => x - dots[index] === VALUE_AREA_DOT_PITCH)).toBe(true);
+  // The dots start the overhang left of the sell column and run on to the last of them the widened line holds, which
+  // reaches the overhang past the buy column.
+  const lastDot = dots[dots.length - 1];
+  const spanLength = lineRight - lineLeft;
+  expect(dots[0]).toBe(lineLeft);
+  expect(lastDot).toBe(lineLeft + VALUE_AREA_DOT_PITCH * Math.floor((spanLength - 1) / VALUE_AREA_DOT_PITCH));
+  // They therefore reach further across than the bar's body, which the overhang at either end carries them.
+  const spread = lastDot - dots[0];
+  expect(spread).toBeGreaterThanOrEqual(BAR_BODY_WIDTH * MIN_VALUE_AREA_SPREAD_SHARE);
+  expectNoErrors(collected);
+});
+
+test('an imbalanced cell is marked in the candle gap at its inner edge, in its own side colour', async ({ page }) => {
+  const collected = await openFootprintChart(page, imbalancedFootprintEvent());
+  // The footprint zoom settles after the style's first paint, so the columns are read only once the pane draws at the
+  // spacing the renderer lays them out with.
+  await expect.poll(() => barSpacing(page)).toBe(FOOTPRINT_BAR_SPACING);
+  const image = await paneImage(page);
+  // The bar's columns at the pane's own zoom: the sell column, the gap the thin candle leaves it, the candle, another
+  // gap and the buy column.
+  const barX = Math.round(await barTimeX(page, NEWEST_BAR_OPEN_MS));
+  const columns = footprintBarColumns(barX, BAR_BODY_WIDTH, PANE_PIXEL_RATIO);
+  const space = IMBALANCE_MARK_SPACE * PANE_PIXEL_RATIO;
+  const sellEdge = columns.sell.left + columns.sell.width;
+  // Three css px wide, one css px of the gap kept between each mark and its own column's inner edge: right of the
+  // sell column, left of the buy one.
+  const sellMark = { left: sellEdge + space, right: sellEdge + space + IMBALANCE_MARK_RUN - 1 };
+  const buyMark = { left: columns.buy.left - space - IMBALANCE_MARK_RUN, right: columns.buy.left - space - 1 };
+  const group = { left: columns.sell.left, right: columns.buy.left + columns.buy.width };
+  // The fixture flags the sell side of its lowest row and the buy side of the row above it, so each mark is read in
+  // the row of the cell it marks.
+  const sellRow = await cellRowY(page, ROW_PRICES[1]);
+  const buyRow = await cellRowY(page, ROW_PRICES[2]);
+
+  // Either mark stands inside its gap, clear of the thin candle that gap belongs to.
+  expect(sellMark.right).toBeLessThan(columns.candle.left);
+  expect(buyMark.left).toBeGreaterThan(columns.candle.left + columns.candle.width - 1);
+  // It is the only paint of its colour across the bar's whole group of columns, so no mark is left on an outer edge.
+  expect(colourSpan(image, SELL_IMBALANCE, { ...group, top: sellRow, bottom: sellRow })).toEqual(sellMark);
+  expect(colourSpan(image, BUY_IMBALANCE, { ...group, top: buyRow, bottom: buyRow })).toEqual(buyMark);
+  expectNoErrors(collected);
+});
+
+test('the legend says the data is incomplete, and clears when the style leaves', async ({ page }) => {
   const collected = await gotoWithStub(page, { chartFootprintEvent: incompleteFootprintEvent() });
   await openChart(page);
   await chooseBarStyle(page, 'Volume footprint');
@@ -462,6 +876,93 @@ test('a bar the host holds no footprint for draws as a plain candle', async ({ p
   expect(sitesPainting(image, UP_CANDLE, region).length).toBeGreaterThan(0);
   expect(horizontalRunsPainting(image, SELL_LIGHTEST, region, MIN_CELL_RUN)).toEqual([]);
   expect(horizontalRunsPainting(image, BUY_LIGHTEST, region, MIN_CELL_RUN)).toEqual([]);
+
+  // The bar draws no plain full-body candle: its body is painted on the very candle column a footprint bar keeps its
+  // own thin candle on, at that column's width, so a bar still being read lines up with the footprint bars beside it.
+  const pending = await pendingCandle(page, image);
+  expect(pending.body.right - pending.body.left + 1).toBe(pending.columnWidth);
+  expect(pending.columnWidth).toBeLessThan(pending.fullWidth);
+  expectNoErrors(collected);
+});
+
+test('a forming footprint rewrites the newest bar alone', async ({ page }) => {
+  const { collected, drawn } = await openFootprintWindow(page);
+
+  await pushEvent(page, 'chart-footprint-forming', formingFootprintEvent());
+  await expect.poll(() => newestRowVolume(page)).toBe(FORMED_ROW_VOLUME);
+
+  const after = await barStyle(page);
+  expect(after.points).toHaveLength(drawn.points.length);
+  // Every other bar kept the very point it was drawn with; only the forming bar's own point was written again.
+  expect(after.points.slice(0, -1)).toEqual(drawn.points.slice(0, -1));
+  expect(after.points.at(-1)).not.toEqual(drawn.points.at(-1));
+  // One point written and no whole rewrite, so the columns of the other bars were never thrown away and redrawn.
+  expect(after.writes).toEqual({ data: drawn.writes.data, update: drawn.writes.update + 1 });
+  expectNoErrors(collected);
+});
+
+test('a window that lists only the complete bars keeps the forming bar footprint', async ({ page }) => {
+  const { collected } = await openFootprintWindow(page);
+  await pushEvent(page, 'chart-footprint-forming', formingFootprintEvent());
+  await expect.poll(() => newestRowVolume(page)).toBe(FORMED_ROW_VOLUME);
+  const formed = await footprintOfPoint(page, NEWEST_POINT);
+  expect(formed).not.toBeNull();
+
+  // The host's next window read still finds the newest bar forming, so it lists only the bar before it, with rows of
+  // its own. The forming bar keeps the footprint its own read gave it, on the frame the window lands in and after it:
+  // dropping it would redraw that bar as a plain candle until the next forming read, up to a second later.
+  await pushEvent(page, 'chart-footprint', completeBarsFootprintEvent());
+  for (let frame = 0; frame <= WATCHED_FRAMES; frame += 1) {
+    expect(await footprintOfPoint(page, NEWEST_POINT)).toEqual(formed);
+    await waitTwoAnimationFrames(page);
+  }
+  // The complete bar the window did list takes the window's own rows, so the newest bar alone was kept.
+  expect(await rowVolumeOfPoint(page, OLDER_POINT)).toBe(REPUBLISHED_ROW_VOLUME);
+  expect(await footprintPointCount(page)).toBe(TWO_BAR_FOOTPRINT_EVENT.bars.length);
+  // A window another symbol publishes describes a chart that is not this one, so the kept footprint still stands.
+  await pushEvent(page, 'chart-footprint', { ...completeBarsFootprintEvent(), symbol: 'NAS100' });
+  expect(await footprintOfPoint(page, NEWEST_POINT)).toEqual(formed);
+  expectNoErrors(collected);
+});
+
+test('republishing the identical window rewrites no point', async ({ page }) => {
+  const { collected, drawn } = await openFootprintWindow(page);
+
+  await pushEvent(page, 'chart-footprint', TWO_BAR_FOOTPRINT_EVENT);
+  const republished = await barStyle(page);
+  expect(republished.writes).toEqual(drawn.writes);
+  expect(republished.points).toEqual(drawn.points);
+
+  // A window the host read with other rows does rewrite it, so the identical one wrote nothing at all.
+  await pushEvent(page, 'chart-footprint', republishedFootprintEvent());
+  await expect.poll(() => newestRowVolume(page)).toBe(REPUBLISHED_ROW_VOLUME);
+  expect((await barStyle(page)).writes).toEqual({ data: drawn.writes.data + 1, update: drawn.writes.update });
+  expectNoErrors(collected);
+});
+
+test('republishing a window the notice already shows leaves the legend alone', async ({ page }) => {
+  const collected = await gotoWithStub(page, { chartFootprintEvent: incompleteFootprintEvent() });
+  await openChart(page);
+  await chooseBarStyle(page, 'Volume footprint');
+  const notice = page.locator('.chart-footprint-notice');
+  await expect(notice).toHaveText(EXPECTED_NOTICE);
+  // The footprint zoom settles after the style's first paint, so the watch starts on a chart that is at rest.
+  await waitTwoAnimationFrames(page);
+
+  await watchNotice(page);
+  await pushEvent(page, 'chart-footprint', incompleteFootprintEvent());
+  // Writing the text the notice already shows would take it out of the legend and put it back, re-laying the
+  // whole legend out for a frame the chart then has to repaint.
+  expect(await noticeMutations(page)).toBe(0);
+
+  // A read that stopped inside another bar does rewrite the notice, so the watch was armed the whole time.
+  await pushEvent(page, 'chart-footprint', {
+    ...incompleteFootprintEvent(),
+    incompleteBefore: PREVIOUS_BAR_OPEN_MS,
+    incomplete: [PREVIOUS_BAR_OPEN_MS],
+  });
+  await expect(notice).toHaveText(EARLIER_NOTICE);
+  expect(await noticeMutations(page)).toBeGreaterThan(0);
   expectNoErrors(collected);
 });
 

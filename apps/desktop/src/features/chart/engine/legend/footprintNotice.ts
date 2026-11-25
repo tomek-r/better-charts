@@ -2,44 +2,34 @@
 export interface FootprintNotices {
   /** The opening time of the newest bar the host stopped reading inside; null when it read every bar whole. */
   readonly incompleteBeforeMs: number | null;
-  /** Whether the volumes drawn are the trades the host counted, because it reports no volume of its own. */
-  readonly tickVolume: boolean;
 }
 
-/** The label the notice starts with, the two things it can say, and what separates them. */
+/** The label the notice starts with and what it says after it. */
 const NOTICE_LABEL = 'Footprint: ';
 const INCOMPLETE_TEXT = 'incomplete tick data before ';
-const TICK_VOLUME_TEXT = 'volume = tick count';
-const NOTICE_SEPARATOR = ' · ';
 /** The gap the notice keeps from the legend text before it, in host CSS px. */
 const NOTICE_GAP = '8px';
 /** The class of the market-session dot the notice sits in front of. */
 const MARKET_DOT_CLASS = 'chart-market-dot';
 
-/** Nothing to report: every bar was read whole and its volumes are the broker's own. */
-export const NO_FOOTPRINT_NOTICES: FootprintNotices = { incompleteBeforeMs: null, tickVolume: false };
+/** Nothing to report: the host read every bar whole. */
+export const NO_FOOTPRINT_NOTICES: FootprintNotices = { incompleteBeforeMs: null };
 
 /**
- * What the legend says about `notices`, empty while the data is complete and counted in lots. The date is
- * written by `timeLabel`, the chart's own time format, so the notice reads like the axis and the pointer.
+ * What the legend says about `notices`, empty while the host read every bar whole. The date is written by
+ * `timeLabel`, the chart's own time format, so the notice reads like the axis and the pointer.
  */
 export function footprintNoticeText(notices: FootprintNotices, timeLabel: (atMs: number) => string): string {
-  const parts: string[] = [];
-  if (notices.incompleteBeforeMs !== null) {
-    parts.push(`${INCOMPLETE_TEXT}${timeLabel(notices.incompleteBeforeMs)}`);
-  }
-  if (notices.tickVolume) {
-    parts.push(TICK_VOLUME_TEXT);
-  }
-  if (parts.length === 0) {
+  if (notices.incompleteBeforeMs === null) {
     return '';
   }
-  return `${NOTICE_LABEL}${parts.join(NOTICE_SEPARATOR)}`;
+  return `${NOTICE_LABEL}${INCOMPLETE_TEXT}${timeLabel(notices.incompleteBeforeMs)}`;
 }
 
 /**
- * The footprint notice beside the legend's OHLC text: in the legend only while it has something to report,
- * just in front of the market-session dot that sits next to it, so a quiet legend keeps just its own spans.
+ * The footprint notice beside the legend's OHLC text: in the legend only while the host read a bar only part
+ * way in, just in front of the market-session dot that sits next to it, so a quiet legend keeps just its own
+ * spans.
  */
 export class FootprintNotice {
   private readonly container: HTMLElement;

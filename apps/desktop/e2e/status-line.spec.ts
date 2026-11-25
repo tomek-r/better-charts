@@ -33,6 +33,14 @@ const SAME_DAY_BARS = 20;
 const PREVIOUS_DAY_PAGE_BARS = 300;
 const VALUE_GAP_PX = 6;
 const BOLLINGER_SEARCH = 'bollinger';
+/** The background a test configures for the status line, and the colour the browser then paints it in. */
+const BACKGROUND_HEX = '#123456';
+const BACKGROUND_RGB = 'rgb(18, 52, 86)';
+/** Two price-pane indicators, so the legend has a row under the OHLC line and one under that. */
+const SMA_ENTRY = { instanceId: 'sma-1', definitionId: 'sma', settings: {} };
+const EMA_ENTRY = { instanceId: 'ema-1', definitionId: 'ema', settings: {} };
+/** How far two legend rows may miss each other's edge and still be drawn on each other. */
+const TOUCHING_TOLERANCE_PX = 1;
 
 /** A bar of the stub's shape, flat and with one volume, so only the field a test reads varies. */
 function barOf(time: number, close: number): RenderBar {
@@ -116,6 +124,26 @@ function expectEqualGaps(boxes: readonly ValueBox[]): void {
     }
     previous = box;
   }
+}
+
+/** A legend row as it is painted: its top and bottom edges and the background it shows between them. */
+interface PaintedRow {
+  readonly top: number;
+  readonly bottom: number;
+  readonly background: string;
+}
+
+/** The rows of the legend as they stack from the top, with the background each one paints. */
+function paintedRows(page: Page): Promise<PaintedRow[]> {
+  return page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('.chart-legend, .chart-indicator-legend-row'));
+    return rows
+      .map((row) => {
+        const box = row.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom, background: getComputedStyle(row).backgroundColor };
+      })
+      .sort((one, other) => one.top - other.top);
+  });
 }
 
 test('the bar change reads in the price digits with the percent of its reference', () => {
@@ -212,6 +240,29 @@ test('the default volume value takes the rising body colour of the prices', asyn
   const volumeValue = page.locator('.chart-legend-volume');
   await expect(volumeValue).toHaveCount(1);
   await expect(volumeValue).toHaveCSS('color', RISING_BODY_COLOR);
+  expectNoErrors(collected);
+});
+
+test('the status line background runs on from the OHLC row into the indicator rows', async ({ page }) => {
+  const statusLine = { background: { visible: true, color: BACKGROUND_HEX } };
+  const indicators = [SMA_ENTRY, EMA_ENTRY];
+  const chartOverrides = { [EURUSD_CHART]: { statusLine, indicators } };
+  const collected = await gotoWithStub(page, { chartSettingOverrides: chartOverrides });
+  await openChart(page);
+  // Off the chart, so no row is hovered and every row paints the configured background rather than its own.
+  await page.mouse.move(0, 0);
+  await expect(page.locator('.chart-indicator-legend-row')).toHaveCount(indicators.length);
+
+  const rows = await paintedRows(page);
+  // The OHLC row and the two indicator rows under it, each of them painted in the configured colour.
+  expect(rows).toHaveLength(indicators.length + 1);
+  for (const row of rows) {
+    expect(row.background).toBe(BACKGROUND_RGB);
+  }
+  // Their boxes meet, so the background is one block down the legend with no chart showing between two rows.
+  for (let index = 1; index < rows.length; index += 1) {
+    expect(Math.abs(rows[index].top - rows[index - 1].bottom)).toBeLessThanOrEqual(TOUCHING_TOLERANCE_PX);
+  }
   expectNoErrors(collected);
 });
 

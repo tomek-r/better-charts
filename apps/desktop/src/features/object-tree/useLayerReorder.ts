@@ -37,7 +37,8 @@ const MOVE_STEPS: ArrowSteps = { ArrowUp: -1, ArrowDown: 1 };
 /**
  * Reordering of a topmost-first row list: a row drags with HTML5 drag and drop, or moves with Alt+Arrow while
  * it holds focus. Both hand the move to `moveRow`, which owns what it does — a drawing moves through the
- * chart, an indicator through the saved settings — and a keyboard move keeps focus on the moved row.
+ * chart, an indicator through the saved settings — and a keyboard move keeps focus on the moved row. The
+ * price pane's rows cross kinds, so one list holds the drawings, the price bars and its indicators together.
  */
 export function useLayerReorder(
   rowCount: number,

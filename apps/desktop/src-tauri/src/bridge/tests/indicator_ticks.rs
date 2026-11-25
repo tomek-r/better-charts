@@ -1,7 +1,9 @@
 //! The indicator ticks route: the caller key, the range and page bounds, the
 //! bounded latest-per-key slots, the published wire shape and the command
 //! boundary.
+use super::common::RecordedEvents;
 use super::*;
+use std::time::Instant;
 use trading_core::protocol::MarketTick;
 
 /// Page size a default handshake negotiates.
@@ -113,39 +115,46 @@ fn at_most_eight_keys_are_kept_and_the_oldest_drops_out() {
     for key in &keys {
         ticks_slots(&state).queue(valid_ticks_request(key, 1_000, 2_000));
     }
-    let waiting = ticks_slots(&state).claim_waiting(&state.next_request_id);
-    assert_eq!(waiting.len(), MAX_INDICATOR_TICK_KEYS);
-    let kept: Vec<&str> = waiting
-        .iter()
-        .map(|ticks| ticks.request.key.as_str())
-        .collect();
-    assert!(
-        !kept.contains(&keys[0].as_str()),
-        "the oldest key is dropped"
-    );
-    assert!(kept.contains(&keys[MAX_INDICATOR_TICK_KEYS].as_str()));
-    assert!(waiting[0].request_id.starts_with(INDICATOR_TICKS_ID_PREFIX));
+    // The route keeps one request on the wire, so the kept keys are read out one
+    // claim at a time, oldest first. Each claim is its own statement: holding the
+    // slots' guard across the answer would lock it twice.
+    let mut kept = Vec::new();
+    loop {
+        let claimed = ticks_slots(&state).claim_next(&state.next_request_id, Instant::now());
+        let Some(claimed) = claimed else {
+            break;
+        };
+        kept.push(claimed.request.key.clone());
+        assert!(claimed.request_id.starts_with(INDICATOR_TICKS_ID_PREFIX));
+        assert!(ticks_slots(&state)
+            .take_awaited(&claimed.request_id)
+            .is_some());
+    }
+    assert_eq!(kept, keys[1..].to_vec(), "the oldest key is dropped");
+    assert!(kept.contains(&keys[MAX_INDICATOR_TICK_KEYS]));
 }
 
 #[test]
 fn a_newer_request_for_a_key_drops_the_response_it_awaited() {
     let state = BridgeState::default();
     ticks_slots(&state).queue(valid_ticks_request("volume-100", 1_000, 2_000));
-    let first = ticks_slots(&state).claim_waiting(&state.next_request_id);
-    assert_eq!(first.len(), 1);
+    let first = ticks_slots(&state)
+        .claim_next(&state.next_request_id, Instant::now())
+        .expect("the first request goes out");
 
     ticks_slots(&state).queue(valid_ticks_request("volume-100", 3_000, 4_000));
-    let second = ticks_slots(&state).claim_waiting(&state.next_request_id);
-    assert_eq!(second.len(), 1);
-    assert_ne!(first[0].request_id, second[0].request_id);
+    let second = ticks_slots(&state)
+        .claim_next(&state.next_request_id, Instant::now())
+        .expect("the replacement frees the wire slot");
+    assert_ne!(first.request_id, second.request_id);
 
     let mut slots = ticks_slots(&state);
     assert!(
-        slots.take_awaited(&first[0].request_id).is_none(),
+        slots.take_awaited(&first.request_id).is_none(),
         "the replaced request is no longer awaited"
     );
     let awaited = slots
-        .take_awaited(&second[0].request_id)
+        .take_awaited(&second.request_id)
         .expect("the newest request is awaited");
     assert_eq!(awaited.page.from_ms, 3_000);
     assert_eq!(awaited.page.to_ms, 4_000);
@@ -164,13 +173,14 @@ fn command_queues_ticks_without_touching_the_tick_profile_slots() {
     )
     .expect("connected bridge accepts the ticks");
 
-    let waiting = ticks_slots(&state).claim_waiting(&state.next_request_id);
-    assert_eq!(waiting.len(), 1);
-    assert_eq!(waiting[0].request.key, "volume-100");
-    assert_eq!(waiting[0].request.page.symbol, "NAS100");
-    assert_eq!(waiting[0].request.page.from_ms, 1_000);
-    assert_eq!(waiting[0].request.page.to_ms, 2_000);
-    assert_eq!(waiting[0].request.page.max_ticks, 500);
+    let waiting = ticks_slots(&state)
+        .claim_next(&state.next_request_id, Instant::now())
+        .expect("the queued ticks go out");
+    assert_eq!(waiting.request.key, "volume-100");
+    assert_eq!(waiting.request.page.symbol, "NAS100");
+    assert_eq!(waiting.request.page.from_ms, 1_000);
+    assert_eq!(waiting.request.page.to_ms, 2_000);
+    assert_eq!(waiting.request.page.max_ticks, 500);
 
     assert!(state.pending_tick_profile.lock().unwrap().is_none());
     assert!(state.expected_tick_profile.lock().unwrap().is_none());
@@ -245,19 +255,55 @@ fn command_refuses_other_symbols_and_pages_beyond_the_negotiated_bound() {
         );
     }
     assert!(ticks_slots(&state)
-        .claim_waiting(&state.next_request_id)
-        .is_empty());
+        .claim_next(&state.next_request_id, Instant::now())
+        .is_none());
 }
 
 #[test]
 fn clearing_the_ticks_slots_drops_queued_and_awaited_requests() {
     let state = BridgeState::default();
     ticks_slots(&state).queue(valid_ticks_request("volume-100", 1_000, 2_000));
-    let waiting = ticks_slots(&state).claim_waiting(&state.next_request_id);
+    let waiting = ticks_slots(&state)
+        .claim_next(&state.next_request_id, Instant::now())
+        .expect("the queued ticks go out");
     clear_indicator_ticks(&state);
     let mut slots = ticks_slots(&state);
-    assert!(slots.take_awaited(&waiting[0].request_id).is_none());
-    assert!(slots.claim_waiting(&state.next_request_id).is_empty());
+    assert!(slots.take_awaited(&waiting.request_id).is_none());
+    assert!(slots
+        .claim_next(&state.next_request_id, Instant::now())
+        .is_none());
+}
+
+#[test]
+fn a_request_the_ea_never_answered_is_failed_after_the_timeout() {
+    let state = chart_state();
+    let recorded = Arc::new(RecordedEvents::default());
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    // A claim old enough that the answer can no longer come.
+    let stale_claim = Instant::now()
+        .checked_sub(TICK_ANSWER_TIMEOUT + Duration::from_secs(1))
+        .expect("an instant before now");
+    ticks_slots(&state).queue(valid_ticks_request("volume-100", 1_000, 2_000));
+    let awaited = ticks_slots(&state)
+        .claim_next(&state.next_request_id, stale_claim)
+        .expect("the ticks go out");
+
+    expire_awaited_ticks(&state, &events, "session-1");
+
+    assert!(
+        ticks_slots(&state)
+            .take_awaited(&awaited.request_id)
+            .is_none(),
+        "the stalled request frees the route's wire slot"
+    );
+    let unavailable = recorded.named("indicator-ticks-unavailable");
+    assert_eq!(unavailable.len(), 1);
+    assert_eq!(unavailable[0]["key"], "volume-100");
+    assert_eq!(unavailable[0]["symbol"], "NAS100");
+    assert_eq!(
+        unavailable[0]["message"],
+        "the terminal did not answer the tick history request"
+    );
 }
 
 #[test]

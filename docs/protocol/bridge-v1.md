@@ -1125,6 +1125,22 @@ id is ignored like a stale page and the tick profile's own ids stay untouched. A
 new session or a change of the chart symbol drops every queued and awaited
 indicator ticks request.
 
+The EA serves one `tick_history_request` at a time: a newer one silently cancels
+the request it was serving, and a cancelled id is never answered. The host
+therefore keeps at most one tick history request in flight at once, across this
+route and the tick profile together. A flush writes at most the oldest queued
+indicator ticks request, and only while neither route awaits an answer: the tick
+profile's own page stays pending (not taken) while an indicator ticks request is
+awaited, and no indicator ticks request is claimed while the tick profile's page
+is awaited. The rest wait in the ordered per-key queue, so a request queued
+behind the awaited one goes out only once that one is answered; a newer request
+for the awaited key replaces it and frees the wire slot at once, because its
+answer, if it still comes, is stale and ignored like any other. A request the EA
+has not answered after 150 s (the EA itself fails a read after 120 s) counts as
+failed for its id: it is handled exactly like a correlated `error` below, with
+the message `the terminal did not answer the tick history request`, which frees
+the slot for the next queued request.
+
 `indicator-ticks` event payload (camelCase, as emitted to the frontend):
 
 ```json
@@ -1183,7 +1199,32 @@ named `chart-footprint` or `chart-footprint-live` is not answered — the
 frontend's other keys are unaffected. The window read asks for the newest loaded
 bar's ticks first and works back to the oldest loaded bar, or until 500,000
 ticks are read, so a window deeper than that budget leaves its oldest bars
-without a footprint.
+without a footprint. Its pages are planned from the candles the window was
+loaded with: a page covers the run of newest unread bars whose summed
+`tick_volume` — MT5's count of the ticks in each bar — times a safety factor of
+1.25 still fits the page's `max_ticks`, and at least one bar. A window whose
+bars report a tick count therefore costs as few pages as its ticks allow, where
+a page used to start at one bar and grow. A bar whose candle reports a count of
+0 (unknown) falls back to that growing page: one bar first, doubling while a
+page fits and halving when one holds too many ticks. A wrong estimate costs
+pages, never data: a page that held more ticks than its estimate planned is
+re-read with fewer bars, and a bar that still does not fit is paged through one
+millisecond at a time, exactly as before.
+
+Every answered window page and every finished window read prints one timing line
+to the desktop's stderr with the bars and ticks it covered and its milliseconds —
+since the page was queued for a page, since the read started for the finished
+read. A page line also carries `bid_changes`, the ticks of the page that report
+MT5's Bid flag (flag `2`, the bid changed), and `mt5_tick_volume`, the summed
+`tick_volume` of the loaded bars that open inside the page's range, so the
+footprint's own tick count can be compared with MT5's Tick Volume. Like the tick
+profile's decision lines they are `[bridge] INFO` lines and stay off unless
+`MT5_BRIDGE_PROFILE_LOG=1`:
+
+```text
+[bridge] INFO footprint ticks NAS100 page 1769999940000..1770000000000 bars=2 ticks=37 complete=false waited_ms=64 bid_changes=6 mt5_tick_volume=37
+[bridge] INFO footprint ticks NAS100 read finished bars=300 ticks=41207 pages=4 elapsed_ms=311
+```
 
 A bar's footprint is computed from all of its ticks or not at all. A bar is kept
 only when every page covering it, from its open through its end, held its whole
@@ -1239,25 +1280,39 @@ first, and never a bar the read stopped inside: those are named, ascending, in
 window was read whole), so the chart can say that ticks before that time are
 incomplete. Prices and volumes are decimal strings, as the wire carries them;
 `ticksPerRow`, `openMs`, the trade counts and `poc`, `vah` and `val` stay
-numbers. The event is published when the window read finishes — the window
-covered, the tick budget spent or the read stopped inside a bar, including a
-read a correlated error ended — and again whenever the bar the chart left
-behind lands complete. `rows` are the engine's own rows: contiguous price
-levels, each a whole number of `ticksPerRow` ticks of the symbol's mirrored
-tick size, with the volume each side traded, and `poc`, `vah` and `val` name
-rows by row number.
+numbers. The event is published after every answered page of the window read
+while the read is still going, so the chart shows the newest bars as soon as the
+first page lands instead of after the whole read: `bars` then holds the bars the
+read has taken whole so far — its newest ones, because it reads them first — and
+a bar it has not reached yet is simply absent, so `incomplete` and
+`incompleteBefore` name only bars a page actually stopped inside. The event is
+published once more when the window read finishes — the window covered, the tick
+budget spent or the read stopped inside a bar, including a read a correlated
+error ended — and again whenever the bar the chart left behind lands complete.
+`rows` are the engine's own rows: contiguous price levels, each a whole number of
+`ticksPerRow` ticks of the symbol's mirrored tick size, with the volume each side
+traded, and `poc`, `vah` and `val` name rows by row number.
 
 Each row also carries `buyTrades` and `sellTrades`: the number of trades that
 side took in it. A trade is one tick the bar's trade-only rule counts — a bar
 where any tick reports a volume counts only the ticks that report one, and a bar
 where none does (forex) counts every tick — on the side its own tick flag names,
-or, for an unflagged tick, the side the tick rule gives it (above the previous
+or, for a tick flagged neither or both ways, the side its own prices give it: a
+tick with a last price, a bid and an ask is classified by comparing its last
+price with its own bid/ask mid (above the mid a buy, below it a sell), and
+otherwise, or at the mid, the side the tick rule gives it (above the previous
 price a buy, below it a sell, at the same price the previous trade's side), so a
 tick of two and a half lots is one trade and a row's trade counts are the ticks
 behind its volumes, not the volumes themselves. A bar's own `buyTrades` and
 `sellTrades` are the sums of its rows' counts, and a row no trade reached counts
 `0` on both sides. The four fields are additive: a consumer that writes volumes
 ignores them.
+
+A tick trades at its last price; a tick without one (a CFD or forex quote) trades at
+the mid of its bid and ask, or at its bid when it has no ask. Some CFD feeds set
+both MT5 side flags (`TICK_FLAG_BUY` and `TICK_FLAG_SELL`) on every quote, which
+names no side; those quote ticks carry no last price, so the tick rule decides
+them too.
 
 `volume` is `real` when MT5 reports lots and `ticks` when no tick of the bar
 carries one and each tick counts as a trade. A bar the engine rows no level of
@@ -1428,7 +1483,10 @@ remembered history starts (at most 64) are cleared with the series.
 
 A new request, `cancel_tick_profile`, a session change or disconnect and a
 symbol change invalidate the estimate and the bar pages (generation); stale or
-mismatched responses are ignored. One profile is in flight at a time.
+mismatched responses are ignored. One profile is in flight at a time. Its
+`tick_history_request` page shares the EA's one tick history slot with the
+indicator ticks route above, so a profile page waits while an indicator ticks
+request is awaited, and the other way round; see "Indicator ticks".
 
 **Decision log (desktop stderr, no wire change).** With `MT5_BRIDGE_PROFILE_LOG=1`
 each profile prints one `[bridge] INFO` line for the choice to the `pnpm dev`

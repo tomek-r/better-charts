@@ -1,14 +1,23 @@
 import { defineConfig, devices } from '@playwright/test';
 
-/** Serves the pre-built bundle; not the 1420 of `pnpm tauri dev`. */
-const E2E_BUNDLE_PORT = 1421;
+/**
+ * A port the environment may move, so a second worktree can run the suite beside this one; anything that is not a
+ * whole number from 1 to 65535 keeps the default.
+ */
+function portFromEnv(name: string, fallback: number): number {
+  const port = Number(process.env[name]);
+  return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : fallback;
+}
+
+/** Serves the pre-built bundle; not the 1420 of `pnpm tauri dev`. Override it with E2E_BUNDLE_PORT to run beside another worktree. */
+const E2E_BUNDLE_PORT = portFromEnv('E2E_BUNDLE_PORT', 1421);
 const E2E_BUNDLE_URL = `http://localhost:${E2E_BUNDLE_PORT}`;
 const E2E_BUNDLE_DIR = '.e2e-bundle';
 const E2E_BUNDLE_COMMAND =
   `pnpm exec vite build --mode development --minify false --outDir ${E2E_BUNDLE_DIR} --emptyOutDir && ` +
   `pnpm exec vite preview --outDir ${E2E_BUNDLE_DIR} --port ${E2E_BUNDLE_PORT} --strictPort`;
-/** The dev server for the source-module specs; not WebKit's 1422, so both suites can run at once. */
-const E2E_DEV_SERVER_PORT = 1423;
+/** The dev server for the source-module specs; not WebKit's 1422, so both suites can run at once. Override it with E2E_DEV_SERVER_PORT to run beside another worktree. */
+const E2E_DEV_SERVER_PORT = portFromEnv('E2E_DEV_SERVER_PORT', 1423);
 const E2E_DEV_SERVER_URL = `http://localhost:${E2E_DEV_SERVER_PORT}`;
 
 /**

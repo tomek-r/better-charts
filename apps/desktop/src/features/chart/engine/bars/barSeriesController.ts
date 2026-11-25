@@ -12,7 +12,6 @@ import {
   type CandleAppearance,
 } from './candleAppearance';
 import { BarStyleSeries, type BarStyleSeriesState } from '../barStyle/barStyleSeries';
-import type { BarFootprints } from '../barStyle/barStylePoints';
 import type { BarFootprint } from '../barStyle/volumeFootprint/footprintData';
 import { DEFAULT_BAR_STYLE_APPEARANCE, type BarStyleAppearance } from '../barStyle/barStyleAppearance';
 
@@ -21,15 +20,6 @@ export interface LegendBar {
   readonly bar: RenderBar;
   readonly bodyColor: string | null;
   readonly previous: RenderBar | undefined;
-}
-
-/** The footprints keyed the way the bars are timed: the UTC seconds of the bar each one opened. */
-function footprintsByBar(footprints: readonly BarFootprint[]): BarFootprints {
-  const byBar = new Map<number, BarFootprint>();
-  for (const footprint of footprints) {
-    byBar.set(Math.floor(footprint.openMs / 1000), footprint);
-  }
-  return byBar;
 }
 
 /**
@@ -227,11 +217,19 @@ export class BarSeriesController {
   }
 
   /**
-   * Draws the footprints the host published for the bars it read whole, keyed by the bar each one belongs
-   * to. A bar the host holds no footprint for keeps drawing as a plain candle.
+   * Draws the footprints the host published for the bars it read whole. A bar the host holds no footprint for
+   * keeps drawing as a plain candle, and a republish of the same footprints costs the series no write.
    */
   setFootprints(footprints: readonly BarFootprint[]): void {
-    this.barStyle.applyFootprints(footprintsByBar(footprints), this.cache);
+    this.barStyle.applyFootprints(footprints, this.cache);
+  }
+
+  /**
+   * Draws the footprint the host republished for its forming bar: that bar's point alone is written while it is
+   * the newest one, so the columns of every other bar keep the paint they already have.
+   */
+  setFormingFootprint(footprint: BarFootprint): void {
+    this.barStyle.applyFormingFootprint(footprint, this.cache);
   }
 
   /** Removes the bar style series; the surface removes the chart itself. */

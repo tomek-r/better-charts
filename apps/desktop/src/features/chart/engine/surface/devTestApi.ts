@@ -92,7 +92,8 @@ export interface DevTestApi {
   candles(): CandleSeriesState;
   /**
    * The bar style series: the style it draws, the library series type drawing it (null while the
-   * anchor paints the candles), the options it was given and its points, all as plain copies.
+   * anchor paints the candles), the options it was given, its points and how often it wrote them,
+   * all as plain copies.
    */
   barStyle(): BarStyleSeriesState;
   visibleRange(): { from: number; to: number } | null;

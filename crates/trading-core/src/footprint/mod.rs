@@ -51,7 +51,7 @@ pub const TICK_FLAG_BUY: u32 = 32;
 pub const TICK_FLAG_SELL: u32 = 64;
 
 /// The side a tick reports: the direction of the trade the feed flagged, or [`TickSide::Unknown`]
-/// when it flagged none, which the tick rule then decides.
+/// when it flagged neither side or both, which the tick rule then decides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TickSide {
     Buy,
@@ -60,15 +60,14 @@ pub enum TickSide {
 }
 
 impl TickSide {
-    /// The side MT5's tick flags name. A tick that carries neither [`TICK_FLAG_BUY`] nor
-    /// [`TICK_FLAG_SELL`] has no side of its own; one that somehow carries both counts as a buy.
+    /// The side MT5's tick flags name. A tick that carries exactly one of [`TICK_FLAG_BUY`] and
+    /// [`TICK_FLAG_SELL`] took that side. One that carries neither, or both — some CFD feeds set both
+    /// on every quote — names no side of its own, so the tick rule decides it.
     pub fn from_flags(flags: u32) -> Self {
-        if flags & TICK_FLAG_BUY != 0 {
-            Self::Buy
-        } else if flags & TICK_FLAG_SELL != 0 {
-            Self::Sell
-        } else {
-            Self::Unknown
+        match (flags & TICK_FLAG_BUY != 0, flags & TICK_FLAG_SELL != 0) {
+            (true, false) => Self::Buy,
+            (false, true) => Self::Sell,
+            _ => Self::Unknown,
         }
     }
 }

@@ -8,6 +8,7 @@ use crate::chart_footprint::events::{CHART_FOOTPRINT_EVENT, CHART_FOOTPRINT_FORM
 use crate::chart_footprint::{ChartFootprintRequest, ChartFootprintRowSize};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
+use std::time::Instant;
 use trading_core::footprint::{FootprintTick, TICK_FLAG_BUY, TICK_FLAG_SELL};
 use trading_core::protocol::MarketTick;
 
@@ -23,15 +24,21 @@ fn dec(value: &str) -> Decimal {
     value.parse().expect("a decimal")
 }
 
-/// A bar whose every price is `close`.
+/// A bar whose every price is `close`, with one tick counted in it.
 fn candle(time_ms: i64, close: &str) -> MarketCandle {
+    candle_with_ticks(time_ms, close, 1)
+}
+
+/// A bar whose every price is `close`, with `tick_volume` ticks counted in it, as MT5 reports them:
+/// the host sizes a window read's pages from them.
+fn candle_with_ticks(time_ms: i64, close: &str, tick_volume: u64) -> MarketCandle {
     MarketCandle {
         time_ms,
         open: close.to_owned(),
         high: close.to_owned(),
         low: close.to_owned(),
         close: close.to_owned(),
-        tick_volume: 1,
+        tick_volume,
         spread: 0,
         real_volume: 0,
     }
@@ -114,33 +121,24 @@ fn chart_quote(time_ms: i64) -> QuoteUpdate {
     }
 }
 
-/// The bars each page of a read of `bar_count` bars covers, newest first, as the read grows its page:
-/// one bar, then twice as many, halved against the window.
-fn page_spans(bar_count: usize) -> Vec<(usize, usize)> {
-    let mut spans = Vec::new();
-    let mut unread_from = bar_count;
-    let mut page_bars = 1;
-    while unread_from > 0 {
-        let first_bar = unread_from.saturating_sub(page_bars);
-        spans.push((first_bar, unread_from));
-        unread_from = first_bar;
-        page_bars = (page_bars * 2).min(bar_count);
-    }
-    spans
-}
-
-/// Answers the window's read page by page, one buy tick a bar at its open, as the EA would.
+/// Answers the window's read page by page, as the EA would: every page the read queued is claimed from
+/// the ticks route and answered with one buy tick at the open of each bar it asked for, until the read
+/// asks for nothing more.
 fn read_window(state: &BridgeState, events: &Arc<dyn BridgeEvents>, window: &[MarketCandle]) {
-    for (first_bar, last_bar) in page_spans(window.len()) {
-        let ticks: Vec<MarketTick> = window[first_bar..last_bar]
-            .iter()
-            .map(|bar| tick(bar.time_ms, "100", "2", TICK_FLAG_BUY))
-            .collect();
-        let from_ms = window[first_bar].time_ms;
-        let to_ms = window
-            .get(last_bar)
-            .map_or(from_ms + 1, |next| next.time_ms);
-        let answered = page(from_ms, to_ms, true, &ticks);
+    let mut pages = 0;
+    while let Some(claimed) = claim_next_tick_request(state, &state.next_request_id, Instant::now())
+    {
+        pages += 1;
+        assert!(
+            pages <= window.len(),
+            "a window read asks for no more pages than its bars"
+        );
+        let request = ticks_slots(state)
+            .take_awaited(&claimed.request_id)
+            .expect("the claimed page is awaited");
+        assert_eq!(request.key, CHART_FOOTPRINT_KEY);
+        let ticks = ticks_in(window, request.page.from_ms, request.page.to_ms);
+        let answered = page(request.page.from_ms, request.page.to_ms, true, &ticks);
         assert!(accept_footprint_page(
             state,
             events,
@@ -148,6 +146,25 @@ fn read_window(state: &BridgeState, events: &Arc<dyn BridgeEvents>, window: &[Ma
             &answered
         ));
     }
+}
+
+/// One buy tick at the open of each bar of `window` the page of `from_ms..to_ms` asked for.
+fn ticks_in(window: &[MarketCandle], from_ms: i64, to_ms: i64) -> Vec<MarketTick> {
+    window
+        .iter()
+        .filter(|bar| (from_ms..to_ms).contains(&bar.time_ms))
+        .map(|bar| tick(bar.time_ms, "100", "2", TICK_FLAG_BUY))
+        .collect()
+}
+
+/// The opening times of the bars a `chart-footprint` event carries, oldest first.
+fn bar_opens(event: &serde_json::Value) -> Vec<i64> {
+    event["bars"]
+        .as_array()
+        .expect("the bars are a list")
+        .iter()
+        .map(|bar| bar["openMs"].as_i64().expect("a bar names its open"))
+        .collect()
 }
 
 /// An observer that keeps the ticks it was last handed.
@@ -184,9 +201,9 @@ fn enabling_the_chart_footprint_reads_the_window_it_shows() {
 
     enable(&state);
 
-    let queued = ticks_slots(&state).claim_waiting(&state.next_request_id);
-    assert_eq!(queued.len(), 1, "the window's own read is queued");
-    assert_eq!(queued[0].request.key, CHART_FOOTPRINT_KEY);
+    let queued = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the window's own read is queued");
+    assert_eq!(queued.request.key, CHART_FOOTPRINT_KEY);
 }
 
 #[test]
@@ -229,9 +246,15 @@ fn a_finished_window_read_publishes_its_complete_bars_oldest_first() {
 
 #[test]
 fn a_bar_the_read_stopped_inside_is_published_apart_and_kept_out_of_the_bars() {
-    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    // Two bars whose candles counted two ticks each and a two-tick page: the read covers one bar at a
+    // time, so its first page is the newest bar alone.
+    let window = [
+        candle_with_ticks(0, "100", 2),
+        candle_with_ticks(MINUTE_MS, "100", 2),
+    ];
     let (state, recorded) = chart_state(&window);
     let events: Arc<dyn BridgeEvents> = recorded.clone();
+    state.transfer_limits.lock().unwrap().max_ticks_per_page = 2;
     enable(&state);
 
     // The newest bar's page holds more ticks in its first millisecond than one page carries, so the
@@ -265,6 +288,79 @@ fn a_bar_the_read_stopped_inside_is_published_apart_and_kept_out_of_the_bars() {
     );
     assert_eq!(event["incompleteBefore"], MINUTE_MS);
     assert_eq!(event["incomplete"], serde_json::json!([MINUTE_MS]));
+}
+
+#[test]
+fn a_window_read_publishes_the_newest_bars_after_its_first_page() {
+    // Two bars whose candles counted two ticks each and a two-tick page: the read asks for the newest
+    // bar first and for the bar under it once that one is whole.
+    let window = [
+        candle_with_ticks(0, "100", 2),
+        candle_with_ticks(MINUTE_MS, "100", 2),
+    ];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    state.transfer_limits.lock().unwrap().max_ticks_per_page = 2;
+    enable(&state);
+
+    let first = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the newest bar's page");
+    assert_eq!(first.request.key, CHART_FOOTPRINT_KEY);
+    let answered = page(
+        MINUTE_MS,
+        MINUTE_MS + 1,
+        true,
+        &[tick(MINUTE_MS, "100", "2", TICK_FLAG_BUY)],
+    );
+    assert!(ticks_slots(&state)
+        .take_awaited(&first.request_id)
+        .is_some());
+    assert!(accept_footprint_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_KEY,
+        &answered
+    ));
+
+    let published = recorded.named(CHART_FOOTPRINT_EVENT);
+    let first_event = published
+        .last()
+        .expect("the first page publishes the bar it read");
+    assert_eq!(
+        bar_opens(first_event),
+        vec![MINUTE_MS],
+        "the bars the read has taken whole so far are its newest one"
+    );
+    assert_eq!(
+        first_event["incompleteBefore"],
+        serde_json::Value::Null,
+        "the bar the read has not reached yet is not reported incomplete"
+    );
+    assert!(first_event["incomplete"]
+        .as_array()
+        .expect("the incomplete bars are a list")
+        .is_empty());
+
+    let second = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the bar under the newest one");
+    assert_eq!(second.request.key, CHART_FOOTPRINT_KEY);
+    let answered = page(0, MINUTE_MS, true, &[tick(0, "100", "2", TICK_FLAG_BUY)]);
+    assert!(ticks_slots(&state)
+        .take_awaited(&second.request_id)
+        .is_some());
+    assert!(accept_footprint_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_KEY,
+        &answered
+    ));
+
+    let published = recorded.named(CHART_FOOTPRINT_EVENT);
+    let finished = published
+        .last()
+        .expect("the finished read publishes both bars");
+    assert_eq!(bar_opens(finished), vec![0, MINUTE_MS]);
+    assert_eq!(finished["incompleteBefore"], serde_json::Value::Null);
 }
 
 #[test]
@@ -362,13 +458,11 @@ fn a_closed_bar_landing_whole_publishes_the_window_again() {
         "the closed bar landing whole publishes the window again"
     );
     let event = published.last().expect("the window gained a complete bar");
-    let opens: Vec<i64> = event["bars"]
-        .as_array()
-        .expect("the bars are a list")
-        .iter()
-        .map(|bar| bar["openMs"].as_i64().expect("a bar names its open"))
-        .collect();
-    assert_eq!(opens, vec![0, MINUTE_MS], "both closed bars are complete");
+    assert_eq!(
+        bar_opens(event),
+        vec![0, MINUTE_MS],
+        "both closed bars are complete"
+    );
     assert!(event["incomplete"]
         .as_array()
         .expect("the incomplete bars are a list")
@@ -405,12 +499,44 @@ fn an_observer_keeps_the_ticks_coming_while_the_chart_footprint_is_off() {
     // A chart load replaces the feed; the read starts because the observer needs the ticks.
     publish_market(&events, &state, SESSION, snapshot(&window));
 
-    let queued = ticks_slots(&state).claim_waiting(&state.next_request_id);
-    assert_eq!(queued.len(), 1, "the observer's read is queued");
-    assert_eq!(queued[0].request.key, CHART_FOOTPRINT_KEY);
-
     read_window(&state, &events, &window);
 
     assert_eq!(observer.bars(), vec![0, MINUTE_MS]);
     assert!(recorded.named(CHART_FOOTPRINT_EVENT).is_empty());
+}
+
+#[test]
+fn a_live_reread_waits_for_the_window_page_holding_the_one_tick_slot() {
+    // A single-bar window reads in one page, so the live re-read is the only request queued behind it.
+    let window = [candle(0, "100")];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    enable(&state);
+
+    let window_page = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the window read takes the EA's one tick slot");
+    assert_eq!(window_page.request.key, CHART_FOOTPRINT_KEY);
+
+    // The quote asks for the forming bar's live re-read while that page awaits its answer: the EA
+    // serves one tick request at a time, so the re-read must stay queued rather than cancel it.
+    assert!(accept_quote(&events, &state, SESSION, chart_quote(0)).is_some());
+    assert!(
+        claim_next_tick_request(&state, &state.next_request_id, Instant::now()).is_none(),
+        "the live re-read must not go out while the window page is awaited"
+    );
+
+    // Answering the window page frees the slot, and the live re-read then goes out.
+    assert!(ticks_slots(&state)
+        .take_awaited(&window_page.request_id)
+        .is_some());
+    let answered = page(0, MINUTE_MS, true, &[tick(0, "100", "2", TICK_FLAG_BUY)]);
+    assert!(accept_footprint_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_KEY,
+        &answered
+    ));
+    let live_page = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the live re-read goes out once the window page is answered");
+    assert_eq!(live_page.request.key, CHART_FOOTPRINT_LIVE_KEY);
 }

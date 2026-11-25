@@ -3,7 +3,10 @@
 //!
 //! A bar's prices carry no trades, so a footprint can only answer from the raw ticks inside the bar.
 //! The read asks for them over the desktop's indicator ticks route (no wire change), newest bar
-//! first, and stops once the oldest loaded bar is covered or the tick budget is spent. A bar's
+//! first, and stops once the oldest loaded bar is covered or the tick budget is spent. A page is
+//! sized from the candles' own tick counts — MT5's count of the ticks in each bar, widened by
+//! [`TICK_ESTIMATE_MARGIN_NUMERATOR`] — so a window costs as few pages as its ticks allow, and a bar
+//! whose candle reported no count falls back to a page widened bar by bar. A bar's
 //! footprint is either computed from all of its ticks or not at all: a bar is kept only when every
 //! page covering it, from its open through its end, held its whole range, and a bar a read stopped
 //! inside keeps no ticks and reads as `na`, as the bars the read never reached do.
@@ -18,9 +21,10 @@
 //! the one after starts at the bar's open again.
 
 use rust_decimal::Decimal;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
-use trading_core::footprint::FootprintTick;
+use trading_core::footprint::{FootprintTick, TickSide};
 use trading_core::protocol::{MarketCandle, MarketTick};
 
 /// Most ticks one footprint read keeps. A deeper read costs the EA's reader one page at a time, and a
@@ -29,18 +33,34 @@ pub(crate) const FOOTPRINT_TICK_BUDGET: usize = 500_000;
 /// Shortest interval between two live re-reads of the forming bar. Quotes arrive far more often than
 /// a bar's tick history needs reading again, and every re-read costs the EA a tick page.
 pub(crate) const FORMING_REREAD_INTERVAL: Duration = Duration::from_millis(1_000);
-/// Bars one page asks for first. The read doubles it while a page fits and halves it when one holds
-/// too many ticks, so a sparse window costs few pages and a dense one stays within the EA's page.
+/// Bars one page asks for first when the candles report no tick count to size it from. The read
+/// doubles it while a page fits and halves it when one holds too many ticks, so a window of bars
+/// without counts costs few pages and a dense one stays within the EA's page.
 const FIRST_PAGE_BARS: usize = 1;
+/// How much wider a page is sized than the candles' own tick counts name, as the fraction
+/// `TICK_ESTIMATE_MARGIN_NUMERATOR / TICK_ESTIMATE_MARGIN_DENOMINATOR` — `1.25`. A bar's count is
+/// what MT5 counted while the bar formed, so it can fall short of the ticks its reader returns for
+/// the bar; a page sized a little wide still reads whole, while one sized a little short costs
+/// another page. A fraction keeps the estimate in whole numbers.
+const TICK_ESTIMATE_MARGIN_NUMERATOR: u64 = 5;
+const TICK_ESTIMATE_MARGIN_DENOMINATOR: u64 = 4;
+/// Largest factor a page's tick estimate is widened by after a page held more ticks than it was
+/// sized for. At it the candles' counts are taken to undercount the read for good: the read plans its
+/// pages from bars instead, whose halving narrows them until every page fits.
+const MAX_TICK_ESTIMATE_SHRINK: u64 = 64;
 /// Shortest span a bar can have. A page asks for a range that ends after it starts, and a tick falls
 /// in the millisecond it carries.
 const MINIMUM_BAR_SPAN_MS: i64 = 1;
 
-/// One bar of a footprint read: when it opened, and when the bar after it did.
+/// One bar of a footprint read: when it opened, when the bar after it did, and how many ticks MT5
+/// counted in it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BarSpan {
     pub(crate) open_ms: i64,
     pub(crate) end_ms: i64,
+    /// The candle's `tick_volume`: MT5's count of the ticks in the bar. `0` when the broker reported
+    /// none, which leaves the pages sized from bars instead of ticks.
+    pub(crate) tick_volume: u64,
 }
 
 /// The bars of `candles` as a footprint read sees them, oldest first. The newest bar is still forming,
@@ -54,6 +74,7 @@ pub(crate) fn footprint_window(candles: &[MarketCandle], read_end_ms: i64) -> Ve
         window.push(BarSpan {
             open_ms: candle.time_ms,
             end_ms: end_ms.max(candle.time_ms + MINIMUM_BAR_SPAN_MS),
+            tick_volume: candle.tick_volume,
         });
     }
     window
@@ -100,19 +121,66 @@ fn bar_of(bars: &[BarSpan], time_ms: i64) -> Option<usize> {
 }
 
 /// One wire tick as a footprint trade: the price it moved at, the volume it moved and the side its
-/// flags name. `None` when the wire names no positive price to trade at.
+/// flags name.
+///
+/// A tick whose flags name no side — neither, or both — takes the side the quote rule reads from its
+/// own prices: with a last price and a bid and an ask, a last above their mid bought and one below it
+/// sold, and a last at the mid names no side, which the tick rule then decides. A tick without a last
+/// price is a quote priced at its mid already and keeps no side of its own either. `None` when the wire
+/// names no positive price to trade at.
 pub(crate) fn to_trade_tick(tick: &MarketTick) -> Option<FootprintTick> {
-    Some(FootprintTick::from_flags(
-        tick.time_ms,
-        traded_price(tick)?,
-        traded_volume(tick),
-        tick.flags,
-    ))
+    Some(FootprintTick {
+        time_ms: tick.time_ms,
+        price: traded_price(tick)?,
+        volume: traded_volume(tick),
+        side: trade_side(tick),
+    })
 }
 
-/// The price the tick traded at: the last price when the broker reports one, the bid otherwise.
+/// The side the tick trades on: the side its flags name, or — when they name none, neither or both —
+/// the side its own last price gives against its own bid/ask mid.
+fn trade_side(tick: &MarketTick) -> TickSide {
+    match TickSide::from_flags(tick.flags) {
+        TickSide::Unknown => quote_rule_side(tick),
+        side => side,
+    }
+}
+
+/// The side the tick's own last price names against its own bid/ask mid, the quote rule of Lee and
+/// Ready: above the mid the trade took the ask, below it the bid, and at the mid it names no side,
+/// which leaves the tick rule to decide.
+///
+/// A tick without a last price is a quote priced at its mid already, and one without both quotes has
+/// no mid to compare with: both name no side here.
+fn quote_rule_side(tick: &MarketTick) -> TickSide {
+    let (Some(last), Some(mid)) = (positive_decimal(&tick.last), positive_mid(tick)) else {
+        return TickSide::Unknown;
+    };
+    match last.cmp(&mid) {
+        Ordering::Greater => TickSide::Buy,
+        Ordering::Less => TickSide::Sell,
+        Ordering::Equal => TickSide::Unknown,
+    }
+}
+
+/// The price the tick traded at: the last price when the broker reports one. A quote-only feed (CFDs,
+/// forex) reports none, so its tick trades at the mid price, which moves whichever side re-quotes and
+/// so gives the tick rule a change to read; without an ask the bid stands in.
 fn traded_price(tick: &MarketTick) -> Option<Decimal> {
-    positive_decimal(&tick.last).or_else(|| positive_decimal(&tick.bid))
+    positive_decimal(&tick.last).or_else(|| mid_price(tick))
+}
+
+/// The mid of the tick's bid and ask when both are positive, the bid alone when only it is.
+fn mid_price(tick: &MarketTick) -> Option<Decimal> {
+    positive_mid(tick).or_else(|| positive_decimal(&tick.bid))
+}
+
+/// The mid of the tick's bid and ask when both are positive: the price a quote trades at, and the
+/// price the quote rule compares a last price with.
+fn positive_mid(tick: &MarketTick) -> Option<Decimal> {
+    let bid = positive_decimal(&tick.bid)?;
+    let ask = positive_decimal(&tick.ask)?;
+    Some((bid + ask) / Decimal::TWO)
 }
 
 /// The volume the tick moved: the real volume when the symbol reports one, the tick count otherwise,
@@ -132,6 +200,8 @@ fn positive_decimal(value: &str) -> Option<Decimal> {
 pub(crate) struct TickPage {
     /// The first bar the page covers; its range starts at that bar's opening time.
     pub(crate) first_bar: usize,
+    /// How many bars the page covers, `first_bar` included. The timing lines report it.
+    pub(crate) bars: usize,
     pub(crate) from_ms: i64,
     pub(crate) to_ms: i64,
     pub(crate) max_ticks: u32,
@@ -147,7 +217,8 @@ pub(crate) struct PageAnswer<'a> {
 /// What a finished footprint read kept: the ticks of the bars it took whole, and the one bar it
 /// stopped inside, whose ticks are dropped.
 pub(crate) struct FootprintRead {
-    /// The ticks of each bar the read took whole, keyed by the bar's opening time.
+    /// The ticks of each bar the read took whole and has not handed on yet, keyed by that bar's opening
+    /// time.
     pub(crate) ticks: BTreeMap<i64, Vec<FootprintTick>>,
     /// The bar the read stopped inside, if it stopped in one.
     pub(crate) incomplete: Option<i64>,
@@ -168,8 +239,12 @@ pub(crate) struct FootprintTicks {
     stopped_in: Option<i64>,
     /// Bars `[unread_from ..]` are read whole.
     unread_from: usize,
-    /// How many bars one page asks for.
+    /// How many bars one page asks for when a bar's candle reported no tick count to size it from.
     page_bars: usize,
+    /// How much wider a page's tick estimate is than the candles' counts, after pages that held more
+    /// ticks than they were sized for: one doubling per such page, so a wrong estimate still reads
+    /// every bar.
+    estimate_shrink: u64,
     read_ticks: usize,
     tick_budget: usize,
     /// The page the read waits for, once it asked for one.
@@ -190,6 +265,7 @@ impl FootprintTicks {
             within_from_ms: None,
             stopped_in: None,
             page_bars: FIRST_PAGE_BARS,
+            estimate_shrink: 1,
             read_ticks: 0,
             tick_budget,
             awaiting: None,
@@ -222,8 +298,11 @@ impl FootprintTicks {
         }
         if page.first_bar + 1 != self.unread_from {
             // The range held more ticks than a page, so the answer covers only its oldest bars and
-            // none of them borders the bars already read. Ask for fewer bars instead.
+            // none of them borders the bars already read. Ask for fewer bars instead: the widening
+            // page halves, and the candles' tick estimate is widened by the same factor, so a run the
+            // estimate over-counted shrinks too.
             self.page_bars = self.halved_page_bars();
+            self.estimate_shrink = self.widened_estimate_shrink();
             return;
         }
         match resumed_after(ticks, page.from_ms) {
@@ -267,16 +346,70 @@ impl FootprintTicks {
         let (first_bar, from_ms) = match self.within_from_ms {
             Some(from_ms) => (self.unread_from - 1, from_ms),
             None => {
-                let first_bar = self.unread_from.saturating_sub(self.page_bars);
+                let first_bar = self.first_bar_of_page(max_ticks);
                 (first_bar, self.bars.get(first_bar)?.open_ms)
             }
         };
         Some(TickPage {
             first_bar,
+            bars: self.unread_from - first_bar,
             from_ms,
             to_ms: end_bar.end_ms,
             max_ticks,
         })
+    }
+
+    /// The oldest bar a page of `max_ticks` ticks covers: the run of newest unread bars whose candles'
+    /// tick counts, widened by [`TICK_ESTIMATE_MARGIN_NUMERATOR`], fit the page, and at least the
+    /// newest unread bar alone. A bar whose candle reported no count leaves the page sized from bars,
+    /// which a page that fitted widens and one that held too many halves.
+    fn first_bar_of_page(&self, max_ticks: u32) -> usize {
+        let widened_page = self.unread_from.saturating_sub(self.page_bars);
+        let Some(newest) = self.unread_from.checked_sub(1) else {
+            return widened_page;
+        };
+        if self.estimate_shrink >= MAX_TICK_ESTIMATE_SHRINK {
+            // The candles' counts fall short of the ticks their pages bring, however wide the estimate
+            // is taken: plan from bars instead, whose halving narrows every page until it fits.
+            return widened_page;
+        }
+        self.estimated_first_bar(newest, max_ticks)
+            .unwrap_or(widened_page)
+    }
+
+    /// The oldest bar of the run of unread bars ending at `newest` whose estimated ticks fit
+    /// `max_ticks`; `None` when the candle of `newest` reported no tick count to size a page from.
+    fn estimated_first_bar(&self, newest: usize, max_ticks: u32) -> Option<usize> {
+        let mut counted = counted_ticks(self.bars.get(newest)?)?;
+        let bound = u64::from(max_ticks);
+        let mut first = newest;
+        while let Some(older) = first.checked_sub(1) {
+            let Some(bar) = self.bars.get(older) else {
+                break;
+            };
+            let Some(bar_counted) = counted_ticks(bar) else {
+                // The run stops before a bar no candle counted, which the page after this one sizes
+                // from bars instead.
+                break;
+            };
+            let widened = counted.saturating_add(bar_counted);
+            if self.estimated_page_ticks(widened) > bound {
+                break;
+            }
+            counted = widened;
+            first = older;
+        }
+        Some(first)
+    }
+
+    /// The ticks a page is expected to read for bars whose candles counted `counted` ticks: MT5's
+    /// count widened by the estimate margin and by whatever pages that held more ticks than they were
+    /// sized for added, and never below one tick.
+    fn estimated_page_ticks(&self, counted: u64) -> u64 {
+        let widened = counted
+            .saturating_mul(TICK_ESTIMATE_MARGIN_NUMERATOR)
+            .saturating_mul(self.estimate_shrink);
+        (widened / TICK_ESTIMATE_MARGIN_DENOMINATOR).max(1)
     }
 
     /// Keeps the page's ticks and marks its bars read.
@@ -293,6 +426,16 @@ impl FootprintTicks {
             self.ticks_by_bar.entry(open_ms).or_default().extend(trades);
         }
         self.read_ticks += ticks.len();
+    }
+
+    /// The ticks of the bars this read has taken whole so far, taken out so they can be handed on
+    /// before the read ends. The bar it pages through keeps its ticks: no page has covered its whole
+    /// range yet.
+    fn take_whole_bars(&mut self) -> BTreeMap<i64, Vec<FootprintTick>> {
+        let Some(oldest_whole) = self.bars.get(self.unread_from).map(|bar| bar.open_ms) else {
+            return BTreeMap::new();
+        };
+        self.ticks_by_bar.split_off(&oldest_whole)
     }
 
     /// Keeps the ticks of `ticks` before its last millisecond, which the next page asks for again, and
@@ -336,6 +479,19 @@ impl FootprintTicks {
     fn halved_page_bars(&self) -> usize {
         (self.page_bars / 2).max(FIRST_PAGE_BARS)
     }
+
+    /// How much wider the tick estimate is after a page held more ticks than it was sized for.
+    fn widened_estimate_shrink(&self) -> u64 {
+        self.estimate_shrink
+            .saturating_mul(2)
+            .min(MAX_TICK_ESTIMATE_SHRINK)
+    }
+}
+
+/// How many ticks MT5 counted in `bar`; `None` when its candle reported none, which leaves the page
+/// sized from bars instead.
+fn counted_ticks(bar: &BarSpan) -> Option<u64> {
+    (bar.tick_volume != 0).then_some(bar.tick_volume)
 }
 
 /// The millisecond the next page of a half-read bar resumes at: the last tick's, which the page did
@@ -449,6 +605,7 @@ impl LiveRead {
         let asked = resume.as_ref().map_or(span, |point| BarSpan {
             open_ms: point.from_ms,
             end_ms: span.end_ms,
+            tick_volume: span.tick_volume,
         });
         Some(Self {
             span,
@@ -494,6 +651,21 @@ fn last_tick_ms(ticks: &[FootprintTick]) -> Option<i64> {
     ticks.last().map(|tick| tick.time_ms)
 }
 
+/// What the timing lines report of the window read: when it started and when the page it waits for
+/// went out, the bars that page covers, and what the pages before it read. Nothing else reads them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ReadTiming {
+    /// When the read started; `None` while no window read is in flight.
+    pub(crate) started: Option<Instant>,
+    /// When the page the read waits for went out.
+    pub(crate) page_queued: Option<Instant>,
+    /// The bars that page covers.
+    pub(crate) page_bars: usize,
+    /// The pages the read answered before that one, and the ticks they brought.
+    pub(crate) pages: usize,
+    pub(crate) ticks: usize,
+}
+
 /// The footprint ticks of the chart symbol: the reads that fill them, and the ticks an observer reads.
 #[derive(Default)]
 pub(crate) struct FootprintFeed {
@@ -515,6 +687,13 @@ pub(crate) struct FootprintFeed {
     live: Option<LiveRead>,
     /// When the forming bar may be re-read again.
     next_forming_read_at: Option<Instant>,
+    /// When the window read started and when the page it waits for went out, with the bars that page
+    /// covers and the pages and ticks read before it: the timing lines report them.
+    read_started: Option<Instant>,
+    page_queued: Option<Instant>,
+    page_bars: usize,
+    read_pages: usize,
+    read_page_ticks: usize,
 }
 
 impl FootprintFeed {
@@ -523,25 +702,56 @@ impl FootprintFeed {
         *self = Self::default();
         self.bars = bars.clone();
         self.read = FootprintTicks::new(bars, FOOTPRINT_TICK_BUDGET);
-        self.read.as_mut()?.next_page(page_bound)
+        self.read_started = Some(Instant::now());
+        let page = self.read.as_mut()?.next_page(page_bound);
+        self.note_page(page)
     }
 
-    /// Folds one answered page of the window read in.
+    /// Folds one answered page of the window read in, handing the bars it took whole to the feed as it
+    /// goes: the observer and the chart see them before the read ends, and a bar the read has not
+    /// reached names no state at all.
     pub(crate) fn accept_page(&mut self, answer: PageAnswer<'_>, page_bound: u32) -> PageOutcome {
-        let next_page = {
+        let (next_page, whole) = {
             let Some(read) = self.read.as_mut() else {
                 return PageOutcome::Idle;
             };
             read.accept(answer);
-            read.next_page(page_bound)
+            let next_page = read.next_page(page_bound);
+            (next_page, read.take_whole_bars())
         };
+        self.read_pages += 1;
+        self.read_page_ticks += answer.ticks.len();
+        self.keep_read_bars(whole);
         match next_page {
-            Some(page) => PageOutcome::Next(page),
+            Some(page) => {
+                self.note_page(Some(page));
+                PageOutcome::Next(page)
+            }
             None => {
                 self.finish_read();
                 PageOutcome::Finished
             }
         }
+    }
+
+    /// What the window read's timing lines report: when it started, when the page it waits for went
+    /// out and the bars that page covers, and what the pages before it read.
+    pub(crate) fn read_timing(&self) -> ReadTiming {
+        ReadTiming {
+            started: self.read_started,
+            page_queued: self.page_queued,
+            page_bars: self.page_bars,
+            pages: self.read_pages,
+            ticks: self.read_page_ticks,
+        }
+    }
+
+    /// Notes the page the read just asked for, so the timing lines cover it and the time it takes the
+    /// EA to answer it.
+    fn note_page(&mut self, page: Option<TickPage>) -> Option<TickPage> {
+        self.page_bars = page.map_or(0, |page| page.bars);
+        self.page_queued = page.map(|_| Instant::now());
+        page
     }
 
     /// Follows the chart's forming bar after an accepted quote at `now`: the bar's first re-read, then
@@ -677,7 +887,13 @@ impl FootprintFeed {
                 self.drop_partial_bar(incomplete);
             }
         }
-        for (open_ms, ticks) in read.ticks {
+        self.keep_read_bars(read.ticks);
+    }
+
+    /// Keeps the bars the window read took whole, whether it is still going or it just finished: a bar
+    /// a live read owns is left to it, because a window page of such a bar stops before its end.
+    fn keep_read_bars(&mut self, whole: BTreeMap<i64, Vec<FootprintTick>>) {
+        for (open_ms, ticks) in whole {
             if self.follow_owns(open_ms) {
                 continue;
             }
@@ -702,6 +918,16 @@ impl FootprintFeed {
     /// host that publishes the window tells a closed bar landing complete by this count growing.
     pub(crate) fn complete_bar_count(&self) -> usize {
         self.complete_bars().count()
+    }
+
+    /// How many ticks MT5 counted in the window's bars that open in `from_ms..to_ms`: the candles' own
+    /// tick volume, which a footprint's tick count is compared with.
+    pub(crate) fn candle_tick_volume(&self, from_ms: i64, to_ms: i64) -> u64 {
+        self.bars
+            .iter()
+            .filter(|bar| (from_ms..to_ms).contains(&bar.open_ms))
+            .map(|bar| bar.tick_volume)
+            .fold(0, u64::saturating_add)
     }
 
     /// The forming bar's opening time and the ticks its last whole re-read kept, once the quote path

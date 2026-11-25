@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  footprintCellNumberColor,
   footprintCells,
   type FootprintCellSettings,
   type FootprintRowCells,
@@ -8,10 +9,18 @@ import {
   FOOTPRINT_DEFAULT_BUY_SHADES,
   FOOTPRINT_DEFAULT_SELL_SHADES,
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintDefaults';
+import { footprintProfileBox } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintGeometry';
 import {
   FOOTPRINT_NEUTRAL_COLOR,
+  FOOTPRINT_NEUTRAL_TEXT_COLOR,
   FOOTPRINT_POC_COLOR,
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintShades';
+import {
+  FOOTPRINT_FONT_SIZE,
+  footprintCellShowsText,
+  type FootprintTextStyle,
+  type FootprintTextWidth,
+} from '../src/features/chart/engine/barStyle/volumeFootprint/footprintTextSize';
 import type {
   BarFootprint,
   ChartFootprintRow,
@@ -19,12 +28,28 @@ import type {
 
 /**
  * What each footprint type makes of one bar's rows: the number every cell writes, the shade it is graded to, the
- * imbalance marks on its edges and, in Profile, the share of its column it fills. The bar holds three rows, so
- * every band and every share below is hand-computed from those rows.
+ * colour that number is written in, the imbalance marks on its edges and, in Profile, the share of its column it
+ * fills. The bar holds three rows, so every band and every share below is hand-computed from those rows.
  */
 
 /** The four values each side of a row carries: the volume it traded and the trades behind it. */
 type RowSides = Pick<ChartFootprintRow, 'buyVolume' | 'sellVolume' | 'buyTrades' | 'sellTrades'>;
+
+/** The light text colour every number written on a sell or buy shade takes, whatever band that shade is. */
+const LIGHT_TEXT_COLOR = '#ffffff';
+/** The dark text colour a number keeps on the white fill a bar's point of control row is drawn in. */
+const DARK_TEXT_COLOR = '#0b0e14';
+/** How wide the spec's text is in css px: five pixels a character, which a stub measures without any canvas. */
+const MEASURED_TEXT: FootprintTextWidth = (text) => text.length * 5;
+/** The text style the cells' numbers are fitted to their boxes with, at one device pixel per css px. */
+const CELL_TEXT_STYLE: FootprintTextStyle = {
+  size: FOOTPRINT_FONT_SIZE,
+  textWidth: MEASURED_TEXT,
+  horizontalPixelRatio: 1,
+  verticalPixelRatio: 1,
+};
+/** The box of one column a cell is drawn in, in device pixels: seventy-two wide, one twenty-px row tall. */
+const CELL_COLUMN = { left: 0, width: 72, top: 0, height: 20 };
 
 /** One row of the fixture: its number, the prices it spans and what each side of it took. */
 function row(rowNumber: number, downPrice: number, upPrice: number, sides: RowSides): ChartFootprintRow {
@@ -71,6 +96,15 @@ function settingsWith(changes: Partial<FootprintCellSettings>): FootprintCellSet
   return { ...SETTINGS, ...changes };
 }
 
+/**
+ * The bar whose point of control traded both sides alike: its lowest row carries the volume and no delta at all, so
+ * in Profile the highlighted row's cell fills none of its column.
+ */
+const BALANCED_POC_FOOTPRINT: BarFootprint = {
+  ...FOOTPRINT,
+  rows: [{ ...ROWS[0], buyVolume: 300, sellVolume: 300 }, ROWS[1], ROWS[2]],
+};
+
 /** One row's cells as a painter sees them: the column, the number and the fill of each, in one line per cell. */
 function paintedCells(rows: readonly FootprintRowCells[]): string[][] {
   return rows.map(({ cells }) => cells.map((cell) => `${cell.column} ${cell.text} ${cell.fill}`));
@@ -97,20 +131,26 @@ test('a cell carries only the imbalance mark of a side the host called imbalance
   ]);
 });
 
-test('Bid × Ask writes one cell per row, its larger side sharing the shade of the bar largest level', () => {
+test("Bid × Ask writes each row's bid left of the candle and its ask right of it, both in the row's one shade", () => {
   // The largest level is 600, the lowest row's buy side: that row is all of it, band 4; 100 of 600 is 0.17, band 1;
-  // 500 of 600 is 0.83, band 4. The sell shades take a level the sell side won, or one both sides shared.
+  // 500 of 600 is 0.83, band 4. The sell shades take a level the sell side won, or one both sides shared, and the buy
+  // shades the rest, so both cells of a row take the one shade of that row's larger side.
   expect(paintedCells(footprintCells(FOOTPRINT, settingsWith({ type: 'bidAsk' })))).toEqual([
-    ['buy 200 × 600 #004d40'],
-    ['buy 100 × 100 #ff99a0'],
-    ['buy 500 × 300 #801922'],
+    ['sell 200 #004d40', 'buy 600 #004d40'],
+    ['sell 100 #ff99a0', 'buy 100 #ff99a0'],
+    ['sell 500 #801922', 'buy 300 #801922'],
   ]);
 });
 
-test('Bid × Ask stands the sell mark on the cell left edge and the buy mark on its right one', () => {
-  const marked = footprintCells(FOOTPRINT, settingsWith({ type: 'bidAsk' })).map(({ cells }) => cells[0].marks);
+test("Bid × Ask stands each side's imbalance mark on its own cell", () => {
+  const rows = footprintCells(FOOTPRINT, settingsWith({ type: 'bidAsk' }));
+  const marked = rows.map(({ cells }) => cells.map((cell) => cell.marks));
 
-  expect(marked).toEqual([[], ['sell'], ['buy']]);
+  expect(marked).toEqual([
+    [[], []],
+    [['sell'], []],
+    [[], ['buy']],
+  ]);
 });
 
 test('Delta writes each row signed difference, shaded by its distance from zero', () => {
@@ -195,6 +235,67 @@ test('counting volume highlights the host point of control, counting trades the 
     false,
     true,
   ]);
+});
+
+test('every number on a sell or buy shade is the light text colour, whatever band that shade is', () => {
+  const rows = footprintCells(FOOTPRINT, SETTINGS);
+
+  // Both lightest cells of the bar are band 1 of their side's ramp — the quietest row's two sides — which is where
+  // dark text used to be written: on them, and on the darker bands, every number is now light.
+  expect(rows[1].cells.map((cell) => cell.fill)).toEqual(['#ff99a0', '#5cc4b4']);
+  expect(rows[1].cells.map((cell) => cell.textColor)).toEqual([LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR]);
+  expect(rows.map(({ cells }) => cells.map((cell) => cell.textColor))).toEqual([
+    [LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR],
+    [LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR],
+    [LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR],
+  ]);
+  // The cells of the other types take the same colour in every band, and only a cell of no side keeps its neutral
+  // fill's own contrast: the zero delta of the middle row is written in the neutral text colour.
+  const deltas = footprintCells(FOOTPRINT, settingsWith({ type: 'delta' }));
+  expect(deltas.map(({ cells }) => cells.map((cell) => cell.fill))).toEqual([
+    ['#004d40'],
+    [FOOTPRINT_NEUTRAL_COLOR],
+    ['#cc2f3c'],
+  ]);
+  expect(deltas.map(({ cells }) => cells.map((cell) => cell.textColor))).toEqual([
+    [LIGHT_TEXT_COLOR],
+    [FOOTPRINT_NEUTRAL_TEXT_COLOR],
+    [LIGHT_TEXT_COLOR],
+  ]);
+});
+
+test('the point of control row keeps its dark numbers on the white fill it is drawn in', () => {
+  const highlight = { visible: true, color: FOOTPRINT_POC_COLOR };
+  const rows = footprintCells(FOOTPRINT, settingsWith({ poc: highlight }));
+
+  // The host calls the lowest row the point of control: both of its cells are white and keep the dark text a light
+  // fill takes, while every other row still writes its numbers on a side shade, in the light colour.
+  expect(rows[0].cells.map((cell) => cell.fill)).toEqual([FOOTPRINT_POC_COLOR, FOOTPRINT_POC_COLOR]);
+  expect(rows[0].cells.map((cell) => cell.textColor)).toEqual([DARK_TEXT_COLOR, DARK_TEXT_COLOR]);
+  expect(rows[2].cells.map((cell) => cell.textColor)).toEqual([LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR]);
+});
+
+test('a number that runs past its own box is written light, while one inside its box keeps its fill colour', () => {
+  const highlight = { visible: true, color: FOOTPRINT_POC_COLOR };
+  // In Cluster a cell's box is its whole column, so the point of control's white fill holds the number and the dark
+  // text that fill gives it stays.
+  const clustered = footprintCells(FOOTPRINT, settingsWith({ type: 'delta', poc: highlight }))[0].cells[0];
+  const clusteredBox = footprintProfileBox(CELL_COLUMN, clustered.widthShare, 'buy');
+  expect(clustered.textColor).toBe(DARK_TEXT_COLOR);
+  expect(footprintCellNumberColor(clustered, clusteredBox, CELL_TEXT_STYLE)).toBe(DARK_TEXT_COLOR);
+
+  // In Profile that same cell fills only its share of the column, and a delta that points nowhere fills none of it:
+  // its box is one device px wide, so its number is written over the chart's dark background — while the whole column
+  // still holds it — and takes the light text colour rather than the dark one of its own fill.
+  const profile = settingsWith({ type: 'delta', display: 'profile', poc: highlight });
+  const profiled = footprintCells(BALANCED_POC_FOOTPRINT, profile)[0].cells[0];
+  const profiledBox = footprintProfileBox(CELL_COLUMN, profiled.widthShare, 'buy');
+
+  expect(profiled.widthShare).toBe(0);
+  expect(profiledBox.width).toBe(1);
+  expect(profiled.textColor).toBe(DARK_TEXT_COLOR);
+  expect(footprintCellShowsText(profiledBox, CELL_COLUMN.width, profiled.text, CELL_TEXT_STYLE)).toBe(true);
+  expect(footprintCellNumberColor(profiled, profiledBox, CELL_TEXT_STYLE)).toBe(LIGHT_TEXT_COLOR);
 });
 
 test('the shades a cell takes come from the settings, so an edited ramp repaints the bar', () => {

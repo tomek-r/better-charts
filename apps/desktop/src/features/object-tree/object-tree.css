@@ -177,9 +177,3 @@
   border-top: 1px solid var(--color-border);
   padding-top: 4px;
 }
-
-/* The price pane's indicators open with the rule that separates them from the drawings above them. An own
-   pane's group already carries that rule, so its list adds none. */
-.object-tree-pane-group > .object-tree-list + .object-tree-indicator-list {
-  border-top: 1px solid var(--color-border);
-}

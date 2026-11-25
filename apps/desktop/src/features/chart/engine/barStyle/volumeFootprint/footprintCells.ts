@@ -1,5 +1,6 @@
 import type { ToggledColor } from '../barStyleAppearance';
 import type { BarFootprint, ChartFootprintRow } from './footprintData';
+import { SINGLE_COLUMN_SIDE, type FootprintCellBox } from './footprintGeometry';
 import type { FootprintDisplay, FootprintType, FootprintValues } from './footprintModes';
 import {
   FOOTPRINT_NEUTRAL_COLOR,
@@ -14,6 +15,7 @@ import {
   type FootprintSide,
   type FootprintVolumeRange,
 } from './footprintShades';
+import { footprintTextFits, type FootprintTextStyle } from './footprintTextSize';
 import {
   footprintLargestValue,
   footprintRowDelta,
@@ -23,15 +25,8 @@ import {
 } from './footprintValues';
 import { footprintSignedText, footprintVolumeText } from './footprintVolumeText';
 
-/** What separates the two sides of a bid-ask cell's text. */
-const BID_ASK_SEPARATOR = ' × ';
 /** The share of its column a cell fills while the bar draws its cells in clusters. */
 const FULL_WIDTH_SHARE = 1;
-/**
- * The one column the bid-ask, delta and total types write their single cell in: the buy column, which the
- * single-column layout fills with the whole body right of the thin candle.
- */
-const SINGLE_COLUMN: FootprintSide = 'buy';
 
 /** One cell of a footprint bar as the painter draws it. */
 export interface FootprintCell {
@@ -72,7 +67,7 @@ export interface FootprintCellSettings {
 interface FootprintBarSizes {
   readonly sell: FootprintVolumeRange;
   readonly buy: FootprintVolumeRange;
-  /** The largest value one level holds either way, which a bid-ask cell's shade spans from nothing up to. */
+  /** The largest value one level holds either way, which both cells of a bid-ask level are shaded up from. */
   readonly level: FootprintVolumeRange;
   /** The largest distance a level's delta sits from zero, which a delta cell's shade spans from nothing up to. */
   readonly delta: FootprintVolumeRange;
@@ -177,22 +172,28 @@ function bothSidesOf(row: ChartFootprintRow, settings: FootprintCellSettings, si
 }
 
 /**
- * One cell writing "sell × buy", shaded by the larger side's share of the bar's largest level: the sell shades when
- * the sell side is the larger one, the buy shades otherwise. Both sides' imbalance marks stand on its two edges.
+ * Both cells of a bid-ask level in the one shade it takes: the larger side's, graded by that side's share of the
+ * bar's largest level, with the sell shading a level the sell side won or shared and the buy shading the rest. The
+ * bid (sell) cell writes the sell number with the sell mark, the ask (buy) cell the buy number with the buy mark.
  */
-function bidAskCell(row: ChartFootprintRow, settings: FootprintCellSettings, sizes: FootprintBarSizes): CellDraft {
+function bidAskCells(row: ChartFootprintRow, settings: FootprintCellSettings, sizes: FootprintBarSizes): CellDraft[] {
   const sell = footprintSideValue(row, 'sell', settings.values);
   const buy = footprintSideValue(row, 'buy', settings.values);
   const larger = Math.max(sell, buy);
-  return {
-    column: SINGLE_COLUMN,
-    value: larger,
-    magnitude: larger,
-    text: `${cellText(sell)}${BID_ASK_SEPARATOR}${cellText(buy)}`,
-    marks: imbalanceMarks(row, FOOTPRINT_SIDES),
-    shade: sell >= buy ? 'sell' : 'buy',
-    band: footprintCellBand(larger, sizes.level, settings.gradient),
-  };
+  const shade: CellShade = sell >= buy ? 'sell' : 'buy';
+  const band = footprintCellBand(larger, sizes.level, settings.gradient);
+  return FOOTPRINT_SIDES.map((side) => {
+    const value = side === 'sell' ? sell : buy;
+    return {
+      column: side,
+      value,
+      magnitude: value,
+      text: cellText(value),
+      marks: imbalanceMarks(row, [side]),
+      shade,
+      band,
+    };
+  });
 }
 
 /** The shade a delta takes: the buy side's above zero, the sell side's below it, and none on it. */
@@ -207,7 +208,7 @@ function deltaShade(delta: number): CellShade {
 function deltaCell(row: ChartFootprintRow, settings: FootprintCellSettings, sizes: FootprintBarSizes): CellDraft {
   const delta = footprintRowDelta(row, settings.values);
   return {
-    column: SINGLE_COLUMN,
+    column: SINGLE_COLUMN_SIDE,
     value: delta,
     magnitude: Math.abs(delta),
     text: footprintSignedText(delta),
@@ -221,7 +222,7 @@ function deltaCell(row: ChartFootprintRow, settings: FootprintCellSettings, size
 function totalCell(row: ChartFootprintRow, settings: FootprintCellSettings, sizes: FootprintBarSizes): CellDraft {
   const total = footprintRowTotal(row, settings.values);
   return {
-    column: SINGLE_COLUMN,
+    column: SINGLE_COLUMN_SIDE,
     value: total,
     magnitude: total,
     text: cellText(total),
@@ -264,7 +265,7 @@ function ladderOf(row: ChartFootprintRow, settings: FootprintCellSettings, sizes
 function rowDrafts(row: ChartFootprintRow, settings: FootprintCellSettings, sizes: FootprintBarSizes): CellDraft[] {
   switch (settings.type) {
     case 'bidAsk':
-      return [bidAskCell(row, settings, sizes)];
+      return bidAskCells(row, settings, sizes);
     case 'delta':
       return [deltaCell(row, settings, sizes)];
     case 'total':
@@ -276,7 +277,7 @@ function rowDrafts(row: ChartFootprintRow, settings: FootprintCellSettings, size
   }
 }
 
-/** The larger of one row's two sides, which a bid-ask cell's shade is its share of. */
+/** The larger of one row's two sides, whose share of it sets the shade both cells of a bid-ask level take. */
 function largestSideOfRow(row: ChartFootprintRow, values: FootprintValues): number {
   return Math.max(footprintSideValue(row, 'sell', values), footprintSideValue(row, 'buy', values));
 }
@@ -332,7 +333,7 @@ function fillOf(draft: CellDraft, settings: FootprintCellSettings): string {
 
 /** The colour of a draft's number, which a neutral cell takes from the neutral fill. */
 function textColorOf(draft: CellDraft): string {
-  return draft.shade === 'neutral' ? FOOTPRINT_NEUTRAL_TEXT_COLOR : footprintTextColor(draft.band);
+  return draft.shade === 'neutral' ? FOOTPRINT_NEUTRAL_TEXT_COLOR : footprintTextColor();
 }
 
 /** One draft as the painter draws it, the highlight of the row a bar traded most at over its own shade. */
@@ -369,4 +370,19 @@ export function footprintCells(footprint: BarFootprint, settings: FootprintCellS
     row,
     cells: cells.map((draft) => cellOf(draft, settings, largest, pocRow, row.row)),
   }));
+}
+
+/**
+ * The colour `cell`'s number is written in inside the coloured box that cell fills: the colour its own fill gives it
+ * while the number fits that box, and the light text colour once the number runs past the box onto the chart's dark
+ * background. A Profile cell fills only its share of the column while its number is written against the whole
+ * column's width, so a cell of little or no share — a delta that points nowhere, a quiet row — writes its number over
+ * the background, where the colour of its own fill would be unreadable.
+ */
+export function footprintCellNumberColor(
+  cell: FootprintCell,
+  box: FootprintCellBox,
+  style: FootprintTextStyle,
+): string {
+  return footprintTextFits(box, cell.text, style) ? cell.textColor : footprintTextColor();
 }

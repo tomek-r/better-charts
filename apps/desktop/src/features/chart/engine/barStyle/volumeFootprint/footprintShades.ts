@@ -14,7 +14,7 @@ export const FOOTPRINT_NEUTRAL_COLOR = palette.raised;
 
 /** The shade the row a bar traded most at is drawn in on both sides, which a dark chart reads as white. */
 export const FOOTPRINT_POC_COLOR = '#ffffff';
-/** The text on a light shade and on a dark one. */
+/** The two text colours: dark on a light fill, and light on a dark one and on every shade of a side. */
 const DARK_TEXT_COLOR = '#0b0e14';
 const LIGHT_TEXT_COLOR = '#ffffff';
 /** How bright a fill must be before dark text reads on it, from 0 (black) to 1 (white). */
@@ -67,8 +67,8 @@ export function footprintBand(value: number, range: FootprintVolumeRange): Footp
 }
 
 /**
- * The band one cell is drawn in, which both its fill and its text colour come from: the band its value is graded
- * to, or the flat one while the gradient is off.
+ * The band one cell is drawn in, which decides the shade its fill takes: the band its value is graded to, or the flat
+ * one while the gradient is off.
  */
 export function footprintCellBand(value: number, range: FootprintVolumeRange, gradient: boolean): FootprintBand {
   return gradient ? footprintBand(value, range) : FLAT_BAND;
@@ -79,9 +79,13 @@ export function footprintShadeColor(shades: readonly string[], band: FootprintBa
   return shades[band - 1];
 }
 
-/** The colour a cell's number takes on its shade: white on the dark shades, dark on the light ones. */
-export function footprintTextColor(band: FootprintBand): string {
-  return band >= 3 ? LIGHT_TEXT_COLOR : DARK_TEXT_COLOR;
+/**
+ * The colour every number written on a sell or buy shade takes: the light text colour, whatever band that shade is in,
+ * so a number reads alike on the lightest band of a side and on its darkest. A number that runs past a profile cell's
+ * box onto the column's background keeps that colour too, which the chart's dark background reads.
+ */
+export function footprintTextColor(): string {
+  return LIGHT_TEXT_COLOR;
 }
 
 /**

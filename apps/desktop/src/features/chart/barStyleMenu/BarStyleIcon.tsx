@@ -54,16 +54,13 @@ function VolumeCandlesGlyph() {
   );
 }
 
-/** Volume footprint: a thin candle between two columns of volume cells, one row per price. */
+/** Volume footprint: a candle with the rows of its price levels listed beside it. */
 function VolumeFootprintGlyph() {
   return (
     <>
-      <path d="M13.5 4.5v2M13.5 17.5v2" />
-      <rect x="12.5" y="6.5" width="2" height="11" fill="currentColor" />
-      <rect x="5.5" y="7.5" width="6" height="4" />
-      <rect x="5.5" y="11.5" width="6" height="4" fill="currentColor" />
-      <rect x="16.5" y="7.5" width="6" height="4" fill="currentColor" />
-      <rect x="16.5" y="11.5" width="6" height="4" />
+      <path d="M8.5 5.5v4M8.5 18.5v4" />
+      <rect x="6.5" y="9.5" width="4" height="9" />
+      <path d="M14.5 9.5h9M14.5 14.5h9M14.5 19.5h9" />
     </>
   );
 }

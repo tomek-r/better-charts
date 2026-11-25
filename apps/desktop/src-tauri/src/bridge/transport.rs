@@ -1,11 +1,12 @@
 use super::{
-    mark_order_check_sent, series_slots, ticks_slots, BridgeState, ExpectedReconciliation,
+    claim_next_tick_request, mark_order_check_sent, series_slots, ticks_slots, BridgeState,
+    ExpectedReconciliation,
 };
 use crate::execution_adapter::{ExecutionAdapterError, ExecutionAdapterState};
 use std::{
     collections::VecDeque,
     sync::atomic::Ordering,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -229,11 +230,13 @@ pub(crate) async fn flush_outbound(
     }
 
     // The desktop's indicator ticks, one raw page each; they never ask for price
-    // counts and never touch the tick profile's own request.
+    // counts and never touch the tick profile's own request. The EA serves one
+    // tick history request at a time, so only the oldest waiting one goes out, and
+    // only while neither this route nor the tick profile awaits an answer.
     let waiting_ticks = claim_for_session(state, session_id, || {
-        ticks_slots(state).claim_waiting(&state.next_request_id)
+        claim_next_tick_request(state, &state.next_request_id, Instant::now())
     })?;
-    for ticks in waiting_ticks {
+    if let Some(ticks) = waiting_ticks {
         send(
             stream,
             MessageType::TickHistoryRequest,
@@ -318,6 +321,12 @@ pub(crate) async fn flush_outbound(
     }
 
     let pending_profile = claim_for_session(state, session_id, || {
+        // The profile's page shares the EA's one tick history slot with the
+        // indicator ticks route: it stays pending here while that route awaits an
+        // answer, and a later flush writes it.
+        if ticks_slots(state).is_awaited() {
+            return None;
+        }
         state
             .pending_tick_profile
             .lock()

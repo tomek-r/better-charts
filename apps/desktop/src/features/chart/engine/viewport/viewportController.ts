@@ -140,6 +140,11 @@ export class ViewportController {
     return this.queuedWrite?.barSpacing ?? this.chart.timeScale().options().barSpacing;
   }
 
+  /** The logical index of the newest bar; null while the chart holds none. */
+  newestBarIndex(): number | null {
+    return this.data.bars.length > 0 ? this.data.bars.length - 1 : null;
+  }
+
   /**
    * The library applies `applyOptions` and `setVisibleLogicalRange` at its next
    * paint, not when they are called. The paint callback was registered by that
