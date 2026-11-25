@@ -12,7 +12,11 @@
   align-items: center;
   gap: 7px;
   background: var(--chart-status-line-background, transparent);
-  padding: 0 4px;
+  /* The text is given one fixed 16 px line, and the bottom padding carries the row's box on down to the first
+     indicator row 34 px from the top: the status line's background then runs on into the rows under it instead
+     of leaving the chart showing between them. */
+  line-height: 16px;
+  padding: 0 4px 8px;
   margin-left: -4px;
   border-radius: 4px;
 }
@@ -61,7 +65,9 @@
 .chart-indicator-legend-rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* The rows stack with their boxes on each other, so the status line's background paints one block down them;
+     the row's own bottom padding is what keeps its words the 2 px from the next row they have always been. */
+  gap: 0;
 }
 
 .chart-indicator-legend-rows[hidden],
@@ -70,16 +76,17 @@
 }
 
 .chart-indicator-legend-row {
-  --indicator-legend-row-height: 22px;
+  --indicator-legend-row-height: 24px;
   --indicator-legend-item-gap: 4px;
   --indicator-legend-value-gap: 6px;
   pointer-events: auto;
   display: flex;
   align-items: center;
   gap: var(--indicator-legend-item-gap);
-  /* One height with or without the hover buttons: the 20 px buttons plus the 1 px border on each side. */
+  /* One height with or without the hover buttons: the 20 px buttons, the 1 px border on each side, and the
+     2 px of padding that carries the row's background down to the row after it. */
   height: var(--indicator-legend-row-height);
-  padding: 0 4px;
+  padding: 0 4px 2px;
   margin-left: -5px;
   border: 1px solid transparent;
   border-radius: var(--border-radius);
