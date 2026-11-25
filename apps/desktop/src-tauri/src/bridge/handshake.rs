@@ -353,6 +353,8 @@ pub(crate) async fn run_handshake(
             tick_price_counts: hello_payload.tick_price_counts,
             partial_close: hello_payload.partial_close,
             other_symbol_series: hello_payload.other_symbol_series,
+            // The host reads footprints from raw ticks until it can ask for footprint counts.
+            tick_footprint_counts: false,
         },
     )
     .await

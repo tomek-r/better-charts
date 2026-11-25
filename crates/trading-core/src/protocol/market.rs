@@ -436,6 +436,59 @@ pub struct TickPriceCount {
     pub bid_seen: bool,
 }
 
+const TICK_SIZE_INVALID: &str = "invalid tick size";
+const PRICE_PAGE_INVALID: &str = "invalid tick price page bounds";
+const FOOTPRINT_REQUEST_INVALID: &str = "invalid tick footprint request";
+const FOOTPRINT_PAGE_INVALID: &str = "invalid tick footprint page bounds";
+const FOOTPRINT_LEVEL_INVALID: &str = "invalid footprint level";
+const FOOTPRINT_TOTAL_INVALID: &str = "invalid footprint totals";
+const FOOTPRINT_CARRY_INVALID: &str = "invalid footprint carry";
+
+/// Page header a summarised tick answer echoes from its request.
+struct TickPageHeader<'a> {
+    request_id: &'a str,
+    symbol: &'a str,
+    from_ms: i64,
+    to_ms: i64,
+    complete: bool,
+    through_ms: i64,
+    loaded_ticks: u32,
+}
+
+/// Identity and exclusive-boundary rules shared by the summarised tick pages;
+/// the request must already be validated. A complete page ends at `to_ms`; an
+/// incomplete one excludes its final millisecond so the next request re-reads
+/// it, and a page with no certified progress reports the range start with no
+/// loaded tick, which tells the caller to split the range.
+fn validate_tick_page_header(
+    request: &TickHistoryRequest,
+    page: &TickPageHeader<'_>,
+    error: &'static str,
+) -> Result<(), &'static str> {
+    if page.request_id.is_empty()
+        || page.symbol != request.symbol.as_str()
+        || page.from_ms != request.from_ms
+        || page.to_ms != request.to_ms
+        || page.loaded_ticks > request.max_ticks
+        || page.through_ms < page.from_ms
+        || page.through_ms > page.to_ms
+        || (page.complete && page.through_ms != page.to_ms)
+        || (!page.complete && page.through_ms == page.to_ms)
+        || (!page.complete && page.through_ms == page.from_ms && page.loaded_ticks != 0)
+    {
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn positive_tick_size(value: &str) -> Result<Decimal, &'static str> {
+    let tick_size: Decimal = value.parse().map_err(|_| TICK_SIZE_INVALID)?;
+    if tick_size <= Decimal::ZERO {
+        return Err(TICK_SIZE_INVALID);
+    }
+    Ok(tick_size)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TickPriceHistorySnapshot {
     pub request_id: String,
@@ -456,29 +509,25 @@ pub struct TickPriceHistorySnapshot {
 impl TickPriceHistorySnapshot {
     pub fn validate(&self, request: &TickHistoryRequest) -> Result<(), &'static str> {
         request.validate()?;
-        if self.request_id.is_empty()
-            || self.symbol != request.symbol
-            || self.from_ms != request.from_ms
-            || self.to_ms != request.to_ms
-            || self.loaded_ticks > request.max_ticks
-            || self.rejected_ticks > self.loaded_ticks
-            || self.through_ms < self.from_ms
-            || self.through_ms > self.to_ms
-            || (self.complete && self.through_ms != self.to_ms)
-            || (!self.complete && self.through_ms == self.to_ms)
-            || (!self.complete && self.through_ms == self.from_ms && self.loaded_ticks != 0)
+        validate_tick_page_header(
+            request,
+            &TickPageHeader {
+                request_id: &self.request_id,
+                symbol: &self.symbol,
+                from_ms: self.from_ms,
+                to_ms: self.to_ms,
+                complete: self.complete,
+                through_ms: self.through_ms,
+                loaded_ticks: self.loaded_ticks,
+            },
+            PRICE_PAGE_INVALID,
+        )?;
+        if self.rejected_ticks > self.loaded_ticks
             || self.prices.len() > self.loaded_ticks as usize * 2
         {
-            return Err("invalid tick price page bounds");
+            return Err(PRICE_PAGE_INVALID);
         }
-        if self
-            .tick_size
-            .parse::<Decimal>()
-            .map_err(|_| "invalid tick size")?
-            <= Decimal::ZERO
-        {
-            return Err("invalid tick size");
-        }
+        positive_tick_size(&self.tick_size)?;
         let quotes = match (&self.min_quote, &self.max_quote) {
             (None, None) if self.loaded_ticks == 0 => None,
             (Some(low), Some(high)) if self.loaded_ticks > 0 => {
@@ -516,6 +565,160 @@ impl TickPriceHistorySnapshot {
             || totals[2] > totals[0]
         {
             return Err("invalid profile count totals");
+        }
+        Ok(())
+    }
+}
+
+/// Side of a footprint level: the aggressor the tick rule gave the trade.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FootprintSide {
+    Buy,
+    Sell,
+}
+
+/// Tick-rule state of a footprint page: price and side of the last counted
+/// trade, so a page continuing a range classifies like one whole read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FootprintCarry {
+    pub price: String,
+    pub side: FootprintSide,
+}
+
+/// Optional footprint-count request; older peers keep the raw tick path.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TickFootprintHistoryRequest {
+    #[serde(flatten)]
+    pub history: TickHistoryRequest,
+    pub footprint_counts: bool,
+    /// True weights each counted trade by its real volume, false counts one per
+    /// traded tick.
+    pub real_volume: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carry: Option<FootprintCarry>,
+}
+
+impl TickFootprintHistoryRequest {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        self.history
+            .validate()
+            .map_err(|_| FOOTPRINT_REQUEST_INVALID)?;
+        if !self.footprint_counts {
+            return Err(FOOTPRINT_REQUEST_INVALID);
+        }
+        if let Some(carry) = self.carry.as_ref() {
+            positive_price(&carry.price, FOOTPRINT_CARRY_INVALID)?;
+        }
+        Ok(())
+    }
+}
+
+/// Volume traded at one price, kept as the wire's text so no precision is lost.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FootprintLevel {
+    /// Traded price exactly as counted; a mid can carry one digit more than the
+    /// symbol's digits, so levels are keyed by the text's value.
+    pub price: String,
+    pub buy: String,
+    pub sell: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TickFootprintHistorySnapshot {
+    pub request_id: String,
+    pub symbol: String,
+    pub from_ms: i64,
+    pub to_ms: i64,
+    pub tick_size: String,
+    pub complete: bool,
+    /// Accepted exclusive boundary; an incomplete page re-reads this millisecond.
+    pub through_ms: i64,
+    pub loaded_ticks: u32,
+    pub trade_ticks: u32,
+    /// Tick-rule state after this page: price and side of the last counted
+    /// trade, to be passed back by the following request.
+    pub carry: Option<FootprintCarry>,
+    pub levels: Vec<FootprintLevel>,
+}
+
+/// A level's numbers, parsed once; the strings stay on the wire untouched.
+struct LevelValues {
+    price: Decimal,
+    buy: Decimal,
+    sell: Decimal,
+}
+
+fn footprint_decimal(value: &str, error: &'static str) -> Result<Decimal, &'static str> {
+    value.parse().map_err(|_| error)
+}
+
+fn positive_price(value: &str, error: &'static str) -> Result<Decimal, &'static str> {
+    let price = footprint_decimal(value, error)?;
+    if price <= Decimal::ZERO {
+        return Err(error);
+    }
+    Ok(price)
+}
+
+/// A level exists only where a trade landed: non-negative sides that sum above
+/// zero. An unweighted page counts whole trades, so both sides are whole too.
+fn level_values(level: &FootprintLevel, real_volume: bool) -> Result<LevelValues, &'static str> {
+    let price = positive_price(&level.price, FOOTPRINT_LEVEL_INVALID)?;
+    let buy = footprint_decimal(&level.buy, FOOTPRINT_LEVEL_INVALID)?;
+    let sell = footprint_decimal(&level.sell, FOOTPRINT_LEVEL_INVALID)?;
+    if buy < Decimal::ZERO
+        || sell < Decimal::ZERO
+        || buy + sell <= Decimal::ZERO
+        || (!real_volume && (buy.fract() != Decimal::ZERO || sell.fract() != Decimal::ZERO))
+    {
+        return Err(FOOTPRINT_LEVEL_INVALID);
+    }
+    Ok(LevelValues { price, buy, sell })
+}
+
+impl TickFootprintHistorySnapshot {
+    pub fn validate(&self, request: &TickFootprintHistoryRequest) -> Result<(), &'static str> {
+        request.validate()?;
+        validate_tick_page_header(
+            &request.history,
+            &TickPageHeader {
+                request_id: &self.request_id,
+                symbol: &self.symbol,
+                from_ms: self.from_ms,
+                to_ms: self.to_ms,
+                complete: self.complete,
+                through_ms: self.through_ms,
+                loaded_ticks: self.loaded_ticks,
+            },
+            FOOTPRINT_PAGE_INVALID,
+        )?;
+        if self.trade_ticks > self.loaded_ticks
+            || u32::try_from(self.levels.len()).map_or(true, |count| count > self.trade_ticks)
+        {
+            return Err(FOOTPRINT_PAGE_INVALID);
+        }
+        positive_tick_size(&self.tick_size)?;
+        if let Some(carry) = self.carry.as_ref() {
+            positive_price(&carry.price, FOOTPRINT_CARRY_INVALID)?;
+        }
+        // A page that counted no trade is a pure continuation: no level, and the
+        // carry it returns is the one it was given.
+        if self.trade_ticks == 0 && (!self.levels.is_empty() || self.carry != request.carry) {
+            return Err(FOOTPRINT_PAGE_INVALID);
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut counted = Decimal::ZERO;
+        for level in &self.levels {
+            let values = level_values(level, request.real_volume)?;
+            if !seen.insert(values.price) {
+                return Err(FOOTPRINT_LEVEL_INVALID);
+            }
+            counted += values.buy + values.sell;
+        }
+        // One trade weighs one, so an unweighted page's level sums are its count.
+        if !request.real_volume && counted != Decimal::from(self.trade_ticks) {
+            return Err(FOOTPRINT_TOTAL_INVALID);
         }
         Ok(())
     }

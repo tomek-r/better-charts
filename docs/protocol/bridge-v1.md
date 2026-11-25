@@ -57,7 +57,8 @@ token is required outside development builds.
   "account_login": "12345678", "broker_server": "Broker-Demo", "chart_symbol": "NAS100",
   "expert_version": "1.012", "tick_reader_version": "1.001", "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
-  "tick_price_counts": true, "partial_close": true, "other_symbol_series": true,
+  "tick_price_counts": true, "tick_footprint_counts": true, "partial_close": true,
+  "other_symbol_series": true,
   "supported_timeframes": ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30",
     "H1", "H2", "H3", "H4", "H6", "H8", "H12", "D1", "W1", "MN1"]
 }
@@ -69,7 +70,8 @@ token is required outside development builds.
 {
   "heartbeat_interval_ms": 2000, "heartbeat_timeout_ms": 6000, "trading_enabled": false,
   "transfer_limits": {"max_frame_bytes": 8388608, "max_ticks_per_page": 262144},
-  "tick_price_counts": true, "partial_close": true, "other_symbol_series": true
+  "tick_price_counts": true, "tick_footprint_counts": true, "partial_close": true,
+  "other_symbol_series": true
 }
 ```
 
@@ -126,6 +128,7 @@ also clears a refusal that belonged to the terminal it just stopped and reports
 | Current defaults | 8 MiB / 262,144 ticks per page. |
 | Valid limits | Rust frame bytes: `1024..=2147483643`; EA frame MiB: `1..=2047`; ticks: `1..=262144` (`u32`; a peer advertising more is rejected). Invalid limits reject the handshake. The frame bounds, the 8 MiB default and the `1..=1000` history page and the `initialHistoryBars` handshake window (`1..=historyBars`, currently 300) and the `ticksPerPage` default/max (262,144; the EA input keeps its own literal) live once in `config/bridge.json`, as does the desktop-only `tickProfile.maxEstimatedTicks` budget (30,000,000; the EA never reads it), embedded by `crates/trading-core/src/protocol/limits.rs` and imported by `apps/desktop/src/shared/bridge/config.ts`. |
 | `tick_price_counts` | Defaults to `false`; exact price summaries require support from both peers. Raw tick pages remain supported. |
+| `tick_footprint_counts` | Defaults to `false`; footprint pages require support from both peers. `hello_ack.tick_footprint_counts:true` means the EA sums footprint volumes per price and side, see "Footprint counts" below. Raw tick pages and exact price summaries are unaffected. |
 | `partial_close` | Defaults to `false` when absent from `hello`. Rust echoes the negotiated value in `hello_ack`, publishes it as `partialClose` on the bridge status and resets it when the session ends. An EA without it ignores `order_close_request.volume` and would close the whole position, so Rust rejects every partial close unless it is `true`. |
 | `other_symbol_series` | Defaults to `false` when absent from `hello`. Rust echoes the negotiated value in `hello_ack`, publishes it as `otherSymbolSeries` on the bridge status and resets it when the session ends. An EA without it serves older-history pages for the chart symbol only, so the desktop's `request_indicator_series` rejects every other symbol unless it is `true`. |
 | `hello.supported_timeframes` | Required list of the EA's supported MT5 period codes. Must be a nonempty, unique subset of the standard periods and include `M1`. Missing, `null` or invalid advertisements reject the handshake. Published as `supportedTimeframes` on the Tauri bridge status; history commands reject periods the connected EA did not advertise. |
@@ -1009,7 +1012,9 @@ Tick history is read-only and must not block heartbeats or command handling.
 
 `max_ticks` is `1..=negotiated max_ticks_per_page`; missing `price_counts`
 means `false`. Request `price_counts:true` only when both peers negotiated
-`tick_price_counts:true`.
+`tick_price_counts:true`. Request `footprint_counts:true` only when both peers
+negotiated `tick_footprint_counts:true`, and expect the
+`tick_footprint_history_snapshot` answer described below instead.
 
 **`tick_history_snapshot` payload:**
 
@@ -1065,6 +1070,89 @@ BID prices from unflagged/rejected ticks for the grid fallback. Quote bounds
 include all accepted amounts. `min_quote`/`max_quote` preserve
 quote bounds. A wide price set can fall back to a raw snapshot for the same
 page; accept either format without double counting.
+
+### Footprint counts
+
+When both peers negotiated `tick_footprint_counts:true`, a
+`tick_history_request` carrying `footprint_counts:true` is answered by
+`tick_footprint_history_snapshot`: the volume the counted trades traded at each
+price, per side, instead of the raw ticks. Peers without the capability keep
+the raw tick page.
+
+**`tick_history_request` payload (footprint):**
+
+```json
+{
+  "symbol": "NAS100", "from_ms": 1769999400000, "to_ms": 1769999460000, "max_ticks": 5000,
+  "footprint_counts": true, "real_volume": true,
+  "carry": {"price": "25001.7", "side": "buy"}
+}
+```
+
+**`tick_footprint_history_snapshot` payload:**
+
+```json
+{
+  "request_id": "rust-footprint-1", "symbol": "NAS100", "from_ms": 1769999400000,
+  "to_ms": 1769999460000, "tick_size": "0.1", "complete": false,
+  "through_ms": 1769999430000, "loaded_ticks": 412, "trade_ticks": 208,
+  "carry": {"price": "25001.75", "side": "sell"},
+  "levels": [
+    {"price": "25001.7", "buy": "12.50", "sell": "9.00"},
+    {"price": "25001.75", "buy": "3.00", "sell": "0"}
+  ]
+}
+```
+
+`footprint_counts` must be `true`; a request without it is not a footprint
+request. `real_volume` selects the weight below and is echoed in the rules, not
+in the answer. `carry` is the tick-rule state — the price and side of the last
+counted trade — and is optional: absent, the page starts with no carry. A
+malformed or non-positive carry price rejects the request.
+
+One request covers one bar's range, or its continuation from the previous
+answer's `through_ms`; the host passes the `carry` the previous page returned.
+A request for the next bar sends the carry it holds for the boundary, or none
+when the bar starts a fresh range.
+
+**Counted trades.** With `real_volume:true` a tick is a trade when its
+`volume_real` — falling back to `volume` when that field is absent or unreadable
+— is greater than zero, and its weight is that volume. With `real_volume:false`
+a tick is a trade when its `volume` is greater than zero, or when it carries
+MT5's BID flag (`2`, the bid changed), and its weight is `1`: MT5's Tick Volume
+counts bid changes, so quotes count there. A tick that is not a trade is
+skipped; it still counts as a loaded tick.
+
+**Traded price.** A counted trade trades at `last` when that is greater than
+zero, else at `(bid + ask) / 2` when both are greater than zero, else at `bid`.
+A tick without a positive price is no trade. Levels are keyed by the traded
+price exactly, compared as decimals: a mid can carry one digit more than the
+symbol's `digits`, and two spellings of the same value are the same level.
+
+**Side.** Exactly one of MT5's `TICK_FLAG_BUY` (`32`) and `TICK_FLAG_SELL`
+(`64`) names the side. Otherwise, with `last`, `bid` and `ask` all greater than
+zero, a `last` above the mid `(bid + ask) / 2` is a buy and one below it a sell.
+Otherwise the tick rule decides against the carry: a traded price above the
+carry price is a buy, below it a sell, equal to it keeps the carry's side, and
+with no carry it is a buy. A tick flagged both ways names no side by its flags
+and goes through the same two rules. Every counted trade then
+becomes the carry, which the answer returns.
+
+**Pages.** A footprint page is bounded by `max_ticks` records read and by the
+frame byte budget exactly like an exact price summary: `complete` pages end at
+`to_ms`, an incomplete page excludes its final millisecond (`through_ms`) and
+the next request re-reads it from there with the carry from before that
+millisecond. No certified progress means `through_ms == from_ms`, zero loaded
+ticks and no levels, so the range must be split. `loaded_ticks` counts the
+records read (trades and non-trades), `trade_ticks` the counted ones, and
+`trade_ticks <= loaded_ticks`.
+
+`levels` are unique, positive prices, each with non-negative `buy` and `sell`
+volumes whose sum is above zero, and there are never more levels than counted
+trades. With `real_volume:false` every `buy` and `sell` is a whole number of
+trades and their sums equal `trade_ticks`. A page that counted no trade carries
+no level and returns the carry it was given. `complete=false` with trades is a
+normal truncated page; the EA never samples a range.
 
 ### Pagination and request errors
 

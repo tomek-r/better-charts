@@ -31,6 +31,10 @@ pub struct HelloPayload {
     pub transfer_limits: TransferLimits,
     #[serde(default)]
     pub tick_price_counts: bool,
+    /// The EA sums footprint volumes per price and side; a footprint page is
+    /// requested only when both peers advertise this.
+    #[serde(default)]
+    pub tick_footprint_counts: bool,
     /// The EA honors `order_close_request.volume` as a partial close.
     #[serde(default)]
     pub partial_close: bool,
@@ -51,6 +55,10 @@ pub struct HelloAckPayload {
     pub transfer_limits: TransferLimits,
     #[serde(default)]
     pub tick_price_counts: bool,
+    /// The EA sums footprint volumes per price and side; used only when both
+    /// peers advertise this.
+    #[serde(default)]
+    pub tick_footprint_counts: bool,
     #[serde(default)]
     pub partial_close: bool,
     #[serde(default)]
