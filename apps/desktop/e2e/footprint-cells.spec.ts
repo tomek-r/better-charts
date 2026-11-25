@@ -10,6 +10,7 @@ import {
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintDefaults';
 import {
   FOOTPRINT_NEUTRAL_COLOR,
+  FOOTPRINT_NEUTRAL_TEXT_COLOR,
   FOOTPRINT_POC_COLOR,
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintShades';
 import type {
@@ -19,12 +20,17 @@ import type {
 
 /**
  * What each footprint type makes of one bar's rows: the number every cell writes, the shade it is graded to, the
- * imbalance marks on its edges and, in Profile, the share of its column it fills. The bar holds three rows, so
- * every band and every share below is hand-computed from those rows.
+ * colour that number is written in, the imbalance marks on its edges and, in Profile, the share of its column it
+ * fills. The bar holds three rows, so every band and every share below is hand-computed from those rows.
  */
 
 /** The four values each side of a row carries: the volume it traded and the trades behind it. */
 type RowSides = Pick<ChartFootprintRow, 'buyVolume' | 'sellVolume' | 'buyTrades' | 'sellTrades'>;
+
+/** The light text colour every number written on a sell or buy shade takes, whatever band that shade is. */
+const LIGHT_TEXT_COLOR = '#ffffff';
+/** The dark text colour a number keeps on the white fill a bar's point of control row is drawn in. */
+const DARK_TEXT_COLOR = '#0b0e14';
 
 /** One row of the fixture: its number, the prices it spans and what each side of it took. */
 function row(rowNumber: number, downPrice: number, upPrice: number, sides: RowSides): ChartFootprintRow {
@@ -201,6 +207,44 @@ test('counting volume highlights the host point of control, counting trades the 
     false,
     true,
   ]);
+});
+
+test('every number on a sell or buy shade is the light text colour, whatever band that shade is', () => {
+  const rows = footprintCells(FOOTPRINT, SETTINGS);
+
+  // Both lightest cells of the bar are band 1 of their side's ramp — the quietest row's two sides — which is where
+  // dark text used to be written: on them, and on the darker bands, every number is now light.
+  expect(rows[1].cells.map((cell) => cell.fill)).toEqual(['#ff99a0', '#5cc4b4']);
+  expect(rows[1].cells.map((cell) => cell.textColor)).toEqual([LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR]);
+  expect(rows.map(({ cells }) => cells.map((cell) => cell.textColor))).toEqual([
+    [LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR],
+    [LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR],
+    [LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR],
+  ]);
+  // The cells of the other types take the same colour in every band, and only a cell of no side keeps its neutral
+  // fill's own contrast: the zero delta of the middle row is written in the neutral text colour.
+  const deltas = footprintCells(FOOTPRINT, settingsWith({ type: 'delta' }));
+  expect(deltas.map(({ cells }) => cells.map((cell) => cell.fill))).toEqual([
+    ['#004d40'],
+    [FOOTPRINT_NEUTRAL_COLOR],
+    ['#cc2f3c'],
+  ]);
+  expect(deltas.map(({ cells }) => cells.map((cell) => cell.textColor))).toEqual([
+    [LIGHT_TEXT_COLOR],
+    [FOOTPRINT_NEUTRAL_TEXT_COLOR],
+    [LIGHT_TEXT_COLOR],
+  ]);
+});
+
+test('the point of control row keeps its dark numbers on the white fill it is drawn in', () => {
+  const highlight = { visible: true, color: FOOTPRINT_POC_COLOR };
+  const rows = footprintCells(FOOTPRINT, settingsWith({ poc: highlight }));
+
+  // The host calls the lowest row the point of control: both of its cells are white and keep the dark text a light
+  // fill takes, while every other row still writes its numbers on a side shade, in the light colour.
+  expect(rows[0].cells.map((cell) => cell.fill)).toEqual([FOOTPRINT_POC_COLOR, FOOTPRINT_POC_COLOR]);
+  expect(rows[0].cells.map((cell) => cell.textColor)).toEqual([DARK_TEXT_COLOR, DARK_TEXT_COLOR]);
+  expect(rows[2].cells.map((cell) => cell.textColor)).toEqual([LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR]);
 });
 
 test('the shades a cell takes come from the settings, so an edited ramp repaints the bar', () => {

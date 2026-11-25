@@ -1,4 +1,3 @@
-import type { DevicePixelRatios } from '../barBodyWidth';
 import type { FootprintLayout } from './footprintModes';
 import type { FootprintSide } from './footprintShades';
 
@@ -27,9 +26,6 @@ export interface FootprintCellBox extends FootprintColumn {
   readonly height: number;
 }
 
-/** How wide a text is, in css px, in the font the footprint writes its numbers in. */
-export type FootprintTextWidth = (text: string) => number;
-
 /** How a text is aligned on the media x it is written at: a column's numbers stand on one of its two edges. */
 export type FootprintTextAlign = 'left' | 'right';
 
@@ -52,12 +48,6 @@ const ROOM_PARTS = 4;
 const TWO_COLUMNS: FootprintLayout = 'two-columns';
 /** The empty background a cell keeps under itself, in css px, so the cells of two neighbouring rows never touch. */
 export const ROW_GAP = 2;
-/** The size the footprint's numbers are written in, in css px, which the renderer builds its font from. */
-export const FOOTPRINT_FONT_SIZE = 14;
-/** The height one line of those numbers takes, in css px: a line of the font at FOOTPRINT_FONT_SIZE. */
-export const TEXT_LINE_HEIGHT = FOOTPRINT_FONT_SIZE;
-/** The room a text keeps from the edge it stands against, in css px, on either side of the thin candle. */
-export const TEXT_PADDING = 8;
 /**
  * The side whose column a single-column bar fills: the buy column, right of the thin candle. The two types that
  * write one cell a row write it there, and it reads as that side's column.
@@ -149,6 +139,24 @@ export function footprintBarColumns(
     : twoColumnColumns(x, fullWidth, horizontalPixelRatio);
 }
 
+/**
+ * The candle of a bar that draws no cells, as the pane paints it: the media x its body is centred on and the device
+ * width that body takes.
+ */
+export interface FootprintCandleGlyph {
+  readonly x: number;
+  readonly width: number;
+}
+
+/**
+ * The candle of a bar the host holds no footprint for: the very column the thin candle of a footprint bar at the same
+ * x and body width takes, read as the media x to paint it on and the device width to paint it at. A bar still being
+ * read therefore lines up with the footprint bars beside it instead of taking its whole body width.
+ */
+export function footprintCandleGlyph(candle: FootprintColumn, horizontalPixelRatio: number): FootprintCandleGlyph {
+  return { x: (candle.left + candle.width / 2) / horizontalPixelRatio, width: candle.width };
+}
+
 /** The empty background a cell leaves under itself, in device pixels: ROW_GAP css px at the screen's ratio. */
 function rowGapPixels(verticalPixelRatio: number): number {
   return Math.round(ROW_GAP * verticalPixelRatio);
@@ -185,34 +193,6 @@ export function footprintCellBox(
 }
 
 /**
- * Whether `text` fits a box `width` by `height` device pixels: the text and its padding no wider than the box's media
- * width, and the box at least one line of the font tall. `textWidth` measures the text in css px, so this needs no
- * canvas to decide.
- */
-export function footprintTextFits(
-  width: number,
-  height: number,
-  text: string,
-  ratios: DevicePixelRatios,
-  textWidth: FootprintTextWidth,
-): boolean {
-  if (height / ratios.verticalPixelRatio < TEXT_LINE_HEIGHT) {
-    return false;
-  }
-  return textWidth(text) + TEXT_PADDING <= width / ratios.horizontalPixelRatio;
-}
-
-/** Whether a cell writes its text: whether that text fits inside the cell's box, which is its row less the gap. */
-export function footprintCellShowsText(
-  box: FootprintCellBox,
-  text: string,
-  ratios: DevicePixelRatios,
-  textWidth: FootprintTextWidth,
-): boolean {
-  return footprintTextFits(box.width, box.height, text, ratios, textWidth);
-}
-
-/**
  * The box of a profile cell: `widthShare` of its column's width, kept on the edge nearest the thin candle, so the
  * cells of a bar grow away from it as their values do. The single column of a one-column bar is a buy column, so its
  * cells are anchored at its left, next to the candle.
@@ -228,16 +208,4 @@ export function footprintProfileBox(box: FootprintCellBox, widthShare: number, s
 /** How a column writes its text: on the edge nearest the thin candle, the sell column's right and the buy's left. */
 export function footprintTextAlignOf(side: FootprintSide): FootprintTextAlign {
   return side === 'sell' ? 'right' : 'left';
-}
-
-/** The media x a text of `align` is written at inside `column`, TEXT_PADDING css px in from the edge it stands on. */
-export function footprintTextX(
-  column: FootprintColumn,
-  align: FootprintTextAlign,
-  horizontalPixelRatio: number,
-): number {
-  if (align === 'right') {
-    return (column.left + column.width) / horizontalPixelRatio - TEXT_PADDING;
-  }
-  return column.left / horizontalPixelRatio + TEXT_PADDING;
 }

@@ -8,17 +8,14 @@ import { volumeCandleColors } from '../volumeCandles/volumeCandleColors';
 import { footprintCells, type FootprintCell } from './footprintCells';
 import type { BarFootprint, ChartFootprintRow } from './footprintData';
 import {
-  FOOTPRINT_FONT_SIZE,
   footprintBarColumns,
-  footprintCellShowsText,
+  footprintCandleGlyph,
   footprintProfileBox,
   footprintRowBox,
   footprintRowGapBox,
   footprintTextAlignOf,
-  footprintTextX,
   type FootprintBarColumns,
   type FootprintCellBox,
-  type FootprintTextWidth,
 } from './footprintGeometry';
 import { footprintImbalanceBox, imbalanceMarkColor } from './footprintImbalance';
 import { footprintLayoutOf } from './footprintModes';
@@ -26,9 +23,17 @@ import type { FootprintSide } from './footprintShades';
 import { footprintStackedZones, type FootprintStackedZone } from './footprintStackedZones';
 import { footprintSummaryLayout, paintFootprintSummaryBox, type FootprintTextMark } from './footprintSummary';
 import {
+  FOOTPRINT_FONT_SIZE,
+  footprintBarTextSize,
+  footprintCellShowsText,
+  footprintTextX,
+  type FootprintTextStyle,
+  type FootprintTextWidth,
+} from './footprintTextSize';
+import {
   paintValueAreaLines,
   paintValueAreaMarkers,
-  valueAreaMarkerX,
+  valueAreaMark,
   type FootprintValueAreaMark,
   type FootprintValueAreaSpan,
 } from './footprintValueArea';
@@ -37,10 +42,17 @@ import type { VolumeFootprintPoint } from './volumeFootprintPoint';
 
 /** The family the cells' numbers and the value area marker are written in. */
 const FOOTPRINT_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
-/** The font the cells' numbers are written in, which the text fit is measured in. */
-const FOOTPRINT_FONT = `${FOOTPRINT_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
-/** The font a summary line's value is written in, right after its label. */
-const FOOTPRINT_BOLD_FONT = `bold ${FOOTPRINT_FONT}`;
+
+/** The font the numbers are written in at `size` css px, which every text is measured at the maximum of. */
+function footprintFont(size: number): string {
+  return `${size}px ${FOOTPRINT_FONT_FAMILY}`;
+}
+
+/** The font a summary line's value is written in at `size` css px: the numbers' own font, in bold. */
+function footprintBoldFont(size: number): string {
+  return `bold ${footprintFont(size)}`;
+}
+
 /** The share of its side's colour a stacked zone's band is filled at, so what it covers stays readable through it. */
 const STACKED_ZONE_FILL_PERCENT = 20;
 /** The thickness of a stacked zone's top and bottom edge lines, in device pixels. */
@@ -70,12 +82,20 @@ interface FootprintMarks {
 }
 
 /**
- * The two boxes one cell covers: the one it is filled in and writes its number in, which stops a row gap above the
- * row below, and the whole row, which its imbalance marks span.
+ * The boxes one cell covers: the one it is filled in, which stops a row gap above the row below, the whole row, which
+ * its imbalance marks span, and the whole column, whose width judges the number it writes.
  */
 interface FootprintCellBoxes {
   readonly cell: FootprintCellBox;
   readonly row: FootprintCellBox;
+  /** The whole column between the row's two prices, which a profile cell's coloured box is only a share of. */
+  readonly column: FootprintCellBox;
+}
+
+/** One cell of a bar placed on the pane: the cell the painter drew and the boxes it covers. */
+interface PlacedCell {
+  readonly cell: FootprintCell;
+  readonly boxes: FootprintCellBoxes;
 }
 
 /** One stacked zone placed on the pane: the media x it starts at and the one it ends at, null for the pane's edge. */
@@ -168,18 +188,27 @@ function paintImbalanceMark(paint: FootprintPaint, box: FootprintCellBox, side: 
  * Paints one cell: its fill, the number it writes against its column's inner edge and the marks on its edges. The
  * marks span the cell's whole row, so they stay on the row's prices rather than stopping at its box's lower edge.
  */
-function paintCell(paint: FootprintPaint, cell: FootprintCell, boxes: FootprintCellBoxes, marks: FootprintMarks): void {
+function paintCell(
+  paint: FootprintPaint,
+  placed: PlacedCell,
+  style: FootprintTextStyle | null,
+  marks: FootprintMarks,
+): void {
+  const { cell, boxes } = placed;
   const box = boxes.cell;
   paint.context.fillStyle = cell.fill;
   paint.context.fillRect(box.left, box.top, box.width, box.height);
-  if (footprintCellShowsText(box, cell.text, paint, paint.textWidth)) {
+  // A profile cell's coloured box is only its share of the column, so its number is judged against the whole column
+  // and may run past the coloured part onto the column's background.
+  if (style !== null && footprintCellShowsText(box, boxes.column.width, cell.text, style)) {
     const align = footprintTextAlignOf(cell.column);
     marks.texts.push({
-      x: footprintTextX(box, align, paint.horizontalPixelRatio),
+      x: footprintTextX(box, align, style),
       y: (box.top + box.height / 2) / paint.verticalPixelRatio,
       text: cell.text,
       color: cell.textColor,
       align,
+      size: style.size,
     });
   }
   for (const side of cell.marks) {
@@ -187,13 +216,9 @@ function paintCell(paint: FootprintPaint, cell: FootprintCell, boxes: FootprintC
   }
 }
 
-/** Paints one bar's cells: every row's cells where their prices put them, with the marks they carry. */
-function paintFootprintCells(
-  paint: FootprintPaint,
-  footprint: BarFootprint,
-  columns: FootprintBarColumns,
-  marks: FootprintMarks,
-): void {
+/** Every cell of one bar placed on the pane, in the order they are painted, with the boxes each one covers. */
+function placedCells(paint: FootprintPaint, footprint: BarFootprint, columns: FootprintBarColumns): PlacedCell[] {
+  const placed: PlacedCell[] = [];
   for (const { row, cells } of footprintCells(footprint, paint.options)) {
     const topY = paint.priceConverter(row.upPrice);
     const bottomY = paint.priceConverter(row.downPrice);
@@ -201,14 +226,36 @@ function paintFootprintCells(
       continue;
     }
     for (const cell of cells) {
-      paintCell(paint, cell, cellBoxes(paint, cell, columns, topY, bottomY), marks);
+      placed.push({ cell, boxes: cellBoxes(paint, cell, columns, topY, bottomY) });
     }
   }
+  return placed;
 }
 
 /**
- * The boxes one cell covers: its column between the row's two prices, narrowed to the share a profile cell takes —
- * the whole row, and the cell's own box, which leaves the row gap under it.
+ * What one bar writes its numbers in: the largest size the shortest of its cells holds a line of, or none while the
+ * bar has no cell or no row tall enough for the smallest size.
+ */
+function barTextStyle(paint: FootprintPaint, placed: readonly PlacedCell[]): FootprintTextStyle | null {
+  const size = footprintBarTextSize(
+    placed.map(({ boxes }) => boxes.cell.height),
+    paint.verticalPixelRatio,
+  );
+  if (size === null) {
+    return null;
+  }
+  return {
+    size,
+    textWidth: paint.textWidth,
+    horizontalPixelRatio: paint.horizontalPixelRatio,
+    verticalPixelRatio: paint.verticalPixelRatio,
+  };
+}
+
+/**
+ * The boxes one cell covers: its column between the row's two prices, whose width its number is judged against, that
+ * column narrowed to the share a profile cell takes — the whole row, which its imbalance marks span — and the cell's
+ * own box, which leaves the row gap under it.
  */
 function cellBoxes(
   paint: FootprintPaint,
@@ -217,12 +264,9 @@ function cellBoxes(
   topY: number,
   bottomY: number,
 ): FootprintCellBoxes {
-  const row = footprintProfileBox(
-    footprintRowBox(columns[cell.column], topY, bottomY, paint.verticalPixelRatio),
-    cell.widthShare,
-    cell.column,
-  );
-  return { cell: footprintRowGapBox(row, paint.verticalPixelRatio), row };
+  const column = footprintRowBox(columns[cell.column], topY, bottomY, paint.verticalPixelRatio);
+  const row = footprintProfileBox(column, cell.widthShare, cell.column);
+  return { cell: footprintRowGapBox(row, paint.verticalPixelRatio), row, column };
 }
 
 /** The media y of one value area line: the top of the VAH row, or the bottom of the VAL row. */
@@ -238,11 +282,16 @@ function valueAreaSpan(columns: FootprintBarColumns): FootprintValueAreaSpan {
   return { left: columns.sell.left, right: columns.buy.left + columns.buy.width };
 }
 
-/** Paints the value area's dashed lines across the bar, and notes where the media pass marks their left ends. */
+/**
+ * Paints the value area's dashed lines across the bar, and notes where the media pass marks their left ends. A bar
+ * that writes no number, or whose group is narrower than MIN_MARKER_BAR_WIDTH, keeps its lines and loses the marker
+ * the media pass would otherwise write over its neighbour.
+ */
 function paintValueArea(
   paint: FootprintPaint,
   footprint: BarFootprint,
   columns: FootprintBarColumns,
+  style: FootprintTextStyle | null,
   marks: FootprintMarks,
 ): void {
   if (!paint.options.showValueArea) {
@@ -257,26 +306,34 @@ function paintValueArea(
   }
   const span = valueAreaSpan(columns);
   paintValueAreaLines(paint.context, span, ys, paint);
-  marks.valueAreas.push({ markerX: valueAreaMarkerX(span, paint.horizontalPixelRatio), ys });
+  const mark = valueAreaMark(span, ys, style);
+  if (mark !== null) {
+    marks.valueAreas.push(mark);
+  }
 }
 
 /**
  * Writes what one bar says under its columns: each side's total, or both in one line in the single-column layout,
  * and the delta box below them while the summary is on. The lowest row's bottom is where both start, so neither
- * covers a cell, and the totals use the full columns rather than any profile cell's share.
+ * covers a cell, and the totals use the full columns rather than any profile cell's share. They are written at the
+ * same size as the bar's cells, and a bar whose rows hold no line of text writes nothing under them.
  */
 function paintSummary(
   paint: FootprintPaint,
   footprint: BarFootprint,
   columns: FootprintBarColumns,
+  style: FootprintTextStyle | null,
   marks: FootprintMarks,
 ): void {
+  if (style === null) {
+    return;
+  }
   const lowest = footprint.rows[0];
   const lowestBottomY = lowest === undefined ? null : paint.priceConverter(lowest.downPrice);
   if (lowestBottomY === null) {
     return;
   }
-  const summary = footprintSummaryLayout(footprint, columns, lowestBottomY, paint.options, paint, paint.textWidth);
+  const summary = footprintSummaryLayout(footprint, columns, lowestBottomY, paint.options, style);
   if (summary === null) {
     return;
   }
@@ -292,11 +349,6 @@ function paintSummary(
  */
 function barColumns(paint: FootprintPaint, x: number): FootprintBarColumns {
   return footprintBarColumns(x, paint.fullWidth, paint.horizontalPixelRatio, footprintLayoutOf(paint.options.type));
-}
-
-/** The media x the thin candle is drawn on: the middle of its own column, which the layout has placed for it. */
-function candleCentreX(paint: FootprintPaint, columns: FootprintBarColumns): number {
-  return (columns.candle.left + columns.candle.width / 2) / paint.horizontalPixelRatio;
 }
 
 /**
@@ -339,7 +391,24 @@ function paintStackedZone(paint: FootprintPaint, zone: PlacedStackedZone, paneWi
   paint.context.fillRect(box.left, box.top + box.height - STACKED_ZONE_EDGE_WIDTH, box.width, STACKED_ZONE_EDGE_WIDTH);
 }
 
-/** Paints one bar: its plain candle, or its cells with the thin candle among them. */
+/**
+ * Paints the thin candle of one bar: its wick and its body on the candle column the layout placed for it, which is
+ * the same box whether the bar draws its cells around that candle or the host holds no footprint for it.
+ */
+function paintBarCandle(
+  paint: FootprintPaint,
+  bar: FootprintBar,
+  columns: FootprintBarColumns,
+  style: CandleGlyphStyle,
+): void {
+  const glyph = footprintCandleGlyph(columns.candle, paint.horizontalPixelRatio);
+  paintCandle(paint.context, glyph.x, glyph.width, bar.prices, style, paint);
+}
+
+/**
+ * Paints one bar: its cells with the thin candle among them, or, while the host holds no footprint for it, the
+ * candle alone.
+ */
 function paintFootprintBar(paint: FootprintPaint, bar: FootprintBar, marks: FootprintMarks): void {
   const footprint = bar.point.footprint;
   const style: CandleGlyphStyle = {
@@ -347,17 +416,22 @@ function paintFootprintBar(paint: FootprintPaint, bar: FootprintBar, marks: Foot
     wickVisible: paint.options.wickVisible,
     borderVisible: paint.options.borderVisible,
   };
+  const columns = barColumns(paint, bar.x);
   if (footprint === undefined) {
-    // The host read no whole ticks for this bar, so it is a plain candle at the bar's own body width.
-    paintCandle(paint.context, bar.x, paint.fullWidth, bar.prices, style, paint);
+    // The host read no whole ticks for this bar yet, so it draws nothing but a candle, on the very candle column a
+    // footprint bar at the same x and body width keeps its own thin candle on, and leaves the cells and totals out.
+    paintBarCandle(paint, bar, columns, style);
     return;
   }
-  const columns = barColumns(paint, bar.x);
-  paintFootprintCells(paint, footprint, columns, marks);
-  paintCandle(paint.context, candleCentreX(paint, columns), columns.candle.width, bar.prices, style, paint);
-  paintValueArea(paint, footprint, columns, marks);
+  const placed = placedCells(paint, footprint, columns);
+  const textStyle = barTextStyle(paint, placed);
+  for (const placedCell of placed) {
+    paintCell(paint, placedCell, textStyle, marks);
+  }
+  paintBarCandle(paint, bar, columns, style);
+  paintValueArea(paint, footprint, columns, textStyle, marks);
   // The summary uses these full columns, never the profile-narrowed cell boxes painted inside them.
-  paintSummary(paint, footprint, columns, marks);
+  paintSummary(paint, footprint, columns, textStyle, marks);
 }
 
 /**
@@ -365,8 +439,11 @@ function paintFootprintBar(paint: FootprintPaint, bar: FootprintBar, marks: Foot
  * display make of its rows — a sell column, a gap, a thin candle, another gap and a buy column, or one column beside
  * the candle — a mark on every imbalanced edge and its value area dashed. Under the columns it writes each side's
  * total against its own column, or both in one line in the single-column layout, and, while the summary is on, the
- * bar's delta and total in a box. The stacked imbalance zones are painted first, so every bar's own paint stands
- * over them. The cells are device pixels; only the text and the markers are written, in media pixels.
+ * bar's delta and total in a box. Every number of one bar is written at the one size its shortest row holds, which
+ * its cells, its totals and the box's lines share. A bar the host holds no footprint for paints the thin candle
+ * alone, on that same candle column, and no cells, totals or summary of its own. The stacked imbalance zones are
+ * painted first, so every bar's own paint stands over them. The cells are device pixels; only the text and the
+ * markers are written, in media pixels.
  */
 export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPoint, VolumeFootprintOptions> {
   protected override options: VolumeFootprintOptions = VOLUME_FOOTPRINT_DEFAULT_OPTIONS;
@@ -400,8 +477,9 @@ export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPo
         verticalPixelRatio,
       };
       context.save();
-      // The bitmap context draws in device pixels, so its font measures the text in the css px the media pass writes.
-      context.font = FOOTPRINT_FONT;
+      // The bitmap context draws in device pixels, so its font measures the text in the css px the media pass writes:
+      // every text is measured once, at the size the fit rules scale their widths from.
+      context.font = footprintFont(FOOTPRINT_FONT_SIZE);
       // The zones are painted first, so the cells and candles of every bar stand over them.
       for (const zone of source.zones) {
         paintStackedZone(paint, zone, bitmapSize.width);
@@ -414,7 +492,10 @@ export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPo
     return marks;
   }
 
-  /** Writes the cells' numbers, the box's values in bold, and the value area markers, in media pixels. */
+  /**
+   * Writes the cells' numbers, the box's values in bold, and the value area markers — each at its bar's own size — in
+   * media pixels.
+   */
   private paintMarks(target: SeriesRenderingTarget, marks: FootprintMarks): void {
     if (marks.texts.length === 0 && marks.valueAreas.length === 0) {
       return;
@@ -423,13 +504,15 @@ export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPo
       context.save();
       context.textBaseline = 'middle';
       for (const text of marks.texts) {
-        context.font = text.bold === true ? FOOTPRINT_BOLD_FONT : FOOTPRINT_FONT;
+        context.font = text.bold === true ? footprintBoldFont(text.size) : footprintFont(text.size);
         context.textAlign = text.align;
         context.fillStyle = text.color;
         context.fillText(text.text, text.x, text.y);
       }
-      context.font = FOOTPRINT_FONT;
+      // Each bar's marker is written at that bar's own size, so a bar zoomed narrow keeps a marker as small as its
+      // numbers rather than one standing over its neighbours.
       for (const area of marks.valueAreas) {
+        context.font = footprintFont(area.size);
         paintValueAreaMarkers(context, area);
       }
       context.restore();

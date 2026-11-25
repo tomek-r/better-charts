@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { barBodyWidth } from '../src/features/chart/engine/barStyle/barBodyWidth';
 import { FOOTPRINT_BAR_SPACING } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintZoom';
+import { footprintBarColumns } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintGeometry';
 import { FOOTPRINT_NEUTRAL_COLOR } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintShades';
 import type { ChartFootprintEvent, ChartFootprintRow, Candle } from '../src/shared/bridge/types';
 import { palette } from '../src/shared/theme/palette';
@@ -32,9 +33,9 @@ import {
 
 /**
  * The volume footprint bar style on a live chart: the host's chart footprint follows the style, the bars'
- * footprints reach the custom series, a bar the host holds none for keeps drawing as a plain candle, and
- * the totals, delta box, imbalance marks and legend notice are painted. The Symbol tab edits what the cells
- * write, and a setting the host computes rows with reaches it at once.
+ * footprints reach the custom series, a bar the host holds none for draws the footprint bars' own thin candle on
+ * its column, and the totals, delta box, imbalance marks and legend notice are painted. The Symbol tab edits what
+ * the cells write, and a setting the host computes rows with reaches it at once.
  */
 
 /** The account the stub's bridge status and account snapshot both report. */
@@ -99,6 +100,12 @@ const ZONE_EDGE_MARGIN = 2;
 const BAR_BODY_WIDTH = barBodyWidth(FOOTPRINT_BAR_SPACING, 1);
 /** How few css px of background the reference leaves between the candle body and either column. */
 const MIN_CANDLE_GAP = 5;
+/** The device pixels one css px of the suite's screenshots covers, which Playwright keeps at its default ratio. */
+const PANE_PIXEL_RATIO = 1;
+/** The milliseconds in a second, which turns a point's bar time into the ms the chart's time hook takes. */
+const MS_PER_SECOND = 1000;
+/** How many device px tall a candle body is read at least, so the row read across its middle lies inside it. */
+const MIN_BODY_HEIGHT = 3;
 /** How far into a cell row the gap is read, in css px, clear of the number written in the middle of the cell. */
 const CELL_ROW_INSET = 4;
 /** The dash one value area line paints, in css px, which only a dashed line reaches as a run of its own. */
@@ -404,6 +411,67 @@ function panePriceY(page: Page, price: number): Promise<number> {
   return page.evaluate((value) => window.__chartTest!.priceToY(value), price);
 }
 
+/** The bar prices one point of the bar style series carries, and the bar time they belong to. */
+interface BarPrices {
+  readonly time: number;
+  readonly open: number;
+  readonly close: number;
+}
+
+/** The prices and the bar time a point of the bar style series carries, or null while any of them is no number. */
+function barPricesOf(point: Record<string, unknown>): BarPrices | null {
+  const { time, open, close } = point;
+  if (typeof time !== 'number' || typeof open !== 'number' || typeof close !== 'number') {
+    return null;
+  }
+  return { time, open, close };
+}
+
+/**
+ * One bar the host holds no footprint for, read off the pane: the span its own body paints, the candle column a
+ * footprint bar keeps, and the bar's whole body width.
+ */
+interface PendingCandle {
+  readonly body: ColourSpan;
+  readonly columnWidth: number;
+  readonly fullWidth: number;
+}
+
+/**
+ * The newest up bar of the window whose whole body stands inside the pane, read as the candle a bar without a
+ * footprint draws: the span its body paints across the middle row of that body, and the candle column a footprint bar
+ * at the same bar spacing keeps. One bar alone is read, so no other bar's paint can be taken for its own.
+ */
+async function pendingCandle(page: Page, image: DecodedPng): Promise<PendingCandle> {
+  const pane = await paneColumns(page, image);
+  const fullWidth = barBodyWidth(await barSpacing(page), PANE_PIXEL_RATIO);
+  const columnWidth = footprintBarColumns(0, fullWidth, PANE_PIXEL_RATIO).candle.width;
+  // The newest bars are read first, since they stand past the legend the pane draws over its left side.
+  for (const point of [...(await barStyle(page)).points].reverse()) {
+    const bar = barPricesOf(point);
+    if (bar === null || bar.close <= bar.open) {
+      continue;
+    }
+    const barX = await barTimeX(page, bar.time * MS_PER_SECOND);
+    // A bar the pane cuts off would paint a body of its own, clipped by the pane's edge, rather than the whole column.
+    const standsInPane = barX - fullWidth / 2 >= pane.left && barX + fullWidth / 2 <= pane.right;
+    if (!standsInPane) {
+      continue;
+    }
+    const openY = await panePriceY(page, bar.open);
+    const closeY = await panePriceY(page, bar.close);
+    if (Math.abs(closeY - openY) < MIN_BODY_HEIGHT) {
+      continue;
+    }
+    const row = barRowRegion(image, barX, Math.floor((openY + closeY) / 2));
+    const body = colourSpan(image, UP_CANDLE, row);
+    if (body !== null) {
+      return { body, columnWidth, fullWidth };
+    }
+  }
+  throw new Error('The pane painted no up bar body standing inside it, so no pending candle was read.');
+}
+
 /**
  * The pane rows the stacked zone spans: from the y of its highest row's upPrice to the y of its lowest row's
  * downPrice, plus the css px the edge lines above and below it paint in.
@@ -598,6 +666,12 @@ test('a bar the host holds no footprint for draws as a plain candle', async ({ p
   expect(sitesPainting(image, UP_CANDLE, region).length).toBeGreaterThan(0);
   expect(horizontalRunsPainting(image, SELL_LIGHTEST, region, MIN_CELL_RUN)).toEqual([]);
   expect(horizontalRunsPainting(image, BUY_LIGHTEST, region, MIN_CELL_RUN)).toEqual([]);
+
+  // The bar draws no plain full-body candle: its body is painted on the very candle column a footprint bar keeps its
+  // own thin candle on, at that column's width, so a bar still being read lines up with the footprint bars beside it.
+  const pending = await pendingCandle(page, image);
+  expect(pending.body.right - pending.body.left + 1).toBe(pending.columnWidth);
+  expect(pending.columnWidth).toBeLessThan(pending.fullWidth);
   expectNoErrors(collected);
 });
 

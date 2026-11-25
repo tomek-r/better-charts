@@ -332,7 +332,7 @@ function fillOf(draft: CellDraft, settings: FootprintCellSettings): string {
 
 /** The colour of a draft's number, which a neutral cell takes from the neutral fill. */
 function textColorOf(draft: CellDraft): string {
-  return draft.shade === 'neutral' ? FOOTPRINT_NEUTRAL_TEXT_COLOR : footprintTextColor(draft.band);
+  return draft.shade === 'neutral' ? FOOTPRINT_NEUTRAL_TEXT_COLOR : footprintTextColor();
 }
 
 /** One draft as the painter draws it, the highlight of the row a bar traded most at over its own shade. */

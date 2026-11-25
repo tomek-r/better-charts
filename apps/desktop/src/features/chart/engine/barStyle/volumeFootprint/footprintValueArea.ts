@@ -1,5 +1,6 @@
 import { palette } from '../../../../../shared/theme/palette';
 import type { DevicePixelRatios } from '../barBodyWidth';
+import { footprintTextScale, type FootprintTextStyle } from './footprintTextSize';
 
 /** The colour the value area's lines and marker are drawn in, neutral against the dark chart. */
 const VALUE_AREA_COLOR = palette.textTertiary;
@@ -11,7 +12,13 @@ export const VALUE_AREA_LINE_WIDTH = 1;
 const NARROWEST_LINE = 1;
 /** The glyph marking where a value area line starts, and how far left of the bar it stands, in css px. */
 const VALUE_AREA_MARKER = '▶';
-const VALUE_AREA_MARKER_GAP = 2;
+/** How far left of the bar the marker stands at the maximum text size, in css px, scaled with the bar's own size. */
+export const VALUE_AREA_MARKER_GAP = 2;
+/**
+ * The narrowest bar, in css px, that marks its value areas: the marker stands left of the bar, so a narrower bar would
+ * see it reach over its neighbour while the chart is zoomed out, and keeps its dashed lines alone instead.
+ */
+export const MIN_MARKER_BAR_WIDTH = 48;
 /** A one-pixel line covers a single row of pixels only while it is stroked on that row's centre. */
 const ROW_CENTRE = 0.5;
 
@@ -22,14 +29,40 @@ export interface FootprintValueAreaSpan {
 }
 
 /** The media x the marker of a line is written at: just left of the bar, so it points at the line's first dash. */
-export function valueAreaMarkerX(span: FootprintValueAreaSpan, horizontalPixelRatio: number): number {
-  return span.left / horizontalPixelRatio - VALUE_AREA_MARKER_GAP;
+export function valueAreaMarkerX(span: FootprintValueAreaSpan, style: FootprintTextStyle): number {
+  return span.left / style.horizontalPixelRatio - VALUE_AREA_MARKER_GAP * footprintTextScale(style.size);
 }
 
 /** Where the media pass writes one bar's value area marker, and the media y of each line it points at. */
 export interface FootprintValueAreaMark {
   readonly markerX: number;
   readonly ys: readonly number[];
+  /** The size the whole bar writes its numbers in, in css px, which the marker's glyph is written at. */
+  readonly size: number;
+}
+
+/** How wide one bar's group — its columns and the thin candle between them — is, in css px. */
+function valueAreaGroupWidth(span: FootprintValueAreaSpan, style: FootprintTextStyle): number {
+  return (span.right - span.left) / style.horizontalPixelRatio;
+}
+
+/**
+ * The marker one bar's value area lines are written with, at the bar's own text size and its gap scaled the same way,
+ * or none while the bar writes no number at all or its group is narrower than MIN_MARKER_BAR_WIDTH. The lines
+ * themselves are drawn either way.
+ */
+export function valueAreaMark(
+  span: FootprintValueAreaSpan,
+  ys: readonly number[],
+  style: FootprintTextStyle | null,
+): FootprintValueAreaMark | null {
+  if (style === null) {
+    return null;
+  }
+  if (valueAreaGroupWidth(span, style) < MIN_MARKER_BAR_WIDTH) {
+    return null;
+  }
+  return { markerX: valueAreaMarkerX(span, style), ys, size: style.size };
 }
 
 /** Paints one dashed line across `span` at each media y in `ys`, in device pixels. */
@@ -54,7 +87,7 @@ export function paintValueAreaLines(
   context.restore();
 }
 
-/** Writes the marker of every line of `mark` at the line's own y, in the media pass's own font. */
+/** Writes the marker of every line of `mark` at the line's own y, in the font the caller has set for its size. */
 export function paintValueAreaMarkers(context: CanvasRenderingContext2D, mark: FootprintValueAreaMark): void {
   context.save();
   context.fillStyle = VALUE_AREA_COLOR;
