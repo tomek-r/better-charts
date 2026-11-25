@@ -20,6 +20,12 @@
 //! never read again nor counted twice. A read that does not come back whole drops the bar's ticks and
 //! the one after starts at the bar's open again.
 
+mod counts;
+
+// The bridge that pages these reads arrives in a later change; until then only the tests read them.
+#[cfg_attr(not(test), allow(unused_imports))]
+pub(crate) use counts::{level_ticks, CountsLive, CountsPage, CountsRead};
+
 use rust_decimal::Decimal;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -62,6 +68,9 @@ pub(crate) struct BarSpan {
     /// The candle's `tick_volume`: MT5's count of the ticks in the bar. `0` when the broker reported
     /// none, which leaves the pages sized from bars instead of ticks.
     pub(crate) tick_volume: u64,
+    /// Whether the candle reported a real volume, which leaves a counted trade weighted by the volume
+    /// it moved instead of counting one.
+    pub(crate) real_volume: bool,
 }
 
 /// The bars of `candles` as a footprint read sees them, oldest first. The newest bar is still forming,
@@ -76,6 +85,7 @@ pub(crate) fn footprint_window(candles: &[MarketCandle], read_end_ms: i64) -> Ve
             open_ms: candle.time_ms,
             end_ms: end_ms.max(candle.time_ms + MINIMUM_BAR_SPAN_MS),
             tick_volume: candle.tick_volume,
+            real_volume: candle.real_volume > 0,
         });
     }
     window
@@ -673,6 +683,7 @@ impl LiveRead {
             open_ms: point.from_ms,
             end_ms: span.end_ms,
             tick_volume: span.tick_volume,
+            real_volume: span.real_volume,
         });
         Some(Self {
             span,
@@ -1153,6 +1164,10 @@ impl FootprintFeed {
         true
     }
 }
+
+#[cfg(test)]
+#[path = "counts_tests.rs"]
+mod counts_tests;
 
 #[cfg(test)]
 mod tests;

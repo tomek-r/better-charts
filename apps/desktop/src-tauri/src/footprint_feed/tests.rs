@@ -124,6 +124,7 @@ fn one_minute(open_ms: i64) -> Vec<BarSpan> {
         open_ms,
         end_ms: open_ms + MINUTE_MS,
         tick_volume: 0,
+        real_volume: false,
     }]
 }
 
@@ -134,11 +135,13 @@ fn forming(open_ms: i64) -> FormingBars {
             open_ms,
             end_ms: open_ms + MINUTE_MS,
             tick_volume: 0,
+            real_volume: false,
         },
         closed: Some(BarSpan {
             open_ms: open_ms - MINUTE_MS,
             end_ms: open_ms,
             tick_volume: 0,
+            real_volume: false,
         }),
     }
 }
@@ -195,16 +198,19 @@ fn the_newest_bar_ends_at_the_read_end() {
                 open_ms: 0,
                 end_ms: MINUTE_MS,
                 tick_volume: 0,
+                real_volume: false,
             },
             BarSpan {
                 open_ms: MINUTE_MS,
                 end_ms: 2 * MINUTE_MS,
                 tick_volume: 0,
+                real_volume: false,
             },
             BarSpan {
                 open_ms: 2 * MINUTE_MS,
                 end_ms: 5 * MINUTE_MS,
                 tick_volume: 0,
+                real_volume: false,
             },
         ]
     );
@@ -237,11 +243,13 @@ fn the_forming_bar_and_the_one_before_it_end_where_the_chart_says() {
                 open_ms: 2 * MINUTE_MS,
                 end_ms: 3 * MINUTE_MS,
                 tick_volume: 0,
+                real_volume: false,
             },
             closed: Some(BarSpan {
                 open_ms: MINUTE_MS,
                 end_ms: 2 * MINUTE_MS,
                 tick_volume: 0,
+                real_volume: false,
             }),
         }
     );
@@ -1403,11 +1411,13 @@ fn a_closed_bar_is_reread_to_its_end_and_becomes_complete() {
                 open_ms: 0,
                 end_ms: MINUTE_MS,
                 tick_volume: 0,
+                real_volume: false,
             },
             BarSpan {
                 open_ms: MINUTE_MS,
                 end_ms: 2 * MINUTE_MS,
                 tick_volume: 0,
+                real_volume: false,
             },
         ],
         PAGE_BOUND,
