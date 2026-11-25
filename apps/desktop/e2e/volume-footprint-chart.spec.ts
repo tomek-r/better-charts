@@ -3,7 +3,12 @@ import { barBodyWidth } from '../src/features/chart/engine/barStyle/barBodyWidth
 import { FOOTPRINT_BAR_SPACING } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintZoom';
 import { footprintBarColumns } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintGeometry';
 import { FOOTPRINT_NEUTRAL_COLOR } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintShades';
-import type { ChartFootprintEvent, ChartFootprintRow, Candle } from '../src/shared/bridge/types';
+import type {
+  ChartFootprintEvent,
+  ChartFootprintFormingEvent,
+  ChartFootprintRow,
+  Candle,
+} from '../src/shared/bridge/types';
 import { palette } from '../src/shared/theme/palette';
 import { waitTwoAnimationFrames } from './helpers/animationFrames';
 import { openChartSettingsTab } from './helpers/chartSettingsDialog';
@@ -25,6 +30,7 @@ import {
   chartScopeKey,
   expectNoErrors,
   gotoWithStub,
+  pushEvent,
   STUB_M5_INTERVAL_MS,
   STUB_NOW,
   stubInvocations,
@@ -180,6 +186,51 @@ function incompleteFootprintEvent(): ChartFootprintEvent {
   };
 }
 
+/** The opening time of the bar before the newest one, which the write tests' window holds a footprint for too. */
+const PREVIOUS_BAR_OPEN_MS = NEWEST_BAR_OPEN_MS - STUB_M5_INTERVAL_MS;
+/** The volume both sides of every row traded once the host re-read the forming bar. */
+const FORMED_ROW_VOLUME = 960;
+/** The volume both sides of every row traded in the window the host republishes with other rows. */
+const REPUBLISHED_ROW_VOLUME = 1440;
+
+/** `rows` with both sides of each one trading `volume`, so a re-read differs from the fixture's own copy. */
+function rowsTrading(rows: readonly ChartFootprintRow[], volume: number): ChartFootprintRow[] {
+  return rows.map((row) => ({ ...row, buyVolume: volume.toFixed(2), sellVolume: volume.toFixed(2) }));
+}
+
+/** One footprint with both sides of every row trading `volume`, and its two totals summed over them. */
+function footprintTrading(bar: ChartFootprintEvent['bars'][number], volume: number) {
+  const traded = (volume * bar.rows.length).toFixed(2);
+  return { ...bar, rows: rowsTrading(bar.rows, volume), buyVolume: traded, sellVolume: traded };
+}
+
+/**
+ * The window the write tests drive: a footprint on the newest bar of the stub's window and one on the bar before
+ * it, so a write that touches the wrong bar is visible in the other footprint's point.
+ */
+const TWO_BAR_FOOTPRINT_EVENT: ChartFootprintEvent = {
+  ...FOOTPRINT_EVENT,
+  bars: [{ ...FOOTPRINT_EVENT.bars[0], openMs: PREVIOUS_BAR_OPEN_MS }, FOOTPRINT_EVENT.bars[0]],
+};
+
+/** The forming bar the host re-read, whose rows trade another volume than the window's copy of it. */
+function formingFootprintEvent(): ChartFootprintFormingEvent {
+  return {
+    symbol: 'EURUSD',
+    timeframe: 'M5',
+    ticksPerRow: TICKS_PER_ROW,
+    bar: footprintTrading(FOOTPRINT_EVENT.bars[0], FORMED_ROW_VOLUME),
+  };
+}
+
+/** The whole window again, with every row of both its footprints trading another volume. */
+function republishedFootprintEvent(): ChartFootprintEvent {
+  return {
+    ...TWO_BAR_FOOTPRINT_EVENT,
+    bars: TWO_BAR_FOOTPRINT_EVENT.bars.map((bar) => footprintTrading(bar, REPUBLISHED_ROW_VOLUME)),
+  };
+}
+
 /** The M5 window the stacked-zone fixture draws, and the place in it of the bar the footprint belongs to. */
 const ZONE_WINDOW_BARS = 10;
 const ZONE_BAR_INDEX = 6;
@@ -264,6 +315,8 @@ const INCOMPLETE_BEFORE_LABEL = chartTimeLabelOf(NEWEST_BAR_OPEN_MS);
  * (`volume: 'ticks'`), and the notice says nothing about that.
  */
 const EXPECTED_NOTICE = `Footprint: incomplete tick data before ${INCOMPLETE_BEFORE_LABEL}`;
+/** The notice the legend shows once the host's read stopped inside the bar before the newest instead. */
+const EARLIER_NOTICE = `Footprint: incomplete tick data before ${chartTimeLabelOf(PREVIOUS_BAR_OPEN_MS)}`;
 
 /** Picks `label` in the chart header's bar type menu. */
 async function chooseBarStyle(page: Page, label: string): Promise<void> {
@@ -281,6 +334,61 @@ async function footprintSettings(page: Page): Promise<unknown[]> {
 /** The bar style series as the dev hook shows it. */
 async function barStyle(page: Page) {
   return page.evaluate(() => window.__chartTest!.barStyle());
+}
+
+/** How many points of the bar style series carry a footprint, which is one per bar the host read whole. */
+async function footprintPointCount(page: Page): Promise<number> {
+  return (await barStyle(page)).points.filter((point) => 'footprint' in point).length;
+}
+
+/** The footprint a point of the bar style series carries, as the dev hook copies it out of the custom series. */
+interface FootprintPointState {
+  readonly rows: readonly { readonly buyVolume: number }[];
+}
+
+/** The volume the lowest row of the newest bar's drawn footprint traded into the ask. */
+async function newestRowVolume(page: Page): Promise<number> {
+  const footprint = (await barStyle(page)).points.at(-1)?.footprint as FootprintPointState | undefined;
+  return footprint?.rows[0]?.buyVolume ?? Number.NaN;
+}
+
+/**
+ * Opens the chart on the window the write tests drive and waits until every footprint of it is drawn, returning
+ * the bar style series as the dev hook first shows it.
+ */
+async function openFootprintWindow(page: Page) {
+  const collected = await gotoWithStub(page, {
+    chartFootprintEvent: TWO_BAR_FOOTPRINT_EVENT,
+    chartSettingOverrides: { [EURUSD_CHART]: { barStyle: 'volumeFootprint' } },
+  });
+  await openChart(page);
+  await expect.poll(() => footprintPointCount(page)).toBe(TWO_BAR_FOOTPRINT_EVENT.bars.length);
+  return { collected, drawn: await barStyle(page) };
+}
+
+/** The notice as the page watches it: the count of the DOM writes it took since `watchNotice`. */
+interface NoticeWatch {
+  __noticeMutations?: number;
+}
+
+/** Counts every DOM write the notice takes from now on, so a republish of what it says must add none. */
+async function watchNotice(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const notice = document.querySelector('.chart-footprint-notice');
+    const watch = window as unknown as NoticeWatch;
+    watch.__noticeMutations = 0;
+    if (notice === null) {
+      return;
+    }
+    new MutationObserver((records) => {
+      watch.__noticeMutations = (watch.__noticeMutations ?? 0) + records.length;
+    }).observe(notice, { childList: true, characterData: true, subtree: true });
+  });
+}
+
+/** How many DOM writes the notice took since `watchNotice`. */
+function noticeMutations(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as NoticeWatch).__noticeMutations ?? 0);
 }
 
 /** The bar spacing the dev hook's latest time-scale write left, in css px per bar. */
@@ -672,6 +780,63 @@ test('a bar the host holds no footprint for draws as a plain candle', async ({ p
   const pending = await pendingCandle(page, image);
   expect(pending.body.right - pending.body.left + 1).toBe(pending.columnWidth);
   expect(pending.columnWidth).toBeLessThan(pending.fullWidth);
+  expectNoErrors(collected);
+});
+
+test('a forming footprint rewrites the newest bar alone', async ({ page }) => {
+  const { collected, drawn } = await openFootprintWindow(page);
+
+  await pushEvent(page, 'chart-footprint-forming', formingFootprintEvent());
+  await expect.poll(() => newestRowVolume(page)).toBe(FORMED_ROW_VOLUME);
+
+  const after = await barStyle(page);
+  expect(after.points).toHaveLength(drawn.points.length);
+  // Every other bar kept the very point it was drawn with; only the forming bar's own point was written again.
+  expect(after.points.slice(0, -1)).toEqual(drawn.points.slice(0, -1));
+  expect(after.points.at(-1)).not.toEqual(drawn.points.at(-1));
+  // One point written and no whole rewrite, so the columns of the other bars were never thrown away and redrawn.
+  expect(after.writes).toEqual({ data: drawn.writes.data, update: drawn.writes.update + 1 });
+  expectNoErrors(collected);
+});
+
+test('republishing the identical window rewrites no point', async ({ page }) => {
+  const { collected, drawn } = await openFootprintWindow(page);
+
+  await pushEvent(page, 'chart-footprint', TWO_BAR_FOOTPRINT_EVENT);
+  const republished = await barStyle(page);
+  expect(republished.writes).toEqual(drawn.writes);
+  expect(republished.points).toEqual(drawn.points);
+
+  // A window the host read with other rows does rewrite it, so the identical one wrote nothing at all.
+  await pushEvent(page, 'chart-footprint', republishedFootprintEvent());
+  await expect.poll(() => newestRowVolume(page)).toBe(REPUBLISHED_ROW_VOLUME);
+  expect((await barStyle(page)).writes).toEqual({ data: drawn.writes.data + 1, update: drawn.writes.update });
+  expectNoErrors(collected);
+});
+
+test('republishing a window the notice already shows leaves the legend alone', async ({ page }) => {
+  const collected = await gotoWithStub(page, { chartFootprintEvent: incompleteFootprintEvent() });
+  await openChart(page);
+  await chooseBarStyle(page, 'Volume footprint');
+  const notice = page.locator('.chart-footprint-notice');
+  await expect(notice).toHaveText(EXPECTED_NOTICE);
+  // The footprint zoom settles after the style's first paint, so the watch starts on a chart that is at rest.
+  await waitTwoAnimationFrames(page);
+
+  await watchNotice(page);
+  await pushEvent(page, 'chart-footprint', incompleteFootprintEvent());
+  // Writing the text the notice already shows would take it out of the legend and put it back, re-laying the
+  // whole legend out for a frame the chart then has to repaint.
+  expect(await noticeMutations(page)).toBe(0);
+
+  // A read that stopped inside another bar does rewrite the notice, so the watch was armed the whole time.
+  await pushEvent(page, 'chart-footprint', {
+    ...incompleteFootprintEvent(),
+    incompleteBefore: PREVIOUS_BAR_OPEN_MS,
+    incomplete: [PREVIOUS_BAR_OPEN_MS],
+  });
+  await expect(notice).toHaveText(EARLIER_NOTICE);
+  expect(await noticeMutations(page)).toBeGreaterThan(0);
   expectNoErrors(collected);
 });
 
