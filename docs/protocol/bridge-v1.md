@@ -1199,7 +1199,32 @@ named `chart-footprint` or `chart-footprint-live` is not answered — the
 frontend's other keys are unaffected. The window read asks for the newest loaded
 bar's ticks first and works back to the oldest loaded bar, or until 500,000
 ticks are read, so a window deeper than that budget leaves its oldest bars
-without a footprint.
+without a footprint. Its pages are planned from the candles the window was
+loaded with: a page covers the run of newest unread bars whose summed
+`tick_volume` — MT5's count of the ticks in each bar — times a safety factor of
+1.25 still fits the page's `max_ticks`, and at least one bar. A window whose
+bars report a tick count therefore costs as few pages as its ticks allow, where
+a page used to start at one bar and grow. A bar whose candle reports a count of
+0 (unknown) falls back to that growing page: one bar first, doubling while a
+page fits and halving when one holds too many ticks. A wrong estimate costs
+pages, never data: a page that held more ticks than its estimate planned is
+re-read with fewer bars, and a bar that still does not fit is paged through one
+millisecond at a time, exactly as before.
+
+Every answered window page and every finished window read prints one timing line
+to the desktop's stderr with the bars and ticks it covered and its milliseconds —
+since the page was queued for a page, since the read started for the finished
+read. A page line also carries `bid_changes`, the ticks of the page that report
+MT5's Bid flag (flag `2`, the bid changed), and `mt5_tick_volume`, the summed
+`tick_volume` of the loaded bars that open inside the page's range, so the
+footprint's own tick count can be compared with MT5's Tick Volume. Like the tick
+profile's decision lines they are `[bridge] INFO` lines and stay off unless
+`MT5_BRIDGE_PROFILE_LOG=1`:
+
+```text
+[bridge] INFO footprint ticks NAS100 page 1769999940000..1770000000000 bars=2 ticks=37 complete=false waited_ms=64 bid_changes=6 mt5_tick_volume=37
+[bridge] INFO footprint ticks NAS100 read finished bars=300 ticks=41207 pages=4 elapsed_ms=311
+```
 
 A bar's footprint is computed from all of its ticks or not at all. A bar is kept
 only when every page covering it, from its open through its end, held its whole
@@ -1255,13 +1280,18 @@ first, and never a bar the read stopped inside: those are named, ascending, in
 window was read whole), so the chart can say that ticks before that time are
 incomplete. Prices and volumes are decimal strings, as the wire carries them;
 `ticksPerRow`, `openMs`, the trade counts and `poc`, `vah` and `val` stay
-numbers. The event is published when the window read finishes — the window
-covered, the tick budget spent or the read stopped inside a bar, including a
-read a correlated error ended — and again whenever the bar the chart left
-behind lands complete. `rows` are the engine's own rows: contiguous price
-levels, each a whole number of `ticksPerRow` ticks of the symbol's mirrored
-tick size, with the volume each side traded, and `poc`, `vah` and `val` name
-rows by row number.
+numbers. The event is published after every answered page of the window read
+while the read is still going, so the chart shows the newest bars as soon as the
+first page lands instead of after the whole read: `bars` then holds the bars the
+read has taken whole so far — its newest ones, because it reads them first — and
+a bar it has not reached yet is simply absent, so `incomplete` and
+`incompleteBefore` name only bars a page actually stopped inside. The event is
+published once more when the window read finishes — the window covered, the tick
+budget spent or the read stopped inside a bar, including a read a correlated
+error ended — and again whenever the bar the chart left behind lands complete.
+`rows` are the engine's own rows: contiguous price levels, each a whole number of
+`ticksPerRow` ticks of the symbol's mirrored tick size, with the volume each side
+traded, and `poc`, `vah` and `val` name rows by row number.
 
 Each row also carries `buyTrades` and `sellTrades`: the number of trades that
 side took in it. A trade is one tick the bar's trade-only rule counts — a bar

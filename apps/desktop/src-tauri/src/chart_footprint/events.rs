@@ -1,5 +1,10 @@
-//! What the chart footprint publishes: the loaded window's complete bars, the bars a read stopped
-//! inside, and the forming bar after each whole live re-read.
+//! What the chart footprint publishes: the loaded window's complete bars as a read grows, the bars a
+//! read stopped inside, and the forming bar after each whole live re-read.
+//!
+//! The window's event is published after every answered page of the read and once more when the read
+//! finishes, so the newest bars reach the chart after the first page instead of after the whole read:
+//! while a read is still going its event holds the bars taken whole so far, and the bars it has not
+//! reached are simply absent — `incomplete` names only the bars a page actually stopped inside.
 //!
 //! Every payload names the chart it belongs to and the row width the host resolved, so a chart that
 //! switched symbol or timeframe can drop an event that arrived for the previous one. Prices and
@@ -34,11 +39,14 @@ pub(crate) struct ChartFootprintEvent {
     pub(crate) symbol: String,
     pub(crate) timeframe: String,
     pub(crate) ticks_per_row: u32,
-    /// The complete bars' footprints, oldest first. A bar whose ticks a read did not take whole is not
-    /// one of them, and a bar the engine can row no level of (no tick size, no trade) is left out.
+    /// The complete bars' footprints, oldest first: every bar a read has taken whole so far, which
+    /// while a read is still going is its newest bars only. A bar whose ticks a read did not take
+    /// whole is not one of them, and a bar the engine can row no level of (no tick size, no trade) is
+    /// left out.
     pub(crate) bars: Vec<BarFootprint>,
     /// The open time of the newest bar a read stopped inside, so the chart can say that ticks before
-    /// it are incomplete; `None` when every bar of the window was read whole.
+    /// it are incomplete; `None` when every bar of the window was read whole. A bar a read has not
+    /// reached yet is never one of them.
     pub(crate) incomplete_before: Option<i64>,
     /// The open time of every bar a read stopped inside, ascending.
     pub(crate) incomplete: Vec<i64>,
@@ -74,6 +82,10 @@ pub(crate) fn footprint_chart(state: &BridgeState) -> Option<FootprintChart> {
 }
 
 /// The loaded window's event for what the feed holds, or `None` while the chart footprint is off.
+///
+/// A window read in flight publishes the bars it has taken whole so far: those are its newest bars,
+/// because it reads them first. `incomplete` names only the bars a page stopped inside, so a bar the
+/// read has not reached yet is absent rather than reported as incomplete.
 pub(crate) fn window_event(
     state: &BridgeState,
     feed: &FootprintFeed,

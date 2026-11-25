@@ -12,24 +12,32 @@
 //! read stopped inside keeps no ticks and reads as no trades. A new session or another chart symbol
 //! drops both reads with the requests that fill them.
 //!
-//! The chart footprint publishes over the same reads: the loaded window's complete bars when its read
-//! finishes and the forming bar after each whole live re-read. It never starts a read of its own, so a
-//! chart that asked for no footprint and that no observer needs costs nothing.
+//! The chart footprint publishes over the same reads: the loaded window's complete bars after each
+//! answered page — so the newest bars reach the chart after the first page instead of after the whole
+//! read — and again when the read finishes, and the forming bar after each whole live re-read. It
+//! never starts a read of its own, so a chart that asked for no footprint and that no observer needs
+//! costs nothing.
+//!
+//! Every answered window page and every finished window read prints one `[bridge] INFO` timing line
+//! (under `MT5_BRIDGE_PROFILE_LOG=1`, like the tick profile's lines): the bars and ticks the page
+//! covered and the milliseconds it took, so a slow history read can be measured instead of guessed.
 //!
 //! Everything here expects the caller to hold `session_work`, which every caller already does: the
 //! chart load, the quote and the ticks answer all run inside that gate.
 
 use super::{
-    log_warn, queue_indicator_ticks, BridgeEvents, BridgeState, IndicatorTicksRequest,
+    log_info, log_warn, queue_indicator_ticks, BridgeEvents, BridgeState, IndicatorTicksRequest,
     TickHistorySnapshot,
 };
 use crate::chart_footprint;
 use crate::footprint_feed::{
-    footprint_window, forming_bars, FootprintFeed, FormingBars, PageAnswer, PageOutcome, TickPage,
+    footprint_window, forming_bars, FootprintFeed, FormingBars, PageAnswer, PageOutcome,
+    ReadTiming, TickPage,
 };
 use std::sync::{Arc, MutexGuard};
 use std::time::Instant;
-use trading_core::protocol::MarketCandle;
+use trading_core::protocol::{MarketCandle, MarketTick};
+use trading_core::volume_profile::TICK_FLAG_BID;
 
 /// The key the host's window footprint read is routed under. The frontend never asks for it, and an
 /// answer under it fills the feed instead of being published as `indicator-ticks`.
@@ -143,7 +151,9 @@ pub(crate) fn drop_footprint_feed(state: &BridgeState) {
 }
 
 /// Folds one answered page of the window read in, asks for the next, and hands the ticks on once the
-/// window is covered, the budget is spent or a bar stopped the read inside itself.
+/// window is covered, the budget is spent or a bar stopped the read inside itself. Each answered page
+/// publishes the bars the read has taken whole so far, so the chart shows its newest bars as soon as
+/// the first page lands; a read still going names no bar it has not reached as incomplete.
 fn accept_window_page(
     state: &BridgeState,
     events: &Arc<dyn BridgeEvents>,
@@ -154,17 +164,77 @@ fn accept_window_page(
     // Read out before the feed's lock, so the two are never held together.
     let chart = chart_footprint::footprint_chart(state);
     let mut feed = footprint_feed(state);
+    let timing = feed.read_timing();
+    let mt5_tick_volume = feed.candle_tick_volume(snapshot.from_ms, snapshot.to_ms);
     match feed.accept_page(answer(snapshot), page_bound) {
         PageOutcome::Next(page) => {
+            log_window_page(symbol, &timing, snapshot, mt5_tick_volume);
+            chart_footprint::publish_window(state, events, &feed, chart.as_ref());
             drop(feed);
             queue_footprint_page(state, CHART_FOOTPRINT_KEY, symbol, page, page_bound);
         }
         PageOutcome::Finished => {
+            log_window_page(symbol, &timing, snapshot, mt5_tick_volume);
+            log_finished_window(symbol, &timing, snapshot, feed.complete_bar_count());
             notify_observer(state, &feed);
             chart_footprint::publish_window(state, events, &feed, chart.as_ref());
         }
         PageOutcome::Idle => {}
     }
+}
+
+/// Logs one answered window page: the bars it covered, the ticks it brought, whether it held its whole
+/// range, the milliseconds it took the EA to answer it, how many of its ticks report MT5's bid flag and
+/// how many ticks MT5 counted in the bars the range covers, so the footprint's tick count can be
+/// compared with MT5's Tick Volume.
+fn log_window_page(
+    symbol: &str,
+    timing: &ReadTiming,
+    snapshot: &TickHistorySnapshot,
+    mt5_tick_volume: u64,
+) {
+    log_info(&format!(
+        "footprint ticks {symbol} page {}..{} bars={} ticks={} complete={} waited_ms={} bid_changes={} mt5_tick_volume={}",
+        snapshot.from_ms,
+        snapshot.to_ms,
+        timing.page_bars,
+        snapshot.ticks.len(),
+        snapshot.complete,
+        elapsed_ms(timing.page_queued),
+        bid_changes(&snapshot.ticks),
+        mt5_tick_volume,
+    ));
+}
+
+/// How many of `ticks` report MT5's bid flag (flag `2`, the bid changed).
+fn bid_changes(ticks: &[MarketTick]) -> usize {
+    ticks
+        .iter()
+        .filter(|tick| tick.flags & TICK_FLAG_BID != 0)
+        .count()
+}
+
+/// Logs the finished window read: the bars it took whole, the ticks it read and the milliseconds it
+/// took from the page that started it.
+fn log_finished_window(
+    symbol: &str,
+    timing: &ReadTiming,
+    snapshot: &TickHistorySnapshot,
+    bars: usize,
+) {
+    log_info(&format!(
+        "footprint ticks {symbol} read finished bars={bars} ticks={} pages={} elapsed_ms={}",
+        timing.ticks + snapshot.ticks.len(),
+        timing.pages + 1,
+        elapsed_ms(timing.started),
+    ));
+}
+
+/// The milliseconds since `then`, and `0` when the feed timed nothing.
+fn elapsed_ms(then: Option<Instant>) -> u64 {
+    then.map_or(0, |then| {
+        u64::try_from(then.elapsed().as_millis()).unwrap_or(u64::MAX)
+    })
 }
 
 /// Folds one answered page of the forming bar's live read in; a whole re-read replaces the forming
