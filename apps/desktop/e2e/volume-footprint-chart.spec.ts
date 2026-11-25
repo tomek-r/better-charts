@@ -4,6 +4,7 @@ import { FOOTPRINT_BAR_SPACING } from '../src/features/chart/engine/barStyle/vol
 import { footprintBarColumns } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintGeometry';
 import { IMBALANCE_MARK_SPACE } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintImbalance';
 import { FOOTPRINT_NEUTRAL_COLOR } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintShades';
+import { VALUE_AREA_OVERHANG } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintValueArea';
 import type {
   ChartFootprintEvent,
   ChartFootprintFormingEvent,
@@ -81,7 +82,7 @@ const MIN_CELL_RUN = 6;
 const SELL_TOTAL = parseHexColor('#F23645');
 const BUY_TOTAL = parseHexColor('#089981');
 const DELTA_NEUTRAL = parseHexColor('#c4c9d0');
-/** The value area's dashed lines share the neutral delta's colour, palette.textTertiary, and so does their marker. */
+/** The value area's dotted lines share the neutral delta's colour, palette.textTertiary, and so does their marker. */
 const VALUE_AREA_LINE = DELTA_NEUTRAL;
 /** The colour of the imbalance mark each side's cells are marked with. */
 const SELL_IMBALANCE = parseHexColor('#F23645');
@@ -115,14 +116,18 @@ const MS_PER_SECOND = 1000;
 const MIN_BODY_HEIGHT = 3;
 /** How far into a cell row the gap is read, in css px, clear of the number written in the middle of the cell. */
 const CELL_ROW_INSET = 4;
-/** The dash one value area line paints, in css px, which only a dashed line reaches as a run of its own. */
-const VALUE_AREA_DASH_RUN = 3;
-/** The dashes one bar's value area line paints, well under the sixteen its dashes count to across the bar. */
-const MIN_VALUE_AREA_DASHES = 6;
-/** A solid line would paint a run this long across the bar, which a dash pattern never reaches. */
+/** The one device px a dot of a value area line paints, in css px, which only a dotted line paints as a run. */
+const VALUE_AREA_DASH_RUN = 1;
+/** The pitch of the value area line's dot pattern, in css px: one dot drawn, two clear, then the next dot. */
+const VALUE_AREA_DOT_PITCH = 3;
+/** The dots one bar's value area line paints, a shade under the forty-six its 136 device px span counts. */
+const MIN_VALUE_AREA_DASHES = 40;
+/** The rows either side of the value area line's own that a read covers, in css px, so a rounding still lands in. */
+const VALUE_AREA_ROW_SLACK = 2;
+/** A solid line would paint a run this long across the bar, which a dot pattern never reaches. */
 const SOLID_LINE_RUN = 16;
-/** The share of the bar the value area line's dashes have to reach across, past the candle it crosses. */
-const MIN_VALUE_AREA_SPREAD_SHARE = 0.8;
+/** The share of the bar body the line's dots reach across, which the overhang past both columns carries it past. */
+const MIN_VALUE_AREA_SPREAD_SHARE = 1;
 /** The month and weekday names the chart's default time labels write. */
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -705,18 +710,67 @@ test('the thin candle stands free, a gap of background either side of its body',
   expectNoErrors(collected);
 });
 
-test('the value area is marked by a dashed line across the whole bar', async ({ page }) => {
-  const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
-  const image = await paneImage(page);
-  const barX = await barTimeX(page, NEWEST_BAR_OPEN_MS);
-  const vahY = Math.round(await panePriceY(page, Number(FOOTPRINT_EVENT.bars[0].rows.at(-1)!.upPrice)));
-  const band = { ...barRowRegion(image, barX, vahY), top: vahY - 2, bottom: vahY + 2 };
+/** The row most of `sites` stand on: the one a line's dots share. */
+function mostCommonRow(sites: readonly PixelSite[]): number {
+  const counts = new Map<number, number>();
+  for (const site of sites) {
+    counts.set(site.y, (counts.get(site.y) ?? 0) + 1);
+  }
+  let best = sites[0]?.y ?? 0;
+  for (const [y, count] of counts) {
+    if (count > (counts.get(best) ?? 0)) {
+      best = y;
+    }
+  }
+  return best;
+}
 
-  const dashes = horizontalRunsPainting(image, VALUE_AREA_LINE, band, VALUE_AREA_DASH_RUN);
-  // The line is dashed rather than solid, and its dashes reach across the sell column, the gaps and the buy column.
+/** `region` narrowed to the one screenshot row `y`. */
+function rowBand(region: PixelRegion, y: number): PixelRegion {
+  return { ...region, top: y, bottom: y };
+}
+
+test('the value area is marked by a dotted line across the bar and past both of its columns', async ({ page }) => {
+  const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
+  // The footprint zoom settles after the style's first paint, so the columns and the line are read only once the pane
+  // draws at the spacing the renderer lays them out with.
+  await expect.poll(() => barSpacing(page)).toBe(FOOTPRINT_BAR_SPACING);
+  const image = await paneImage(page);
+  const barX = Math.round(await barTimeX(page, NEWEST_BAR_OPEN_MS));
+  const vahY = Math.round(await panePriceY(page, Number(FOOTPRINT_EVENT.bars[0].rows.at(-1)!.upPrice)));
+  // The bar's columns at the pane's own zoom, and the line they carry: the overhang past the sell column's left edge
+  // and the same past the buy column's right one.
+  const columns = footprintBarColumns(barX, BAR_BODY_WIDTH, PANE_PIXEL_RATIO);
+  const overhang = VALUE_AREA_OVERHANG * PANE_PIXEL_RATIO;
+  const lineLeft = columns.sell.left - overhang;
+  const lineRight = columns.buy.left + columns.buy.width + overhang;
+  // Only the line's own columns are read, so the marker standing left of it is never counted as one of its dots.
+  const band = {
+    left: Math.max(0, lineLeft),
+    right: Math.min(image.width, lineRight),
+    top: vahY - VALUE_AREA_ROW_SLACK,
+    bottom: vahY + VALUE_AREA_ROW_SLACK,
+  };
+
+  // The band leaves the line's row room to round either way; the row it actually stands on is the one most of its
+  // dots share, so a pixel of a number or a cell edge the band also holds is never read as one of its dots.
+  const row = rowBand(band, mostCommonRow(horizontalRunsPainting(image, VALUE_AREA_LINE, band, VALUE_AREA_DASH_RUN)));
+  const dashes = horizontalRunsPainting(image, VALUE_AREA_LINE, row, VALUE_AREA_DASH_RUN);
+  // The line is dotted rather than dashed or solid: one device px on, two off, across the bar and both overhangs.
+  // Every run it paints is that one px, so the runs and the painted pixels are as many as each other.
   expect(dashes.length).toBeGreaterThanOrEqual(MIN_VALUE_AREA_DASHES);
-  expect(horizontalRunsPainting(image, VALUE_AREA_LINE, band, SOLID_LINE_RUN)).toEqual([]);
-  const spread = Math.max(...dashes.map((dash) => dash.x)) - Math.min(...dashes.map((dash) => dash.x));
+  expect(sitesPainting(image, VALUE_AREA_LINE, row)).toHaveLength(dashes.length);
+  expect(horizontalRunsPainting(image, VALUE_AREA_LINE, row, SOLID_LINE_RUN)).toEqual([]);
+  const dots = dashes.map((dash) => dash.x);
+  expect(dots.slice(1).every((x, index) => x - dots[index] === VALUE_AREA_DOT_PITCH)).toBe(true);
+  // The dots start the overhang left of the sell column and run on to the last of them the widened line holds, which
+  // reaches the overhang past the buy column.
+  const lastDot = dots[dots.length - 1];
+  const spanLength = lineRight - lineLeft;
+  expect(dots[0]).toBe(lineLeft);
+  expect(lastDot).toBe(lineLeft + VALUE_AREA_DOT_PITCH * Math.floor((spanLength - 1) / VALUE_AREA_DOT_PITCH));
+  // They therefore reach further across than the bar's body, which the overhang at either end carries them.
+  const spread = lastDot - dots[0];
   expect(spread).toBeGreaterThanOrEqual(BAR_BODY_WIDTH * MIN_VALUE_AREA_SPREAD_SHARE);
   expectNoErrors(collected);
 });

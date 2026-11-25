@@ -26,6 +26,7 @@ import {
 import {
   FOOTPRINT_TYPES,
   footprintLayoutOf,
+  type FootprintLayout,
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintModes';
 import {
   FOOTPRINT_SIDES,
@@ -60,6 +61,9 @@ import {
   VALUE_AREA_DASH,
   VALUE_AREA_LINE_WIDTH,
   VALUE_AREA_MARKER_GAP,
+  VALUE_AREA_OVERHANG,
+  valueAreaDashPixels,
+  valueAreaLineSpan,
   valueAreaMark,
   valueAreaMarkerX,
   type FootprintValueAreaSpan,
@@ -81,7 +85,7 @@ import { DEFAULT_FOOTPRINT_SETTINGS } from './helpers/footprintFixtures';
 /**
  * What the volume footprint style means to the engine: the volume a cell writes, the shade a cell is graded in, the
  * size a bar writes its numbers at, the device geometry of the two columns and the thin candle, the summary under
- * them, the value area's dashed lines and their marker, the imbalance marks and the rows the host is asked for.
+ * them, the value area's dotted lines and their marker, the imbalance marks and the rows the host is asked for.
  */
 
 /** One side's volumes from nothing to a hundred, which every band boundary is read against. */
@@ -113,11 +117,12 @@ const SUMMARY_COLUMNS = footprintBarColumns(10, 100, NO_SCALING, 'two-columns');
 const LOWEST_ROW_BOTTOM = 200;
 
 /**
- * The device-pixel span one value area line crosses: the sell column's left edge of a bar `fullWidth` css px wide out
- * to its buy column's right one, so the span is as wide as the bar's group.
+ * The device-pixel span the value area lines of a bar `fullWidth` css px wide cross its columns over: the sell
+ * column's left edge — the thin candle's own, in the single-column layout, where the empty sell slot stands — out to
+ * the buy column's right one. The lines themselves are drawn VALUE_AREA_OVERHANG css px past either end of it.
  */
-function valueAreaSpanOf(fullWidth: number): FootprintValueAreaSpan {
-  const columns = footprintBarColumns(10, fullWidth, NO_SCALING, 'two-columns');
+function valueAreaSpanOf(fullWidth: number, layout: FootprintLayout = 'two-columns'): FootprintValueAreaSpan {
+  const columns = footprintBarColumns(10, fullWidth, NO_SCALING, layout);
   return { left: columns.sell.left, right: columns.buy.left + columns.buy.width };
 }
 
@@ -240,21 +245,49 @@ test('a cell writes its number at the size its bar holds, and nothing while that
   expect(footprintCellShowsText(cell, cell.width, line, textStyleOf(10))).toBe(true);
 });
 
-test('the value area is marked by a dashed line three css px on and three off, one css px wide', () => {
-  expect(VALUE_AREA_DASH).toEqual([3, 3]);
+test('the value area is marked by a dotted line one css px on and two off, one css px wide', () => {
+  expect(VALUE_AREA_DASH).toEqual([1, 2]);
   expect(VALUE_AREA_LINE_WIDTH).toBe(1);
 });
 
+test('a value area dot keeps whole device pixels on any screen', () => {
+  // One css px on and two off as the suite's one-to-one screen keeps them, doubled on a screen of two device px per
+  // css px, and rounded where the ratio is fractional: 1 × 1.25 = 1.25 and 2 × 1.25 = 2.5 are no whole pixels, so
+  // the dot keeps one of them and the gap three.
+  expect(valueAreaDashPixels(NO_SCALING)).toEqual([1, 2]);
+  expect(valueAreaDashPixels(2)).toEqual([2, 4]);
+  expect(valueAreaDashPixels(1.25)).toEqual([1, 3]);
+});
+
+test('a value area line runs four css px past the outermost column of either layout', () => {
+  // A hundred-pixel two-column bar's columns span -40 to 60: its line starts four css px left of the sell column and
+  // stops four past the buy one, so it overhangs the outer edges of the bar's columns on both sides.
+  const twoColumns = valueAreaSpanOf(100);
+  expect(VALUE_AREA_OVERHANG).toBe(4);
+  expect(twoColumns).toEqual({ left: -40, right: 60 });
+  expect(valueAreaLineSpan(twoColumns, NO_SCALING)).toEqual({ left: -44, right: 64 });
+  // The one-column bar keeps no sell column, so its line starts four css px left of its thin candle and stops four
+  // past its one column: the 136-px body centres the candle on 0 and spans it to 20, and the column stops at its cap.
+  const single = valueAreaSpanOf(OWNER_BODY_WIDTH, 'single-column');
+  expect(single).toEqual({ left: 0, right: 98 });
+  expect(valueAreaLineSpan(single, NO_SCALING)).toEqual({ left: -4, right: 102 });
+  // The overhang is css px at the screen's ratio, in whole device px: eight on a screen of two device px per css px,
+  // and six on one of a ratio and a half, where 4 × 1.5 = 6.
+  expect(valueAreaLineSpan(twoColumns, 2)).toEqual({ left: -48, right: 68 });
+  expect(valueAreaLineSpan(twoColumns, 1.5)).toEqual({ left: -46, right: 66 });
+});
+
 test('a bar writes its value area marker at its own text size, its gap scaled with it', () => {
-  // A hundred-pixel two-column bar's group spans -40 to 60: at the maximum size the marker stands the two css px of
-  // its gap left of the sell column's edge, and the mark carries the size the media pass writes it at.
+  // A hundred-pixel two-column bar's columns span -40 to 60, and its line runs four css px past the sell column's
+  // edge: at the maximum size the marker stands the two css px of its gap left of that line's own left end, and the
+  // mark carries the size the media pass writes it at.
   const span = valueAreaSpanOf(100);
 
   expect(MIN_MARKER_BAR_WIDTH).toBe(48);
   expect(VALUE_AREA_MARKER_GAP).toBe(2);
-  expect(valueAreaMarkerX(span, textStyleOf(FOOTPRINT_FONT_SIZE))).toBe(-42);
+  expect(valueAreaMarkerX(span, textStyleOf(FOOTPRINT_FONT_SIZE))).toBe(-46);
   expect(valueAreaMark(span, [211, 240], textStyleOf(FOOTPRINT_FONT_SIZE))).toEqual({
-    markerX: -42,
+    markerX: -46,
     ys: [211, 240],
     size: FOOTPRINT_FONT_SIZE,
   });
@@ -265,9 +298,10 @@ test('a bar writing at a smaller size marks its value area with a smaller marker
   const style = textStyleOf(10);
   const mark = valueAreaMark(span, [211], style);
 
-  // A ten-px bar keeps 2 × 10/14 = 1.43 css px of the gap, so its marker stands nearer the sell column than the two
-  // px of a bar at the maximum size, and it is written at ten px rather than fourteen.
-  expect(valueAreaMarkerX(span, style)).toBeCloseTo(-41.428571, 5);
+  // A ten-px bar keeps 2 × 10/14 = 1.43 css px of the gap, so its marker stands nearer the line's left end than the
+  // two px of a bar at the maximum size, and it is written at ten px rather than fourteen: that end stands on -44,
+  // so the marker is written on -45.43.
+  expect(valueAreaMarkerX(span, style)).toBeCloseTo(-45.428571, 5);
   expect(valueAreaMarkerX(span, style)).toBeGreaterThan(valueAreaMarkerX(span, textStyleOf(FOOTPRINT_FONT_SIZE)));
   expect(mark?.markerX).toBe(valueAreaMarkerX(span, style));
   expect(mark?.size).toBe(10);
@@ -279,7 +313,7 @@ test('a bar too narrow for a marker, or one writing no text at all, marks its va
   const narrow = valueAreaSpanOf(MIN_MARKER_BAR_WIDTH - 1);
   const atMinimum = valueAreaSpanOf(MIN_MARKER_BAR_WIDTH);
 
-  // The marker stands left of the bar, so a bar whose group is narrower than the minimum keeps its dashed lines and
+  // The marker stands left of the bar, so a bar whose group is narrower than the minimum keeps its dotted lines and
   // no marker, which would otherwise reach over the bar beside it once the chart is zoomed out.
   expect(atMinimum.right - atMinimum.left).toBe(MIN_MARKER_BAR_WIDTH);
   expect(valueAreaMark(narrow, [211], style)).toBeNull();
