@@ -8,13 +8,13 @@
 //! error frame and publishing the protocol-error status.
 
 use super::{
-    account_snapshot, bar_update, disconnect, end_current_session, flush_outbound, heartbeat,
-    history_snapshot, order_check_error, order_check_result, order_command_error,
-    order_command_update, portfolio_snapshot, protocol_error, protocol_error_session, publish,
-    quote_update, read_one, reconcile_error, reconcile_snapshot, risk_quote_error,
-    risk_quote_result, run_handshake, send_error, symbol_info, symbol_search, tauri_events,
-    tick_history, tick_history_error, tick_price_history, BridgeConnectionState, BridgeEvents,
-    BridgeState, ExecutionAdapterState, FrameSource, HEARTBEAT_TIMEOUT,
+    account_snapshot, bar_update, disconnect, end_current_session, expire_awaited_ticks,
+    flush_outbound, heartbeat, history_snapshot, order_check_error, order_check_result,
+    order_command_error, order_command_update, portfolio_snapshot, protocol_error,
+    protocol_error_session, publish, quote_update, read_one, reconcile_error, reconcile_snapshot,
+    risk_quote_error, risk_quote_result, run_handshake, send_error, symbol_info, symbol_search,
+    tauri_events, tick_history, tick_history_error, tick_price_history, BridgeConnectionState,
+    BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource, HEARTBEAT_TIMEOUT,
 };
 use crate::bridge::endpoint::BridgeEndpoint;
 use std::{net::SocketAddr, sync::Arc};
@@ -91,6 +91,10 @@ pub(crate) async fn handle_connection(
         {
             break;
         }
+        // A tick request the EA never answered must not hold the host's one tick
+        // slot: every loop turn checks the timeout before the flush, so the EA's
+        // heartbeat (every 2 s) keeps the check running.
+        expire_awaited_ticks(&state, &events, &session_id);
         if flush_outbound(&mut stream, &state, &adapter, &session_id)
             .await
             .is_err()

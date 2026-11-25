@@ -1125,6 +1125,22 @@ id is ignored like a stale page and the tick profile's own ids stay untouched. A
 new session or a change of the chart symbol drops every queued and awaited
 indicator ticks request.
 
+The EA serves one `tick_history_request` at a time: a newer one silently cancels
+the request it was serving, and a cancelled id is never answered. The host
+therefore keeps at most one tick history request in flight at once, across this
+route and the tick profile together. A flush writes at most the oldest queued
+indicator ticks request, and only while neither route awaits an answer: the tick
+profile's own page stays pending (not taken) while an indicator ticks request is
+awaited, and no indicator ticks request is claimed while the tick profile's page
+is awaited. The rest wait in the ordered per-key queue, so a request queued
+behind the awaited one goes out only once that one is answered; a newer request
+for the awaited key replaces it and frees the wire slot at once, because its
+answer, if it still comes, is stale and ignored like any other. A request the EA
+has not answered after 150 s (the EA itself fails a read after 120 s) counts as
+failed for its id: it is handled exactly like a correlated `error` below, with
+the message `the terminal did not answer the tick history request`, which frees
+the slot for the next queued request.
+
 `indicator-ticks` event payload (camelCase, as emitted to the frontend):
 
 ```json
@@ -1433,7 +1449,10 @@ remembered history starts (at most 64) are cleared with the series.
 
 A new request, `cancel_tick_profile`, a session change or disconnect and a
 symbol change invalidate the estimate and the bar pages (generation); stale or
-mismatched responses are ignored. One profile is in flight at a time.
+mismatched responses are ignored. One profile is in flight at a time. Its
+`tick_history_request` page shares the EA's one tick history slot with the
+indicator ticks route above, so a profile page waits while an indicator ticks
+request is awaited, and the other way round; see "Indicator ticks".
 
 **Decision log (desktop stderr, no wire change).** With `MT5_BRIDGE_PROFILE_LOG=1`
 each profile prints one `[bridge] INFO` line for the choice to the `pnpm dev`

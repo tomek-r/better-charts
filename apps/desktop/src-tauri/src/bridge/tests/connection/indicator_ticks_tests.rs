@@ -170,12 +170,17 @@ async fn ticks_page_is_written_with_its_range_and_published_on_its_own_event() {
 }
 
 #[tokio::test]
-async fn a_tick_profile_page_in_flight_keeps_its_own_answer() {
+async fn a_tick_profile_page_waits_while_an_indicator_ticks_page_is_awaited() {
     let harness = default_harness().await;
     let mut client = BridgeClient::connect(harness.addr).await.unwrap();
     let session = complete_handshake(&mut client, &harness).await.session;
     show_chart_symbol(&harness, "EURUSD");
 
+    let (ticks_id, ticks_request) =
+        write_ticks_page(&harness, &mut client, "volume-100", 1_000, 2_000, 500).await;
+
+    // The profile asks for its own page while the ticks page awaits its answer: the EA serves one tick
+    // request at a time, so the profile's page stays pending instead of cancelling the ticks read.
     request_tick_profile_inner(
         &harness.state,
         "EURUSD".into(),
@@ -185,22 +190,30 @@ async fn a_tick_profile_page_in_flight_keeps_its_own_answer() {
         70,
     )
     .expect("profile queued");
-    request_indicator_ticks_inner(
-        &harness.state,
-        "volume-100".into(),
-        "EURUSD".into(),
-        1_000,
-        2_000,
-        500,
-    )
-    .expect("ticks queued");
+    assert!(
+        client.recv(WAIT).await.is_none(),
+        "no profile page may go out while the ticks page is awaited"
+    );
+    assert!(harness.state.pending_tick_profile.lock().unwrap().is_some());
 
-    let ticks_page = client.recv(WAIT).await.expect("ticks page on the wire");
-    assert_eq!(ticks_page.message_type, MessageType::TickHistoryRequest);
-    assert!(ticks_page.id.starts_with("rust-indicator-ticks-"));
-    let ticks_request: TickHistoryRequest =
-        serde_json::from_value(ticks_page.payload).expect("ticks payload");
-    let profile_page = client.recv(WAIT).await.expect("profile page on the wire");
+    send_ticks_snapshot(
+        &mut client,
+        &session,
+        &ticks_id,
+        &ticks_request,
+        true,
+        vec![tick_json(1_500, "25000.1", "25000.3")],
+    )
+    .await;
+    assert!(
+        wait_until(WAIT, || harness.events.has_event("indicator-ticks")).await,
+        "the ticks page must be published"
+    );
+
+    let profile_page = client
+        .recv(WAIT)
+        .await
+        .expect("the profile page follows the ticks answer");
     assert_eq!(profile_page.message_type, MessageType::TickHistoryRequest);
     assert!(profile_page.id.starts_with("rust-ticks-"));
     let profile_request: TickHistoryRequest =
@@ -211,26 +224,12 @@ async fn a_tick_profile_page_in_flight_keeps_its_own_answer() {
     send_ticks_snapshot(
         &mut client,
         &session,
-        &ticks_page.id,
-        &ticks_request,
-        true,
-        vec![tick_json(1_500, "25000.1", "25000.3")],
-    )
-    .await;
-    send_ticks_snapshot(
-        &mut client,
-        &session,
         &profile_page.id,
         &profile_request,
         true,
         vec![tick_json(500, "25001.0", "25001.2")],
     )
     .await;
-
-    assert!(
-        wait_until(WAIT, || harness.events.has_event("indicator-ticks")).await,
-        "the ticks page must be published"
-    );
     assert!(
         wait_until(WAIT, || harness.events.has_event("tick-profile")).await,
         "the profile page must still be published"
@@ -248,32 +247,155 @@ async fn a_tick_profile_page_in_flight_keeps_its_own_answer() {
 }
 
 #[tokio::test]
-async fn two_keys_in_flight_each_answer_under_their_own_key() {
+async fn indicator_ticks_wait_while_a_tick_profile_page_is_awaited() {
     let harness = default_harness().await;
     let mut client = BridgeClient::connect(harness.addr).await.unwrap();
     let session = complete_handshake(&mut client, &harness).await.session;
     show_chart_symbol(&harness, "EURUSD");
 
-    let first = write_ticks_page(&harness, &mut client, "atr-14", 1_000, 2_000, 500).await;
-    let second = write_ticks_page(&harness, &mut client, "sar-3", 3_000, 4_000, 400).await;
-    assert_ne!(first.0, second.0, "one id per request");
+    // The tick profile's own page owns the EA's one tick slot first.
+    request_tick_profile_inner(
+        &harness.state,
+        "EURUSD".into(),
+        100,
+        1_000,
+        RowLayout::default(),
+        70,
+    )
+    .expect("profile queued");
+    let profile_page = client.recv(WAIT).await.expect("profile page on the wire");
+    assert_eq!(profile_page.message_type, MessageType::TickHistoryRequest);
+    assert!(profile_page.id.starts_with("rust-ticks-"));
+    let profile_request: TickHistoryRequest =
+        serde_json::from_value(profile_page.payload).expect("profile payload");
+
+    request_indicator_ticks_inner(
+        &harness.state,
+        "volume-100".into(),
+        "EURUSD".into(),
+        1_000,
+        2_000,
+        500,
+    )
+    .expect("ticks queued");
+    assert!(
+        client.recv(WAIT).await.is_none(),
+        "no ticks page may go out while the profile page is awaited"
+    );
+    assert!(!ticks_slots(&harness.state).is_awaited());
 
     send_ticks_snapshot(
         &mut client,
         &session,
-        &second.0,
-        &second.1,
+        &profile_page.id,
+        &profile_request,
         true,
-        vec![tick_json(3_500, "25002.0", "25002.2")],
+        vec![tick_json(500, "25001.0", "25001.2")],
     )
     .await;
+    assert!(
+        wait_until(WAIT, || harness.events.has_event("tick-profile")).await,
+        "the profile page must be published"
+    );
+
+    let ticks_page = client
+        .recv(WAIT)
+        .await
+        .expect("the ticks page follows the profile answer");
+    assert_eq!(ticks_page.message_type, MessageType::TickHistoryRequest);
+    assert!(ticks_page.id.starts_with("rust-indicator-ticks-"));
+    let ticks_request: TickHistoryRequest =
+        serde_json::from_value(ticks_page.payload).expect("ticks payload");
     send_ticks_snapshot(
         &mut client,
         &session,
-        &first.0,
-        &first.1,
-        false,
+        &ticks_page.id,
+        &ticks_request,
+        true,
         vec![tick_json(1_500, "25000.1", "25000.3")],
+    )
+    .await;
+    assert!(
+        wait_until(WAIT, || harness.events.has_event("indicator-ticks")).await,
+        "the queued ticks page must still be published"
+    );
+    assert_eq!(emitted(&harness, "indicator-ticks")["key"], "volume-100");
+}
+
+#[tokio::test]
+async fn two_queued_keys_go_out_one_at_a_time_and_answer_under_their_own_key() {
+    let harness = default_harness().await;
+    let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+    let session = complete_handshake(&mut client, &harness).await.session;
+    show_chart_symbol(&harness, "EURUSD");
+
+    // Two callers ask at once; the EA serves one tick request at a time, so only the oldest is written.
+    request_indicator_ticks_inner(
+        &harness.state,
+        "atr-14".into(),
+        "EURUSD".into(),
+        1_000,
+        2_000,
+        500,
+    )
+    .expect("first ticks queued");
+    request_indicator_ticks_inner(
+        &harness.state,
+        "sar-3".into(),
+        "EURUSD".into(),
+        3_000,
+        4_000,
+        400,
+    )
+    .expect("second ticks queued");
+
+    let first = client
+        .recv(WAIT)
+        .await
+        .expect("the oldest page on the wire");
+    assert_eq!(first.message_type, MessageType::TickHistoryRequest);
+    assert!(first.id.starts_with("rust-indicator-ticks-"));
+    let first_request: TickHistoryRequest =
+        serde_json::from_value(first.payload).expect("first payload");
+    assert_eq!(first_request.from_ms, 1_000);
+
+    assert!(
+        client.recv(WAIT).await.is_none(),
+        "the second page waits for the first answer"
+    );
+
+    send_ticks_snapshot(
+        &mut client,
+        &session,
+        &first.id,
+        &first_request,
+        true,
+        vec![tick_json(1_500, "25000.1", "25000.3")],
+    )
+    .await;
+    assert!(
+        wait_until(WAIT, || harness.events.has_event("indicator-ticks")).await,
+        "the first page must be published"
+    );
+
+    let second = client
+        .recv(WAIT)
+        .await
+        .expect("the second page follows the first answer");
+    assert_eq!(second.message_type, MessageType::TickHistoryRequest);
+    assert!(second.id.starts_with("rust-indicator-ticks-"));
+    assert_ne!(second.id, first.id, "one id per request");
+    let second_request: TickHistoryRequest =
+        serde_json::from_value(second.payload).expect("second payload");
+    assert_eq!(second_request.from_ms, 3_000);
+
+    send_ticks_snapshot(
+        &mut client,
+        &session,
+        &second.id,
+        &second_request,
+        false,
+        vec![tick_json(3_500, "25002.0", "25002.2")],
     )
     .await;
 
@@ -282,9 +404,9 @@ async fn two_keys_in_flight_each_answer_under_their_own_key() {
         "both pages must be published"
     );
     let pages = ticks_events(&harness);
-    assert_eq!(pages[0]["key"], "sar-3");
-    assert_eq!(pages[0]["fromMs"], 3_000);
-    assert_eq!(pages[1]["key"], "atr-14");
+    assert_eq!(pages[0]["key"], "atr-14");
+    assert_eq!(pages[0]["fromMs"], 1_000);
+    assert_eq!(pages[1]["key"], "sar-3");
     assert_eq!(pages[1]["complete"], false);
 }
 
@@ -458,8 +580,8 @@ async fn ticks_request_for_another_symbol_is_refused() {
         Err("symbol is not the chart's symbol".to_owned())
     );
     assert!(ticks_slots(&harness.state)
-        .claim_waiting(&harness.state.next_request_id)
-        .is_empty());
+        .claim_next(&harness.state.next_request_id, std::time::Instant::now())
+        .is_none());
 }
 
 #[tokio::test]

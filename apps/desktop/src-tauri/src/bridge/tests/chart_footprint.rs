@@ -8,6 +8,7 @@ use crate::chart_footprint::events::{CHART_FOOTPRINT_EVENT, CHART_FOOTPRINT_FORM
 use crate::chart_footprint::{ChartFootprintRequest, ChartFootprintRowSize};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
+use std::time::Instant;
 use trading_core::footprint::{FootprintTick, TICK_FLAG_BUY, TICK_FLAG_SELL};
 use trading_core::protocol::MarketTick;
 
@@ -184,9 +185,9 @@ fn enabling_the_chart_footprint_reads_the_window_it_shows() {
 
     enable(&state);
 
-    let queued = ticks_slots(&state).claim_waiting(&state.next_request_id);
-    assert_eq!(queued.len(), 1, "the window's own read is queued");
-    assert_eq!(queued[0].request.key, CHART_FOOTPRINT_KEY);
+    let queued = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the window's own read is queued");
+    assert_eq!(queued.request.key, CHART_FOOTPRINT_KEY);
 }
 
 #[test]
@@ -405,12 +406,48 @@ fn an_observer_keeps_the_ticks_coming_while_the_chart_footprint_is_off() {
     // A chart load replaces the feed; the read starts because the observer needs the ticks.
     publish_market(&events, &state, SESSION, snapshot(&window));
 
-    let queued = ticks_slots(&state).claim_waiting(&state.next_request_id);
-    assert_eq!(queued.len(), 1, "the observer's read is queued");
-    assert_eq!(queued[0].request.key, CHART_FOOTPRINT_KEY);
+    let queued = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the observer's read is queued");
+    assert_eq!(queued.request.key, CHART_FOOTPRINT_KEY);
 
     read_window(&state, &events, &window);
 
     assert_eq!(observer.bars(), vec![0, MINUTE_MS]);
     assert!(recorded.named(CHART_FOOTPRINT_EVENT).is_empty());
+}
+
+#[test]
+fn a_live_reread_waits_for_the_window_page_holding_the_one_tick_slot() {
+    // A single-bar window reads in one page, so the live re-read is the only request queued behind it.
+    let window = [candle(0, "100")];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    enable(&state);
+
+    let window_page = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the window read takes the EA's one tick slot");
+    assert_eq!(window_page.request.key, CHART_FOOTPRINT_KEY);
+
+    // The quote asks for the forming bar's live re-read while that page awaits its answer: the EA
+    // serves one tick request at a time, so the re-read must stay queued rather than cancel it.
+    assert!(accept_quote(&events, &state, SESSION, chart_quote(0)).is_some());
+    assert!(
+        claim_next_tick_request(&state, &state.next_request_id, Instant::now()).is_none(),
+        "the live re-read must not go out while the window page is awaited"
+    );
+
+    // Answering the window page frees the slot, and the live re-read then goes out.
+    assert!(ticks_slots(&state)
+        .take_awaited(&window_page.request_id)
+        .is_some());
+    let answered = page(0, MINUTE_MS, true, &[tick(0, "100", "2", TICK_FLAG_BUY)]);
+    assert!(accept_footprint_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_KEY,
+        &answered
+    ));
+    let live_page = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the live re-read goes out once the window page is answered");
+    assert_eq!(live_page.request.key, CHART_FOOTPRINT_LIVE_KEY);
 }
