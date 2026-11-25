@@ -1,8 +1,17 @@
 import type { DevicePixelRatios } from '../barBodyWidth';
 import type { FootprintCellBox, FootprintColumn, FootprintTextAlign } from './footprintGeometry';
 
-/** How wide a text is, in css px, in the font the footprint writes its numbers in at FOOTPRINT_FONT_SIZE. */
-export type FootprintTextWidth = (text: string) => number;
+/**
+ * The face a footprint text is written in: the regular one of its numbers and its labels, and the bold one its summary
+ * box draws its values in, which measures wider than the regular face and so is measured on its own.
+ */
+export type FootprintTextWeight = 'regular' | 'bold';
+
+/**
+ * How wide a text is, in css px, in `weight`'s face of the font the footprint writes in at FOOTPRINT_FONT_SIZE: a
+ * measurer that cannot tell the two faces apart may leave the weight out, and a text is then measured as it is regular.
+ */
+export type FootprintTextWidth = (text: string, weight: FootprintTextWeight) => number;
 
 /** The largest size a bar's numbers are written in, in css px, which every text is measured at. */
 export const FOOTPRINT_FONT_SIZE = 14;
@@ -20,7 +29,8 @@ const NARROWEST_TEXT_PADDING = 2;
 
 /**
  * What one bar's texts are laid out with: the one size every number of the bar is written in, the screen's ratios,
- * and the seam that measures a text at FOOTPRINT_FONT_SIZE, which every smaller size scales.
+ * and the seam that measures a text at FOOTPRINT_FONT_SIZE in the weight it is written in, which every smaller size
+ * scales.
  */
 export interface FootprintTextStyle extends DevicePixelRatios {
   readonly size: number;
@@ -65,9 +75,17 @@ export function footprintBarTextSize(cellHeights: readonly number[], verticalPix
   return footprintTextSize(Math.min(...cellHeights) / verticalPixelRatio);
 }
 
-/** How wide `text` is at `style`'s size, in css px: the width it measures at the maximum size, scaled. */
-export function footprintTextWidthAt(text: string, style: FootprintTextStyle): number {
-  return style.textWidth(text) * footprintTextScale(style.size);
+/**
+ * How wide `text` is at `style`'s size, in css px: the width it measures at the maximum size in `weight`'s face,
+ * scaled. A text the media pass draws bold has to be measured bold, or the block it belongs to is centred on a width
+ * narrower than the one it is drawn at.
+ */
+export function footprintTextWidthAt(
+  text: string,
+  style: FootprintTextStyle,
+  weight: FootprintTextWeight = 'regular',
+): number {
+  return style.textWidth(text, weight) * footprintTextScale(style.size);
 }
 
 /**

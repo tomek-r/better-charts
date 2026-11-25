@@ -17,6 +17,7 @@ import {
   footprintTextWidthAt,
   footprintTextX,
   type FootprintTextStyle,
+  type FootprintTextWeight,
 } from './footprintTextSize';
 import { footprintBarSides, type FootprintBarSides } from './footprintValues';
 import { footprintSignedText, footprintVolumeText } from './footprintVolumeText';
@@ -36,6 +37,13 @@ const SUMMARY_BOX_BORDER = palette.borderStrong;
 /** The labels the two lines start with, which the box's label column holds. */
 const DELTA_LABEL = 'Delta';
 const TOTAL_LABEL = 'Total';
+/**
+ * The faces the box's two pieces of text are measured in, which are the very ones the media pass draws them in: the
+ * labels regular and the values bold, which measures wider than the regular face, so a block measured with the
+ * regular face for both is narrower than the block it draws.
+ */
+const LABEL_TEXT_WEIGHT: FootprintTextWeight = 'regular';
+const VALUE_TEXT_WEIGHT: FootprintTextWeight = 'bold';
 /** The separator between the sell and buy totals of a one-column bar. */
 const TOTALS_SEPARATOR = ' × ';
 
@@ -295,15 +303,21 @@ function totalsTexts(
   return marks.filter((mark): mark is FootprintTextMark => mark !== null);
 }
 
-/** The width of the box's label column, in css px: its wider label plus the room before a value. */
+/**
+ * The width of the box's label column, in css px: its wider label in the regular face it is written in, plus the room
+ * a value keeps before it.
+ */
 function labelColumnWidth(style: FootprintTextStyle): number {
-  const label = Math.max(footprintTextWidthAt(DELTA_LABEL, style), footprintTextWidthAt(TOTAL_LABEL, style));
+  const label = Math.max(
+    footprintTextWidthAt(DELTA_LABEL, style, LABEL_TEXT_WEIGHT),
+    footprintTextWidthAt(TOTAL_LABEL, style, LABEL_TEXT_WEIGHT),
+  );
   return label + LABEL_GAP * footprintTextScale(style.size);
 }
 
-/** The width one line of the box needs, in css px: its label in the box's label column and the value after it. */
+/** The width one line needs, in css px: its regular label in the label column and the bold value after it. */
 function lineWidth(line: FootprintSummaryLine, labelColumn: number, style: FootprintTextStyle): number {
-  return labelColumn + footprintTextWidthAt(line.value.text, style);
+  return labelColumn + footprintTextWidthAt(line.value.text, style, VALUE_TEXT_WEIGHT);
 }
 
 /**
@@ -349,8 +363,11 @@ function blockWidth(fitted: readonly FootprintFittedLine[], labelColumn: number,
 
 /**
  * The media x the block of the box's written lines starts at, in css px: half of the room the box's width leaves them,
- * so the two margins the block leaves read alike. Every written line has been fitted to the room, and the box it is
- * centred in always keeps the padding beside it, so the block never reaches past the box's edges.
+ * so the two margins the block leaves read alike. `width` is the block measured exactly as the media pass draws it —
+ * the labels in their regular face and the values in their bold one — so the left margin from the box's edge to the
+ * labels and the right one from the widest value's end to the other edge are the same. Every written line has been
+ * fitted to the room, and the box it is centred in always keeps the padding beside it, so the block never reaches past
+ * the box's edges.
  */
 function blockLeft(box: FootprintSummaryBox, width: number, style: FootprintTextStyle): number {
   return box.left / style.horizontalPixelRatio + (boxWidth(box, style) - width) / 2;
@@ -403,12 +420,13 @@ function boxMarks(
  * of the strip and the block of the lines it writes with SUMMARY_PADDING on both sides, and never wider than that
  * room, so the single-column box of a capped column grows to the text the column itself is too narrow for. The box's
  * lines make one block — a label in the box's fixed label column, then the value bold right after it — which is
- * centred across the box, so its two margins read alike and keep the full padding. A line is left out only while it
- * does not fit even the room, which does not move with the values a forming bar changes, and a box no line of it fits
- * is left off rather than drawn empty. The totals are fitted against the layout's full columns, never a Profile
- * cell's narrower share, so Profile keeps them, and the single-column totals line runs on into the same room the box
- * may use. Every text is written at `style`'s size. A bar whose summary strip is narrower than
- * MIN_SUMMARY_BAR_WIDTH writes neither.
+ * measured in those very faces, the labels regular and the values bold, and centred across the box: the room from its
+ * left edge to the labels equals the room from the widest value's end to its right edge, and both keep the full
+ * padding. A line is left out only while it does not fit even the room, which does not move with the values a forming
+ * bar changes, and a box no line of it fits is left off rather than drawn empty. The totals are fitted against the
+ * layout's full columns, never a Profile cell's narrower share, so Profile keeps them, and the single-column totals
+ * line runs on into the same room the box may use. Every text is written at `style`'s size. A bar whose summary strip
+ * is narrower than MIN_SUMMARY_BAR_WIDTH writes neither.
  */
 export function footprintSummaryLayout(
   footprint: BarFootprint,

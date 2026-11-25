@@ -29,6 +29,7 @@ import {
   footprintCellShowsText,
   footprintTextX,
   type FootprintTextStyle,
+  type FootprintTextWeight,
   type FootprintTextWidth,
 } from './footprintTextSize';
 import {
@@ -54,6 +55,17 @@ function footprintBoldFont(size: number): string {
   return `bold ${footprintFont(size)}`;
 }
 
+/**
+ * The font a text is measured in at the maximum size: the very face the media pass draws it in, which is the numbers'
+ * regular one or, for the summary box's values, the bold one — a bold text is wider, so it is measured bold.
+ */
+function footprintMeasureFont(weight: FootprintTextWeight): string {
+  if (weight === 'bold') {
+    return footprintBoldFont(FOOTPRINT_FONT_SIZE);
+  }
+  return footprintFont(FOOTPRINT_FONT_SIZE);
+}
+
 /** The share of its side's colour a stacked zone's band is filled at, so what it covers stays readable through it. */
 const STACKED_ZONE_FILL_PERCENT = 20;
 /** The thickness of a stacked zone's top and bottom edge lines, in device pixels. */
@@ -67,7 +79,7 @@ interface FootprintPaint extends DevicePixelRatios {
   readonly fullWidth: number;
   /** The slot one bar stands in, in media px, which the box of its summary may grow into. */
   readonly barSpacing: number;
-  /** How wide a text is drawn, in css px, which decides whether a cell or a total has room for it. */
+  /** How wide a text is drawn in its own weight, in css px, which decides whether a cell or a line has room for it. */
   readonly textWidth: FootprintTextWidth;
 }
 
@@ -483,13 +495,17 @@ export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPo
         priceConverter: source.priceConverter,
         fullWidth: barBodyWidth(source.barSpacing, horizontalPixelRatio),
         barSpacing: source.barSpacing,
-        textWidth: (text) => context.measureText(text).width,
+        textWidth: (text, weight) => {
+          context.font = footprintMeasureFont(weight);
+          return context.measureText(text).width;
+        },
         horizontalPixelRatio,
         verticalPixelRatio,
       };
       context.save();
       // The bitmap context draws in device pixels, so its font measures the text in the css px the media pass writes:
-      // every text is measured once, at the size the fit rules scale their widths from.
+      // every text is measured once, at the maximum size and in its own weight, which the fit rules scale their
+      // widths from. The measurer sets that font itself, so a bold value is measured in the bold face it is drawn in.
       context.font = footprintFont(FOOTPRINT_FONT_SIZE);
       // The zones are painted first, so the cells and candles of every bar stand over them.
       for (const zone of source.zones) {
