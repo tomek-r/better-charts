@@ -14,14 +14,18 @@
 //!
 //! Once the handshake negotiated `tick_footprint_counts`, the same two reads ask for MT5's counted
 //! pages instead of the raw ticks: one request per bar, or per rest of a bar, whose per-price totals
-//! become the bar's ticks. A peer without the capability keeps the raw path above unchanged; the keys,
-//! the events, the timing lines and the observer hear the same thing either way.
+//! become the bar's ticks. A bar the chart leaves keeps the footprint its counted levels already name
+//! and is finished from the millisecond they reached, so the chart never loses it while the rest of
+//! the bar lands, and the following forming bar's first read goes out the moment that read does. A
+//! peer without the capability keeps the raw path above unchanged; the keys, the events, the timing
+//! lines and the observer hear the same thing either way.
 //!
 //! The chart footprint publishes over the same reads: the loaded window's complete bars after each
 //! answered page — so the newest bars reach the chart after the first page instead of after the whole
-//! read — and again when the read finishes, and the forming bar after each whole live re-read. It
-//! never starts a read of its own, so a chart that asked for no footprint and that no observer needs
-//! costs nothing.
+//! read — and again when the read finishes, and the forming bar after each whole live re-read, with
+//! the window again when the bar the chart left keeps its counted footprint or lands whole. It never
+//! starts a read of its own, so a chart that asked for no footprint and that no observer needs costs
+//! nothing.
 //!
 //! Every answered window page and every finished window read prints one `[bridge] INFO` timing line
 //! (under `MT5_BRIDGE_PROFILE_LOG=1`, like the tick profile's lines): the bars and ticks the page
@@ -156,7 +160,7 @@ fn follow_counts_quote(
         let mut feed = footprint_feed(state);
         let step = feed.follow_forming_bar_counts(forming, Instant::now());
         if step.ticks_dropped {
-            publish_forming_ticks(state, events, &feed, chart, false);
+            publish_forming_ticks(state, events, &feed, chart, step.window_changed);
         }
         step
     };
@@ -221,14 +225,16 @@ pub(crate) fn abandon_footprint_read(
     let mut feed = footprint_feed(state);
     if live {
         // A live read that ends here can leave the forming bar without whole ticks, which whoever
-        // reads them hears at once.
+        // reads them hears at once; a closing read that ends here drops the footprint the window held
+        // provisionally for the bar the chart left, which it must hear too.
+        let closing = counts && feed.closing_counts_live_read();
         let dropped = if counts {
             feed.abandon_counts_live_read()
         } else {
             feed.abandon_live_read()
         };
         if dropped {
-            publish_forming_ticks(state, events, &feed, chart.as_ref(), false);
+            publish_forming_ticks(state, events, &feed, chart.as_ref(), closing);
         }
         return true;
     }
@@ -262,17 +268,18 @@ fn publish_window_read(
 }
 
 /// Hands the forming bar's ticks to the observer and to the chart footprint, and the window again when
-/// the bar the chart left landed complete, whichever kind of page filled them.
+/// the bars it publishes changed with them: the bar the chart left landed whole, or it kept the
+/// footprint its counted levels already had. Either kind of page can fill them.
 fn publish_forming_ticks(
     state: &BridgeState,
     events: &Arc<dyn BridgeEvents>,
     feed: &FootprintFeed,
     chart: Option<&FootprintChart>,
-    closed_bar_landed: bool,
+    window_changed: bool,
 ) {
     notify_observer(state, feed);
     chart_footprint::publish_forming(state, events, feed, chart);
-    if closed_bar_landed {
+    if window_changed {
         chart_footprint::publish_window(state, events, feed, chart);
     }
 }
@@ -431,7 +438,9 @@ fn accept_live_page(
     }
 }
 
-/// Folds one answered counted page of the forming bar's read in, exactly as the raw live pages do.
+/// Folds one answered counted page of the forming bar's read in, exactly as the raw live pages do: a
+/// closing read that lands hands the window its finished bar and starts the following forming bar's
+/// first page, which is queued at once under the live key.
 fn accept_counts_live_page(
     state: &BridgeState,
     events: &Arc<dyn BridgeEvents>,
@@ -440,14 +449,20 @@ fn accept_counts_live_page(
     let symbol = snapshot.symbol.as_str();
     let chart = chart_footprint::footprint_chart(state);
     let mut feed = footprint_feed(state);
+    let closing = feed.closing_counts_live_read();
     let complete_before = feed.complete_bar_count();
     match feed.accept_counts_live_page(snapshot) {
         CountsOutcome::Next(page) => {
+            // A closing read leaves no complete read to count: it replaced the footprint the window
+            // held provisionally, so the window hears its finished bar from the page it started.
+            if closing && !feed.closing_counts_live_read() {
+                publish_forming_ticks(state, events, &feed, chart.as_ref(), true);
+            }
             drop(feed);
             queue_counts_page(state, CHART_FOOTPRINT_LIVE_KEY, symbol, page);
         }
         CountsOutcome::Finished => {
-            let landed = feed.complete_bar_count() > complete_before;
+            let landed = closing || feed.complete_bar_count() > complete_before;
             publish_forming_ticks(state, events, &feed, chart.as_ref(), landed);
         }
         CountsOutcome::Idle => {}

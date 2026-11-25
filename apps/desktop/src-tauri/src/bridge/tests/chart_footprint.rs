@@ -764,38 +764,90 @@ fn read_counts_window(
     }
 }
 
-#[test]
-fn a_counts_forming_bar_is_read_whole_and_lands_complete_when_the_chart_moves_on() {
-    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
-    let (state, recorded) = chart_state(&window);
+/// A chart of `window` reading counted pages, with its window read answered whole: the state the quote
+/// path follows a forming bar from.
+fn counted_chart(window: &[MarketCandle]) -> (BridgeState, Arc<RecordedEvents>) {
+    let (state, recorded) = chart_state(window);
     let events: Arc<dyn BridgeEvents> = recorded.clone();
     negotiate_footprint_counts(&state);
     enable(&state);
-    read_counts_window(&state, &events, &window);
-    let windows_before = recorded.named(CHART_FOOTPRINT_EVENT).len();
+    read_counts_window(&state, &events, window);
+    (state, recorded)
+}
+
+/// The chart gains the bar opening at `open_ms` and accepts a quote of it: the bar it left behind is
+/// read once more, to that bar's own end, and the read for it is queued.
+fn chart_moves_on(state: &BridgeState, events: &Arc<dyn BridgeEvents>, open_ms: i64) {
+    let newer = BarUpdate {
+        symbol: SYMBOL.into(),
+        timeframe: TIMEFRAME.into(),
+        candle: candle(open_ms, "101"),
+    };
+    assert_eq!(
+        accept_bar_update(state, SESSION, &newer),
+        BarUpdateAcceptance::Applied
+    );
+    assert!(accept_quote(events, state, SESSION, chart_quote(open_ms)).is_some());
+}
+
+/// The tick-rule state `price` and `side` name.
+fn carry(price: &str, side: FootprintSide) -> FootprintCarry {
+    FootprintCarry {
+        price: price.into(),
+        side,
+    }
+}
+
+/// Claims the live page the read queued and answers it with `levels` counted to `through_ms`, carrying
+/// `carry` as the tick-rule state the page leaves. Answers the claimed page.
+fn answer_live_counts_page(
+    state: &BridgeState,
+    events: &Arc<dyn BridgeEvents>,
+    through_ms: i64,
+    complete: bool,
+    levels: &[(&str, &str, &str)],
+    carry: Option<FootprintCarry>,
+) -> IndicatorTicksRequest {
+    let claimed = claim_page(state);
+    assert_eq!(claimed.key, CHART_FOOTPRINT_LIVE_KEY);
+    let mut answered = counts_page(
+        claimed.page.from_ms,
+        claimed.page.to_ms,
+        complete,
+        through_ms,
+        levels,
+    );
+    answered.carry = carry;
+    assert!(accept_footprint_counts_page(
+        state,
+        events,
+        CHART_FOOTPRINT_LIVE_KEY,
+        &answered
+    ));
+    claimed
+}
+
+#[test]
+fn a_counts_forming_bar_is_read_whole_and_lands_complete_when_the_chart_moves_on() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = counted_chart(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
 
     // The quote makes the host read the forming bar from its open to the broker's time; the window's
     // read of it stops at its opening millisecond, so the chart first hears that it has no footprint.
     assert!(accept_quote(&events, &state, SESSION, chart_quote(MINUTE_MS)).is_some());
-    let live = claim_page(&state);
-    assert_eq!(live.key, CHART_FOOTPRINT_LIVE_KEY);
+    let live = answer_live_counts_page(
+        &state,
+        &events,
+        MINUTE_MS + 1,
+        true,
+        &[("100", "3", "2")],
+        None,
+    );
     assert_eq!(
         (live.page.from_ms, live.page.to_ms),
         (MINUTE_MS, MINUTE_MS + 1)
     );
-    let answered = counts_page(
-        MINUTE_MS,
-        MINUTE_MS + 1,
-        true,
-        MINUTE_MS + 1,
-        &[("100", "3", "2")],
-    );
-    assert!(accept_footprint_counts_page(
-        &state,
-        &events,
-        CHART_FOOTPRINT_LIVE_KEY,
-        &answered
-    ));
 
     let forming = recorded.named(CHART_FOOTPRINT_FORMING_EVENT);
     assert!(
@@ -807,28 +859,19 @@ fn a_counts_forming_bar_is_read_whole_and_lands_complete_when_the_chart_moves_on
     assert_eq!(event["bar"]["buyVolume"], "3");
     assert_eq!(event["bar"]["sellVolume"], "2");
 
-    // The chart gains a bar: the bar it left is read once more to that bar's own end, and lands
-    // complete in the window.
-    let newer = BarUpdate {
-        symbol: SYMBOL.into(),
-        timeframe: TIMEFRAME.into(),
-        candle: candle(2 * MINUTE_MS, "101"),
-    };
-    assert_eq!(
-        accept_bar_update(&state, SESSION, &newer),
-        BarUpdateAcceptance::Applied
-    );
-    assert!(accept_quote(&events, &state, SESSION, chart_quote(2 * MINUTE_MS)).is_some());
+    // The chart gains a bar: the bar it left is finished from the millisecond its forming read reached,
+    // and lands complete in the window once the rest of it answers.
+    chart_moves_on(&state, &events, 2 * MINUTE_MS);
     let closing = claim_page(&state);
     assert_eq!(closing.key, CHART_FOOTPRINT_LIVE_KEY);
     assert_eq!(
         (closing.page.from_ms, closing.page.to_ms),
-        (MINUTE_MS, 2 * MINUTE_MS),
-        "the bar the chart left, to its own end"
+        (MINUTE_MS + 1, 2 * MINUTE_MS),
+        "the rest of the bar the chart left"
     );
     let answered = counts_page(
-        MINUTE_MS,
-        2 * MINUTE_MS,
+        closing.page.from_ms,
+        closing.page.to_ms,
         true,
         2 * MINUTE_MS,
         &[("100", "4", "1")],
@@ -841,16 +884,175 @@ fn a_counts_forming_bar_is_read_whole_and_lands_complete_when_the_chart_moves_on
     ));
 
     let published = recorded.named(CHART_FOOTPRINT_EVENT);
-    assert!(
-        published.len() > windows_before,
-        "the closed bar landing whole publishes the window again"
-    );
-    let event = published.last().expect("the window gained a complete bar");
+    let event = published
+        .last()
+        .expect("the landed bar publishes the window again");
     assert_eq!(bar_opens(event), vec![0, MINUTE_MS]);
+    assert_eq!(
+        event["bars"][1]["buyVolume"], "7",
+        "the levels the forming read counted and the rest of the bar"
+    );
+    assert_eq!(event["bars"][1]["sellVolume"], "3");
     assert!(event["incomplete"]
         .as_array()
         .expect("the incomplete bars are a list")
         .is_empty());
+}
+
+#[test]
+fn a_left_bar_s_closing_page_asks_on_from_its_forming_read_with_its_carry() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = counted_chart(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+
+    assert!(accept_quote(&events, &state, SESSION, chart_quote(MINUTE_MS)).is_some());
+    answer_live_counts_page(
+        &state,
+        &events,
+        MINUTE_MS + 1,
+        false,
+        &[("100", "3", "2")],
+        Some(carry("100", FootprintSide::Buy)),
+    );
+
+    chart_moves_on(&state, &events, 2 * MINUTE_MS);
+
+    let closing = claim_page(&state);
+    assert_eq!(closing.key, CHART_FOOTPRINT_LIVE_KEY);
+    assert_eq!(
+        (closing.page.from_ms, closing.page.to_ms),
+        (MINUTE_MS + 1, 2 * MINUTE_MS),
+        "the rest of the bar, from the millisecond the forming read reached"
+    );
+    let wire = serde_json::to_value(closing.wire_request()).expect("a wire payload");
+    assert_eq!(
+        wire["carry"],
+        serde_json::json!({"price": "100", "side": "buy"}),
+        "the tick-rule state the forming read left"
+    );
+}
+
+#[test]
+fn a_left_bar_keeps_its_counted_footprint_while_its_closing_read_is_in_flight() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = counted_chart(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+
+    assert!(accept_quote(&events, &state, SESSION, chart_quote(MINUTE_MS)).is_some());
+    answer_live_counts_page(
+        &state,
+        &events,
+        MINUTE_MS + 1,
+        true,
+        &[("100", "3", "2")],
+        None,
+    );
+
+    chart_moves_on(&state, &events, 2 * MINUTE_MS);
+    let closing = claim_page(&state);
+    assert_eq!(
+        (closing.page.from_ms, closing.page.to_ms),
+        (MINUTE_MS + 1, 2 * MINUTE_MS),
+        "the closing read is in flight and unanswered"
+    );
+
+    let published = recorded.named(CHART_FOOTPRINT_EVENT);
+    let event = published.last().expect("the move publishes the window");
+    assert_eq!(
+        bar_opens(event),
+        vec![0, MINUTE_MS],
+        "the bar the chart left keeps a footprint"
+    );
+    assert_eq!(
+        event["bars"][1]["buyVolume"], "3",
+        "the levels the forming read counted so far"
+    );
+    assert_eq!(event["bars"][1]["sellVolume"], "2");
+    assert!(
+        event["incomplete"]
+            .as_array()
+            .expect("the incomplete bars are a list")
+            .is_empty(),
+        "the bar is not reported as stopped inside"
+    );
+    let forming = recorded.named(CHART_FOOTPRINT_FORMING_EVENT);
+    assert!(
+        forming.last().expect("the forming bar's event")["bar"].is_null(),
+        "the new forming bar has no read yet"
+    );
+}
+
+#[test]
+fn the_new_forming_bar_s_first_page_follows_the_closing_read_without_a_quote() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = counted_chart(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+
+    assert!(accept_quote(&events, &state, SESSION, chart_quote(MINUTE_MS)).is_some());
+    answer_live_counts_page(
+        &state,
+        &events,
+        MINUTE_MS + 1,
+        true,
+        &[("100", "3", "2")],
+        None,
+    );
+    chart_moves_on(&state, &events, 2 * MINUTE_MS);
+    let closing = claim_page(&state);
+    assert!(accept_footprint_counts_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_LIVE_KEY,
+        &counts_page(
+            closing.page.from_ms,
+            closing.page.to_ms,
+            true,
+            2 * MINUTE_MS,
+            &[("100", "4", "1")],
+        )
+    ));
+
+    let next = claim_page(&state);
+    assert_eq!(next.key, CHART_FOOTPRINT_LIVE_KEY);
+    assert_eq!(
+        (next.page.from_ms, next.page.to_ms),
+        (2 * MINUTE_MS, 2 * MINUTE_MS + 1),
+        "the new forming bar's first page, from its open"
+    );
+
+    let published = recorded.named(CHART_FOOTPRINT_EVENT);
+    let event = published
+        .last()
+        .expect("the landed bar publishes the window");
+    assert_eq!(bar_opens(event), vec![0, MINUTE_MS]);
+    assert_eq!(event["bars"][1]["buyVolume"], "7");
+    assert_eq!(event["bars"][1]["sellVolume"], "3");
+}
+
+#[test]
+fn a_forming_bar_no_read_followed_closes_with_a_read_from_its_open() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = counted_chart(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+
+    // The forming bar's read never lands: the EA fails it, so no counts follow the bar.
+    assert!(accept_quote(&events, &state, SESSION, chart_quote(MINUTE_MS)).is_some());
+    claim_page(&state);
+    assert!(abandon_footprint_read(
+        &state,
+        &events,
+        CHART_FOOTPRINT_LIVE_KEY
+    ));
+
+    chart_moves_on(&state, &events, 2 * MINUTE_MS);
+
+    let closing = claim_page(&state);
+    assert_eq!(closing.key, CHART_FOOTPRINT_LIVE_KEY);
+    assert_eq!(
+        (closing.page.from_ms, closing.page.to_ms),
+        (MINUTE_MS, 2 * MINUTE_MS),
+        "a bar no forming read holds is read from its open"
+    );
 }
 
 #[test]

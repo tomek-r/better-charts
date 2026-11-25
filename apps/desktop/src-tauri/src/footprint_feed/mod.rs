@@ -611,6 +611,9 @@ pub(crate) struct FormingStep<Page> {
     /// Whether ticks left the readable set without a read finishing: the observer must recompute now,
     /// or it would keep a bar that stopped being read whole.
     pub(crate) ticks_dropped: bool,
+    /// Whether the bars the window publishes changed: the bar the chart left kept the footprint its
+    /// counted levels already had, so the chart must hear it before the rest of the bar lands.
+    pub(crate) window_changed: bool,
 }
 
 impl<Page> FormingStep<Page> {
@@ -618,6 +621,7 @@ impl<Page> FormingStep<Page> {
     const NOTHING: Self = Self {
         page: None,
         ticks_dropped: false,
+        window_changed: false,
     };
 }
 
@@ -759,7 +763,9 @@ pub(crate) struct ReadTiming {
 pub(crate) struct FootprintFeed {
     /// The window the ticks belong to, oldest bar first.
     bars: Vec<BarSpan>,
-    /// The ticks of each bar a read took whole, keyed by the bar's opening time.
+    /// The ticks of each bar a read took whole, keyed by the bar's opening time. The bar the chart
+    /// left may hold the footprint its counted levels already name until the read that finishes it
+    /// lands.
     ticks_by_bar: BTreeMap<i64, Vec<FootprintTick>>,
     /// The bars a read stopped inside: their ticks never reach the observer.
     incomplete: Vec<i64>,
@@ -869,18 +875,21 @@ impl FootprintFeed {
             return FormingStep {
                 page: Some(page),
                 ticks_dropped: change.ticks_dropped,
+                window_changed: false,
             };
         }
         if self.live.is_some() || !self.reread_due(now) {
             return FormingStep {
                 page: None,
                 ticks_dropped: change.ticks_dropped,
+                window_changed: false,
             };
         }
         self.next_forming_read_at = Some(now + FORMING_REREAD_INTERVAL);
         FormingStep {
             page: self.start_live_read(forming.forming, false, page_bound),
             ticks_dropped: change.ticks_dropped,
+            window_changed: false,
         }
     }
 
