@@ -37,11 +37,16 @@ pub(crate) const INDICATOR_TICKS_ID_PREFIX: &str = "rust-indicator-ticks-";
 pub(crate) const TICK_ANSWER_TIMEOUT: Duration = Duration::from_secs(150);
 
 /// What a counted footprint page asks the peer for: each counted trade weighted by the volume it moved
-/// — or counted as one when it moved none — and the tick-rule state the bar's last page left.
+/// — or counted as one when it moved none — the tick-rule state the page's range starts from, and the
+/// bars it covers, so the peer answers one entry per bar instead of the page's levels top-level.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FootprintCountsOptions {
     pub(crate) real_volume: bool,
     pub(crate) carry: Option<FootprintCarry>,
+    /// Strictly ascending opens of the page's bars after its first one.
+    pub(crate) bar_opens: Vec<i64>,
+    /// The open the page's range starts in, named with the listed opens.
+    pub(crate) first_open_ms: Option<i64>,
 }
 
 impl FootprintCountsOptions {
@@ -54,8 +59,8 @@ impl FootprintCountsOptions {
             footprint_counts: true,
             real_volume: self.real_volume,
             carry: self.carry.clone(),
-            bar_opens: Vec::new(),
-            first_open_ms: None,
+            bar_opens: self.bar_opens.clone(),
+            first_open_ms: self.first_open_ms,
         }
     }
 }
@@ -128,6 +133,8 @@ impl IndicatorTicksRequest {
         let counts = FootprintCountsOptions {
             real_volume: request.real_volume,
             carry: request.carry,
+            bar_opens: request.bar_opens,
+            first_open_ms: request.first_open_ms,
         };
         Ok(Self {
             key,
@@ -233,7 +240,8 @@ mod tests {
     use super::*;
     use trading_core::protocol::FootprintSide;
 
-    /// The counted page a footprint read asks for: a one-second range of `NAS100`.
+    /// The counted page a footprint read asks for: a one-second range of `NAS100`, over the bar opening
+    /// at `1_000` and the one opening at `1_500`.
     fn counts_request(
         real_volume: bool,
         carry: Option<FootprintCarry>,
@@ -248,13 +256,13 @@ mod tests {
             footprint_counts: true,
             real_volume,
             carry,
-            bar_opens: Vec::new(),
-            first_open_ms: None,
+            bar_opens: vec![1_500],
+            first_open_ms: Some(1_000),
         }
     }
 
     #[test]
-    fn a_counts_slot_writes_footprint_counts_real_volume_and_carry() {
+    fn a_counts_slot_writes_footprint_counts_real_volume_carry_and_its_bars() {
         let carry = Some(FootprintCarry {
             price: "25001.75".to_owned(),
             side: FootprintSide::Sell,
@@ -278,11 +286,15 @@ mod tests {
             wire["carry"],
             serde_json::json!({"price": "25001.75", "side": "sell"})
         );
+        assert_eq!(wire["first_open_ms"], 1_000);
+        assert_eq!(wire["bar_opens"], serde_json::json!([1_500]));
         assert_eq!(
             request.footprint_counts,
             Some(FootprintCountsOptions {
                 real_volume: true,
                 carry,
+                bar_opens: vec![1_500],
+                first_open_ms: Some(1_000),
             }),
             "the slot keeps what it asks the peer for"
         );

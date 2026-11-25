@@ -485,10 +485,7 @@ impl FootprintTicks {
     /// count widened by the estimate margin and by whatever pages that held more ticks than they were
     /// sized for added, and never below one tick.
     fn estimated_page_ticks(&self, counted: u64) -> u64 {
-        let widened = counted
-            .saturating_mul(TICK_ESTIMATE_MARGIN_NUMERATOR)
-            .saturating_mul(self.estimate_shrink);
-        (widened / TICK_ESTIMATE_MARGIN_DENOMINATOR).max(1)
+        widened_estimate(counted.saturating_mul(self.estimate_shrink)).max(1)
     }
 
     /// Keeps the page's ticks and marks its bars read.
@@ -571,6 +568,13 @@ impl FootprintTicks {
 /// sized from bars instead.
 fn counted_ticks(bar: &BarSpan) -> Option<u64> {
     (bar.tick_volume != 0).then_some(bar.tick_volume)
+}
+
+/// The ticks a page is expected to read for bars whose candles counted `counted` ticks in all: MT5's
+/// count widened by the estimate margin, as the fraction `TICK_ESTIMATE_MARGIN_NUMERATOR /
+/// TICK_ESTIMATE_MARGIN_DENOMINATOR` names.
+fn widened_estimate(counted: u64) -> u64 {
+    counted.saturating_mul(TICK_ESTIMATE_MARGIN_NUMERATOR) / TICK_ESTIMATE_MARGIN_DENOMINATOR
 }
 
 /// The millisecond the next page of a half-read bar resumes at: the last tick's, which the page did

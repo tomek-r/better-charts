@@ -13,12 +13,13 @@
 //! drops both reads with the requests that fill them.
 //!
 //! Once the handshake negotiated `tick_footprint_counts`, the same two reads ask for MT5's counted
-//! pages instead of the raw ticks: one request per bar, or per rest of a bar, whose per-price totals
-//! become the bar's ticks. A bar the chart leaves keeps the footprint its counted levels already name
-//! and is finished from the millisecond they reached, so the chart never loses it while the rest of
-//! the bar lands, and the following forming bar's first read goes out the moment that read does. A
-//! peer without the capability keeps the raw path above unchanged; the keys, the events, the timing
-//! lines and the observer hear the same thing either way.
+//! pages instead of the raw ticks: one request per run of bars — or per rest of a bar — whose per-price
+//! totals become each bar's ticks, so a page of a counted window read covers the run of bars its tick
+//! counts fit. A bar the chart leaves keeps the footprint its counted levels already name and is
+//! finished from the millisecond they reached, so the chart never loses it while the rest of the bar
+//! lands, and the following forming bar's first read goes out the moment that read does. A peer without
+//! the capability keeps the raw path above unchanged; the keys, the events, the timing lines and the
+//! observer hear the same thing either way.
 //!
 //! The chart footprint publishes over the same reads: the loaded window's complete bars after each
 //! answered page — so the newest bars reach the chart after the first page instead of after the whole
@@ -98,7 +99,8 @@ fn start_ticks_read(state: &BridgeState, symbol: &str, bars: Vec<BarSpan>) {
 
 /// Queues the first page of the counted window read.
 fn start_counts_read(state: &BridgeState, symbol: &str, bars: Vec<BarSpan>) {
-    let Some(page) = footprint_feed(state).start_counts(bars) else {
+    let page_bound = page_bound(state);
+    let Some(page) = footprint_feed(state).start_counts(bars, page_bound) else {
         return;
     };
     queue_counts_page(state, CHART_FOOTPRINT_KEY, symbol, page);
@@ -323,12 +325,13 @@ fn accept_counts_window_page(
     events: &Arc<dyn BridgeEvents>,
     snapshot: &TickFootprintHistorySnapshot,
 ) {
+    let page_bound = page_bound(state);
     let symbol = snapshot.symbol.as_str();
     // Read out before the feed's lock, so the two are never held together.
     let chart = chart_footprint::footprint_chart(state);
     let mut feed = footprint_feed(state);
     let timing = feed.read_timing();
-    match feed.accept_counts_page(snapshot) {
+    match feed.accept_counts_page(snapshot, page_bound) {
         CountsOutcome::Next(page) => {
             log_counts_page(symbol, &timing, snapshot);
             publish_window_read(state, events, &feed, chart.as_ref(), false);
@@ -367,7 +370,8 @@ fn log_window_page(
 }
 
 /// Logs one answered counted page: the range it counted, the records it read behind the counted
-/// trades, whether it reached the range's end and the milliseconds it took the EA to answer it.
+/// trades, whether it reached the range's end and the milliseconds it took the EA to answer it. `bars`
+/// is the bars the page covers, so a page that counted a whole run of them says so.
 fn log_counts_page(symbol: &str, timing: &ReadTiming, snapshot: &TickFootprintHistorySnapshot) {
     log_info(&format!(
         "footprint counts {symbol} page {}..{} bars={} ticks={} trades={} complete={} waited_ms={}",
@@ -529,8 +533,10 @@ fn queue_counts_page(state: &BridgeState, key: &str, symbol: &str, page: CountsP
     match request {
         Ok(request) => queue_indicator_ticks(state, request),
         Err(error) => log_warn(&format!(
-            "footprint counts {symbol} bar {} {}..{} were not asked for: {error}",
-            page.open_ms, page.from_ms, page.to_ms
+            "footprint counts {symbol} bars={} {}..{} were not asked for: {error}",
+            page.bars.len(),
+            page.from_ms,
+            page.to_ms(),
         )),
     }
 }

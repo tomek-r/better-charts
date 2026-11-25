@@ -1,31 +1,37 @@
 //! The trades behind a footprint from MT5's counted pages instead of the raw ticks: one
-//! `tick_history_request` with `footprint_counts` per bar, folded into the levels the existing
+//! `tick_history_request` with `footprint_counts` per run of bars, folded into the levels the existing
 //! footprint rows already read.
 //!
-//! A counted page answers with the volume each side traded at each price inside the range it was
-//! asked for, and with the tick-rule carry the next page continues from. One request covers one bar —
-//! the window's newest bar first — or the rest of a bar from the millisecond its last page reached,
-//! so a bar holding more trades than a page costs as many pages as its trades need. The carry is what
-//! makes those pages one read: a page boundary moves the tick rule but not a trade, so a price
-//! counted on two pages is one level whose sides sum, and a trade whose side the tick rule decides
-//! keeps the side the page before it left.
+//! A counted page answers with the volume each side traded at each price inside the range it was asked
+//! for — one entry per bar when the request listed the bars' opens — and with the tick-rule carry the
+//! next page continues from. A page covers a run of the newest unread bars, sized from the candles' own
+//! tick counts, so a window costs the pages its ticks need instead of one request per bar; a bar holding
+//! more trades than a page costs the pages its trades need, because the page after an incomplete one
+//! continues the bar it stopped inside from the millisecond it reached and lists the opens after it, so
+//! the rest of the run follows in the same request. The carry is what makes those pages one read: a page
+//! boundary moves the tick rule but not a trade, so a price counted on two pages is one level whose sides
+//! sum, and a trade whose side the tick rule decides keeps the side the page before it left.
 //!
-//! Counts cannot be resumed inside a millisecond: a page whose `through_ms` is its `from_ms`
-//! certified no progress, so the bar it belongs to stops the read as incomplete instead of being
-//! asked for again. A bar is whole only when its last page came back `complete`; the bars a read took
-//! whole are handed on as [`FootprintTick`]s — one per level and side — which is what the footprint
-//! rows and the engine already read, so a counts read and a raw ticks read paint the same chart.
+//! Counts cannot be resumed inside a millisecond: a page whose `through_ms` is its `from_ms` certified no
+//! progress, so the bar it belongs to stops the read as incomplete instead of being asked for again. A bar
+//! is whole once a page counted its whole range; the bars a read took whole are handed on as
+//! [`FootprintTick`]s — one per level and side — which is what the footprint rows and the engine already
+//! read, so a counts read and a raw ticks read paint the same chart.
 //!
-//! The forming bar is read the same way: [`CountsLive`] keeps one bar's counts across the pages of
-//! one re-read and moves its end to the broker's time as the bar forms, so a whole re-read answers
-//! for the bar as far as it has formed.
+//! The forming bar is read one bar at a time: [`CountsLive`] keeps one bar's counts across the pages of
+//! one re-read and moves its end to the broker's time as the bar forms, so a whole re-read answers for
+//! the bar as far as it has formed.
 
 // The bridge pages these reads whenever the connected EA negotiated `tick_footprint_counts`; the raw
 // tick path stays for the EAs that did not.
 
-use super::{BarSpan, FootprintFeed, FormingBars, FormingStep, FORMING_REREAD_INTERVAL};
+use super::{
+    counted_ticks, widened_estimate, BarSpan, FootprintFeed, FormingBars, FormingStep,
+    FORMING_REREAD_INTERVAL,
+};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
+use std::ops::Range;
 use std::time::Instant;
 use trading_core::footprint::{FootprintTick, TickSide};
 use trading_core::protocol::{
@@ -33,72 +39,103 @@ use trading_core::protocol::{
     TickHistoryRequest,
 };
 
-/// Pages one counted window read may ask for: a bar costs one page, and a bar holding more trades than
-/// a page costs the pages its trades need, so even a dense window of a thousand bars fits.
+/// Pages one counted window read may ask for: a page covers the run of bars its tick counts fit, and a
+/// bar holding more trades than a page costs the pages its trades need, so even a dense window of a
+/// thousand bars fits.
 const MAX_COUNTS_PAGES: usize = 2048;
 
 /// A counts page counts the trades per price instead of carrying the raw ticks: the flag that makes
 /// the peer answer with `tick_footprint_history_snapshot`, and the only page this read understands.
 const COUNTS_REQUESTED: bool = true;
 
-/// One page of a counted read: the bar it counts into, the range of that bar still to count, and the
-/// state the page needs from the pages before it.
+/// One page of a counted read: the bars it counts into, the range of the first of them still to count,
+/// and the state the page needs from the pages before it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CountsPage {
-    /// Opening time of the bar the page belongs to: the bar its levels count into.
-    pub(crate) open_ms: i64,
-    /// First millisecond the page counts: the bar's open, or the millisecond the bar's last page
-    /// stopped at, which MT5 may still have added ticks to.
+    /// The bars the page counts into, oldest first: the wire starts at the first one's open, or inside it
+    /// when a page before this one stopped there, and ends at the last one's end.
+    pub(crate) bars: Vec<BarSpan>,
+    /// First millisecond the page counts: the first bar's open, or the millisecond its last page stopped
+    /// at, which MT5 may still have added ticks to.
     pub(crate) from_ms: i64,
-    /// End of the bar's range, excluded as the wire excludes it.
-    pub(crate) to_ms: i64,
-    /// Whether each counted trade is weighted by the volume it moved instead of counting one.
+    /// Whether each counted trade is weighted by the volume it moved instead of counting one. Every bar
+    /// of a page shares it, because one request carries one rule.
     pub(crate) real_volume: bool,
-    /// Tick-rule state the bar's last page left, passed back so the page classifies its trades like
-    /// one whole read would; `None` at the bar's open, because a bar starts a fresh range.
+    /// Tick-rule state the page starts from: the one a page that stopped inside the first bar left, and
+    /// `None` at a bar's open, because a bar starts a fresh range.
     pub(crate) carry: Option<FootprintCarry>,
 }
 
 impl CountsPage {
+    /// The end of the page's range, excluded as the wire excludes it: the last of its bars' end.
+    pub(crate) fn to_ms(&self) -> i64 {
+        self.bars.last().map_or(self.from_ms, |bar| bar.end_ms)
+    }
+
+    /// Whether `answer` answers this page: its range is the page's own. A stale answer, and one for
+    /// another page, never moves the read.
+    fn awaits(&self, answer: &TickFootprintHistorySnapshot) -> bool {
+        answer.from_ms == self.from_ms && answer.to_ms == self.to_ms()
+    }
+
+    /// The open the page's range starts in, named only when the page covers more than one bar: the wire
+    /// asks for it with the listed opens, and a page of one bar keeps the request shape a bar's page has
+    /// always had.
+    fn first_open_ms(&self) -> Option<i64> {
+        if self.bars.len() < 2 {
+            return None;
+        }
+        self.bars.first().map(|bar| bar.open_ms)
+    }
+
+    /// The opens of the page's bars after the first one: every listed open starts a fresh tick rule.
+    fn bar_opens(&self) -> Vec<i64> {
+        self.bars.iter().skip(1).map(|bar| bar.open_ms).collect()
+    }
+
     /// The wire request for this page of `symbol`, asking for at most `max_ticks` records.
     pub(crate) fn request(&self, symbol: &str, max_ticks: u32) -> TickFootprintHistoryRequest {
         TickFootprintHistoryRequest {
             history: TickHistoryRequest {
                 symbol: symbol.to_owned(),
                 from_ms: self.from_ms,
-                to_ms: self.to_ms,
+                to_ms: self.to_ms(),
                 max_ticks,
             },
             footprint_counts: COUNTS_REQUESTED,
             real_volume: self.real_volume,
             carry: self.carry.clone(),
-            bar_opens: Vec::new(),
-            first_open_ms: None,
+            bar_opens: self.bar_opens(),
+            first_open_ms: self.first_open_ms(),
         }
     }
 }
 
-/// The bars of one window read as counted trades: the newest bar first, one page per bar, and the bar
-/// in progress continued from the millisecond its last page reached with the carry that page returned.
+/// The bars of one window read as counted trades: a page per run of newest unread bars, sized from the
+/// candles' tick counts, and a bar continued from the millisecond its last page reached with the carry
+/// that page returned.
 ///
-/// A bar is whole only when its last page came back complete, and its levels merge across the pages
-/// that continue it, because the carry carries the tick rule over the page boundary and not the
-/// trades. A bar a page stopped inside — a page that certified no progress — keeps no ticks, and no
-/// bar under it is read.
+/// A bar is whole once a page counted its whole range, and its levels merge across the pages that
+/// continue it, because the carry carries the tick rule over a page boundary and not the trades. A bar a
+/// page stopped inside — a page that certified no progress — keeps no ticks, and no bar under it is read.
 pub(crate) struct CountsRead {
     /// The window's bars, oldest first.
     bars: Vec<BarSpan>,
-    /// How many of the newest bars no page has taken whole yet.
-    unread: usize,
-    /// The bar whose pages the read is collecting, once a page has asked for one.
+    /// Whether each bar is whole: no page asks for one again, and a page is one range, so a run never
+    /// crosses a whole bar.
+    whole: Vec<bool>,
+    /// The bar a page stopped inside, once one left it half counted: the page after it continues from
+    /// `through_ms`.
     counting: Option<BarCounts>,
+    /// The page the read waits for, once it asked for one.
+    awaiting: Option<CountsPage>,
     /// The bar a page stopped the read inside: it keeps no ticks, and the read ends there.
     stopped_in: Option<i64>,
     /// How many pages the read has asked for, and the most it may ask.
     pages: usize,
     max_pages: usize,
     /// The bars taken whole since the last call, keyed by their opening time.
-    whole: BTreeMap<i64, Vec<FootprintTick>>,
+    whole_bars: BTreeMap<i64, Vec<FootprintTick>>,
 }
 
 impl CountsRead {
@@ -108,50 +145,54 @@ impl CountsRead {
         if bars.is_empty() {
             return None;
         }
-        let unread = bars.len();
+        let count = bars.len();
         Some(Self {
             bars,
-            unread,
+            whole: vec![false; count],
             counting: None,
+            awaiting: None,
             stopped_in: None,
             pages: 0,
             max_pages,
-            whole: BTreeMap::new(),
+            whole_bars: BTreeMap::new(),
         })
     }
 
-    /// The page to ask for next: the newest bar no page has reached, or the rest of the bar in
-    /// progress. `None` once every bar is whole, a bar stopped the read, or the page limit is spent.
-    pub(crate) fn next_page(&mut self) -> Option<CountsPage> {
-        if self.done() {
-            return None;
-        }
-        if self.counting.is_none() {
-            self.counting = self.newest_unread().map(BarCounts::new);
-        }
-        let page = self.counting.as_ref()?.page();
+    /// The page to ask for next, covering at most `max_ticks` records: the newest unread run of bars one
+    /// page's tick estimate fits, or the rest of the bar a page stopped inside and the run after it.
+    /// `None` once every bar is whole, a bar stopped the read, or the page limit is spent.
+    pub(crate) fn next_page(&mut self, max_ticks: u32) -> Option<CountsPage> {
+        let page = self.planned_page(max_ticks)?;
+        self.awaiting = Some(page.clone());
         self.pages += 1;
         Some(page)
     }
 
-    /// Folds the answer to the page the read asked for in. An answer for any other page is ignored,
-    /// and a page that made no progress stops the bar it belongs to and ends the read.
+    /// Folds the answer to the page the read asked for in. An answer for any other page is ignored, and a
+    /// page that certified no progress stops the bar it started in and ends the read.
     pub(crate) fn accept(&mut self, answer: &TickFootprintHistorySnapshot) {
-        let Some(counting) = self.counting.as_mut() else {
+        let Some(page) = self.asked_page(answer) else {
             return;
         };
-        let open_ms = counting.span.open_ms;
-        let fold = counting.fold_page(answer);
-        match fold {
-            Fold::Foreign | Fold::Continues => {}
-            Fold::Stalled => self.stop(open_ms),
-            Fold::Complete => self.keep_whole_bar(),
+        // A page ending where it started certified no progress. Counts cannot be resumed inside a
+        // millisecond, so neither the rest of that bar nor a bar under it is read.
+        if answer.through_ms <= page.from_ms {
+            self.stopped_in = page.bars.first().map(|bar| bar.open_ms);
+            self.counting = None;
+            return;
         }
+        let whole = whole_bar_count(&page, answer);
+        self.keep_whole_bars(&page, answer, whole);
+        if answer.complete {
+            self.counting = None;
+            return;
+        }
+        self.continue_bar(&page, answer, whole);
     }
 
     /// The bars the read has taken whole since the last call, keyed by their opening time.
     pub(crate) fn take_whole_bars(&mut self) -> BTreeMap<i64, Vec<FootprintTick>> {
-        std::mem::take(&mut self.whole)
+        std::mem::take(&mut self.whole_bars)
     }
 
     /// The bar a page stopped the read inside, if one did.
@@ -159,32 +200,218 @@ impl CountsRead {
         self.stopped_in
     }
 
+    /// The page the answer answers, taken out of the one the read waits for: `None` when it waits for
+    /// none, or for another page.
+    fn asked_page(&mut self, answer: &TickFootprintHistorySnapshot) -> Option<CountsPage> {
+        if !self
+            .awaiting
+            .as_ref()
+            .is_some_and(|page| page.awaits(answer))
+        {
+            return None;
+        }
+        self.awaiting.take()
+    }
+
+    /// The page the read asks for next, or `None` when it asks for none.
+    fn planned_page(&self, max_ticks: u32) -> Option<CountsPage> {
+        let run = self.planned_run(max_ticks)?;
+        let bars = self.bars.get(run)?;
+        let start = bars.first()?;
+        Some(CountsPage {
+            bars: bars.to_vec(),
+            from_ms: self
+                .counting
+                .as_ref()
+                .map_or(start.open_ms, |counts| counts.through_ms),
+            real_volume: start.real_volume,
+            carry: self
+                .counting
+                .as_ref()
+                .and_then(|counts| counts.carry.clone()),
+        })
+    }
+
+    /// The bars the next page covers, as the half-open range of their indexes: from the bar a page
+    /// stopped inside, or from the oldest bar of the newest run whose tick counts fit one page, through
+    /// the newest unread bar.
+    fn planned_run(&self, max_ticks: u32) -> Option<Range<usize>> {
+        if self.done() {
+            return None;
+        }
+        let newest = self.newest_unread()?;
+        let first = match self.counting.as_ref() {
+            // A page always names the newest unread bar last, so the rest of a half counted bar is the
+            // first bar of the page that continues it.
+            Some(counts) => self.bar_index(counts.span.open_ms)?,
+            None => self.estimated_run_start(newest, max_ticks),
+        };
+        Some(first..newest + 1)
+    }
+
     /// Whether the read asks for no more pages.
     fn done(&self) -> bool {
-        self.stopped_in.is_some() || self.pages >= self.max_pages
+        self.stopped_in.is_some() || self.pages >= self.max_pages || self.newest_unread().is_none()
     }
 
-    /// The newest bar no page has taken whole yet.
-    fn newest_unread(&self) -> Option<BarSpan> {
-        self.bars.get(self.unread.checked_sub(1)?).copied()
+    /// The newest bar no page has counted whole yet.
+    fn newest_unread(&self) -> Option<usize> {
+        self.whole.iter().rposition(|whole| !whole)
     }
 
-    /// Keeps the bar whose counting finished as whole and marks it read, so the next page asks for the
-    /// bar under it.
-    fn keep_whole_bar(&mut self) {
-        let Some(counting) = self.counting.take() else {
+    /// The index in the window of the bar opening at `open_ms`.
+    fn bar_index(&self, open_ms: i64) -> Option<usize> {
+        self.bars
+            .binary_search_by_key(&open_ms, |bar| bar.open_ms)
+            .ok()
+    }
+
+    /// The oldest bar of the run of unread bars ending at `newest` whose estimated ticks fit
+    /// `max_ticks`: a page always covers the newest unread bar, and the bars under it while the estimate
+    /// holds. The run stops before a bar a page already counted whole — a page is one range — before a bar
+    /// whose candle reported no tick count, which is read alone, and before a bar counted under another
+    /// `real_volume` rule, which one request cannot carry.
+    fn estimated_run_start(&self, newest: usize, max_ticks: u32) -> usize {
+        let Some(newest_bar) = self.bars.get(newest) else {
+            return newest;
+        };
+        let Some(newest_ticks) = counted_ticks(newest_bar) else {
+            return newest;
+        };
+        let mut counted = newest_ticks;
+        let mut first = newest;
+        while let Some(older) = first.checked_sub(1) {
+            if self.whole.get(older).copied().unwrap_or(true) {
+                break;
+            }
+            let Some(bar) = self.bars.get(older) else {
+                break;
+            };
+            if bar.real_volume != newest_bar.real_volume {
+                break;
+            }
+            let Some(older_ticks) = counted_ticks(bar) else {
+                break;
+            };
+            let widened = counted.saturating_add(older_ticks);
+            if !estimate_fits(widened, max_ticks) {
+                break;
+            }
+            counted = widened;
+            first = older;
+        }
+        first
+    }
+
+    /// Marks the first `count` bars of `page` whole and hands their ticks out. Each bar's levels are the
+    /// ones the answer counted into it — none for a bar it left out, which counted no trade — added to
+    /// the ones a page before it counted into the same bar.
+    fn keep_whole_bars(
+        &mut self,
+        page: &CountsPage,
+        answer: &TickFootprintHistorySnapshot,
+        count: usize,
+    ) {
+        let Some(first_bar) = page.bars.first() else {
             return;
         };
-        self.whole.insert(counting.span.open_ms, counting.ticks());
-        self.unread = self.unread.saturating_sub(1);
+        let Some(first) = self.bar_index(first_bar.open_ms) else {
+            return;
+        };
+        for (offset, bar) in page.bars.iter().take(count).enumerate() {
+            let mut levels = self.carried_levels(bar.open_ms);
+            merge_levels(&mut levels, levels_of(page, answer, bar.open_ms));
+            self.whole_bars
+                .insert(bar.open_ms, level_ticks(bar.open_ms, &levels));
+            self.mark_whole(first + offset);
+        }
     }
 
-    /// Ends the read in the bar it was counting: its levels are dropped, because a bar is kept only
-    /// when every page of its own range answered.
-    fn stop(&mut self, open_ms: i64) {
-        self.counting = None;
-        self.stopped_in = Some(open_ms);
+    /// Marks the window bar at `index` whole, so that no page asks for it again.
+    fn mark_whole(&mut self, index: usize) {
+        if let Some(whole) = self.whole.get_mut(index) {
+            *whole = true;
+        }
     }
+
+    /// The levels a page before this one counted into the bar opening at `open_ms`, taken out of the bar
+    /// the read was counting, and none for any other bar: a page that continues a bar names it first.
+    fn carried_levels(&mut self, open_ms: i64) -> BTreeMap<Decimal, (Decimal, Decimal)> {
+        match self.counting.take() {
+            Some(counts) if counts.span.open_ms == open_ms => counts.levels,
+            other => {
+                self.counting = other;
+                BTreeMap::new()
+            }
+        }
+    }
+
+    /// Keeps the bar the page counted only in part, so the page after it continues from the millisecond it
+    /// reached.
+    fn continue_bar(
+        &mut self,
+        page: &CountsPage,
+        answer: &TickFootprintHistorySnapshot,
+        whole: usize,
+    ) {
+        let Some(bar) = page.bars.get(whole) else {
+            return;
+        };
+        let mut counts = match self.counting.take() {
+            Some(counts) if counts.span.open_ms == bar.open_ms => counts,
+            _ => BarCounts::new(*bar),
+        };
+        counts.count_page(page, answer);
+        self.counting = Some(counts);
+    }
+}
+
+/// Whether a page of `max_ticks` records holds the bars whose candles counted `counted` ticks in all,
+/// widened by the estimate margin the raw tick path sizes its pages by.
+fn estimate_fits(counted: u64, max_ticks: u32) -> bool {
+    widened_estimate(counted) <= u64::from(max_ticks)
+}
+
+/// How many of the page's bars the answer counted whole: every bar of a complete page, and otherwise the
+/// bars whose end the page reached before it stopped.
+fn whole_bar_count(page: &CountsPage, answer: &TickFootprintHistorySnapshot) -> usize {
+    if answer.complete {
+        return page.bars.len();
+    }
+    page.bars
+        .partition_point(|bar| bar.end_ms <= answer.through_ms)
+}
+
+/// The levels the answer counted into the bar opening at `open_ms`: the page's entry for it, the page's
+/// own levels when it asked for one bar, or none when it counted no trade into that bar.
+fn levels_of<'a>(
+    page: &CountsPage,
+    answer: &'a TickFootprintHistorySnapshot,
+    open_ms: i64,
+) -> &'a [FootprintLevel] {
+    if page.bars.len() == 1 {
+        return &answer.levels;
+    }
+    match answer.bars.iter().find(|bar| bar.open_ms == open_ms) {
+        Some(bar) => bar.levels.as_slice(),
+        None => &[],
+    }
+}
+
+/// The carry a page continuing the bar opening at `open_ms` starts from: the answer's own carry when its
+/// last counted bar is that bar — or when the page asked for one bar, which is that bar — and none
+/// otherwise, because a bar's open starts a fresh tick rule and the page's last trade was one of a bar
+/// that has already ended.
+fn continuation_carry(
+    page: &CountsPage,
+    answer: &TickFootprintHistorySnapshot,
+    open_ms: i64,
+) -> Option<FootprintCarry> {
+    let counted_last = answer.bars.last().is_some_and(|bar| bar.open_ms == open_ms);
+    if page.bars.len() > 1 && !counted_last {
+        return None;
+    }
+    answer.carry.clone()
 }
 
 /// One bar counted as the chart forms it, or as the chart left it behind.
@@ -220,7 +447,7 @@ impl CountsLive {
     /// Folds the answer to the page this read asks for in. A no-progress answer, and one for another
     /// page, leaves the state unchanged, so the read asks the same page again.
     pub(crate) fn accept(&mut self, answer: &TickFootprintHistorySnapshot) {
-        self.counts.fold_page(answer);
+        self.counts.accept_page(answer);
     }
 
     /// The trades counted so far: one per level and side.
@@ -267,7 +494,7 @@ impl CountsLive {
 /// The levels one bar's pages have counted so far, and where its last page stopped.
 ///
 /// A page boundary moves the tick-rule carry but no trade, so the levels of a price counted on two
-/// pages sum into one.
+/// pages sum into one, and a bar's page covers that bar alone.
 struct BarCounts {
     /// The bar being counted, with the end its read goes to.
     span: BarSpan,
@@ -292,45 +519,38 @@ impl BarCounts {
     }
 
     /// The page this bar's read asks for next: from the last millisecond a page reached to the bar's
-    /// end.
+    /// end, over this bar alone.
     fn page(&self) -> CountsPage {
         CountsPage {
-            open_ms: self.span.open_ms,
+            bars: vec![self.span],
             from_ms: self.through_ms,
-            to_ms: self.span.end_ms,
             real_volume: self.span.real_volume,
             carry: self.carry.clone(),
         }
     }
 
-    /// Whether `answer` answers the page this bar's read asks for. A page of any other range — a stale
-    /// answer, one of another bar — is not this read's and never moves it.
-    fn awaits(&self, answer: &TickFootprintHistorySnapshot) -> bool {
-        answer.from_ms == self.through_ms && answer.to_ms == self.span.end_ms
+    /// Folds the answer to the page this bar's read asks for in, when it is that page and moved the bar
+    /// on: its levels merge into the bar's, and its boundary and carry become the ones the next page asks
+    /// from. A page of another range, and one that certified no progress, leaves the bar untouched.
+    fn accept_page(&mut self, answer: &TickFootprintHistorySnapshot) {
+        let continuing = self.page();
+        if !continuing.awaits(answer) || answer.through_ms <= self.through_ms {
+            return;
+        }
+        self.count_page(&continuing, answer);
     }
 
-    /// Folds the answer to the awaited page in: its levels merge into the bar's, and its boundary and
-    /// carry become the ones the next page asks from.
-    fn fold_page(&mut self, answer: &TickFootprintHistorySnapshot) -> Fold {
-        if !self.awaits(answer) {
-            return Fold::Foreign;
-        }
-        // A page ending where it started certified no progress. Counts cannot be resumed inside a
-        // millisecond, so neither the rest of this bar nor a bar under it is read.
-        if answer.through_ms <= self.through_ms {
-            return Fold::Stalled;
-        }
-        merge_levels(&mut self.levels, &answer.levels);
+    /// Merges the answer to `continuing` into the bar's counts: its levels, the millisecond it reached
+    /// and the carry the page after it continues from.
+    fn count_page(&mut self, continuing: &CountsPage, answer: &TickFootprintHistorySnapshot) {
+        let levels = levels_of(continuing, answer, self.span.open_ms);
+        merge_levels(&mut self.levels, levels);
         self.through_ms = answer.through_ms;
-        self.carry.clone_from(&answer.carry);
-        if answer.complete {
-            return Fold::Complete;
-        }
-        Fold::Continues
+        self.carry = continuation_carry(continuing, answer, self.span.open_ms);
     }
 
-    /// Whether the last page read reached the bar's end, which only a complete page does on the
-    /// wire's own rules.
+    /// Whether the last page read reached the bar's end, which only a complete page does on the wire's
+    /// own rules.
     fn read_to_end(&self) -> bool {
         self.through_ms >= self.span.end_ms
     }
@@ -339,19 +559,6 @@ impl BarCounts {
     fn ticks(&self) -> Vec<FootprintTick> {
         level_ticks(self.span.open_ms, &self.levels)
     }
-}
-
-/// What folding one answered page into a bar left to do.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Fold {
-    /// The answer was not the page the bar's read asked for: the bar did not move.
-    Foreign,
-    /// The page moved the read on, and the rest of the bar follows.
-    Continues,
-    /// The page reached the bar's end complete, so the bar is whole.
-    Complete,
-    /// The page certified no progress, so the bar stopped the read.
-    Stalled,
 }
 
 /// The trades of one bar's levels, as the footprint rows read them: per price ascending one buy tick
@@ -419,13 +626,18 @@ pub(crate) enum CountsOutcome {
 }
 
 impl FootprintFeed {
-    /// Replaces the feed with a counts read of `bars` and answers the page to ask for first.
-    pub(crate) fn start_counts(&mut self, bars: Vec<BarSpan>) -> Option<CountsPage> {
+    /// Replaces the feed with a counts read of `bars` and answers the page to ask for first, covering at
+    /// most `page_bound` records.
+    pub(crate) fn start_counts(
+        &mut self,
+        bars: Vec<BarSpan>,
+        page_bound: u32,
+    ) -> Option<CountsPage> {
         *self = Self::default();
         self.bars = bars.clone();
         self.counts_read = CountsRead::new(bars, MAX_COUNTS_PAGES);
         self.read_started = Some(Instant::now());
-        let page = self.counts_read.as_mut()?.next_page();
+        let page = self.counts_read.as_mut()?.next_page(page_bound);
         self.note_counts_page(page)
     }
 
@@ -435,12 +647,13 @@ impl FootprintFeed {
     pub(crate) fn accept_counts_page(
         &mut self,
         answer: &TickFootprintHistorySnapshot,
+        page_bound: u32,
     ) -> CountsOutcome {
         let Some(read) = self.counts_read.as_mut() else {
             return CountsOutcome::Idle;
         };
         read.accept(answer);
-        let next_page = read.next_page();
+        let next_page = read.next_page(page_bound);
         let whole = read.take_whole_bars();
         self.read_pages += 1;
         self.read_page_ticks = self
@@ -569,10 +782,10 @@ impl FootprintFeed {
         true
     }
 
-    /// Notes the counts page the read just asked for, so the timing lines cover one bar and the time it
-    /// takes the EA to answer it.
+    /// Notes the counts page the read just asked for, so the timing lines cover the bars it counts and
+    /// the time it takes the EA to answer it.
     fn note_counts_page(&mut self, page: Option<CountsPage>) -> Option<CountsPage> {
-        self.page_bars = usize::from(page.is_some());
+        self.page_bars = page.as_ref().map_or(0, |page| page.bars.len());
         self.page_queued = page.is_some().then(Instant::now);
         page
     }

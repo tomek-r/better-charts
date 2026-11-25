@@ -11,13 +11,16 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 use trading_core::footprint::{FootprintTick, TICK_FLAG_BUY, TICK_FLAG_SELL};
 use trading_core::protocol::{
-    FootprintCarry, FootprintLevel, FootprintSide, MarketTick, TickFootprintHistorySnapshot,
+    FootprintBarCounts, FootprintCarry, FootprintLevel, FootprintSide, MarketTick,
+    TickFootprintHistoryRequest, TickFootprintHistorySnapshot,
 };
 
 const SESSION: &str = "session-1";
 const SYMBOL: &str = "NAS100";
 const TIMEFRAME: &str = "M1";
 const MINUTE_MS: i64 = 60_000;
+/// The millisecond halfway through a bar: where a page of these tests stops inside a bar.
+const HALF_MINUTE_MS: i64 = MINUTE_MS / 2;
 /// The row width these tests ask for: ten tenths of a point, so one row spans one point.
 const TICKS_PER_ROW: u32 = 10;
 
@@ -567,32 +570,42 @@ fn claim_page(state: &BridgeState) -> IndicatorTicksRequest {
         .expect("the claimed page is awaited")
 }
 
-/// One counted page of a footprint read: `levels` as `(price, buy, sell)` texts, every level counted as
-/// the whole trades its sides name, and no tick-rule carry.
-fn counts_page(
-    from_ms: i64,
-    to_ms: i64,
-    complete: bool,
-    through_ms: i64,
-    levels: &[(&str, &str, &str)],
-) -> TickFootprintHistorySnapshot {
-    let levels: Vec<FootprintLevel> = levels
+/// The wire levels `texts` names, each a `(price, buy, sell)` triple.
+fn wire_levels(texts: &[(&str, &str, &str)]) -> Vec<FootprintLevel> {
+    texts
         .iter()
         .map(|(price, buy, sell)| FootprintLevel {
             price: (*price).into(),
             buy: (*buy).into(),
             sell: (*sell).into(),
         })
-        .collect();
-    // An unweighted page counts one trade per unit of volume, so its sides' sums are its trade count.
-    let counted = levels
+        .collect()
+}
+
+/// The trades an unweighted page's levels name: one per unit of their sides' volumes.
+fn counted_trades(levels: &[FootprintLevel]) -> u32 {
+    levels
         .iter()
         .map(|level| {
             let buy = level.buy.parse::<u32>().expect("a whole number of trades");
             let sell = level.sell.parse::<u32>().expect("a whole number of trades");
             buy + sell
         })
-        .sum::<u32>();
+        .sum()
+}
+
+/// One counted page of a footprint read: `texts` as `(price, buy, sell)` levels, every level counted as
+/// the whole trades its sides name, and no tick-rule carry.
+fn counts_page(
+    from_ms: i64,
+    to_ms: i64,
+    complete: bool,
+    through_ms: i64,
+    texts: &[(&str, &str, &str)],
+) -> TickFootprintHistorySnapshot {
+    let levels = wire_levels(texts);
+    // An unweighted page counts one trade per unit of volume, so its sides' sums are its trade count.
+    let counted = counted_trades(&levels);
     TickFootprintHistorySnapshot {
         request_id: "rust-indicator-ticks-1".into(),
         symbol: SYMBOL.into(),
@@ -609,6 +622,63 @@ fn counts_page(
     }
 }
 
+/// One entry of a multi-bar counted page: the open the page counted into and its `(price, buy, sell)`
+/// levels, every level counted as the whole trades its sides name.
+fn counts_bar(open_ms: i64, texts: &[(&str, &str, &str)]) -> FootprintBarCounts {
+    let levels = wire_levels(texts);
+    FootprintBarCounts {
+        open_ms,
+        trade_ticks: counted_trades(&levels),
+        levels,
+    }
+}
+
+/// The trades the bars of a counted page name, which is the page's own count.
+fn bars_trade_ticks(bars: &[FootprintBarCounts]) -> u32 {
+    bars.iter()
+        .map(|bar| bar.trade_ticks)
+        .fold(0, u32::saturating_add)
+}
+
+/// The opens of the bars a counted request names, oldest first: the open its range starts in and every
+/// open it lists after it.
+fn request_bar_opens(counts: &TickFootprintHistoryRequest) -> Vec<i64> {
+    let first = counts.first_open_ms.unwrap_or(counts.history.from_ms);
+    std::iter::once(first)
+        .chain(counts.bar_opens.iter().copied())
+        .collect()
+}
+
+/// The answer to the counted window page `request` asked for, whole: every bar it names counts two
+/// bought lots at its open. A page of one bar keeps the top-level levels a single bar's answer has.
+fn counted_window_page(request: &IndicatorTicksRequest) -> TickFootprintHistorySnapshot {
+    let counts = request.counts_request().expect("a counted page");
+    let to_ms = counts.history.to_ms;
+    if counts.bar_opens.is_empty() {
+        let from_ms = counts.history.from_ms;
+        return counts_page(from_ms, to_ms, true, to_ms, &[("100", "2", "0")]);
+    }
+    let bars: Vec<FootprintBarCounts> = request_bar_opens(&counts)
+        .into_iter()
+        .map(|open_ms| counts_bar(open_ms, &[("100", "2", "0")]))
+        .collect();
+    let counted = bars_trade_ticks(&bars);
+    TickFootprintHistorySnapshot {
+        request_id: "rust-indicator-ticks-1".into(),
+        symbol: SYMBOL.into(),
+        from_ms: counts.history.from_ms,
+        to_ms,
+        tick_size: "0.1".into(),
+        complete: true,
+        through_ms: to_ms,
+        loaded_ticks: counted,
+        trade_ticks: counted,
+        carry: None,
+        levels: Vec::new(),
+        bars,
+    }
+}
+
 /// The `tick_footprint_history_snapshot` frame the EA writes for `snapshot`.
 fn counts_envelope(snapshot: &TickFootprintHistorySnapshot) -> Envelope {
     Envelope {
@@ -622,8 +692,12 @@ fn counts_envelope(snapshot: &TickFootprintHistorySnapshot) -> Envelope {
 }
 
 #[test]
-fn a_counts_window_read_asks_for_the_newest_bar_s_counted_trades_first() {
-    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+fn a_counts_window_read_asks_for_the_newest_run_of_bars_one_page_fits() {
+    let window = [
+        candle_with_ticks(0, "100", 1),
+        candle_with_ticks(MINUTE_MS, "100", 1),
+        candle_with_ticks(2 * MINUTE_MS, "100", 1),
+    ];
     let (state, _recorded) = chart_state(&window);
     negotiate_footprint_counts(&state);
 
@@ -631,8 +705,11 @@ fn a_counts_window_read_asks_for_the_newest_bar_s_counted_trades_first() {
 
     let queued = claim_page(&state);
     assert_eq!(queued.key, CHART_FOOTPRINT_KEY);
-    assert_eq!(queued.page.from_ms, MINUTE_MS, "the newest bar first");
-    assert_eq!(queued.page.to_ms, MINUTE_MS + 1);
+    assert_eq!(
+        (queued.page.from_ms, queued.page.to_ms),
+        (0, 2 * MINUTE_MS + 1),
+        "the run of bars the candles' tick counts fit one page"
+    );
     let wire = serde_json::to_value(queued.wire_request()).expect("a wire payload");
     assert_eq!(wire["footprint_counts"], true);
     assert_eq!(
@@ -640,8 +717,32 @@ fn a_counts_window_read_asks_for_the_newest_bar_s_counted_trades_first() {
         "the candle reports no real volume"
     );
     assert_eq!(wire["symbol"], SYMBOL);
+    assert_eq!(wire["first_open_ms"], 0);
+    assert_eq!(
+        wire["bar_opens"],
+        serde_json::json!([MINUTE_MS, 2 * MINUTE_MS]),
+        "the opens after the bar the range starts in"
+    );
     let page_bound = state.transfer_limits.lock().unwrap().max_ticks_per_page;
     assert_eq!(wire["max_ticks"], serde_json::json!(page_bound));
+}
+
+#[test]
+fn a_counts_window_page_of_one_bar_keeps_the_shape_a_bar_s_page_has() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, _recorded) = chart_state(&window);
+    // A page bound of one tick fits the newest bar alone.
+    state.transfer_limits.lock().unwrap().max_ticks_per_page = 1;
+    negotiate_footprint_counts(&state);
+
+    enable(&state);
+
+    let queued = claim_page(&state);
+    assert_eq!(queued.page.from_ms, MINUTE_MS, "the newest bar first");
+    assert_eq!(queued.page.to_ms, MINUTE_MS + 1);
+    let wire = serde_json::to_value(queued.wire_request()).expect("a wire payload");
+    assert!(wire.get("bar_opens").is_none(), "a page names no bar");
+    assert!(wire.get("first_open_ms").is_none());
 }
 
 #[test]
@@ -649,6 +750,8 @@ fn a_counts_page_publishes_its_bar_and_asks_for_the_bar_under_it() {
     let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
     let (state, recorded) = chart_state(&window);
     let events: Arc<dyn BridgeEvents> = recorded.clone();
+    // A page bound of one tick fits the newest bar alone, so the bar under it is the page after.
+    state.transfer_limits.lock().unwrap().max_ticks_per_page = 1;
     negotiate_footprint_counts(&state);
     enable(&state);
     claim_page(&state);
@@ -691,6 +794,8 @@ fn an_incomplete_counts_page_asks_for_the_rest_of_the_bar_with_its_carry() {
     let (state, recorded) = chart_state(&window);
     let events: Arc<dyn BridgeEvents> = recorded.clone();
     broker_time(&state, MINUTE_MS + 30_000);
+    // A page bound of one tick fits the forming bar alone, so its page is the rest of that one bar.
+    state.transfer_limits.lock().unwrap().max_ticks_per_page = 1;
     negotiate_footprint_counts(&state);
     enable(&state);
     let first = claim_page(&state);
@@ -728,10 +833,76 @@ fn an_incomplete_counts_page_asks_for_the_rest_of_the_bar_with_its_carry() {
         wire["carry"],
         serde_json::json!({"price": "100", "side": "sell"})
     );
+    assert!(
+        wire.get("bar_opens").is_none(),
+        "a page continuing one bar names no bar"
+    );
 }
 
-/// Answers the window's counts read page by page, as the EA would: one page of two bought lots at the
-/// open of each bar it asked for, until the read asks for nothing more.
+#[test]
+fn an_incomplete_multi_bar_page_continues_the_bar_it_stopped_in_and_the_run_after_it() {
+    let window = [
+        candle_with_ticks(0, "100", 1),
+        candle_with_ticks(MINUTE_MS, "100", 1),
+        candle_with_ticks(2 * MINUTE_MS, "100", 1),
+    ];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    broker_time(&state, 2 * MINUTE_MS + 30_000);
+    negotiate_footprint_counts(&state);
+    enable(&state);
+    let first = claim_page(&state);
+    assert_eq!(
+        (first.page.from_ms, first.page.to_ms),
+        (0, 2 * MINUTE_MS + 30_000),
+        "one page over the run of three bars"
+    );
+
+    // The page counted the oldest bar whole and stopped inside the bar after it, whose trades it did not
+    // reach: its last counted bar, and the carry's, is the oldest one.
+    let mut answered = counts_page(
+        0,
+        2 * MINUTE_MS + 30_000,
+        false,
+        MINUTE_MS + HALF_MINUTE_MS,
+        &[],
+    );
+    answered.bars = vec![counts_bar(0, &[("100", "2", "1")])];
+    let counted = bars_trade_ticks(&answered.bars);
+    answered.loaded_ticks = counted;
+    answered.trade_ticks = counted;
+    answered.carry = Some(carry("100", FootprintSide::Buy));
+    assert!(accept_footprint_counts_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_KEY,
+        &answered
+    ));
+
+    let rest = claim_page(&state);
+    assert_eq!(
+        (rest.page.from_ms, rest.page.to_ms),
+        (MINUTE_MS + HALF_MINUTE_MS, 2 * MINUTE_MS + 30_000),
+        "the bar it stopped in, from the millisecond it reached, and the run after it"
+    );
+    let wire = serde_json::to_value(rest.wire_request()).expect("a wire payload");
+    assert_eq!(
+        wire["first_open_ms"], MINUTE_MS,
+        "the open of the bar the range starts in"
+    );
+    assert_eq!(
+        wire["bar_opens"],
+        serde_json::json!([2 * MINUTE_MS]),
+        "only the opens after that bar"
+    );
+    assert!(
+        wire.get("carry").is_none(),
+        "the page before ended in another bar, whose open starts a fresh tick rule"
+    );
+}
+
+/// Answers the window's counts read page by page, as the EA would: every bar a page names counts two
+/// bought lots at its open, until the read asks for nothing more.
 fn read_counts_window(
     state: &BridgeState,
     events: &Arc<dyn BridgeEvents>,
@@ -749,13 +920,7 @@ fn read_counts_window(
             .take_awaited(&claimed.request_id)
             .expect("the claimed page is awaited");
         assert_eq!(request.key, CHART_FOOTPRINT_KEY);
-        let answered = counts_page(
-            request.page.from_ms,
-            request.page.to_ms,
-            true,
-            request.page.to_ms,
-            &[("100", "2", "0")],
-        );
+        let answered = counted_window_page(&request);
         assert!(accept_footprint_counts_page(
             state,
             events,
@@ -1062,6 +1227,8 @@ fn a_counts_page_that_makes_no_progress_marks_its_bar_incomplete() {
     let (state, recorded) = chart_state(&window);
     let events: Arc<dyn BridgeEvents> = recorded.clone();
     broker_time(&state, MINUTE_MS + 30_000);
+    // A page bound of one tick fits the forming bar alone, which is the bar the stalled page belongs to.
+    state.transfer_limits.lock().unwrap().max_ticks_per_page = 1;
     negotiate_footprint_counts(&state);
     enable(&state);
     claim_page(&state);
@@ -1119,6 +1286,8 @@ fn a_counts_snapshot_under_a_stale_id_is_ignored_and_the_awaited_one_fills_the_b
     let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
     let (state, recorded) = chart_state(&window);
     let events: Arc<dyn BridgeEvents> = recorded.clone();
+    // A page bound of one tick fits the newest bar alone, which is the bar the answered page names.
+    state.transfer_limits.lock().unwrap().max_ticks_per_page = 1;
     negotiate_footprint_counts(&state);
     enable(&state);
     let claimed = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
