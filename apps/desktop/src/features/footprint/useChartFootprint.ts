@@ -23,6 +23,30 @@ export interface ChartFootprintSource {
 }
 
 /**
+ * The footprint the hook already holds for the bar still forming, which a window read never carries: the newest bar
+ * it holds, kept only while that bar opens after every bar of the window.
+ */
+function formingFootprintOf(
+  byBar: ReadonlyMap<number, BarFootprint>,
+  bars: ChartFootprintEvent['bars'],
+): BarFootprint | null {
+  let newestMs = Number.NEGATIVE_INFINITY;
+  let forming: BarFootprint | null = null;
+  for (const footprint of byBar.values()) {
+    if (footprint.openMs > newestMs) {
+      newestMs = footprint.openMs;
+      forming = footprint;
+    }
+  }
+  if (forming === null) {
+    return null;
+  }
+  // A bar the window lists is the window's own copy of it, so only a bar opening after all of them is still forming.
+  const carried = bars.some((bar) => bar.openMs >= newestMs);
+  return carried ? null : forming;
+}
+
+/**
  * Keeps the host's chart footprint on for exactly as long as the volume footprint style draws the bars, and
  * hands every footprint it publishes to the bar style series. A report the host makes for another symbol or
  * timeframe describes a chart that is not this one, so it is dropped.
@@ -62,9 +86,15 @@ export function useChartFootprint({ chart, appearance, symbol, timeframe }: Char
         return;
       }
       incompleteBeforeMs = event.incompleteBefore;
+      // A window lists only the bars the host read whole, so the bar still forming is not one of them: the footprint
+      // its own read put here stays, or that bar would drop back to a plain candle until the next forming read.
+      const forming = formingFootprintOf(byBar, event.bars);
       byBar.clear();
       for (const bar of event.bars) {
         byBar.set(bar.openMs, readBarFootprint(bar));
+      }
+      if (forming !== null) {
+        byBar.set(forming.openMs, forming);
       }
       publish();
     };

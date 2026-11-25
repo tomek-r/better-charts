@@ -237,6 +237,15 @@ function republishedFootprintEvent(): ChartFootprintEvent {
   };
 }
 
+/**
+ * The window again while the newest bar is still forming, so it lists only the bar before it: a window carries the
+ * complete bars alone, and its own rows for them.
+ */
+function completeBarsFootprintEvent(): ChartFootprintEvent {
+  const republished = republishedFootprintEvent();
+  return { ...republished, bars: republished.bars.slice(0, -1) };
+}
+
 /** The M5 window the stacked-zone fixture draws, and the place in it of the bar the footprint belongs to. */
 const ZONE_WINDOW_BARS = 10;
 const ZONE_BAR_INDEX = 6;
@@ -352,10 +361,27 @@ interface FootprintPointState {
   readonly rows: readonly { readonly buyVolume: number }[];
 }
 
+/** How many points back from the newest a read of the series looks: the newest bar itself, and the one before it. */
+const NEWEST_POINT = 0;
+const OLDER_POINT = 1;
+/** The frames the bars are watched for after a window read lands: the frame it lands in and the next three. */
+const WATCHED_FRAMES = 3;
+
+/** The footprint the `fromNewest`-th newest point of the bar style series carries; null while it carries none. */
+async function footprintOfPoint(page: Page, fromNewest: number): Promise<FootprintPointState | null> {
+  const points = (await barStyle(page)).points;
+  const footprint = points.at(-1 - fromNewest)?.footprint as FootprintPointState | undefined;
+  return footprint ?? null;
+}
+
+/** The volume the lowest row of the `fromNewest`-th newest point's footprint traded into the ask. */
+async function rowVolumeOfPoint(page: Page, fromNewest: number): Promise<number> {
+  return (await footprintOfPoint(page, fromNewest))?.rows[0]?.buyVolume ?? Number.NaN;
+}
+
 /** The volume the lowest row of the newest bar's drawn footprint traded into the ask. */
 async function newestRowVolume(page: Page): Promise<number> {
-  const footprint = (await barStyle(page)).points.at(-1)?.footprint as FootprintPointState | undefined;
-  return footprint?.rows[0]?.buyVolume ?? Number.NaN;
+  return rowVolumeOfPoint(page, NEWEST_POINT);
 }
 
 /**
@@ -872,6 +898,30 @@ test('a forming footprint rewrites the newest bar alone', async ({ page }) => {
   expect(after.points.at(-1)).not.toEqual(drawn.points.at(-1));
   // One point written and no whole rewrite, so the columns of the other bars were never thrown away and redrawn.
   expect(after.writes).toEqual({ data: drawn.writes.data, update: drawn.writes.update + 1 });
+  expectNoErrors(collected);
+});
+
+test('a window that lists only the complete bars keeps the forming bar footprint', async ({ page }) => {
+  const { collected } = await openFootprintWindow(page);
+  await pushEvent(page, 'chart-footprint-forming', formingFootprintEvent());
+  await expect.poll(() => newestRowVolume(page)).toBe(FORMED_ROW_VOLUME);
+  const formed = await footprintOfPoint(page, NEWEST_POINT);
+  expect(formed).not.toBeNull();
+
+  // The host's next window read still finds the newest bar forming, so it lists only the bar before it, with rows of
+  // its own. The forming bar keeps the footprint its own read gave it, on the frame the window lands in and after it:
+  // dropping it would redraw that bar as a plain candle until the next forming read, up to a second later.
+  await pushEvent(page, 'chart-footprint', completeBarsFootprintEvent());
+  for (let frame = 0; frame <= WATCHED_FRAMES; frame += 1) {
+    expect(await footprintOfPoint(page, NEWEST_POINT)).toEqual(formed);
+    await waitTwoAnimationFrames(page);
+  }
+  // The complete bar the window did list takes the window's own rows, so the newest bar alone was kept.
+  expect(await rowVolumeOfPoint(page, OLDER_POINT)).toBe(REPUBLISHED_ROW_VOLUME);
+  expect(await footprintPointCount(page)).toBe(TWO_BAR_FOOTPRINT_EVENT.bars.length);
+  // A window another symbol publishes describes a chart that is not this one, so the kept footprint still stands.
+  await pushEvent(page, 'chart-footprint', { ...completeBarsFootprintEvent(), symbol: 'NAS100' });
+  expect(await footprintOfPoint(page, NEWEST_POINT)).toEqual(formed);
   expectNoErrors(collected);
 });
 
