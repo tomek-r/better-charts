@@ -3,6 +3,9 @@
   position: relative;
   /* Contain canvas, message and legend layers within the chart frame. */
   isolation: isolate;
+  /* The layer the menus and popovers hung in the frame paint at: above the 49 of the pane separator's hover
+     band, the deepest of the chart's own overlays, so no overlay can cover a menu that lies over it. */
+  --chart-popover-layer: 50;
   min-height: 320px;
   flex: 1 1 320px;
   overflow: hidden;

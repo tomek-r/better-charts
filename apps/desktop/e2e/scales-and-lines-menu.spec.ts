@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { bidAskDrawingModeOf, bidAskDrawingsOf } from '../src/features/chart/scalesAndLinesMenu/bidAskDrawingMode';
 import { palette } from '../src/shared/theme/palette';
 import { OBJECT_SETTINGS_ICON_PATHS } from '../src/shared/ui/icons/objectSettingsIcon';
+import { RESIZE_HANDLE_SELECTOR, paneSeparatorCenter } from './helpers/chartHost';
 import { openScalesAndLinesMenu } from './helpers/chartMenu';
 import { chartScalesState } from './helpers/chartScalesState';
 import { chartSettingsDialog } from './helpers/chartSettingsDialog';
@@ -45,6 +46,13 @@ const SUBMENU_ROW_LABELS: Readonly<Record<'Labels' | 'Lines', readonly string[]>
   Labels: ['Symbol name label', 'Bid and ask labels', 'Countdown to bar close'],
   Lines: ['Bid and ask lines'],
 };
+/** The hover band the app draws over a pane separator, and the panel every chart menu hangs in. */
+const BAND_SELECTOR = '.chart-pane-separator-band';
+const MENU_PANEL_SELECTOR = '.chart-anchored-panel';
+/** A saved indicator with a pane of its own, which puts a separator over the chart for the band to show on. */
+const RSI_ENTRY = { instanceId: 'rsi-1', definitionId: 'rsi', settings: {} };
+/** The narrowest strip the band and the menu may share and still lie over each other. */
+const MIN_SHARED_WIDTH_PX = 20;
 
 /** The gear the engine draws in the corner where the price axis meets the time axis. */
 const gear = (page: Page) => page.getByRole('button', { name: 'Chart settings', exact: true });
@@ -67,9 +75,55 @@ async function turnAutoScaleOn(page: Page): Promise<void> {
   await expect.poll(() => autoScale(page)).toBe(true);
 }
 
+/** A place on the screen and the room it takes, in page pixels. */
+interface Box {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 /** The box of an element on the page, which every geometry check below reads. */
-async function box(locator: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
+async function box(locator: Locator): Promise<Box> {
   return (await locator.boundingBox())!;
+}
+
+/** The part of the screen two boxes share, which is empty in a dimension where they do not meet. */
+function overlapOf(one: Box, other: Box): Box {
+  const left = Math.max(one.x, other.x);
+  const top = Math.max(one.y, other.y);
+  return {
+    x: left,
+    y: top,
+    width: Math.min(one.x + one.width, other.x + other.width) - left,
+    height: Math.min(one.y + one.height, other.y + other.height) - top,
+  };
+}
+
+/**
+ * The layer an element paints at inside the chart frame: the outermost ancestor, itself included, that carries a
+ * positioned z-index. The frame's `isolation` makes it the stacking context every one of its overlays resolves
+ * against, so two of these values say which of the two is drawn on top.
+ */
+function paintLevel(page: Page, selector: string): Promise<number> {
+  return page.evaluate((query: string) => {
+    const element = document.querySelector(query);
+    if (element === null) {
+      throw new Error(`Nothing matches ${query}.`);
+    }
+    const frame = element.closest('.chart-frame');
+    if (frame === null) {
+      throw new Error(`${query} sits outside the chart frame.`);
+    }
+    let level = 0;
+    for (let node: Element | null = element; node !== null && node !== frame; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.position !== 'static' && style.zIndex !== 'auto') {
+        level = Number.parseInt(style.zIndex, 10);
+      }
+    }
+    return level;
+  }, selector);
 }
 
 /** Opens the menu and the Labels submenu hanging beside it, and returns that submenu. */
@@ -142,6 +196,41 @@ test('the gear opens the menu above itself, in the price scale order', async ({ 
   await expect(menu.getByRole('menuitem', { name: 'Labels' })).toHaveAttribute('aria-haspopup', 'menu');
   await expect(menu.getByRole('menuitem', { name: 'Lines' })).toHaveAttribute('aria-haspopup', 'menu');
   await expect(menu.getByRole('separator')).toHaveCount(3);
+  expectNoErrors(collected);
+});
+
+test('the separator band never paints over the menu above the gear', async ({ page }) => {
+  const collected = await gotoWithStub(page, {
+    chartSettingOverrides: { [EURUSD_CHART]: { indicators: [RSI_ENTRY] } },
+  });
+  await openChart(page);
+  const menu = await openScalesAndLinesMenu(page);
+
+  // The band shows while the pointer rests on the library's resize handle, taken at the middle of the
+  // separator: far enough left of the menu that the menu keeps the pointer to itself. The indicator pane, and
+  // with it the handle, is drawn on a later paint, so it is waited for first.
+  await expect(page.locator(RESIZE_HANDLE_SELECTOR)).toBeVisible();
+  const centre = await paneSeparatorCenter(page);
+  await page.mouse.move(centre.x, centre.y);
+  const band = page.locator(BAND_SELECTOR);
+  await expect(band).toHaveCSS('opacity', '1');
+
+  // The band runs the width of the pane and the menu hangs over its right end, so the two do share ground:
+  // the strip below is the part of the band the menu lies over.
+  const shared = overlapOf(await box(band), await box(menu));
+  expect(shared.width).toBeGreaterThan(MIN_SHARED_WIDTH_PX);
+  expect(shared.height).toBeGreaterThan(0);
+  const sharedCentre = { x: shared.x + shared.width / 2, y: shared.y + shared.height / 2 };
+
+  // The menu takes the pointer in that strip, being the topmost thing on screen there.
+  const menuTakesThePoint = await page.evaluate(({ x, y }: { x: number; y: number }) => {
+    const topmost = document.elementFromPoint(x, y);
+    return topmost !== null && topmost.closest('.scales-and-lines-menu') !== null;
+  }, sharedCentre);
+  expect(menuTakesThePoint).toBe(true);
+  // The band takes no pointer events, so hit testing cannot see which of the two is painted on top: the layer
+  // each one paints at inside the chart frame says it, and the menu's has to be the higher of the two.
+  expect(await paintLevel(page, MENU_PANEL_SELECTOR)).toBeGreaterThan(await paintLevel(page, BAND_SELECTOR));
   expectNoErrors(collected);
 });
 

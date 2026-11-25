@@ -1,7 +1,8 @@
 /* Hangs a DOM panel (partial-close menu / custom-volume form) from a painted chip. */
 .chart-anchored-panel {
   position: absolute;
-  z-index: 4;
+  /* The chart frame's popover layer, over every overlay it holds (see features/chart/chart-canvas.css). */
+  z-index: var(--chart-popover-layer, 50);
   width: max-content;
   max-width: calc(100% - 16px);
 }
