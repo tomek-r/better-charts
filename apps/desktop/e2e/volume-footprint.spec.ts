@@ -11,6 +11,7 @@ import {
   footprintBarColumns,
   footprintCandleGlyph,
   footprintCellBox,
+  footprintInnerGap,
   footprintProfileBox,
   footprintTextAlignOf,
   MAX_COLUMN_WIDTH,
@@ -19,6 +20,7 @@ import {
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintGeometry';
 import {
   footprintImbalanceBox,
+  IMBALANCE_MARK_SPACE,
   IMBALANCE_MARK_WIDTH,
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintImbalance';
 import {
@@ -903,25 +905,110 @@ test('a summary line its column has no room for is left out, while the ones that
   });
 });
 
-test('an imbalance mark stands on the outer edge of its cell, three css pixels wide and as tall as the cell', () => {
-  // A cell between the prices of its row, less the row gap under it: at two device pixels per css px the row starts
-  // on device pixel 20 and its cell is four pixels tall, ending on 24 where the next row's gap begins.
-  const cell = footprintCellBox({ left: 20, width: 40 }, 10, 14, 2);
+test('an imbalance mark stands in the candle gap, one css px in from the inner edge of its column', () => {
+  // The hundred-pixel bar's columns span -40 to 60: a thirty-six-pixel sell column, six css px of background, the
+  // fifteen-pixel candle, another six and the thirty-seven-pixel buy column, so either mark has a gap six px wide to
+  // stand in. A cell between the prices of its row, less the row gap under it, is four device pixels tall here.
+  const columns = SUMMARY_COLUMNS;
+  const cells = {
+    sell: footprintCellBox(columns.sell, 10, 14, 2),
+    buy: footprintCellBox(columns.buy, 10, 14, 2),
+  };
+  const sellMark = footprintImbalanceBox(cells.sell, 'sell', footprintInnerGap(columns, 'sell'), NO_SCALING);
+  const buyMark = footprintImbalanceBox(cells.buy, 'buy', footprintInnerGap(columns, 'buy'), NO_SCALING);
 
   expect(IMBALANCE_MARK_WIDTH).toBe(3);
-  expect(cell).toEqual({ left: 20, width: 40, top: 20, height: 4 });
-  // The sell mark takes the cell's left edge, the buy mark its right one.
-  expect(footprintImbalanceBox(cell, 'sell', NO_SCALING)).toEqual({ left: 20, top: 20, width: 3, height: 4 });
-  expect(footprintImbalanceBox(cell, 'buy', NO_SCALING)).toEqual({ left: 57, top: 20, width: 3, height: 4 });
-  // The mark is exactly as tall as the cell it marks, so it never runs on over the gap under it: its top and its
-  // bottom edge are the cell's own.
+  expect(IMBALANCE_MARK_SPACE).toBe(1);
+  expect(footprintInnerGap(columns, 'sell')).toBe(CANDLE_GAP);
+  expect(footprintInnerGap(columns, 'buy')).toBe(CANDLE_GAP);
+  expect(cells.sell).toEqual({ left: -40, width: 36, top: 20, height: 4 });
+  expect(cells.buy).toEqual({ left: 23, width: 37, top: 20, height: 4 });
+  // The sell column ends on -4, so its mark stands one css px right of it, and the buy column starts on 23, so its
+  // mark stands the same css px left of that: neither takes the cell's outer edge any more.
+  expect(sellMark).toEqual({ left: -3, top: 20, width: 3, height: 4 });
+  expect(buyMark).toEqual({ left: 19, top: 20, width: 3, height: 4 });
+  expect(sellMark.left - (cells.sell.left + cells.sell.width)).toBe(IMBALANCE_MARK_SPACE);
+  expect(cells.buy.left - (buyMark.left + buyMark.width)).toBe(IMBALANCE_MARK_SPACE);
+  // Both marks stop short of the thin candle the gap belongs to rather than standing over it.
+  expect(sellMark.left + sellMark.width).toBeLessThan(columns.candle.left);
+  expect(buyMark.left).toBeGreaterThan(columns.candle.left + columns.candle.width - 1);
+  // A mark is exactly as tall as the cell it marks, so it never runs on over the gap under it: its top and its bottom
+  // edge are the cell's own.
   for (const side of FOOTPRINT_SIDES) {
-    const mark = footprintImbalanceBox(cell, side, NO_SCALING);
-    expect(mark.top).toBe(cell.top);
-    expect(mark.top + mark.height).toBe(cell.top + cell.height);
+    const mark = footprintImbalanceBox(cells[side], side, footprintInnerGap(columns, side), NO_SCALING);
+    expect(mark.top).toBe(cells[side].top);
+    expect(mark.top + mark.height).toBe(cells[side].top + cells[side].height);
   }
-  // Two device pixels per css pixel double the mark's thickness, so it reads the same on a dense screen.
-  expect(footprintImbalanceBox(cell, 'buy', 2)).toEqual({ left: 54, top: 20, width: 6, height: 4 });
+  // Two device pixels per css px double the mark and its css px of space, so it reads the same on a dense screen: the
+  // same hundred css px body is two hundred device pixels wide and leaves twelve px of gap either side of its candle.
+  const dense = footprintBarColumns(10, 200, 2, 'two-columns');
+  const denseCell = footprintCellBox(dense.sell, 10, 14, 2);
+  expect(footprintInnerGap(dense, 'sell')).toBe(CANDLE_GAP * 2);
+  expect(footprintImbalanceBox(denseCell, 'sell', footprintInnerGap(dense, 'sell'), 2)).toEqual({
+    left: -5,
+    top: 20,
+    width: 6,
+    height: 4,
+  });
+});
+
+test('a one-column bar marks its imbalanced cells in the gap between the candle and its one column', () => {
+  // The hundred-pixel body's one-column layout: the fifteen-pixel candle centred on the bar's x, spanning 3 to 17, six
+  // css px of background after it, and the seventy-two-pixel capped column from 24 to 96. The one column is a buy
+  // column, so its marks stand in the gap the candle leaves before it.
+  const columns = footprintBarColumns(10, 100, NO_SCALING, 'single-column');
+  const cell = footprintCellBox(columns.buy, 10, 14, 2);
+  const mark = footprintImbalanceBox(cell, 'buy', footprintInnerGap(columns, 'buy'), NO_SCALING);
+
+  expect(columns.buy).toEqual({ left: 24, width: MAX_COLUMN_WIDTH });
+  expect(cell).toEqual({ left: 24, width: MAX_COLUMN_WIDTH, top: 20, height: 4 });
+  // Three css px wide, one css px left of the column, and clear of the candle's last pixel on 17.
+  expect(mark).toEqual({ left: 20, top: 20, width: 3, height: 4 });
+  expect(columns.buy.left - (mark.left + mark.width)).toBe(IMBALANCE_MARK_SPACE);
+  expect(mark.left).toBeGreaterThan(columns.candle.left + columns.candle.width - 1);
+});
+
+test('a mark the candle gap cannot hold shrinks to what fits, and never below one device pixel', () => {
+  // A twelve-pixel body is laid out with a two-pixel candle, two px of background either side of it and a three-pixel
+  // column on each side, so the gap holds neither the three-pixel mark nor its css px of space.
+  const columns = footprintBarColumns(10, 12, NO_SCALING, 'two-columns');
+  const cell = footprintCellBox(columns.buy, 10, 14, 2);
+  const gap = footprintInnerGap(columns, 'buy');
+
+  expect(columns).toEqual({
+    sell: { left: 4, width: 3 },
+    candle: { left: 9, width: 2 },
+    buy: { left: 13, width: 3 },
+  });
+  expect(gap).toBe(2);
+  // Two device pixels hold the mark's own css px of space and one pixel of mark, which is what it is drawn at.
+  const mark = footprintImbalanceBox(cell, 'buy', gap, NO_SCALING);
+
+  expect(mark).toEqual({ left: 11, top: 20, width: 1, height: 4 });
+  expect(cell.left - (mark.left + mark.width)).toBe(IMBALANCE_MARK_SPACE);
+  // The shrunken mark fills the gap exactly, its far edge on the candle's own first pixel rather than over it.
+  expect(mark.left).toBe(columns.candle.left + columns.candle.width);
+  // A gap holding the mark and its space exactly leaves the mark at its full width, and a narrower one still keeps the
+  // one device pixel a mark is never drawn under.
+  expect(footprintImbalanceBox(cell, 'buy', IMBALANCE_MARK_WIDTH + IMBALANCE_MARK_SPACE, NO_SCALING).width).toBe(3);
+  expect(footprintImbalanceBox(cell, 'buy', 0, NO_SCALING).width).toBe(1);
+});
+
+test('a profile cell is marked in the very gap a cluster cell is, its column holding the mark', () => {
+  // A profile cell keeps half of its column on the edge nearest the candle: the sell cell's coloured part starts on
+  // -22 while its column starts on -40, so a mark that followed the cell's own edges would move away from the candle.
+  const columns = SUMMARY_COLUMNS;
+  const gap = footprintInnerGap(columns, 'sell');
+  const cluster = footprintCellBox(columns.sell, 10, 14, 2);
+  const profile = footprintProfileBox(cluster, 0.5, 'sell');
+
+  expect(profile).toEqual({ left: -22, width: 18, top: 20, height: 4 });
+  // The profile bar is anchored on the column's inner edge, so its mark stands where the cluster cell's does: in the
+  // candle gap, one css px right of the column that holds both of them.
+  expect(footprintImbalanceBox(profile, 'sell', gap, NO_SCALING)).toEqual(
+    footprintImbalanceBox(cluster, 'sell', gap, NO_SCALING),
+  );
+  expect(footprintImbalanceBox(profile, 'sell', gap, NO_SCALING)).toEqual({ left: -3, top: 20, width: 3, height: 4 });
 });
 
 test('a bar reaches its footprint through its own time, and one without a footprint carries none', () => {

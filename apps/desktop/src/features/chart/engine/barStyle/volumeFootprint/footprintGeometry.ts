@@ -145,6 +145,18 @@ export function footprintBarColumns(
 }
 
 /**
+ * The empty background between the column one side's cells fill and the thin candle, in device pixels: the gap the
+ * layout leaves beside the candle on that side, where that side's imbalance marks stand. A single-column bar keeps no
+ * sell column, so only the gap before its one buy column holds anything.
+ */
+export function footprintInnerGap(columns: FootprintBarColumns, side: FootprintSide): number {
+  if (side === 'sell') {
+    return Math.max(0, columns.candle.left - (columns.sell.left + columns.sell.width));
+  }
+  return Math.max(0, columns.buy.left - (columns.candle.left + columns.candle.width));
+}
+
+/**
  * The candle of a bar that draws no cells, as the pane paints it: the media x its body is centred on and the device
  * width that body takes.
  */

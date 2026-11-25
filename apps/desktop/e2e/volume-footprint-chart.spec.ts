@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { barBodyWidth } from '../src/features/chart/engine/barStyle/barBodyWidth';
 import { FOOTPRINT_BAR_SPACING } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintZoom';
 import { footprintBarColumns } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintGeometry';
+import { IMBALANCE_MARK_SPACE } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintImbalance';
 import { FOOTPRINT_NEUTRAL_COLOR } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintShades';
 import type {
   ChartFootprintEvent,
@@ -468,9 +469,9 @@ function rightOfBar(pane: PixelRegion, barX: number): PixelRegion {
   return { ...pane, left: Math.ceil(barX + FOOTPRINT_BAR_SPACING / 2) };
 }
 
-/** The screenshot row inside the fixture's lowest cell row, where the newest bar's candle body paints across it. */
-async function cellRowY(page: Page): Promise<number> {
-  return Math.floor(await panePriceY(page, ROW_PRICES[1])) + CELL_ROW_INSET;
+/** The screenshot row inside the fixture cell row whose top price is `topPrice`, clear of the number in its middle. */
+async function cellRowY(page: Page, topPrice: number): Promise<number> {
+  return Math.floor(await panePriceY(page, topPrice)) + CELL_ROW_INSET;
 }
 
 /**
@@ -690,7 +691,7 @@ test('a bar writes each side total under its column and the delta box below them
 test('the thin candle stands free, a gap of background either side of its body', async ({ page }) => {
   const collected = await openFootprintChart(page, FOOTPRINT_EVENT);
   const image = await paneImage(page);
-  const row = barRowRegion(image, await barTimeX(page, NEWEST_BAR_OPEN_MS), await cellRowY(page));
+  const row = barRowRegion(image, await barTimeX(page, NEWEST_BAR_OPEN_MS), await cellRowY(page, ROW_PRICES[1]));
 
   const sell = colourSpan(image, SELL_LIGHTEST, row);
   const candle = colourSpan(image, UP_CANDLE, row);
@@ -720,13 +721,34 @@ test('the value area is marked by a dashed line across the whole bar', async ({ 
   expectNoErrors(collected);
 });
 
-test('an imbalanced cell is marked on its outer edge in its own side colour', async ({ page }) => {
-  const { collected, image, boundary } = await openFootprintCells(page, imbalancedFootprintEvent());
-  const above = aboveCells(image, boundary);
+test('an imbalanced cell is marked in the candle gap at its inner edge, in its own side colour', async ({ page }) => {
+  const collected = await openFootprintChart(page, imbalancedFootprintEvent());
+  // The footprint zoom settles after the style's first paint, so the columns are read only once the pane draws at the
+  // spacing the renderer lays them out with.
+  await expect.poll(() => barSpacing(page)).toBe(FOOTPRINT_BAR_SPACING);
+  const image = await paneImage(page);
+  // The bar's columns at the pane's own zoom: the sell column, the gap the thin candle leaves it, the candle, another
+  // gap and the buy column.
+  const barX = Math.round(await barTimeX(page, NEWEST_BAR_OPEN_MS));
+  const columns = footprintBarColumns(barX, BAR_BODY_WIDTH, PANE_PIXEL_RATIO);
+  const space = IMBALANCE_MARK_SPACE * PANE_PIXEL_RATIO;
+  const sellEdge = columns.sell.left + columns.sell.width;
+  // Three css px wide, one css px of the gap kept between each mark and its own column's inner edge: right of the
+  // sell column, left of the buy one.
+  const sellMark = { left: sellEdge + space, right: sellEdge + space + IMBALANCE_MARK_RUN - 1 };
+  const buyMark = { left: columns.buy.left - space - IMBALANCE_MARK_RUN, right: columns.buy.left - space - 1 };
+  const group = { left: columns.sell.left, right: columns.buy.left + columns.buy.width };
+  // The fixture flags the sell side of its lowest row and the buy side of the row above it, so each mark is read in
+  // the row of the cell it marks.
+  const sellRow = await cellRowY(page, ROW_PRICES[1]);
+  const buyRow = await cellRowY(page, ROW_PRICES[2]);
 
-  // Three css px wide, and the only paint of their colour inside the bar: the cells are the lightest shade.
-  expect(horizontalRunsPainting(image, SELL_IMBALANCE, above, IMBALANCE_MARK_RUN).length).toBeGreaterThan(0);
-  expect(horizontalRunsPainting(image, BUY_IMBALANCE, above, IMBALANCE_MARK_RUN).length).toBeGreaterThan(0);
+  // Either mark stands inside its gap, clear of the thin candle that gap belongs to.
+  expect(sellMark.right).toBeLessThan(columns.candle.left);
+  expect(buyMark.left).toBeGreaterThan(columns.candle.left + columns.candle.width - 1);
+  // It is the only paint of its colour across the bar's whole group of columns, so no mark is left on an outer edge.
+  expect(colourSpan(image, SELL_IMBALANCE, { ...group, top: sellRow, bottom: sellRow })).toEqual(sellMark);
+  expect(colourSpan(image, BUY_IMBALANCE, { ...group, top: buyRow, bottom: buyRow })).toEqual(buyMark);
   expectNoErrors(collected);
 });
 

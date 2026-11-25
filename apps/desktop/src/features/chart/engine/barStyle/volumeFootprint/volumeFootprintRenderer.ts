@@ -10,6 +10,7 @@ import type { BarFootprint, ChartFootprintRow } from './footprintData';
 import {
   footprintBarColumns,
   footprintCandleGlyph,
+  footprintInnerGap,
   footprintProfileBox,
   footprintRowBox,
   footprintRowGapBox,
@@ -91,10 +92,12 @@ interface FootprintCellBoxes {
   readonly column: FootprintCellBox;
 }
 
-/** One cell of a bar placed on the pane: the cell the painter drew and the boxes it covers. */
+/** One cell of a bar placed on the pane: the cell the painter drew, the boxes it covers and the gap beside it. */
 interface PlacedCell {
   readonly cell: FootprintCell;
   readonly boxes: FootprintCellBoxes;
+  /** The empty background between the cell's column and the thin candle, in device pixels, where its marks stand. */
+  readonly innerGap: number;
 }
 
 /** One stacked zone placed on the pane: the media x it starts at and the one it ends at, null for the pane's edge. */
@@ -172,22 +175,23 @@ function placedStackedZones(
   }));
 }
 
-/** Paints the imbalance mark standing on the edge of `side` of one cell, in its side's own colour. */
-function paintImbalanceMark(paint: FootprintPaint, box: FootprintCellBox, side: FootprintSide): void {
+/** Paints the imbalance mark standing in the gap at the inner edge of one cell, in its side's own colour. */
+function paintImbalanceMark(paint: FootprintPaint, box: FootprintCellBox, gap: number, side: FootprintSide): void {
   const highlight = paint.options.imbalanceHighlight;
   if (!highlight.visible) {
     return;
   }
-  const mark = footprintImbalanceBox(box, side, paint.horizontalPixelRatio);
+  const mark = footprintImbalanceBox(box, side, gap, paint.horizontalPixelRatio);
   paint.context.fillStyle = imbalanceMarkColor(highlight, side);
   paint.context.fillRect(mark.left, mark.top, mark.width, mark.height);
 }
 
 /**
- * Paints one cell: its fill, the number it writes against its column's inner edge and the marks on its edges. The
- * marks span the cell's own box, so they stop where its fill stops rather than running on over the row gap under it.
- * A number that runs past its own coloured box onto the column's background is written in the light text colour, which
- * the chart's dark background reads, whatever colour its fill gave it.
+ * Paints one cell: its fill, the number it writes against its column's inner edge and the marks of its imbalanced
+ * sides, which stand in the candle gap beside that same edge. The marks span the cell's own box, so they stop where its
+ * fill stops rather than running on over the row gap under it. A number that runs past its own coloured box onto the
+ * column's background is written in the light text colour, which the chart's dark background reads, whatever colour
+ * its fill gave it.
  */
 function paintCell(
   paint: FootprintPaint,
@@ -213,11 +217,11 @@ function paintCell(
     });
   }
   for (const side of cell.marks) {
-    paintImbalanceMark(paint, box, side);
+    paintImbalanceMark(paint, box, placed.innerGap, side);
   }
 }
 
-/** Every cell of one bar placed on the pane, in the order they are painted, with the boxes each one covers. */
+/** Every cell of one bar placed on the pane, in the order they are painted, with the boxes and gap each one covers. */
 function placedCells(paint: FootprintPaint, footprint: BarFootprint, columns: FootprintBarColumns): PlacedCell[] {
   const placed: PlacedCell[] = [];
   for (const { row, cells } of footprintCells(footprint, paint.options)) {
@@ -227,7 +231,8 @@ function placedCells(paint: FootprintPaint, footprint: BarFootprint, columns: Fo
       continue;
     }
     for (const cell of cells) {
-      placed.push({ cell, boxes: cellBoxes(paint, cell, columns, topY, bottomY) });
+      const innerGap = footprintInnerGap(columns, cell.column);
+      placed.push({ cell, boxes: cellBoxes(paint, cell, columns, topY, bottomY), innerGap });
     }
   }
   return placed;
@@ -439,13 +444,13 @@ function paintFootprintBar(paint: FootprintPaint, bar: FootprintBar, marks: Foot
 /**
  * The custom series renderer of the volume footprint bars: each bar paints the cells the appearance's type and
  * display make of its rows — a sell column, a gap, a thin candle, another gap and a buy column, or a thin candle on
- * the bar's own x with the one column right of it — a mark on every imbalanced edge and its value area dashed. Under
- * the columns it writes each side's total against its own column, or both in one line in the single-column layout,
- * and, while the summary is on, the bar's delta and total in a box. Every number of one bar is written at the one size
- * its shortest row holds, which its cells, its totals and the box's lines share. A bar the host holds no footprint for
- * paints the thin candle alone, on that same candle column, and no cells, totals or summary of its own. The stacked
- * imbalance zones are painted first, so every bar's own paint stands over them. The cells are device pixels; only the
- * text and the markers are written, in media pixels.
+ * the bar's own x with the one column right of it — a mark in the gap at each imbalanced cell's inner edge and its
+ * value area dashed. Under the columns it writes each side's total against its own column, or both in one line in
+ * the single-column layout, and, while the summary is on, the bar's delta and total in a box. Every number of one
+ * bar is written at the one size its shortest row holds, which its cells, its totals and the box's lines share. A bar
+ * the host holds no footprint for paints the thin candle alone, on that same candle column, and no cells, totals or
+ * summary of its own. The stacked imbalance zones are painted first, so every bar's own paint stands over them. The
+ * cells are device pixels; only the text and the markers are written, in media pixels.
  */
 export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPoint, VolumeFootprintOptions> {
   protected override options: VolumeFootprintOptions = VOLUME_FOOTPRINT_DEFAULT_OPTIONS;
