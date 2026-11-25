@@ -19,12 +19,14 @@
 //! ticks to it — and its whole answer replaces the bar's ticks from M on, so the ticks before M are
 //! never read again nor counted twice. A read that does not come back whole drops the bar's ticks and
 //! the one after starts at the bar's open again.
+//!
+//! Once the handshake negotiated `tick_footprint_counts`, the same two reads ask the EA for its counted
+//! pages instead (`counts`): per-price totals that fold into the very ticks above, so the feed, the
+//! chart footprint and the observer read one shape whichever path filled it.
 
 mod counts;
 
-// The bridge that pages these reads arrives in a later change; until then only the tests read them.
-#[cfg_attr(not(test), allow(unused_imports))]
-pub(crate) use counts::{level_ticks, CountsLive, CountsPage, CountsRead};
+pub(crate) use counts::{CountsLive, CountsOutcome, CountsPage, CountsRead};
 
 use rust_decimal::Decimal;
 use std::cmp::Ordering;
@@ -602,21 +604,29 @@ pub(crate) enum PageOutcome {
 }
 
 /// What one accepted quote changed in the feed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct FormingStep {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FormingStep<Page> {
     /// The page the live read asks the EA for, if any.
-    pub(crate) page: Option<TickPage>,
+    pub(crate) page: Option<Page>,
     /// Whether ticks left the readable set without a read finishing: the observer must recompute now,
     /// or it would keep a bar that stopped being read whole.
     pub(crate) ticks_dropped: bool,
 }
 
-impl FormingStep {
+impl<Page> FormingStep<Page> {
     /// A quote that changed nothing.
     const NOTHING: Self = Self {
         page: None,
         ticks_dropped: false,
     };
+}
+
+/// What one quote changed in the feed before the forming bar's next re-read is asked for.
+struct FollowChange {
+    /// The bar the chart left behind, if the chart moved on to a later forming bar.
+    left: Option<BarSpan>,
+    /// Whether ticks left the readable set without a read finishing.
+    ticks_dropped: bool,
 }
 
 /// One live read: a single bar, read over the window read's own machinery from its open, or from the
@@ -755,6 +765,8 @@ pub(crate) struct FootprintFeed {
     incomplete: Vec<i64>,
     /// The window read in flight, if any.
     read: Option<FootprintTicks>,
+    /// The counted window read in flight, when the EA answers with per-price totals.
+    counts_read: Option<CountsRead>,
     /// The chart's forming bar, once the quote path follows one.
     forming: Option<BarSpan>,
     /// The oldest bar the live reads own: the window read never answers for it or the bars above it.
@@ -763,6 +775,11 @@ pub(crate) struct FootprintFeed {
     forming_ticks: Option<Vec<FootprintTick>>,
     /// The live read in flight, if any.
     live: Option<LiveRead>,
+    /// The counted read of the forming bar, when the EA answers with per-price totals.
+    counts_live: Option<CountsLive>,
+    /// Whether a counted page of the forming bar went out and its answer has not landed yet: the next
+    /// re-read waits for it, because a newer page for the same key would orphan that answer.
+    counts_live_awaited: bool,
     /// When the forming bar may be re-read again.
     next_forming_read_at: Option<Instant>,
     /// When the window read started and when the page it waits for went out, with the bars that page
@@ -840,43 +857,55 @@ impl FootprintFeed {
         forming: FormingBars,
         now: Instant,
         page_bound: u32,
-    ) -> FormingStep {
+    ) -> FormingStep<TickPage> {
         if self.bars.is_empty() {
             return FormingStep::NOTHING;
         }
-        let bar = forming.forming;
-        let left = self
-            .forming
-            .filter(|current| current.open_ms != bar.open_ms);
-        let closed_page = match left {
-            Some(current) => self.leave_forming_bar(current, forming.closed, page_bound),
-            None => None,
-        };
-        if self.live_from.is_none() {
-            self.live_from = Some(bar.open_ms);
-        }
-        // The forming bar's ticks come from the live re-reads, so a window read of it stops short of
-        // the broker's time and is dropped.
-        let from_window = self.ticks_by_bar.remove(&bar.open_ms).is_some();
-        let ticks_dropped = left.is_some() || from_window;
-        self.forming = Some(bar);
+        let change = self.begin_follow(forming);
+        let closed_page = change
+            .left
+            .and_then(|left| self.leave_forming_bar(left, forming.closed, page_bound));
         if let Some(page) = closed_page {
             return FormingStep {
                 page: Some(page),
-                ticks_dropped,
+                ticks_dropped: change.ticks_dropped,
             };
         }
-        if self.live.is_some() || self.next_forming_read_at.is_some_and(|at| now < at) {
+        if self.live.is_some() || !self.reread_due(now) {
             return FormingStep {
                 page: None,
-                ticks_dropped,
+                ticks_dropped: change.ticks_dropped,
             };
         }
         self.next_forming_read_at = Some(now + FORMING_REREAD_INTERVAL);
         FormingStep {
-            page: self.start_live_read(bar, false, page_bound),
-            ticks_dropped,
+            page: self.start_live_read(forming.forming, false, page_bound),
+            ticks_dropped: change.ticks_dropped,
         }
+    }
+
+    /// Marks `forming` as the bar the live reads follow after a quote: the bar the chart left behind,
+    /// the bars the live reads own from here on, and the forming bar's window ticks dropped, because a
+    /// window page of it stops before the broker's time.
+    fn begin_follow(&mut self, forming: FormingBars) -> FollowChange {
+        let bar = forming.forming;
+        let left = self
+            .forming
+            .filter(|current| current.open_ms != bar.open_ms);
+        if self.live_from.is_none() {
+            self.live_from = Some(bar.open_ms);
+        }
+        let from_window = self.ticks_by_bar.remove(&bar.open_ms).is_some();
+        self.forming = Some(bar);
+        FollowChange {
+            ticks_dropped: left.is_some() || from_window,
+            left,
+        }
+    }
+
+    /// Whether the forming bar may be re-read at `now`: the interval since the last re-read has passed.
+    fn reread_due(&self, now: Instant) -> bool {
+        !self.next_forming_read_at.is_some_and(|at| now < at)
     }
 
     /// Folds one answered live page in: a whole read replaces the bar's ticks, and the pages of a bar

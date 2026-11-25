@@ -10,7 +10,9 @@ use rust_decimal::Decimal;
 use std::collections::BTreeMap;
 use std::time::Instant;
 use trading_core::footprint::{FootprintTick, TICK_FLAG_BUY, TICK_FLAG_SELL};
-use trading_core::protocol::MarketTick;
+use trading_core::protocol::{
+    FootprintCarry, FootprintLevel, FootprintSide, MarketTick, TickFootprintHistorySnapshot,
+};
 
 const SESSION: &str = "session-1";
 const SYMBOL: &str = "NAS100";
@@ -539,4 +541,463 @@ fn a_live_reread_waits_for_the_window_page_holding_the_one_tick_slot() {
     let live_page = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
         .expect("the live re-read goes out once the window page is answered");
     assert_eq!(live_page.request.key, CHART_FOOTPRINT_LIVE_KEY);
+}
+
+/// The connected EA negotiated the counted pages: footprints then read per-price totals.
+fn negotiate_footprint_counts(state: &BridgeState) {
+    *state.tick_footprint_counts.lock().unwrap() = true;
+}
+
+/// The broker's clock, so a read of the newest bar reaches past its opening millisecond.
+fn broker_time(state: &BridgeState, server_time_ms: i64) {
+    state.status.lock().unwrap().market_session = Some(MarketSessionView {
+        symbol: SYMBOL.into(),
+        is_open: true,
+        trade_mode: 4,
+        server_time_ms,
+    });
+}
+
+/// Claims the page the read queued and takes it out of the awaited slots, as the wire would.
+fn claim_page(state: &BridgeState) -> IndicatorTicksRequest {
+    let claimed = claim_next_tick_request(state, &state.next_request_id, Instant::now())
+        .expect("the read queued a page");
+    ticks_slots(state)
+        .take_awaited(&claimed.request_id)
+        .expect("the claimed page is awaited")
+}
+
+/// One counted page of a footprint read: `levels` as `(price, buy, sell)` texts, every level counted as
+/// the whole trades its sides name, and no tick-rule carry.
+fn counts_page(
+    from_ms: i64,
+    to_ms: i64,
+    complete: bool,
+    through_ms: i64,
+    levels: &[(&str, &str, &str)],
+) -> TickFootprintHistorySnapshot {
+    let levels: Vec<FootprintLevel> = levels
+        .iter()
+        .map(|(price, buy, sell)| FootprintLevel {
+            price: (*price).into(),
+            buy: (*buy).into(),
+            sell: (*sell).into(),
+        })
+        .collect();
+    // An unweighted page counts one trade per unit of volume, so its sides' sums are its trade count.
+    let counted = levels
+        .iter()
+        .map(|level| {
+            let buy = level.buy.parse::<u32>().expect("a whole number of trades");
+            let sell = level.sell.parse::<u32>().expect("a whole number of trades");
+            buy + sell
+        })
+        .sum::<u32>();
+    TickFootprintHistorySnapshot {
+        request_id: "rust-indicator-ticks-1".into(),
+        symbol: SYMBOL.into(),
+        from_ms,
+        to_ms,
+        tick_size: "0.1".into(),
+        complete,
+        through_ms,
+        loaded_ticks: counted,
+        trade_ticks: counted,
+        carry: None,
+        levels,
+    }
+}
+
+/// The `tick_footprint_history_snapshot` frame the EA writes for `snapshot`.
+fn counts_envelope(snapshot: &TickFootprintHistorySnapshot) -> Envelope {
+    Envelope {
+        v: PROTOCOL_VERSION,
+        message_type: MessageType::TickFootprintHistorySnapshot,
+        id: snapshot.request_id.clone(),
+        session_id: Some(SESSION.into()),
+        sent_at_ms: 1,
+        payload: serde_json::to_value(snapshot).expect("a counts payload"),
+    }
+}
+
+#[test]
+fn a_counts_window_read_asks_for_the_newest_bar_s_counted_trades_first() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, _recorded) = chart_state(&window);
+    negotiate_footprint_counts(&state);
+
+    enable(&state);
+
+    let queued = claim_page(&state);
+    assert_eq!(queued.key, CHART_FOOTPRINT_KEY);
+    assert_eq!(queued.page.from_ms, MINUTE_MS, "the newest bar first");
+    assert_eq!(queued.page.to_ms, MINUTE_MS + 1);
+    let wire = serde_json::to_value(queued.wire_request()).expect("a wire payload");
+    assert_eq!(wire["footprint_counts"], true);
+    assert_eq!(
+        wire["real_volume"], false,
+        "the candle reports no real volume"
+    );
+    assert_eq!(wire["symbol"], SYMBOL);
+    let page_bound = state.transfer_limits.lock().unwrap().max_ticks_per_page;
+    assert_eq!(wire["max_ticks"], serde_json::json!(page_bound));
+}
+
+#[test]
+fn a_counts_page_publishes_its_bar_and_asks_for_the_bar_under_it() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    negotiate_footprint_counts(&state);
+    enable(&state);
+    claim_page(&state);
+
+    let answered = counts_page(
+        MINUTE_MS,
+        MINUTE_MS + 1,
+        true,
+        MINUTE_MS + 1,
+        &[("100", "2", "1")],
+    );
+    assert!(accept_footprint_counts_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_KEY,
+        &answered
+    ));
+
+    let published = recorded.named(CHART_FOOTPRINT_EVENT);
+    let event = published
+        .last()
+        .expect("the page publishes the bar it counted");
+    assert_eq!(bar_opens(event), vec![MINUTE_MS]);
+    assert_eq!(event["bars"][0]["rows"][0]["row"], 100);
+    assert_eq!(event["bars"][0]["rows"][0]["buyVolume"], "2");
+    assert_eq!(event["bars"][0]["rows"][0]["sellVolume"], "1");
+
+    let next = claim_page(&state);
+    assert_eq!(next.key, CHART_FOOTPRINT_KEY);
+    assert_eq!(
+        (next.page.from_ms, next.page.to_ms),
+        (0, MINUTE_MS),
+        "the bar under the one the page counted"
+    );
+}
+
+#[test]
+fn an_incomplete_counts_page_asks_for_the_rest_of_the_bar_with_its_carry() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    broker_time(&state, MINUTE_MS + 30_000);
+    negotiate_footprint_counts(&state);
+    enable(&state);
+    let first = claim_page(&state);
+    assert_eq!(
+        (first.page.from_ms, first.page.to_ms),
+        (MINUTE_MS, MINUTE_MS + 30_000)
+    );
+
+    let mut answered = counts_page(
+        MINUTE_MS,
+        MINUTE_MS + 30_000,
+        false,
+        MINUTE_MS + 10_000,
+        &[("100", "1", "0")],
+    );
+    answered.carry = Some(FootprintCarry {
+        price: "100".into(),
+        side: FootprintSide::Sell,
+    });
+    assert!(accept_footprint_counts_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_KEY,
+        &answered
+    ));
+
+    let rest = claim_page(&state);
+    assert_eq!(
+        (rest.page.from_ms, rest.page.to_ms),
+        (MINUTE_MS + 10_000, MINUTE_MS + 30_000),
+        "the rest of the bar, from the millisecond the page reached"
+    );
+    let wire = serde_json::to_value(rest.wire_request()).expect("a wire payload");
+    assert_eq!(
+        wire["carry"],
+        serde_json::json!({"price": "100", "side": "sell"})
+    );
+}
+
+/// Answers the window's counts read page by page, as the EA would: one page of two bought lots at the
+/// open of each bar it asked for, until the read asks for nothing more.
+fn read_counts_window(
+    state: &BridgeState,
+    events: &Arc<dyn BridgeEvents>,
+    window: &[MarketCandle],
+) {
+    let mut pages = 0;
+    while let Some(claimed) = claim_next_tick_request(state, &state.next_request_id, Instant::now())
+    {
+        pages += 1;
+        assert!(
+            pages <= window.len(),
+            "a counts window read asks for no more pages than its bars"
+        );
+        let request = ticks_slots(state)
+            .take_awaited(&claimed.request_id)
+            .expect("the claimed page is awaited");
+        assert_eq!(request.key, CHART_FOOTPRINT_KEY);
+        let answered = counts_page(
+            request.page.from_ms,
+            request.page.to_ms,
+            true,
+            request.page.to_ms,
+            &[("100", "2", "0")],
+        );
+        assert!(accept_footprint_counts_page(
+            state,
+            events,
+            CHART_FOOTPRINT_KEY,
+            &answered
+        ));
+    }
+}
+
+#[test]
+fn a_counts_forming_bar_is_read_whole_and_lands_complete_when_the_chart_moves_on() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    negotiate_footprint_counts(&state);
+    enable(&state);
+    read_counts_window(&state, &events, &window);
+    let windows_before = recorded.named(CHART_FOOTPRINT_EVENT).len();
+
+    // The quote makes the host read the forming bar from its open to the broker's time; the window's
+    // read of it stops at its opening millisecond, so the chart first hears that it has no footprint.
+    assert!(accept_quote(&events, &state, SESSION, chart_quote(MINUTE_MS)).is_some());
+    let live = claim_page(&state);
+    assert_eq!(live.key, CHART_FOOTPRINT_LIVE_KEY);
+    assert_eq!(
+        (live.page.from_ms, live.page.to_ms),
+        (MINUTE_MS, MINUTE_MS + 1)
+    );
+    let answered = counts_page(
+        MINUTE_MS,
+        MINUTE_MS + 1,
+        true,
+        MINUTE_MS + 1,
+        &[("100", "3", "2")],
+    );
+    assert!(accept_footprint_counts_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_LIVE_KEY,
+        &answered
+    ));
+
+    let forming = recorded.named(CHART_FOOTPRINT_FORMING_EVENT);
+    assert!(
+        forming[0]["bar"].is_null(),
+        "the window's read of the forming bar stops short of the broker's time"
+    );
+    let event = forming.last().expect("the whole read publishes the bar");
+    assert_eq!(event["bar"]["openMs"], MINUTE_MS);
+    assert_eq!(event["bar"]["buyVolume"], "3");
+    assert_eq!(event["bar"]["sellVolume"], "2");
+
+    // The chart gains a bar: the bar it left is read once more to that bar's own end, and lands
+    // complete in the window.
+    let newer = BarUpdate {
+        symbol: SYMBOL.into(),
+        timeframe: TIMEFRAME.into(),
+        candle: candle(2 * MINUTE_MS, "101"),
+    };
+    assert_eq!(
+        accept_bar_update(&state, SESSION, &newer),
+        BarUpdateAcceptance::Applied
+    );
+    assert!(accept_quote(&events, &state, SESSION, chart_quote(2 * MINUTE_MS)).is_some());
+    let closing = claim_page(&state);
+    assert_eq!(closing.key, CHART_FOOTPRINT_LIVE_KEY);
+    assert_eq!(
+        (closing.page.from_ms, closing.page.to_ms),
+        (MINUTE_MS, 2 * MINUTE_MS),
+        "the bar the chart left, to its own end"
+    );
+    let answered = counts_page(
+        MINUTE_MS,
+        2 * MINUTE_MS,
+        true,
+        2 * MINUTE_MS,
+        &[("100", "4", "1")],
+    );
+    assert!(accept_footprint_counts_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_LIVE_KEY,
+        &answered
+    ));
+
+    let published = recorded.named(CHART_FOOTPRINT_EVENT);
+    assert!(
+        published.len() > windows_before,
+        "the closed bar landing whole publishes the window again"
+    );
+    let event = published.last().expect("the window gained a complete bar");
+    assert_eq!(bar_opens(event), vec![0, MINUTE_MS]);
+    assert!(event["incomplete"]
+        .as_array()
+        .expect("the incomplete bars are a list")
+        .is_empty());
+}
+
+#[test]
+fn a_counts_page_that_makes_no_progress_marks_its_bar_incomplete() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    broker_time(&state, MINUTE_MS + 30_000);
+    negotiate_footprint_counts(&state);
+    enable(&state);
+    claim_page(&state);
+
+    // A page ending where it started certified no progress, and counts cannot be resumed inside a
+    // millisecond: the bar it belongs to keeps no ticks and its levels are dropped.
+    let stalled = counts_page(MINUTE_MS, MINUTE_MS + 30_000, false, MINUTE_MS, &[]);
+    assert!(accept_footprint_counts_page(
+        &state,
+        &events,
+        CHART_FOOTPRINT_KEY,
+        &stalled
+    ));
+
+    let published = recorded.named(CHART_FOOTPRINT_EVENT);
+    let event = published
+        .last()
+        .expect("the stopped read publishes its state");
+    assert!(
+        event["bars"]
+            .as_array()
+            .expect("the bars are a list")
+            .is_empty(),
+        "a bar no page took whole has no footprint"
+    );
+    assert_eq!(event["incompleteBefore"], MINUTE_MS);
+    assert_eq!(event["incomplete"], serde_json::json!([MINUTE_MS]));
+    assert!(
+        claim_next_tick_request(&state, &state.next_request_id, Instant::now()).is_none(),
+        "no page follows a stopped read"
+    );
+}
+
+#[test]
+fn a_chart_without_the_footprint_counts_capability_reads_raw_ticks() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, _recorded) = chart_state(&window);
+
+    enable(&state);
+
+    let queued = claim_page(&state);
+    assert_eq!(queued.key, CHART_FOOTPRINT_KEY);
+    assert!(
+        queued.footprint_counts.is_none(),
+        "an older EA keeps the raw page"
+    );
+    let wire = serde_json::to_value(queued.wire_request()).expect("a wire payload");
+    assert!(wire.get("footprint_counts").is_none());
+    assert!(wire.get("carry").is_none());
+    assert_eq!(wire["symbol"], SYMBOL);
+}
+
+#[test]
+fn a_counts_snapshot_under_a_stale_id_is_ignored_and_the_awaited_one_fills_the_bar() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    negotiate_footprint_counts(&state);
+    enable(&state);
+    let claimed = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the newest bar's page");
+    let adapter = ExecutionAdapterState::new(ExecutionSafetyState::unavailable());
+    let inbound = Inbound {
+        events: &events,
+        state: &state,
+        adapter: &adapter,
+        session_id: SESSION,
+    };
+    let mut answered = counts_page(
+        MINUTE_MS,
+        MINUTE_MS + 1,
+        true,
+        MINUTE_MS + 1,
+        &[("100", "2", "1")],
+    );
+
+    answered.request_id = "rust-indicator-ticks-stale".into();
+    assert!(matches!(
+        footprint_counts_snapshot(&inbound, counts_envelope(&answered)),
+        InboundOutcome::Continue
+    ));
+    assert!(
+        recorded.named(CHART_FOOTPRINT_EVENT).is_empty(),
+        "a stale id answers no read"
+    );
+
+    answered.request_id = claimed.request_id.clone();
+    assert!(matches!(
+        footprint_counts_snapshot(&inbound, counts_envelope(&answered)),
+        InboundOutcome::Continue
+    ));
+    assert_eq!(
+        recorded.named(CHART_FOOTPRINT_EVENT).len(),
+        1,
+        "the awaited page publishes the bar it counted"
+    );
+}
+
+#[test]
+fn a_counts_snapshot_that_does_not_answer_its_request_ends_the_read() {
+    let window = [candle(0, "100"), candle(MINUTE_MS, "100")];
+    let (state, recorded) = chart_state(&window);
+    let events: Arc<dyn BridgeEvents> = recorded.clone();
+    negotiate_footprint_counts(&state);
+    enable(&state);
+    let claimed = claim_next_tick_request(&state, &state.next_request_id, Instant::now())
+        .expect("the newest bar's page");
+    let adapter = ExecutionAdapterState::new(ExecutionSafetyState::unavailable());
+    let inbound = Inbound {
+        events: &events,
+        state: &state,
+        adapter: &adapter,
+        session_id: SESSION,
+    };
+
+    // The page's range is not the one the read asked for: it is handled like a correlated error, so
+    // the read it answers ends and asks for nothing more.
+    let mut foreign = counts_page(
+        MINUTE_MS + 1,
+        MINUTE_MS + 1,
+        true,
+        MINUTE_MS + 1,
+        &[("100", "2", "1")],
+    );
+    foreign.request_id = claimed.request_id.clone();
+    assert!(matches!(
+        footprint_counts_snapshot(&inbound, counts_envelope(&foreign)),
+        InboundOutcome::Continue
+    ));
+    assert!(
+        claim_next_tick_request(&state, &state.next_request_id, Instant::now()).is_none(),
+        "the read it ended asks for no more pages"
+    );
+    let published = recorded.named(CHART_FOOTPRINT_EVENT);
+    let event = published
+        .last()
+        .expect("the ended read publishes its state");
+    assert!(event["bars"]
+        .as_array()
+        .expect("the bars are a list")
+        .is_empty());
 }

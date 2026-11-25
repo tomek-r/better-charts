@@ -1,4 +1,5 @@
-use super::{level_ticks, BarSpan, CountsLive, CountsPage, CountsRead};
+use super::counts::level_ticks;
+use super::{BarSpan, CountsLive, CountsPage, CountsRead};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
 use trading_core::footprint::{FootprintTick, TickSide};

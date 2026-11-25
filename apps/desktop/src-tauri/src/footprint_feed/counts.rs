@@ -20,18 +20,22 @@
 //! one re-read and moves its end to the broker's time as the bar forms, so a whole re-read answers
 //! for the bar as far as it has formed.
 
-// The bridge that pages these reads arrives in a later change; until then only the tests read them,
-// which the lib target does not compile.
-#![cfg_attr(not(test), allow(dead_code))]
+// The bridge pages these reads whenever the connected EA negotiated `tick_footprint_counts`; the raw
+// tick path stays for the EAs that did not.
 
-use super::BarSpan;
+use super::{BarSpan, FootprintFeed, FormingBars, FormingStep, FORMING_REREAD_INTERVAL};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
+use std::time::Instant;
 use trading_core::footprint::{FootprintTick, TickSide};
 use trading_core::protocol::{
     FootprintCarry, FootprintLevel, TickFootprintHistoryRequest, TickFootprintHistorySnapshot,
     TickHistoryRequest,
 };
+
+/// Pages one counted window read may ask for: a bar costs one page, and a bar holding more trades than
+/// a page costs the pages its trades need, so even a dense window of a thousand bars fits.
+const MAX_COUNTS_PAGES: usize = 2048;
 
 /// A counts page counts the trades per price instead of carrying the raw ticks: the flag that makes
 /// the peer answer with `tick_footprint_history_snapshot`, and the only page this read understands.
@@ -222,6 +226,16 @@ impl CountsLive {
         self.counts.ticks()
     }
 
+    /// The bar this read is of, with the end it reaches.
+    pub(crate) fn span(&self) -> BarSpan {
+        self.counts.span
+    }
+
+    /// Whether this read finishes the bar the chart left instead of following the forming one.
+    pub(crate) fn closing(&self) -> bool {
+        self.closing
+    }
+
     /// Whether the read answered for the bar as the chart left it: a closing read whose last page
     /// reached the bar's end complete.
     pub(crate) fn is_whole(&self) -> bool {
@@ -376,4 +390,202 @@ fn counted_level(level: &FootprintLevel) -> Option<(Decimal, Decimal, Decimal)> 
     let buy = level.buy.parse::<Decimal>().ok()?;
     let sell = level.sell.parse::<Decimal>().ok()?;
     Some((price, buy, sell))
+}
+
+/// What one answered counts page left to do.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CountsOutcome {
+    /// The page to ask the EA for next.
+    Next(CountsPage),
+    /// The read is covered, spent or stopped: the observer hears the ticks.
+    Finished,
+    /// The read was dropped before this page arrived, because the chart changed.
+    Idle,
+}
+
+impl FootprintFeed {
+    /// Replaces the feed with a counts read of `bars` and answers the page to ask for first.
+    pub(crate) fn start_counts(&mut self, bars: Vec<BarSpan>) -> Option<CountsPage> {
+        *self = Self::default();
+        self.bars = bars.clone();
+        self.counts_read = CountsRead::new(bars, MAX_COUNTS_PAGES);
+        self.read_started = Some(Instant::now());
+        let page = self.counts_read.as_mut()?.next_page();
+        self.note_counts_page(page)
+    }
+
+    /// Folds one answered page of the counts window read in, handing the bars it took whole to the feed
+    /// as it goes: the observer and the chart see them before the read ends, and a bar the read has not
+    /// reached names no state at all.
+    pub(crate) fn accept_counts_page(
+        &mut self,
+        answer: &TickFootprintHistorySnapshot,
+    ) -> CountsOutcome {
+        let Some(read) = self.counts_read.as_mut() else {
+            return CountsOutcome::Idle;
+        };
+        read.accept(answer);
+        let next_page = read.next_page();
+        let whole = read.take_whole_bars();
+        self.read_pages += 1;
+        self.read_page_ticks = self
+            .read_page_ticks
+            .saturating_add(usize::try_from(answer.loaded_ticks).unwrap_or(usize::MAX));
+        self.keep_read_bars(whole);
+        match next_page {
+            Some(page) => match self.note_counts_page(Some(page)) {
+                Some(page) => CountsOutcome::Next(page),
+                None => CountsOutcome::Finished,
+            },
+            None => {
+                self.finish_counts_read();
+                CountsOutcome::Finished
+            }
+        }
+    }
+
+    /// Ends the counts window read where it stands and drops the bar it stopped inside, which keeps no
+    /// ticks and so reads `na`; the bars the live reads own are left to them.
+    pub(crate) fn finish_counts_read(&mut self) {
+        let Some(mut read) = self.counts_read.take() else {
+            return;
+        };
+        let stopped_in = read.stopped_in();
+        let whole = read.take_whole_bars();
+        self.keep_read_bars(whole);
+        let Some(open_ms) = stopped_in.filter(|open_ms| !self.follow_owns(*open_ms)) else {
+            return;
+        };
+        self.drop_partial_bar(open_ms);
+    }
+
+    /// Follows the chart's forming bar in counts mode after an accepted quote at `now`: the bar's first
+    /// read, then at most one per [`FORMING_REREAD_INTERVAL`], each asking only for the trades the bar
+    /// gained since the one before. A bar the chart has left behind is read once more to its own end,
+    /// which is what makes it whole.
+    pub(crate) fn follow_forming_bar_counts(
+        &mut self,
+        forming: FormingBars,
+        now: Instant,
+    ) -> FormingStep<CountsPage> {
+        if self.bars.is_empty() {
+            return FormingStep::NOTHING;
+        }
+        let change = self.begin_follow(forming);
+        let closed_page = change
+            .left
+            .and_then(|left| self.leave_forming_bar_counts(left, forming.closed));
+        if let Some(page) = closed_page {
+            return FormingStep {
+                page: Some(page),
+                ticks_dropped: change.ticks_dropped,
+            };
+        }
+        if self.counts_live_awaited || !self.reread_due(now) {
+            return FormingStep {
+                page: None,
+                ticks_dropped: change.ticks_dropped,
+            };
+        }
+        self.next_forming_read_at = Some(now + FORMING_REREAD_INTERVAL);
+        FormingStep {
+            page: self.start_counts_live_read(forming.forming, false),
+            ticks_dropped: change.ticks_dropped,
+        }
+    }
+
+    /// Folds one answered page of the forming bar's counts read in: its levels grow with every page, and
+    /// a read that reached its end answers for the bar as far as it has formed.
+    pub(crate) fn accept_counts_live_page(
+        &mut self,
+        answer: &TickFootprintHistorySnapshot,
+    ) -> CountsOutcome {
+        let Some(live) = self.counts_live.as_mut() else {
+            return CountsOutcome::Idle;
+        };
+        live.accept(answer);
+        let next_page = live.next_page();
+        self.counts_live_awaited = next_page.is_some();
+        match next_page {
+            Some(page) => CountsOutcome::Next(page),
+            None => {
+                self.finish_counts_live_read();
+                CountsOutcome::Finished
+            }
+        }
+    }
+
+    /// Ends the counts read of the forming bar where it stands, because the EA could not answer it: the
+    /// forming bar loses the trades this read had counted and reads `na` until a whole re-read lands,
+    /// and the bar the chart left keeps no ticks. Answers whether ticks left the readable set, so the
+    /// observer recomputes at once.
+    pub(crate) fn abandon_counts_live_read(&mut self) -> bool {
+        self.counts_live_awaited = false;
+        let Some(live) = self.counts_live.take() else {
+            return false;
+        };
+        let open_ms = live.span().open_ms;
+        if live.closing() {
+            return self.drop_partial_bar(open_ms);
+        }
+        self.forming_ticks = None;
+        true
+    }
+
+    /// Notes the counts page the read just asked for, so the timing lines cover one bar and the time it
+    /// takes the EA to answer it.
+    fn note_counts_page(&mut self, page: Option<CountsPage>) -> Option<CountsPage> {
+        self.page_bars = usize::from(page.is_some());
+        self.page_queued = page.is_some().then(Instant::now);
+        page
+    }
+
+    /// Asks for the page a forming-bar counts re-read needs. The read keeps the levels it has counted
+    /// and its end moves to the broker's time, so a later re-read asks only for the trades the bar
+    /// gained; `closing` starts the read of the bar the chart left.
+    fn start_counts_live_read(&mut self, span: BarSpan, closing: bool) -> Option<CountsPage> {
+        if self.counts_live.is_none() {
+            self.counts_live = Some(CountsLive::new(span, closing));
+        }
+        let live = self.counts_live.as_mut()?;
+        live.set_end(span.end_ms);
+        let page = live.next_page();
+        self.counts_live_awaited = page.is_some();
+        page
+    }
+
+    /// Keeps what a counts live read answered for its bar: the bar the chart left, once the read
+    /// reached its end — which is what makes it whole — or the forming bar's counted trades as of this
+    /// read. A forming read stays for the next re-read, which asks only for the trades it gained.
+    fn finish_counts_live_read(&mut self) {
+        let Some(live) = self.counts_live.as_ref() else {
+            return;
+        };
+        let span = live.span();
+        let ticks = live.ticks();
+        if live.is_whole() {
+            self.counts_live = None;
+            self.keep_complete_bar(span.open_ms, ticks);
+            return;
+        }
+        self.incomplete.retain(|bar| *bar != span.open_ms);
+        self.forming_ticks = Some(ticks);
+    }
+
+    /// The chart left its forming bar: its counts read ends, its window ticks go, and the bar is read
+    /// once more to its own end when the window holds it as the bar before the new one.
+    fn leave_forming_bar_counts(
+        &mut self,
+        left: BarSpan,
+        closed: Option<BarSpan>,
+    ) -> Option<CountsPage> {
+        self.next_forming_read_at = None;
+        self.counts_live = None;
+        self.counts_live_awaited = false;
+        self.ticks_by_bar.remove(&left.open_ms);
+        let closed = closed.filter(|closed| closed.open_ms == left.open_ms);
+        let page = closed.and_then(|closed| self.start_counts_live_read(closed, true));
+        self.forming_ticks = None;
+        page
+    }
 }

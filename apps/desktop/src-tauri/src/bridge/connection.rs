@@ -9,12 +9,13 @@
 
 use super::{
     account_snapshot, bar_update, disconnect, end_current_session, expire_awaited_ticks,
-    flush_outbound, heartbeat, history_snapshot, order_check_error, order_check_result,
-    order_command_error, order_command_update, portfolio_snapshot, protocol_error,
-    protocol_error_session, publish, quote_update, read_one, reconcile_error, reconcile_snapshot,
-    risk_quote_error, risk_quote_result, run_handshake, send_error, symbol_info, symbol_search,
-    tauri_events, tick_history, tick_history_error, tick_price_history, BridgeConnectionState,
-    BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource, HEARTBEAT_TIMEOUT,
+    flush_outbound, footprint_counts_snapshot, heartbeat, history_snapshot, order_check_error,
+    order_check_result, order_command_error, order_command_update, portfolio_snapshot,
+    protocol_error, protocol_error_session, publish, quote_update, read_one, reconcile_error,
+    reconcile_snapshot, risk_quote_error, risk_quote_result, run_handshake, send_error,
+    symbol_info, symbol_search, tauri_events, tick_history, tick_history_error, tick_price_history,
+    BridgeConnectionState, BridgeEvents, BridgeState, ExecutionAdapterState, FrameSource,
+    HEARTBEAT_TIMEOUT,
 };
 use crate::bridge::endpoint::BridgeEndpoint;
 use std::{net::SocketAddr, sync::Arc};
@@ -186,6 +187,9 @@ pub(crate) async fn handle_connection(
             MessageType::SymbolSearchResult => symbol_search(&inbound, message).await,
             MessageType::TickHistorySnapshot => tick_history(&inbound, message).await,
             MessageType::TickPriceHistorySnapshot => tick_price_history(&inbound, message).await,
+            MessageType::TickFootprintHistorySnapshot => {
+                footprint_counts_snapshot(&inbound, message)
+            }
             MessageType::Error => tick_history_error(&inbound, message).await,
             // `heartbeat_ack` has no side effect beyond its parse, and the
             // original arm continued on both outcomes.

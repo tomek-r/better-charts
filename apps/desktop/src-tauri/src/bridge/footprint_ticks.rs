@@ -1,6 +1,6 @@
-//! The trades the chart's bars hold: the chart symbol's raw ticks, read over the indicator ticks
-//! route under reserved keys whose answers never reach the frontend (see
-//! `docs/protocol/bridge-v1.md`, "Indicator ticks").
+//! The trades the chart's bars hold: the chart symbol's ticks, read over the indicator ticks route
+//! under reserved keys whose answers never reach the frontend (see `docs/protocol/bridge-v1.md`,
+//! "Indicator ticks").
 //!
 //! A footprint counts the trades inside each bar, which the chart's bars do not carry. The host reads
 //! the loaded window's ticks newest bar first, groups them by the bar they fall in and keeps every bar
@@ -11,6 +11,11 @@
 //! page a second instead of its whole tick history. A bar is either read whole or not at all: a bar a
 //! read stopped inside keeps no ticks and reads as no trades. A new session or another chart symbol
 //! drops both reads with the requests that fill them.
+//!
+//! Once the handshake negotiated `tick_footprint_counts`, the same two reads ask for MT5's counted
+//! pages instead of the raw ticks: one request per bar, or per rest of a bar, whose per-price totals
+//! become the bar's ticks. A peer without the capability keeps the raw path above unchanged; the keys,
+//! the events, the timing lines and the observer hear the same thing either way.
 //!
 //! The chart footprint publishes over the same reads: the loaded window's complete bars after each
 //! answered page — so the newest bars reach the chart after the first page instead of after the whole
@@ -30,13 +35,14 @@ use super::{
     TickHistorySnapshot,
 };
 use crate::chart_footprint;
+use crate::chart_footprint::events::FootprintChart;
 use crate::footprint_feed::{
-    footprint_window, forming_bars, FootprintFeed, FormingBars, PageAnswer, PageOutcome,
-    ReadTiming, TickPage,
+    footprint_window, forming_bars, BarSpan, CountsOutcome, CountsPage, FootprintFeed, FormingBars,
+    PageAnswer, PageOutcome, ReadTiming, TickPage,
 };
 use std::sync::{Arc, MutexGuard};
 use std::time::Instant;
-use trading_core::protocol::{MarketCandle, MarketTick};
+use trading_core::protocol::{MarketCandle, MarketTick, TickFootprintHistorySnapshot};
 use trading_core::volume_profile::TICK_FLAG_BID;
 
 /// The key the host's window footprint read is routed under. The frontend never asks for it, and an
@@ -58,14 +64,40 @@ pub(crate) fn footprint_needed(state: &BridgeState) -> bool {
         .is_some_and(|observer| observer.needs_ticks())
 }
 
+/// Whether the EA answers footprint reads with its counted pages: the capability both peers
+/// negotiated in the handshake.
+fn reads_footprint_counts(state: &BridgeState) -> bool {
+    *state
+        .tick_footprint_counts
+        .lock()
+        .expect("footprint capability mutex poisoned")
+}
+
 /// Replaces the feed with a read of `candles`' window of `symbol` and queues its first page.
 pub(crate) fn start_footprint_read(state: &BridgeState, symbol: &str, candles: &[MarketCandle]) {
-    let page_bound = page_bound(state);
     let bars = footprint_window(candles, read_end_ms(state));
+    if reads_footprint_counts(state) {
+        start_counts_read(state, symbol, bars);
+    } else {
+        start_ticks_read(state, symbol, bars);
+    }
+}
+
+/// Queues the first page of the raw window read.
+fn start_ticks_read(state: &BridgeState, symbol: &str, bars: Vec<BarSpan>) {
+    let page_bound = page_bound(state);
     let Some(page) = footprint_feed(state).start(bars, page_bound) else {
         return;
     };
     queue_footprint_page(state, CHART_FOOTPRINT_KEY, symbol, page, page_bound);
+}
+
+/// Queues the first page of the counted window read.
+fn start_counts_read(state: &BridgeState, symbol: &str, bars: Vec<BarSpan>) {
+    let Some(page) = footprint_feed(state).start_counts(bars) else {
+        return;
+    };
+    queue_counts_page(state, CHART_FOOTPRINT_KEY, symbol, page);
 }
 
 /// Re-reads the forming bar's ticks after an accepted quote of the chart symbol: to the broker's time,
@@ -76,25 +108,62 @@ pub(crate) fn follow_footprint_quote(state: &BridgeState, events: &Arc<dyn Bridg
     if !footprint_needed(state) {
         return;
     }
-    let page_bound = page_bound(state);
+    let counts = reads_footprint_counts(state);
     let Some((symbol, forming)) = chart_forming_bars(state) else {
         return;
     };
     // Read out before the feed's lock, so the two are never held together.
     let chart = chart_footprint::footprint_chart(state);
-    let mut feed = footprint_feed(state);
-    let step = feed.follow_forming_bar(forming, Instant::now(), page_bound);
-    if step.ticks_dropped {
-        notify_observer(state, &feed);
-        // The forming bar's ticks left the readable set, so the chart hears that it has no footprint
-        // until a whole re-read lands.
-        chart_footprint::publish_forming(state, events, &feed, chart.as_ref());
+    if counts {
+        follow_counts_quote(state, events, &symbol, forming, chart.as_ref());
+    } else {
+        follow_ticks_quote(state, events, &symbol, forming, chart.as_ref());
     }
-    drop(feed);
+}
+
+/// Queues the page a raw re-read of the forming bar asks for.
+fn follow_ticks_quote(
+    state: &BridgeState,
+    events: &Arc<dyn BridgeEvents>,
+    symbol: &str,
+    forming: FormingBars,
+    chart: Option<&FootprintChart>,
+) {
+    let page_bound = page_bound(state);
+    let step = {
+        let mut feed = footprint_feed(state);
+        let step = feed.follow_forming_bar(forming, Instant::now(), page_bound);
+        if step.ticks_dropped {
+            publish_forming_ticks(state, events, &feed, chart, false);
+        }
+        step
+    };
     let Some(page) = step.page else {
         return;
     };
-    queue_footprint_page(state, CHART_FOOTPRINT_LIVE_KEY, &symbol, page, page_bound);
+    queue_footprint_page(state, CHART_FOOTPRINT_LIVE_KEY, symbol, page, page_bound);
+}
+
+/// Queues the page a counted re-read of the forming bar asks for.
+fn follow_counts_quote(
+    state: &BridgeState,
+    events: &Arc<dyn BridgeEvents>,
+    symbol: &str,
+    forming: FormingBars,
+    chart: Option<&FootprintChart>,
+) {
+    let step = {
+        let mut feed = footprint_feed(state);
+        let step = feed.follow_forming_bar_counts(forming, Instant::now());
+        if step.ticks_dropped {
+            publish_forming_ticks(state, events, &feed, chart, false);
+        }
+        step
+    };
+    let Some(page) = step.page else {
+        return;
+    };
+    queue_counts_page(state, CHART_FOOTPRINT_LIVE_KEY, symbol, page);
 }
 
 /// Folds one answered page of the host's own reads in and answers whether `key` is one of them; a key
@@ -116,6 +185,25 @@ pub(crate) fn accept_footprint_page(
     false
 }
 
+/// Folds one answered counted page of the host's own reads in and answers whether `key` is one of
+/// them; a key that is not names no read the host asked for.
+pub(crate) fn accept_footprint_counts_page(
+    state: &BridgeState,
+    events: &Arc<dyn BridgeEvents>,
+    key: &str,
+    snapshot: &TickFootprintHistorySnapshot,
+) -> bool {
+    if key == CHART_FOOTPRINT_KEY {
+        accept_counts_window_page(state, events, snapshot);
+        return true;
+    }
+    if key == CHART_FOOTPRINT_LIVE_KEY {
+        accept_counts_live_page(state, events, snapshot);
+        return true;
+    }
+    false
+}
+
 /// Ends one of the host's own reads where it stands, because the EA could not answer it, and answers
 /// whether `key` is one of them. The bars a read took whole keep their footprints; a bar it stopped
 /// inside reads as no trades, and the chart footprint publishes the window again so the chart says so.
@@ -128,26 +216,65 @@ pub(crate) fn abandon_footprint_read(
     if !live && key != CHART_FOOTPRINT_KEY {
         return false;
     }
+    let counts = reads_footprint_counts(state);
     let chart = chart_footprint::footprint_chart(state);
     let mut feed = footprint_feed(state);
     if live {
         // A live read that ends here can leave the forming bar without whole ticks, which whoever
         // reads them hears at once.
-        if feed.abandon_live_read() {
-            notify_observer(state, &feed);
-            chart_footprint::publish_forming(state, events, &feed, chart.as_ref());
+        let dropped = if counts {
+            feed.abandon_counts_live_read()
+        } else {
+            feed.abandon_live_read()
+        };
+        if dropped {
+            publish_forming_ticks(state, events, &feed, chart.as_ref(), false);
         }
         return true;
     }
-    feed.finish_read();
-    notify_observer(state, &feed);
-    chart_footprint::publish_window(state, events, &feed, chart.as_ref());
+    if counts {
+        feed.finish_counts_read();
+    } else {
+        feed.finish_read();
+    }
+    publish_window_read(state, events, &feed, chart.as_ref(), true);
     true
 }
 
 /// Forgets both reads: another session or chart symbol computes from here.
 pub(crate) fn drop_footprint_feed(state: &BridgeState) {
     footprint_feed(state).clear();
+}
+
+/// Hands the bars the window read has taken whole so far to the chart footprint — and the whole set to
+/// the observer once the read is over — whichever kind of page filled them.
+fn publish_window_read(
+    state: &BridgeState,
+    events: &Arc<dyn BridgeEvents>,
+    feed: &FootprintFeed,
+    chart: Option<&FootprintChart>,
+    finished: bool,
+) {
+    if finished {
+        notify_observer(state, feed);
+    }
+    chart_footprint::publish_window(state, events, feed, chart);
+}
+
+/// Hands the forming bar's ticks to the observer and to the chart footprint, and the window again when
+/// the bar the chart left landed complete, whichever kind of page filled them.
+fn publish_forming_ticks(
+    state: &BridgeState,
+    events: &Arc<dyn BridgeEvents>,
+    feed: &FootprintFeed,
+    chart: Option<&FootprintChart>,
+    closed_bar_landed: bool,
+) {
+    notify_observer(state, feed);
+    chart_footprint::publish_forming(state, events, feed, chart);
+    if closed_bar_landed {
+        chart_footprint::publish_window(state, events, feed, chart);
+    }
 }
 
 /// Folds one answered page of the window read in, asks for the next, and hands the ticks on once the
@@ -169,17 +296,43 @@ fn accept_window_page(
     match feed.accept_page(answer(snapshot), page_bound) {
         PageOutcome::Next(page) => {
             log_window_page(symbol, &timing, snapshot, mt5_tick_volume);
-            chart_footprint::publish_window(state, events, &feed, chart.as_ref());
+            publish_window_read(state, events, &feed, chart.as_ref(), false);
             drop(feed);
             queue_footprint_page(state, CHART_FOOTPRINT_KEY, symbol, page, page_bound);
         }
         PageOutcome::Finished => {
             log_window_page(symbol, &timing, snapshot, mt5_tick_volume);
             log_finished_window(symbol, &timing, snapshot, feed.complete_bar_count());
-            notify_observer(state, &feed);
-            chart_footprint::publish_window(state, events, &feed, chart.as_ref());
+            publish_window_read(state, events, &feed, chart.as_ref(), true);
         }
         PageOutcome::Idle => {}
+    }
+}
+
+/// Folds one answered counted page of the window read in, asks for the next, and hands the ticks on
+/// exactly as the raw pages do: every page publishes the bars the read has taken whole so far.
+fn accept_counts_window_page(
+    state: &BridgeState,
+    events: &Arc<dyn BridgeEvents>,
+    snapshot: &TickFootprintHistorySnapshot,
+) {
+    let symbol = snapshot.symbol.as_str();
+    // Read out before the feed's lock, so the two are never held together.
+    let chart = chart_footprint::footprint_chart(state);
+    let mut feed = footprint_feed(state);
+    let timing = feed.read_timing();
+    match feed.accept_counts_page(snapshot) {
+        CountsOutcome::Next(page) => {
+            log_counts_page(symbol, &timing, snapshot);
+            publish_window_read(state, events, &feed, chart.as_ref(), false);
+            drop(feed);
+            queue_counts_page(state, CHART_FOOTPRINT_KEY, symbol, page);
+        }
+        CountsOutcome::Finished => {
+            log_counts_page(symbol, &timing, snapshot);
+            publish_window_read(state, events, &feed, chart.as_ref(), true);
+        }
+        CountsOutcome::Idle => {}
     }
 }
 
@@ -203,6 +356,21 @@ fn log_window_page(
         elapsed_ms(timing.page_queued),
         bid_changes(&snapshot.ticks),
         mt5_tick_volume,
+    ));
+}
+
+/// Logs one answered counted page: the range it counted, the records it read behind the counted
+/// trades, whether it reached the range's end and the milliseconds it took the EA to answer it.
+fn log_counts_page(symbol: &str, timing: &ReadTiming, snapshot: &TickFootprintHistorySnapshot) {
+    log_info(&format!(
+        "footprint counts {symbol} page {}..{} bars={} ticks={} trades={} complete={} waited_ms={}",
+        snapshot.from_ms,
+        snapshot.to_ms,
+        timing.page_bars,
+        snapshot.loaded_ticks,
+        snapshot.trade_ticks,
+        snapshot.complete,
+        elapsed_ms(timing.page_queued),
     ));
 }
 
@@ -256,13 +424,33 @@ fn accept_live_page(
             queue_footprint_page(state, CHART_FOOTPRINT_LIVE_KEY, symbol, page, page_bound);
         }
         PageOutcome::Finished => {
-            notify_observer(state, &feed);
-            chart_footprint::publish_forming(state, events, &feed, chart.as_ref());
-            if feed.complete_bar_count() > complete_before {
-                chart_footprint::publish_window(state, events, &feed, chart.as_ref());
-            }
+            let landed = feed.complete_bar_count() > complete_before;
+            publish_forming_ticks(state, events, &feed, chart.as_ref(), landed);
         }
         PageOutcome::Idle => {}
+    }
+}
+
+/// Folds one answered counted page of the forming bar's read in, exactly as the raw live pages do.
+fn accept_counts_live_page(
+    state: &BridgeState,
+    events: &Arc<dyn BridgeEvents>,
+    snapshot: &TickFootprintHistorySnapshot,
+) {
+    let symbol = snapshot.symbol.as_str();
+    let chart = chart_footprint::footprint_chart(state);
+    let mut feed = footprint_feed(state);
+    let complete_before = feed.complete_bar_count();
+    match feed.accept_counts_live_page(snapshot) {
+        CountsOutcome::Next(page) => {
+            drop(feed);
+            queue_counts_page(state, CHART_FOOTPRINT_LIVE_KEY, symbol, page);
+        }
+        CountsOutcome::Finished => {
+            let landed = feed.complete_bar_count() > complete_before;
+            publish_forming_ticks(state, events, &feed, chart.as_ref(), landed);
+        }
+        CountsOutcome::Idle => {}
     }
 }
 
@@ -311,6 +499,23 @@ fn queue_footprint_page(
         Err(error) => log_warn(&format!(
             "footprint ticks {symbol} {}..{} were not asked for: {error}",
             page.from_ms, page.to_ms
+        )),
+    }
+}
+
+/// Queues one counted page of a reserved read on the indicator ticks route.
+fn queue_counts_page(state: &BridgeState, key: &str, symbol: &str, page: CountsPage) {
+    let page_bound = page_bound(state);
+    let request = IndicatorTicksRequest::build_footprint_counts(
+        key.to_owned(),
+        page.request(symbol, page_bound),
+        page_bound,
+    );
+    match request {
+        Ok(request) => queue_indicator_ticks(state, request),
+        Err(error) => log_warn(&format!(
+            "footprint counts {symbol} bar {} {}..{} were not asked for: {error}",
+            page.open_ms, page.from_ms, page.to_ms
         )),
     }
 }

@@ -324,7 +324,9 @@ decimal strings, the way the wire carries them, and each row also carries its bu
 trade counts, and each bar its totals. The reads reuse the indicator-ticks route under the
 reserved keys `chart-footprint` and `chart-footprint-live`, so a connected EA needs no
 change. Nothing is published while the footprint is off, and a chart that has not asked for
-one reads no tick.
+one reads no tick. When the EA negotiates `tick_footprint_counts`, both reads ask for MT5's
+counted pages (per-price totals) instead of the raw ticks; an EA that does not keeps the
+raw tick path unchanged.
 
 The `Volume footprint` bar style draws these rows. Its Symbol settings choose the row size
 (Auto with an ATR length, or Manual ticks per row), the display (Cluster, or Profile with

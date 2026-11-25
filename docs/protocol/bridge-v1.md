@@ -1307,6 +1307,16 @@ while still asking their own `max_ticks`. The learned count only shrinks, so a
 page that comes up short again lowers it further and the plans narrow until one
 fits, and a page planned from bars keeps its own halving.
 
+When both peers negotiated `tick_footprint_counts:true`, these same two reads ask
+for MT5's counted pages ("Footprint counts" above) instead: each request carries
+`footprint_counts:true`, the bar's `real_volume` rule and the `carry` its last
+page returned, one page covering one bar or the rest of it, and the answer's
+per-price levels become the bar's ticks, so a bar costs one page per page of its
+trades rather than a page per slice of its raw ticks. A peer without the
+capability keeps the raw tick pages described here unchanged, and the keys, the
+events, the `incomplete` rules and the timing lines are otherwise the same, a
+counted page's line naming `trades=` instead of `bid_changes=`.
+
 Every answered window page and every finished window read prints one timing line
 to the desktop's stderr with the bars and ticks it covered and its milliseconds —
 since the page was queued for a page, since the read started for the finished

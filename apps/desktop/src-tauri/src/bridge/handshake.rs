@@ -233,6 +233,10 @@ pub(crate) async fn run_handshake(
         .lock()
         .expect("tick capability mutex poisoned") = hello_payload.tick_price_counts;
     *state
+        .tick_footprint_counts
+        .lock()
+        .expect("footprint capability mutex poisoned") = hello_payload.tick_footprint_counts;
+    *state
         .transfer_limits
         .lock()
         .expect("transfer limits mutex poisoned") = transfer_limits;
@@ -353,8 +357,9 @@ pub(crate) async fn run_handshake(
             tick_price_counts: hello_payload.tick_price_counts,
             partial_close: hello_payload.partial_close,
             other_symbol_series: hello_payload.other_symbol_series,
-            // The host reads footprints from raw ticks until it can ask for footprint counts.
-            tick_footprint_counts: false,
+            // Acked as offered: the host reads footprints from counted pages exactly when the EA
+            // reports it can serve them.
+            tick_footprint_counts: hello_payload.tick_footprint_counts,
         },
     )
     .await

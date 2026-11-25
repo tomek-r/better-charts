@@ -105,6 +105,7 @@ impl BridgeState {
             session_work: Arc::new(Mutex::new(())),
             transfer_limits: Arc::new(Mutex::new(Default::default())),
             tick_price_counts: Arc::new(Mutex::new(false)),
+            tick_footprint_counts: Arc::new(Mutex::new(false)),
             market: Arc::new(Mutex::new(MarketSnapshot::default())),
             footprint_feed: Arc::new(Mutex::new(FootprintFeed::default())),
             chart_footprint: Arc::new(Mutex::new(
