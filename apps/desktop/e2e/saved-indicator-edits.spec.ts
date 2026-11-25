@@ -14,6 +14,7 @@ import {
   withIndicatorMoved,
   withIndicatorPaneHeights,
   withIndicatorSettings,
+  withPricePaneOrder,
   withoutIndicator,
 } from '../src/features/indicators/savedIndicatorEdits';
 import { objectTreeIndicatorPanes } from '../src/features/object-tree/objectTreeIndicatorEntries';
@@ -128,6 +129,29 @@ test('a dragged pane height lands on its own entry and keeps everything else it 
   );
 
   expect(resized).toEqual([{ ...SAVED_LIMITED_RSI, paneHeight: DRAGGED_RSI_PANE_HEIGHT }, SAVED_SMA_9]);
+});
+
+test('a price-pane order takes its entries in the rows order and flags the ones under the bars', () => {
+  const ordered = withPricePaneOrder([SAVED_SMA_9, SAVED_SMA_21], ['sma-2', 'sma-1'], 1);
+
+  expect(ordered).toEqual([SAVED_SMA_21, { ...SAVED_SMA_9, belowBars: true }]);
+});
+
+test('a price-pane order flags every entry under the bars and leaves the panes below theirs', () => {
+  const ordered = withPricePaneOrder([SAVED_SMA_9, SAVED_RSI], ['sma-1'], 0);
+
+  expect(ordered).toEqual([{ ...SAVED_SMA_9, belowBars: true }, SAVED_RSI]);
+});
+
+test('a price-pane order that names no saved entry leaves every entry where it is', () => {
+  expect(withPricePaneOrder([SAVED_SMA_9], ['ghost-2'], 0)).toEqual([SAVED_SMA_9]);
+});
+
+test('sameSavedIndicators tells two entries apart by their side of the price bars', () => {
+  const underBars: SavedIndicator = { ...SAVED_SMA_9, belowBars: true };
+
+  expect(sameSavedIndicators([SAVED_SMA_9], [underBars])).toBe(false);
+  expect(sameSavedIndicators([underBars], [underBars])).toBe(true);
 });
 
 test('readSavedIndicators keeps a limited visibility and drops a default or unreadable one', () => {

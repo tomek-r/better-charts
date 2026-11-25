@@ -9,7 +9,7 @@ export interface ObjectTreeIndicator {
 
 /** The rows of the object tree, grouped the way the chart stacks its panes. */
 export interface ObjectTreeIndicatorPanes {
-  /** The price pane's rows, which sit under the drawings. */
+  /** The price pane's rows, in the saved order: they stand around the price bars, which the tree prints among them. */
   readonly pricePane: readonly ObjectTreeIndicator[];
   /** One row per indicator with a pane of its own, in the order its pane stands under the price pane. */
   readonly ownPanes: readonly ObjectTreeIndicator[];

@@ -27,6 +27,24 @@ export async function seriesOrderOf(page: Page, instanceId: string): Promise<num
   return drawn.find((indicator) => indicator.id === instanceId)?.seriesOrder ?? null;
 }
 
+/** The series type the anchor candle series draws with, which the price pane's paint order is read against. */
+const CANDLE_SERIES_TYPE = 'Candlestick';
+
+/**
+ * The index the price bars hold among the price pane's series: the same order `seriesOrderOf` reads, so a series
+ * with a greater index paints over the candles and one with a smaller index under them.
+ */
+export async function barsSeriesOrder(page: Page): Promise<number> {
+  const types = await page.evaluate(() => window.__chartTest!.priceSeriesTypes());
+  return types.indexOf(CANDLE_SERIES_TYPE);
+}
+
+/** Whether the chart paints the plots of `instanceId` over the price bars; false while it draws no plot there. */
+export async function paintsOverBars(page: Page, instanceId: string): Promise<boolean> {
+  const order = await seriesOrderOf(page, instanceId);
+  return order !== null && order > (await barsSeriesOrder(page));
+}
+
 /** Whether the chart paints `top` over `under`: the saved order's first is the higher series order. */
 export async function paintsOver(page: Page, top: string, under: string): Promise<boolean> {
   const [topOrder, underOrder] = [await seriesOrderOf(page, top), await seriesOrderOf(page, under)];

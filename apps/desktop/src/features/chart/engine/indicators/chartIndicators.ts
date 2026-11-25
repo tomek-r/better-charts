@@ -77,7 +77,7 @@ export class ChartIndicators {
     this.plotHoverChanged = options.plotHoverChanged;
     this.legendWords = options.legendWords;
     this.hoveredBar = new HoveredBar(chart, options.bars);
-    this.layer = new IndicatorLayer(chart);
+    this.layer = new IndicatorLayer(chart, options.priceSeries);
     this.runtime = new IndicatorRuntime(
       this.layer,
       options.definitions,

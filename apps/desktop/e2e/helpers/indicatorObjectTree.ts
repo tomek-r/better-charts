@@ -37,19 +37,12 @@ export function paneGroupNames(page: Page): Promise<Array<string | null>> {
     .evaluateAll((groups) => groups.map((group) => group.getAttribute('aria-label')));
 }
 
-/** The indicator list of one pane group. */
-function paneIndicatorList(group: Locator): Locator {
-  return group.getByRole('list', { name: 'Indicators' });
-}
+/** One indicator row of the tree, whose place in its group's list is what the pane's order lists. */
+const INDICATOR_ROW_SELECTOR = 'li[data-instance-id]';
 
-/** Every indicator row of one pane group. */
+/** Every indicator row of one pane group: the price pane's sit among its drawings, an own pane's alone in its list. */
 export function paneIndicatorRows(group: Locator): Locator {
-  return paneIndicatorList(group).getByRole('listitem');
-}
-
-/** The indicator list of the price pane, which sits under the drawings and leaves the tree once it holds no row. */
-export function indicatorList(page: Page): Locator {
-  return paneIndicatorList(paneGroup(page, PRICE_PANE_GROUP));
+  return group.locator(INDICATOR_ROW_SELECTOR);
 }
 
 /** Every indicator row of the price pane. */

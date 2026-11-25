@@ -1,4 +1,4 @@
-import { MismatchDirection, type IChartApi, type IPriceLine } from 'lightweight-charts';
+import { MismatchDirection, type IChartApi, type IPriceLine, type ISeriesApi } from 'lightweight-charts';
 import type { ChartIndicatorPane } from './indicatorContract';
 import { IndicatorFillPrimitive } from './indicatorFillPrimitive';
 import type { IndicatorFill, IndicatorFillEdge, IndicatorFrame, IndicatorLevel } from './indicatorFrame';
@@ -69,6 +69,15 @@ export interface IndicatorLayerState {
 export interface IndicatorPaneHeight {
   readonly instanceId: string;
   readonly paneHeight: number;
+}
+
+/**
+ * The price pane's paint order: the indicators topmost first, and how many of the leading ones paint over the price
+ * bars. The rest paint under the candles, which is the side the object tree's bars row gives them.
+ */
+export interface IndicatorPaintOrder {
+  readonly topFirst: readonly string[];
+  readonly aboveBars: number;
 }
 
 /** One plot's value at one bar and the colour it is drawn in. */
@@ -148,6 +157,12 @@ function hostSeriesOf(series: readonly IndicatorPlotSeries[]): IndicatorPlotSeri
  */
 const TOP_PAINT_ORDER = Number.MAX_SAFE_INTEGER;
 
+/** The order that puts a series under every other one in its pane, which draws it under the candles. */
+const BOTTOM_PAINT_ORDER = 0;
+
+/** The order the layer starts on: nothing listed, so every plot keeps the place the chart gave it. */
+const NO_PAINT_ORDER: IndicatorPaintOrder = { topFirst: [], aboveBars: 0 };
+
 /**
  * The display layer for indicator frames: one series per plot, plus the levels and fills the frame
  * describes. Levels are price lines and fills are a primitive, both hung on the first line plot
@@ -159,10 +174,14 @@ export class IndicatorLayer {
   private readonly shown = new Map<string, Shown>();
   /** The indicator the chart has selected; its plots paint the selection handles. */
   private selectedId: string | null = null;
-  /** The indicators the app lists topmost first, as its last caller set them: the first paints over the rest. */
-  private paintOrder: readonly string[] = [];
+  /** The indicators the app lists topmost first, and how many of them paint over the price bars. */
+  private paintOrder: IndicatorPaintOrder = NO_PAINT_ORDER;
 
-  constructor(private readonly chart: IChartApi) {}
+  constructor(
+    private readonly chart: IChartApi,
+    /** The series that draws the price bars, whose price format the pane's axis keeps while a plot paints under it. */
+    private readonly priceBars: ISeriesApi<'Candlestick'>,
+  ) {}
 
   /**
    * Draws a whole frame for `id`; a frame without plots keeps neither. A frame whose look is the one
@@ -242,11 +261,12 @@ export class IndicatorLayer {
   }
 
   /**
-   * Paints the indicators in the given topmost-first order: the first of the list draws over the ones under
-   * it, and a frame drawn later keeps the place its indicator holds in it.
+   * Paints the indicators in the given order: the leading ones, over the price bars, draw over the candles and the
+   * rest under them, each group's first over the ones below it. A frame drawn later keeps the place its indicator
+   * holds in the order.
    */
-  setPaintOrder(topFirst: readonly string[]): void {
-    this.paintOrder = topFirst;
+  setPaintOrder(order: IndicatorPaintOrder): void {
+    this.paintOrder = order;
     this.applyPaintOrder();
   }
 
@@ -363,15 +383,37 @@ export class IndicatorLayer {
   }
 
   /**
-   * Moves the listed indicators over the other series of their pane, bottom row first: each lift leaves the
-   * ones lifted before it under it, so the list ends topmost first. The plots of one indicator keep their own
-   * order, each moved over the pane's other series in turn.
+   * Orders the pane's series the way the listed indicators stand around the price bars: the ones under the bars drop
+   * to the pane's foot, each over the one listed after it, and then the ones over the bars rise to its top in the
+   * same way. Both passes work bottom row first, so each step leaves the series placed before it where it belongs.
    */
   private applyPaintOrder(): void {
-    for (const id of [...this.paintOrder].reverse()) {
-      for (const series of this.shown.get(id)?.series ?? []) {
-        series.setSeriesOrder(TOP_PAINT_ORDER);
-      }
+    const { topFirst, aboveBars } = this.paintOrder;
+    for (const id of topFirst.slice(aboveBars)) {
+      this.lowerUnderPriceBars(id);
+    }
+    for (const id of topFirst.slice(0, aboveBars).reverse()) {
+      this.setSeriesOrderOf(id, TOP_PAINT_ORDER);
+    }
+  }
+
+  /**
+   * Puts the plots of `id` under the price bars, at the pane's foot. The library writes the pane's price axis with
+   * the format of the series the pane lists first, so a plot that goes under the candles carries their format and the
+   * axis keeps labelling prices for the candles.
+   */
+  private lowerUnderPriceBars(id: string): void {
+    const priceFormat = this.priceBars.options().priceFormat;
+    for (const series of this.shown.get(id)?.series ?? []) {
+      series.applyOptions({ priceFormat });
+      series.setSeriesOrder(BOTTOM_PAINT_ORDER);
+    }
+  }
+
+  /** Gives every plot of `id` the same place among its pane's series; an unknown id orders nothing. */
+  private setSeriesOrderOf(id: string, order: number): void {
+    for (const series of this.shown.get(id)?.series ?? []) {
+      series.setSeriesOrder(order);
     }
   }
 

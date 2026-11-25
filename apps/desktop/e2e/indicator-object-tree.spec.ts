@@ -3,7 +3,6 @@ import {
   PRICE_PANE_GROUP,
   SMA_9_CLOSE,
   expectNoSelectedIndicator,
-  indicatorList,
   indicatorRows,
   openObjectTree,
   openSmaSettingsDialog,
@@ -165,7 +164,7 @@ async function removeIndicatorRow(page: Page, row: Locator): Promise<void> {
   await expect.poll(async () => (await attachedIndicators(page)).length).toBe(0);
 }
 
-test('an attached indicator is listed under the drawings by its legend name', async ({ page }) => {
+test('an attached indicator is listed among the price pane rows by its legend name', async ({ page }) => {
   await openTreeWithSavedSma(page);
 
   await expect(indicatorRows(page)).toHaveCount(1);
@@ -213,7 +212,7 @@ test('Remove detaches the indicator and drops its row', async ({ page }) => {
   const row = await hoveredIndicatorRow(page);
   await removeIndicatorRow(page, row);
 
-  await expect(indicatorList(page)).toHaveCount(0);
+  await expect(indicatorRows(page)).toHaveCount(0);
 });
 
 test('the rows follow the saved order, the top one painting over the ones under it', async ({ page }) => {
@@ -370,7 +369,7 @@ test('Delete on the selected indicator removes it', async ({ page }) => {
   await page.keyboard.press('Delete');
 
   await expect.poll(async () => (await attachedIndicators(page)).length).toBe(0);
-  await expect(indicatorList(page)).toHaveCount(0);
+  await expect(indicatorRows(page)).toHaveCount(0);
   await expect.poll(() => selectedIndicatorId(page)).toBeNull();
 });
 

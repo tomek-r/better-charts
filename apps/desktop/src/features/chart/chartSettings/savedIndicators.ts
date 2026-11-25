@@ -22,6 +22,12 @@ export interface SavedIndicator {
    * overlay never has. Absent keeps the pane at its default height, as every document saved before it does.
    */
   readonly paneHeight?: number;
+  /**
+   * Present only while the indicator paints under the price bars, which the object tree's bars row moves: the
+   * candles then paint over its plots. Absent keeps it over the candles, where every document saved before this
+   * field puts it.
+   */
+  readonly belowBars?: true;
 }
 
 /**
@@ -55,7 +61,7 @@ export function readSavedIndicators(raw: unknown): readonly SavedIndicator[] | u
 
 /**
  * True when both lists hold the same indicators, in the same order, the same settings, the same hidden state,
- * the same timeframes they show on and the same pane heights.
+ * the same timeframes they show on, the same pane heights and the same side of the price bars.
  */
 export function sameSavedIndicators(left: readonly SavedIndicator[], right: readonly SavedIndicator[]): boolean {
   if (left.length !== right.length) {
@@ -83,12 +89,18 @@ function readSavedIndicator(raw: unknown): SavedIndicator | undefined {
     ...hiddenFlag(raw.hidden),
     ...timeframeVisibilityField(raw.timeframeVisibility),
     ...paneHeightField(raw.paneHeight),
+    ...belowBarsFlag(raw.belowBars),
   };
 }
 
 /** The `hidden` flag as a spreadable field, so a shown indicator carries no `hidden` key at all. */
 function hiddenFlag(raw: unknown): { hidden?: true } {
   return raw === true ? { hidden: true } : {};
+}
+
+/** The `belowBars` flag as a spreadable field, so an indicator over the candles carries no key at all. */
+function belowBarsFlag(raw: unknown): Pick<SavedIndicator, 'belowBars'> {
+  return raw === true ? { belowBars: true } : {};
 }
 
 /**
@@ -106,6 +118,11 @@ export function timeframeVisibilityField(raw: unknown): Pick<SavedIndicator, 'ti
  */
 export function paneHeightField(raw: unknown): Pick<SavedIndicator, 'paneHeight'> {
   return isPaneHeight(raw) ? { paneHeight: raw } : {};
+}
+
+/** Whether the indicator paints under the price bars, the side of the bars row its object tree row stands on. */
+export function paintsUnderBars(indicator: SavedIndicator): boolean {
+  return indicator.belowBars === true;
 }
 
 function readSettingValues(raw: unknown): SettingValues {
@@ -146,6 +163,7 @@ function sameSavedIndicator(left: SavedIndicator, right: SavedIndicator): boolea
     left.definitionId === right.definitionId &&
     left.hidden === right.hidden &&
     left.paneHeight === right.paneHeight &&
+    left.belowBars === right.belowBars &&
     sameTimeframeVisibility(
       left.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY,
       right.timeframeVisibility ?? DEFAULT_TIMEFRAME_VISIBILITY,

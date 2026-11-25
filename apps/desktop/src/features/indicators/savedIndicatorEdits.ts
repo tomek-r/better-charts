@@ -88,6 +88,48 @@ export function withIndicatorPaneHeights(
   });
 }
 
+/**
+ * Puts the price-pane indicators in the given top-to-bottom order and names how many of them stand over the price
+ * bars, which is the side the chart paints them on. The indicators of the panes below keep their place among the
+ * entries as they are, and so does every field the caller does not name. An id the order does not name, which is
+ * what an order computed for another list looks like, leaves every entry where it is.
+ */
+export function withPricePaneOrder(
+  indicators: readonly SavedIndicator[],
+  order: readonly string[],
+  aboveBars: number,
+): SavedIndicator[] {
+  const byInstanceId = new Map(indicators.map((indicator) => [indicator.instanceId, indicator]));
+  const ordered = order.flatMap((instanceId) => {
+    const entry = byInstanceId.get(instanceId);
+    return entry === undefined ? [] : [entry];
+  });
+  if (ordered.length !== order.length) {
+    return [...indicators];
+  }
+  const named = new Set(order);
+  let place = 0;
+  return indicators.map((indicator) => {
+    if (!named.has(indicator.instanceId)) {
+      return indicator;
+    }
+    const entry = ordered[place];
+    place += 1;
+    return sideOfBars(entry, place <= aboveBars);
+  });
+}
+
+/** The entry on the side of the price bars `above` names; one over the candles carries no flag at all. */
+function sideOfBars(indicator: SavedIndicator, above: boolean): SavedIndicator {
+  return above ? withoutBelowBarsFlag(indicator) : { ...indicator, belowBars: true };
+}
+
+/** The entry without its `belowBars` key, so an indicator moved over the candles leaves no trace of the flag. */
+function withoutBelowBarsFlag(indicator: SavedIndicator): SavedIndicator {
+  const { belowBars: _belowBars, ...over } = indicator;
+  return over;
+}
+
 /** The entry without its `hidden` key, so showing it again leaves no trace of the flag. */
 function withoutHiddenFlag(indicator: SavedIndicator): SavedIndicator {
   const { hidden: _hidden, ...shown } = indicator;

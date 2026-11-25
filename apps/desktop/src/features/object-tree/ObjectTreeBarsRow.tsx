@@ -24,9 +24,10 @@ function barsLabel(symbol: string | undefined, timeframe: string | undefined): s
 }
 
 /**
- * The price bars in the object tree, at their place in the stacking order: drawings listed below this
- * row paint under the candles. It takes the same drag and keys as a drawing row, and its one button
- * hides the bars from the chart and shows them again; a hidden row's name is dimmed like a drawing's.
+ * The price bars in the object tree, at their place in the stacking order: a drawing or an indicator listed below
+ * this row paints under the candles, and one above it paints over them. It takes the same drag and keys as every
+ * other row, so a drag or Alt+Arrow crosses it into the price-pane indicator rows, and its one button hides the bars
+ * from the chart and shows them again; a hidden row's name is dimmed like a drawing's.
  */
 export function ObjectTreeBarsRow({ reorder }: { readonly reorder: RowReorder }) {
   const { symbol, timeframe } = useBridgeChartState();

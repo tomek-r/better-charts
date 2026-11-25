@@ -9,7 +9,7 @@ import { resolveSettingValues } from '../settings/settingsSchema';
 import type { ChartIndicator, ChartIndicatorDefinition, ChartIndicatorOutlet } from './indicatorContract';
 import { indicatorDisplayOf, indicatorSettingsSchema } from './indicatorDisplaySettings';
 import type { IndicatorFrame } from './indicatorFrame';
-import type { IndicatorLayer } from './indicatorLayer';
+import type { IndicatorLayer, IndicatorPaintOrder } from './indicatorLayer';
 import type { IndicatorSeriesSource } from './indicatorSeriesSource';
 import type { IndicatorTickSource } from './indicatorTickSource';
 
@@ -108,11 +108,11 @@ export class IndicatorRuntime {
   }
 
   /**
-   * Paints the attached indicators in the given topmost-first order, which is the order the saved settings
-   * list them in; an indicator reloaded later keeps the place the list gives it.
+   * Paints the attached indicators in the given order, which is the order the saved settings list them in and the
+   * side of the price bars they stand on; an indicator reloaded later keeps the place the order gives it.
    */
-  setPaintOrder(topFirst: readonly string[]): void {
-    this.layer.setPaintOrder(topFirst);
+  setPaintOrder(order: IndicatorPaintOrder): void {
+    this.layer.setPaintOrder(order);
   }
 
   /** A whole new history replaced the series: every attached indicator is told so, then loads again. */
