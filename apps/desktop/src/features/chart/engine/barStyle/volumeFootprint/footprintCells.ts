@@ -1,6 +1,6 @@
 import type { ToggledColor } from '../barStyleAppearance';
 import type { BarFootprint, ChartFootprintRow } from './footprintData';
-import { SINGLE_COLUMN_SIDE } from './footprintGeometry';
+import { SINGLE_COLUMN_SIDE, type FootprintCellBox } from './footprintGeometry';
 import type { FootprintDisplay, FootprintType, FootprintValues } from './footprintModes';
 import {
   FOOTPRINT_NEUTRAL_COLOR,
@@ -15,6 +15,7 @@ import {
   type FootprintSide,
   type FootprintVolumeRange,
 } from './footprintShades';
+import { footprintTextFits, type FootprintTextStyle } from './footprintTextSize';
 import {
   footprintLargestValue,
   footprintRowDelta,
@@ -369,4 +370,19 @@ export function footprintCells(footprint: BarFootprint, settings: FootprintCellS
     row,
     cells: cells.map((draft) => cellOf(draft, settings, largest, pocRow, row.row)),
   }));
+}
+
+/**
+ * The colour `cell`'s number is written in inside the coloured box that cell fills: the colour its own fill gives it
+ * while the number fits that box, and the light text colour once the number runs past the box onto the chart's dark
+ * background. A Profile cell fills only its share of the column while its number is written against the whole
+ * column's width, so a cell of little or no share — a delta that points nowhere, a quiet row — writes its number over
+ * the background, where the colour of its own fill would be unreadable.
+ */
+export function footprintCellNumberColor(
+  cell: FootprintCell,
+  box: FootprintCellBox,
+  style: FootprintTextStyle,
+): string {
+  return footprintTextFits(box, cell.text, style) ? cell.textColor : footprintTextColor();
 }

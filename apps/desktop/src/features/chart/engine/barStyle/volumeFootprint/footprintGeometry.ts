@@ -8,11 +8,13 @@ export interface FootprintColumn {
 }
 
 /**
- * Where the sell column, the thin candle and the buy column of one bar sit, in device pixels. A bar drawn in the
- * single-column layout has no sell column: that slot is left empty at the group's left edge, where the candle stands,
- * and the one column right of it holds the bar's cells, its totals and the summary box under them. The groups of both
- * layouts are centred on the bar's x and their columns never grow past MAX_COLUMN_WIDTH, so a wide body keeps empty
- * background either side of them rather than fatter columns.
+ * Where the sell column, the thin candle and the buy column of one bar sit, in device pixels. Both layouts keep the
+ * thin candle on the bar's own x, which is the grid line the chart draws the bar on: in the two-column layout it
+ * stands between the two columns, whose group is centred there, and in the single-column layout the candle is itself
+ * centred there, with a gap and the one column right of it. A single-column bar therefore has no sell column: that
+ * slot is left empty where the candle stands, and the one column holds the bar's cells, its totals and the summary box
+ * under them. Every column is held at MAX_COLUMN_WIDTH, so a wide body keeps empty background beside the group rather
+ * than fatter columns.
  */
 export interface FootprintBarColumns {
   readonly sell: FootprintColumn;
@@ -70,7 +72,8 @@ function candleGapOf(fullWidth: number, candleWidth: number, horizontalPixelRati
 
 /**
  * The left edge of a box `width` device pixels wide centred on the bar's media x `x`: the bar's own x snapped to a
- * device pixel, less half the box's width, which is where the columns, gaps and candle of a bar begin.
+ * device pixel, less half the box's width. It places the group of a two-column bar and the candle of a single-column
+ * one, both of which stand centred on the bar's x.
  */
 function centredLeftOf(x: number, width: number, horizontalPixelRatio: number): number {
   return Math.round(x * horizontalPixelRatio) - Math.floor(width / 2);
@@ -108,25 +111,27 @@ function twoColumnColumns(x: number, fullWidth: number, horizontalPixelRatio: nu
 }
 
 /**
- * The columns of a single-column bar: the thin candle on the group's left edge, a gap, and the one column the bar's
- * cells and its totals are written in, capped like the columns of the two-column layout.
+ * The columns of a single-column bar: the thin candle centred on the bar's own x, so it stands on the vertical grid
+ * line the chart draws the bar on, a gap right of it, and the one column the bar's cells, its totals and its summary
+ * are written in, capped like the columns of the two-column layout. The candle therefore stands where a two-column
+ * bar keeps its own, and the gap and the column reach right of it rather than the group being centred on the bar's x.
  */
 function singleColumnColumns(x: number, fullWidth: number, horizontalPixelRatio: number): FootprintBarColumns {
   const candleWidth = candleWidthOf(fullWidth);
   const gap = candleGapOf(fullWidth, candleWidth, horizontalPixelRatio);
   const columnWidth = columnWidthOf(fullWidth - candleWidth - gap, horizontalPixelRatio);
-  const left = centredLeftOf(x, candleWidth + gap + columnWidth, horizontalPixelRatio);
+  const candleLeft = centredLeftOf(x, candleWidth, horizontalPixelRatio);
   return {
-    sell: { left, width: 0 },
-    candle: { left, width: candleWidth },
-    buy: { left: left + candleWidth + gap, width: columnWidth },
+    sell: { left: candleLeft, width: 0 },
+    candle: { left: candleLeft, width: candleWidth },
+    buy: { left: candleLeft + candleWidth + gap, width: columnWidth },
   };
 }
 
 /**
  * The sell column, the thin candle and the buy column of one bar, spanning `fullWidth` device pixels: the two side
- * columns with a gap either side of a candle between them, or the candle on the group's left edge with the one
- * column right of it. Each column is at most MAX_COLUMN_WIDTH wide and the group they make is centred on the bar's x.
+ * columns with a gap either side of a candle between them, or the candle centred on the bar's x with a gap and the one
+ * column right of it. Each column is at most MAX_COLUMN_WIDTH wide.
  */
 export function footprintBarColumns(
   x: number,

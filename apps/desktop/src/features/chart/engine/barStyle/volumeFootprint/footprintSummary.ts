@@ -40,12 +40,13 @@ const TOTAL_LABEL = 'Total';
 const TOTALS_SEPARATOR = ' × ';
 
 /** The space between the lowest row's cells and the side totals, in css px at the maximum text size. */
-const TOTALS_GAP = 4;
+const TOTALS_GAP = 8;
 /** The space between the side totals and the summary box below them, in css px at the maximum text size. */
-const SUMMARY_GAP = 6;
+const SUMMARY_GAP = 10;
 /**
- * The height of one line of the box, how far its text sits inside it and its corner radius, in css px at the maximum
- * text size: every one of them scales with the size the bar writes in.
+ * The height of one line of the box, how far its first line sits below its top edge and its corner radius, in css px at
+ * the maximum text size: every one of them scales with the size the bar writes in. The box's lines are centred across
+ * its width rather than inset from it, so this padding is the room they keep from its top and bottom edges.
  */
 const SUMMARY_LINE_HEIGHT = 20;
 const SUMMARY_PADDING = 6;
@@ -147,7 +148,7 @@ function summaryLineHeight(style: FootprintTextStyle): number {
   return SUMMARY_LINE_HEIGHT * footprintTextScale(style.size);
 }
 
-/** How far the box's lines sit inside it at `style`'s size, in css px: SUMMARY_PADDING at the maximum text size. */
+/** The room the box's lines keep from its top and bottom edges, in css px: SUMMARY_PADDING at the maximum size. */
 function summaryPadding(style: FootprintTextStyle): number {
   return SUMMARY_PADDING * footprintTextScale(style.size);
 }
@@ -164,14 +165,9 @@ function lineCentre(box: FootprintSummaryBox, index: number, style: FootprintTex
   return top + lineHeight / 2;
 }
 
-/** The media x the box's own padding starts at, which the block of its two lines never starts left of. */
-function boxInnerLeft(box: FootprintSummaryBox, style: FootprintTextStyle): number {
-  return box.left / style.horizontalPixelRatio + summaryPadding(style);
-}
-
-/** How much of the box's width its two lines have to write in, in css px. */
-function boxInnerWidth(box: FootprintSummaryBox, style: FootprintTextStyle): number {
-  return box.width / style.horizontalPixelRatio - 2 * summaryPadding(style);
+/** How wide the box is in css px: the room its written lines have, which they are fitted to and centred inside. */
+function boxWidth(box: FootprintSummaryBox, style: FootprintTextStyle): number {
+  return box.width / style.horizontalPixelRatio;
 }
 
 /** The layout a bar's columns make: a single-column bar leaves its sell slot empty. */
@@ -285,31 +281,54 @@ function labelColumnWidth(style: FootprintTextStyle): number {
   return label + LABEL_GAP * footprintTextScale(style.size);
 }
 
-/** The width of the block the two lines make, in css px: its label column and the wider of the two values after it. */
-function summaryBlockWidth(labelColumn: number, lines: FootprintSummaryLines, style: FootprintTextStyle): number {
-  const value = Math.max(footprintTextWidthAt(lines.deltaText, style), footprintTextWidthAt(lines.totalText, style));
-  return labelColumn + value;
+/** The width one line of the box needs, in css px: its label in the box's label column and the value after it. */
+function lineWidth(line: FootprintSummaryLine, labelColumn: number, style: FootprintTextStyle): number {
+  return labelColumn + footprintTextWidthAt(line.value.text, style);
+}
+
+/** One line of the box that has room in it, and the slot of the box the line is written in. */
+interface FootprintFittedLine {
+  readonly line: FootprintSummaryLine;
+  readonly index: number;
+}
+
+/** The lines of the box that fit its width at `style`'s size, in the order the box writes them. */
+function fittedLines(
+  box: FootprintSummaryBox,
+  lines: readonly FootprintSummaryLine[],
+  labelColumn: number,
+  style: FootprintTextStyle,
+): FootprintFittedLine[] {
+  const room = boxWidth(box, style);
+  const fitted: FootprintFittedLine[] = [];
+  lines.forEach((line, index) => {
+    if (lineWidth(line, labelColumn, style) <= room) {
+      fitted.push({ line, index });
+    }
+  });
+  return fitted;
 }
 
 /**
- * The media x the block of the box's two lines starts at, in css px: the box's left edge plus half the room its width
- * leaves, so both margins read alike — but never left of the inner edge its padding leaves, which a block too wide to
- * centre stands on instead.
+ * The media x the block of the box's written lines starts at, in css px: half of the room the box's width leaves them,
+ * so the two margins the block leaves read alike. Every written line has been fitted to the box's width, so the block
+ * never reaches past its edges.
  */
 function blockLeft(box: FootprintSummaryBox, width: number, style: FootprintTextStyle): number {
-  const boxWidth = box.width / style.horizontalPixelRatio;
-  const centred = box.left / style.horizontalPixelRatio + (boxWidth - width) / 2;
-  return Math.max(boxInnerLeft(box, style), centred);
+  return box.left / style.horizontalPixelRatio + (boxWidth(box, style) - width) / 2;
 }
 
-/** The block the box's two lines make: where it starts, and the label column both lines write their labels in. */
+/**
+ * The block the lines written in the box make: where it starts, and the label column each of them writes its label in,
+ * so the labels line up with one another and the values do too.
+ */
 function summaryBlock(
   box: FootprintSummaryBox,
-  lines: FootprintSummaryLines,
+  labelColumn: number,
+  fitted: readonly FootprintFittedLine[],
   style: FootprintTextStyle,
 ): FootprintSummaryBlock {
-  const labelColumn = labelColumnWidth(style);
-  const width = summaryBlockWidth(labelColumn, lines, style);
+  const width = Math.max(...fitted.map(({ line }) => lineWidth(line, labelColumn, style)));
   return { left: blockLeft(box, width, style), labelColumn };
 }
 
@@ -321,49 +340,50 @@ function summaryLines(lines: FootprintSummaryLines): FootprintSummaryLine[] {
   ];
 }
 
-/** One line of the box — its label, then its value in bold — or none while the line does not fit the box. */
+/** One line of the box — its label, then its value in bold — written from the block's own left edge. */
 function boxLine(
   box: FootprintSummaryBox,
   block: FootprintSummaryBlock,
-  index: number,
-  line: FootprintSummaryLine,
+  fitted: FootprintFittedLine,
   style: FootprintTextStyle,
 ): FootprintTextMark[] {
-  const { labelColumn } = block;
-  if (labelColumn + footprintTextWidthAt(line.value.text, style) > boxInnerWidth(box, style)) {
-    return [];
-  }
-  const y = lineCentre(box, index, style);
-  const valueX = block.left + labelColumn;
+  const y = lineCentre(box, fitted.index, style);
+  const color = fitted.line.value.color;
+  const valueX = block.left + block.labelColumn;
   return [
-    { x: block.left, y, text: line.label, color: line.value.color, align: 'left', size: style.size },
-    { x: valueX, y, text: line.value.text, color: line.value.color, align: 'left', bold: true, size: style.size },
+    { x: block.left, y, text: fitted.line.label, color, align: 'left', size: style.size },
+    { x: valueX, y, text: fitted.line.value.text, color, align: 'left', bold: true, size: style.size },
   ];
 }
 
-/** The two lines of the box, both centred in it as one block and each written only while it has room inside. */
+/**
+ * The lines written in the box, centred in it as one block: a line the box has no room for at this size is left out,
+ * and the block the lines that fit make is centred on its own, so a box holding one line still centres it.
+ */
 function boxLines(
   box: FootprintSummaryBox,
   lines: FootprintSummaryLines,
   style: FootprintTextStyle,
 ): FootprintTextMark[] {
-  const block = summaryBlock(box, lines, style);
-  const marks: FootprintTextMark[] = [];
-  summaryLines(lines).forEach((line, index) => {
-    marks.push(...boxLine(box, block, index, line, style));
-  });
-  return marks;
+  const labelColumn = labelColumnWidth(style);
+  const fitted = fittedLines(box, summaryLines(lines), labelColumn, style);
+  if (fitted.length === 0) {
+    return [];
+  }
+  const block = summaryBlock(box, labelColumn, fitted, style);
+  return fitted.flatMap((fittedLine) => boxLine(box, block, fittedLine, style));
 }
 
 /**
  * What one bar writes under its columns: each side's total against its own column's inner edge — or, in the
  * single-column layout, both totals in one line under that column — and, while the summary is on, a rounded box
  * below them holding the bar's delta and the volume it traded. The box's two lines make one block — a label in the
- * box's fixed label column, then the value bold right after it — which is centred in the box, never starting left of
- * its padding. The totals are fitted against the layout's full columns, never a Profile cell's narrower share, so
- * Profile keeps them. Every text is written at `style`'s size and only while it fits the column or the box it belongs
- * to; a box no line of it fits is left off rather than drawn empty, and a bar whose summary strip is narrower than
- * MIN_SUMMARY_BAR_WIDTH writes neither.
+ * box's fixed label column, then the value bold right after it — which is centred across the box's own width, so the
+ * block's two margins read alike even in the narrow box a capped single column leaves. The totals are fitted against
+ * the layout's full columns, never a Profile cell's narrower share, so Profile keeps them. Every text is written at
+ * `style`'s size and only while it fits the column or the box it belongs to; a box line with no room in the box is
+ * left out and the lines that do fit are centred on their own, and a box no line of it fits is left off rather than
+ * drawn empty. A bar whose summary strip is narrower than MIN_SUMMARY_BAR_WIDTH writes neither.
  */
 export function footprintSummaryLayout(
   footprint: BarFootprint,

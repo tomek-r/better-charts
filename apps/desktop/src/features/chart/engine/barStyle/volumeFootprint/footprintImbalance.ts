@@ -18,8 +18,10 @@ export function imbalanceMarkWidth(horizontalPixelRatio: number): number {
 }
 
 /**
- * The box the imbalance mark of one cell covers, in device pixels: a short solid bar standing on the cell's
- * outer edge — the left edge of a sell cell, the right edge of a buy one — as tall as the row itself.
+ * The box the imbalance mark of one cell covers, in device pixels: a short solid bar standing on the cell's outer
+ * edge — the left edge of a sell cell, the right edge of a buy one — as tall as the cell's own box. The mark therefore
+ * runs from the cell's top edge to its bottom one and stops a row gap above the row below it, matching the box the
+ * cell is filled in.
  */
 export function footprintImbalanceBox(
   cell: FootprintCellBox,

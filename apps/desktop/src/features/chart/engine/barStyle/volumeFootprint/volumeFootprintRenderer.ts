@@ -5,7 +5,7 @@ import { candlePrices, paintCandle, type CandleGlyphStyle, type CandlePrices } f
 import { CustomBarRenderer, type SeriesRenderingTarget, type VisibleBarIndices } from '../customBarRenderer';
 import { plottedVisibleBars } from '../customBarVisibleRange';
 import { volumeCandleColors } from '../volumeCandles/volumeCandleColors';
-import { footprintCells, type FootprintCell } from './footprintCells';
+import { footprintCellNumberColor, footprintCells, type FootprintCell } from './footprintCells';
 import type { BarFootprint, ChartFootprintRow } from './footprintData';
 import {
   footprintBarColumns,
@@ -82,12 +82,11 @@ interface FootprintMarks {
 }
 
 /**
- * The boxes one cell covers: the one it is filled in, which stops a row gap above the row below, the whole row, which
- * its imbalance marks span, and the whole column, whose width judges the number it writes.
+ * The boxes one cell covers: the one it is filled in, which stops a row gap above the row below and which its
+ * imbalance marks span too, and the whole column, whose width judges the number it writes.
  */
 interface FootprintCellBoxes {
   readonly cell: FootprintCellBox;
-  readonly row: FootprintCellBox;
   /** The whole column between the row's two prices, which a profile cell's coloured box is only a share of. */
   readonly column: FootprintCellBox;
 }
@@ -186,7 +185,9 @@ function paintImbalanceMark(paint: FootprintPaint, box: FootprintCellBox, side: 
 
 /**
  * Paints one cell: its fill, the number it writes against its column's inner edge and the marks on its edges. The
- * marks span the cell's whole row, so they stay on the row's prices rather than stopping at its box's lower edge.
+ * marks span the cell's own box, so they stop where its fill stops rather than running on over the row gap under it.
+ * A number that runs past its own coloured box onto the column's background is written in the light text colour, which
+ * the chart's dark background reads, whatever colour its fill gave it.
  */
 function paintCell(
   paint: FootprintPaint,
@@ -206,13 +207,13 @@ function paintCell(
       x: footprintTextX(box, align, style),
       y: (box.top + box.height / 2) / paint.verticalPixelRatio,
       text: cell.text,
-      color: cell.textColor,
+      color: footprintCellNumberColor(cell, box, style),
       align,
       size: style.size,
     });
   }
   for (const side of cell.marks) {
-    paintImbalanceMark(paint, boxes.row, side);
+    paintImbalanceMark(paint, box, side);
   }
 }
 
@@ -253,9 +254,9 @@ function barTextStyle(paint: FootprintPaint, placed: readonly PlacedCell[]): Foo
 }
 
 /**
- * The boxes one cell covers: its column between the row's two prices, whose width its number is judged against, that
- * column narrowed to the share a profile cell takes — the whole row, which its imbalance marks span — and the cell's
- * own box, which leaves the row gap under it.
+ * The boxes one cell covers: its column between the row's two prices, whose width its number is judged against, and
+ * that column narrowed to the share a profile cell takes and shortened by the row gap under it — the box the cell is
+ * filled in, and the one its imbalance marks span.
  */
 function cellBoxes(
   paint: FootprintPaint,
@@ -266,7 +267,7 @@ function cellBoxes(
 ): FootprintCellBoxes {
   const column = footprintRowBox(columns[cell.column], topY, bottomY, paint.verticalPixelRatio);
   const row = footprintProfileBox(column, cell.widthShare, cell.column);
-  return { cell: footprintRowGapBox(row, paint.verticalPixelRatio), row, column };
+  return { cell: footprintRowGapBox(row, paint.verticalPixelRatio), column };
 }
 
 /** The media y of one value area line: the top of the VAH row, or the bottom of the VAL row. */
@@ -277,7 +278,7 @@ function valueAreaLineY(paint: FootprintPaint, row: ChartFootprintRow | undefine
   return paint.priceConverter(top ? row.upPrice : row.downPrice);
 }
 
-/** The device-pixel span a value area line crosses: the whole bar, from its sell column out to its buy edge. */
+/** The device-pixel span a value area line crosses: the whole bar, from the sell slot's left edge to its buy column's. */
 function valueAreaSpan(columns: FootprintBarColumns): FootprintValueAreaSpan {
   return { left: columns.sell.left, right: columns.buy.left + columns.buy.width };
 }
@@ -345,15 +346,16 @@ function paintSummary(
 
 /**
  * The columns of the bar at the media x `x`: the layout the appearance's type asks for, at the body's full width, so
- * every caller reads the same columns — the capped ones, centred on the bar's own x.
+ * every caller reads the same columns — the capped ones, the candle standing on the bar's own x.
  */
 function barColumns(paint: FootprintPaint, x: number): FootprintBarColumns {
   return footprintBarColumns(x, paint.fullWidth, paint.horizontalPixelRatio, footprintLayoutOf(paint.options.type));
 }
 
 /**
- * The device x of the right edge of the columns a bar at the media x `x` draws: the buy column's right edge, which a
- * group narrower than its body, its columns capped, stops at rather than reaching the body's own right edge.
+ * The device x of the right edge of the columns a bar at the media x `x` draws: the buy column's right edge, which the
+ * stacked zones start on. A column stops at its cap rather than growing with the body, so the group is narrower than
+ * the body and the body's own right edge stays empty beside it.
  */
 function groupRightEdge(paint: FootprintPaint, x: number): number {
   const columns = barColumns(paint, x);
@@ -436,14 +438,14 @@ function paintFootprintBar(paint: FootprintPaint, bar: FootprintBar, marks: Foot
 
 /**
  * The custom series renderer of the volume footprint bars: each bar paints the cells the appearance's type and
- * display make of its rows — a sell column, a gap, a thin candle, another gap and a buy column, or one column beside
- * the candle — a mark on every imbalanced edge and its value area dashed. Under the columns it writes each side's
- * total against its own column, or both in one line in the single-column layout, and, while the summary is on, the
- * bar's delta and total in a box. Every number of one bar is written at the one size its shortest row holds, which
- * its cells, its totals and the box's lines share. A bar the host holds no footprint for paints the thin candle
- * alone, on that same candle column, and no cells, totals or summary of its own. The stacked imbalance zones are
- * painted first, so every bar's own paint stands over them. The cells are device pixels; only the text and the
- * markers are written, in media pixels.
+ * display make of its rows — a sell column, a gap, a thin candle, another gap and a buy column, or a thin candle on
+ * the bar's own x with the one column right of it — a mark on every imbalanced edge and its value area dashed. Under
+ * the columns it writes each side's total against its own column, or both in one line in the single-column layout,
+ * and, while the summary is on, the bar's delta and total in a box. Every number of one bar is written at the one size
+ * its shortest row holds, which its cells, its totals and the box's lines share. A bar the host holds no footprint for
+ * paints the thin candle alone, on that same candle column, and no cells, totals or summary of its own. The stacked
+ * imbalance zones are painted first, so every bar's own paint stands over them. The cells are device pixels; only the
+ * text and the markers are written, in media pixels.
  */
 export class VolumeFootprintRenderer extends CustomBarRenderer<VolumeFootprintPoint, VolumeFootprintOptions> {
   protected override options: VolumeFootprintOptions = VOLUME_FOOTPRINT_DEFAULT_OPTIONS;

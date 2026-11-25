@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  footprintCellNumberColor,
   footprintCells,
   type FootprintCellSettings,
   type FootprintRowCells,
@@ -8,11 +9,18 @@ import {
   FOOTPRINT_DEFAULT_BUY_SHADES,
   FOOTPRINT_DEFAULT_SELL_SHADES,
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintDefaults';
+import { footprintProfileBox } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintGeometry';
 import {
   FOOTPRINT_NEUTRAL_COLOR,
   FOOTPRINT_NEUTRAL_TEXT_COLOR,
   FOOTPRINT_POC_COLOR,
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintShades';
+import {
+  FOOTPRINT_FONT_SIZE,
+  footprintCellShowsText,
+  type FootprintTextStyle,
+  type FootprintTextWidth,
+} from '../src/features/chart/engine/barStyle/volumeFootprint/footprintTextSize';
 import type {
   BarFootprint,
   ChartFootprintRow,
@@ -31,6 +39,17 @@ type RowSides = Pick<ChartFootprintRow, 'buyVolume' | 'sellVolume' | 'buyTrades'
 const LIGHT_TEXT_COLOR = '#ffffff';
 /** The dark text colour a number keeps on the white fill a bar's point of control row is drawn in. */
 const DARK_TEXT_COLOR = '#0b0e14';
+/** How wide the spec's text is in css px: five pixels a character, which a stub measures without any canvas. */
+const MEASURED_TEXT: FootprintTextWidth = (text) => text.length * 5;
+/** The text style the cells' numbers are fitted to their boxes with, at one device pixel per css px. */
+const CELL_TEXT_STYLE: FootprintTextStyle = {
+  size: FOOTPRINT_FONT_SIZE,
+  textWidth: MEASURED_TEXT,
+  horizontalPixelRatio: 1,
+  verticalPixelRatio: 1,
+};
+/** The box of one column a cell is drawn in, in device pixels: seventy-two wide, one twenty-px row tall. */
+const CELL_COLUMN = { left: 0, width: 72, top: 0, height: 20 };
 
 /** One row of the fixture: its number, the prices it spans and what each side of it took. */
 function row(rowNumber: number, downPrice: number, upPrice: number, sides: RowSides): ChartFootprintRow {
@@ -76,6 +95,15 @@ const SETTINGS: FootprintCellSettings = {
 function settingsWith(changes: Partial<FootprintCellSettings>): FootprintCellSettings {
   return { ...SETTINGS, ...changes };
 }
+
+/**
+ * The bar whose point of control traded both sides alike: its lowest row carries the volume and no delta at all, so
+ * in Profile the highlighted row's cell fills none of its column.
+ */
+const BALANCED_POC_FOOTPRINT: BarFootprint = {
+  ...FOOTPRINT,
+  rows: [{ ...ROWS[0], buyVolume: 300, sellVolume: 300 }, ROWS[1], ROWS[2]],
+};
 
 /** One row's cells as a painter sees them: the column, the number and the fill of each, in one line per cell. */
 function paintedCells(rows: readonly FootprintRowCells[]): string[][] {
@@ -245,6 +273,29 @@ test('the point of control row keeps its dark numbers on the white fill it is dr
   expect(rows[0].cells.map((cell) => cell.fill)).toEqual([FOOTPRINT_POC_COLOR, FOOTPRINT_POC_COLOR]);
   expect(rows[0].cells.map((cell) => cell.textColor)).toEqual([DARK_TEXT_COLOR, DARK_TEXT_COLOR]);
   expect(rows[2].cells.map((cell) => cell.textColor)).toEqual([LIGHT_TEXT_COLOR, LIGHT_TEXT_COLOR]);
+});
+
+test('a number that runs past its own box is written light, while one inside its box keeps its fill colour', () => {
+  const highlight = { visible: true, color: FOOTPRINT_POC_COLOR };
+  // In Cluster a cell's box is its whole column, so the point of control's white fill holds the number and the dark
+  // text that fill gives it stays.
+  const clustered = footprintCells(FOOTPRINT, settingsWith({ type: 'delta', poc: highlight }))[0].cells[0];
+  const clusteredBox = footprintProfileBox(CELL_COLUMN, clustered.widthShare, 'buy');
+  expect(clustered.textColor).toBe(DARK_TEXT_COLOR);
+  expect(footprintCellNumberColor(clustered, clusteredBox, CELL_TEXT_STYLE)).toBe(DARK_TEXT_COLOR);
+
+  // In Profile that same cell fills only its share of the column, and a delta that points nowhere fills none of it:
+  // its box is one device px wide, so its number is written over the chart's dark background — while the whole column
+  // still holds it — and takes the light text colour rather than the dark one of its own fill.
+  const profile = settingsWith({ type: 'delta', display: 'profile', poc: highlight });
+  const profiled = footprintCells(BALANCED_POC_FOOTPRINT, profile)[0].cells[0];
+  const profiledBox = footprintProfileBox(CELL_COLUMN, profiled.widthShare, 'buy');
+
+  expect(profiled.widthShare).toBe(0);
+  expect(profiledBox.width).toBe(1);
+  expect(profiled.textColor).toBe(DARK_TEXT_COLOR);
+  expect(footprintCellShowsText(profiledBox, CELL_COLUMN.width, profiled.text, CELL_TEXT_STYLE)).toBe(true);
+  expect(footprintCellNumberColor(profiled, profiledBox, CELL_TEXT_STYLE)).toBe(LIGHT_TEXT_COLOR);
 });
 
 test('the shades a cell takes come from the settings, so an edited ramp repaints the bar', () => {

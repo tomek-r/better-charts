@@ -26,6 +26,7 @@ import {
   footprintLayoutOf,
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintModes';
 import {
+  FOOTPRINT_SIDES,
   footprintBand,
   footprintCellBand,
   footprintShadeColor,
@@ -35,7 +36,9 @@ import {
   footprintSummaryLayout,
   footprintSummaryLines,
   MIN_SUMMARY_BAR_WIDTH,
+  type FootprintSummaryLayout,
   type FootprintSummarySettings,
+  type FootprintTextMark,
 } from '../src/features/chart/engine/barStyle/volumeFootprint/footprintSummary';
 import {
   FOOTPRINT_FONT_SIZE,
@@ -87,6 +90,8 @@ const NO_SCALING = 1;
 const NO_SCALING_RATIOS = { horizontalPixelRatio: NO_SCALING, verticalPixelRatio: NO_SCALING };
 /** One column of a bar, in device pixels, which the cell boxes are measured inside. */
 const SIDE_COLUMN = { left: 8, width: 8 };
+/** The background between the thin candle and each column beside it, in css px, at the suite's one-to-one ratio. */
+const CANDLE_GAP = 6;
 /** How wide the spec's text is in css px: five pixels a character, which a stub measures without any canvas. */
 const MEASURED_TEXT: FootprintTextWidth = (text) => text.length * 5;
 
@@ -333,17 +338,37 @@ test('a two-column bar leaves a gap either side of its thin candle and splits th
   });
 });
 
-test('a one-column bar keeps its thin candle on the group left edge and holds its column at the cap', () => {
-  // A ninety-six-pixel body: its fourteen-pixel candle stands on the group's left edge, six pixels of background
-  // follow it, and the single column is held at its seventy-two-pixel cap rather than taking the seventy-six pixels
-  // the body leaves it, so the 92-pixel group is centred on the bar's x with two pixels of body either side of it.
+test('a one-column bar centres its thin candle on the bar x and holds its column at the cap', () => {
+  // A ninety-six-pixel body: its fourteen-pixel candle is centred on the bar's own x = 10, spanning 3 to 17, six
+  // pixels of background follow it, and the single column is held at its seventy-two-pixel cap rather than taking the
+  // seventy-six pixels the body leaves it, so it runs from 23 to 95.
   expect(footprintBarColumns(10, 96, NO_SCALING, 'single-column')).toEqual({
-    sell: { left: -36, width: 0 },
-    candle: { left: -36, width: 14 },
-    buy: { left: -16, width: MAX_COLUMN_WIDTH },
+    sell: { left: 3, width: 0 },
+    candle: { left: 3, width: 14 },
+    buy: { left: 23, width: MAX_COLUMN_WIDTH },
   });
   // A body its two columns can still fill keeps them filling it, the sell column on the body's left edge.
   expect(footprintBarColumns(10, 96, NO_SCALING, 'two-columns').sell.left).toBe(-38);
+});
+
+test('a one-column bar of any body width keeps its candle on the bar x, a gap before its one column', () => {
+  // The candle stands on the grid line the bar is drawn on rather than half a group left of it, so a bar of any body
+  // width reads on the same x whichever type is chosen. The gap and the column follow it to the right.
+  for (const fullWidth of [40, 96, 100, 136, 400]) {
+    const columns = footprintBarColumns(10, fullWidth, NO_SCALING, 'single-column');
+    // A candle of an even width lands on the bar's x exactly, and one of an odd width one device pixel at most off.
+    expect(Math.abs(columns.candle.left + columns.candle.width / 2 - 10)).toBeLessThanOrEqual(1);
+    expect(columns.buy.left - (columns.candle.left + columns.candle.width)).toBe(CANDLE_GAP);
+    // The empty sell slot stands where the candle does, and the one column keeps its cap.
+    expect(columns.sell).toEqual({ left: columns.candle.left, width: 0 });
+    expect(columns.buy.width).toBeLessThanOrEqual(MAX_COLUMN_WIDTH);
+  }
+  // On a screen of two device pixels per css px the candle is centred on the same grid line, in device pixels, and
+  // its gap widens with the screen: a thirty-pixel candle on 5, twelve pixels of background, then the one column.
+  const dense = footprintBarColumns(10, 200, 2, 'single-column');
+  expect(dense.candle).toEqual({ left: 5, width: 30 });
+  expect(dense.candle.left + dense.candle.width / 2).toBe(20);
+  expect(dense.buy.left - (dense.candle.left + dense.candle.width)).toBe(CANDLE_GAP * 2);
 });
 
 test('a very wide two-column bar caps both columns and centres the group on its x', () => {
@@ -372,26 +397,28 @@ test('a very wide two-column bar caps both columns and centres the group on its 
   expect(SUMMARY_COLUMNS.buy.width).toBeLessThan(MAX_COLUMN_WIDTH);
 });
 
-test('a very wide one-column bar caps its one column and keeps the candle on the group left edge', () => {
-  // Four hundred css px: a sixty-pixel candle, a six-pixel gap and the column held at its seventy-two-pixel cap make
-  // a 138-pixel group that starts on -59, with the candle on its left edge, and is centred on the bar's x, so 131
-  // device pixels of the body stay empty on either side of it.
+test('a very wide one-column bar caps its one column and centres its candle on the bar x', () => {
+  // Four hundred css px: the sixty-pixel candle of the body is centred on the bar's own x = 10, spanning -20 to 40,
+  // six pixels of background follow it, and the column is held at its seventy-two-pixel cap rather than filling the
+  // 334 device pixels the body leaves it, so it runs from 46 to 118.
   const columns = footprintBarColumns(10, 400, NO_SCALING, 'single-column');
   const bodyLeft = 10 - 400 / 2;
   const bodyRight = bodyLeft + 400;
-  const groupRight = columns.buy.left + columns.buy.width;
 
   expect(columns).toEqual({
-    sell: { left: -59, width: 0 },
-    candle: { left: -59, width: 60 },
-    buy: { left: 7, width: MAX_COLUMN_WIDTH },
+    sell: { left: -20, width: 0 },
+    candle: { left: -20, width: 60 },
+    buy: { left: 46, width: MAX_COLUMN_WIDTH },
   });
-  // The candle stands on the group's left edge, six pixels of background follow it, and the one column is capped.
+  // The candle stands on the bar's x, six pixels of background follow it, and the one column is capped.
   expect(columns.candle.left).toBe(columns.sell.left);
-  expect(columns.buy.left).toBe(columns.candle.left + columns.candle.width + 6);
-  expect((columns.sell.left + groupRight) / 2).toBe(10);
-  expect(columns.sell.left - bodyLeft).toBe(bodyRight - groupRight);
-  expect(columns.sell.left - bodyLeft).toBe(131);
+  expect(columns.candle.left + columns.candle.width / 2).toBe(10);
+  expect(columns.buy.left).toBe(columns.candle.left + columns.candle.width + CANDLE_GAP);
+  expect(columns.buy.width).toBe(MAX_COLUMN_WIDTH);
+  // The candle leaves the body's own left half empty behind it, and the capped column stops well inside its right
+  // one, so the pair reaches right of the bar's x rather than being centred on it.
+  expect(columns.candle.left - bodyLeft).toBe(170);
+  expect(bodyRight - (columns.buy.left + columns.buy.width)).toBe(92);
 });
 
 test('the column cap is css px scaled by the screen ratio, in whole device pixels', () => {
@@ -416,10 +443,12 @@ test('a bar the host holds no footprint for draws its candle on the very column 
   const twoColumns = footprintBarColumns(10, 40, NO_SCALING, 'two-columns');
   expect(footprintCandleGlyph(twoColumns.candle, NO_SCALING)).toEqual({ x: 10, width: 6 });
 
-  // The one-column bar's candle column is left -10, width 6, on its group's left edge, so the pending bar's candle
-  // follows it seven pixels left of the bar's x rather than holding the body.
+  // The one-column bar's candle column is left 7, width 6 — centred on the bar's own x, on the very column the
+  // two-column bar keeps its candle on — so the pending bar's candle is painted on the bar's x, where the body of
+  // any footprint bar stands, rather than seven pixels left of it.
   const oneColumn = footprintBarColumns(10, 40, NO_SCALING, 'single-column');
-  expect(footprintCandleGlyph(oneColumn.candle, NO_SCALING)).toEqual({ x: -7, width: 6 });
+  expect(oneColumn.candle).toEqual(twoColumns.candle);
+  expect(footprintCandleGlyph(oneColumn.candle, NO_SCALING)).toEqual({ x: 10, width: 6 });
 
   // On a screen of two device pixels per css px the body keeps the candle column's own device width — a 120-pixel
   // candle within an 800-pixel body — painted on the media x of its middle, which is still the bar's own ten css px.
@@ -563,29 +592,89 @@ function summaryLayout(buyVolume: number, sellVolume: number, showSummary: boole
   return summaryLayoutOf({ ...FOOTPRINT, buyVolume, sellVolume }, SUMMARY_COLUMNS, showSummary, size);
 }
 
+/** How wide one character of the owner's canvas font is at fourteen css px, in css px: a sans-serif's digits do. */
+const OWNER_CHARACTER_WIDTH = 8;
+/**
+ * The owner's font, measured deterministically: eight css px a character, which the spec's five-px stub leaves out and
+ * which is what makes the two-line block of a one-column bar's summary as wide as the owner sees it.
+ */
+const OWNER_FONT_TEXT: FootprintTextWidth = (text) => text.length * OWNER_CHARACTER_WIDTH;
+/** The body width the owner's bars are drawn at, in css px, which leaves the capped single column seventy-two px. */
+const OWNER_BODY_WIDTH = 136;
+/** The columns of the owner's Delta bars: the thin candle centred on the bar x, and the one column beside it. */
+const OWNER_SINGLE_COLUMN = footprintBarColumns(10, OWNER_BODY_WIDTH, NO_SCALING, 'single-column');
+/** The size a bar whose rows are ten css px tall writes at, whose summary lines have to keep fitting that smaller. */
+const SHORT_ROW_TEXT_SIZE = 10;
+
+/** One bar's summary at the owner's zoom and text size, with the volumes the two sides of it traded. */
+function ownerSummary(sellVolume: number, buyVolume: number, size = FOOTPRINT_FONT_SIZE) {
+  const footprint = { ...FOOTPRINT, buyVolume, sellVolume };
+  const style = textStyleOf(size, OWNER_FONT_TEXT);
+  return footprintSummaryLayout(footprint, OWNER_SINGLE_COLUMN, LOWEST_ROW_BOTTOM, SUMMARY_SETTINGS, style);
+}
+
+/** The box a summary was laid out with, and every text it writes, which a bar with room for its summary always has. */
+function summaryBoxOf(layout: FootprintSummaryLayout | null) {
+  if (layout === null || layout.box === null) {
+    throw new Error('a bar with room for its summary writes its box');
+  }
+  return { box: layout.box, texts: layout.texts };
+}
+
+/** The marks the summary box of `layout` writes, the totals under the column above it left out. */
+function boxMarks(layout: FootprintSummaryLayout | null): readonly FootprintTextMark[] {
+  const { box, texts } = summaryBoxOf(layout);
+  return texts.filter((text) => text.y >= box.top);
+}
+
+/** The text a bar writes under its column before its box: the sell total, the separator and the buy total. */
+function totalsLineText(layout: FootprintSummaryLayout | null): string {
+  const { box, texts } = summaryBoxOf(layout);
+  return texts
+    .filter((text) => text.y < box.top)
+    .map((text) => text.text)
+    .join('');
+}
+
+/** The margins the block of a box's lines leaves inside it, left and right, in css px of `style`'s size. */
+function boxMargins(layout: FootprintSummaryLayout | null, style: FootprintTextStyle): { left: number; right: number } {
+  const { box } = summaryBoxOf(layout);
+  const texts = boxMarks(layout);
+  const blockLeft = Math.min(...texts.map((text) => text.x));
+  const blockRight = Math.max(...texts.map((text) => text.x + footprintTextWidthAt(text.text, style)));
+  return { left: blockLeft - box.left, right: box.left + box.width - blockRight };
+}
+
+/** One Delta bar the owner reported, and what its summary writes for it: its totals line and the box's two values. */
+const OWNER_SUMMARY_CASES = [
+  { sellVolume: 81, buyVolume: 74, totals: '81 × 74', deltaText: '−7', totalText: '155' },
+  { sellVolume: 20, buyVolume: 25, totals: '20 × 25', deltaText: '5', totalText: '45' },
+  { sellVolume: 40, buyVolume: 18, totals: '40 × 18', deltaText: '−22', totalText: '58' },
+];
+
 test('a bar writes each side total under its own column, against the edge nearest the candle', () => {
   // The columns span x = -40 to 60: the sell total ends eight pixels inside its own right edge, the buy total starts
-  // eight pixels inside its left one, and both are written eleven pixels under the lowest row's bottom — the middle
-  // of a line that starts four pixels below it.
+  // eight pixels inside its left one, and both are written fifteen pixels under the lowest row's bottom — the middle
+  // of a line that starts eight pixels below it.
   expect(summaryLayout(1000, 600, false)).toEqual({
     box: null,
     texts: [
-      { x: -12, y: 211, text: '600', color: '#F23645', align: 'right', size: 14 },
-      { x: 31, y: 211, text: '1K', color: '#089981', align: 'left', size: 14 },
+      { x: -12, y: 215, text: '600', color: '#F23645', align: 'right', size: 14 },
+      { x: 31, y: 215, text: '1K', color: '#089981', align: 'left', size: 14 },
     ],
   });
 });
 
 test('a one-column bar writes both totals in one coloured line under its own column', () => {
-  // The capped single column runs from -15 to 57, so the sell, separator and buy runs — 15, 15 and 25 css px wide —
-  // start at -7, 8 and 23, all written eleven pixels under the lowest row's bottom: fifty-five pixels of text and
+  // The capped single column runs from 24 to 96, so the sell, separator and buy runs — 15, 15 and 25 css px wide —
+  // start at 32, 47 and 62, all written fifteen pixels under the lowest row's bottom: fifty-five pixels of text and
   // their eight pixels of padding fit the seventy-two-pixel column.
   const columns = footprintBarColumns(10, 100, NO_SCALING, 'single-column');
   const line = summaryLayoutOf({ ...FOOTPRINT, buyVolume: 2180, sellVolume: 600 }, columns, false);
   expect(line?.texts).toEqual([
-    { x: -7, y: 211, text: '600', color: '#F23645', align: 'left', size: 14 },
-    { x: 8, y: 211, text: ' × ', color: '#dce4ef', align: 'left', size: 14 },
-    { x: 23, y: 211, text: '2.18K', color: '#089981', align: 'left', size: 14 },
+    { x: 32, y: 215, text: '600', color: '#F23645', align: 'left', size: 14 },
+    { x: 47, y: 215, text: ' × ', color: '#dce4ef', align: 'left', size: 14 },
+    { x: 62, y: 215, text: '2.18K', color: '#089981', align: 'left', size: 14 },
   ]);
   // Two five-character totals and their separator need sixty-five pixels, which with their padding spill past the
   // capped column, so that whole line is left out rather than written over the column's edge.
@@ -619,22 +708,27 @@ test('a Profile cell writes a number too wide for its box while its whole column
   expect(footprintCellShowsText(cell, column.width, '600 × 2.18K', textStyleOf(FOOTPRINT_FONT_SIZE))).toBe(false);
 });
 
+/** The box's two lines for the fixture's 400 delta and 1.6K total: the block centred on -15.5 in both boxes these tests lay out. */
+const FIXTURE_BOX_LINES = [
+  { x: -15.5, y: 248, text: 'Delta', color: '#089981', align: 'left', size: 14 },
+  { x: 15.5, y: 248, text: '400', color: '#089981', align: 'left', bold: true, size: 14 },
+  { x: -15.5, y: 268, text: 'Total', color: '#dce4ef', align: 'left', size: 14 },
+  { x: 15.5, y: 268, text: '1.6K', color: '#dce4ef', align: 'left', bold: true, size: 14 },
+];
+
 test('the summary box spans the bar columns below the totals, with the delta and the total inside it', () => {
-  // The bar's columns span -40 to 60, so the box is the hundred pixels between them. Six pixels under the totals it
+  // The bar's columns span -40 to 60, so the box is the hundred pixels between them. Ten pixels under the totals it
   // starts, fifty-two pixels tall with its six pixels of padding, and its two twenty-pixel lines are written sixteen
   // and thirty-six pixels into it. Both lines make one block — the thirty-one-pixel label column, the wider label plus
   // six pixels, and the twenty-pixel '1.6K' after it, so fifty-one pixels wide — which the box centres: it starts
   // -15.5, twenty-four and a half pixels in from the box's left edge and as far from its right one. A label stands on
   // the block's left edge and its value right after the label column, on 15.5.
   expect(summaryLayout(1000, 600, true)).toEqual({
-    box: { left: -40, top: 224, width: 100, height: 52, radius: 6 },
+    box: { left: -40, top: 232, width: 100, height: 52, radius: 6 },
     texts: [
-      { x: -12, y: 211, text: '600', color: '#F23645', align: 'right', size: 14 },
-      { x: 31, y: 211, text: '1K', color: '#089981', align: 'left', size: 14 },
-      { x: -15.5, y: 240, text: 'Delta', color: '#089981', align: 'left', size: 14 },
-      { x: 15.5, y: 240, text: '400', color: '#089981', align: 'left', bold: true, size: 14 },
-      { x: -15.5, y: 260, text: 'Total', color: '#dce4ef', align: 'left', size: 14 },
-      { x: 15.5, y: 260, text: '1.6K', color: '#dce4ef', align: 'left', bold: true, size: 14 },
+      { x: -12, y: 215, text: '600', color: '#F23645', align: 'right', size: 14 },
+      { x: 31, y: 215, text: '1K', color: '#089981', align: 'left', size: 14 },
+      ...FIXTURE_BOX_LINES,
     ],
   });
 });
@@ -643,35 +737,72 @@ test('the summary box centres its two lines, leaving them the same room either s
   // The block is fifty-one css px wide inside a hundred-pixel box, so it stands twenty-four and a half pixels in from
   // either edge: the left margin the leftmost text leaves and the right margin the rightmost text leaves are equal.
   const layout = summaryLayout(1000, 600, true);
-  if (layout === null || layout.box === null) {
-    throw new Error('a hundred-pixel bar writes its summary box');
-  }
-  const { box } = layout;
-  // The box's own texts are the ones written at or below its top, under the totals above it.
-  const boxTexts = layout.texts.filter((text) => text.y >= box.top);
-  const blockLeft = Math.min(...boxTexts.map((text) => text.x));
-  const blockRight = Math.max(...boxTexts.map((text) => text.x + MEASURED_TEXT(text.text)));
-  const leftMargin = blockLeft - box.left;
-  const rightMargin = box.left + box.width - blockRight;
+  const margins = boxMargins(layout, textStyleOf(FOOTPRINT_FONT_SIZE));
 
-  expect(boxTexts).toHaveLength(4);
-  expect(leftMargin).toBeCloseTo(24.5, 5);
-  expect(rightMargin).toBeCloseTo(24.5, 5);
-  expect(Math.abs(leftMargin - rightMargin)).toBeLessThanOrEqual(1);
+  expect(boxMarks(layout)).toHaveLength(4);
+  expect(margins.left).toBeCloseTo(24.5, 5);
+  expect(margins.right).toBeCloseTo(24.5, 5);
+  expect(Math.abs(margins.left - margins.right)).toBeLessThanOrEqual(1);
   // Centred or not, the block never leaves the box.
-  expect(leftMargin).toBeGreaterThan(0);
-  expect(rightMargin).toBeGreaterThan(0);
+  expect(margins.left).toBeGreaterThan(0);
+  expect(margins.right).toBeGreaterThan(0);
 });
 
 test('a one-column bar spans its summary box over its own column, leaving the empty sell slot out', () => {
   const columns = footprintBarColumns(10, 100, NO_SCALING, 'single-column');
   const layout = summaryLayoutOf(FOOTPRINT, columns, true);
 
-  // The capped single column runs from -15 to 57: the box starts on that column's left edge and is exactly as wide
-  // as it, rather than reaching back over the thin candle to the group's left edge.
+  // The capped single column runs from 24 to 96: the box starts on that column's left edge and is exactly as wide
+  // as it, rather than reaching back over the thin candle and its gap to the empty sell slot.
   expect(layout?.box?.left).toBe(columns.buy.left);
   expect(layout?.box?.width).toBe(columns.buy.width);
-  expect(layout?.box).toEqual({ left: -15, top: 224, width: 72, height: 52, radius: 6 });
+  expect(layout?.box).toEqual({ left: 24, top: 232, width: 72, height: 52, radius: 6 });
+});
+
+test('a one-column bar at the owner size writes both of its summary lines, centred in its box', () => {
+  // The owner's Delta bars: rows of a hundred and ninety css px write at fourteen, and the capped single column is
+  // seventy-two px wide, so the box is that column and its two lines of text have to share it. Both lines are
+  // written, their labels on one x and their values on another, and the block they make is centred in the box.
+  const style = textStyleOf(FOOTPRINT_FONT_SIZE, OWNER_FONT_TEXT);
+
+  for (const { sellVolume, buyVolume, totals, deltaText, totalText } of OWNER_SUMMARY_CASES) {
+    const layout = ownerSummary(sellVolume, buyVolume);
+    const marks = boxMarks(layout);
+    expect(totalsLineText(layout)).toBe(totals);
+    expect(marks.map((text) => text.text)).toEqual(['Delta', deltaText, 'Total', totalText]);
+    expect(marks[0].x).toBe(marks[2].x);
+    expect(marks[1].x).toBe(marks[3].x);
+    const margins = boxMargins(layout, style);
+    expect(margins.left).toBeCloseTo(margins.right, 5);
+    expect(margins.left).toBeGreaterThanOrEqual(0);
+  }
+});
+
+test('a one-column bar writing at ten px still keeps both summary lines, its scaled sizes leaving them room', () => {
+  // A bar of ten-css-px rows writes its summary at ten: the labels, the gaps, the padding and the box itself scale
+  // with that size, so the two lines keep fitting the column the box spans.
+  const style = textStyleOf(SHORT_ROW_TEXT_SIZE, OWNER_FONT_TEXT);
+  const layout = ownerSummary(81, 74, SHORT_ROW_TEXT_SIZE);
+  const marks = boxMarks(layout);
+
+  expect(marks.map((text) => text.text)).toEqual(['Delta', '−7', 'Total', '155']);
+  expect(marks.every((text) => text.size === SHORT_ROW_TEXT_SIZE)).toBe(true);
+  const margins = boxMargins(layout, style);
+  expect(margins.left).toBeCloseTo(margins.right, 5);
+});
+
+test('a one-column box keeps only the summary line it has room for, and centres the one it keeps', () => {
+  // The bar traded 400 lots on its sell side and 1220 on its buy one: its delta '820' fits the box, while the total
+  // '1.62K' is wider than the whole column. The delta line is written alone, and the block it makes on its own is
+  // centred in the box rather than standing where the two-line block would have started.
+  const style = textStyleOf(FOOTPRINT_FONT_SIZE, OWNER_FONT_TEXT);
+  const layout = ownerSummary(400, 1220);
+  const marks = boxMarks(layout);
+
+  expect(marks.map((text) => text.text)).toEqual(['Delta', '820']);
+  const margins = boxMargins(layout, style);
+  expect(margins.left).toBeCloseTo(margins.right, 5);
+  expect(margins.left).toBeGreaterThan(0);
 });
 
 test('a very wide bar spans its summary box over the capped group, not the whole body', () => {
@@ -681,17 +812,17 @@ test('a very wide bar spans its summary box over the capped group, not the whole
   // The box is the 216 device pixels of the capped group rather than the 400 of the body, and each total stands
   // inside its own capped column: eight pixels in from the sell column's right edge on -26, and eight pixels in
   // from the buy column's left one on 46.
-  expect(layout?.box).toEqual({ left: -98, top: 224, width: 216, height: 52, radius: 6 });
+  expect(layout?.box).toEqual({ left: -98, top: 232, width: 216, height: 52, radius: 6 });
   expect(layout?.texts.slice(0, 2)).toEqual([
-    { x: -34, y: 211, text: '600', color: '#F23645', align: 'right', size: 14 },
-    { x: 54, y: 211, text: '1K', color: '#089981', align: 'left', size: 14 },
+    { x: -34, y: 215, text: '600', color: '#F23645', align: 'right', size: 14 },
+    { x: 54, y: 215, text: '1K', color: '#089981', align: 'left', size: 14 },
   ]);
 });
 
 test('the totals and the summary lines are written at the size their own bar holds', () => {
   // A bar of ten-px rows writes everything under its columns at ten px: each total keeps 8 × 10/14 = 5.71 px of its
-  // padding, its line is a line of ten px 4 × 10/14 = 2.86 px under the lowest row, and the box takes the scaled
-  // gaps, line height, padding and radius: it starts 200 + (4 + 14 + 6) × 10/14 = 217.14, rounded to 217 px, is
+  // padding, its line is a line of ten px 8 × 10/14 = 5.71 px under the lowest row, and the box takes the scaled
+  // gaps, line height, padding and radius: it starts 200 + (8 + 14 + 10) × 10/14 = 222.86, rounded to 223 px, is
   // (2 × 20 + 2 × 6) × 10/14 = 37.14, rounded to 37 px, tall, with a 6 × 10/14 = 4.29, rounded to 4, px radius.
   const layout = summaryLayout(1000, 600, true, 10);
   if (layout === null || layout.box === null) {
@@ -704,25 +835,26 @@ test('the totals and the summary lines are written at the size their own bar hol
   // on -4 and the buy one starts on 23.
   expect(layout.texts[0].x).toBeCloseTo(-9.714286, 5);
   expect(layout.texts[1].x).toBeCloseTo(28.714286, 5);
-  expect(layout.texts[0].y).toBeCloseTo(207.857143, 5);
-  expect(layout.box).toEqual({ left: -40, top: 217, width: 100, height: 37, radius: 4 });
+  expect(layout.texts[0].y).toBeCloseTo(210.714286, 5);
+  expect(layout.box).toEqual({ left: -40, top: 223, width: 100, height: 37, radius: 4 });
   // The box's two lines sit 20 × 10/14 = 14.29 px apart, the first one 6 × 10/14 = 4.29 px and half a line inside it.
-  expect(layout.texts[2].y).toBeCloseTo(228.428571, 5);
-  expect(layout.texts[4].y).toBeCloseTo(242.714286, 5);
+  expect(layout.texts[2].y).toBeCloseTo(234.428571, 5);
+  expect(layout.texts[4].y).toBeCloseTo(248.714286, 5);
 });
 
 test('a summary box with no line that fits it is left off rather than drawn empty', () => {
-  // Six css px a character: inside the sixty-px box of the narrowest bar that writes a summary, forty-eight px are
-  // left of its padding, while the delta line needs its thirty-six-px label column and eighteen more for its value.
-  // No line fits, so no box is drawn — not even an empty one — while the buy total still fits its own twenty-px
-  // column.
+  // Six css px a character: the sixty-px box of the narrowest bar that writes a summary cannot hold a line of its
+  // thirty-six-px label column and a value — the delta '−10.5K' needs thirty-six more px for it and the total '12.5K'
+  // thirty. No line fits, so no box is drawn — not even an empty one — while the buy total still fits its own
+  // twenty-px column.
   const sixPerCharacter: FootprintTextWidth = (text) => text.length * 6;
   const columns = footprintBarColumns(10, MIN_SUMMARY_BAR_WIDTH, NO_SCALING, 'two-columns');
   const wideStyle = textStyleOf(FOOTPRINT_FONT_SIZE, sixPerCharacter);
+  const traded = { ...FOOTPRINT, sellVolume: 11_500 };
 
-  expect(footprintSummaryLayout(FOOTPRINT, columns, LOWEST_ROW_BOTTOM, SUMMARY_SETTINGS, wideStyle)).toEqual({
+  expect(footprintSummaryLayout(traded, columns, LOWEST_ROW_BOTTOM, SUMMARY_SETTINGS, wideStyle)).toEqual({
     box: null,
-    texts: [{ x: 28, y: 211, text: '1K', color: '#089981', align: 'left', size: 14 }],
+    texts: [{ x: 28, y: 215, text: '1K', color: '#089981', align: 'left', size: 14 }],
   });
 });
 
@@ -758,32 +890,38 @@ test('a bar whose summary strip is narrower than the minimum writes neither the 
 test('a summary line its column has no room for is left out, while the ones that fit are written', () => {
   // The narrowest bar that writes a summary: a sixty-pixel body leaves a nineteen-pixel sell column and a
   // twenty-pixel buy column. Eight pixels of padding need twenty-three pixels for the fifteen-pixel sell total, four
-  // more than its column has, so only the buy total is written; inside the box the delta line fits the forty-eight
-  // pixels left of its padding and the longer total line does not. The block would be fifty-one pixels wide, three
-  // more than that room, so it cannot be centred and starts on the inner padding, -14, its value thirty-one pixels on.
+  // more than its column has, so only the buy total is written. The box is sixty pixels wide, and both of its lines
+  // fit that width — forty-six and fifty-one pixels of label column and value — so the block they make, fifty-one
+  // pixels wide, is centred in it: it starts -15.5, four and a half pixels in from the box's left edge.
   const columns = footprintBarColumns(10, MIN_SUMMARY_BAR_WIDTH, NO_SCALING, 'two-columns');
   const sellColumn = { ...columns.sell, top: 0, height: TEXT_LINE_HEIGHT };
 
   expect(footprintCellShowsText(sellColumn, sellColumn.width, '600', textStyleOf(FOOTPRINT_FONT_SIZE))).toBe(false);
   expect(summaryLayoutOf(FOOTPRINT, columns, true)).toEqual({
-    box: { left: -20, top: 224, width: 60, height: 52, radius: 6 },
-    texts: [
-      { x: 28, y: 211, text: '1K', color: '#089981', align: 'left', size: 14 },
-      { x: -14, y: 240, text: 'Delta', color: '#089981', align: 'left', size: 14 },
-      { x: 17, y: 240, text: '400', color: '#089981', align: 'left', bold: true, size: 14 },
-    ],
+    box: { left: -20, top: 232, width: 60, height: 52, radius: 6 },
+    texts: [{ x: 28, y: 215, text: '1K', color: '#089981', align: 'left', size: 14 }, ...FIXTURE_BOX_LINES],
   });
 });
 
-test('an imbalance mark stands on the outer edge of its cell, three css pixels wide and as tall as the row', () => {
-  const cell = { left: 20, width: 40, top: 100, height: 30 };
+test('an imbalance mark stands on the outer edge of its cell, three css pixels wide and as tall as the cell', () => {
+  // A cell between the prices of its row, less the row gap under it: at two device pixels per css px the row starts
+  // on device pixel 20 and its cell is four pixels tall, ending on 24 where the next row's gap begins.
+  const cell = footprintCellBox({ left: 20, width: 40 }, 10, 14, 2);
 
   expect(IMBALANCE_MARK_WIDTH).toBe(3);
+  expect(cell).toEqual({ left: 20, width: 40, top: 20, height: 4 });
   // The sell mark takes the cell's left edge, the buy mark its right one.
-  expect(footprintImbalanceBox(cell, 'sell', NO_SCALING)).toEqual({ left: 20, top: 100, width: 3, height: 30 });
-  expect(footprintImbalanceBox(cell, 'buy', NO_SCALING)).toEqual({ left: 57, top: 100, width: 3, height: 30 });
+  expect(footprintImbalanceBox(cell, 'sell', NO_SCALING)).toEqual({ left: 20, top: 20, width: 3, height: 4 });
+  expect(footprintImbalanceBox(cell, 'buy', NO_SCALING)).toEqual({ left: 57, top: 20, width: 3, height: 4 });
+  // The mark is exactly as tall as the cell it marks, so it never runs on over the gap under it: its top and its
+  // bottom edge are the cell's own.
+  for (const side of FOOTPRINT_SIDES) {
+    const mark = footprintImbalanceBox(cell, side, NO_SCALING);
+    expect(mark.top).toBe(cell.top);
+    expect(mark.top + mark.height).toBe(cell.top + cell.height);
+  }
   // Two device pixels per css pixel double the mark's thickness, so it reads the same on a dense screen.
-  expect(footprintImbalanceBox(cell, 'buy', 2)).toEqual({ left: 54, top: 100, width: 6, height: 30 });
+  expect(footprintImbalanceBox(cell, 'buy', 2)).toEqual({ left: 54, top: 20, width: 6, height: 4 });
 });
 
 test('a bar reaches its footprint through its own time, and one without a footprint carries none', () => {
