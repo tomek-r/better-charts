@@ -30,10 +30,11 @@ pub use limits::{
     max_estimated_profile_ticks, max_frame_bytes, max_ticks_per_page, min_frame_bytes,
 };
 pub use market::{
-    BarUpdate, BrokerSymbol, HistoryRequest, HistorySnapshot, MarketCandle, MarketTick,
-    QuoteUpdate, SymbolInfoRequest, SymbolInfoResult, SymbolSearchRequest, SymbolSearchResult,
-    TickHistoryRequest, TickHistorySnapshot, TickPriceCount, TickPriceHistoryRequest,
-    TickPriceHistorySnapshot,
+    BarUpdate, BrokerSymbol, FootprintCarry, FootprintLevel, FootprintSide, HistoryRequest,
+    HistorySnapshot, MarketCandle, MarketTick, QuoteUpdate, SymbolInfoRequest, SymbolInfoResult,
+    SymbolSearchRequest, SymbolSearchResult, TickFootprintHistoryRequest,
+    TickFootprintHistorySnapshot, TickHistoryRequest, TickHistorySnapshot, TickPriceCount,
+    TickPriceHistoryRequest, TickPriceHistorySnapshot,
 };
 pub use orders::{
     protective_price, validate_stop_distances, OrderCancelRequest, OrderCheckError,
@@ -119,6 +120,7 @@ pub enum MessageType {
     TickHistoryRequest,
     TickHistorySnapshot,
     TickPriceHistorySnapshot,
+    TickFootprintHistorySnapshot,
     ReconcileRequest,
     ReconcileSnapshot,
     ReconcileError,

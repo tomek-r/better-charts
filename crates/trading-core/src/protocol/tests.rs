@@ -369,6 +369,348 @@ fn validates_exact_price_summary_and_rejects_ambiguous_boundaries_or_counts() {
     assert!(empty.validate(&request).is_ok());
 }
 
+fn footprint_request() -> TickFootprintHistoryRequest {
+    TickFootprintHistoryRequest {
+        history: TickHistoryRequest {
+            symbol: "NAS".into(),
+            from_ms: 1000,
+            to_ms: 2000,
+            max_ticks: 100,
+        },
+        footprint_counts: true,
+        real_volume: true,
+        carry: Some(FootprintCarry {
+            price: "100.5".into(),
+            side: FootprintSide::Buy,
+        }),
+    }
+}
+
+fn footprint_snapshot() -> TickFootprintHistorySnapshot {
+    TickFootprintHistorySnapshot {
+        request_id: "fp-page".into(),
+        symbol: "NAS".into(),
+        from_ms: 1000,
+        to_ms: 2000,
+        tick_size: "0.1".into(),
+        complete: false,
+        through_ms: 1500,
+        loaded_ticks: 40,
+        trade_ticks: 5,
+        carry: Some(FootprintCarry {
+            price: "101.0".into(),
+            side: FootprintSide::Sell,
+        }),
+        levels: vec![
+            FootprintLevel {
+                price: "100.5".into(),
+                buy: "3".into(),
+                sell: "0".into(),
+            },
+            FootprintLevel {
+                price: "101.0".into(),
+                buy: "0".into(),
+                sell: "2".into(),
+            },
+        ],
+    }
+}
+
+#[test]
+fn footprint_request_flattens_the_history_and_keeps_the_carry_optional() {
+    let request = footprint_request();
+    request.validate().unwrap();
+    let value = serde_json::to_value(&request).unwrap();
+    assert_eq!(value["symbol"], "NAS");
+    assert_eq!(value["from_ms"], 1000);
+    assert_eq!(value["to_ms"], 2000);
+    assert_eq!(value["max_ticks"], 100);
+    assert_eq!(value["footprint_counts"], true);
+    assert_eq!(value["real_volume"], true);
+    assert_eq!(value["carry"]["price"], "100.5");
+    assert_eq!(value["carry"]["side"], "buy");
+    let parsed: TickFootprintHistoryRequest = serde_json::from_value(value).unwrap();
+    parsed.validate().unwrap();
+    assert_eq!(parsed.carry, request.carry);
+
+    // A first page has no carry yet: the field is omitted and parses back to none.
+    let first_page = TickFootprintHistoryRequest {
+        carry: None,
+        ..footprint_request()
+    };
+    let json = serde_json::to_string(&first_page).unwrap();
+    assert!(!json.contains("carry"), "{json}");
+    let parsed: TickFootprintHistoryRequest = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.carry, None);
+    parsed.validate().unwrap();
+
+    // A side outside buy/sell is not a value this protocol has.
+    let unknown_side = r#"{"price": "100.5", "side": "flat"}"#;
+    assert!(serde_json::from_str::<FootprintCarry>(unknown_side).is_err());
+}
+
+#[test]
+fn footprint_request_requires_its_mode_a_valid_range_and_a_positive_carry() {
+    let base = footprint_request();
+    assert_eq!(
+        TickFootprintHistoryRequest {
+            footprint_counts: false,
+            ..base.clone()
+        }
+        .validate(),
+        Err("invalid tick footprint request")
+    );
+    for history in [
+        TickHistoryRequest {
+            from_ms: 2000,
+            ..base.history.clone()
+        },
+        TickHistoryRequest {
+            symbol: String::new(),
+            ..base.history.clone()
+        },
+        TickHistoryRequest {
+            max_ticks: 0,
+            ..base.history.clone()
+        },
+    ] {
+        assert_eq!(
+            TickFootprintHistoryRequest {
+                history,
+                ..base.clone()
+            }
+            .validate(),
+            Err("invalid tick footprint request")
+        );
+    }
+    for bad in ["0", "-1", "100.5 ", "abc"] {
+        assert_eq!(
+            TickFootprintHistoryRequest {
+                carry: Some(FootprintCarry {
+                    price: bad.into(),
+                    side: FootprintSide::Sell,
+                }),
+                ..base.clone()
+            }
+            .validate(),
+            Err("invalid footprint carry"),
+            "{bad} must be rejected as a carry price"
+        );
+    }
+}
+
+#[test]
+fn footprint_page_round_trips_and_accepts_counted_and_weighted_answers() {
+    let request = TickFootprintHistoryRequest {
+        real_volume: false,
+        ..footprint_request()
+    };
+    let snapshot = footprint_snapshot();
+    snapshot.validate(&request).unwrap();
+
+    let value = serde_json::to_value(&snapshot).unwrap();
+    for field in [
+        "request_id",
+        "symbol",
+        "from_ms",
+        "to_ms",
+        "tick_size",
+        "complete",
+        "through_ms",
+        "loaded_ticks",
+        "trade_ticks",
+        "carry",
+        "levels",
+    ] {
+        assert!(value.get(field).is_some(), "{field} must stay snake_case");
+    }
+    assert_eq!(value["carry"]["price"], "101.0");
+    assert_eq!(value["carry"]["side"], "sell");
+    assert_eq!(value["levels"][0]["price"], "100.5");
+    assert_eq!(value["levels"][0]["buy"], "3");
+    assert_eq!(value["levels"][0]["sell"], "0");
+    let parsed: TickFootprintHistorySnapshot = serde_json::from_value(value).unwrap();
+    parsed.validate(&request).unwrap();
+
+    // A weighted page carries the traded lots, not whole tick counts.
+    let weighted = TickFootprintHistoryRequest {
+        real_volume: true,
+        ..request.clone()
+    };
+    let mut lots = snapshot.clone();
+    lots.levels[0].buy = "2.5".into();
+    lots.validate(&weighted).unwrap();
+    // The same page is not a whole-trade count, so the counted mode rejects it.
+    assert!(lots.validate(&request).is_err());
+    // Weighted sums need not equal the trade count either.
+    lots.levels[0].buy = "100".into();
+    lots.validate(&weighted).unwrap();
+}
+
+#[test]
+fn footprint_page_rejects_bad_identity_bounds_and_tick_size() {
+    let request = TickFootprintHistoryRequest {
+        real_volume: false,
+        ..footprint_request()
+    };
+    let snapshot = footprint_snapshot();
+    snapshot.validate(&request).unwrap();
+
+    let mut bad = snapshot.clone();
+    bad.request_id.clear();
+    assert!(bad.validate(&request).is_err(), "a page echoes its request");
+    let mut bad = snapshot.clone();
+    bad.symbol = "OTHER".into();
+    assert!(bad.validate(&request).is_err(), "the symbol must match");
+    let mut bad = snapshot.clone();
+    bad.from_ms = 999;
+    assert!(bad.validate(&request).is_err(), "the range must match");
+    let mut bad = snapshot.clone();
+    bad.to_ms = 2001;
+    assert!(bad.validate(&request).is_err(), "the range must match");
+    let mut bad = snapshot.clone();
+    bad.complete = true;
+    assert!(
+        bad.validate(&request).is_err(),
+        "a complete page ends at to_ms"
+    );
+    let mut bad = snapshot.clone();
+    bad.through_ms = 2000;
+    assert!(
+        bad.validate(&request).is_err(),
+        "an incomplete page excludes its last millisecond"
+    );
+    let mut bad = snapshot.clone();
+    bad.through_ms = 1000;
+    assert!(
+        bad.validate(&request).is_err(),
+        "no progress means no loaded tick"
+    );
+    let mut bad = snapshot.clone();
+    bad.loaded_ticks = 101;
+    assert!(bad.validate(&request).is_err(), "max_ticks caps the page");
+    let mut bad = snapshot.clone();
+    bad.trade_ticks = 41;
+    assert!(
+        bad.validate(&request).is_err(),
+        "a trade is one loaded tick"
+    );
+    let mut bad = snapshot.clone();
+    bad.tick_size = "0".into();
+    assert!(bad.validate(&request).is_err(), "tick_size is positive");
+    let mut bad = snapshot.clone();
+    bad.tick_size = "abc".into();
+    assert!(bad.validate(&request).is_err(), "tick_size is a decimal");
+
+    // No progress reports the range start with no loaded tick and no trade.
+    let mut stalled = snapshot.clone();
+    stalled.through_ms = 1000;
+    stalled.loaded_ticks = 0;
+    stalled.trade_ticks = 0;
+    stalled.levels.clear();
+    stalled.carry = request.carry.clone();
+    stalled.validate(&request).unwrap();
+}
+
+#[test]
+fn footprint_page_rejects_impossible_levels_and_carries() {
+    let counted = TickFootprintHistoryRequest {
+        real_volume: false,
+        ..footprint_request()
+    };
+    let weighted = TickFootprintHistoryRequest {
+        real_volume: true,
+        ..counted.clone()
+    };
+    let snapshot = footprint_snapshot();
+    snapshot.validate(&counted).unwrap();
+
+    // Levels are keyed by price value, not by their spelling.
+    let mut bad = snapshot.clone();
+    bad.levels[1].price = "100.5".into();
+    assert!(bad.validate(&weighted).is_err(), "levels are unique");
+    let mut bad = snapshot.clone();
+    bad.levels[0].price = "0".into();
+    assert!(bad.validate(&weighted).is_err(), "a price is positive");
+    let mut bad = snapshot.clone();
+    bad.levels[0].price = "100,5".into();
+    assert!(bad.validate(&weighted).is_err(), "a price is a decimal");
+    let mut bad = snapshot.clone();
+    bad.levels[0].buy = "-1".into();
+    assert!(bad.validate(&weighted).is_err(), "a side is non-negative");
+    let mut bad = snapshot.clone();
+    bad.levels[0].sell = "NaN".into();
+    assert!(bad.validate(&weighted).is_err(), "a side is a decimal");
+    let mut bad = snapshot.clone();
+    bad.levels[1].sell = "0".into();
+    assert!(bad.validate(&weighted).is_err(), "a level needs a trade");
+    let mut bad = snapshot.clone();
+    bad.trade_ticks = 1;
+    assert!(
+        bad.validate(&weighted).is_err(),
+        "no more levels than trades"
+    );
+
+    // An unweighted page counts whole trades whose sums are its trade count.
+    let mut bad = snapshot.clone();
+    bad.levels[0].buy = "3.5".into();
+    assert!(bad.validate(&counted).is_err(), "a counted trade is whole");
+    let mut bad = snapshot.clone();
+    bad.levels[1].sell = "1".into();
+    assert!(
+        bad.validate(&counted).is_err(),
+        "level sums are the trade count"
+    );
+
+    let mut bad = snapshot.clone();
+    bad.carry = Some(FootprintCarry {
+        price: "0".into(),
+        side: FootprintSide::Buy,
+    });
+    assert!(
+        bad.validate(&weighted).is_err(),
+        "a carry price is positive"
+    );
+    let mut bad = snapshot.clone();
+    bad.carry = Some(FootprintCarry {
+        price: "101.0 ".into(),
+        side: FootprintSide::Buy,
+    });
+    assert!(
+        bad.validate(&weighted).is_err(),
+        "a carry price is a decimal"
+    );
+}
+
+#[test]
+fn footprint_page_without_a_trade_returns_the_carry_it_was_given() {
+    let request = TickFootprintHistoryRequest {
+        real_volume: true,
+        ..footprint_request()
+    };
+    let mut page = footprint_snapshot();
+    page.trade_ticks = 0;
+    page.loaded_ticks = 12;
+    page.levels.clear();
+    page.carry = request.carry.clone();
+    page.validate(&request).unwrap();
+
+    // A page that counted no trade keeps the carry it was given …
+    let mut bad = page.clone();
+    bad.carry = None;
+    assert!(bad.validate(&request).is_err());
+    let mut bad = page.clone();
+    bad.carry = Some(FootprintCarry {
+        price: "1".into(),
+        side: FootprintSide::Buy,
+    });
+    assert!(bad.validate(&request).is_err());
+    // … and carries no level.
+    let mut bad = page.clone();
+    bad.levels = footprint_snapshot().levels;
+    assert!(bad.validate(&request).is_err());
+}
+
 #[test]
 fn validates_symbol_search_and_serializes_snake_case() {
     let request = SymbolSearchRequest {
@@ -2313,9 +2655,50 @@ fn other_symbol_series_capability_defaults_to_false_and_round_trips() {
         trading_enabled: true,
         transfer_limits: Default::default(),
         tick_price_counts: false,
+        tick_footprint_counts: false,
         partial_close: false,
         other_symbol_series: true,
     })
     .unwrap();
     assert_eq!(echoed["other_symbol_series"], true);
+}
+
+#[test]
+fn footprint_counts_capability_defaults_to_false_and_round_trips() {
+    assert_eq!(
+        serde_json::to_string(&MessageType::TickFootprintHistorySnapshot).unwrap(),
+        "\"tick_footprint_history_snapshot\""
+    );
+    let hello = serde_json::json!({
+        "token": "t", "terminal_id": "x", "terminal_build": 1,
+        "account_login": "1", "broker_server": "s", "chart_symbol": "A",
+        "expert_version": "1", "trading_enabled": true,
+        "supported_timeframes": ["M1"],
+    });
+    let legacy: HelloPayload = serde_json::from_value(hello.clone()).unwrap();
+    assert!(!legacy.tick_footprint_counts);
+    let mut capable = hello;
+    capable["tick_footprint_counts"] = true.into();
+    let capable: HelloPayload = serde_json::from_value(capable).unwrap();
+    assert!(capable.tick_footprint_counts);
+
+    let ack: HelloAckPayload = serde_json::from_value(serde_json::json!({
+        "heartbeat_interval_ms": 2000,
+        "heartbeat_timeout_ms": 6000,
+        "trading_enabled": true,
+    }))
+    .unwrap();
+    assert!(!ack.tick_footprint_counts);
+    let echoed = serde_json::to_value(HelloAckPayload {
+        heartbeat_interval_ms: 2000,
+        heartbeat_timeout_ms: 6000,
+        trading_enabled: true,
+        transfer_limits: Default::default(),
+        tick_price_counts: false,
+        tick_footprint_counts: true,
+        partial_close: false,
+        other_symbol_series: false,
+    })
+    .unwrap();
+    assert_eq!(echoed["tick_footprint_counts"], true);
 }
