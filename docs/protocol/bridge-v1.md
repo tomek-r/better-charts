@@ -1077,7 +1077,9 @@ When both peers negotiated `tick_footprint_counts:true`, a
 `tick_history_request` carrying `footprint_counts:true` is answered by
 `tick_footprint_history_snapshot`: the volume the counted trades traded at each
 price, per side, instead of the raw ticks. Peers without the capability keep
-the raw tick page.
+the raw tick page. The hand-computed cases in
+[`scripts/fixtures/footprint_counts_cases.json`](../../scripts/fixtures/footprint_counts_cases.json)
+are the shared cases the EA, the mock and the host must agree on.
 
 **`tick_history_request` payload (footprint):**
 
@@ -1116,8 +1118,8 @@ A request for the next bar sends the carry it holds for the boundary, or none
 when the bar starts a fresh range.
 
 **Counted trades.** With `real_volume:true` a tick is a trade when its
-`volume_real` — falling back to `volume` when that field is absent or unreadable
-— is greater than zero, and its weight is that volume. With `real_volume:false`
+`volume_real` is greater than zero, or else its `volume` is, and its weight is
+the first of the two that is. With `real_volume:false`
 a tick is a trade when its `volume` is greater than zero, or when it carries
 MT5's BID flag (`2`, the bid changed), and its weight is `1`: MT5's Tick Volume
 counts bid changes, so quotes count there. A tick that is not a trade is

@@ -109,7 +109,9 @@ def handle_tick_history(reader: FrameReader, conn: socket.socket, session_id: st
     assert session_id is not None and message.get("session_id") == session_id
     request = {**message["payload"], "_request_id": message["id"]}
     response = synthetic_tick_history(request, session_id, reader.transfer_limits)
-    if request.get("price_counts", False):
+    if request.get("footprint_counts", False):
+        response = tick_footprint_snapshot(response, request)
+    elif request.get("price_counts", False):
         response = tick_price_summary(response)
     send_frame(conn, response, reader.transfer_limits["max_frame_bytes"])
     return True
@@ -130,6 +132,171 @@ def tick_price_summary(message: dict) -> dict:
         "prices": [{"price": "100.0", "total": count, "bid": count, "ask": 0, "bid_seen": True},
                    {"price": "100.1", "total": 0, "bid": 0, "ask": count, "bid_seen": False}] if count else []})
     return {**message, "type": "tick_price_history_snapshot", "payload": payload}
+
+
+# MT5 MqlTick flags the footprint rules read: BID marks a bid change (ASK alone
+# never counts a trade), BUY/SELL name the side of a counted trade.
+TICK_FLAG_BID = 2
+TICK_FLAG_BUY = 32
+TICK_FLAG_SELL = 64
+FOOTPRINT_TICK_SIZE = "0.1"
+DECIMAL_ZERO = Decimal(0)
+FOOTPRINT_CASES_PATH = Path(__file__).resolve().parent / "fixtures/footprint_counts_cases.json"
+
+
+def decimal_price(value) -> Decimal | None:
+    """The exact decimal a wire value spells, or None when it is absent or unreadable."""
+    if value is None:
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    return parsed if parsed.is_finite() else None
+
+
+def decimal_text(value: Decimal) -> str:
+    """The shortest plain spelling of an exact decimal ("100.00" -> "100"), so a
+    tidied answer and a hand-written fixture expectation compare as text."""
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def tick_flags(tick: dict) -> int:
+    flags = tick.get("flags")
+    return flags if isinstance(flags, int) else 0
+
+
+def valid_carry(carry: dict | None) -> dict | None:
+    """The request's carry in plain spelling, or None when the page starts fresh;
+    a malformed or non-positive carry price rejects the request."""
+    if carry is None:
+        return None
+    price = decimal_price(carry.get("price"))
+    assert price is not None and price > 0, f"malformed carry: {carry}"
+    return {"price": decimal_text(price), "side": carry["side"]}
+
+
+def positive_quote(tick: dict, field: str) -> Decimal:
+    """One of the tick's prices; an absent, unreadable or non-positive price reads as zero."""
+    price = decimal_price(tick.get(field))
+    return price if price is not None and price > 0 else DECIMAL_ZERO
+
+
+def tick_quotes(tick: dict) -> tuple[Decimal, Decimal, Decimal]:
+    return positive_quote(tick, "last"), positive_quote(tick, "bid"), positive_quote(tick, "ask")
+
+
+def traded_price(tick: dict) -> Decimal | None:
+    """Where a counted trade trades: its last, else the bid/ask mid, else its bid;
+    None when the tick carries no positive price and so no trade."""
+    last, bid, ask = tick_quotes(tick)
+    if last > 0:
+        return last
+    if bid > 0 and ask > 0:
+        return (bid + ask) / 2
+    return bid if bid > 0 else None
+
+
+def tick_rule_side(price: Decimal, carry: dict | None) -> str:
+    """The tick rule against the carry: up is a buy, down a sell, the carry's own
+    price keeps its side, and a page with no carry buys."""
+    if carry is None:
+        return "buy"
+    # `valid_carry` normalized every carry to a plain price and a side.
+    carry_price = Decimal(carry["price"])
+    if price != carry_price:
+        return "buy" if price > carry_price else "sell"
+    return carry["side"]
+
+
+def trade_side(tick: dict, price: Decimal, carry: dict | None) -> str:
+    """The side of a counted trade: its own flag, else the quote rule, else the tick rule."""
+    flags = tick_flags(tick)
+    buys, sells = flags & TICK_FLAG_BUY, flags & TICK_FLAG_SELL
+    if buys and not sells:
+        return "buy"
+    if sells and not buys:
+        return "sell"
+    last, bid, ask = tick_quotes(tick)
+    if last > 0 and bid > 0 and ask > 0:
+        mid = (bid + ask) / 2
+        if last > mid:
+            return "buy"
+        if last < mid:
+            return "sell"
+    return tick_rule_side(price, carry)
+
+
+def trade_weight(tick: dict, real_volume: bool) -> Decimal:
+    """The weight of a counted trade, or zero when the tick is not a trade.
+
+    Real volume weighs the volume the tick reports — `volume_real` when it is
+    above zero, else `volume`, as the host reads a raw tick. Without it the tick
+    volume counts one per trade, and MT5's tick volume counts bid changes.
+    """
+    if real_volume:
+        for field in ("volume_real", "volume"):
+            weight = decimal_price(tick.get(field))
+            if weight is not None and weight > 0:
+                return weight
+        return DECIMAL_ZERO
+    volume = decimal_price(tick.get("volume"))
+    counts_as_trade = (volume is not None and volume > 0) or bool(tick_flags(tick) & TICK_FLAG_BID)
+    return Decimal(1) if counts_as_trade else DECIMAL_ZERO
+
+
+def footprint_counts(request: dict, ticks: list[dict]) -> dict:
+    """The counted trades of one page: the trade count, the carry the answer
+    returns and the buy/sell volume every traded price took."""
+    real_volume = bool(request.get("real_volume", False))
+    carry = valid_carry(request.get("carry"))
+    trade_ticks = 0
+    levels: dict[Decimal, dict] = {}
+    for tick in ticks:
+        weight = trade_weight(tick, real_volume)
+        price = traded_price(tick)
+        if weight <= 0 or price is None:
+            continue
+        side = trade_side(tick, price, carry)
+        trade_ticks += 1
+        traded = levels.setdefault(price, {"buy": DECIMAL_ZERO, "sell": DECIMAL_ZERO})
+        traded[side] += weight
+        carry = {"price": decimal_text(price), "side": side}
+    return {
+        "trade_ticks": trade_ticks,
+        "carry": carry,
+        "levels": [{"price": decimal_text(price), "buy": decimal_text(traded["buy"]), "sell": decimal_text(traded["sell"])}
+                   for price, traded in sorted(levels.items())],
+    }
+
+
+def footprint_page_prefix(raw: dict) -> tuple[list, int]:
+    """The ticks a footprint page counts and its exclusive end: a truncated page
+    drops its final millisecond, which the next request reads again."""
+    if raw["complete"]:
+        return raw["ticks"], raw["to_ms"]
+    if not raw["ticks"]:
+        return [], raw["from_ms"]
+    last_ms = raw["ticks"][-1]["time_ms"]
+    return [tick for tick in raw["ticks"] if tick["time_ms"] < last_ms], last_ms
+
+
+def tick_footprint_snapshot(raw_message: dict, request: dict) -> dict:
+    """The footprint answer over one synthetic raw page's ticks: complete when the
+    page held its range, else cut before its final millisecond. `carry` is the
+    footprint's own piece of state, not the request's echo."""
+    raw = raw_message["payload"]
+    ticks, through_ms = footprint_page_prefix(raw)
+    counts = footprint_counts(request, ticks)
+    return envelope("tick_footprint_history_snapshot", "ea-footprint", raw_message.get("session_id"), {
+        "request_id": raw["request_id"], "symbol": raw["symbol"],
+        "from_ms": raw["from_ms"], "to_ms": raw["to_ms"], "tick_size": FOOTPRINT_TICK_SIZE,
+        "complete": raw["complete"], "through_ms": through_ms, "loaded_ticks": len(ticks),
+        "trade_ticks": counts["trade_ticks"], "carry": counts["carry"], "levels": counts["levels"],
+    })
 
 
 # Oldest bar time the mock's synthetic history reaches. A page that cannot be
@@ -355,6 +522,74 @@ def self_test_tick_history() -> int:
     assert payload["complete"] is True and [tick["time_ms"] for tick in payload["ticks"]] == [110]
     assert tick_price_summary(synthetic_tick_history(request, "synthetic-session", LEGACY_TRANSFER_LIMITS))["payload"]["loaded_ticks"] == 1
     print("mock tick-history self-test passed: large pages, legacy limits, byte budgets and half-open ranges")
+    return 0
+
+
+def normalized_counts(counts: dict) -> dict:
+    """A `footprint_counts` answer with its decimals in the fixture's spelling."""
+    carry = counts["carry"]
+    return {
+        "trade_ticks": counts["trade_ticks"],
+        "carry": None if carry is None else {"price": decimal_text(Decimal(str(carry["price"]))), "side": carry["side"]},
+        "levels": [{"price": decimal_text(Decimal(str(level["price"]))),
+                    "buy": decimal_text(Decimal(str(level["buy"]))),
+                    "sell": decimal_text(Decimal(str(level["sell"])))} for level in counts["levels"]],
+    }
+
+
+def carry_of(row: list | None) -> dict | None:
+    return None if row is None else {"price": row[0], "side": row[1]}
+
+
+def shared_footprint_cases() -> list[dict]:
+    """The shared cases, with their compact tick and level rows named by the
+    file's own field lists."""
+    shared = json.loads(FOOTPRINT_CASES_PATH.read_text())
+    tick_fields, level_fields = shared["tick_fields"], shared["level_fields"]
+    return [{
+        "name": case["name"],
+        "request": {"real_volume": case["real_volume"], "carry": carry_of(case["carry"])},
+        "ticks": [dict(zip(tick_fields, row)) for row in case["ticks"]],
+        "expected": {
+            "trade_ticks": case["trade_ticks"], "carry": carry_of(case["carry_after"]),
+            "levels": [dict(zip(level_fields, row)) for row in case["levels"]],
+        },
+    } for case in shared["cases"]]
+
+
+def self_test_footprint_counts() -> int:
+    """The shared footprint cases and one complete snapshot envelope."""
+    cases = shared_footprint_cases()
+    names = [case["name"] for case in cases]
+    assert cases and len(set(names)) == len(names), "the shared footprint cases are non-empty and uniquely named"
+    for case in cases:
+        counts = footprint_counts(case["request"], case["ticks"])
+        assert normalized_counts(counts) == normalized_counts(case["expected"]), case["name"]
+    request = {"symbol": "TEST.SYNTHETIC", "from_ms": MOCK_DATA_START_MS, "to_ms": MOCK_DATA_START_MS + 1000,
+               "max_ticks": 100, "footprint_counts": True, "real_volume": False,
+               "carry": {"price": "100.05", "side": "sell"}, "_request_id": "rust-footprint-1"}
+    raw = synthetic_tick_history(request, "synthetic-session", TRANSFER_LIMITS)
+    frame = tick_footprint_snapshot(raw, request)
+    payload = expect_type(frame, "tick_footprint_history_snapshot")
+    assert frame["id"] == "ea-footprint" and frame["session_id"] == "synthetic-session"
+    assert payload["request_id"] == "rust-footprint-1" and payload["symbol"] == "TEST.SYNTHETIC"
+    assert (payload["from_ms"], payload["to_ms"]) == (request["from_ms"], request["to_ms"])
+    assert payload["tick_size"] == "0.1" and payload["complete"] is True
+    assert payload["through_ms"] == request["to_ms"]
+    assert payload["loaded_ticks"] == len(raw["payload"]["ticks"])
+    # The synthetic quotes move the bid (flags 6) at a mid of 100.05 with no last price, so each is one trade, and the
+    # tick rule keeps the carry's sell side at its own price.
+    assert payload["trade_ticks"] == 100
+    assert payload["levels"] == [{"price": "100.05", "buy": "0", "sell": "100"}]
+    assert payload["carry"] == request["carry"]
+    # A malformed carry price rejects the request instead of guessing a side.
+    rejected = False
+    try:
+        footprint_counts({"real_volume": False, "carry": {"price": "abc", "side": "buy"}}, [])
+    except AssertionError:
+        rejected = True
+    assert rejected, "a malformed carry price rejects the request"
+    print(f"mock footprint-counts self-test passed: {len(cases)} shared cases, complete snapshot envelope, carry of a page without trades")
     return 0
 
 
@@ -717,7 +952,8 @@ def main() -> int:
             "tick_reader_version": MQ5_VERSIONS["tickReaderVersion"], "trading_enabled": False,
             "supported_timeframes": SUPPORTED_TIMEFRAMES,
             "transfer_limits": TRANSFER_LIMITS,
-            "tick_price_counts": True, "partial_close": True, "other_symbol_series": True,
+            "tick_price_counts": True, "tick_footprint_counts": True,
+            "partial_close": True, "other_symbol_series": True,
         }))
         hello_ack = next_non_reconcile(reader, conn, None, deadline)
         hello_payload = expect_type(hello_ack, "hello_ack")
@@ -851,7 +1087,8 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(
-            self_test_history_page() + self_test_initial_history() + self_test_tick_history() + self_test_partial_close() + self_test_margin_projection()
+            self_test_history_page() + self_test_initial_history() + self_test_tick_history() + self_test_footprint_counts()
+            + self_test_partial_close() + self_test_margin_projection()
             if "--self-test" in sys.argv[1:] or os.environ.get("MT5_MOCK_SELFTEST") == "1"
             else main()
         )
