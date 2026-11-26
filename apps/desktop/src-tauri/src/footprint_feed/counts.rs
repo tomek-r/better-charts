@@ -13,10 +13,13 @@
 //! sum, and a trade whose side the tick rule decides keeps the side the page before it left.
 //!
 //! Counts cannot be resumed inside a millisecond: a page whose `through_ms` is its `from_ms` certified no
-//! progress, so the bar it belongs to stops the read as incomplete instead of being asked for again. A bar
-//! is whole once a page counted its whole range; the bars a read took whole are handed on as
-//! [`FootprintTick`]s — one per level and side — which is what the footprint rows and the engine already
-//! read, so a counts read and a raw ticks read paint the same chart.
+//! progress, so the bar it belongs to stops the read as incomplete instead of being asked for again. A
+//! page that loaded no tick at all, while the candles of its bars count volume, is not that case: MT5
+//! loads a symbol's tick history in the background, so such a page is asked again a few times and its
+//! bars are left unread rather than counted empty. A bar is whole once a page counted its whole range;
+//! the bars a read took whole are handed on as [`FootprintTick`]s — one per level and side — which is
+//! what the footprint rows and the engine already read, so a counts read and a raw ticks read paint the
+//! same chart.
 //!
 //! The forming bar is read one bar at a time: [`CountsLive`] keeps one bar's counts across the pages of
 //! one re-read and moves its end to the broker's time as the bar forms, so a whole re-read answers for
@@ -47,6 +50,11 @@ const MAX_COUNTS_PAGES: usize = 2048;
 /// A counts page counts the trades per price instead of carrying the raw ticks: the flag that makes
 /// the peer answer with `tick_footprint_history_snapshot`, and the only page this read understands.
 const COUNTS_REQUESTED: bool = true;
+
+/// How many answers in a row a counted read tolerates that loaded no tick at all: MT5 loads a symbol's
+/// tick history in the background, so an indicator's `CopyTicks` answers an empty page meanwhile, and
+/// that page is worth asking again rather than counting its bars empty.
+pub(crate) const MAX_UNLOADED_RETRIES: usize = 3;
 
 /// One page of a counted read: the bars it counts into, the range of the first of them still to count,
 /// and the state the page needs from the pages before it.
@@ -117,7 +125,8 @@ impl CountsPage {
 ///
 /// A bar is whole once a page counted its whole range, and its levels merge across the pages that
 /// continue it, because the carry carries the tick rule over a page boundary and not the trades. A bar a
-/// page stopped inside — a page that certified no progress — keeps no ticks, and no bar under it is read.
+/// page stopped inside — a page that certified no progress, or one that never loaded its ticks — keeps no
+/// ticks, and no bar under it is read.
 pub(crate) struct CountsRead {
     /// The window's bars, oldest first.
     bars: Vec<BarSpan>,
@@ -131,6 +140,9 @@ pub(crate) struct CountsRead {
     awaiting: Option<CountsPage>,
     /// The bar a page stopped the read inside: it keeps no ticks, and the read ends there.
     stopped_in: Option<i64>,
+    /// How many answers in a row loaded no tick, which the read asks again within
+    /// [`MAX_UNLOADED_RETRIES`].
+    unloaded_answers: usize,
     /// How many pages the read has asked for, and the most it may ask.
     pages: usize,
     max_pages: usize,
@@ -152,6 +164,7 @@ impl CountsRead {
             counting: None,
             awaiting: None,
             stopped_in: None,
+            unloaded_answers: 0,
             pages: 0,
             max_pages,
             whole_bars: BTreeMap::new(),
@@ -168,17 +181,22 @@ impl CountsRead {
         Some(page)
     }
 
-    /// Folds the answer to the page the read asked for in. An answer for any other page is ignored, and a
-    /// page that certified no progress stops the bar it started in and ends the read.
+    /// Folds the answer to the page the read asked for in. An answer for any other page is ignored; an
+    /// answer that loaded no tick of a page whose ticks exist leaves every bar as it was, so the page is
+    /// asked again; and a page that certified no progress stops the bar it started in and ends the read.
     pub(crate) fn accept(&mut self, answer: &TickFootprintHistorySnapshot) {
         let Some(page) = self.asked_page(answer) else {
             return;
         };
+        if answered_without_ticks(&page, answer) {
+            self.retry_unloaded(&page);
+            return;
+        }
+        self.unloaded_answers = 0;
         // A page ending where it started certified no progress. Counts cannot be resumed inside a
         // millisecond, so neither the rest of that bar nor a bar under it is read.
         if answer.through_ms <= page.from_ms {
-            self.stopped_in = page.bars.first().map(|bar| bar.open_ms);
-            self.counting = None;
+            self.stop_in_first_bar(&page);
             return;
         }
         let whole = whole_bar_count(&page, answer);
@@ -188,6 +206,22 @@ impl CountsRead {
             return;
         }
         self.continue_bar(&page, answer, whole);
+    }
+
+    /// Counts an answer that loaded no tick and stops the read in the page's first bar once the page has
+    /// answered that way too often to be asked again, as the no-progress case does: the ticks may still
+    /// arrive, so the bars stay unread rather than counted empty.
+    fn retry_unloaded(&mut self, page: &CountsPage) {
+        self.unloaded_answers += 1;
+        if self.unloaded_answers > MAX_UNLOADED_RETRIES {
+            self.stop_in_first_bar(page);
+        }
+    }
+
+    /// Stops the read in the first bar of `page`, which keeps no ticks, and asks for no page after it.
+    fn stop_in_first_bar(&mut self, page: &CountsPage) {
+        self.stopped_in = page.bars.first().map(|bar| bar.open_ms);
+        self.counting = None;
     }
 
     /// The bars the read has taken whole since the last call, keyed by their opening time.
@@ -382,6 +416,22 @@ fn whole_bar_count(page: &CountsPage, answer: &TickFootprintHistorySnapshot) -> 
         .partition_point(|bar| bar.end_ms <= answer.through_ms)
 }
 
+/// Whether a complete `answer` loaded no tick for `page` although the page's ticks exist: the page
+/// starts at the open of its first bar — a page continuing a bar from mid-bar legitimately finds no
+/// tick before the millisecond it starts at — and a bar of it counts volume under a candle that
+/// reported a tick count. Such an answer says nothing about the page's trades, so it never counts a
+/// bar; an incomplete answer that loaded nothing made no progress, and stops the read instead.
+fn answered_without_ticks(page: &CountsPage, answer: &TickFootprintHistorySnapshot) -> bool {
+    if !answer.complete || answer.loaded_ticks > 0 {
+        return false;
+    }
+    let starts_at_open = page
+        .bars
+        .first()
+        .is_some_and(|bar| page.from_ms == bar.open_ms);
+    starts_at_open && page.bars.iter().any(|bar| counted_ticks(bar).is_some())
+}
+
 /// The levels the answer counted into the bar opening at `open_ms`: the page's entry for it, the page's
 /// own levels when it asked for one bar, or none when it counted no trade into that bar.
 fn levels_of<'a>(
@@ -444,8 +494,9 @@ impl CountsLive {
         Some(self.counts.page())
     }
 
-    /// Folds the answer to the page this read asks for in. A no-progress answer, and one for another
-    /// page, leaves the state unchanged, so the read asks the same page again.
+    /// Folds the answer to the page this read asks for in. A no-progress answer, one that loaded no tick
+    /// of a bar whose candle counts trades, and one for another page leave the state unchanged, so the
+    /// read asks the same page again.
     pub(crate) fn accept(&mut self, answer: &TickFootprintHistorySnapshot) {
         self.counts.accept_page(answer);
     }
@@ -531,10 +582,14 @@ impl BarCounts {
 
     /// Folds the answer to the page this bar's read asks for in, when it is that page and moved the bar
     /// on: its levels merge into the bar's, and its boundary and carry become the ones the next page asks
-    /// from. A page of another range, and one that certified no progress, leaves the bar untouched.
+    /// from. A page of another range, one that certified no progress, and one that loaded no tick of a bar
+    /// whose candle counts trades, leave the bar untouched.
     fn accept_page(&mut self, answer: &TickFootprintHistorySnapshot) {
         let continuing = self.page();
         if !continuing.awaits(answer) || answer.through_ms <= self.through_ms {
+            return;
+        }
+        if answered_without_ticks(&continuing, answer) {
             return;
         }
         self.count_page(&continuing, answer);

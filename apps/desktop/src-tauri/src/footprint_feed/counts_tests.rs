@@ -1,4 +1,4 @@
-use super::counts::level_ticks;
+use super::counts::{level_ticks, MAX_UNLOADED_RETRIES};
 use super::{BarSpan, CountsLive, CountsPage, CountsRead};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
@@ -604,6 +604,137 @@ fn a_page_that_makes_no_progress_stops_its_bar_and_the_read() {
 }
 
 #[test]
+fn an_incomplete_page_that_loaded_no_ticks_stops_the_read_at_once() {
+    // An answer that really was not loaded is complete, so an incomplete one that loaded nothing
+    // reached no further than it started: the bar is not asked again.
+    let mut read = CountsRead::new(counted_minutes(&[2]), WIDE_PAGES).expect("a one-bar window");
+    let page = read.next_page(PAGE_TICKS).expect("the bar's page");
+
+    read.accept(&partial(&page, page.from_ms, &[], None));
+
+    assert_eq!(read.stopped_in(), Some(0), "a page that moved nowhere");
+    assert_eq!(read.next_page(PAGE_TICKS), None, "no page follows it");
+}
+
+#[test]
+fn an_unloaded_page_hands_no_bar_out_and_is_asked_again() {
+    let mut read = CountsRead::new(counted_minutes(&[2, 2]), WIDE_PAGES).expect("two bars");
+    let page = read.next_page(PAGE_TICKS).expect("the run of both bars");
+    assert_eq!(page.from_ms, 0);
+
+    read.accept(&bars_answer(&page, true, page.to_ms(), &[], None));
+
+    assert!(
+        read.take_whole_bars().is_empty(),
+        "an unloaded answer counts no bar"
+    );
+    let again = read.next_page(PAGE_TICKS).expect("the page again");
+    assert_eq!(again.from_ms, page.from_ms);
+    assert_eq!(
+        opens(&again.bars),
+        opens(&page.bars),
+        "the same bars are asked for"
+    );
+}
+
+#[test]
+fn a_page_that_stays_unloaded_stops_the_read_in_its_first_bar() {
+    let mut read = CountsRead::new(counted_minutes(&[2, 2]), WIDE_PAGES).expect("two bars");
+
+    for _ in 0..=MAX_UNLOADED_RETRIES {
+        let page = read.next_page(PAGE_TICKS).expect("the page once more");
+        read.accept(&bars_answer(&page, true, page.to_ms(), &[], None));
+    }
+
+    assert_eq!(read.stopped_in(), Some(0), "the bar the page starts at");
+    assert_eq!(
+        read.next_page(PAGE_TICKS),
+        None,
+        "no page follows a stopped read"
+    );
+    assert!(
+        read.take_whole_bars().is_empty(),
+        "the bars stay unread rather than empty"
+    );
+}
+
+#[test]
+fn a_read_that_recovers_from_unloaded_pages_still_hands_its_bars_out() {
+    let mut read = CountsRead::new(counted_minutes(&[2, 2]), WIDE_PAGES).expect("two bars");
+    for _ in 0..MAX_UNLOADED_RETRIES {
+        let page = read.next_page(PAGE_TICKS).expect("the page once more");
+        read.accept(&bars_answer(&page, true, page.to_ms(), &[], None));
+    }
+    assert_eq!(read.stopped_in(), None, "a retried page has not stopped");
+
+    let page = read.next_page(PAGE_TICKS).expect("the page that recovered");
+    read.accept(&bars_answer(
+        &page,
+        true,
+        page.to_ms(),
+        &[(0, &[("100", "1", "0")]), (MINUTE_MS, &[("101", "0", "2")])],
+        None,
+    ));
+
+    let kept = read.take_whole_bars();
+    assert_eq!(
+        kept.keys().copied().collect::<Vec<_>>(),
+        vec![0, MINUTE_MS],
+        "the bars the answer counted"
+    );
+    assert_eq!(kept[&0], vec![trade(0, "100", "1", TickSide::Buy)]);
+    assert_eq!(
+        kept[&MINUTE_MS],
+        vec![trade(MINUTE_MS, "101", "2", TickSide::Sell)]
+    );
+}
+
+#[test]
+fn an_unloaded_page_of_bars_without_a_tick_count_is_whole_without_trades() {
+    let mut read = CountsRead::new(minutes(1), WIDE_PAGES).expect("a one-bar window");
+    let page = read.next_page(PAGE_TICKS).expect("the bar's page");
+
+    read.accept(&whole(&page, &[]));
+
+    let kept = read.take_whole_bars();
+    assert_eq!(
+        kept.keys().copied().collect::<Vec<_>>(),
+        vec![0],
+        "a candle that reported no tick count is asked no more"
+    );
+    assert!(kept[&0].is_empty(), "and counted no trade");
+}
+
+#[test]
+fn a_continuation_page_that_loaded_no_ticks_finishes_the_bar_it_continues() {
+    let mut read = CountsRead::new(counted_minutes(&[2]), WIDE_PAGES).expect("a one-bar window");
+    let first = read.next_page(PAGE_TICKS).expect("the bar's page");
+    read.accept(&partial(&first, HALF_MINUTE_MS, &[("100", "1", "2")], None));
+
+    let rest = read.next_page(PAGE_TICKS).expect("the rest of the bar");
+    assert_eq!(
+        rest.from_ms, HALF_MINUTE_MS,
+        "a page continuing the bar from mid-bar"
+    );
+    read.accept(&bars_answer(&rest, true, rest.to_ms(), &[], None));
+
+    let kept = read.take_whole_bars();
+    assert_eq!(
+        kept[&0],
+        vec![
+            trade(0, "100", "1", TickSide::Buy),
+            trade(0, "100", "2", TickSide::Sell),
+        ],
+        "the levels counted before stay the bar's"
+    );
+    assert_eq!(
+        read.stopped_in(),
+        None,
+        "a page that moved on leaves the bar"
+    );
+}
+
+#[test]
 fn a_read_asks_for_no_more_pages_than_its_limit() {
     let mut read = CountsRead::new(minutes(3), 2).expect("three bars are a window");
     let half_past = 2 * MINUTE_MS + HALF_MINUTE_MS;
@@ -816,6 +947,37 @@ fn a_live_read_ignores_a_page_that_made_no_progress_or_another_bar_s_page() {
 
     live.accept(&whole(&page, &[("100", "1", "1")]));
     assert_eq!(live.ticks().len(), 2, "the read's own page still counts");
+}
+
+#[test]
+fn a_closing_read_of_a_counted_bar_ignores_a_page_that_loaded_no_ticks() {
+    let mut live = CountsLive::new(counted_bar(0, 5), true);
+    let page = live.next_page().expect("the bar's page");
+
+    live.accept(&whole(&page, &[]));
+
+    assert!(
+        !live.is_whole(),
+        "a page loaded before the bar's ticks landed is no read of it"
+    );
+    assert!(live.ticks().is_empty(), "and counts no trade into it");
+    let again = live.next_page().expect("the same page is asked again");
+    assert_eq!(again.from_ms, 0, "from the bar's open");
+    assert_eq!(again.to_ms(), MINUTE_MS);
+}
+
+#[test]
+fn a_closing_read_of_a_bar_without_a_tick_count_is_whole_without_trades() {
+    let mut live = CountsLive::new(bar_at(0), true);
+    let page = live.next_page().expect("the bar's page");
+
+    live.accept(&whole(&page, &[]));
+
+    assert!(
+        live.is_whole(),
+        "a candle that reported no tick count has no ticks to load"
+    );
+    assert!(live.ticks().is_empty());
 }
 
 #[test]
