@@ -16,7 +16,7 @@ mod ticks;
 #[cfg(test)]
 pub(crate) use tick_profile::finish_tick_page;
 pub(crate) use tick_profile::{tick_history, tick_history_error, tick_price_history};
-pub(crate) use ticks::expire_awaited_ticks;
+pub(crate) use ticks::{expire_awaited_ticks, footprint_counts_snapshot};
 
 use super::{
     accept_account, accept_bar_update, accept_quote, accept_symbol_info,

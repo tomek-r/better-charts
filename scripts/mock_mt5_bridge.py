@@ -248,11 +248,36 @@ def trade_weight(tick: dict, real_volume: bool) -> Decimal:
     return Decimal(1) if counts_as_trade else DECIMAL_ZERO
 
 
-def footprint_counts(request: dict, ticks: list[dict]) -> dict:
-    """The counted trades of one page: the trade count, the carry the answer
-    returns and the buy/sell volume every traded price took."""
-    real_volume = bool(request.get("real_volume", False))
-    carry = valid_carry(request.get("carry"))
+def footprint_bar_opens(request: dict) -> list[int]:
+    """The opens a multi-bar request splits at: the bar the range starts in
+    (`first_open_ms`, or `from_ms` when the range starts at a bar open) and
+    every later open it names. Empty for a single-bar request."""
+    later = request.get("bar_opens") or []
+    if not later:
+        return []
+    first = request.get("first_open_ms")
+    return [request.get("from_ms", 0) if first is None else first, *later]
+
+
+def footprint_bar_ticks(request: dict, ticks: list[dict]) -> list[tuple[int, list[dict]]]:
+    """The ticks grouped by the bar they fall in: each named open starts a bar,
+    and the ticks before the first listed open belong to the bar the range
+    starts in."""
+    opens = footprint_bar_opens(request)
+    if not opens:
+        return [(request.get("from_ms", 0), ticks)]
+    groups = [[open_ms, []] for open_ms in opens]
+    index = 0
+    for tick in ticks:
+        while index + 1 < len(opens) and tick["time_ms"] >= opens[index + 1]:
+            index += 1
+        groups[index][1].append(tick)
+    return [(open_ms, bar_ticks) for open_ms, bar_ticks in groups]
+
+
+def footprint_bar_counts(ticks: list[dict], carry: dict | None, real_volume: bool) -> dict:
+    """One bar's counted trades: its trade count, the carry it leaves and the
+    buy/sell volume every traded price took."""
     trade_ticks = 0
     levels: dict[Decimal, dict] = {}
     for tick in ticks:
@@ -273,6 +298,30 @@ def footprint_counts(request: dict, ticks: list[dict]) -> dict:
     }
 
 
+def footprint_counts(request: dict, ticks: list[dict]) -> dict:
+    """The counted trades of one page: the trade count, the carry the answer
+    returns and the buy/sell volume every traded price took.
+
+    A multi-bar request resets the tick rule at every named open, counts each
+    bar separately and omits a bar that counted no trade; a single-bar request
+    keeps today's level-only answer."""
+    real_volume = bool(request.get("real_volume", False))
+    base_carry = valid_carry(request.get("carry"))
+    groups = footprint_bar_ticks(request, ticks)
+    if len(groups) == 1:
+        return {**footprint_bar_counts(groups[0][1], base_carry, real_volume), "bars": []}
+    page_carry = base_carry
+    trade_ticks = 0
+    bars = []
+    for index, (open_ms, bar_ticks) in enumerate(groups):
+        counts = footprint_bar_counts(bar_ticks, base_carry if index == 0 else None, real_volume)
+        trade_ticks += counts["trade_ticks"]
+        if counts["trade_ticks"] > 0:
+            bars.append({"open_ms": open_ms, "trade_ticks": counts["trade_ticks"], "levels": counts["levels"]})
+            page_carry = counts["carry"]
+    return {"trade_ticks": trade_ticks, "carry": page_carry, "levels": [], "bars": bars}
+
+
 def footprint_page_prefix(raw: dict) -> tuple[list, int]:
     """The ticks a footprint page counts and its exclusive end: a truncated page
     drops its final millisecond, which the next request reads again."""
@@ -291,12 +340,15 @@ def tick_footprint_snapshot(raw_message: dict, request: dict) -> dict:
     raw = raw_message["payload"]
     ticks, through_ms = footprint_page_prefix(raw)
     counts = footprint_counts(request, ticks)
-    return envelope("tick_footprint_history_snapshot", "ea-footprint", raw_message.get("session_id"), {
+    payload = {
         "request_id": raw["request_id"], "symbol": raw["symbol"],
         "from_ms": raw["from_ms"], "to_ms": raw["to_ms"], "tick_size": FOOTPRINT_TICK_SIZE,
         "complete": raw["complete"], "through_ms": through_ms, "loaded_ticks": len(ticks),
         "trade_ticks": counts["trade_ticks"], "carry": counts["carry"], "levels": counts["levels"],
-    })
+    }
+    if request.get("bar_opens"):
+        payload["bars"] = counts["bars"]
+    return envelope("tick_footprint_history_snapshot", "ea-footprint", raw_message.get("session_id"), payload)
 
 
 # Oldest bar time the mock's synthetic history reaches. A page that cannot be
@@ -525,15 +577,21 @@ def self_test_tick_history() -> int:
     return 0
 
 
+def normalized_levels(levels: list[dict]) -> list[dict]:
+    return [{"price": decimal_text(Decimal(str(level["price"]))),
+             "buy": decimal_text(Decimal(str(level["buy"]))),
+             "sell": decimal_text(Decimal(str(level["sell"])))} for level in levels]
+
+
 def normalized_counts(counts: dict) -> dict:
     """A `footprint_counts` answer with its decimals in the fixture's spelling."""
     carry = counts["carry"]
     return {
         "trade_ticks": counts["trade_ticks"],
         "carry": None if carry is None else {"price": decimal_text(Decimal(str(carry["price"]))), "side": carry["side"]},
-        "levels": [{"price": decimal_text(Decimal(str(level["price"]))),
-                    "buy": decimal_text(Decimal(str(level["buy"]))),
-                    "sell": decimal_text(Decimal(str(level["sell"])))} for level in counts["levels"]],
+        "levels": normalized_levels(counts["levels"]),
+        "bars": [{"open_ms": bar["open_ms"], "trade_ticks": bar["trade_ticks"],
+                  "levels": normalized_levels(bar["levels"])} for bar in counts.get("bars", [])],
     }
 
 
@@ -541,18 +599,36 @@ def carry_of(row: list | None) -> dict | None:
     return None if row is None else {"price": row[0], "side": row[1]}
 
 
+def case_request(case: dict) -> dict:
+    """The request a compact case names: its volume rule and carry, plus the
+    opens when it covers more than one bar."""
+    request = {"real_volume": case["real_volume"], "carry": carry_of(case["carry"])}
+    if "bar_opens" in case:
+        request["bar_opens"] = case["bar_opens"]
+        request["first_open_ms"] = case["first_open_ms"]
+    return request
+
+
+def bar_of(row: list, bar_fields: list[str], level_fields: list[str]) -> dict:
+    bar = dict(zip(bar_fields, row))
+    bar["levels"] = [dict(zip(level_fields, level)) for level in bar["levels"]]
+    return bar
+
+
 def shared_footprint_cases() -> list[dict]:
-    """The shared cases, with their compact tick and level rows named by the
+    """The shared cases, with their compact tick, level and bar rows named by the
     file's own field lists."""
     shared = json.loads(FOOTPRINT_CASES_PATH.read_text())
     tick_fields, level_fields = shared["tick_fields"], shared["level_fields"]
+    bar_fields = shared.get("bar_fields", ["open_ms", "trade_ticks", "levels"])
     return [{
         "name": case["name"],
-        "request": {"real_volume": case["real_volume"], "carry": carry_of(case["carry"])},
+        "request": case_request(case),
         "ticks": [dict(zip(tick_fields, row)) for row in case["ticks"]],
         "expected": {
             "trade_ticks": case["trade_ticks"], "carry": carry_of(case["carry_after"]),
             "levels": [dict(zip(level_fields, row)) for row in case["levels"]],
+            "bars": [bar_of(row, bar_fields, level_fields) for row in case.get("bars", [])],
         },
     } for case in shared["cases"]]
 
@@ -582,6 +658,19 @@ def self_test_footprint_counts() -> int:
     assert payload["trade_ticks"] == 100
     assert payload["levels"] == [{"price": "100.05", "buy": "0", "sell": "100"}]
     assert payload["carry"] == request["carry"]
+    assert "bars" not in payload, "a single-bar request keeps today's shape"
+    # A multi-bar request splits at its open, where the tick rule starts fresh.
+    multibar = {**request, "bar_opens": [MOCK_DATA_START_MS + 500], "first_open_ms": MOCK_DATA_START_MS}
+    multi = expect_type(tick_footprint_snapshot(synthetic_tick_history(multibar, "synthetic-session", TRANSFER_LIMITS),
+                                               multibar), "tick_footprint_history_snapshot")
+    assert multi["levels"] == [] and multi["trade_ticks"] == 100
+    assert multi["bars"] == [
+        {"open_ms": MOCK_DATA_START_MS, "trade_ticks": 50,
+         "levels": [{"price": "100.05", "buy": "0", "sell": "50"}]},
+        {"open_ms": MOCK_DATA_START_MS + 500, "trade_ticks": 50,
+         "levels": [{"price": "100.05", "buy": "50", "sell": "0"}]},
+    ]
+    assert multi["carry"] == {"price": "100.05", "side": "buy"}
     # A malformed carry price rejects the request instead of guessing a side.
     rejected = False
     try:

@@ -265,6 +265,9 @@ pub(crate) struct BridgeState {
     pub(crate) session_work: Arc<Mutex<()>>,
     pub(crate) transfer_limits: Arc<Mutex<trading_core::protocol::TransferLimits>>,
     pub(crate) tick_price_counts: Arc<Mutex<bool>>,
+    /// Whether the EA answers footprint reads with MT5's counted pages instead of the raw ticks. Both
+    /// peers negotiate it in the handshake, so it is off until the connected EA reports it.
+    pub(crate) tick_footprint_counts: Arc<Mutex<bool>>,
     pub(crate) market: Arc<Mutex<MarketSnapshot>>,
     /// The trades the chart's bars hold: the chart symbol's raw ticks, read over the indicator ticks
     /// route under reserved keys, plus the forming bar's live ticks.

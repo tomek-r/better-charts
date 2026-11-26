@@ -229,10 +229,10 @@ pub(crate) async fn flush_outbound(
         .await?;
     }
 
-    // The desktop's indicator ticks, one raw page each; they never ask for price
-    // counts and never touch the tick profile's own request. The EA serves one
-    // tick history request at a time, so only the oldest waiting one goes out, and
-    // only while neither this route nor the tick profile awaits an answer.
+    // The desktop's indicator ticks, one page each: the raw ticks, or the counted trades of a
+    // footprint read once the EA negotiated `tick_footprint_counts`. They never touch the tick
+    // profile's own request. The EA serves one tick history request at a time, so only the oldest
+    // waiting one goes out, and only while neither this route nor the tick profile awaits an answer.
     let waiting_ticks = claim_for_session(state, session_id, || {
         claim_next_tick_request(state, &state.next_request_id, Instant::now())
     })?;
@@ -242,7 +242,7 @@ pub(crate) async fn flush_outbound(
             MessageType::TickHistoryRequest,
             ticks.request_id,
             Some(session_id.to_owned()),
-            ticks.request.page,
+            ticks.request.wire_request(),
         )
         .await?;
     }

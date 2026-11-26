@@ -8,12 +8,15 @@
 //! fill the chart's feed and never reach the frontend.
 
 use super::super::{
-    abandon_footprint_read, accept_footprint_page, bridge_emit, claim_for_session, log_warn,
-    ticks_slots, BridgeEvents, BridgeState, Inbound, InboundOutcome, IndicatorTickView,
-    IndicatorTicksRequest, IndicatorTicksUnavailableView, IndicatorTicksView, TICK_ANSWER_TIMEOUT,
+    abandon_footprint_read, accept_footprint_counts_page, accept_footprint_page, bridge_emit,
+    claim_for_session, log_warn, ticks_slots, BridgeEvents, BridgeState, Inbound, InboundOutcome,
+    IndicatorTickView, IndicatorTicksRequest, IndicatorTicksUnavailableView, IndicatorTicksView,
+    TICK_ANSWER_TIMEOUT,
 };
 use std::{sync::Arc, time::Instant};
-use trading_core::protocol::{ErrorCode, TickHistorySnapshot};
+use trading_core::protocol::{
+    Envelope, ErrorCode, TickFootprintHistorySnapshot, TickHistorySnapshot,
+};
 
 /// What a request the EA never answered fails its key with: the host's own
 /// wording, because the terminal sent no message of its own.
@@ -49,6 +52,52 @@ pub(super) fn ticks_snapshot(
         },
     );
     Some(InboundOutcome::Continue)
+}
+
+/// Handles `tick_footprint_history_snapshot`: the counted answer to a footprint read, under the key
+/// that read was issued for. A page is matched by its request id, so a stale or foreign id is ignored
+/// like a stale page, and a page that does not answer the request it was claimed with is handled like
+/// a correlated error: the read it belongs to ends and every other read keeps going.
+pub(crate) fn footprint_counts_snapshot(
+    inbound: &Inbound<'_>,
+    message: Envelope,
+) -> InboundOutcome {
+    let snapshot: TickFootprintHistorySnapshot = match serde_json::from_value(message.payload) {
+        Ok(snapshot) => snapshot,
+        Err(_) => {
+            return InboundOutcome::ErrorFrame(
+                ErrorCode::InvalidMessage,
+                "invalid tick footprint history snapshot",
+            )
+        }
+    };
+    let _session_work = match inbound.state.session_work.lock() {
+        Ok(guard) => guard,
+        Err(_) => return InboundOutcome::Continue,
+    };
+    if inbound
+        .state
+        .current_session
+        .lock()
+        .ok()
+        .and_then(|session| session.clone())
+        .as_deref()
+        != Some(inbound.session_id)
+    {
+        return InboundOutcome::Continue;
+    }
+    let Some(request) = ticks_slots(inbound.state).take_awaited(&snapshot.request_id) else {
+        return InboundOutcome::Continue;
+    };
+    let answers_its_request = request
+        .counts_request()
+        .is_some_and(|counts| snapshot.validate(&counts).is_ok());
+    if !answers_its_request {
+        abandon_footprint_read(inbound.state, inbound.events, &request.key);
+        return InboundOutcome::Continue;
+    }
+    accept_footprint_counts_page(inbound.state, inbound.events, &request.key, &snapshot);
+    InboundOutcome::Continue
 }
 
 /// A correlated ticks failure (the EA could not read that range in time). Only

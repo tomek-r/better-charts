@@ -597,6 +597,15 @@ pub struct TickFootprintHistoryRequest {
     pub real_volume: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub carry: Option<FootprintCarry>,
+    /// Strictly ascending opens of the bars inside the range after its first
+    /// one. Trades before the first open belong to the bar the range starts in,
+    /// and every named open starts a fresh tick rule.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bar_opens: Vec<i64>,
+    /// Open of the bar the range starts in when that bar opened before
+    /// `from_ms`; required with `bar_opens`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_open_ms: Option<i64>,
 }
 
 impl TickFootprintHistoryRequest {
@@ -610,6 +619,30 @@ impl TickFootprintHistoryRequest {
         if let Some(carry) = self.carry.as_ref() {
             positive_price(&carry.price, FOOTPRINT_CARRY_INVALID)?;
         }
+        self.validate_bar_opens()
+    }
+
+    /// A multi-bar request names the bars after the range's first one: the open
+    /// it starts in, then strictly ascending opens inside the range.
+    fn validate_bar_opens(&self) -> Result<(), &'static str> {
+        if self
+            .first_open_ms
+            .is_some_and(|open_ms| open_ms > self.history.from_ms)
+        {
+            return Err(FOOTPRINT_REQUEST_INVALID);
+        }
+        if self.bar_opens.is_empty() {
+            return Ok(());
+        }
+        if self.first_open_ms.is_none()
+            || self
+                .bar_opens
+                .iter()
+                .any(|open_ms| *open_ms <= self.history.from_ms || *open_ms >= self.history.to_ms)
+            || self.bar_opens.windows(2).any(|pair| pair[0] >= pair[1])
+        {
+            return Err(FOOTPRINT_REQUEST_INVALID);
+        }
         Ok(())
     }
 }
@@ -622,6 +655,15 @@ pub struct FootprintLevel {
     pub price: String,
     pub buy: String,
     pub sell: String,
+}
+
+/// One bar's totals inside a multi-bar footprint page: the open the page
+/// counted the bar into and the trades it counted there.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FootprintBarCounts {
+    pub open_ms: i64,
+    pub trade_ticks: u32,
+    pub levels: Vec<FootprintLevel>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -640,6 +682,9 @@ pub struct TickFootprintHistorySnapshot {
     /// trade, to be passed back by the following request.
     pub carry: Option<FootprintCarry>,
     pub levels: Vec<FootprintLevel>,
+    /// Per-bar totals when the request named `bar_opens`; empty otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bars: Vec<FootprintBarCounts>,
 }
 
 /// A level's numbers, parsed once; the strings stay on the wire untouched.
@@ -677,6 +722,32 @@ fn level_values(level: &FootprintLevel, real_volume: bool) -> Result<LevelValues
     Ok(LevelValues { price, buy, sell })
 }
 
+/// A page's levels, or one bar's: a trade names one level at most, prices are
+/// unique, and an unweighted count's level sums are its trade count.
+fn validate_footprint_levels(
+    levels: &[FootprintLevel],
+    trade_ticks: u32,
+    real_volume: bool,
+) -> Result<(), &'static str> {
+    if u32::try_from(levels.len()).map_or(true, |count| count > trade_ticks) {
+        return Err(FOOTPRINT_PAGE_INVALID);
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut counted = Decimal::ZERO;
+    for level in levels {
+        let values = level_values(level, real_volume)?;
+        if !seen.insert(values.price) {
+            return Err(FOOTPRINT_LEVEL_INVALID);
+        }
+        counted += values.buy + values.sell;
+    }
+    // One trade weighs one, so an unweighted count's level sums are its count.
+    if !real_volume && counted != Decimal::from(trade_ticks) {
+        return Err(FOOTPRINT_TOTAL_INVALID);
+    }
+    Ok(())
+}
+
 impl TickFootprintHistorySnapshot {
     pub fn validate(&self, request: &TickFootprintHistoryRequest) -> Result<(), &'static str> {
         request.validate()?;
@@ -693,9 +764,7 @@ impl TickFootprintHistorySnapshot {
             },
             FOOTPRINT_PAGE_INVALID,
         )?;
-        if self.trade_ticks > self.loaded_ticks
-            || u32::try_from(self.levels.len()).map_or(true, |count| count > self.trade_ticks)
-        {
+        if self.trade_ticks > self.loaded_ticks {
             return Err(FOOTPRINT_PAGE_INVALID);
         }
         positive_tick_size(&self.tick_size)?;
@@ -707,17 +776,42 @@ impl TickFootprintHistorySnapshot {
         if self.trade_ticks == 0 && (!self.levels.is_empty() || self.carry != request.carry) {
             return Err(FOOTPRINT_PAGE_INVALID);
         }
-        let mut seen = std::collections::HashSet::new();
-        let mut counted = Decimal::ZERO;
-        for level in &self.levels {
-            let values = level_values(level, request.real_volume)?;
-            if !seen.insert(values.price) {
-                return Err(FOOTPRINT_LEVEL_INVALID);
+        if request.bar_opens.is_empty() {
+            if !self.bars.is_empty() {
+                return Err(FOOTPRINT_PAGE_INVALID);
             }
-            counted += values.buy + values.sell;
+            return validate_footprint_levels(&self.levels, self.trade_ticks, request.real_volume);
         }
-        // One trade weighs one, so an unweighted page's level sums are its count.
-        if !request.real_volume && counted != Decimal::from(self.trade_ticks) {
+        self.validate_bars(request)
+    }
+
+    /// A multi-bar page keeps its levels inside the bars: the page's trade count
+    /// is the bars' sum, the bars ascend through the request's opens, and each
+    /// bar obeys the level rules on its own.
+    fn validate_bars(&self, request: &TickFootprintHistoryRequest) -> Result<(), &'static str> {
+        if !self.levels.is_empty() {
+            return Err(FOOTPRINT_PAGE_INVALID);
+        }
+        let first_open = request.first_open_ms.ok_or(FOOTPRINT_REQUEST_INVALID)?;
+        if self
+            .bars
+            .windows(2)
+            .any(|pair| pair[0].open_ms >= pair[1].open_ms)
+        {
+            return Err(FOOTPRINT_PAGE_INVALID);
+        }
+        let mut total = 0u64;
+        for bar in &self.bars {
+            if bar.open_ms != first_open && !request.bar_opens.contains(&bar.open_ms) {
+                return Err(FOOTPRINT_PAGE_INVALID);
+            }
+            validate_footprint_levels(&bar.levels, bar.trade_ticks, request.real_volume)?;
+            total += u64::from(bar.trade_ticks);
+        }
+        let Ok(total) = u32::try_from(total) else {
+            return Err(FOOTPRINT_TOTAL_INVALID);
+        };
+        if total != self.trade_ticks {
             return Err(FOOTPRINT_TOTAL_INVALID);
         }
         Ok(())

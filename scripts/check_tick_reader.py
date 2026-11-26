@@ -76,14 +76,28 @@ class TickReaderSourceGuards(unittest.TestCase):
         self.assertNotIn("g_tick_body", page)
 
     def test_price_counts_are_exact_and_keep_timestamp_boundary(self):
+        prefix = EA.split("void AcceptTickPagePrefix()", 1)[1].split("bool PreparePriceTickPayload()", 1)[0]
+        self.assertIn("time_msc>=g_tick_through", prefix)
         prepare = EA.split("bool PreparePriceTickPayload()", 1)[1].split("bool AddPriceCount", 1)[0]
-        self.assertIn("time_msc>=g_tick_through", prepare)
+        self.assertIn("AcceptTickPagePrefix();", prepare)
         aggregate = EA.split("void PollPriceTickPayload()", 1)[1].split("bool PrepareRawTickPayload", 1)[0]
         self.assertIn("valid && (bid_changed || ask_changed)", aggregate)
         self.assertIn("g_tick_rejected++", aggregate)
         self.assertIn("GetTickCount64()-started>=BRIDGE_TICK_WORK_SLICE_MS", aggregate)
         self.assertIn("PrepareRawTickPayload();", aggregate)
         self.assertNotIn("TickJson(", aggregate)
+
+    def test_footprint_counts_share_the_prefix_and_work_in_slices(self):
+        prepare = EA.split("bool PrepareFootprintPayload()", 1)[1].split("bool CountFootprintTick", 1)[0]
+        self.assertIn("AcceptTickPagePrefix();", prepare)
+        self.assertNotIn("StartTickPrefetch", prepare)
+        poll = EA.split("void PollFootprintPayload()", 1)[1].split("bool PrepareRawTickPayload", 1)[0]
+        self.assertIn("GetTickCount64()-started>=BRIDGE_TICK_WORK_SLICE_MS", poll)
+        self.assertIn("SendPayloadBytes(g_tick_payload,g_tick_payload_size)", poll)
+        self.assertIn("footprint levels exceed frame limit", poll)
+        # A multi-bar answer keeps the top-level levels empty and lists its bars.
+        self.assertIn(r'\"levels\":[],\"bars\":[', poll)
+        self.assertNotIn("TickJson(", poll)
 
     def test_prefetch_is_session_bound_and_released_on_every_exit(self):
         matches = EA.split("bool PrefetchMatches", 1)[1].split("bool StartTickReaderAttempt", 1)[0]
@@ -95,11 +109,11 @@ class TickReaderSourceGuards(unittest.TestCase):
         self.assertIn("!g_tick_complete && g_tick_through>g_tick_from", prepare)
 
     def test_tick_buffer_growth_is_geometric_and_bounded(self):
-        grow = EA.split("bool GrowTickPayload", 1)[1].split("bool AppendPricePayload", 1)[0]
+        grow = EA.split("bool GrowTickPayload", 1)[1].split("bool AppendTickPayload", 1)[0]
         self.assertIn("(long)current*2", grow)
         self.assertIn("g_max_frame_bytes", grow)
         self.assertIn("required", grow)
-        price = EA.split("bool AppendPricePayload", 1)[1].split("void PollPriceTickPayload", 1)[0]
+        price = EA.split("bool AppendTickPayload", 1)[1].split("void PollPriceTickPayload", 1)[0]
         raw = EA.split("void PollTickHistory()", 1)[1].split("bool SameBar", 1)[0]
         self.assertIn("GrowTickPayload(g_tick_payload_size+size)", price)
         self.assertIn("GrowTickPayload(required)", raw)

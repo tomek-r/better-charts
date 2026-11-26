@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.012"
+#define BRIDGE_EXPERT_VERSION "1.014"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -88,6 +88,46 @@ long g_tick_through=0;
 uint g_tick_rejected=0;
 double g_tick_min_quote=0,g_tick_max_quote=0;
 ulong g_tick_reader_ready_ms=0;
+// Footprint mode: the same read page counted into per-price buy/sell totals.
+// Levels are keyed by the traded price in tenths of a digit (a mid can carry
+// one more digit than the symbol), so two spellings of one value share a level.
+struct FootprintLevel { double price; double buy; double sell; };
+// One bar a multi-bar request splits at: its open and the trades counted in it.
+struct FootprintBarTotal { long open_ms; int trades; };
+// A level key is (bar index << BRIDGE_FOOTPRINT_LEVEL_BAR_SHIFT) + the traded
+// price in tenths of a digit, so one ascending sort orders the answer's bars
+// and each bar's prices. The stride 2^40 is far above the price key of any
+// symbol with up to 12 digits, and BRIDGE_FOOTPRINT_MAX_BARS bounds the opens.
+#define BRIDGE_FOOTPRINT_MAX_BARS        4096
+#define BRIDGE_FOOTPRINT_LEVEL_BAR_SHIFT 40
+#define BRIDGE_FOOTPRINT_LEVEL_STRIDE    ((long)1<<BRIDGE_FOOTPRINT_LEVEL_BAR_SHIFT)
+bool g_footprint_counts_enabled=false,g_tick_footprint=false,g_footprint_real_volume=false;
+// Tick-rule state: the price and side of the last counted trade of the bar
+// being counted, seeded from the request's optional carry. The price also keeps
+// its decimal key, so the rule's "equal price" test survives the carry's text
+// round trip. A bar open restarts the rule, so what the answer reports is kept
+// apart from it.
+bool g_footprint_has_carry=false;
+double g_footprint_carry_price=0.0;
+long g_footprint_carry_key=0;
+string g_footprint_carry_side="";
+// The carry the answer returns: the state after the last counted trade, which a
+// bar open does not clear.
+bool g_footprint_answer_has_carry=false;
+double g_footprint_answer_price=0.0;
+string g_footprint_answer_side="";
+CHashMap<long,int> g_footprint_index;
+FootprintLevel g_footprint_levels[];
+long g_footprint_keys[];
+int g_footprint_level_count=0,g_footprint_cursor=0,g_footprint_emitted=0,g_footprint_trades=0;
+// The request's bars, ascending by open; none means a single-bar request, which
+// keeps today's top-level level list. Ticks arrive in time order, so the bar
+// index only moves forward, and each bar counts its own trades.
+FootprintBarTotal g_footprint_bars[];
+int g_footprint_bar_count=0,g_footprint_bar_index=0;
+// The bar whose level list the answer streams and how many of its levels went
+// out; -1 while no bar entry is open.
+int g_footprint_emit_bar=-1,g_footprint_bar_levels=0;
 // Prefetch of the next price-count page. Holds at most one reader; it is only
 // adopted by a request for the same session, symbol, from and count.
 int g_prefetch_reader=INVALID_HANDLE;
@@ -501,7 +541,7 @@ bool SendHello()
    g_identity_server=AccountInfoString(ACCOUNT_SERVER);
    // Rust reads this once per session; remembered so a later change reconnects.
    g_hello_trading_enabled=TradingEnabled();
-   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_reader_version\":%s,\"tick_price_counts\":true,\"partial_close\":true,\"other_symbol_series\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,(g_reader_version=="" ? "null" : "\""+g_reader_version+"\""),SupportedTimeframesJson(),(g_hello_trading_enabled ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
+   string hello=StringFormat("{\"v\":%d,\"type\":\"hello\",\"id\":\"ea-%I64u\",\"session_id\":null,\"sent_at_ms\":%I64u,\"payload\":{\"token\":\"%s\",\"terminal_id\":\"%s\",\"terminal_build\":%s,\"account_login\":\"%s\",\"broker_server\":\"%s\",\"chart_symbol\":\"%s\",\"expert_version\":\"%s\",\"tick_reader_version\":%s,\"tick_price_counts\":true,\"tick_footprint_counts\":true,\"partial_close\":true,\"other_symbol_series\":true,\"supported_timeframes\":%s,\"trading_enabled\":%s,\"transfer_limits\":{\"max_frame_bytes\":%u,\"max_ticks_per_page\":%u}}}",BRIDGE_PROTOCOL_VERSION,g_message_id,(ulong)TimeGMT()*1000,JsonEscape(InpBridgeToken),terminal_id,terminal_build,account_login,broker_server,JsonEscape(_Symbol),BRIDGE_EXPERT_VERSION,(g_reader_version=="" ? "null" : "\""+g_reader_version+"\""),SupportedTimeframesJson(),(g_hello_trading_enabled ? "true" : "false"),InpBridgeMaxFrameMiB*1048576,InpBridgeMaxTicksPerPage);
    return SendFrame(hello);
   }
 
@@ -1815,6 +1855,30 @@ void ReleaseTickPrefetch()
    g_prefetch_session="";
   }
 
+// Clears the footprint counter, its level index and the carry it was seeded
+// with, so no page inherits another request's trades.
+void ResetFootprintState()
+  {
+   g_tick_footprint=false;
+   g_footprint_real_volume=false;
+   RestartFootprintTickRule();
+   g_footprint_answer_has_carry=false;
+   g_footprint_answer_price=0.0;
+   g_footprint_answer_side="";
+   g_footprint_index.Clear();
+   ArrayResize(g_footprint_levels,0);
+   ArrayResize(g_footprint_keys,0);
+   g_footprint_level_count=0;
+   g_footprint_cursor=0;
+   g_footprint_emitted=0;
+   g_footprint_trades=0;
+   ArrayResize(g_footprint_bars,0);
+   g_footprint_bar_count=0;
+   g_footprint_bar_index=0;
+   g_footprint_emit_bar=-1;
+   g_footprint_bar_levels=0;
+  }
+
 // Clears the active request but keeps a pending prefetch: the next request in
 // the same profile is expected to adopt it. Every other exit uses
 // CancelTickHistory, which also discards the prefetch.
@@ -1828,6 +1892,7 @@ void ResetActiveTickHistory()
    g_price_count=0;
    g_price_cursor=0;
    g_tick_aggregate=false;
+   ResetFootprintState();
    ArrayResize(g_tick_payload,0);
    g_tick_payload_size=0;
    ArrayResize(g_tick_page,0);
@@ -2023,18 +2088,175 @@ bool JsonBooleanIsTrue(const string json,const string name)
    return StringSubstr(json,index,4)=="true";
   }
 
-bool PreparePriceTickPayload()
+// Skips the JSON whitespace before the next token.
+int JsonNextValueStart(const string json,int index)
+  {
+   while(index<StringLen(json) && StringGetCharacter(json,index)<=32) index++;
+   return index;
+  }
+
+// Parses the request's optional array of integer timestamps into `values`: at
+// most `capacity` entries, and only digits, commas, whitespace and the closing
+// bracket are accepted, so any other content rejects the whole request. Absent
+// is an empty array; a present but malformed one is never read as empty.
+bool ParseJsonIntegerArray(const string json,const string field,long &values[],const int capacity,int &count)
+  {
+   count=0;
+   ArrayResize(values,0);
+   const string marker="\""+field+"\"";
+   int index=StringFind(json,marker);
+   if(index<0) return true;
+   index=JsonNextValueStart(json,index+StringLen(marker));
+   if(index>=StringLen(json) || StringGetCharacter(json,index)!=':') return false;
+   index=JsonNextValueStart(json,index+1);
+   if(index>=StringLen(json) || StringGetCharacter(json,index)!='[') return false;
+   index++;
+   bool done=false;
+   while(!done)
+     {
+      index=JsonNextValueStart(json,index);
+      if(index>=StringLen(json)) return false;
+      // An empty array and the closing bracket after the last value end it.
+      if(StringGetCharacter(json,index)==']') { done=true; continue; }
+      const int first_digit=index;
+      while(index<StringLen(json) && StringGetCharacter(json,index)>='0' && StringGetCharacter(json,index)<='9') index++;
+      const int digits=index-first_digit;
+      // A millisecond timestamp holds far fewer than 18 digits; a longer run is
+      // no timestamp, and the count bound rejects a request that names too many.
+      if(digits<1 || digits>18 || count>=capacity) return false;
+      if(ArrayResize(values,count+1)!=count+1) return false;
+      values[count]=StringToInteger(StringSubstr(json,first_digit,digits));
+      count++;
+      index=JsonNextValueStart(json,index);
+      if(index>=StringLen(json)) return false;
+      const ushort separator=StringGetCharacter(json,index);
+      if(separator==',') index++;
+      else if(separator==']') done=true;
+      else return false;
+     }
+   return true;
+  }
+
+// The request's optional tick-rule carry: the price and side of the last
+// counted trade before this page. A carry whose price is not a positive number
+// or whose side is neither buy nor sell rejects the request rather than
+// guessing a side.
+bool ParseFootprintCarry(const string json,bool &has_carry,double &price,string &side)
+  {
+   has_carry=false;
+   price=0.0;
+   side="";
+   const string price_text=JsonStringField(json,"price");
+   const string side_text=JsonStringField(json,"side");
+   // The carry's price and side are the request's only fields of those names,
+   // and a request without a carry carries neither.
+   if(price_text=="" && side_text=="") return true;
+   if(!ParsePositiveDecimal(price_text,price)) return false;
+   if(side_text!="buy" && side_text!="sell") return false;
+   has_carry=true;
+   side=side_text;
+   return true;
+  }
+
+// The request's optional bar split: `bar_opens` names the strictly ascending
+// opens inside the range and `first_open_ms`, required with them, the open of
+// the bar the range starts in. A violation rejects the request instead of
+// guessing a bar boundary; without `bar_opens` the page counts one bar.
+bool ParseFootprintBars(const string json,const long from_ms,const long to_ms,long &opens[],int &count,long &first_open_ms)
+  {
+   count=0;
+   first_open_ms=from_ms;
+   if(!ParseJsonIntegerArray(json,"bar_opens",opens,BRIDGE_FOOTPRINT_MAX_BARS,count)) return false;
+   if(count==0) return true;
+   first_open_ms=JsonIntegerField(json,"first_open_ms",-1);
+   if(first_open_ms<0 || first_open_ms>from_ms) return false;
+   for(int i=0;i<count;i++)
+     {
+      if(opens[i]<=from_ms || opens[i]>=to_ms) return false;
+      if(i>0 && opens[i]<=opens[i-1]) return false;
+     }
+   return true;
+  }
+
+// Installs the request's bars after the queue reset cleared the page, so every
+// bar starts counting its own trades at zero.
+bool InstallFootprintBars(const long &opens[],const int count,const long first_open_ms)
+  {
+   if(count<=0) return true;
+   const int bars=count+1;
+   if(ArrayResize(g_footprint_bars,bars)!=bars) return false;
+   g_footprint_bars[0].open_ms=first_open_ms;
+   g_footprint_bars[0].trades=0;
+   for(int i=0;i<count;i++)
+     {
+      g_footprint_bars[i+1].open_ms=opens[i];
+      g_footprint_bars[i+1].trades=0;
+     }
+   g_footprint_bar_count=bars;
+   return true;
+  }
+
+// A footprint page counts the same read into per-price buy/sell totals. It
+// shares the one tick-history slot with the other modes, never adopts a price
+// prefetch and starts none, so no mode inherits another's state. A request may
+// name a run of bars, which the page counts and answers one level list each.
+bool QueueFootprintHistory(const string request_id,const string symbol,const long from_ms,const long to_ms,const long max_ticks,const string json)
+  {
+   if(!g_footprint_counts_enabled)
+     {
+      SendProtocolError("INVALID_MESSAGE","unsupported tick history request");
+      return false;
+     }
+   bool has_carry=false;
+   double carry_price=0.0;
+   string carry_side="";
+   long bar_opens[];
+   int bar_count=0;
+   long first_open_ms=0;
+   if(!ParseFootprintCarry(json,has_carry,carry_price,carry_side) ||
+      !ParseFootprintBars(json,from_ms,to_ms,bar_opens,bar_count,first_open_ms))
+     {
+      SendProtocolError("INVALID_MESSAGE","unsupported tick history request");
+      return false;
+     }
+   // Queueing clears the previous request (and the prefetch); this request's
+   // carry and bars are installed after that reset.
+   if(!QueueTickHistory(request_id,symbol,from_ms,to_ms,max_ticks,false)) return false;
+   g_tick_footprint=true;
+   g_footprint_real_volume=JsonBooleanIsTrue(json,"real_volume");
+   g_footprint_has_carry=has_carry;
+   g_footprint_carry_price=carry_price;
+   g_footprint_carry_side=carry_side;
+   // The answer reports the request's carry until a counted trade replaces it.
+   g_footprint_answer_has_carry=has_carry;
+   g_footprint_answer_price=carry_price;
+   g_footprint_answer_side=carry_side;
+   if(!InstallFootprintBars(bar_opens,bar_count,first_open_ms))
+     {
+      FailTickHistory("footprint bar allocation failed");
+      return false;
+     }
+   return true;
+  }
+
+// The accepted prefix of one read page, shared by both summary modes: at most
+// `max_ticks` records before `to_ms`, and an incomplete page drops its final
+// millisecond, which the next request reads again from `through_ms`.
+void AcceptTickPagePrefix()
   {
    const int copied=ArraySize(g_tick_page);
    g_tick_accepted=(int)MathMin(copied,g_tick_max);
    while(g_tick_accepted>0 && g_tick_page[g_tick_accepted-1].time_msc>=g_tick_to) g_tick_accepted--;
    g_tick_through=g_tick_to;
-   if(!g_tick_complete)
-     {
-      g_tick_through=(g_tick_accepted>0 ? g_tick_page[g_tick_accepted-1].time_msc : g_tick_from);
-      while(g_tick_accepted>0 && g_tick_page[g_tick_accepted-1].time_msc>=g_tick_through) g_tick_accepted--;
-      if(g_tick_accepted==0) g_tick_through=g_tick_from;
-     }
+   if(g_tick_complete) return;
+   g_tick_through=(g_tick_accepted>0 ? g_tick_page[g_tick_accepted-1].time_msc : g_tick_from);
+   while(g_tick_accepted>0 && g_tick_page[g_tick_accepted-1].time_msc>=g_tick_through) g_tick_accepted--;
+   if(g_tick_accepted==0) g_tick_through=g_tick_from;
+  }
+
+bool PreparePriceTickPayload()
+  {
+   AcceptTickPagePrefix();
    g_tick_cursor=0;
    g_tick_rejected=0;
    g_price_cursor=0;
@@ -2082,7 +2304,9 @@ bool GrowTickPayload(const int required)
    return ArrayResize(g_tick_payload,capacity)==capacity;
   }
 
-bool AppendPricePayload(const string entry)
+// Appends one already-serialized JSON fragment to the tick-history frame
+// buffer, shared by the summary modes.
+bool AppendTickPayload(const string entry)
   {
    uchar bytes[];
    if(!Utf8Bytes(entry,bytes)) return false;
@@ -2119,7 +2343,7 @@ void PollPriceTickPayload()
      {
       const string tick_size=DoubleToString(SymbolInfoDouble(g_tick_symbol,SYMBOL_TRADE_TICK_SIZE),digits);
       const string header=StringFormat("{\"v\":1,\"type\":\"tick_price_history_snapshot\",\"id\":\"ea-ticks-%I64u\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"request_id\":\"%s\",\"symbol\":\"%s\",\"from_ms\":%I64d,\"to_ms\":%I64d,\"tick_size\":\"%s\",\"prices\":[",++g_message_id,JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(g_tick_request),JsonEscape(g_tick_symbol),g_tick_from,g_tick_to,tick_size);
-      if(!AppendPricePayload(header)) { FailTickHistory("price envelope exceeds frame limit"); return; }
+      if(!AppendTickPayload(header)) { FailTickHistory("price envelope exceeds frame limit"); return; }
      }
    while(g_price_cursor<g_price_count)
      {
@@ -2127,7 +2351,7 @@ void PollPriceTickPayload()
       const string entry=StringFormat("%s{\"price\":\"%s\",\"total\":%u,\"bid\":%u,\"ask\":%u,\"bid_seen\":%s}",(index>0 ? "," : ""),DoubleToString(g_prices[index].price,digits),g_prices[index].total,g_prices[index].bid,g_prices[index].ask,(g_prices[index].bid_seen ? "true" : "false"));
       // An unusually broad price set can exceed the frame budget. Reuse the
       // already-read page through the raw path without sampling or another read.
-      if(StringLen(entry)+512>(int)g_max_frame_bytes-g_tick_payload_size || !AppendPricePayload(entry))
+      if(StringLen(entry)+512>(int)g_max_frame_bytes-g_tick_payload_size || !AppendTickPayload(entry))
         {
          g_tick_aggregate=false;
          ReleaseTickPrefetch();
@@ -2141,9 +2365,286 @@ void PollPriceTickPayload()
    const string low=(g_tick_accepted>0 ? "\""+DoubleToString(g_tick_min_quote,digits)+"\"" : "null");
    const string high=(g_tick_accepted>0 ? "\""+DoubleToString(g_tick_max_quote,digits)+"\"" : "null");
    const string suffix=StringFormat("],\"complete\":%s,\"through_ms\":%I64d,\"loaded_ticks\":%d,\"rejected_ticks\":%u,\"min_quote\":%s,\"max_quote\":%s}}",(g_tick_complete ? "true" : "false"),g_tick_through,g_tick_accepted,g_tick_rejected,low,high);
-   if(!AppendPricePayload(suffix)) { FailTickHistory("price envelope exceeds frame limit"); return; }
+   if(!AppendTickPayload(suffix)) { FailTickHistory("price envelope exceeds frame limit"); return; }
    if(!SendPayloadBytes(g_tick_payload,g_tick_payload_size)) { DisconnectAndRetry("tick price snapshot send failed"); return; }
    PrintFormat("BetterChartsBridge tick page delivered: source=ticks mode=prices records=%d prices=%d bytes=%d read_ms=%I64u work_ms=%I64u complete=%s prefetch=%s",g_tick_accepted,g_price_count,g_tick_payload_size,g_tick_reader_ready_ms-g_tick_started_ms,GetTickCount64()-g_tick_reader_ready_ms,(g_tick_complete ? "yes" : "no"),(g_tick_prefetch_hit ? "hit" : "miss"));
+   ResetActiveTickHistory();
+  }
+
+//--- footprint counts: per-price buy/sell totals of the counted trades -----
+
+double FootprintPositivePrice(const double value)
+  { return (MathIsValidNumber(value) && value>0.0 ? value : 0.0); }
+
+// The weight of a counted trade, or zero when the tick is not a trade. Real
+// volume weighs the volume the tick reports; without it MT5's tick volume
+// counts one per trade, and a quote that moved the bid counts there.
+double FootprintTradeWeight(const MqlTick &tick)
+  {
+   if(g_footprint_real_volume)
+     {
+      if(tick.volume_real>0.0) return tick.volume_real;
+      return (tick.volume!=0 ? (double)tick.volume : 0.0);
+     }
+   return ((tick.volume!=0 || (tick.flags&TICK_FLAG_BID)!=0) ? 1.0 : 0.0);
+  }
+
+// Where a counted trade trades: its last, else the bid/ask mid, else its bid.
+// A tick without a positive price is no trade.
+double FootprintTradePrice(const MqlTick &tick,bool &priced)
+  {
+   const double last=FootprintPositivePrice(tick.last);
+   const double bid=FootprintPositivePrice(tick.bid);
+   const double ask=FootprintPositivePrice(tick.ask);
+   if(last>0.0) { priced=true; return last; }
+   if(bid>0.0 && ask>0.0) { priced=true; return (bid+ask)/2.0; }
+   priced=(bid>0.0);
+   return (priced ? bid : 0.0);
+  }
+
+// A bar open restarts the tick rule with no carry; the answer keeps the carry
+// of the last counted trade, so the next page continues the rule from there.
+void RestartFootprintTickRule()
+  {
+   g_footprint_has_carry=false;
+   g_footprint_carry_price=0.0;
+   g_footprint_carry_key=0;
+   g_footprint_carry_side="";
+  }
+
+// The counted ticks arrive in time order, so the bar index only moves forward:
+// a tick at or after a named open belongs to that bar, and the tick rule starts
+// there with no carry.
+void AdvanceFootprintBar(const long time_msc)
+  {
+   while(g_footprint_bar_index+1<g_footprint_bar_count &&
+         g_footprint_bars[g_footprint_bar_index+1].open_ms<=time_msc)
+     {
+      g_footprint_bar_index++;
+      RestartFootprintTickRule();
+     }
+  }
+
+// The level key packs the bar index above the price key, so one hash index holds
+// every bar's levels and one sort orders them bar by bar.
+long FootprintLevelKey(const long price_key)
+  { return ((long)g_footprint_bar_index<<BRIDGE_FOOTPRINT_LEVEL_BAR_SHIFT)+price_key; }
+
+// The tick rule against the carry: up is a buy, down a sell, the carry's own
+// price keeps its side, and a page with no carry buys. Prices compare by their
+// decimal key, so equal spellings of one value stay equal.
+string FootprintTickRuleSide(const long key)
+  {
+   if(!g_footprint_has_carry) return "buy";
+   if(key>g_footprint_carry_key) return "buy";
+   if(key<g_footprint_carry_key) return "sell";
+   return g_footprint_carry_side;
+  }
+
+// The side of a counted trade: exactly one of its own flags, else the quote
+// rule against its own mid, else the tick rule against the carry. Last and mid
+// compare on the level grid (`scale`), as doubles a last at the mid can read
+// a hair below or above it.
+string FootprintTradeSide(const MqlTick &tick,const long key,const double scale)
+  {
+   const bool buy_flag=((tick.flags&TICK_FLAG_BUY)!=0);
+   const bool sell_flag=((tick.flags&TICK_FLAG_SELL)!=0);
+   if(buy_flag && !sell_flag) return "buy";
+   if(sell_flag && !buy_flag) return "sell";
+   const double last=FootprintPositivePrice(tick.last);
+   const double bid=FootprintPositivePrice(tick.bid);
+   const double ask=FootprintPositivePrice(tick.ask);
+   if(last>0.0 && bid>0.0 && ask>0.0)
+     {
+      const long last_key=(long)MathRound(last*scale);
+      const long mid_key=(long)MathRound((bid+ask)/2.0*scale);
+      if(last_key>mid_key) return "buy";
+      if(last_key<mid_key) return "sell";
+     }
+   return FootprintTickRuleSide(key);
+  }
+
+// Adds one trade's weight to its price's level, creating the level when the
+// price is first seen; `key` is the traded price in tenths of a digit.
+bool AddFootprintWeight(const double price,const long key,const double weight,const bool is_buy)
+  {
+   int index=0;
+   if(!g_footprint_index.TryGetValue(key,index))
+     {
+      index=g_footprint_level_count;
+      if(index>=ArraySize(g_footprint_levels) || !g_footprint_index.Add(key,index)) return false;
+      g_footprint_levels[index].price=price;
+      g_footprint_levels[index].buy=0.0;
+      g_footprint_levels[index].sell=0.0;
+      g_footprint_keys[index]=key;
+      g_footprint_level_count++;
+     }
+   if(is_buy) g_footprint_levels[index].buy+=weight;
+   else g_footprint_levels[index].sell+=weight;
+   return true;
+  }
+
+// A level's volume: whole trades in tick-count mode, the reported lots with
+// real volume.
+string FootprintVolumeText(const double volume)
+  {
+   if(g_footprint_real_volume) return DoubleToString(volume,8);
+   return StringFormat("%.0f",volume);
+  }
+
+string FootprintCarryJson(const int price_digits)
+  {
+   if(!g_footprint_answer_has_carry) return "null";
+   return StringFormat("{\"price\":\"%s\",\"side\":\"%s\"}",DoubleToString(g_footprint_answer_price,price_digits),g_footprint_answer_side);
+  }
+
+// The answer orders its levels by bar and price, which the packed level key
+// makes one ascending sort. ArraySort needs a plain numeric array, so the keys
+// are sorted and the hash index maps each back to its level.
+void SortFootprintLevels()
+  {
+   ArrayResize(g_footprint_keys,g_footprint_level_count);
+   ArraySort(g_footprint_keys);
+  }
+
+bool PrepareFootprintPayload()
+  {
+   AcceptTickPagePrefix();
+   const int capacity=g_tick_accepted;
+   if(ArrayResize(g_footprint_levels,capacity)!=capacity || ArrayResize(g_footprint_keys,capacity)!=capacity)
+     { FailTickHistory("footprint level allocation failed"); return false; }
+   g_footprint_index.Clear();
+   g_footprint_cursor=0;
+   g_footprint_emitted=0;
+   g_footprint_level_count=0;
+   g_footprint_trades=0;
+   for(int bar=0;bar<g_footprint_bar_count;bar++) g_footprint_bars[bar].trades=0;
+   g_footprint_bar_index=0;
+   g_footprint_emit_bar=-1;
+   g_footprint_bar_levels=0;
+   // The request's carry arrives as decimal text; its key is where the tick
+   // rule compares it against this page's prices.
+   const int digits=(int)SymbolInfoInteger(g_tick_symbol,SYMBOL_DIGITS);
+   if(g_footprint_has_carry) g_footprint_carry_key=(long)MathRound(g_footprint_carry_price*MathPow(10.0,digits+1));
+   g_tick_header="footprint-counts";
+   return true;
+  }
+
+// Counts one accepted tick into the page: its traded price, its side and its
+// weight; a tick that is no trade, or trades nowhere, adds nothing. Every
+// counted trade becomes the carry the answer returns. `failure` names why a
+// trade could not be counted.
+bool CountFootprintTick(const int index,const double scale,string &failure)
+  {
+   failure="";
+   AdvanceFootprintBar(g_tick_page[index].time_msc);
+   const double weight=FootprintTradeWeight(g_tick_page[index]);
+   if(weight<=0.0) return true;
+   bool priced=false;
+   const double price=FootprintTradePrice(g_tick_page[index],priced);
+   if(!priced) return true;
+   const long price_key=(long)MathRound(price*scale);
+   // A price key that reached the bar stride would alias another bar's level.
+   if(price_key<=0 || price_key>=BRIDGE_FOOTPRINT_LEVEL_STRIDE)
+     {
+      failure="footprint price key out of range";
+      return false;
+     }
+   const string side=FootprintTradeSide(g_tick_page[index],price_key,scale);
+   if(!AddFootprintWeight(price,FootprintLevelKey(price_key),weight,side=="buy"))
+     {
+      failure="footprint level allocation failed";
+      return false;
+     }
+   g_footprint_trades++;
+   if(g_footprint_bar_count>0) g_footprint_bars[g_footprint_bar_index].trades++;
+   g_footprint_has_carry=true;
+   g_footprint_carry_price=price;
+   g_footprint_carry_key=price_key;
+   g_footprint_carry_side=side;
+   g_footprint_answer_has_carry=true;
+   g_footprint_answer_price=price;
+   g_footprint_answer_side=side;
+   return true;
+  }
+
+// Appends one JSON fragment of the footprint answer unless the frame budget
+// cannot hold it; an answer that does not fit fails rather than being sampled.
+bool AppendFootprintFragment(const string fragment)
+  {
+   if(StringLen(fragment)+512>(int)g_max_frame_bytes-g_tick_payload_size) return false;
+   return AppendTickPayload(fragment);
+  }
+
+// One level of the answer; `first` suppresses the separating comma.
+bool AppendFootprintLevel(const int index,const bool first,const int price_digits)
+  {
+   const string entry=StringFormat("%s{\"price\":\"%s\",\"buy\":\"%s\",\"sell\":\"%s\"}",(first ? "" : ","),DoubleToString(g_footprint_levels[index].price,price_digits),FootprintVolumeText(g_footprint_levels[index].buy),FootprintVolumeText(g_footprint_levels[index].sell));
+   return AppendFootprintFragment(entry);
+  }
+
+// One bar of a multi-bar answer: its own open, its counted trades and the level
+// list that follows, which the caller closes.
+bool AppendFootprintBar(const int bar)
+  {
+   const string entry=StringFormat("%s{\"open_ms\":%I64d,\"trade_ticks\":%d,\"levels\":[",(g_footprint_emit_bar>=0 ? "," : ""),g_footprint_bars[bar].open_ms,g_footprint_bars[bar].trades);
+   return AppendFootprintFragment(entry);
+  }
+
+// Counts the accepted ticks into per-price buy/sell totals, then streams the
+// levels out, in work slices so heartbeats and commands keep their turns. A
+// request that named bar opens keeps the top-level levels empty and answers one
+// level list per bar, ascending by open; a bar that counted no trade carries no
+// level and is left out.
+void PollFootprintPayload()
+  {
+   const int digits=(int)SymbolInfoInteger(g_tick_symbol,SYMBOL_DIGITS);
+   const double scale=MathPow(10.0,digits+1);
+   const ulong started=GetTickCount64();
+   while(g_footprint_cursor<g_tick_accepted)
+     {
+      const int index=g_footprint_cursor++;
+      string failure="";
+      if(!CountFootprintTick(index,scale,failure)) { FailTickHistory(failure); return; }
+      if(GetTickCount64()-started>=BRIDGE_TICK_WORK_SLICE_MS) return;
+     }
+   if(g_tick_payload_size==0)
+     {
+      SortFootprintLevels();
+      const string tick_size=DoubleToString(SymbolInfoDouble(g_tick_symbol,SYMBOL_TRADE_TICK_SIZE),digits);
+      const string prefix=StringFormat("{\"v\":1,\"type\":\"tick_footprint_history_snapshot\",\"id\":\"ea-ticks-%I64u\",\"session_id\":\"%s\",\"sent_at_ms\":%I64u,\"payload\":{\"request_id\":\"%s\",\"symbol\":\"%s\",\"from_ms\":%I64d,\"to_ms\":%I64d,\"tick_size\":\"%s\",\"complete\":%s,\"through_ms\":%I64d,\"loaded_ticks\":%d,\"trade_ticks\":%d,\"carry\":%s",++g_message_id,JsonEscape(g_session_id),(ulong)TimeGMT()*1000,JsonEscape(g_tick_request),JsonEscape(g_tick_symbol),g_tick_from,g_tick_to,tick_size,(g_tick_complete ? "true" : "false"),g_tick_through,g_tick_accepted,g_footprint_trades,FootprintCarryJson(digits+1));
+      const string header=prefix+(g_footprint_bar_count>0 ? ",\"levels\":[],\"bars\":[" : ",\"levels\":[");
+      if(!AppendTickPayload(header)) { FailTickHistory("footprint envelope exceeds frame limit"); return; }
+     }
+   while(g_footprint_emitted<g_footprint_level_count)
+     {
+      const int slot=g_footprint_emitted++;
+      if(g_footprint_bar_count>0)
+        {
+         const int bar=(int)(g_footprint_keys[slot]>>BRIDGE_FOOTPRINT_LEVEL_BAR_SHIFT);
+         // The sorted keys are bar by bar, so a new bar closes the previous one.
+         if(bar!=g_footprint_emit_bar)
+           {
+            if(g_footprint_emit_bar>=0 && !AppendFootprintFragment("]}"))
+              { FailTickHistory("footprint bars exceed frame limit"); return; }
+            if(!AppendFootprintBar(bar)) { FailTickHistory("footprint bars exceed frame limit"); return; }
+            g_footprint_emit_bar=bar;
+            g_footprint_bar_levels=0;
+           }
+        }
+      int index=0;
+      if(!g_footprint_index.TryGetValue(g_footprint_keys[slot],index))
+        { FailTickHistory("footprint level index lost"); return; }
+      if(!AppendFootprintLevel(index,g_footprint_bar_levels==0,digits+1))
+        { FailTickHistory("footprint levels exceed frame limit"); return; }
+      g_footprint_bar_levels++;
+      if(GetTickCount64()-started>=BRIDGE_TICK_WORK_SLICE_MS) return;
+     }
+   if(g_footprint_emit_bar>=0 && !AppendFootprintFragment("]}"))
+     { FailTickHistory("footprint bars exceed frame limit"); return; }
+   if(!AppendTickPayload("]}}")) { FailTickHistory("footprint envelope exceeds frame limit"); return; }
+   if(!SendPayloadBytes(g_tick_payload,g_tick_payload_size)) { DisconnectAndRetry("tick footprint snapshot send failed"); return; }
+   PrintFormat("BetterChartsBridge tick page delivered: source=ticks mode=footprint records=%d trades=%d levels=%d bytes=%d read_ms=%I64u work_ms=%I64u complete=%s",g_tick_accepted,g_footprint_trades,g_footprint_level_count,g_tick_payload_size,g_tick_reader_ready_ms-g_tick_started_ms,GetTickCount64()-g_tick_reader_ready_ms,(g_tick_complete ? "yes" : "no"));
    ResetActiveTickHistory();
   }
 
@@ -2215,9 +2716,14 @@ void PollTickHistory()
         {
          if(!PreparePriceTickPayload()) return;
         }
+      else if(g_tick_footprint)
+        {
+         if(!PrepareFootprintPayload()) return;
+        }
       else if(!PrepareRawTickPayload()) return;
      }
    if(g_tick_aggregate) { PollPriceTickPayload(); return; }
+   if(g_tick_footprint) { PollFootprintPayload(); return; }
    const int digits=(int)SymbolInfoInteger(g_tick_symbol,SYMBOL_DIGITS);
    const int copied=ArraySize(g_tick_page);
    const ulong started=GetTickCount64();
@@ -3202,6 +3708,7 @@ void HandleFrame(const string json)
       g_max_frame_bytes=(uint)frame_bytes;
       g_max_ticks_per_page=(uint)page_ticks;
       g_price_counts_enabled=JsonBooleanIsTrue(json,"tick_price_counts");
+      g_footprint_counts_enabled=JsonBooleanIsTrue(json,"tick_footprint_counts");
       g_partial_close_enabled=JsonBooleanIsTrue(json,"partial_close");
       g_other_symbol_series_enabled=JsonBooleanIsTrue(json,"other_symbol_series");
       g_session_id=session_id;
@@ -3249,7 +3756,10 @@ void HandleFrame(const string json)
       const long from_ms=JsonIntegerField(json,"from_ms",-1);
       const long to_ms=JsonIntegerField(json,"to_ms",-1);
       const long max_ticks=JsonIntegerField(json,"max_ticks",0);
-      QueueTickHistory(request_id,symbol,from_ms,to_ms,max_ticks,JsonBooleanIsTrue(json,"price_counts"));
+      // `footprint_counts` selects the per-price buy/sell answer; a request
+      // without it keeps the raw or the price-count page.
+      if(JsonBooleanIsTrue(json,"footprint_counts")) QueueFootprintHistory(request_id,symbol,from_ms,to_ms,max_ticks,json);
+      else QueueTickHistory(request_id,symbol,from_ms,to_ms,max_ticks,JsonBooleanIsTrue(json,"price_counts"));
      }
    else if(type=="symbol_search_request")
      {
@@ -3362,6 +3872,7 @@ void TryConnect()
    g_max_frame_bytes=BRIDGE_MAX_FRAME;
    g_max_ticks_per_page=5000;
    g_session_id="";
+   g_footprint_counts_enabled=false;
    g_partial_close_enabled=false;
    g_other_symbol_series_enabled=false;
    ClearPendingHistoryPages();

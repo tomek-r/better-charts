@@ -583,6 +583,28 @@ async fn trading_permission_is_shown_from_the_hello_and_reset_on_disconnect() {
 }
 
 #[tokio::test]
+async fn footprint_counts_capability_is_acknowledged_only_when_the_hello_offers_it() {
+    for offered in [Some(true), Some(false), None] {
+        let harness = default_harness().await;
+        let mut client = BridgeClient::connect(harness.addr).await.unwrap();
+        let mut hello = valid_hello(None);
+        if let Some(offered) = offered {
+            hello.payload["tick_footprint_counts"] = offered.into();
+        }
+        client.send(hello).await.unwrap();
+        let ack = client.recv(Duration::from_secs(2)).await.unwrap();
+        assert_eq!(ack.message_type, MessageType::HelloAck);
+        let expected = offered.unwrap_or(false);
+        assert_eq!(ack.payload["tick_footprint_counts"], expected);
+        assert_eq!(
+            *harness.state.tick_footprint_counts.lock().unwrap(),
+            expected,
+            "the host reads footprints the way the EA it acknowledged can serve them"
+        );
+    }
+}
+
+#[tokio::test]
 async fn partial_close_capability_is_negotiated_echoed_and_reset_on_disconnect() {
     for offered in [Some(true), Some(false), None] {
         let harness = default_harness().await;

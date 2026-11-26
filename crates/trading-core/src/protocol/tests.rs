@@ -383,6 +383,8 @@ fn footprint_request() -> TickFootprintHistoryRequest {
             price: "100.5".into(),
             side: FootprintSide::Buy,
         }),
+        bar_opens: Vec::new(),
+        first_open_ms: None,
     }
 }
 
@@ -413,6 +415,7 @@ fn footprint_snapshot() -> TickFootprintHistorySnapshot {
                 sell: "2".into(),
             },
         ],
+        bars: Vec::new(),
     }
 }
 
@@ -709,6 +712,254 @@ fn footprint_page_without_a_trade_returns_the_carry_it_was_given() {
     let mut bad = page.clone();
     bad.levels = footprint_snapshot().levels;
     assert!(bad.validate(&request).is_err());
+}
+
+fn multibar_footprint_request() -> TickFootprintHistoryRequest {
+    TickFootprintHistoryRequest {
+        bar_opens: vec![1500],
+        first_open_ms: Some(1000),
+        ..footprint_request()
+    }
+}
+
+fn multibar_footprint_snapshot() -> TickFootprintHistorySnapshot {
+    TickFootprintHistorySnapshot {
+        complete: true,
+        through_ms: 2000,
+        trade_ticks: 5,
+        levels: Vec::new(),
+        bars: vec![
+            FootprintBarCounts {
+                open_ms: 1000,
+                trade_ticks: 2,
+                levels: vec![FootprintLevel {
+                    price: "100.5".into(),
+                    buy: "1".into(),
+                    sell: "1".into(),
+                }],
+            },
+            FootprintBarCounts {
+                open_ms: 1500,
+                trade_ticks: 3,
+                levels: vec![FootprintLevel {
+                    price: "101.0".into(),
+                    buy: "0".into(),
+                    sell: "3".into(),
+                }],
+            },
+        ],
+        ..footprint_snapshot()
+    }
+}
+
+#[test]
+fn footprint_multibar_request_round_trips_its_opens_and_keeps_the_single_bar_shape() {
+    let request = multibar_footprint_request();
+    request.validate().unwrap();
+    let value = serde_json::to_value(&request).unwrap();
+    assert_eq!(value["first_open_ms"], 1000);
+    assert_eq!(value["bar_opens"], serde_json::json!([1500]));
+    let parsed: TickFootprintHistoryRequest = serde_json::from_value(value).unwrap();
+    parsed.validate().unwrap();
+    assert_eq!(parsed.bar_opens, request.bar_opens);
+    assert_eq!(parsed.first_open_ms, request.first_open_ms);
+
+    // A single-bar request is today's payload: neither field appears.
+    let single = TickFootprintHistoryRequest {
+        bar_opens: Vec::new(),
+        first_open_ms: None,
+        ..footprint_request()
+    };
+    let json = serde_json::to_string(&single).unwrap();
+    assert!(
+        !json.contains("bar_opens") && !json.contains("first_open_ms"),
+        "{json}"
+    );
+}
+
+#[test]
+fn footprint_multibar_request_rejects_unordered_opens_and_a_missing_first_open() {
+    let base = multibar_footprint_request();
+    base.validate().unwrap();
+    // The bar the range starts in must be named, and it may start before from_ms.
+    assert!(TickFootprintHistoryRequest {
+        first_open_ms: None,
+        ..base.clone()
+    }
+    .validate()
+    .is_err());
+    assert!(TickFootprintHistoryRequest {
+        first_open_ms: Some(1001),
+        ..base.clone()
+    }
+    .validate()
+    .is_err());
+    assert!(TickFootprintHistoryRequest {
+        first_open_ms: Some(999),
+        ..base.clone()
+    }
+    .validate()
+    .is_ok());
+    // Opens after the first one ascend strictly and stay inside the range.
+    for bar_opens in [
+        vec![1500, 1500],
+        vec![1800, 1500],
+        vec![1000],
+        vec![2000],
+        vec![900],
+    ] {
+        assert!(TickFootprintHistoryRequest {
+            bar_opens,
+            ..base.clone()
+        }
+        .validate()
+        .is_err());
+    }
+    assert!(TickFootprintHistoryRequest {
+        bar_opens: vec![1500, 1800],
+        ..base
+    }
+    .validate()
+    .is_ok());
+}
+
+#[test]
+fn footprint_multibar_page_reports_one_level_free_total_per_bar() {
+    let request = TickFootprintHistoryRequest {
+        real_volume: false,
+        ..multibar_footprint_request()
+    };
+    let snapshot = multibar_footprint_snapshot();
+    snapshot.validate(&request).unwrap();
+
+    let value = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(value["levels"], serde_json::json!([]));
+    assert_eq!(value["trade_ticks"], 5);
+    assert_eq!(value["bars"][0]["open_ms"], 1000);
+    assert_eq!(value["bars"][0]["trade_ticks"], 2);
+    assert_eq!(value["bars"][1]["open_ms"], 1500);
+    assert_eq!(value["bars"][1]["trade_ticks"], 3);
+    let parsed: TickFootprintHistorySnapshot = serde_json::from_value(value).unwrap();
+    parsed.validate(&request).unwrap();
+
+    // Without bar_opens the answer keeps today's shape: no bars.
+    let single_request = TickFootprintHistoryRequest {
+        real_volume: false,
+        ..footprint_request()
+    };
+    let single = footprint_snapshot();
+    single.validate(&single_request).unwrap();
+    assert!(serde_json::to_value(&single).unwrap().get("bars").is_none());
+}
+
+#[test]
+fn footprint_multibar_page_rejects_a_bad_bar_list() {
+    let request = TickFootprintHistoryRequest {
+        real_volume: false,
+        ..multibar_footprint_request()
+    };
+    let snapshot = multibar_footprint_snapshot();
+    snapshot.validate(&request).unwrap();
+
+    // A single-bar request must not carry bars.
+    let single_request = TickFootprintHistoryRequest {
+        real_volume: false,
+        ..footprint_request()
+    };
+    assert!(snapshot.validate(&single_request).is_err());
+
+    // The page's levels live inside its bars.
+    let mut bad = snapshot.clone();
+    bad.levels = vec![FootprintLevel {
+        price: "100.5".into(),
+        buy: "1".into(),
+        sell: "1".into(),
+    }];
+    assert!(bad.validate(&request).is_err());
+
+    // The bars ascend and every open is one the request named.
+    let mut bad = snapshot.clone();
+    bad.bars.swap(0, 1);
+    assert!(bad.validate(&request).is_err());
+    let mut bad = snapshot.clone();
+    bad.bars[1].open_ms = 1600;
+    assert!(bad.validate(&request).is_err());
+
+    // The page's trade count is the bars' sum.
+    let mut bad = snapshot.clone();
+    bad.trade_ticks = 4;
+    assert!(bad.validate(&request).is_err());
+
+    // Each bar obeys the level rules on its own.
+    let mut bad = snapshot.clone();
+    bad.bars[0].levels[0].buy = "2".into();
+    assert!(
+        bad.validate(&request).is_err(),
+        "a bar's sums are its trades"
+    );
+    let mut bad = snapshot.clone();
+    bad.bars[0].trade_ticks = 1;
+    assert!(
+        bad.validate(&request).is_err(),
+        "no more levels than trades"
+    );
+    let mut bad = snapshot.clone();
+    bad.bars[0].levels[0].buy = "1.5".into();
+    assert!(bad.validate(&request).is_err(), "a counted trade is whole");
+}
+
+#[test]
+fn footprint_multibar_page_may_omit_a_bar_with_no_counted_trade() {
+    let request = TickFootprintHistoryRequest {
+        real_volume: false,
+        bar_opens: vec![1500, 1800],
+        first_open_ms: Some(1000),
+        ..footprint_request()
+    };
+    let snapshot = TickFootprintHistorySnapshot {
+        trade_ticks: 3,
+        bars: vec![FootprintBarCounts {
+            open_ms: 1000,
+            trade_ticks: 3,
+            levels: vec![FootprintLevel {
+                price: "101.0".into(),
+                buy: "0".into(),
+                sell: "3".into(),
+            }],
+        }],
+        ..multibar_footprint_snapshot()
+    };
+    snapshot.validate(&request).unwrap();
+
+    // An explicitly empty bar is fine too.
+    let mut with_empty = snapshot.clone();
+    with_empty.bars.push(FootprintBarCounts {
+        open_ms: 1800,
+        trade_ticks: 0,
+        levels: Vec::new(),
+    });
+    with_empty.validate(&request).unwrap();
+
+    // With no counted trade at all the page returns the carry it was given.
+    let no_trade_request = TickFootprintHistoryRequest {
+        carry: Some(FootprintCarry {
+            price: "100.5".into(),
+            side: FootprintSide::Buy,
+        }),
+        ..request
+    };
+    let mut none = footprint_snapshot();
+    none.trade_ticks = 0;
+    none.levels.clear();
+    none.carry = no_trade_request.carry.clone();
+    none.bars.clear();
+    none.validate(&no_trade_request).unwrap();
+    let mut bad = none;
+    bad.carry = Some(FootprintCarry {
+        price: "1".into(),
+        side: FootprintSide::Sell,
+    });
+    assert!(bad.validate(&no_trade_request).is_err());
 }
 
 #[test]
