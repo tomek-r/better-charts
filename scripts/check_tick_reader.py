@@ -95,6 +95,8 @@ class TickReaderSourceGuards(unittest.TestCase):
         self.assertIn("GetTickCount64()-started>=BRIDGE_TICK_WORK_SLICE_MS", poll)
         self.assertIn("SendPayloadBytes(g_tick_payload,g_tick_payload_size)", poll)
         self.assertIn("footprint levels exceed frame limit", poll)
+        # A multi-bar answer keeps the top-level levels empty and lists its bars.
+        self.assertIn(r'\"levels\":[],\"bars\":[', poll)
         self.assertNotIn("TickJson(", poll)
 
     def test_prefetch_is_session_bound_and_released_on_every_exit(self):
