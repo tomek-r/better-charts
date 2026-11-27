@@ -158,6 +158,7 @@ mod tests {
             tick_value_profit: None,
             tick_value_loss: None,
             tick_value_currency: None,
+            currency_profit: None,
             volume_min: "0.01".into(),
             volume_max: "100".into(),
             volume_step: "0.01".into(),
