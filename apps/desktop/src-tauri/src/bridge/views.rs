@@ -209,6 +209,16 @@ pub(crate) struct BrokerSymbolView {
     /// `SYMBOL_CURRENCY_PROFIT`: the currency a price move's profit is computed
     /// in; `null` from EAs older than 1.015.
     pub(crate) currency_profit: Option<String>,
+    /// `SYMBOL_EXCHANGE`: the venue the symbol trades on; `null` when unknown.
+    pub(crate) exchange: Option<String>,
+    /// `SYMBOL_ISIN`; `null` when unknown.
+    pub(crate) isin: Option<String>,
+    /// `SYMBOL_CURRENCY_BASE`; `null` from EAs older than 1.016.
+    pub(crate) currency_base: Option<String>,
+    /// Raw `SYMBOL_TRADE_CALC_MODE`; `null` when unknown.
+    pub(crate) calc_mode: Option<u32>,
+    /// Raw `SYMBOL_SECTOR`; `null` when unknown.
+    pub(crate) sector: Option<u32>,
     pub(crate) volume_min: String,
     pub(crate) volume_max: String,
     pub(crate) volume_step: String,
@@ -234,6 +244,11 @@ impl From<BrokerSymbol> for BrokerSymbolView {
             tick_value_loss: value.tick_value_loss,
             tick_value_currency: value.tick_value_currency,
             currency_profit: value.currency_profit,
+            exchange: value.exchange,
+            isin: value.isin,
+            currency_base: value.currency_base,
+            calc_mode: value.calc_mode,
+            sector: value.sector,
             volume_min: value.volume_min,
             volume_max: value.volume_max,
             volume_step: value.volume_step,
@@ -643,6 +658,11 @@ mod tests {
             tick_value_loss: None,
             tick_value_currency: None,
             currency_profit: currency_profit.map(str::to_owned),
+            exchange: None,
+            isin: None,
+            currency_base: None,
+            calc_mode: None,
+            sector: None,
             volume_min: "0.01".into(),
             volume_max: "100".into(),
             volume_step: "0.01".into(),
@@ -670,5 +690,36 @@ mod tests {
             serde_json::to_value(&unknown).unwrap()["currencyProfit"],
             serde_json::Value::Null
         );
+    }
+
+    #[test]
+    fn broker_symbol_view_publishes_the_classification_fields_as_camel_case() {
+        let reported = BrokerSymbolView::from(BrokerSymbol {
+            exchange: Some("NASDAQ".into()),
+            isin: Some("US67066G1040".into()),
+            currency_base: Some("USD".into()),
+            calc_mode: Some(2),
+            sector: Some(5),
+            ..broker_symbol(Some("USD"))
+        });
+        let value = serde_json::to_value(&reported).unwrap();
+        assert_eq!(value["exchange"], "NASDAQ");
+        assert_eq!(value["isin"], "US67066G1040");
+        assert_eq!(value["currencyBase"], "USD");
+        assert_eq!(value["calcMode"], 2);
+        assert_eq!(value["sector"], 5);
+        assert!(value.get("currency_base").is_none());
+        assert!(value.get("calc_mode").is_none());
+
+        // An older EA omits them; the view reports each one as unknown.
+        let unknown =
+            serde_json::to_value(BrokerSymbolView::from(broker_symbol(Some("USD")))).unwrap();
+        for field in ["exchange", "isin", "currencyBase", "calcMode", "sector"] {
+            assert_eq!(
+                unknown[field],
+                serde_json::Value::Null,
+                "{field} must be null"
+            );
+        }
     }
 }

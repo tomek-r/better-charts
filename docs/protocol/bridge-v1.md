@@ -455,6 +455,7 @@ for a different feed.
     {
       "symbol": "NAS100", "description": "Nasdaq 100 CFD", "digits": 1, "tick_size": "0.1",
       "point_size": "0.1", "contract_size": "1", "currency_profit": "USD",
+      "currency_base": "USD", "exchange": null, "isin": null, "calc_mode": 2, "sector": null,
       "volume_min": "0.01", "volume_max": "100",
       "volume_step": "0.01", "trade_mode": 4, "stops_level": 0, "freeze_level": 0,
       "filling_mode": 1, "order_mode": 127, "expiration_mode": 15, "trade_execution": 2
@@ -478,6 +479,12 @@ remain authoritative. No changes to dispatch or trading permissions are involved
 `currency_profit` (EA 1.015+, additive) is an optional nonempty string carrying MT5's
 `SYMBOL_CURRENCY_PROFIT`, the currency a price move's profit is computed in; older
 EAs omit it, which Rust reads as unknown.
+`exchange`, `isin`, `currency_base`, `calc_mode` and `sector` (EA 1.016+, additive)
+are optional too: `SYMBOL_EXCHANGE`, `SYMBOL_ISIN` and `SYMBOL_CURRENCY_BASE` as
+nonempty strings, and the raw `SYMBOL_TRADE_CALC_MODE` and `SYMBOL_SECTOR` as
+unsigned integers. Older EAs omit them, and the EA sends an empty MT5 string as
+`null`; both read as unknown, while a present but blank `exchange`, `isin` or
+`currency_base` rejects the record.
 Restriction levels and mode masks are unsigned integers passed directly from
 MT5. Selecting a symbol uses the same history feed; it does not create another
 connection. Rust publishes active metadata as the camelCase `symbol-info`

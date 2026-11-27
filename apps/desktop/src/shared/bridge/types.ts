@@ -326,6 +326,16 @@ export interface BrokerSymbol {
   tickValueCurrency?: string | null;
   /** SYMBOL_CURRENCY_PROFIT: the currency a price move's profit is computed in; null/absent = unknown (EAs before 1.015). */
   currencyProfit?: string | null;
+  /** SYMBOL_EXCHANGE: the venue the symbol trades on; null/absent = not reported (EAs before 1.016, or no exchange). */
+  exchange?: string | null;
+  /** SYMBOL_ISIN; null/absent = not reported (EAs before 1.016, or a symbol without an ISIN). */
+  isin?: string | null;
+  /** SYMBOL_CURRENCY_BASE: the symbol's base currency; null/absent = not reported (EAs before 1.016). */
+  currencyBase?: string | null;
+  /** Raw SYMBOL_TRADE_CALC_MODE, telling forex from CFD etc.; null/absent = not reported (EAs before 1.016). */
+  calcMode?: number | null;
+  /** Raw SYMBOL_SECTOR; null/absent = not reported (EAs before 1.016). */
+  sector?: number | null;
   volumeMin: string;
   volumeMax: string;
   volumeStep: string;
