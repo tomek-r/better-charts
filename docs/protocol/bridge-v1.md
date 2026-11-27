@@ -1297,15 +1297,19 @@ the slot for the next queued request.
 {
   "key": "volume-bars-100", "symbol": "NAS100", "fromMs": 1769999400000,
   "toMs": 1770000000000, "complete": true, "ticks": [
-    {"timeMs": 1769999400123, "bid": "25000.1", "ask": "25000.3", "last": "0", "volume": 0}
+    {"timeMs": 1769999400123, "bid": "25000.1", "ask": "25000.3", "last": "0",
+     "volume": 0, "flags": 6}
   ]
 }
 ```
 
 Prices and the last price stay the decimal strings the wire carries — the
 desktop never converts them to floats — and `volume` is the integer tick volume.
-`complete` has the page meaning above, and `ticks` is the oldest continuous
-prefix of the range, never a sample. A correlated `error` frame whose envelope
+`flags` is the tick's raw MT5 flags (u32): its `TICK_FLAG_*` bits, which name
+the side a deal traded on, so a tick chart can tell a buy from a sell. The field
+is additive: a frontend that reads no flags ignores it. `complete` has the page
+meaning above, and `ticks` is the oldest continuous prefix of the range, never a
+sample. A correlated `error` frame whose envelope
 `id` is one of these `rust-indicator-ticks-<n>` ids ends only that request and
 publishes `indicator-ticks-unavailable`:
 
