@@ -71,6 +71,15 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   hands the chart an empty, final page so the chart's paging latches the end of
   history and a scroll cannot start a request loop. There is no history-limit
   notice in the chart to reuse, so nothing is said on screen.
+- Seconds intervals (`S5`, `S15`, `S30`, `S90` through `S86400`) draw bars built
+  from the same raw ticks on a fixed grid: a bar covers a block of N seconds
+  counted from the start of the tick's broker day (00:00 of its server-time day),
+  so the grid never shifts when older history loads and a day's last block may be
+  shorter than N. A bar's time is its block's start; a live quote extends the block
+  it falls in and the quote of the next block opens a new bar; a read holds back
+  the ticks of its oldest block, which the older page completes, as it does the
+  ticks short of an N-tick bar. The interval menu has no seconds entry yet, so
+  nothing in the UI selects one.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
 - Chart SL/TP clear chips remove the selected live level from positions or

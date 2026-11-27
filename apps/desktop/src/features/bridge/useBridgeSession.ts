@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import type { Candle, BrokerSymbol } from '../../shared/bridge/types';
 import { initialHistoryBarsFor } from '../chart/engine/bars/initialHistoryWindow';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
-import { isTickInterval } from '../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval } from '../../shared/bridge/chartIntervals';
 import { useFieldSetterSelector } from '../../shared/store/fieldStore';
 import type { BridgeSessionStores } from './bridgeSessionStores';
 import type { BridgeMarketResources } from './market/bridgeMarketRuntime';
@@ -69,8 +69,8 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
       if (!symbol || stores.connection.getState().status.state !== 'connected') {
         return;
       }
-      if (isTickInterval(wire)) {
-        // A tick interval has no series to request: its bars are read from the chart symbol's own ticks.
+      if (isTickBuiltInterval(wire)) {
+        // A tick-built interval has no series to request: its bars are read from the chart symbol's own ticks.
         requestedTickIntervalRef.current = wire;
         tickBarsRef.current?.show(symbol, wire);
         return;
@@ -108,10 +108,10 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
       setChartError(undefined);
       beginHistoryWait(historyWaitSetters);
       const generation = ++requestGeneration.current;
-      // A tick interval shows no MT5 series, so the window that moves the bridge to the
+      // A tick-built interval shows no MT5 series, so the window that moves the bridge to the
       // new symbol is requested on the last MT5 timeframe and its candles are dropped.
       const shown = loadingTimeframeRef.current ?? stores.market.getState().snapshot.timeframe;
-      const timeframe = isTickInterval(shown) ? mt5TimeframeRef.current : (shown ?? DEFAULT_TIMEFRAME);
+      const timeframe = isTickBuiltInterval(shown) ? mt5TimeframeRef.current : (shown ?? DEFAULT_TIMEFRAME);
       try {
         await sendInitialHistory(symbol, timeframe);
       } catch {

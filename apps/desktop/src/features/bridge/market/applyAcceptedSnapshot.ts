@@ -3,7 +3,7 @@ import type { ChartController } from '../../chart/engine/surface/chartController
 import type { Mt5DataAdapter } from '../../chart/engine/bars/mt5DataAdapter';
 import type { MarketSnapshot } from '../../../shared/bridge/types';
 import { DEFAULT_TIMEFRAME } from '../../../shared/bridge/timeframes';
-import { isTickInterval } from '../../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval } from '../../../shared/bridge/chartIntervals';
 import type { BridgeSessionState } from '../useBridgeSession';
 
 export const NONE_VALID_CANDLES_MESSAGE = 'MT5 returned candles, but none of them contain valid OHLC values.';
@@ -46,12 +46,12 @@ export function snapshotViewportMode(
 
 /**
  * Records the MT5 series on screen: the series a symbol switch or a saved window
- * asks the bridge for while a tick interval is shown.
+ * asks the bridge for while a tick-built interval is shown.
  */
 export function recordMt5Timeframe(mt5Timeframe: { current: string }, timeframe: string | undefined): void {
   const series = timeframe ?? DEFAULT_TIMEFRAME;
-  // A tick interval is drawn from ticks: it is never a window a symbol switch could request.
-  if (!isTickInterval(series)) {
+  // A tick-built interval is drawn from ticks: it is never a window a symbol switch could request.
+  if (!isTickBuiltInterval(series)) {
     mt5Timeframe.current = series;
   }
 }

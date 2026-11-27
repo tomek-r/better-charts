@@ -1,5 +1,5 @@
 import { TICKS_PER_PAGE } from '../../../shared/bridge/config';
-import { ticksPerBarOf } from '../../../shared/bridge/chartIntervals';
+import { tickGroupingOf, type TickGrouping } from '../../../shared/bridge/chartIntervals';
 import type { Candle, IndicatorTick, MarketSnapshot } from '../../../shared/bridge/types';
 import type { RenderBar } from '../../chart/engine/bars/renderBar';
 import {
@@ -94,9 +94,9 @@ function candleOf(bar: RenderBar): Candle {
 }
 
 /**
- * The chart's bars while a tick interval is shown: the symbol's raw ticks, read
- * backwards from the newest instant it is known to have reached, built into
- * N-tick bars and then kept live from the quotes.
+ * The chart's bars while a tick-built interval is shown: the symbol's raw ticks,
+ * read backwards from the newest instant it is known to have reached, built into
+ * the interval's N-tick bars or seconds blocks and then kept live from the quotes.
  *
  * A read walks back one window at a time under `CHART_TICK_BUDGET` ticks until it
  * has `INITIAL_TICK_BARS` bars or the bridge stops answering, then replaces the
@@ -132,7 +132,7 @@ export class ChartTickBars {
 
   /** Reads `interval`'s ticks of `symbol` and draws the bars they build, replacing any read in flight. */
   show(symbol: string, interval: string): void {
-    if (!symbol || ticksPerBarOf(interval) === undefined) {
+    if (!symbol || tickGroupingOf(interval) === undefined) {
       return;
     }
     this.forgetRead();
@@ -165,11 +165,11 @@ export class ChartTickBars {
     if (tick.timeMs > this.newestTickMs) {
       this.newestTickMs = tick.timeMs;
     }
-    const ticksPerBar = ticksPerBarOf(this.deps.session.currentTimeframe.current);
-    if (ticksPerBar === undefined || this.timeline === null) {
+    const grouping = tickGroupingOf(this.deps.session.currentTimeframe.current);
+    if (grouping === undefined || this.timeline === null) {
       return;
     }
-    const next = foldTick(this.timeline, tick, ticksPerBar);
+    const next = foldTick(this.timeline, tick, grouping);
     if (next === this.timeline) {
       return;
     }
@@ -203,8 +203,8 @@ export class ChartTickBars {
   private readAnswer(answer: IndicatorTicksAnswer): void {
     const pending = this.pending;
     const walk = this.walk;
-    const ticksPerBar = ticksPerBarOf(this.drawing?.interval);
-    if (pending === null || walk === null || ticksPerBar === undefined) {
+    const grouping = tickGroupingOf(this.drawing?.interval);
+    if (pending === null || walk === null || grouping === undefined) {
       return;
     }
     if (answer.kind === 'page' && !answersTickWindow(answer, pending)) {
@@ -231,11 +231,11 @@ export class ChartTickBars {
       return;
     }
     if (this.phase === 'older') {
-      this.takeOlderPage(answer.ticks, ticksPerBar);
+      this.takeOlderPage(answer.ticks, grouping);
       return;
     }
     this.heldTicks = [...answer.ticks, ...this.heldTicks];
-    this.timeline = tickBarTimeline(this.heldTicks, ticksPerBar);
+    this.timeline = tickBarTimeline(this.heldTicks, grouping);
     if (this.enoughBars()) {
       this.drawOpeningBars();
       return;
@@ -252,12 +252,12 @@ export class ChartTickBars {
   /** Draws the bars the opening read built and keeps what an older page needs to join them. */
   private drawOpeningBars(): void {
     const drawing = this.drawing;
-    const ticksPerBar = ticksPerBarOf(drawing?.interval);
+    const grouping = tickGroupingOf(drawing?.interval);
     this.pending = null;
-    if (drawing === null || ticksPerBar === undefined) {
+    if (drawing === null || grouping === undefined) {
       return;
     }
-    const hold = heldTickBars(this.heldTicks, ticksPerBar);
+    const hold = heldTickBars(this.heldTicks, grouping);
     this.oldestTicks = hold.oldestTicks;
     this.oldestTickMs = this.heldTicks[0]?.timeMs ?? 0;
     this.heldTicks = [];
@@ -267,20 +267,21 @@ export class ChartTickBars {
       this.timeline = null;
       return;
     }
-    // Every bar holds the ticks its interval groups, so the next tick opens a bar of its own.
+    // Every bar holds the ticks its interval groups, so the next tick of a tick interval opens
+    // a bar of its own, while a seconds bar keeps taking the ticks of its block until it closes.
     this.timeline = { bars: hold.bars, formingPrices: [] };
     this.replaceHistory(drawing.symbol, drawing.interval, hold.bars);
   }
 
   /** Joins a page of older ticks to the chart's oldest bar and puts their bars in front of it. */
-  private takeOlderPage(olderTicks: readonly IndicatorTick[], ticksPerBar: number): void {
+  private takeOlderPage(olderTicks: readonly IndicatorTick[], grouping: TickGrouping): void {
     const timeline = this.timeline;
     const chart = this.deps.chart.current;
     if (timeline === null || chart === null) {
       this.endRead();
       return;
     }
-    const hold = joinedTickBars(olderTicks, this.oldestTicks, ticksPerBar, timeline.bars[0].time);
+    const hold = joinedTickBars(olderTicks, this.oldestTicks, grouping, timeline.bars[0].time);
     this.oldestTicks = hold.oldestTicks;
     this.oldestTickMs = olderTicks[0]?.timeMs ?? this.oldestTickMs;
     if (hold.bars.length === 0) {

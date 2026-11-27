@@ -120,10 +120,10 @@ test.describe('classifying a code into the bars it needs', () => {
     }
   });
 
-  test('only native and N-tick intervals can be drawn so far', () => {
+  test('native, N-tick and seconds intervals can be drawn; aggregated ones not yet', () => {
     expect(isDrawableInterval('M5')).toBe(true);
     expect(isDrawableInterval('T37')).toBe(true);
-    expect(isDrawableInterval('S5')).toBe(false);
+    expect(isDrawableInterval('S5')).toBe(true);
     expect(isDrawableInterval('D5')).toBe(false);
     expect(isDrawableInterval('BOGUS')).toBe(false);
   });
@@ -187,8 +187,9 @@ test.describe('restoring and starring an interval', () => {
   });
 
   test('an interval no slice draws yet is not restored', () => {
-    expect(restorableSelection(savedOn('S5'), ['M1', 'M5'])).toBeUndefined();
+    expect(restorableSelection(savedOn('S5'), ['M1', 'M5'])).toEqual(savedOn('S5'));
     expect(restorableSelection(savedOn('D5'), ['M1', 'D1'])).toBeUndefined();
+    expect(restorableSelection(savedOn('M7'), ['M1', 'M5'])).toBeUndefined();
   });
 
   test('an MT5 code still needs the handshake to advertise it', () => {
@@ -200,6 +201,6 @@ test.describe('restoring and starring an interval', () => {
     const stored = (value: string) => ({ getItem: () => value });
 
     expect(loadTimeframeFavorites(stored('["T37","T100000"]'))).toEqual(['T37', 'T100000']);
-    expect(loadTimeframeFavorites(stored('["S5","D5","T10","BOGUS"]'))).toEqual(['T10']);
+    expect(loadTimeframeFavorites(stored('["S5","D5","M7","T10","BOGUS"]'))).toEqual(['S5', 'T10']);
   });
 });

@@ -1,6 +1,6 @@
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
 import { isDrawableInterval } from '../../../shared/bridge/chartIntervalModel';
-import { isTickInterval } from '../../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval } from '../../../shared/bridge/chartIntervals';
 
 /** The chart window one account was last watching: a symbol and a timeframe, nothing else. */
 export interface LastChartSelection {
@@ -52,8 +52,8 @@ export function isSameChartSelection(
 /**
  * The saved selection when its interval is one this app serves: a
  * `config/timeframes.json` code and, when the handshake advertises any, one of
- * those, or any N-tick interval this app builds from ticks itself. An empty
- * handshake list means "not reported", as in the timeframe bar.
+ * those, or any tick-built interval this app draws from the symbol's raw ticks
+ * itself. An empty handshake list means "not reported", as in the timeframe bar.
  */
 export function restorableSelection(
   selection: LastChartSelection | undefined,
@@ -62,7 +62,7 @@ export function restorableSelection(
   if (!selection || !isDrawableInterval(selection.timeframe)) {
     return undefined;
   }
-  if (isTickInterval(selection.timeframe)) {
+  if (isTickBuiltInterval(selection.timeframe)) {
     return selection;
   }
   const served = supportedTimeframes?.length ? supportedTimeframes : [...knownTimeframes];

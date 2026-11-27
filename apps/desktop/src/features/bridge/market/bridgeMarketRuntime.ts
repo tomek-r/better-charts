@@ -25,7 +25,7 @@ import {
 } from '../bridgePayloadNormalizers';
 import type { PayloadEvent } from '../bridgeEventTypes';
 import { HISTORY_BARS } from '../../../shared/bridge/config';
-import { isTickInterval } from '../../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval } from '../../../shared/bridge/chartIntervals';
 import type { BridgeSessionState } from '../useBridgeSession';
 import { applyAcceptedSnapshot, recordMt5Timeframe, snapshotViewportMode } from './applyAcceptedSnapshot';
 import { ChartTickBars, newestKnownInstantMs } from './chartTickBars';
@@ -147,8 +147,8 @@ export function createBridgeMarketRuntime(
     if (run.disposed || run.bridgeState !== 'connected' || !chartRef.current || candles.length === 0) {
       return;
     }
-    // A tick interval draws quotes: a candle queued for the interval before it is not this chart's.
-    if (isTickInterval(currentTimeframeRef.current)) {
+    // A tick-built interval draws quotes: a candle queued for the interval before it is not this chart's.
+    if (isTickBuiltInterval(currentTimeframeRef.current)) {
       return;
     }
     try {
@@ -171,8 +171,8 @@ export function createBridgeMarketRuntime(
     if (run.disposed || run.bridgeState !== 'connected' || !symbol || !timeframe) {
       return;
     }
-    // A tick interval has no broker pages: its older bars are read from the symbol's older ticks.
-    if (isTickInterval(timeframe)) {
+    // A tick-built interval has no broker pages: its older bars are read from the symbol's older ticks.
+    if (isTickBuiltInterval(timeframe)) {
       tickBars.requestOlderTicks();
       return;
     }
@@ -433,8 +433,8 @@ export function createBridgeMarketRuntime(
     if (run.disposed || run.bridgeState !== 'connected' || !chartRef.current) {
       return;
     }
-    // A tick interval's bars are built from quotes: a candle of any MT5 series is not this chart's.
-    if (isTickInterval(currentTimeframeRef.current)) {
+    // A tick-built interval's bars are built from quotes: a candle of any MT5 series is not this chart's.
+    if (isTickBuiltInterval(currentTimeframeRef.current)) {
       return;
     }
     const { candle, symbol, timeframe } = normalizeBarUpdate(event.payload, {

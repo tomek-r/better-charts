@@ -1,6 +1,6 @@
 import type { AccountSnapshot } from '../../../shared/bridge/types';
 import { initialHistoryBarsFor } from '../../chart/engine/bars/initialHistoryWindow';
-import { isTickInterval } from '../../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval } from '../../../shared/bridge/chartIntervals';
 import type { BridgeSessionState } from '../useBridgeSession';
 import { brokerListsSymbol } from '../market/brokerSymbolList';
 import type { BridgeEffectRun, BridgeMarketResources } from '../market/bridgeMarketRuntime';
@@ -89,12 +89,12 @@ export function createSavedWindowRestore(
   } = session;
 
   /**
-   * A saved tick interval has no series to request, so the bridge is moved to its
-   * symbol with a window of the MT5 timeframe shown last; the runtime then reads
-   * that symbol's ticks and draws them in place of the window's candles.
+   * A saved tick-built interval has no series to request, so the bridge is moved
+   * to its symbol with a window of the MT5 timeframe shown last; the runtime then
+   * reads that symbol's ticks and draws them in place of the window's candles.
    */
   const requestWindow = (adapter: MarketAdapter, selection: LastChartSelection) => {
-    const timeframe = isTickInterval(selection.timeframe) ? mt5TimeframeRef.current : selection.timeframe;
+    const timeframe = isTickBuiltInterval(selection.timeframe) ? mt5TimeframeRef.current : selection.timeframe;
     beginHistoryWait(historyWaitSetters);
     void adapter
       .requestHistory(selection.symbol, timeframe, initialHistoryBarsFor(resources.chart.current))
@@ -104,7 +104,7 @@ export function createSavedWindowRestore(
   // Reopens the saved window exactly like a user pick, so a refusal leaves the
   // session's own window on screen instead of an empty chart.
   const openSavedWindow = (adapter: MarketAdapter, saved: LastChartSelection) => {
-    const tickInterval = isTickInterval(saved.timeframe);
+    const tickInterval = isTickBuiltInterval(saved.timeframe);
     targetSymbol.current = saved.symbol;
     loadingTimeframeRef.current = tickInterval ? undefined : saved.timeframe;
     requestedTickIntervalRef.current = tickInterval ? saved.timeframe : null;
