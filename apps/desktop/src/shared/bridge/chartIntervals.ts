@@ -4,9 +4,12 @@
  * this app builds itself from the chart symbol's raw ticks.
  *
  * A tick code (`T10`) is frontend-only and never reaches the EA: no MT5 series
- * carries it, so the bridge is asked for ticks instead of a history window.
+ * carries it, so the bridge is asked for ticks instead of a history window. Which
+ * codes exist, and what each one needs, is `chartIntervalModel.ts`; any tick count
+ * it allows is a tick interval here, while the menu lists the four presets below.
  */
-import { timeframeLabel, timeframeLongLabel, timeframeSection, type TimeframeSection } from './timeframes';
+import { chartIntervalLabel, chartIntervalLongLabel, chartIntervalOf } from './chartIntervalModel';
+import { timeframeSection, type TimeframeSection } from './timeframes';
 
 /** Bars of N ticks, listed as TradingView lists them: 1T, 10T, 100T, 1000T. */
 export interface TickInterval {
@@ -20,18 +23,25 @@ export interface TickInterval {
   readonly longLabel: string;
 }
 
-export const TICK_INTERVALS: readonly TickInterval[] = [
-  { code: 'T1', ticksPerBar: 1, label: '1T', longLabel: '1 tick' },
-  { code: 'T10', ticksPerBar: 10, label: '10T', longLabel: '10 ticks' },
-  { code: 'T100', ticksPerBar: 100, label: '100T', longLabel: '100 ticks' },
-  { code: 'T1000', ticksPerBar: 1000, label: '1000T', longLabel: '1000 ticks' },
-];
+/** The tick counts the interval menu offers; the model recognises every count up to its own cap. */
+const TICK_PRESET_COUNTS: readonly number[] = [1, 10, 100, 1000];
 
-const tickIntervalByCode = new Map<string, TickInterval>(TICK_INTERVALS.map((interval) => [interval.code, interval]));
+/** The presets, labelled by the model so a preset and a typed tick code can never read differently. */
+export const TICK_INTERVALS: readonly TickInterval[] = TICK_PRESET_COUNTS.map((ticksPerBar) => {
+  const code = `T${ticksPerBar}`;
+  return { code, ticksPerBar, label: chartIntervalLabel(code), longLabel: chartIntervalLongLabel(code) };
+});
 
-/** The ticks the bars of `code` group, or undefined for an MT5 timeframe or an unknown code. */
+/**
+ * The ticks the bars of `code` group, or undefined for a timeframe, a second or an
+ * aggregated interval, and for a code the interval model does not know.
+ */
 export function ticksPerBarOf(code: string | undefined): number | undefined {
-  return code === undefined ? undefined : tickIntervalByCode.get(code)?.ticksPerBar;
+  if (code === undefined) {
+    return undefined;
+  }
+  const interval = chartIntervalOf(code);
+  return interval?.kind === 'ticks' ? interval.ticksPerBar : undefined;
 }
 
 /** Whether `code` names an interval this app builds from ticks. */
@@ -39,14 +49,14 @@ export function isTickInterval(code: string | undefined): boolean {
   return ticksPerBarOf(code) !== undefined;
 }
 
-/** `T10` → `10T`; an MT5 code keeps its own short label. */
+/** `T10` → `10T`, `T37` → `37T`; an MT5 code keeps its own short label. */
 export function intervalLabel(code: string): string {
-  return tickIntervalByCode.get(code)?.label ?? timeframeLabel(code);
+  return chartIntervalLabel(code);
 }
 
-/** `T10` → `10 ticks`; an MT5 code keeps its own long label. */
+/** `T10` → `10 ticks`, `T37` → `37 ticks`; an MT5 code keeps its own long label. */
 export function intervalLongLabel(code: string): string {
-  return tickIntervalByCode.get(code)?.longLabel ?? timeframeLongLabel(code);
+  return chartIntervalLongLabel(code);
 }
 
 /** The menu groups ticks in a section of their own, listed before the MT5 ones. */
