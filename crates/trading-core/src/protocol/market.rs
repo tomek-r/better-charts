@@ -151,6 +151,25 @@ pub struct BrokerSymbol {
     /// `None` from EAs older than 1.015.
     #[serde(default)]
     pub currency_profit: Option<String>,
+    /// The venue a symbol trades on (`SYMBOL_EXCHANGE`); `None` from EAs older than
+    /// 1.016 and for a symbol MT5 reports no venue for, which the EA sends as `null`.
+    #[serde(default)]
+    pub exchange: Option<String>,
+    /// The symbol's ISIN (`SYMBOL_ISIN`); `None` from EAs older than 1.016 and for a
+    /// symbol MT5 reports no ISIN for.
+    #[serde(default)]
+    pub isin: Option<String>,
+    /// The symbol's base currency (`SYMBOL_CURRENCY_BASE`); `None` from EAs older
+    /// than 1.016.
+    #[serde(default)]
+    pub currency_base: Option<String>,
+    /// Raw `SYMBOL_TRADE_CALC_MODE`, telling a forex symbol from a CFD or a future;
+    /// `None` from EAs older than 1.016.
+    #[serde(default)]
+    pub calc_mode: Option<u32>,
+    /// Raw `SYMBOL_SECTOR`; `None` from EAs older than 1.016.
+    #[serde(default)]
+    pub sector: Option<u32>,
     pub volume_min: String,
     pub volume_max: String,
     pub volume_step: String,
@@ -179,6 +198,15 @@ impl BrokerSymbol {
         }
         if is_blank_text(self.currency_profit.as_deref()) {
             return Err("empty profit currency");
+        }
+        if is_blank_text(self.exchange.as_deref()) {
+            return Err("empty exchange");
+        }
+        if is_blank_text(self.isin.as_deref()) {
+            return Err("empty isin");
+        }
+        if is_blank_text(self.currency_base.as_deref()) {
+            return Err("empty base currency");
         }
         match (&self.tick_value_profit, &self.tick_value_loss) {
             (None, None) => {}

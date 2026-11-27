@@ -26,6 +26,11 @@ fn symbol_search_view_uses_frontend_camel_case_shape() {
             tick_value_loss: Some("0.42".into()),
             tick_value_currency: Some("PLN".into()),
             currency_profit: Some("USD".into()),
+            exchange: Some("NASDAQ".into()),
+            isin: None,
+            currency_base: Some("USD".into()),
+            calc_mode: Some(2),
+            sector: None,
             volume_min: "0.01".into(),
             volume_max: "100".into(),
             volume_step: "0.01".into(),
@@ -49,6 +54,13 @@ fn symbol_search_view_uses_frontend_camel_case_shape() {
     assert_eq!(json["symbols"][0]["tickValueProfit"], "0.4");
     assert_eq!(json["symbols"][0]["tickValueLoss"], "0.42");
     assert_eq!(json["symbols"][0]["tickValueCurrency"], "PLN");
+    assert_eq!(json["symbols"][0]["exchange"], "NASDAQ");
+    assert_eq!(json["symbols"][0]["currencyBase"], "USD");
+    assert_eq!(json["symbols"][0]["calcMode"], 2);
+    assert!(json["symbols"][0]["isin"].is_null());
+    assert!(json["symbols"][0]["sector"].is_null());
+    assert!(json["symbols"][0].get("currency_base").is_none());
+    assert!(json["symbols"][0].get("calc_mode").is_none());
 }
 
 #[test]

@@ -980,6 +980,11 @@ fn validates_symbol_search_and_serializes_snake_case() {
         tick_value_loss: None,
         tick_value_currency: None,
         currency_profit: None,
+        exchange: None,
+        isin: None,
+        currency_base: None,
+        calc_mode: None,
+        sector: None,
         volume_min: "0.01".into(),
         volume_max: "100".into(),
         volume_step: "0.01".into(),
@@ -1104,6 +1109,11 @@ fn rejects_invalid_broker_symbol_parameters() {
         tick_value_loss: None,
         tick_value_currency: None,
         currency_profit: None,
+        exchange: None,
+        isin: None,
+        currency_base: None,
+        calc_mode: None,
+        sector: None,
         volume_min: "0".into(),
         volume_max: "1".into(),
         volume_step: "0.01".into(),
@@ -1118,16 +1128,21 @@ fn rejects_invalid_broker_symbol_parameters() {
     assert!(invalid.validate().is_err());
 }
 
+/// The required fields of a `symbol_info` record, as the EA puts them on the wire.
+fn broker_symbol_payload() -> serde_json::Value {
+    serde_json::json!({
+        "symbol": "EURUSD", "description": "Euro vs US Dollar", "digits": 5,
+        "tick_size": "0.00001", "point_size": "0.00001", "contract_size": "100000",
+        "volume_min": "0.01", "volume_max": "100", "volume_step": "0.01",
+        "trade_mode": 4, "stops_level": 0, "freeze_level": 0,
+        "filling_mode": 1, "order_mode": 127, "expiration_mode": 15, "trade_execution": 2,
+    })
+}
+
 #[test]
 fn broker_symbol_profit_currency_is_optional_and_never_blank() {
     let symbol = |currency_profit: Option<serde_json::Value>| -> BrokerSymbol {
-        let mut payload = serde_json::json!({
-            "symbol": "EURUSD", "description": "Euro vs US Dollar", "digits": 5,
-            "tick_size": "0.00001", "point_size": "0.00001", "contract_size": "100000",
-            "volume_min": "0.01", "volume_max": "100", "volume_step": "0.01",
-            "trade_mode": 4, "stops_level": 0, "freeze_level": 0,
-            "filling_mode": 1, "order_mode": 127, "expiration_mode": 15, "trade_execution": 2,
-        });
+        let mut payload = broker_symbol_payload();
         if let Some(currency_profit) = currency_profit {
             payload["currency_profit"] = currency_profit;
         }
@@ -1154,6 +1169,71 @@ fn broker_symbol_profit_currency_is_optional_and_never_blank() {
             symbol(Some(blank.into())).validate(),
             Err("empty profit currency")
         );
+    }
+}
+
+#[test]
+fn broker_symbol_classification_fields_are_optional_and_never_blank() {
+    let with_fields = |fields: serde_json::Value| -> BrokerSymbol {
+        let mut payload = broker_symbol_payload();
+        payload
+            .as_object_mut()
+            .expect("symbol payload is an object")
+            .extend(fields.as_object().cloned().expect("fields are an object"));
+        serde_json::from_value(payload).unwrap()
+    };
+
+    // An EA 1.016+ reports where the symbol trades and how MT5 classifies it.
+    let reported = with_fields(serde_json::json!({
+        "exchange": "NASDAQ", "isin": "US67066G1040", "currency_base": "USD",
+        "calc_mode": 2, "sector": 5,
+    }));
+    assert_eq!(reported.exchange.as_deref(), Some("NASDAQ"));
+    assert_eq!(reported.isin.as_deref(), Some("US67066G1040"));
+    assert_eq!(reported.currency_base.as_deref(), Some("USD"));
+    assert_eq!(reported.calc_mode, Some(2));
+    assert_eq!(reported.sector, Some(5));
+    reported.validate().unwrap();
+    let encoded = serde_json::to_value(&reported).unwrap();
+    assert_eq!(encoded["exchange"], "NASDAQ");
+    assert_eq!(encoded["isin"], "US67066G1040");
+    assert_eq!(encoded["currency_base"], "USD");
+    assert_eq!(encoded["calc_mode"], 2);
+    assert_eq!(encoded["sector"], 5);
+
+    // Older EAs omit them, and the EA's `null` for an empty MT5 string means the
+    // same thing: the metadata still validates with every field unknown.
+    for legacy in [
+        serde_json::json!({}),
+        serde_json::json!({
+            "exchange": null, "isin": null, "currency_base": null,
+            "calc_mode": null, "sector": null,
+        }),
+    ] {
+        let older = with_fields(legacy);
+        older.validate().unwrap();
+        assert_eq!(older.exchange, None);
+        assert_eq!(older.isin, None);
+        assert_eq!(older.currency_base, None);
+        assert_eq!(older.calc_mode, None);
+        assert_eq!(older.sector, None);
+    }
+
+    // A blank string is not a venue, an ISIN or a currency.
+    for (field, error) in [
+        ("exchange", "empty exchange"),
+        ("isin", "empty isin"),
+        ("currency_base", "empty base currency"),
+    ] {
+        for blank in ["", "   "] {
+            let mut fields = serde_json::Map::new();
+            fields.insert(field.to_owned(), blank.into());
+            assert_eq!(
+                with_fields(serde_json::Value::Object(fields)).validate(),
+                Err(error),
+                "{blank:?} must not pass as {field}"
+            );
+        }
     }
 }
 

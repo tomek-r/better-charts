@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.015"
+#define BRIDGE_EXPERT_VERSION "1.016"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -1389,6 +1389,13 @@ string AccountTickValuesJson(const string symbol,const double tick_size)
    return unavailable;
   }
 
+// Optional MT5 text: an empty string means "not reported", so it travels as JSON null.
+string OptionalJsonString(const string text)
+  {
+   if(StringLen(text)==0) return "null";
+   return "\""+JsonEscape(text)+"\"";
+  }
+
 string SymbolMetadataJson(const string symbol)
   {
    const int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
@@ -1401,8 +1408,13 @@ string SymbolMetadataJson(const string symbol)
    const double contract_size=SymbolInfoDouble(symbol,SYMBOL_TRADE_CONTRACT_SIZE);
    const string description=JsonEscape(SymbolInfoString(symbol,SYMBOL_DESCRIPTION));
    const string profit_currency=JsonEscape(SymbolInfoString(symbol,SYMBOL_CURRENCY_PROFIT));
+   const string base_currency=OptionalJsonString(SymbolInfoString(symbol,SYMBOL_CURRENCY_BASE));
+   const string exchange=OptionalJsonString(SymbolInfoString(symbol,SYMBOL_EXCHANGE));
+   const string isin=OptionalJsonString(SymbolInfoString(symbol,SYMBOL_ISIN));
+   const string calc_mode=StringFormat("%I64d",(long)SymbolInfoInteger(symbol,SYMBOL_TRADE_CALC_MODE));
+   const string sector=StringFormat("%I64d",SymbolInfoInteger(symbol,SYMBOL_SECTOR));
    const string metadata=StringFormat("{\"symbol\":\"%s\",\"description\":\"%s\",\"digits\":%d,\"tick_size\":\"%s\",\"volume_min\":\"%s\",\"volume_max\":\"%s\",\"volume_step\":\"%s\",\"trade_mode\":%I64d,\"point_size\":\"%s\",\"contract_size\":\"%s\",\"stops_level\":%I64d,\"freeze_level\":%I64d,\"filling_mode\":%I64d,\"order_mode\":%I64d,\"expiration_mode\":%I64d,\"trade_execution\":%I64d}",JsonEscape(symbol),description,digits,DoubleToString(tick_size,tick_digits),DoubleToString(volume_min,8),DoubleToString(volume_max,8),DoubleToString(volume_step,8),SymbolInfoInteger(symbol,SYMBOL_TRADE_MODE),DoubleToString(point_size,tick_digits),DoubleToString(contract_size,8),SymbolInfoInteger(symbol,SYMBOL_TRADE_STOPS_LEVEL),SymbolInfoInteger(symbol,SYMBOL_TRADE_FREEZE_LEVEL),SymbolInfoInteger(symbol,SYMBOL_FILLING_MODE),SymbolInfoInteger(symbol,SYMBOL_ORDER_MODE),SymbolInfoInteger(symbol,SYMBOL_EXPIRATION_MODE),SymbolInfoInteger(symbol,SYMBOL_TRADE_EXEMODE));
-   return StringSubstr(metadata,0,StringLen(metadata)-1)+","+AccountTickValuesJson(symbol,tick_size)+",\"currency_profit\":\""+profit_currency+"\"}";
+   return StringSubstr(metadata,0,StringLen(metadata)-1)+","+AccountTickValuesJson(symbol,tick_size)+",\"currency_profit\":\""+profit_currency+"\",\"currency_base\":"+base_currency+",\"exchange\":"+exchange+",\"isin\":"+isin+",\"calc_mode\":"+calc_mode+",\"sector\":"+sector+"}";
   }
 
 bool SendSymbolSearchResult(const string request_id,const string query,const long limit)
