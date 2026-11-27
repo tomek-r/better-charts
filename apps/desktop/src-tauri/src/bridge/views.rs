@@ -206,6 +206,9 @@ pub(crate) struct BrokerSymbolView {
     pub(crate) tick_value_profit: Option<String>,
     pub(crate) tick_value_loss: Option<String>,
     pub(crate) tick_value_currency: Option<String>,
+    /// `SYMBOL_CURRENCY_PROFIT`: the currency a price move's profit is computed
+    /// in; `null` from EAs older than 1.015.
+    pub(crate) currency_profit: Option<String>,
     pub(crate) volume_min: String,
     pub(crate) volume_max: String,
     pub(crate) volume_step: String,
@@ -230,6 +233,7 @@ impl From<BrokerSymbol> for BrokerSymbolView {
             tick_value_profit: value.tick_value_profit,
             tick_value_loss: value.tick_value_loss,
             tick_value_currency: value.tick_value_currency,
+            currency_profit: value.currency_profit,
             volume_min: value.volume_min,
             volume_max: value.volume_max,
             volume_step: value.volume_step,
@@ -620,5 +624,51 @@ impl From<QuoteUpdate> for QuoteView {
             volume_real: value.volume_real,
             flags: value.flags,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn broker_symbol(currency_profit: Option<&str>) -> BrokerSymbol {
+        BrokerSymbol {
+            symbol: "NAS100".into(),
+            description: "Nasdaq 100".into(),
+            digits: 1,
+            tick_size: "0.1".into(),
+            point_size: "0.1".into(),
+            contract_size: "1".into(),
+            tick_value_profit: None,
+            tick_value_loss: None,
+            tick_value_currency: None,
+            currency_profit: currency_profit.map(str::to_owned),
+            volume_min: "0.01".into(),
+            volume_max: "100".into(),
+            volume_step: "0.01".into(),
+            trade_mode: 4,
+            stops_level: 0,
+            freeze_level: 0,
+            filling_mode: 1,
+            order_mode: 127,
+            expiration_mode: 15,
+            trade_execution: 2,
+        }
+    }
+
+    #[test]
+    fn broker_symbol_view_publishes_the_profit_currency_as_camel_case() {
+        let reported = BrokerSymbolView::from(broker_symbol(Some("USD")));
+        let value = serde_json::to_value(&reported).unwrap();
+        assert_eq!(value["currencyProfit"], serde_json::json!("USD"));
+        assert!(value.get("currency_profit").is_none());
+
+        // An older EA omits the field; the view reports it as unknown.
+        let unknown = BrokerSymbolView::from(broker_symbol(None));
+        assert_eq!(unknown.currency_profit, None);
+        assert_eq!(
+            serde_json::to_value(&unknown).unwrap()["currencyProfit"],
+            serde_json::Value::Null
+        );
     }
 }

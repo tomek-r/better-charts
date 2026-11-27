@@ -979,6 +979,7 @@ fn validates_symbol_search_and_serializes_snake_case() {
         tick_value_profit: None,
         tick_value_loss: None,
         tick_value_currency: None,
+        currency_profit: None,
         volume_min: "0.01".into(),
         volume_max: "100".into(),
         volume_step: "0.01".into(),
@@ -1036,12 +1037,14 @@ fn validates_symbol_search_and_serializes_snake_case() {
         "tick_value_profit",
         "tick_value_loss",
         "tick_value_currency",
+        "currency_profit",
     ] {
         legacy.as_object_mut().unwrap().remove(field);
     }
     let legacy: BrokerSymbol = serde_json::from_value(legacy).unwrap();
     legacy.validate().unwrap();
     assert_eq!(legacy.tick_value_profit, None);
+    assert_eq!(legacy.currency_profit, None);
     let info_request = SymbolInfoRequest {
         symbol: "NAS100".into(),
     };
@@ -1100,6 +1103,7 @@ fn rejects_invalid_broker_symbol_parameters() {
         tick_value_profit: None,
         tick_value_loss: None,
         tick_value_currency: None,
+        currency_profit: None,
         volume_min: "0".into(),
         volume_max: "1".into(),
         volume_step: "0.01".into(),
@@ -1112,6 +1116,45 @@ fn rejects_invalid_broker_symbol_parameters() {
         trade_execution: 0,
     };
     assert!(invalid.validate().is_err());
+}
+
+#[test]
+fn broker_symbol_profit_currency_is_optional_and_never_blank() {
+    let symbol = |currency_profit: Option<serde_json::Value>| -> BrokerSymbol {
+        let mut payload = serde_json::json!({
+            "symbol": "EURUSD", "description": "Euro vs US Dollar", "digits": 5,
+            "tick_size": "0.00001", "point_size": "0.00001", "contract_size": "100000",
+            "volume_min": "0.01", "volume_max": "100", "volume_step": "0.01",
+            "trade_mode": 4, "stops_level": 0, "freeze_level": 0,
+            "filling_mode": 1, "order_mode": 127, "expiration_mode": 15, "trade_execution": 2,
+        });
+        if let Some(currency_profit) = currency_profit {
+            payload["currency_profit"] = currency_profit;
+        }
+        serde_json::from_value(payload).unwrap()
+    };
+
+    // An EA 1.015+ reports the currency its price moves are worth in.
+    let reported = symbol(Some("USD".into()));
+    assert_eq!(reported.currency_profit.as_deref(), Some("USD"));
+    reported.validate().unwrap();
+    assert_eq!(
+        serde_json::to_value(&reported).unwrap()["currency_profit"],
+        serde_json::json!("USD")
+    );
+
+    // Older EAs omit it: absence reads as unknown and the metadata still validates.
+    let legacy = symbol(None);
+    assert_eq!(legacy.currency_profit, None);
+    legacy.validate().unwrap();
+
+    // A blank string is not a currency, so it can never reach the app.
+    for blank in ["", "   "] {
+        assert_eq!(
+            symbol(Some(blank.into())).validate(),
+            Err("empty profit currency")
+        );
+    }
 }
 
 #[test]

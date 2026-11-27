@@ -790,6 +790,7 @@ def symbol_info(symbol: str, description: str) -> dict:
         "symbol": symbol, "description": description, "digits": 1,
         "tick_size": "0.1", "point_size": "0.1", "contract_size": "1",
         "tick_value_profit": "0.1", "tick_value_loss": "0.1", "tick_value_currency": "USD",
+        "currency_profit": "USD",
         "volume_min": "0.01", "volume_max": "100.00", "volume_step": "0.01", "trade_mode": 0,
         "stops_level": 0, "freeze_level": 0, "filling_mode": 1, "order_mode": 127,
         "expiration_mode": 15, "trade_execution": 2,

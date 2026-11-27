@@ -3,7 +3,7 @@
 //| MT5 bridge: market data and guarded trading commands.   |
 //+------------------------------------------------------------------+
 #property strict
-#define BRIDGE_EXPERT_VERSION "1.014"
+#define BRIDGE_EXPERT_VERSION "1.015"
 #property version BRIDGE_EXPERT_VERSION
 #property description "Better Charts MT5 bridge: market data and trading commands."
 
@@ -1400,8 +1400,9 @@ string SymbolMetadataJson(const string symbol)
    const double point_size=SymbolInfoDouble(symbol,SYMBOL_POINT);
    const double contract_size=SymbolInfoDouble(symbol,SYMBOL_TRADE_CONTRACT_SIZE);
    const string description=JsonEscape(SymbolInfoString(symbol,SYMBOL_DESCRIPTION));
+   const string profit_currency=JsonEscape(SymbolInfoString(symbol,SYMBOL_CURRENCY_PROFIT));
    const string metadata=StringFormat("{\"symbol\":\"%s\",\"description\":\"%s\",\"digits\":%d,\"tick_size\":\"%s\",\"volume_min\":\"%s\",\"volume_max\":\"%s\",\"volume_step\":\"%s\",\"trade_mode\":%I64d,\"point_size\":\"%s\",\"contract_size\":\"%s\",\"stops_level\":%I64d,\"freeze_level\":%I64d,\"filling_mode\":%I64d,\"order_mode\":%I64d,\"expiration_mode\":%I64d,\"trade_execution\":%I64d}",JsonEscape(symbol),description,digits,DoubleToString(tick_size,tick_digits),DoubleToString(volume_min,8),DoubleToString(volume_max,8),DoubleToString(volume_step,8),SymbolInfoInteger(symbol,SYMBOL_TRADE_MODE),DoubleToString(point_size,tick_digits),DoubleToString(contract_size,8),SymbolInfoInteger(symbol,SYMBOL_TRADE_STOPS_LEVEL),SymbolInfoInteger(symbol,SYMBOL_TRADE_FREEZE_LEVEL),SymbolInfoInteger(symbol,SYMBOL_FILLING_MODE),SymbolInfoInteger(symbol,SYMBOL_ORDER_MODE),SymbolInfoInteger(symbol,SYMBOL_EXPIRATION_MODE),SymbolInfoInteger(symbol,SYMBOL_TRADE_EXEMODE));
-   return StringSubstr(metadata,0,StringLen(metadata)-1)+","+AccountTickValuesJson(symbol,tick_size)+"}";
+   return StringSubstr(metadata,0,StringLen(metadata)-1)+","+AccountTickValuesJson(symbol,tick_size)+",\"currency_profit\":\""+profit_currency+"\"}";
   }
 
 bool SendSymbolSearchResult(const string request_id,const string query,const long limit)

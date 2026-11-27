@@ -324,6 +324,8 @@ export interface BrokerSymbol {
   tickValueProfit?: string | null;
   tickValueLoss?: string | null;
   tickValueCurrency?: string | null;
+  /** SYMBOL_CURRENCY_PROFIT: the currency a price move's profit is computed in; null/absent = unknown (EAs before 1.015). */
+  currencyProfit?: string | null;
   volumeMin: string;
   volumeMax: string;
   volumeStep: string;

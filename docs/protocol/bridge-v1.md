@@ -454,7 +454,8 @@ for a different feed.
   "symbols": [
     {
       "symbol": "NAS100", "description": "Nasdaq 100 CFD", "digits": 1, "tick_size": "0.1",
-      "point_size": "0.1", "contract_size": "1", "volume_min": "0.01", "volume_max": "100",
+      "point_size": "0.1", "contract_size": "1", "currency_profit": "USD",
+      "volume_min": "0.01", "volume_max": "100",
       "volume_step": "0.01", "trade_mode": 4, "stops_level": 0, "freeze_level": 0,
       "filling_mode": 1, "order_mode": 127, "expiration_mode": 15, "trade_execution": 2
     }
@@ -474,6 +475,9 @@ nonempty currency. UI estimates use only values matching the current account
 currency; they never substitute price distance × contract size as account money.
 Cached tick conversion estimates are approximate; fresh risk quotes and OrderCheck
 remain authoritative. No changes to dispatch or trading permissions are involved.
+`currency_profit` (EA 1.015+, additive) is an optional nonempty string carrying MT5's
+`SYMBOL_CURRENCY_PROFIT`, the currency a price move's profit is computed in; older
+EAs omit it, which Rust reads as unknown.
 Restriction levels and mode masks are unsigned integers passed directly from
 MT5. Selecting a symbol uses the same history feed; it does not create another
 connection. Rust publishes active metadata as the camelCase `symbol-info`

@@ -147,6 +147,10 @@ pub struct BrokerSymbol {
     pub tick_value_loss: Option<String>,
     #[serde(default)]
     pub tick_value_currency: Option<String>,
+    /// The currency the symbol's profit is computed in (`SYMBOL_CURRENCY_PROFIT`);
+    /// `None` from EAs older than 1.015.
+    #[serde(default)]
+    pub currency_profit: Option<String>,
     pub volume_min: String,
     pub volume_max: String,
     pub volume_step: String,
@@ -159,17 +163,22 @@ pub struct BrokerSymbol {
     pub trade_execution: u32,
 }
 
+/// True for an optional text field a peer sent but left blank: blank is not a
+/// value, and absence already means unknown.
+fn is_blank_text(value: Option<&str>) -> bool {
+    value.is_some_and(|value| value.trim().is_empty())
+}
+
 impl BrokerSymbol {
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.symbol.trim().is_empty() {
             return Err("empty symbol");
         }
-        if self
-            .tick_value_currency
-            .as_ref()
-            .is_some_and(|value| value.trim().is_empty())
-        {
+        if is_blank_text(self.tick_value_currency.as_deref()) {
             return Err("empty tick value currency");
+        }
+        if is_blank_text(self.currency_profit.as_deref()) {
+            return Err("empty profit currency");
         }
         match (&self.tick_value_profit, &self.tick_value_loss) {
             (None, None) => {}

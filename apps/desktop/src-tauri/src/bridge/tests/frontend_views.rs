@@ -25,6 +25,7 @@ fn symbol_search_view_uses_frontend_camel_case_shape() {
             tick_value_profit: Some("0.4".into()),
             tick_value_loss: Some("0.42".into()),
             tick_value_currency: Some("PLN".into()),
+            currency_profit: Some("USD".into()),
             volume_min: "0.01".into(),
             volume_max: "100".into(),
             volume_step: "0.01".into(),

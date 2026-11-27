@@ -290,6 +290,7 @@ export function brokerSymbolFixture(
     tickValueProfit: '1.00000',
     tickValueLoss: '1.00000',
     tickValueCurrency: 'USD',
+    currencyProfit: 'USD',
     volumeMin: '0.01',
     volumeMax: '100',
     volumeStep: '0.01',
