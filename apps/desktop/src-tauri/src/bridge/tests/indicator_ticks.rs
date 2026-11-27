@@ -335,8 +335,9 @@ fn the_published_page_keeps_the_decimal_strings_of_the_wire() {
     assert_eq!(json["ticks"][0]["ask"], "25000.3");
     assert_eq!(json["ticks"][0]["last"], "0");
     assert_eq!(json["ticks"][0]["volume"], 7);
+    // Buy/sell side travels with the tick so tick charts can tell them apart.
+    assert_eq!(json["ticks"][0]["flags"], 6);
     // The profile-only wire fields stay out of this event.
     assert!(json["ticks"][0].get("volumeReal").is_none());
-    assert!(json["ticks"][0].get("flags").is_none());
     assert!(json.get("from_ms").is_none());
 }

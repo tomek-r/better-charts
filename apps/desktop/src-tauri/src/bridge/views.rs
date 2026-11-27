@@ -87,6 +87,9 @@ pub(crate) struct IndicatorTickView {
     pub(crate) ask: String,
     pub(crate) last: String,
     pub(crate) volume: u64,
+    /// MT5's `TICK_FLAG_*` bits of the tick, which name the side a deal traded
+    /// on.
+    pub(crate) flags: u32,
 }
 
 impl From<&MarketTick> for IndicatorTickView {
@@ -97,6 +100,7 @@ impl From<&MarketTick> for IndicatorTickView {
             ask: tick.ask.clone(),
             last: tick.last.clone(),
             volume: tick.volume,
+            flags: tick.flags,
         }
     }
 }

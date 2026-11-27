@@ -202,6 +202,11 @@ export interface IndicatorTick {
   ask: string;
   last: string;
   volume: number;
+  /**
+   * MT5's TICK_FLAG_* bits of the tick, which name the side a deal traded on; absent on pages from an older
+   * app build and on ticks the chart synthesizes itself.
+   */
+  flags?: number;
 }
 
 /**

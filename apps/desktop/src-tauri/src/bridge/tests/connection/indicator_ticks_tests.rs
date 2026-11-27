@@ -157,7 +157,8 @@ async fn ticks_page_is_written_with_its_range_and_published_on_its_own_event() {
     assert_eq!(page["ticks"][0]["last"], "0");
     assert_eq!(page["ticks"][0]["volume"], 0);
     assert!(page["ticks"][0].get("volumeReal").is_none());
-    assert!(page["ticks"][0].get("flags").is_none());
+    // The tick's MT5 flags ride along so tick charts can tell a buy from a sell.
+    assert_eq!(page["ticks"][0]["flags"], 6);
 
     // A ticks read is neither a profile page nor a profile event.
     assert!(!harness.events.has_event("tick-profile"));
