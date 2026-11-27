@@ -59,6 +59,9 @@ export type ChartInterval =
       readonly base: string;
     };
 
+/** An interval whose bars the chart builds from a native timeframe's candles: `M7`, `H5`, `MN4`. */
+export type AggregatedInterval = Extract<ChartInterval, { kind: 'aggregated' }>;
+
 /** Code shape: a unit of one or two letters and its count, never leading a zero: `M7`, `MN4`, `T37`. */
 const CODE_SHAPE = /^([A-Z]{1,2})([1-9]\d*)$/;
 
