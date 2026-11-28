@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
-import { TICK_INTERVALS, intervalLabel, isTickInterval } from '../../../shared/bridge/chartIntervals';
+import {
+  TICK_INTERVALS,
+  intervalLabel,
+  intervalOrderKey,
+  isTickBuiltInterval,
+  isTickInterval,
+  seriesTimeframeOf,
+} from '../../../shared/bridge/chartIntervals';
 import { CaretIcon } from '../../../shared/ui/icons/CaretIcon';
 import { useBridgeActions } from '../../bridge/BridgeSessionProvider';
 import { useBridgeChartState, useBridgeConnection } from '../../bridge/bridgeSelectors';
 import { TimeframeMenu } from './menu/TimeframeMenu';
+import { useCustomIntervals } from './useCustomIntervals';
 import { useTimeframeFavorites } from './useTimeframeFavorites';
 
 /** Closes on Escape (returning focus to the trigger) and on a pointer press outside `anchor`. */
@@ -43,6 +51,7 @@ export function ChartTimeframes() {
   const { status } = useBridgeConnection();
   const { requestInterval } = useBridgeActions();
   const { favorites, toggleFavorite } = useTimeframeFavorites();
+  const { customIntervals, addCustomInterval, removeCustomInterval } = useCustomIntervals();
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
   const chevronRef = useRef<HTMLButtonElement>(null);
@@ -81,12 +90,30 @@ export function ChartTimeframes() {
   }
 
   const supportedOptions = timeframeOptions.filter((option) => supported.includes(option.wire));
-  const options = [...tickOptions, ...supportedOptions];
+  // A typed interval is drawable whenever the chart can build it: a tick-built one always, and an
+  // aggregated one only when the bridge advertises the timeframe it is grouped from.
+  const canDraw = (wire: string) => isTickBuiltInterval(wire) || supported.includes(seriesTimeframeOf(wire));
+  const customOptions = customIntervals.filter((wire) => canDraw(wire)).map((wire) => ({ wire }));
+  const options = [...tickOptions, ...customOptions, ...supportedOptions].sort(
+    (first, second) => intervalOrderKey(first.wire) - intervalOrderKey(second.wire),
+  );
   // The active interval is always visible, even when it is not a favorite.
   const shown = options.filter((option) => favorites.includes(option.wire) || option.wire === timeframe);
   const select = (wire: string) => {
     closeMenu(false);
     void requestInterval(wire);
+  };
+  // A typed interval is remembered in the menu and drawn at once.
+  const addInterval = (wire: string) => {
+    addCustomInterval(wire);
+    select(wire);
+  };
+  // Removing a typed interval unstars it too, so no header button is left without a menu row.
+  const removeInterval = (wire: string) => {
+    removeCustomInterval(wire);
+    if (favorites.includes(wire)) {
+      toggleFavorite(wire);
+    }
   };
 
   return (
@@ -122,9 +149,13 @@ export function ChartTimeframes() {
             options={options}
             active={timeframe}
             favorites={favorites}
+            customIntervals={customIntervals}
+            canDraw={canDraw}
             disabled={disabled}
             onSelect={select}
+            onAddInterval={addInterval}
             onToggleFavorite={toggleFavorite}
+            onRemoveCustomInterval={removeInterval}
           />
         )}
       </div>

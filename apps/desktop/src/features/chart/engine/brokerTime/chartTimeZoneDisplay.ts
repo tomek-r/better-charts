@@ -1,5 +1,5 @@
 import type { IChartApi, TickMarkFormatter } from 'lightweight-charts';
-import { isTickInterval } from '../../../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval } from '../../../../shared/bridge/chartIntervals';
 import {
   createChartTimeFormat,
   DEFAULT_CHART_TIME_LABELS,
@@ -65,12 +65,12 @@ export class ChartTimeZoneDisplay {
   }
 
   /**
-   * Reads the bars' time to what `interval` shows on screen: a tick bar closes after a number of ticks and a
-   * chart type's bar when its move happens, so each one's own second is what tells one from the next, while
-   * every MT5 bar keeps its minute.
+   * Reads the bars' time to what `interval` shows on screen: a tick-built bar and a chart type's bar have no
+   * MT5 series behind them, so each one's own second is what tells one from the next, while every MT5 bar
+   * keeps its minute.
    */
   applyInterval(interval: string, secondPrecision = false): void {
-    const precision: ChartTimePrecision = secondPrecision || isTickInterval(interval) ? 'second' : 'minute';
+    const precision: ChartTimePrecision = secondPrecision || isTickBuiltInterval(interval) ? 'second' : 'minute';
     if (precision === this.appliedPrecision) {
       return;
     }

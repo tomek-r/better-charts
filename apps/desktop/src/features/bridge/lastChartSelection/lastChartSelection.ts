@@ -1,5 +1,6 @@
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
-import { isTickInterval } from '../../../shared/bridge/chartIntervals';
+import { isDrawableInterval } from '../../../shared/bridge/chartIntervalModel';
+import { isTickBuiltInterval, seriesTimeframeOf } from '../../../shared/bridge/chartIntervals';
 
 /** The chart window one account was last watching: a symbol and a timeframe, nothing else. */
 export interface LastChartSelection {
@@ -51,26 +52,23 @@ export function isSameChartSelection(
 /**
  * The saved selection when its interval is one this app serves: a
  * `config/timeframes.json` code and, when the handshake advertises any, one of
- * those, or a tick interval this app builds from ticks itself. An empty
- * handshake list means "not reported", as in the timeframe bar.
+ * those, or any tick-built interval this app draws from the symbol's raw ticks
+ * itself. An aggregated interval needs its base timeframe served, because that
+ * is the series the chart asks the bridge for. An empty handshake list means
+ * "not reported", as in the timeframe bar.
  */
 export function restorableSelection(
   selection: LastChartSelection | undefined,
   supportedTimeframes: readonly string[] | undefined,
 ): LastChartSelection | undefined {
-  if (!selection || !isServedInterval(selection.timeframe)) {
+  if (!selection || !isDrawableInterval(selection.timeframe)) {
     return undefined;
   }
-  if (isTickInterval(selection.timeframe)) {
+  if (isTickBuiltInterval(selection.timeframe)) {
     return selection;
   }
   const served = supportedTimeframes?.length ? supportedTimeframes : [...knownTimeframes];
-  return served.includes(selection.timeframe) ? selection : undefined;
-}
-
-/** Whether the app can draw `code` at all: an MT5 code of the contract, or a tick interval of its own. */
-function isServedInterval(code: string): boolean {
-  return knownTimeframes.has(code) || isTickInterval(code);
+  return served.includes(seriesTimeframeOf(selection.timeframe)) ? selection : undefined;
 }
 
 function readSelection(value: unknown): LastChartSelection | undefined {

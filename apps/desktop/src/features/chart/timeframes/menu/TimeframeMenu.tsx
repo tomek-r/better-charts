@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { INTERVAL_NOT_SERVED_MESSAGE, parseIntervalInput } from '../../../../shared/bridge/chartIntervalModel';
 import {
   intervalLabel,
   intervalLongLabel,
@@ -11,10 +12,14 @@ import { StarIcon } from '../../../../shared/ui/icons/StarIcon';
 // TradingView lists its tick intervals first, so the section order is the same here.
 const sectionTitles: { section: IntervalSection; title: string }[] = [
   { section: 'ticks', title: 'Ticks' },
+  { section: 'seconds', title: 'Seconds' },
   { section: 'minutes', title: 'Minutes' },
   { section: 'hours', title: 'Hours' },
   { section: 'days', title: 'Days & above' },
 ];
+
+/** The message the interval input points at while its text names no interval. */
+const INTERVAL_ERROR_ID = 'timeframe-menu-interval-error';
 
 /**
  * Keeps the absolutely positioned menu inside the viewport without moving the chart, and pinned to
@@ -47,21 +52,138 @@ function useViewportFit() {
   return menuRef;
 }
 
+interface CustomIntervalInputProps {
+  canDraw: (wire: string) => boolean;
+  disabled: boolean;
+  onAddInterval: (wire: string) => void;
+}
+
+/** The interval input: Enter adds the interval it names, and a text naming none explains itself below. */
+function CustomIntervalInput({ canDraw, disabled, onAddInterval }: CustomIntervalInputProps) {
+  const [text, setText] = useState('');
+  const [error, setError] = useState<string>();
+  const editText = (typed: string) => {
+    setText(typed);
+    setError(undefined);
+  };
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const parsed = parseIntervalInput(text);
+    if (!parsed.ok) {
+      setError(parsed.message);
+      return;
+    }
+    if (!canDraw(parsed.interval.code)) {
+      setError(INTERVAL_NOT_SERVED_MESSAGE);
+      return;
+    }
+    editText('');
+    onAddInterval(parsed.interval.code);
+  };
+  return (
+    <form onSubmit={submit}>
+      <input
+        className="timeframe-menu-input"
+        type="text"
+        aria-label="Custom interval"
+        placeholder="37T, 5s, 7m, 4M"
+        autoComplete="off"
+        spellCheck={false}
+        value={text}
+        disabled={disabled}
+        aria-invalid={error !== undefined}
+        aria-describedby={error === undefined ? undefined : INTERVAL_ERROR_ID}
+        onChange={(event) => editText(event.target.value)}
+      />
+      {error !== undefined && (
+        <p id={INTERVAL_ERROR_ID} className="error-text timeframe-menu-error" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+interface TimeframeMenuRowProps {
+  wire: string;
+  active: string | undefined;
+  favorites: readonly string[];
+  customIntervals: readonly string[];
+  disabled: boolean;
+  onSelect: (wire: string) => void;
+  onToggleFavorite: (wire: string) => void;
+  onRemoveCustomInterval: (wire: string) => void;
+}
+
+/** One interval: its label, its star, and for an interval the user typed the button that removes it. */
+function TimeframeMenuRow({
+  wire,
+  active,
+  favorites,
+  customIntervals,
+  disabled,
+  onSelect,
+  onToggleFavorite,
+  onRemoveCustomInterval,
+}: TimeframeMenuRowProps) {
+  const isFavorite = favorites.includes(wire);
+  const shortLabel = intervalLabel(wire);
+  return (
+    <div className={wire === active ? 'timeframe-menu-row active' : 'timeframe-menu-row'}>
+      <button
+        className="popup-menu-row timeframe-menu-select"
+        disabled={disabled}
+        aria-current={wire === active ? 'true' : undefined}
+        onClick={() => onSelect(wire)}
+      >
+        {intervalLongLabel(wire)}
+      </button>
+      {customIntervals.includes(wire) && (
+        <button
+          className="timeframe-menu-remove"
+          aria-label={`Remove ${shortLabel} from the menu`}
+          onClick={() => onRemoveCustomInterval(wire)}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      )}
+      <button
+        className={isFavorite ? 'timeframe-menu-star favorite' : 'timeframe-menu-star'}
+        aria-pressed={isFavorite}
+        aria-label={`${isFavorite ? 'Remove' : 'Add'} ${shortLabel} ${isFavorite ? 'from' : 'to'} favorites`}
+        onClick={() => onToggleFavorite(wire)}
+      >
+        <StarIcon filled={isFavorite} />
+      </button>
+    </div>
+  );
+}
+
+interface TimeframeMenuProps {
+  options: { wire: string }[];
+  active: string | undefined;
+  favorites: readonly string[];
+  customIntervals: readonly string[];
+  canDraw: (wire: string) => boolean;
+  disabled: boolean;
+  onSelect: (wire: string) => void;
+  onAddInterval: (wire: string) => void;
+  onToggleFavorite: (wire: string) => void;
+  onRemoveCustomInterval: (wire: string) => void;
+}
+
 export function TimeframeMenu({
   options,
   active,
   favorites,
+  customIntervals,
+  canDraw,
   disabled,
   onSelect,
+  onAddInterval,
   onToggleFavorite,
-}: {
-  options: { wire: string }[];
-  active: string | undefined;
-  favorites: readonly string[];
-  disabled: boolean;
-  onSelect: (wire: string) => void;
-  onToggleFavorite: (wire: string) => void;
-}) {
+  onRemoveCustomInterval,
+}: TimeframeMenuProps) {
   const menuRef = useViewportFit();
   const [collapsed, setCollapsed] = useState<ReadonlySet<IntervalSection>>(new Set());
   const toggleSection = (section: IntervalSection) =>
@@ -75,6 +197,7 @@ export function TimeframeMenu({
 
   return (
     <div className="timeframe-menu" role="dialog" aria-label="Timeframes" ref={menuRef}>
+      <CustomIntervalInput canDraw={canDraw} disabled={disabled} onAddInterval={onAddInterval} />
       {sectionTitles.map(({ section, title }) => {
         const rows = options.filter((option) => intervalSection(option.wire) === section);
         if (rows.length === 0) {
@@ -92,30 +215,19 @@ export function TimeframeMenu({
               <CaretIcon className={isCollapsed ? 'timeframe-caret collapsed' : 'timeframe-caret'} />
             </button>
             {!isCollapsed &&
-              rows.map(({ wire }) => {
-                const isFavorite = favorites.includes(wire);
-                const short = intervalLabel(wire);
-                return (
-                  <div key={wire} className={wire === active ? 'timeframe-menu-row active' : 'timeframe-menu-row'}>
-                    <button
-                      className="popup-menu-row timeframe-menu-select"
-                      disabled={disabled}
-                      aria-current={wire === active ? 'true' : undefined}
-                      onClick={() => onSelect(wire)}
-                    >
-                      {intervalLongLabel(wire)}
-                    </button>
-                    <button
-                      className={isFavorite ? 'timeframe-menu-star favorite' : 'timeframe-menu-star'}
-                      aria-pressed={isFavorite}
-                      aria-label={`${isFavorite ? 'Remove' : 'Add'} ${short} ${isFavorite ? 'from' : 'to'} favorites`}
-                      onClick={() => onToggleFavorite(wire)}
-                    >
-                      <StarIcon filled={isFavorite} />
-                    </button>
-                  </div>
-                );
-              })}
+              rows.map(({ wire }) => (
+                <TimeframeMenuRow
+                  key={wire}
+                  wire={wire}
+                  active={active}
+                  favorites={favorites}
+                  customIntervals={customIntervals}
+                  disabled={disabled}
+                  onSelect={onSelect}
+                  onToggleFavorite={onToggleFavorite}
+                  onRemoveCustomInterval={onRemoveCustomInterval}
+                />
+              ))}
           </div>
         );
       })}

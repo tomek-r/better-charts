@@ -7,7 +7,7 @@ import { priceTagHeight, tagStackTops } from '../quotes/tagStack';
 import { paintTag, tagLayout } from '../text/priceTag';
 import { barCountdownDefaultOptions, type BarCountdownOptions, type BarCountdownState } from './barCountdownOptions';
 import { DEFAULT_TIMEFRAME } from '../../../../shared/bridge/timeframes';
-import { isTickInterval } from '../../../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval } from '../../../../shared/bridge/chartIntervals';
 
 /**
  * Counts the current bar down on the price axis, under the Bid label.
@@ -130,12 +130,12 @@ export class BarCountdownPrimitive extends ChartSeriesPrimitive {
   }
 
   /**
-   * Whether the tag counts anything at all: a tick interval's bar closes after a number of ticks and a chart
-   * type's bar when the move that draws it happens, so neither has a moment on the clock to count down to.
+   * Whether the tag counts anything at all: a tick-built interval's bar has no MT5 series behind it and a chart
+   * type's bar closes when the move that draws it happens, so neither has a moment to count down to.
    */
   private countsDown(): boolean {
     const { connected, suspended, timeframe, chartTypeBars } = this.state;
-    return connected && !suspended && !chartTypeBars && !isTickInterval(timeframe);
+    return connected && !suspended && !chartTypeBars && !isTickBuiltInterval(timeframe);
   }
 
   /** Countdown text for the current broker second, ignoring visibility. */

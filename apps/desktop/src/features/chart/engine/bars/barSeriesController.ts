@@ -2,7 +2,7 @@ import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { Candle } from '../../../../shared/bridge/types';
 import { toRenderBar, type RenderBar } from './renderBar';
 import { DEFAULT_TIMEFRAME, timeframeSeconds } from '../../../../shared/bridge/timeframes';
-import { isTickInterval } from '../../../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval } from '../../../../shared/bridge/chartIntervals';
 import {
   candlePointColors,
   candleSeriesColors,
@@ -64,11 +64,11 @@ export class BarSeriesController {
   }
 
   /**
-   * Whether the bars group ticks: such a bar closes after a number of ticks, not
-   * at a time, so a reading measured in bar lengths (the day change) has none.
+   * Whether the chart builds its bars from ticks: such a bar has no MT5 series behind it, so a
+   * reading measured in bar lengths (the day change) has none.
    */
   get isTickBars(): boolean {
-    return isTickInterval(this.period);
+    return isTickBuiltInterval(this.period);
   }
 
   /** The digits of the price format on the candle series. */

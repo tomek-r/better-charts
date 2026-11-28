@@ -1,12 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
 import { TickMarkType } from 'lightweight-charts';
 import { TICKS_PER_PAGE } from '../src/shared/bridge/config';
+import { isDrawableInterval } from '../src/shared/bridge/chartIntervalModel';
 import {
   TICK_INTERVALS,
   intervalLabel,
   intervalLongLabel,
   intervalSection,
+  isTickBuiltInterval,
   isTickInterval,
+  secondsPerBarOf,
+  type TickGrouping,
 } from '../src/shared/bridge/chartIntervals';
 import { lastChartSelectionKey } from '../src/features/bridge/lastChartSelection/lastChartSelection';
 import { ChartTickBars, CHART_TICK_BUDGET, INITIAL_TICK_BARS } from '../src/features/bridge/market/chartTickBars';
@@ -91,6 +95,16 @@ function risingTicks(count: number, startMs: number): IndicatorTick[] {
   return Array.from({ length: count }, (_, index) => tickAt(startMs + index * MILLISECONDS_PER_SECOND, priceOf(index)));
 }
 
+/** The grouping of a bar of `ticksPerBar` ticks, as the chart asks the timeline for one. */
+function ticksGrouping(ticksPerBar: number): TickGrouping {
+  return { kind: 'ticks', ticksPerBar };
+}
+
+/** The grouping of a bar of `seconds` seconds, as the chart asks the timeline for one. */
+function secondsGrouping(seconds: number): TickGrouping {
+  return { kind: 'seconds', seconds };
+}
+
 const quote = (timeMs: number, bid?: string) => eurusdQuote(timeMs, bid);
 
 const chartBars = (page: Page) => page.evaluate(() => window.__chartTest?.data() ?? []);
@@ -148,6 +162,16 @@ test.describe('the interval model', () => {
     expect(intervalLabel('T1000')).toBe('1000T');
     expect(intervalLongLabel('T1')).toBe('1 tick');
   });
+
+  test('a seconds code is drawable and tick-built, while an MT5 code is neither', () => {
+    expect(isDrawableInterval('S5')).toBe(true);
+    expect(isTickBuiltInterval('S5')).toBe(true);
+    expect(isTickBuiltInterval('T10')).toBe(true);
+    expect(isTickBuiltInterval('M5')).toBe(false);
+    expect(isTickBuiltInterval(undefined)).toBe(false);
+    expect(secondsPerBarOf('S90')).toBe(90);
+    expect(secondsPerBarOf('T90')).toBeUndefined();
+  });
 });
 
 test.describe('building the chart’s N-tick bars', () => {
@@ -155,7 +179,7 @@ test.describe('building the chart’s N-tick bars', () => {
     // Twenty ticks a tenth of a second apart: every group of two opens inside the same second.
     const ticks = Array.from({ length: 20 }, (_, index) => tickAt(FIRST_TICK_MS + index * 100, '1.0850'));
 
-    const timeline = tickBarTimeline(ticks, 2);
+    const timeline = tickBarTimeline(ticks, ticksGrouping(2));
 
     const expectedTimes = Array.from({ length: 10 }, (_, index) => FIRST_TICK_SECONDS + index);
     expect(timeline.bars.map((bar) => bar.time)).toEqual(expectedTimes);
@@ -163,7 +187,7 @@ test.describe('building the chart’s N-tick bars', () => {
   });
 
   test('a bar whose ticks are seconds apart keeps the second its first tick arrived in', () => {
-    const timeline = tickBarTimeline(risingTicks(4, FIRST_TICK_MS), 2);
+    const timeline = tickBarTimeline(risingTicks(4, FIRST_TICK_MS), ticksGrouping(2));
 
     expect(timeline.bars).toEqual([
       { time: FIRST_TICK_SECONDS, open: 1.085, high: 1.086, low: 1.085, close: 1.086, volume: 2 },
@@ -172,11 +196,11 @@ test.describe('building the chart’s N-tick bars', () => {
   });
 
   test('a live tick extends the forming bar, and the tick after N closes it with a bar of its own', () => {
-    const closed = tickBarTimeline(risingTicks(TICKS_PER_BAR, FIRST_TICK_MS), TICKS_PER_BAR);
+    const closed = tickBarTimeline(risingTicks(TICKS_PER_BAR, FIRST_TICK_MS), ticksGrouping(TICKS_PER_BAR));
     expect(closed.bars).toHaveLength(1);
     expect(closed.formingPrices).toEqual([]);
 
-    let forming = foldTick(closed, tickAt(FIRST_TICK_MS + 30_000, '1.2000'), TICKS_PER_BAR);
+    let forming = foldTick(closed, tickAt(FIRST_TICK_MS + 30_000, '1.2000'), ticksGrouping(TICKS_PER_BAR));
     expect(forming.bars).toHaveLength(2);
     expect(forming.bars[1]).toEqual({
       time: FIRST_TICK_SECONDS + 30,
@@ -189,13 +213,13 @@ test.describe('building the chart’s N-tick bars', () => {
 
     for (let taken = 2; taken <= TICKS_PER_BAR; taken += 1) {
       const price = (1.2 + taken * 0.001).toFixed(4);
-      forming = foldTick(forming, tickAt(FIRST_TICK_MS + 30_000 + taken, price), TICKS_PER_BAR);
+      forming = foldTick(forming, tickAt(FIRST_TICK_MS + 30_000 + taken, price), ticksGrouping(TICKS_PER_BAR));
     }
     expect(forming.bars).toHaveLength(2);
     expect(forming.formingPrices).toEqual([]);
     expect(forming.bars[1]).toMatchObject({ volume: TICKS_PER_BAR, open: 1.2, high: 1.21, close: 1.21 });
 
-    const eleventh = foldTick(forming, tickAt(FIRST_TICK_MS + 40_000, '1.3000'), TICKS_PER_BAR);
+    const eleventh = foldTick(forming, tickAt(FIRST_TICK_MS + 40_000, '1.3000'), ticksGrouping(TICKS_PER_BAR));
     expect(eleventh.bars).toHaveLength(3);
     expect(eleventh.bars[2]).toEqual({
       time: FIRST_TICK_SECONDS + 40,
@@ -208,9 +232,109 @@ test.describe('building the chart’s N-tick bars', () => {
   });
 
   test('a tick carrying no price leaves the timeline as it was', () => {
-    const timeline = tickBarTimeline(risingTicks(2, FIRST_TICK_MS), TICKS_PER_BAR);
+    const timeline = tickBarTimeline(risingTicks(2, FIRST_TICK_MS), ticksGrouping(TICKS_PER_BAR));
 
-    expect(foldTick(timeline, tickAt(FIRST_TICK_MS + 5000, '0'), TICKS_PER_BAR)).toBe(timeline);
+    expect(foldTick(timeline, tickAt(FIRST_TICK_MS + 5000, '0'), ticksGrouping(TICKS_PER_BAR))).toBe(timeline);
+  });
+});
+
+test.describe('building the chart’s seconds bars', () => {
+  /** A read that starts two seconds into a block of five, so its oldest block is short of ticks. */
+  const MID_BLOCK_TICKS = [
+    tickAt(FIRST_TICK_MS + 2000, '1.0850'),
+    tickAt(FIRST_TICK_MS + 3000, '1.0851'),
+    tickAt(FIRST_TICK_MS + 6000, '1.0852'),
+    tickAt(FIRST_TICK_MS + 11_000, '1.0853'),
+  ];
+
+  test('five seconds group the ticks of each block into the bar its block starts', () => {
+    // Ten o'clock and one, four, six and fourteen seconds on: three blocks of five.
+    const ticks = [
+      tickAt(FIRST_TICK_MS + 1000, '1.0850'),
+      tickAt(FIRST_TICK_MS + 4000, '1.0855'),
+      tickAt(FIRST_TICK_MS + 6000, '1.0851'),
+      tickAt(FIRST_TICK_MS + 14_000, '1.0860'),
+    ];
+
+    const timeline = tickBarTimeline(ticks, secondsGrouping(5));
+
+    expect(timeline.bars).toEqual([
+      { time: FIRST_TICK_SECONDS, open: 1.085, high: 1.0855, low: 1.085, close: 1.0855, volume: 2 },
+      { time: FIRST_TICK_SECONDS + 5, open: 1.0851, high: 1.0851, low: 1.0851, close: 1.0851, volume: 1 },
+      { time: FIRST_TICK_SECONDS + 10, open: 1.086, high: 1.086, low: 1.086, close: 1.086, volume: 1 },
+    ]);
+    expect(timeline.formingPrices).toEqual([]);
+  });
+
+  test('a block grid that does not divide the day restarts at the next day’s midnight', () => {
+    const lastTickOfDay = tickAt(Date.UTC(2024, 4, 14, 23, 59, 59), '1.1000');
+    const firstTickOfNextDay = tickAt(Date.UTC(2024, 4, 15, 0, 0, 1), '1.1001');
+
+    const timeline = tickBarTimeline([lastTickOfDay, firstTickOfNextDay], secondsGrouping(7000));
+
+    // Twelve blocks of 7000 seconds fit the day, so its last one opens at 23:20:00; the next day starts a new grid.
+    expect(timeline.bars.map((bar) => bar.time)).toEqual([
+      Date.UTC(2024, 4, 14, 23, 20) / MILLISECONDS_PER_SECOND,
+      Date.UTC(2024, 4, 15, 0, 0) / MILLISECONDS_PER_SECOND,
+    ]);
+    expect(timeline.bars.map((bar) => bar.volume)).toEqual([1, 1]);
+  });
+
+  test('a live tick extends the newest block, and the tick after it opens the next', () => {
+    const first = tickBarTimeline([tickAt(FIRST_TICK_MS + 1000, '1.0850')], secondsGrouping(5));
+
+    const extended = foldTick(first, tickAt(FIRST_TICK_MS + 4000, '1.0860'), secondsGrouping(5));
+    expect(extended.bars).toEqual([
+      { time: FIRST_TICK_SECONDS, open: 1.085, high: 1.086, low: 1.085, close: 1.086, volume: 2 },
+    ]);
+
+    const opened = foldTick(extended, tickAt(FIRST_TICK_MS + 6000, '1.0840'), secondsGrouping(5));
+    expect(opened.bars).toHaveLength(2);
+    expect(opened.bars[1]).toEqual({
+      time: FIRST_TICK_SECONDS + 5,
+      open: 1.084,
+      high: 1.084,
+      low: 1.084,
+      close: 1.084,
+      volume: 1,
+    });
+    // A tick of a block older than the newest bar would rewrite history, so it is dropped.
+    expect(foldTick(opened, tickAt(FIRST_TICK_MS, '1.2000'), secondsGrouping(5))).toBe(opened);
+  });
+
+  test('a read that starts mid-block holds the ticks of its oldest block back', () => {
+    const hold = heldTickBars(MID_BLOCK_TICKS, secondsGrouping(5));
+
+    expect(hold.oldestTicks).toEqual(MID_BLOCK_TICKS.slice(0, 2));
+    expect(hold.bars).toEqual([
+      { time: FIRST_TICK_SECONDS + 5, open: 1.0852, high: 1.0852, low: 1.0852, close: 1.0852, volume: 1 },
+      { time: FIRST_TICK_SECONDS + 10, open: 1.0853, high: 1.0853, low: 1.0853, close: 1.0853, volume: 1 },
+    ]);
+  });
+
+  test('the page before that read completes the held block, and its own short block waits', () => {
+    const hold = heldTickBars(MID_BLOCK_TICKS, secondsGrouping(5));
+    const olderTicks = [
+      tickAt(Date.UTC(2024, 4, 14, 9, 59, 51), '1.0840'),
+      tickAt(Date.UTC(2024, 4, 14, 9, 59, 52), '1.0841'),
+      tickAt(Date.UTC(2024, 4, 14, 9, 59, 56), '1.0842'),
+    ];
+
+    const joined = joinedTickBars(olderTicks, hold.oldestTicks, secondsGrouping(5), hold.bars[0].time);
+
+    // The page's own oldest block is short as well, so its two ticks wait for the page before it.
+    expect(joined.oldestTicks).toEqual(olderTicks.slice(0, 2));
+    expect(joined.bars).toEqual([
+      {
+        time: Date.UTC(2024, 4, 14, 9, 59, 55) / MILLISECONDS_PER_SECOND,
+        open: 1.0842,
+        high: 1.0842,
+        low: 1.0842,
+        close: 1.0842,
+        volume: 1,
+      },
+      { time: FIRST_TICK_SECONDS, open: 1.085, high: 1.0851, low: 1.085, close: 1.0851, volume: 2 },
+    ]);
   });
 });
 
@@ -350,7 +474,7 @@ test.describe('holding the oldest tick bar back', () => {
   const SHORT_OLDEST_TICKS = risingTicks(23, FIRST_TICK_MS);
 
   test('a read whose oldest bar is short keeps its ticks back instead of drawing a bar of three', () => {
-    const hold = heldTickBars(SHORT_OLDEST_TICKS, TICKS_PER_BAR);
+    const hold = heldTickBars(SHORT_OLDEST_TICKS, ticksGrouping(TICKS_PER_BAR));
 
     expect(hold.bars).toHaveLength(2);
     expect(hold.bars.every((bar) => bar.volume === TICKS_PER_BAR)).toBe(true);
@@ -358,10 +482,10 @@ test.describe('holding the oldest tick bar back', () => {
   });
 
   test('the page before it completes that bar, and only the ticks short of one wait for the next page', () => {
-    const hold = heldTickBars(SHORT_OLDEST_TICKS, TICKS_PER_BAR);
+    const hold = heldTickBars(SHORT_OLDEST_TICKS, ticksGrouping(TICKS_PER_BAR));
     const olderTicks = ticksFrom(FIRST_TICK_MS - 15 * MILLISECONDS_PER_SECOND, 15, 1.2);
 
-    const joined = joinedTickBars(olderTicks, hold.oldestTicks, TICKS_PER_BAR, hold.bars[0].time);
+    const joined = joinedTickBars(olderTicks, hold.oldestTicks, ticksGrouping(TICKS_PER_BAR), hold.bars[0].time);
 
     // Fifteen older ticks and the three held back make one whole bar, with eight ticks left over.
     expect(joined.oldestTicks).toEqual(olderTicks.slice(0, 8));
@@ -385,7 +509,7 @@ function atAverageDigits(values: readonly (number | null)[]): (number | null)[] 
 
 test.describe('calculating on a tick chart', () => {
   /** Thirty ticks a second apart: three bars of ten, whose closes rise by a point a tick. */
-  const CHART_BARS = tickBarTimeline(risingTicks(30, FIRST_TICK_MS), TICKS_PER_BAR).bars;
+  const CHART_BARS = tickBarTimeline(risingTicks(30, FIRST_TICK_MS), ticksGrouping(TICKS_PER_BAR)).bars;
   /** The window of the moving average the chart's own closes must reproduce. */
   const SMA_LENGTH = 2;
   /** The seeded moving average of the chart's own closes, which the Chart choice must reproduce. */
@@ -528,7 +652,7 @@ test('scrolling past the oldest tick bar reads the ticks before it and prepends 
   // Every bar but the newest holds exactly the ticks the interval groups...
   expect(drawnAfter.slice(0, -1).filter((bar) => bar.volume !== TICKS_PER_BAR)).toEqual([]);
   // ...the two bars the older page built are its ticks' own groups, and the opening read held no tick back...
-  const olderBars = joinedTickBars(OLDER_TICKS, [], TICKS_PER_BAR, drawnBefore[0].time).bars;
+  const olderBars = joinedTickBars(OLDER_TICKS, [], ticksGrouping(TICKS_PER_BAR), drawnBefore[0].time).bars;
   expect(drawnAfter.slice(0, 2)).toEqual(olderBars);
   // ...and the bars that were on screen are untouched.
   expect(drawnAfter.slice(2)).toEqual(drawnBefore);

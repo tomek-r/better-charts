@@ -71,6 +71,34 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   hands the chart an empty, final page so the chart's paging latches the end of
   history and a scroll cannot start a request loop. There is no history-limit
   notice in the chart to reuse, so nothing is said on screen.
+- Seconds intervals (`S5`, `S15`, `S30`, `S90` through `S86400`) draw bars built
+  from the same raw ticks on a fixed grid: a bar covers a block of N seconds
+  counted from the start of the tick's broker day (00:00 of its server-time day),
+  so the grid never shifts when older history loads and a day's last block may be
+  shorter than N. A bar's time is its block's start; a live quote extends the block
+  it falls in and the quote of the next block opens a new bar; a read holds back
+  the ticks of its oldest block, which the older page completes, as it does the
+  ticks short of an N-tick bar. The interval menu lists a seconds interval
+  once it has been typed into the menu's input.
+- Aggregated time intervals (`M7`, `M90`, `H5`, `D5`, `W2`, `MN4` and every other
+  count the interval model allows) draw bars grouped from their native base
+  timeframe's own candles: `M7` asks the bridge for `M1` and folds those candles
+  into blocks on a fixed grid (counted from the midnight of the candle's day for
+  minutes and hours, from the calendar for days, weeks and months), so the grid
+  never shifts when history reloads. An aggregated code never reaches the bridge or
+  the EA. The read asks for a base bar for every block a pane shows, holds back the
+  block its window began inside until an older page completes it, and rebuilds the
+  forming block from its base candles, so a live base candle of the same time
+  replaces its own instead of counting twice.
+- The timeframe menu has one input that takes any interval the model allows
+  (`37T`, `5s`, `7` or `7m`, `5h`, `5D`, `2W`, `4M`): Enter draws it and
+  remembers it in the menu under its own section (Ticks, Seconds, Minutes, Hours,
+  Days & above), where it can be starred or removed. Text that names no interval,
+  a count past its unit's cap, or an interval whose bars MT5 does not offer on
+  this account (a native timeframe the handshake does not advertise, or an
+  aggregated one whose base timeframe it does not) is refused inline. The
+  countdown, future time points and drawing anchors step on the drawn bars of
+  every such interval, including a short last intraday bar before midnight.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
 - Chart SL/TP clear chips remove the selected live level from positions or

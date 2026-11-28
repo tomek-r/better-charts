@@ -5,12 +5,33 @@
  *
  * `label` is presentation only, derived from the wire code (`M15` → `15m`,
  * `H1` → `1H`) so the tabs cannot disagree with the contract.
+ *
+ * The bar-time helpers below also know the interval codes the config does not
+ * list (`M7`, `S5`, `H5`, `D5`, `W2`, `MN4` …), because the countdown, the future
+ * time points and the drawing anchors step on the bars the chart draws.
  */
 import config from '../../../../../config/timeframes.json' with { type: 'json' };
 
 /** Wire code shape: a unit and an amount (`M15`, `H1`, `MN1`). Declared before
  *  the options below, which label each code while this module initialises. */
 const WIRE_CODE = /^(MN|[A-Z])(\d+)$/;
+
+const SECONDS_PER_MINUTE = 60;
+const SECONDS_PER_HOUR = 60 * SECONDS_PER_MINUTE;
+const SECONDS_PER_DAY = 24 * SECONDS_PER_HOUR;
+const SECONDS_PER_WEEK = 7 * SECONDS_PER_DAY;
+
+/** Fixed span of a unit. `MN` counts calendar months instead. */
+const UNIT_SECONDS: Record<string, number> = {
+  S: 1,
+  M: SECONDS_PER_MINUTE,
+  H: SECONDS_PER_HOUR,
+  D: SECONDS_PER_DAY,
+  W: SECONDS_PER_WEEK,
+};
+
+/** Intraday units: their bars restart at each day's 00:00 unless a bar divides the day evenly. */
+const INTRADAY_UNITS = new Set(['S', 'M', 'H']);
 
 export const timeframeOptions = config.timeframes.map((entry) => ({
   wire: entry.code,
@@ -60,24 +81,117 @@ export function timeframeSection(wire: string): TimeframeSection {
   return unit === 'H' ? 'hours' : 'days';
 }
 
-const defaultEntry = config.timeframes.find((entry) => entry.code === config.default) ?? config.timeframes[0];
-
-/** Nominal seconds per bar; MN1 boundaries use calendar months below. */
-export function timeframeSeconds(wire: string): number {
-  const entry = config.timeframes.find((candidate) => candidate.code === wire) ?? defaultEntry;
-  return entry.seconds;
+interface WireCode {
+  unit: string;
+  count: number;
 }
 
-/** Bar boundary after an offset. MT5 monthly bars follow calendar months. */
-export function timeframeBarTime(wire: string, startSeconds: number, offset: number): number {
-  if (wire !== 'MN1') {
-    return startSeconds + offset * timeframeSeconds(wire);
+/** `M7` → 7 minutes, `MN4` → 4 calendar months. A tick or unknown code has no unit span. */
+function parseWireCode(wire: string): WireCode | undefined {
+  const match = WIRE_CODE.exec(wire);
+  if (!match) {
+    return undefined;
   }
+  return { unit: match[1], count: Number(match[2]) };
+}
+
+function configuredSeconds(wire: string): number | undefined {
+  return config.timeframes.find((entry) => entry.code === wire)?.seconds;
+}
+
+const defaultEntry = config.timeframes.find((entry) => entry.code === config.default) ?? config.timeframes[0];
+
+/** One calendar month is the configured `MN1` span, so `MN4` is four of those. */
+const CALENDAR_MONTH_SECONDS = configuredSeconds('MN1') ?? defaultEntry.seconds;
+
+/** Nominal seconds per bar: the config entry, else the code's own unit, else the default. */
+export function timeframeSeconds(wire: string): number {
+  return configuredSeconds(wire) ?? derivedSeconds(wire) ?? defaultEntry.seconds;
+}
+
+/** A code the config omits: `M7` is 7 minutes, `MN4` is 4 calendar months. */
+function derivedSeconds(wire: string): number | undefined {
+  const code = parseWireCode(wire);
+  if (!code || code.count <= 0) {
+    return undefined;
+  }
+  if (code.unit === 'MN') {
+    return code.count * CALENDAR_MONTH_SECONDS;
+  }
+  const unitSeconds = UNIT_SECONDS[code.unit];
+  if (unitSeconds === undefined) {
+    return undefined;
+  }
+  return code.count * unitSeconds;
+}
+
+/**
+ * Bar boundary `offset` bars after `startSeconds`, the inverse of `timeframeBarOffset`.
+ * Callers pass whole offsets from a bar boundary: future points, drawing anchors, the countdown.
+ */
+export function timeframeBarTime(wire: string, startSeconds: number, offset: number): number {
+  const code = parseWireCode(wire);
+  if (code?.unit === 'MN') {
+    return addCalendarMonths(startSeconds, offset * code.count);
+  }
+  const barLength = timeframeSeconds(wire);
+  if (usesDayGrid(code, barLength)) {
+    return dayGridTimeAtIndex(dayGridIndexAt(startSeconds, barLength) + offset, barLength);
+  }
+  return startSeconds + offset * barLength;
+}
+
+/** Fractional bar offset, including times inside a calendar month or a short last day bar. */
+export function timeframeBarOffset(wire: string, startSeconds: number, timeSeconds: number): number {
+  const code = parseWireCode(wire);
+  if (code?.unit === 'MN') {
+    return calendarMonthOffset(startSeconds, timeSeconds, code.count);
+  }
+  const barLength = timeframeSeconds(wire);
+  if (usesDayGrid(code, barLength)) {
+    return dayGridIndexAt(timeSeconds, barLength) - dayGridIndexAt(startSeconds, barLength);
+  }
+  return (timeSeconds - startSeconds) / barLength;
+}
+
+/**
+ * The drawn intraday grid restarts at each day's own 00:00 (broker time is encoded as UTC
+ * seconds, so a day is `floor(t / 86400)`). A bar length that does not divide the day
+ * therefore leaves one short bar before midnight instead of running into the next day.
+ */
+function usesDayGrid(code: WireCode | undefined, barLength: number): boolean {
+  return code !== undefined && INTRADAY_UNITS.has(code.unit) && SECONDS_PER_DAY % barLength !== 0;
+}
+
+/** Bars in one day of the grid, the last one short when the length does not divide the day. */
+function dayGridBarsPerDay(barLength: number): number {
+  return Math.ceil(SECONDS_PER_DAY / barLength);
+}
+
+/** Fractional bar index of an instant, counting the grid's bars from the epoch day onward. */
+function dayGridIndexAt(timeSeconds: number, barLength: number): number {
+  const day = Math.floor(timeSeconds / SECONDS_PER_DAY);
+  const secondsIntoDay = timeSeconds - day * SECONDS_PER_DAY;
+  const slot = Math.floor(secondsIntoDay / barLength);
+  const lengthInDay = Math.min(barLength, SECONDS_PER_DAY - slot * barLength);
+  const withinBar = (secondsIntoDay - slot * barLength) / lengthInDay;
+  return day * dayGridBarsPerDay(barLength) + slot + withinBar;
+}
+
+/** Opening instant of a bar index: its day's 00:00 plus the bar's slot times the bar length. */
+function dayGridTimeAtIndex(index: number, barLength: number): number {
+  const barsPerDay = dayGridBarsPerDay(barLength);
+  const day = Math.floor(index / barsPerDay);
+  return day * SECONDS_PER_DAY + (index - day * barsPerDay) * barLength;
+}
+
+/** Same instant a number of calendar months later, on the 1st because monthly bars open there. */
+function addCalendarMonths(startSeconds: number, months: number): number {
   const start = new Date(startSeconds * 1000);
   return (
     Date.UTC(
       start.getUTCFullYear(),
-      start.getUTCMonth() + offset,
+      start.getUTCMonth() + months,
       1,
       start.getUTCHours(),
       start.getUTCMinutes(),
@@ -86,18 +200,16 @@ export function timeframeBarTime(wire: string, startSeconds: number, offset: num
   );
 }
 
-/** Fractional bar offset, including times within a monthly candle. */
-export function timeframeBarOffset(wire: string, startSeconds: number, timeSeconds: number): number {
-  if (wire !== 'MN1') {
-    return (timeSeconds - startSeconds) / timeframeSeconds(wire);
-  }
+/** `MN<n>` offset: whole calendar months plus the fraction of the current month, divided by n. */
+function calendarMonthOffset(startSeconds: number, timeSeconds: number, monthsPerBar: number): number {
   const start = new Date(startSeconds * 1000);
   const time = new Date(timeSeconds * 1000);
   let months = (time.getUTCFullYear() - start.getUTCFullYear()) * 12 + time.getUTCMonth() - start.getUTCMonth();
-  if (timeSeconds < timeframeBarTime(wire, startSeconds, months)) {
+  if (timeSeconds < addCalendarMonths(startSeconds, months)) {
     months--;
   }
-  const from = timeframeBarTime(wire, startSeconds, months);
-  const to = timeframeBarTime(wire, startSeconds, months + 1);
-  return months + (timeSeconds - from) / (to - from);
+  const from = addCalendarMonths(startSeconds, months);
+  const to = addCalendarMonths(startSeconds, months + 1);
+  const withinMonth = (timeSeconds - from) / (to - from);
+  return (months + withinMonth) / monthsPerBar;
 }

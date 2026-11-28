@@ -5,6 +5,7 @@ import {
   timeframeBarOffset,
   timeframeLabel,
   timeframeLongLabel,
+  timeframeSeconds,
   timeframeSection,
 } from '../src/shared/bridge/timeframes';
 import {
@@ -156,13 +157,91 @@ test('monthly padding follows calendar boundaries through leap February', () => 
   expect(timeframeLabel('M1')).toBe('1m');
 });
 
-// Pinned because the subject is the month-end boundary of leap February 2024 (29 days, not 30).
-test('monthly countdown ends at the next month rather than after 30 days', () => {
+/** Countdown text with the broker at the second of two quotes a second apart, one bar open at `barStart`. */
+function countdownText(wire: string, barStart: string, quoteTime: string): string {
   const brokerTime = new BrokerTime();
   brokerTime.setConnection('connected', '');
   const clock = new BarCountdownClock(brokerTime);
-  const first = { symbol: 'XBRUSD', timeMs: Date.parse('2024-02-28T23:59:58Z') };
+  const first = { symbol: 'XBRUSD', timeMs: Date.parse(quoteTime) };
   brokerTime.acceptQuote(first);
   brokerTime.acceptQuote({ ...first, timeMs: first.timeMs + 1000 });
-  expect(clock.text('XBRUSD', seconds('2024-02-01T00:00:00Z'), 'MN1')).toBe('24:00:01');
+  return clock.text('XBRUSD', seconds(barStart), wire);
+}
+
+// Pinned because the subject is the month-end boundary of leap February 2024 (29 days, not 30).
+test('monthly countdown ends at the next month rather than after 30 days', () => {
+  expect(countdownText('MN1', '2024-02-01T00:00:00Z', '2024-02-28T23:59:58Z')).toBe('24:00:01');
+});
+
+test.describe('bar times of every drawable interval', () => {
+  // Every value below is hand-computed from the grid the chart draws.
+  const spans: Array<[wire: string, spanSeconds: number]> = [
+    ['M7', 420],
+    ['S5', 5],
+    ['H5', 18000],
+    ['D5', 432000],
+    ['W2', 1209600],
+    ['MN4', 10368000],
+    ['M15', 900],
+    ['T10', 60],
+  ];
+
+  // Intraday bars count from each day's own 00:00, so a length that does not divide a day ends short.
+  const barTimes: Array<[wire: string, from: string, offset: number, to: string]> = [
+    ['M7', '2024-05-14T23:48:00Z', 1, '2024-05-14T23:55:00Z'],
+    ['M7', '2024-05-14T23:48:00Z', 2, '2024-05-15T00:00:00Z'],
+    ['M7', '2024-05-14T23:48:00Z', 3, '2024-05-15T00:07:00Z'],
+    ['M7', '2024-05-14T23:48:00Z', -1, '2024-05-14T23:41:00Z'],
+    ['M7', '2024-05-14T00:00:00Z', 206, '2024-05-15T00:00:00Z'],
+    ['M7', '2024-05-14T00:00:00Z', 412, '2024-05-16T00:00:00Z'],
+    ['H5', '2024-05-14T20:00:00Z', 1, '2024-05-15T00:00:00Z'],
+    ['H5', '2024-05-14T20:00:00Z', 2, '2024-05-15T05:00:00Z'],
+    ['S7', '2024-05-14T23:59:54Z', 1, '2024-05-15T00:00:00Z'],
+    ['D5', '2024-05-14T00:00:00Z', 1, '2024-05-19T00:00:00Z'],
+    ['W2', '2024-01-01T00:00:00Z', 1, '2024-01-15T00:00:00Z'],
+    ['MN4', '2024-01-01T00:00:00Z', 1, '2024-05-01T00:00:00Z'],
+    ['MN4', '2024-01-01T00:00:00Z', 2, '2024-09-01T00:00:00Z'],
+    ['MN4', '2024-01-01T00:00:00Z', -1, '2023-09-01T00:00:00Z'],
+    ['M15', '2024-05-14T23:45:00Z', 1, '2024-05-15T00:00:00Z'],
+  ];
+
+  const barOffsets: Array<[wire: string, from: string, time: string, offset: number]> = [
+    ['M7', '2024-05-14T23:48:00Z', '2024-05-14T23:57:30Z', 1.5],
+    ['M7', '2024-05-14T23:48:00Z', '2024-05-15T00:07:00Z', 3],
+    ['H5', '2024-05-14T20:00:00Z', '2024-05-14T22:00:00Z', 0.5],
+    ['S7', '2024-05-14T23:59:54Z', '2024-05-14T23:59:57Z', 0.5],
+    ['MN4', '2024-01-01T00:00:00Z', '2024-03-01T00:00:00Z', 0.5],
+    ['MN4', '2024-01-01T00:00:00Z', '2024-05-01T00:00:00Z', 1],
+  ];
+
+  test('bar spans cover the drawable codes and unknown codes keep the default', () => {
+    for (const [wire, spanSeconds] of spans) {
+      expect(timeframeSeconds(wire), wire).toBe(spanSeconds);
+    }
+  });
+
+  test('bar boundaries step on the grid the bars are drawn on', () => {
+    for (const [wire, from, offset, to] of barTimes) {
+      expect(timeframeBarTime(wire, seconds(from), offset), `${wire} ${from} ${offset}`).toBe(seconds(to));
+    }
+  });
+
+  test('bar offsets invert the bar boundaries', () => {
+    for (const [wire, from, time, offset] of barOffsets) {
+      expect(timeframeBarOffset(wire, seconds(from), seconds(time)), `${wire} ${from} ${time}`).toBe(offset);
+    }
+  });
+
+  test('future time points step over the short last block of the day', () => {
+    const points = futurePoints(seconds('2024-05-14T23:48:00Z'), 'M7', 96, 3);
+    expect(points.map((point) => point.time)).toEqual([
+      seconds('2024-05-14T23:55:00Z'),
+      seconds('2024-05-15T00:00:00Z'),
+      seconds('2024-05-15T00:07:00Z'),
+    ]);
+  });
+
+  test('the countdown of a short last block stops at midnight', () => {
+    expect(countdownText('M7', '2024-05-14T23:55:00Z', '2024-05-14T23:56:59Z')).toBe('03:00');
+  });
 });
