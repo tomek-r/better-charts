@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import type { Candle, BrokerSymbol } from '../../shared/bridge/types';
 import { initialHistoryBarsFor } from '../chart/engine/bars/initialHistoryWindow';
 import { DEFAULT_TIMEFRAME } from '../../shared/bridge/timeframes';
-import { isTickBuiltInterval } from '../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval, seriesRequestOf } from '../../shared/bridge/chartIntervals';
 import { useFieldSetterSelector } from '../../shared/store/fieldStore';
 import type { BridgeSessionStores } from './bridgeSessionStores';
 import type { BridgeMarketResources } from './market/bridgeMarketRuntime';
@@ -59,7 +59,9 @@ export function useBridgeSession({ stores, marketData, chart, adapterRef }: Brid
       if (!adapter) {
         throw new Error('chart adapter unavailable');
       }
-      return adapter.requestHistory(symbol, timeframe, initialHistoryBarsFor(chart.current));
+      // An aggregated interval is asked for through its base series, one base bar for every block.
+      const request = seriesRequestOf(timeframe, initialHistoryBarsFor(chart.current));
+      return adapter.requestHistory(symbol, request.timeframe, request.bars);
     },
     [adapterRef, chart],
   );

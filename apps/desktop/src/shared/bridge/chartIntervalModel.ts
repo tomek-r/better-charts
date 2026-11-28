@@ -153,12 +153,13 @@ export function chartIntervalOf(code: string): ChartInterval | undefined {
 }
 
 /**
- * Whether the app can draw `code` today: MT5's native bars, and the N-tick and
- * N-second bars it builds itself from the symbol's raw ticks.
+ * Whether the app can draw `code` today: MT5's native bars; the N-tick and N-second
+ * bars it builds itself from the symbol's raw ticks; and the aggregated intervals it
+ * groups from an MT5 base timeframe's bars, such as `M7` from `M1`.
  */
 export function isDrawableInterval(code: string): boolean {
   const kind = chartIntervalOf(code)?.kind;
-  return kind === 'native' || kind === 'ticks' || kind === 'seconds';
+  return kind === 'native' || kind === 'ticks' || kind === 'seconds' || kind === 'aggregated';
 }
 
 /** `1 tick`, `10 ticks`: a count and the singular word of what it counts. */

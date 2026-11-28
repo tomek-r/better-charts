@@ -5,11 +5,17 @@
  *
  * A tick or seconds code (`T10`, `S5`) is frontend-only and never reaches the EA:
  * no MT5 series carries it, so the bridge is asked for ticks instead of a history
- * window. Which codes exist, and what each one needs, is `chartIntervalModel.ts`;
- * any tick count it allows is a tick interval here, while the menu lists the four
- * presets below.
+ * window. An aggregated code (`M7`, `MN4`) never reaches it either: the chart asks
+ * for its base timeframe and groups those candles itself. Which codes exist, and
+ * what each one needs, is `chartIntervalModel.ts`; any tick count it allows is a
+ * tick interval here, while the menu lists the four presets below.
  */
-import { chartIntervalLabel, chartIntervalLongLabel, chartIntervalOf } from './chartIntervalModel';
+import {
+  chartIntervalLabel,
+  chartIntervalLongLabel,
+  chartIntervalOf,
+  type AggregatedInterval,
+} from './chartIntervalModel';
 import { timeframeSection, type TimeframeSection } from './timeframes';
 
 /**
@@ -82,6 +88,39 @@ export function isTickInterval(code: string | undefined): boolean {
 export function secondsPerBarOf(code: string | undefined): number | undefined {
   const grouping = tickGroupingOf(code);
   return grouping?.kind === 'seconds' ? grouping.seconds : undefined;
+}
+
+/** The aggregated interval `code` names, or undefined for every other code and an unknown one. */
+export function aggregatedIntervalOf(code: string | undefined): AggregatedInterval | undefined {
+  const interval = code === undefined ? undefined : chartIntervalOf(code);
+  return interval?.kind === 'aggregated' ? interval : undefined;
+}
+
+/**
+ * The native timeframe the bridge is asked for to draw `code`: the base timeframe an aggregated
+ * interval is grouped from, and `code` itself for every interval MT5 serves as it is.
+ */
+export function seriesTimeframeOf(code: string): string {
+  return aggregatedIntervalOf(code)?.base ?? code;
+}
+
+/**
+ * The base bars a window of `bars` candles of `code` needs: an aggregated bar is `count` base bars
+ * of its series, every other bar one of its own. The adapter clamps the result to its own bound.
+ */
+export function seriesBarsOf(code: string, bars: number): number {
+  return bars * (aggregatedIntervalOf(code)?.count ?? 1);
+}
+
+/** A native series and the bars to ask it for. */
+export interface SeriesRequest {
+  timeframe: string;
+  bars: number;
+}
+
+/** The native series and base-bar count the bridge is asked for to draw `bars` candles of `code`. */
+export function seriesRequestOf(code: string, bars: number): SeriesRequest {
+  return { timeframe: seriesTimeframeOf(code), bars: seriesBarsOf(code, bars) };
 }
 
 /** `T10` → `10T`, `T37` → `37T`; an MT5 code keeps its own short label. */

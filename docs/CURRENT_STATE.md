@@ -80,6 +80,17 @@ React state ownership follows the 2026-10-08 [domain-store decision](reviews/dom
   the ticks of its oldest block, which the older page completes, as it does the
   ticks short of an N-tick bar. The interval menu has no seconds entry yet, so
   nothing in the UI selects one.
+- Aggregated time intervals (`M7`, `M90`, `H5`, `D5`, `W2`, `MN4` and every other
+  count the interval model allows) draw bars grouped from their native base
+  timeframe's own candles: `M7` asks the bridge for `M1` and folds those candles
+  into blocks on a fixed grid (counted from the midnight of the candle's day for
+  minutes and hours, from the calendar for days, weeks and months), so the grid
+  never shifts when history reloads. An aggregated code never reaches the bridge or
+  the EA. The read asks for a base bar for every block a pane shows, holds back the
+  block its window began inside until an older page completes it, and rebuilds the
+  forming block from its base candles, so a live base candle of the same time
+  replaces its own instead of counting twice. The interval menu has no aggregated
+  entry yet; only a window saved on one reopens it.
 - Market, Limit, Stop and Stop Limit orders; optional SL/TP, time-in-force,
   risk preview and MT5 `OrderCheck`; chart/portfolio close, cancel and modify.
 - Chart SL/TP clear chips remove the selected live level from positions or

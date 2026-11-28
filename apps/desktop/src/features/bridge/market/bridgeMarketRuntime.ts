@@ -1,5 +1,6 @@
 import type { ChartController } from '../../chart/engine/surface/chartController';
 import type { Mt5DataAdapter, Mt5HistoryError } from '../../chart/engine/bars/mt5DataAdapter';
+import { aggregatedBlockStartMs } from '../../chart/engine/bars/aggregatedBars';
 import { listen } from '@tauri-apps/api/event';
 import type {
   BridgeStatus,
@@ -25,9 +26,16 @@ import {
 } from '../bridgePayloadNormalizers';
 import type { PayloadEvent } from '../bridgeEventTypes';
 import { HISTORY_BARS } from '../../../shared/bridge/config';
-import { isTickBuiltInterval } from '../../../shared/bridge/chartIntervals';
+import type { AggregatedInterval } from '../../../shared/bridge/chartIntervalModel';
+import {
+  aggregatedIntervalOf,
+  isTickBuiltInterval,
+  seriesBarsOf,
+  seriesTimeframeOf,
+} from '../../../shared/bridge/chartIntervals';
 import type { BridgeSessionState } from '../useBridgeSession';
 import { applyAcceptedSnapshot, recordMt5Timeframe, snapshotViewportMode } from './applyAcceptedSnapshot';
+import { AggregatedSeries } from './aggregatedSeries';
 import { ChartTickBars, newestKnownInstantMs } from './chartTickBars';
 import { endHistoryWait } from './historyWait';
 import { createIdlePrefetch } from './idlePrefetch';
@@ -133,6 +141,30 @@ export function createBridgeMarketRuntime(
   });
   tickBarsRef.current = tickBars;
 
+  /** The aggregated series on screen and the interval it draws; another interval starts a new one. */
+  let aggregatedSeries: AggregatedSeries | undefined;
+  let aggregatedSeriesCode: string | undefined;
+
+  /**
+   * The series a shown `code` draws through, or undefined for an interval that groups nothing. An
+   * interval that groups nothing forgets the aggregated one before it, so no block of that one
+   * outlives the window it was built for.
+   */
+  const aggregatedSeriesOf = (code: string | undefined): AggregatedSeries | undefined => {
+    const interval = aggregatedIntervalOf(code);
+    if (interval === undefined) {
+      aggregatedSeries?.reset();
+      aggregatedSeries = undefined;
+      aggregatedSeriesCode = undefined;
+      return undefined;
+    }
+    if (aggregatedSeries === undefined || aggregatedSeriesCode !== interval.code) {
+      aggregatedSeries = new AggregatedSeries(interval);
+      aggregatedSeriesCode = interval.code;
+    }
+    return aggregatedSeries;
+  };
+
   const cancelCandles = () => {
     if (candleFrame !== undefined) {
       cancelAnimationFrame(candleFrame);
@@ -181,15 +213,18 @@ export function createBridgeMarketRuntime(
       return;
     }
     const key = `${symbol}|${timeframe}`;
+    // An aggregated interval pages its base series, and the page's own failure is reported on it.
+    const series = seriesTimeframeOf(timeframe);
+    const bars = seriesBarsOf(timeframe, HISTORY_BARS);
     if (pageState.key !== key) {
-      Object.assign(pageState, emptyPageState(), { key, symbol, timeframe });
+      Object.assign(pageState, emptyPageState(), { key, symbol, timeframe: series });
     }
     if (pageState.inFlight) {
       return;
     }
     pageState.inFlight = true;
     pageState.anchorMs = beforeMs;
-    void adapter.requestHistoryPage(symbol, timeframe, HISTORY_BARS, beforeMs).catch(() => undefined);
+    void adapter.requestHistoryPage(symbol, series, bars, beforeMs).catch(() => undefined);
   };
   const idlePrefetch = createIdlePrefetch({
     isStillWanted: (dataKey) =>
@@ -208,10 +243,12 @@ export function createBridgeMarketRuntime(
     symbol: targetSymbol.current ?? currentSymbolRef.current,
     timeframe: loadingTimeframeRef.current ?? currentTimeframeRef.current,
   });
+  /** The bridge answers on native series, so an aggregated selection is expected through its base. */
   const isExpectedSelection = (symbol: string | undefined, timeframe: string | undefined) => {
     const expected = expectedSelection();
     return (
-      (!expected.symbol || expected.symbol === symbol) && (!expected.timeframe || expected.timeframe === timeframe)
+      (!expected.symbol || expected.symbol === symbol) &&
+      (!expected.timeframe || seriesTimeframeOf(expected.timeframe) === timeframe)
     );
   };
 
@@ -262,11 +299,13 @@ export function createBridgeMarketRuntime(
       return;
     }
     marketAdapterRef.current?.acceptHistoryUnavailable(symbol, timeframe);
+    // The notice names the interval the user picked, not the base series an aggregated one asks for.
+    const shownTimeframe = loadingTimeframeRef.current ?? timeframe;
     loadingTimeframeRef.current = undefined;
     setLoadingTimeframe(undefined);
     clearPickedSymbol(symbol);
     setHistoryWaitStartedAtMs(undefined);
-    setHistoryUnavailable({ symbol, timeframe });
+    setHistoryUnavailable({ symbol, timeframe: shownTimeframe });
   };
 
   /**
@@ -325,6 +364,21 @@ export function createBridgeMarketRuntime(
     tickBars.show(symbol, tickInterval);
   };
 
+  /**
+   * The newest candle instant the chart draws for `candles`: an aggregated candle opens at the start
+   * of its block, which is at or before the newest base candle that block groups.
+   */
+  const newestDrawnTimeMsOf = (
+    candles: readonly Candle[],
+    interval: AggregatedInterval | undefined,
+  ): number | undefined => {
+    const newest = candles.at(-1);
+    if (newest === undefined || interval === undefined) {
+      return newest?.timeMs;
+    }
+    return aggregatedBlockStartMs(interval, newest.timeMs);
+  };
+
   const onMarketSnapshot = (event: PayloadEvent<MarketSnapshot>) => {
     if (run.disposed || run.bridgeState !== 'connected') {
       return;
@@ -340,18 +394,31 @@ export function createBridgeMarketRuntime(
     }
     endHistoryWait(historyWaitSetters);
     settlePickedSymbol(next.symbol);
+    // An aggregated selection is shown as its own code, over the candles its base series brought.
+    // An unset selection matches anything, so it keeps the snapshot's own timeframe, as before.
+    const shownTimeframe = expectedSelection().timeframe || next.timeframe;
+    const interval = aggregatedIntervalOf(shownTimeframe);
+    const series = aggregatedSeriesOf(shownTimeframe);
+    const baseCandles = validCandlesOf(next.candles);
     const previousLatest = latestCandleRef.current;
-    const validCandles = validCandlesOf(next.candles);
-    const nextLatest = validCandles[validCandles.length - 1];
-    const sameSelection = currentSymbolRef.current === next.symbol && currentTimeframeRef.current === next.timeframe;
-    if (sameSelection && previousLatest && nextLatest && nextLatest.timeMs < previousLatest.timeMs) {
+    const sameSelection = currentSymbolRef.current === next.symbol && currentTimeframeRef.current === shownTimeframe;
+    const newestDrawnTimeMs = newestDrawnTimeMsOf(baseCandles, interval);
+    // A window older than the newest candle already drawn is stale, and would step the pane back.
+    if (
+      sameSelection &&
+      previousLatest &&
+      newestDrawnTimeMs !== undefined &&
+      newestDrawnTimeMs < previousLatest.timeMs
+    ) {
       return;
     }
+    const drawn = series === undefined ? baseCandles : series.window(baseCandles);
+    const nextLatest = drawn.at(-1);
     const candles =
       sameSelection && previousLatest && nextLatest?.timeMs === previousLatest.timeMs
-        ? [...validCandles.slice(0, -1), previousLatest]
-        : validCandles;
-    const accepted = { ...next, candles };
+        ? [...drawn.slice(0, -1), previousLatest]
+        : drawn;
+    const accepted = { ...next, timeframe: shownTimeframe, candles };
     cancelCandles();
     try {
       applyAcceptedSnapshot({ chart: chartRef, adapter: marketAdapterRef.current, session }, accepted, {
@@ -376,13 +443,15 @@ export function createBridgeMarketRuntime(
     const page = normalizeHistoryPage(event.payload);
     const symbol = currentSymbolRef.current;
     const timeframe = currentTimeframeRef.current;
+    if (!symbol || !timeframe) {
+      return;
+    }
     const key = `${symbol}|${timeframe}`;
-    // The page must belong to the selection on screen and exact requested anchor.
+    const seriesTimeframe = seriesTimeframeOf(timeframe);
+    // The page must belong to the selection on screen, its series and the exact requested anchor.
     if (
-      !symbol ||
-      !timeframe ||
       page.symbol !== symbol ||
-      page.timeframe !== timeframe ||
+      page.timeframe !== seriesTimeframe ||
       pageState.key !== key ||
       pageState.anchorMs !== page.beforeMs
     ) {
@@ -390,8 +459,11 @@ export function createBridgeMarketRuntime(
     }
     pageState.inFlight = false;
     pageState.anchorMs = undefined;
-    marketAdapterRef.current?.acceptHistoryPage(symbol, timeframe);
-    chartRef.current?.appendOlderHistory(validCandlesOf(page.candles), page.complete);
+    marketAdapterRef.current?.acceptHistoryPage(symbol, seriesTimeframe);
+    const pageCandles = validCandlesOf(page.candles);
+    const series = aggregatedSeriesOf(timeframe);
+    const prepended = series === undefined ? pageCandles : series.olderPage(pageCandles);
+    chartRef.current?.appendOlderHistory(prepended, page.complete);
   };
 
   /** One `listen` per event; what this run accepts goes to the port's feed, and a disposed run forwards nothing. */
@@ -433,25 +505,32 @@ export function createBridgeMarketRuntime(
     if (run.disposed || run.bridgeState !== 'connected' || !chartRef.current) {
       return;
     }
+    const shownTimeframe = currentTimeframeRef.current;
     // A tick-built interval's bars are built from quotes: a candle of any MT5 series is not this chart's.
-    if (isTickBuiltInterval(currentTimeframeRef.current)) {
+    if (!shownTimeframe || isTickBuiltInterval(shownTimeframe)) {
       return;
     }
+    const seriesTimeframe = seriesTimeframeOf(shownTimeframe);
+    const aggregated = aggregatedSeriesOf(shownTimeframe);
     const { candle, symbol, timeframe } = normalizeBarUpdate(event.payload, {
       symbol: currentSymbolRef.current,
-      timeframe: currentTimeframeRef.current,
+      timeframe: seriesTimeframe,
     });
-    if (symbol !== currentSymbolRef.current || timeframe !== currentTimeframeRef.current) {
+    if (symbol !== currentSymbolRef.current || timeframe !== seriesTimeframe) {
       return;
     }
     if (!isValidCandle(candle)) {
       return;
     }
-    if (latestCandleRef.current && candle.timeMs < latestCandleRef.current.timeMs) {
+    const drawn = aggregated === undefined ? candle : aggregated.live(candle);
+    if (drawn === undefined) {
       return;
     }
-    latestCandleRef.current = candle;
-    pendingCandles.set(candle.timeMs, candle);
+    if (latestCandleRef.current && drawn.timeMs < latestCandleRef.current.timeMs) {
+      return;
+    }
+    latestCandleRef.current = drawn;
+    pendingCandles.set(drawn.timeMs, drawn);
     if (candleFrame === undefined) {
       candleFrame = requestAnimationFrame(flushCandles);
     }

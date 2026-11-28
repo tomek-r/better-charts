@@ -3,7 +3,7 @@ import type { ChartController } from '../../chart/engine/surface/chartController
 import type { Mt5DataAdapter } from '../../chart/engine/bars/mt5DataAdapter';
 import type { MarketSnapshot } from '../../../shared/bridge/types';
 import { DEFAULT_TIMEFRAME } from '../../../shared/bridge/timeframes';
-import { isTickBuiltInterval } from '../../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval, seriesTimeframeOf } from '../../../shared/bridge/chartIntervals';
 import type { BridgeSessionState } from '../useBridgeSession';
 
 export const NONE_VALID_CANDLES_MESSAGE = 'MT5 returned candles, but none of them contain valid OHLC values.';
@@ -71,9 +71,12 @@ export function applyAcceptedSnapshot(
     setLatestCandle,
     setChartError,
   } = session;
-  adapter?.acceptSnapshot(accepted);
-  recordMt5Timeframe(mt5TimeframeRef, accepted.timeframe);
   const timeframe = accepted.timeframe ?? DEFAULT_TIMEFRAME;
+  // The bridge and the EA know native series only: an aggregated interval is acknowledged and
+  // recorded as the base series the chart grouped its bars from.
+  const series = seriesTimeframeOf(timeframe);
+  adapter?.acceptSnapshot({ ...accepted, timeframe: series });
+  recordMt5Timeframe(mt5TimeframeRef, series);
   const dataKey = `${accepted.symbol}:${timeframe}`;
   const replaced = dataKeyRef.current !== dataKey || (chartRef.current?.getData().length ?? 0) === 0;
   // Selection refs describe what is on screen, so set them before the swap:

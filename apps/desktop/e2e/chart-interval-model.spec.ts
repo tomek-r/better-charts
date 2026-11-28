@@ -8,7 +8,13 @@ import {
   parseIntervalInput,
   type ChartInterval,
 } from '../src/shared/bridge/chartIntervalModel';
-import { intervalLabel, intervalLongLabel, isTickInterval, ticksPerBarOf } from '../src/shared/bridge/chartIntervals';
+import {
+  intervalLabel,
+  intervalLongLabel,
+  isTickInterval,
+  seriesRequestOf,
+  ticksPerBarOf,
+} from '../src/shared/bridge/chartIntervals';
 import { restorableSelection } from '../src/features/bridge/lastChartSelection/lastChartSelection';
 import { loadTimeframeFavorites } from '../src/features/chart/timeframes/timeframeFavorites';
 
@@ -120,11 +126,18 @@ test.describe('classifying a code into the bars it needs', () => {
     }
   });
 
-  test('native, N-tick and seconds intervals can be drawn; aggregated ones not yet', () => {
+  test('the bridge is asked for an aggregated interval through its base series', () => {
+    expect(seriesRequestOf('M7', 500)).toEqual({ timeframe: 'M1', bars: 3500 });
+    expect(seriesRequestOf('D5', 100)).toEqual({ timeframe: 'D1', bars: 500 });
+    expect(seriesRequestOf('M15', 500)).toEqual({ timeframe: 'M15', bars: 500 });
+  });
+
+  test('native, N-tick, seconds and aggregated intervals can be drawn', () => {
     expect(isDrawableInterval('M5')).toBe(true);
     expect(isDrawableInterval('T37')).toBe(true);
     expect(isDrawableInterval('S5')).toBe(true);
-    expect(isDrawableInterval('D5')).toBe(false);
+    expect(isDrawableInterval('D5')).toBe(true);
+    expect(isDrawableInterval('M7')).toBe(true);
     expect(isDrawableInterval('BOGUS')).toBe(false);
   });
 });
@@ -186,10 +199,12 @@ test.describe('restoring and starring an interval', () => {
     expect(restorableSelection(savedOn(`T${MAX_TICKS_PER_BAR}`), [])).toEqual(savedOn(`T${MAX_TICKS_PER_BAR}`));
   });
 
-  test('an interval no slice draws yet is not restored', () => {
+  test('an aggregated interval is restored from a saved window like any other drawn interval', () => {
     expect(restorableSelection(savedOn('S5'), ['M1', 'M5'])).toEqual(savedOn('S5'));
-    expect(restorableSelection(savedOn('D5'), ['M1', 'D1'])).toBeUndefined();
-    expect(restorableSelection(savedOn('M7'), ['M1', 'M5'])).toBeUndefined();
+    expect(restorableSelection(savedOn('D5'), ['M1', 'D1'])).toEqual(savedOn('D5'));
+    expect(restorableSelection(savedOn('M7'), ['M1', 'M5'])).toEqual(savedOn('M7'));
+    expect(restorableSelection(savedOn('M7'), ['M5', 'H1'])).toBeUndefined();
+    expect(restorableSelection(savedOn('BOGUS'), ['M1', 'M5'])).toBeUndefined();
   });
 
   test('an MT5 code still needs the handshake to advertise it', () => {
@@ -197,10 +212,10 @@ test.describe('restoring and starring an interval', () => {
     expect(restorableSelection(savedOn('M2'), ['M1', 'M2'])).toEqual(savedOn('M2'));
   });
 
-  test('the favorites keep any N-tick code and drop the intervals no slice draws yet', () => {
+  test('the favorites keep tick and aggregated codes and drop the ones the model does not know', () => {
     const stored = (value: string) => ({ getItem: () => value });
 
     expect(loadTimeframeFavorites(stored('["T37","T100000"]'))).toEqual(['T37', 'T100000']);
-    expect(loadTimeframeFavorites(stored('["S5","D5","M7","T10","BOGUS"]'))).toEqual(['S5', 'T10']);
+    expect(loadTimeframeFavorites(stored('["S5","D5","M7","T10","BOGUS"]'))).toEqual(['S5', 'D5', 'M7', 'T10']);
   });
 });

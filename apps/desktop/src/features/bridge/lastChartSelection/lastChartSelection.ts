@@ -1,6 +1,6 @@
 import { timeframeOptions } from '../../../shared/bridge/timeframes';
 import { isDrawableInterval } from '../../../shared/bridge/chartIntervalModel';
-import { isTickBuiltInterval } from '../../../shared/bridge/chartIntervals';
+import { isTickBuiltInterval, seriesTimeframeOf } from '../../../shared/bridge/chartIntervals';
 
 /** The chart window one account was last watching: a symbol and a timeframe, nothing else. */
 export interface LastChartSelection {
@@ -53,7 +53,9 @@ export function isSameChartSelection(
  * The saved selection when its interval is one this app serves: a
  * `config/timeframes.json` code and, when the handshake advertises any, one of
  * those, or any tick-built interval this app draws from the symbol's raw ticks
- * itself. An empty handshake list means "not reported", as in the timeframe bar.
+ * itself. An aggregated interval needs its base timeframe served, because that
+ * is the series the chart asks the bridge for. An empty handshake list means
+ * "not reported", as in the timeframe bar.
  */
 export function restorableSelection(
   selection: LastChartSelection | undefined,
@@ -66,7 +68,7 @@ export function restorableSelection(
     return selection;
   }
   const served = supportedTimeframes?.length ? supportedTimeframes : [...knownTimeframes];
-  return served.includes(selection.timeframe) ? selection : undefined;
+  return served.includes(seriesTimeframeOf(selection.timeframe)) ? selection : undefined;
 }
 
 function readSelection(value: unknown): LastChartSelection | undefined {
