@@ -14,9 +14,10 @@ import {
   chartIntervalLabel,
   chartIntervalLongLabel,
   chartIntervalOf,
+  MAX_TICKS_PER_BAR,
   type AggregatedInterval,
 } from './chartIntervalModel';
-import { timeframeSection, type TimeframeSection } from './timeframes';
+import { timeframeSeconds, timeframeSection, type TimeframeSection } from './timeframes';
 
 /**
  * How the bars of an interval are grouped from the symbol's raw ticks: a count of
@@ -133,9 +134,22 @@ export function intervalLongLabel(code: string): string {
   return chartIntervalLongLabel(code);
 }
 
-/** The menu groups ticks in a section of their own, listed before the MT5 ones. */
-export type IntervalSection = 'ticks' | TimeframeSection;
+/** The menu lists ticks and seconds in sections of their own, before the MT5 timeframes. */
+export type IntervalSection = 'ticks' | 'seconds' | TimeframeSection;
 
 export function intervalSection(code: string): IntervalSection {
-  return isTickInterval(code) ? 'ticks' : timeframeSection(code);
+  if (isTickInterval(code)) {
+    return 'ticks';
+  }
+  return chartIntervalOf(code)?.kind === 'seconds' ? 'seconds' : timeframeSection(code);
+}
+
+/**
+ * Where an interval sorts in the menu: a tick interval first, ascending by its tick count, and every
+ * other one after them, ascending by its own length. The offset keeps the ranges apart: a tick code
+ * counts at most `MAX_TICKS_PER_BAR` ticks, so its key stays below the shortest time interval's seconds.
+ */
+export function intervalOrderKey(code: string): number {
+  const ticksPerBar = ticksPerBarOf(code);
+  return ticksPerBar === undefined ? timeframeSeconds(code) : ticksPerBar - MAX_TICKS_PER_BAR - 1;
 }

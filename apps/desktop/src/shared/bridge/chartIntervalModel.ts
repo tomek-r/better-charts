@@ -265,6 +265,9 @@ export const INTERVAL_UNREADABLE_MESSAGE = 'Type an interval like 37T, 5s, 7m or
 /** What the interval input shows when the text names a count the chart cannot draw. */
 export const INTERVAL_OUT_OF_RANGE_MESSAGE = 'That interval is outside the supported range.';
 
+/** What the interval input shows when the bridge cannot serve the bars an interval needs. */
+export const INTERVAL_NOT_SERVED_MESSAGE = 'MT5 does not offer the bars this interval needs.';
+
 /** The interval the user's text names, or the short message the input shows instead. */
 export type IntervalParseResult =
   { readonly ok: true; readonly interval: ChartInterval } | { readonly ok: false; readonly message: string };
