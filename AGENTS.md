@@ -223,6 +223,26 @@ not replace testing in the real Tauri/MT5 runtime. Installing Chromium
 (`npx playwright install chromium`) requires network access and is a one-time
 environment setup, not part of normal code changes.
 
+## Commits, PRs and Worktrees
+
+- PR titles use `<type>(<scope>): <what it does>`; bodies use only the sections of
+  `.github/PULL_REQUEST_TEMPLATE.md`. Public PR text describes the behaviour itself and never compares it to
+  another product.
+- If the token cannot create a PR, push and hand over the compare link
+  (`https://github.com/<owner>/<repo>/pull/new/<branch>`) with the title and body.
+- Before a commit run `pnpm --filter better-charts exec eslint src e2e --max-warnings=0`: `pnpm check` passes
+  with warnings, but the checker overlay then intercepts clicks in the hook's E2E run.
+- In a cargo test log, look for `error:` / `could not compile` and the expected binaries and test counts, not
+  only `FAILED`; run a new module's tests explicitly.
+- A new `git worktree` has no `node_modules` or `.husky/_`, so its commits skip the hook silently: run
+  `pnpm install --frozen-lockfile --prefer-offline` first and check `.husky/_/pre-commit` exists. A commit that
+  finishes in seconds was ungated; redo it.
+- Worktrees may gate in parallel with `E2E_BUNDLE_PORT` / `E2E_DEV_SERVER_PORT` overrides and their own
+  `CARGO_TARGET_DIR` (a shared one mixes stale crates). Remove the worktree, its branch and its target dir once
+  its work is merged.
+- Before committing a generated baseline (golden file, known-differences list), spot-check one entry of every
+  category against the sources.
+
 ## Completion Criteria
 
 A change is ready when it respects architecture boundaries and execution
